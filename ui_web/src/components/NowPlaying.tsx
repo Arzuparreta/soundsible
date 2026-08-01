@@ -12,7 +12,7 @@ import {
 import type { PlaybackQueueEntry } from '../lib/playbackQueue';
 import { t } from '../lib/i18n';
 import { NowPlayingBrowser } from './NowPlayingBrowser';
-import { NowPlayingLayoutControl } from './NowPlayingLayoutControl';
+import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import {
   PlayerTrackList,
@@ -182,7 +182,21 @@ export function NowPlaying(props: {
         panelLabel={(panel) => t(`nowPlaying.panel.${panel}`)}
         ariaLabel={t('nowPlaying.playing')}
         dataScope="now-playing"
-        layoutControl={<NowPlayingLayoutControl onSelect={applyLayoutPreset} onReset={resetDesktopLayout} />}
+        layoutControl={
+          <PlayerLayoutControl
+            title={t('nowPlaying.layoutWorkspace')}
+            ariaLabel={t('nowPlaying.changeLayout')}
+            resetLabel={t('nowPlaying.resetLayout')}
+            presets={[
+              { id: 'balanced', label: t('nowPlaying.layoutBalanced') },
+              { id: 'stage', label: t('nowPlaying.layoutPlayer') },
+              { id: 'left', label: t('nowPlaying.layoutExplore') },
+              { id: 'right', label: t('nowPlaying.layoutQueue') },
+            ]}
+            onSelect={applyLayoutPreset}
+            onReset={resetDesktopLayout}
+          />
+        }
         renderPanel={(panel, dragHandle) => {
           if (panel === 'stage') {
             return (

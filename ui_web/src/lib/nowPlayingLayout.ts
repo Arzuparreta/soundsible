@@ -1,4 +1,5 @@
 import {
+  buildThreePanelLayoutPresets,
   clonePanelLayout,
   movePanel as movePlayerPanel,
   normalizePanelRatios as normalizePlayerPanelRatios,
@@ -6,12 +7,13 @@ import {
   reorderPanel as reorderPlayerPanel,
   resizeAdjacentPanels as resizePlayerPanels,
   type PlayerPanelLayout,
+  type ThreePanelLayoutPresetId,
 } from './playerLayout';
 
 export type NowPlayingPanelId = 'browser' | 'stage' | 'queue';
 export type NowPlayingDesktopLayout = PlayerPanelLayout<NowPlayingPanelId>;
 
-export type NowPlayingLayoutPresetId = 'balanced' | 'player' | 'explore' | 'queue';
+export type NowPlayingLayoutPresetId = ThreePanelLayoutPresetId;
 
 export const NOW_PLAYING_LAYOUT_KEY = 'np:desktopLayout:v1';
 export const DEFAULT_NOW_PLAYING_LAYOUT: NowPlayingDesktopLayout = {
@@ -20,24 +22,10 @@ export const DEFAULT_NOW_PLAYING_LAYOUT: NowPlayingDesktopLayout = {
   ratios: { browser: 0.25, stage: 0.5, queue: 0.25 },
 };
 
-export const NOW_PLAYING_LAYOUT_PRESETS: Record<NowPlayingLayoutPresetId, NowPlayingDesktopLayout> = {
-  balanced: DEFAULT_NOW_PLAYING_LAYOUT,
-  player: {
-    version: 1,
-    order: ['browser', 'stage', 'queue'],
-    ratios: { browser: 0.2, stage: 0.6, queue: 0.2 },
-  },
-  explore: {
-    version: 1,
-    order: ['stage', 'browser', 'queue'],
-    ratios: { browser: 0.5, stage: 0.3, queue: 0.2 },
-  },
-  queue: {
-    version: 1,
-    order: ['browser', 'queue', 'stage'],
-    ratios: { browser: 0.2, stage: 0.3, queue: 0.5 },
-  },
-};
+export const NOW_PLAYING_LAYOUT_PRESETS = buildThreePanelLayoutPresets(
+  { left: 'browser', stage: 'stage', right: 'queue' } as const,
+  DEFAULT_NOW_PLAYING_LAYOUT.ratios,
+);
 
 const IDS: NowPlayingPanelId[] = ['browser', 'stage', 'queue'];
 

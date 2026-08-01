@@ -1,29 +1,29 @@
-import { t } from '../lib/i18n';
 import { openContextMenu } from '../lib/contextMenu';
-import type { NowPlayingLayoutPresetId } from '../lib/nowPlayingLayout';
 import styles from './PlayerSurface.module.css';
 
-const PRESETS: Array<{ id: NowPlayingLayoutPresetId; label: string }> = [
-  { id: 'balanced', label: 'nowPlaying.layoutBalanced' },
-  { id: 'player', label: 'nowPlaying.layoutPlayer' },
-  { id: 'explore', label: 'nowPlaying.layoutExplore' },
-  { id: 'queue', label: 'nowPlaying.layoutQueue' },
-];
+export interface PlayerLayoutPresetOption<PresetId extends string> {
+  id: PresetId;
+  label: string;
+}
 
-export function NowPlayingLayoutControl(props: {
-  onSelect: (preset: NowPlayingLayoutPresetId) => void;
+export function PlayerLayoutControl<PresetId extends string>(props: {
+  title: string;
+  ariaLabel: string;
+  resetLabel: string;
+  presets: readonly PlayerLayoutPresetOption<PresetId>[];
+  onSelect: (preset: PresetId) => void;
   onReset: () => void;
 }) {
   const openMenu = (event: MouseEvent) => {
     openContextMenu({
-      title: t('nowPlaying.layoutWorkspace'),
+      title: props.title,
       actions: [
-        ...PRESETS.map((preset) => ({
-          label: t(preset.label),
+        ...props.presets.map((preset) => ({
+          label: preset.label,
           onSelect: () => props.onSelect(preset.id),
         })),
         {
-          label: t('nowPlaying.resetLayout'),
+          label: props.resetLabel,
           onSelect: props.onReset,
         },
       ],
@@ -34,8 +34,8 @@ export function NowPlayingLayoutControl(props: {
     <button
       classList={{ [styles.chromeButton]: true, [styles.layoutButton]: true }}
       type="button"
-      aria-label={t('nowPlaying.changeLayout')}
-      title={t('nowPlaying.changeLayout')}
+      aria-label={props.ariaLabel}
+      title={props.ariaLabel}
       aria-haspopup="menu"
       onClick={openMenu}
     >

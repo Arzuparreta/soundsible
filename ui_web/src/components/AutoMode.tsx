@@ -12,10 +12,12 @@ import { api, type DjProfile } from '../lib/api';
 import {
   AUTO_MODE_LAYOUT_KEY,
   AUTO_MODE_PANELS,
+  autoModeLayoutFromPreset,
   cloneAutoModeLayout,
   DEFAULT_AUTO_MODE_LAYOUT,
   parseAutoModeLayout,
   type AutoModeDesktopLayout,
+  type AutoModeLayoutPresetId,
   type AutoModePanelId,
 } from '../lib/autoModeLayout';
 import { parseDjDirection, parseNamedRequest } from '../lib/djDirection';
@@ -26,6 +28,7 @@ import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import type { CatalogItem, Track } from '../types/music';
 import { NowPlayingBrowser } from './NowPlayingBrowser';
+import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
@@ -104,15 +107,6 @@ function readLayout(): AutoModeDesktopLayout {
   }
 }
 
-function readStageOnly(): boolean {
-  try {
-    const raw = localStorage.getItem(AUTO_MODE_LAYOUT_KEY);
-    return raw ? Boolean((JSON.parse(raw) as { stageOnly?: boolean }).stageOnly) : false;
-  } catch {
-    return false;
-  }
-}
-
 export function AutoMode(props: {
   panel: AutoModePanelId;
   onPanelChange: (panel: AutoModePanelId) => void;
@@ -127,7 +121,6 @@ export function AutoMode(props: {
     DJ_PROFILES.find((profile) => profile.id === (state.autoMode.djProfile ?? 'adaptive')) ?? DJ_PROFILES[0],
   );
   const [layout, setLayout] = createSignal(readLayout());
-  const [stageOnly, setStageOnly] = createSignal(readStageOnly());
   const [resting, setResting] = createSignal(false);
   const [profileOpen, setProfileOpen] = createSignal(false);
   const [boothView, setBoothView] = createSignal<'controls' | 'request'>('controls');
@@ -138,24 +131,24 @@ export function AutoMode(props: {
   let spokenRequestAborter: AbortController | null = null;
   let spokenRequestSequence = 0;
 
-  const persistLayout = (nextLayout = layout(), nextStageOnly = stageOnly()) => {
+  createEffect(() => {
     try {
-      localStorage.setItem(AUTO_MODE_LAYOUT_KEY, JSON.stringify({ ...nextLayout, stageOnly: nextStageOnly }));
+      localStorage.setItem(AUTO_MODE_LAYOUT_KEY, JSON.stringify(layout()));
     } catch {
       /* storage disabled/full */
     }
-  };
+  });
 
-  const updateLayout = (next: AutoModeDesktopLayout) => {
-    setLayout(next);
-    persistLayout(next);
-  };
+  const applyLayoutPreset = (preset: AutoModeLayoutPresetId) =>
+    setLayout(autoModeLayoutFromPreset(preset));
 
-  const toggleStageOnly = () => {
-    const next = !stageOnly();
-    setStageOnly(next);
-    persistLayout(layout(), next);
-    if (next) props.onPanelChange('stage');
+  const resetDesktopLayout = () => {
+    try {
+      localStorage.removeItem(AUTO_MODE_LAYOUT_KEY);
+    } catch {
+      /* storage disabled */
+    }
+    setLayout(autoModeLayoutFromPreset('balanced'));
   };
 
   const armIdle = () => {
@@ -508,14 +501,6 @@ export function AutoMode(props: {
       onPointerDown={armIdle}
       onKeyDown={armIdle}
     >
-      <button
-        class={styles.focusToggle}
-        type="button"
-        aria-pressed={stageOnly()}
-        onClick={toggleStageOnly}
-      >
-        {stageOnly() ? t('autoMode.workspace.showAll') : t('autoMode.workspace.stageOnly')}
-      </button>
       <PlayerWorkspace
         panels={AUTO_MODE_PANELS}
         activePanel={props.panel}
@@ -523,14 +508,27 @@ export function AutoMode(props: {
         onCarouselProgress={props.onCarouselProgress}
         surfaceOpen={props.surfaceOpen}
         layout={layout()}
-        onLayoutChange={updateLayout}
+        onLayoutChange={setLayout}
         minimums={AUTO_MINIMUMS}
         defaults={DEFAULT_AUTO_MODE_LAYOUT.ratios}
         panelLabel={(panel) => t(`autoMode.panel.${panel}`)}
         ariaLabel={t('autoMode.workspace.aria')}
         dataScope="auto"
-        soloPanel={stageOnly() ? 'stage' : null}
-        class={styles.workspace}
+        layoutControl={
+          <PlayerLayoutControl
+            title={t('autoMode.workspace.layoutTitle')}
+            ariaLabel={t('autoMode.workspace.changeLayout')}
+            resetLabel={t('autoMode.workspace.resetLayout')}
+            presets={[
+              { id: 'balanced', label: t('autoMode.workspace.layoutBalanced') },
+              { id: 'stage', label: t('autoMode.workspace.layoutStage') },
+              { id: 'left', label: t('autoMode.workspace.layoutBooth') },
+              { id: 'right', label: t('autoMode.workspace.layoutRoute') },
+            ]}
+            onSelect={applyLayoutPreset}
+            onReset={resetDesktopLayout}
+          />
+        }
         tileClass={styles.tile}
         renderPanel={(panel, dragHandle) => {
           if (panel === 'booth') return <Booth dragHandle={dragHandle} />;

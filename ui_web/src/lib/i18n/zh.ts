@@ -135,8 +135,13 @@ export const zh: Dict = {
     },
     workspace: {
       aria: '自动模式面板',
-      stageOnly: '仅显示播放器',
-      showAll: '显示全部面板',
+      changeLayout: '更改自动模式布局',
+      layoutTitle: '自动模式布局',
+      layoutBalanced: '均衡',
+      layoutStage: '突出播放器',
+      layoutBooth: '突出 DJ 台',
+      layoutRoute: '突出路线',
+      resetLayout: '重置布局',
     },
     booth: {
       aria: 'DJ 台控制',

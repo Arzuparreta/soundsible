@@ -43,17 +43,17 @@ describe('nowPlayingLayout', () => {
 
   it('builds independent presets with their intended order and emphasis', () => {
     expect(layoutFromPreset('balanced')).toEqual(DEFAULT_NOW_PLAYING_LAYOUT);
-    expect(layoutFromPreset('player')).toEqual({
+    expect(layoutFromPreset('stage')).toEqual({
       version: 1,
       order: ['browser', 'stage', 'queue'],
       ratios: { browser: 0.2, stage: 0.6, queue: 0.2 },
     });
-    expect(layoutFromPreset('explore')).toEqual({
+    expect(layoutFromPreset('left')).toEqual({
       version: 1,
       order: ['stage', 'browser', 'queue'],
       ratios: { browser: 0.5, stage: 0.3, queue: 0.2 },
     });
-    expect(layoutFromPreset('queue')).toEqual({
+    expect(layoutFromPreset('right')).toEqual({
       version: 1,
       order: ['browser', 'queue', 'stage'],
       ratios: { browser: 0.2, stage: 0.3, queue: 0.5 },

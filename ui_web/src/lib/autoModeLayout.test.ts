@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  autoModeLayoutFromPreset,
   DEFAULT_AUTO_MODE_LAYOUT,
   parseAutoModeLayout,
 } from './autoModeLayout';
@@ -25,5 +26,36 @@ describe('Auto Mode desktop layout', () => {
       order: ['browser', 'stage', 'queue'],
       ratios: { browser: 1, stage: 1, queue: 1 },
     }))).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
+  });
+
+  it('maps the shared three-panel presets onto Booth, Stage and Route', () => {
+    expect(autoModeLayoutFromPreset('balanced')).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
+    expect(autoModeLayoutFromPreset('stage')).toEqual({
+      version: 1,
+      order: ['booth', 'stage', 'route'],
+      ratios: { booth: 0.2, stage: 0.6, route: 0.2 },
+    });
+    expect(autoModeLayoutFromPreset('left')).toEqual({
+      version: 1,
+      order: ['stage', 'booth', 'route'],
+      ratios: { booth: 0.5, stage: 0.3, route: 0.2 },
+    });
+    expect(autoModeLayoutFromPreset('right')).toEqual({
+      version: 1,
+      order: ['booth', 'route', 'stage'],
+      ratios: { booth: 0.2, stage: 0.3, route: 0.5 },
+    });
+  });
+
+  it('returns fresh layouts so a workspace resize cannot mutate its presets', () => {
+    const layout = autoModeLayoutFromPreset('stage');
+    layout.ratios.stage = 0.4;
+    layout.order.reverse();
+
+    expect(autoModeLayoutFromPreset('stage')).toEqual({
+      version: 1,
+      order: ['booth', 'stage', 'route'],
+      ratios: { booth: 0.2, stage: 0.6, route: 0.2 },
+    });
   });
 });

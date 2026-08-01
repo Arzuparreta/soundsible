@@ -135,8 +135,13 @@ export const fr: Dict = {
     },
     workspace: {
       aria: 'Panneaux Auto Mode',
-      stageOnly: 'Lecteur uniquement',
-      showAll: 'Afficher tous les panneaux',
+      changeLayout: 'Modifier la disposition Auto',
+      layoutTitle: 'Disposition Auto Mode',
+      layoutBalanced: 'Équilibrée',
+      layoutStage: 'Priorité au lecteur',
+      layoutBooth: 'Priorité à la cabine',
+      layoutRoute: 'Priorité au parcours',
+      resetLayout: 'Réinitialiser la disposition',
     },
     booth: {
       aria: 'Commandes de la cabine',

@@ -4,6 +4,8 @@ export interface PlayerPanelLayout<PanelId extends string> {
   ratios: Record<PanelId, number>;
 }
 
+export type ThreePanelLayoutPresetId = 'balanced' | 'stage' | 'left' | 'right';
+
 export function clonePanelLayout<PanelId extends string>(
   layout: PlayerPanelLayout<PanelId>,
 ): PlayerPanelLayout<PanelId> {
@@ -11,6 +13,34 @@ export function clonePanelLayout<PanelId extends string>(
     version: 1,
     order: [...layout.order],
     ratios: { ...layout.ratios },
+  };
+}
+
+export function buildThreePanelLayoutPresets<PanelId extends string>(
+  ids: { left: PanelId; stage: PanelId; right: PanelId },
+  balancedRatios: Record<PanelId, number>,
+): Record<ThreePanelLayoutPresetId, PlayerPanelLayout<PanelId>> {
+  return {
+    balanced: {
+      version: 1,
+      order: [ids.left, ids.stage, ids.right],
+      ratios: { ...balancedRatios },
+    },
+    stage: {
+      version: 1,
+      order: [ids.left, ids.stage, ids.right],
+      ratios: { ...balancedRatios, [ids.left]: 0.2, [ids.stage]: 0.6, [ids.right]: 0.2 },
+    },
+    left: {
+      version: 1,
+      order: [ids.stage, ids.left, ids.right],
+      ratios: { ...balancedRatios, [ids.left]: 0.5, [ids.stage]: 0.3, [ids.right]: 0.2 },
+    },
+    right: {
+      version: 1,
+      order: [ids.left, ids.right, ids.stage],
+      ratios: { ...balancedRatios, [ids.left]: 0.2, [ids.stage]: 0.3, [ids.right]: 0.5 },
+    },
   };
 }
 

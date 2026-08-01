@@ -19,22 +19,6 @@
   animation-delay: 120ms;
 }
 
-.focusToggle {
-  position: absolute;
-  z-index: 9;
-  top: clamp(5.7rem, 9vh, 7.5rem);
-  right: clamp(1rem, 2vw, 2rem);
-  min-height: 2rem;
-  padding: .35rem .72rem;
-  border: 1px solid var(--stage-line);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
-  color: var(--ink-secondary);
-  font: 650 .7rem/1 var(--font-sans);
-  letter-spacing: .04em;
-  backdrop-filter: blur(14px);
-}
-
 .booth {
   display: flex;
   min-width: 0;
@@ -404,20 +388,12 @@
 }
 
 @media (min-width: 1024px) {
-  .workspace {
-    padding-top: clamp(5.6rem, 9vh, 7.4rem);
-  }
-
   .root :global([data-player-stage-mode='auto']) h1 {
     font-size: clamp(26px, 3vw, 42px);
   }
 }
 
 @media (max-width: 1023px) {
-  .focusToggle {
-    display: none;
-  }
-
   .boothScroll {
     padding-bottom: 4rem;
   }

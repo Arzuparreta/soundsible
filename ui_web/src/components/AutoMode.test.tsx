@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { actions, apiMock, state } = vi.hoisted(() => ({
+const { actions, apiMock, openContextMenu, state } = vi.hoisted(() => ({
   actions: {
     setAutoDjProfile: vi.fn(),
     setAutoDirection: vi.fn(),
@@ -18,6 +18,7 @@ const { actions, apiMock, state } = vi.hoisted(() => ({
     resolveCatalogItem: vi.fn(),
     interpretDjCommand: vi.fn(),
   },
+  openContextMenu: vi.fn(),
   state: {
     library: [],
     playback: {
@@ -55,6 +56,7 @@ const { actions, apiMock, state } = vi.hoisted(() => ({
 
 vi.mock('../stores', () => ({ actions, state }));
 vi.mock('../lib/api', () => ({ api: apiMock }));
+vi.mock('../lib/contextMenu', () => ({ openContextMenu }));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/i18n', () => ({
   t: (key: string, params?: Record<string, string | number>) =>
@@ -199,16 +201,35 @@ describe('AutoMode workspace', () => {
     expect(screen.getByRole('heading', { name: 'autoMode.dj.route' })).toBeInTheDocument();
   });
 
-  it('persists an independent desktop layout and the stage-only preference', () => {
-    const { onPanelChange } = renderAuto();
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.workspace.stageOnly' }));
+  it('uses the shared layout menu and persists Auto presets independently', () => {
+    renderAuto();
+    fireEvent.click(screen.getByRole('button', { name: 'autoMode.workspace.changeLayout' }));
 
-    expect(onPanelChange).toHaveBeenCalledWith('stage');
-    expect(JSON.parse(localStorage.getItem('auto:desktopLayout:v1')!)).toMatchObject({
-      order: ['booth', 'stage', 'route'],
-      stageOnly: true,
+    expect(openContextMenu).toHaveBeenCalledOnce();
+    const options = openContextMenu.mock.calls[0][0];
+    expect(options.title).toBe('autoMode.workspace.layoutTitle');
+    expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
+      'autoMode.workspace.layoutBalanced',
+      'autoMode.workspace.layoutStage',
+      'autoMode.workspace.layoutBooth',
+      'autoMode.workspace.layoutRoute',
+      'autoMode.workspace.resetLayout',
+    ]);
+
+    options.actions[2].onSelect();
+    expect(JSON.parse(localStorage.getItem('auto:desktopLayout:v1')!)).toEqual({
+      version: 1,
+      order: ['stage', 'booth', 'route'],
+      ratios: { booth: 0.5, stage: 0.3, route: 0.2 },
     });
     expect(localStorage.getItem('np:desktopLayout:v1')).toBeNull();
+
+    options.actions[4].onSelect();
+    expect(JSON.parse(localStorage.getItem('auto:desktopLayout:v1')!)).toEqual({
+      version: 1,
+      order: ['booth', 'stage', 'route'],
+      ratios: { booth: 0.24, stage: 0.52, route: 0.24 },
+    });
   });
 
   it('retains stable title tiers for callers while Stage owns actual overflow', () => {

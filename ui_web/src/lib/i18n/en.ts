@@ -134,8 +134,13 @@ export const en = {
     },
     workspace: {
       aria: 'Auto Mode panels',
-      stageOnly: 'Focus on player',
-      showAll: 'Show all panels',
+      changeLayout: 'Change Auto layout',
+      layoutTitle: 'Auto Mode layout',
+      layoutBalanced: 'Balanced',
+      layoutStage: 'Player focus',
+      layoutBooth: 'Booth focus',
+      layoutRoute: 'Route focus',
+      resetLayout: 'Reset layout',
     },
     booth: {
       aria: 'DJ booth controls',
