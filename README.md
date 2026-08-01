@@ -42,20 +42,13 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 
 ## Screenshots
 
-<details>
-<summary><b>See Soundsible on mobile and desktop</b></summary>
-<br>
 <div align="center">
-  <p>
-    <img src="docs/images/mobile-library.PNG" alt="Soundsible mobile library" width="210">
-    <img src="docs/images/mobile-now-playing-lyrics.PNG" alt="Soundsible mobile Now Playing with synced lyrics" width="210">
-  </p>
-  <sub>Library · Now Playing with synced lyrics</sub>
-  <br><br>
-  <img src="docs/images/now-playing-desktop.png" alt="Soundsible desktop Now Playing with lyrics and queue" width="720">
-  <br><sub>Desktop Now Playing with lyrics and queue</sub>
+  <img src="docs/images/desktop-now-playing.png" alt="Soundsible app interface" width="100%">
+  <br>
+  <img src="docs/images/mobile-now-playing.png" alt="Soundsible app interface" width="32%">
+  <img src="docs/images/mobile-now-playing-library.png" alt="Soundsible app interface" width="32%">
+  <img src="docs/images/mobile-now-playing-lyrics.png" alt="Soundsible app interface" width="32%">
 </div>
-</details>
 
 ---
 
