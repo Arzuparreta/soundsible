@@ -4,7 +4,8 @@
  * several places and drifting copies would read as different affordances.
  */
 
-/** Handheld karaoke mic — the "show lyrics" affordance. */
+/** Handheld karaoke mic — round mesh head on a tapered body, the
+ * "show lyrics" affordance. */
 export function KaraokeMicIcon(props: { size?: number }) {
   return (
     <svg
@@ -13,18 +14,26 @@ export function KaraokeMicIcon(props: { size?: number }) {
       height={props.size}
       fill="none"
       stroke="currentColor"
-      stroke-width="2"
+      stroke-width="1.6"
       stroke-linecap="round"
       stroke-linejoin="round"
       aria-hidden="true"
     >
-      {/* Drawn upright, then tilted: a mic held at an angle reads as singing
-          along, while the same glyph stood on end reads as dictation. */}
-      <g transform="rotate(40 12 12)">
-        <rect x="9" y="2.6" width="6" height="10" rx="3" />
-        <path d="M12 12.6V20" />
-        <path d="M10.4 16.6h3.2" />
-      </g>
+      <path
+        d="M12 3
+           C9.8 3 7.8 5.3 7.8 8.2
+           C7.8 10.3 8.9 11.6 9.6 12.3
+           L9.3 19
+           C9.25 20.2 9.9 21 11 21
+           L13 21
+           C14.1 21 14.75 20.2 14.7 19
+           L14.4 12.3
+           C15.1 11.6 16.2 10.3 16.2 8.2
+           C16.2 5.3 14.2 3 12 3
+           Z"
+      />
+      <path d="M9.2 6.4h5.6" />
+      <path d="M9 8.3h6" />
     </svg>
   );
 }
