@@ -7,7 +7,7 @@ COPY ui_web/ ./
 RUN npm run build
 
 
-FROM python:3.13-slim-bookworm AS python-build
+FROM python:3.14-slim-bookworm AS python-build
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /build
@@ -18,7 +18,7 @@ COPY requirements.docker.lock ./
 RUN pip wheel --require-hashes --wheel-dir /wheels -r requirements.docker.lock
 
 
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 ARG SOUNDSIBLE_VERSION=0.0.0-docker
 ARG VCS_REF=unknown
