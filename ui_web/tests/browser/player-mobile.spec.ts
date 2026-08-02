@@ -275,42 +275,6 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
       expect(libraryBox!.width).toBeGreaterThan(favouritesBox!.width + playlistsBox!.width);
     } else {
       await expect(side.getByRole('heading', { name: 'Ruta preparada' })).toBeVisible();
-      await side.getByRole('button', { name: 'Añadir' }).click();
-      const browser = page.locator('[data-auto-tile="browser"]');
-      await expect(browser).not.toHaveAttribute('inert', '');
-      await browser.getByRole('button', { name: /^Biblioteca/ }).click();
-      await browser.getByRole('button', { name: /Luz de verano/ }).first().click();
-      await expect(side).not.toHaveAttribute('inert', '');
-      await side.getByRole('button', { name: 'Añadir' }).click();
-      await expect(browser).not.toHaveAttribute('inert', '');
-      await browser.getByRole('button', { name: /Horizonte/ }).first().click();
-      await expect(side).not.toHaveAttribute('inert', '');
-      const dormantInsertionTargets = side.locator('button[aria-label^="Insertar una canción antes de"]');
-      await expect(dormantInsertionTargets).toHaveCount(2);
-      await expect(dormantInsertionTargets.first()).toBeHidden();
-      await expect(dormantInsertionTargets.last()).toBeHidden();
-
-      const carriedRow = side.locator('[draggable="true"]').first();
-      await carriedRow.dispatchEvent('pointerdown', { pointerType: 'touch', isPrimary: true });
-      await expect(dormantInsertionTargets.first()).toHaveAttribute('data-placement-active', '');
-      await expect(dormantInsertionTargets.first()).toBeVisible();
-      await expect(dormantInsertionTargets.last()).toBeVisible();
-      const targetGeometry = await dormantInsertionTargets.evaluateAll((targets) => targets.map((target) => {
-        const box = target.getBoundingClientRect();
-        const previous = target.previousElementSibling?.getBoundingClientRect();
-        const following = target.nextElementSibling?.getBoundingClientRect();
-        const marker = target.querySelector('span')?.getBoundingClientRect();
-        return {
-          height: box.height,
-          clearsPrevious: !previous || box.top >= previous.bottom,
-          clearsFollowing: !following || box.bottom <= following.top,
-          markerOffset: marker ? Math.abs((marker.top + marker.height / 2) - (box.top + box.height / 2)) : 99,
-        };
-      }));
-      expect(new Set(targetGeometry.map((target) => target.height)).size).toBe(1);
-      expect(targetGeometry.every((target) => target.clearsPrevious && target.clearsFollowing)).toBe(true);
-      expect(targetGeometry.every((target) => target.markerOffset <= 1)).toBe(true);
-      await carriedRow.dispatchEvent('pointerup', { pointerType: 'touch', isPrimary: true });
     }
 
     await holdCarousel(page, '[data-auto-carousel]');
@@ -327,6 +291,55 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
 
   await swipeSurfaceDown(page, '[data-auto-tile="stage"]');
   await expect(surface).not.toHaveAttribute('data-player-surface-open');
+});
+
+test('mobile route insertion targets stay contextual and aligned', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
+  await openNowPlaying(page);
+  await page.getByRole('tab', { name: 'AUTO' }).click();
+
+  const route = page.locator('[data-auto-tile="route"]');
+  await holdCarousel(page, '[data-auto-carousel]');
+  await snapPlayerCarousel(page, 'auto', 'route');
+  await releaseCarousel(page, '[data-auto-carousel]');
+  await expect(route).not.toHaveAttribute('inert', '');
+
+  await route.getByRole('button', { name: 'Añadir' }).click();
+  const browser = page.locator('[data-auto-tile="browser"]');
+  await expect(browser).not.toHaveAttribute('inert', '');
+  await browser.getByRole('button', { name: /^Biblioteca/ }).click();
+  await browser.getByRole('button', { name: /Luz de verano/ }).first().click();
+  await expect(route).not.toHaveAttribute('inert', '');
+  await route.getByRole('button', { name: 'Añadir' }).click();
+  await expect(browser).not.toHaveAttribute('inert', '');
+  await browser.getByRole('button', { name: /Horizonte/ }).first().click();
+  await expect(route).not.toHaveAttribute('inert', '');
+
+  const insertionTargets = route.locator('button[aria-label^="Insertar una canción antes de"]');
+  await expect(insertionTargets).toHaveCount(2);
+  await expect(insertionTargets.first()).toBeHidden();
+  await expect(insertionTargets.last()).toBeHidden();
+
+  const carriedRow = route.locator('[draggable="true"]').first();
+  await carriedRow.dispatchEvent('pointerdown', { pointerType: 'touch', isPrimary: true });
+  await expect(insertionTargets.first()).toHaveAttribute('data-placement-active', '');
+  await expect(insertionTargets.first()).toBeVisible();
+  await expect(insertionTargets.last()).toBeVisible();
+  const targetGeometry = await insertionTargets.evaluateAll((targets) => targets.map((target) => {
+    const box = target.getBoundingClientRect();
+    const previous = target.previousElementSibling?.getBoundingClientRect();
+    const following = target.nextElementSibling?.getBoundingClientRect();
+    const marker = target.querySelector('span')?.getBoundingClientRect();
+    return {
+      height: box.height,
+      clearsPrevious: !previous || box.top >= previous.bottom,
+      clearsFollowing: !following || box.bottom <= following.top,
+      markerOffset: marker ? Math.abs((marker.top + marker.height / 2) - (box.top + box.height / 2)) : 99,
+    };
+  }));
+  expect(new Set(targetGeometry.map((target) => target.height)).size).toBe(1);
+  expect(targetGeometry.every((target) => target.clearsPrevious && target.clearsFollowing)).toBe(true);
+  expect(targetGeometry.every((target) => target.markerOffset <= 1)).toBe(true);
 });
 
 test('the shared mode pill and Auto workspace stay contained in compact viewports', async ({ page }) => {
