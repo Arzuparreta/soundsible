@@ -7,6 +7,8 @@ export interface ServerToClientEvents {
   connect: () => void;
   disconnect: () => void;
   library_updated: () => void;
+  /** The engine measured more of the library's loudness. */
+  loudness_updated: () => void;
   favourites_updated: () => void;
   downloader_log: (data: unknown) => void;
   downloader_update: (data: unknown) => void;

@@ -252,16 +252,24 @@ function AccessibilitySection() {
 function PlaybackSection() {
   const [learning, setLearning] = createSignal(true);
   const [autoplay, setAutoplay] = createSignal(state.playback.autoplayEnabled);
+  const [leveling, setLeveling] = createSignal(state.playback.volumeLeveling);
 
   onMount(async () => {
     try {
       const d = await api.getDiscoverySettings();
       if (typeof d.learning_enabled === 'boolean') setLearning(d.learning_enabled);
       if (typeof d.autoplay_enabled === 'boolean') setAutoplay(d.autoplay_enabled);
+      if (typeof d.volume_leveling === 'boolean') setLeveling(d.volume_leveling);
     } catch {
       /* keep the optimistic defaults */
     }
   });
+
+  const toggleLeveling = async () => {
+    const next = !leveling();
+    setLeveling(next);
+    if (!(await actions.setVolumeLeveling(next))) setLeveling(!next);
+  };
 
   const toggleAutoplay = async () => {
     const next = !autoplay();
@@ -298,7 +306,15 @@ function PlaybackSection() {
 
   return (
     <>
-      <SettingsGroup label={t('settings.playback')} note={t('settings.note.autoplay')}>
+      <SettingsGroup label={t('settings.playback')} note={t('settings.note.volumeLeveling')}>
+        <SwitchRow
+          label={t('settings.volumeLeveling')}
+          checked={leveling()}
+          onChange={toggleLeveling}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup label={t('settings.group.upNext')} note={t('settings.note.autoplay')}>
         <SwitchRow label={t('settings.autoplay')} checked={autoplay()} onChange={toggleAutoplay} />
       </SettingsGroup>
 
@@ -694,6 +710,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         </>,
       ),
     keywords: () => [
+      t('settings.volumeLeveling'),
+      t('settings.volumeLevelingSearch'),
       t('settings.autoplay'),
       t('settings.learnActivity'),
       t('settings.resetLearning'),

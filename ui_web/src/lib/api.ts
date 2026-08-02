@@ -1056,7 +1056,27 @@ export const api = {
 
   // ── Settings / system ──
   getDiscoverySettings: () =>
-    request<{ learning_enabled?: boolean; autoplay_enabled?: boolean }>('/api/discovery/settings'),
+    request<{
+      learning_enabled?: boolean;
+      autoplay_enabled?: boolean;
+      volume_leveling?: boolean;
+    }>('/api/discovery/settings'),
+  setVolumeLeveling: (enabled: boolean) =>
+    request<{ volume_leveling?: boolean }>('/api/discovery/settings', {
+      method: 'PATCH',
+      body: { volume_leveling: enabled },
+    }),
+  /** Ask the engine to measure these tracks ahead of its idle sweep. Advisory:
+   * the player never waits on the answer. */
+  requestLoudness: (trackIds: string[]) =>
+    request<{ queued: number }>('/api/loudness/request', {
+      method: 'POST',
+      body: { track_ids: trackIds },
+    }),
+  getLoudnessStatus: () =>
+    request<{ enabled: boolean; activity: string; measured?: number; pending?: number }>(
+      '/api/loudness/status',
+    ),
   setDiscoveryLearning: (enabled: boolean) =>
     request<{ learning_enabled?: boolean }>('/api/discovery/settings', {
       method: 'PATCH',

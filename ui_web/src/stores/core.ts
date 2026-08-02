@@ -99,6 +99,10 @@ export interface PlaybackState {
    * behind explicit requests and the finite playback context. */
   autoplayEnabled: boolean;
   autoplayLoading: boolean;
+  /** Play every song at a similar loudness. Account preference, but read from
+   * localStorage at startup so the first track of a session is already levelled
+   * rather than waiting on a round trip. */
+  volumeLeveling: boolean;
 }
 
 export interface AppState {
@@ -190,6 +194,15 @@ function loadTheme(): Theme {
   return 'system';
 }
 
+/** Volume levelling, read synchronously so the first track of a session is
+ * already levelled. The account is the source of truth and reconciles a moment
+ * later in `initStore`; this mirror is what removes the startup race. */
+export const VOLUME_LEVELING_KEY = 'volumeLeveling';
+
+function loadVolumeLeveling(): boolean {
+  return localStorage.getItem(VOLUME_LEVELING_KEY) !== 'off';
+}
+
 const initialVisualPreferences = loadVisualPreferences();
 
 const [state, setState] = createStore<AppState>({
@@ -227,6 +240,7 @@ const [state, setState] = createStore<AppState>({
     radioSeedId: null,
     autoplayEnabled: true,
     autoplayLoading: false,
+    volumeLeveling: loadVolumeLeveling(),
   },
   autoMode: {
     active: false,

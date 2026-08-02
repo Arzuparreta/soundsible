@@ -24,6 +24,13 @@ export interface Track {
   audio_source_url?: string | null;
   audio_license_url?: string | null;
   audio_identity_verified?: boolean;
+  /** EBU R128 integrated loudness, measured once by the engine. Absent until
+   * the file has been measured, which is what keeps an unmeasured track at
+   * unity gain instead of guessing. */
+  loudness_lufs?: number | null;
+  /** True peak in dBFS, from the same pass. The player refuses any part of a
+   * boost that would push this past the output ceiling. */
+  loudness_peak_dbtp?: number | null;
   cover?: string;
   source?: 'preview';
   /** Identity keys of the row this track was resolved from (see

@@ -64,6 +64,7 @@ export { invalidateLibrarySync, syncLibrary, syncLibrarySoon } from './library';
 import { invalidateLibrarySync, syncLibrary, syncLibrarySoon } from './library';
 export { addRecentCompleted, applyDownloadEvent, downloadCounts } from './downloads';
 import { applyDownloadEvent } from './downloads';
+import { levelFor as levelForTrack } from '../lib/loudness';
 export * from './identity';
 import {
   isFavouriteKeys,
@@ -80,6 +81,7 @@ import {
   randomId,
   resumeState,
   setResumeState,
+  VOLUME_LEVELING_KEY,
   type PlaybackState,
   type RepeatMode,
   type Theme,
@@ -128,6 +130,82 @@ function trackUrl(track: Track, attemptId?: string): string {
   return track.source === 'preview' && previewId
     ? previewUrl(previewId, attemptId)
     : streamUrl(track.id, attemptId);
+}
+
+/**
+ * The volume levelling for one queue entry, as a linear gain.
+ *
+ * Always `1` unless there is a measurement to stand on: an unmeasured track, a
+ * preview, a podcast or the setting switched off all play exactly as they
+ * always did.
+ *
+ * The library lookup matters. A queue entry is a snapshot taken by
+ * `createQueueEntry` when the track was enqueued, so a song measured *after*
+ * that carries the numbers only on the library copy. Only unmeasured entries
+ * pay for the search.
+ */
+function measuredTrack<T extends Track>(entry: T): T | Track {
+  return entry.loudness_lufs == null
+    ? state.library.find((track) => track.id === entry.id) ?? entry
+    : entry;
+}
+
+function levelFor(entry: PlaybackQueueEntry | Track | null | undefined): number {
+  if (!entry || !state.playback.volumeLeveling) return 1;
+  const facts = measuredTrack(entry);
+  const context = (entry as PlaybackQueueEntry).queueContext;
+  // Resolved through the library like the entry itself. Without this an album
+  // queued before the sweep reached it would look wholly unmeasured, and album
+  // levelling would silently never engage.
+  const siblings = context?.kind === 'album'
+    ? state.playback.queue
+        .filter((item) => item.queueContext?.id === context.id)
+        .map(measuredTrack)
+    : undefined;
+  return levelForTrack(facts, {
+    enabled: true,
+    shuffle: state.playback.shuffle,
+    siblings,
+    contextKind: context?.kind ?? null,
+    contextId: context?.id ?? null,
+  });
+}
+
+/**
+ * Apply the levelling preference everywhere it is remembered, and re-level both
+ * decks so the change is heard now rather than at the next track.
+ *
+ * The only place a sounding deck's gain is allowed to move — because it is the
+ * listener asking for it — and the mixer ramps rather than steps it.
+ */
+function applyVolumeLeveling(enabled: boolean): void {
+  setState('playback', 'volumeLeveling', enabled);
+  try {
+    localStorage.setItem(VOLUME_LEVELING_KEY, enabled ? 'on' : 'off');
+  } catch {
+    /* private mode / storage disabled */
+  }
+  audioService.setLevelingEnabled(enabled);
+}
+
+/** Ask the engine to measure what is coming up, so the next few songs are
+ * levelled even on a library the sweep has not reached yet. Fire and forget:
+ * playback never waits on it, and a late answer applies from the next track. */
+function requestUpcomingLoudness(fromIndex: number): void {
+  if (!state.playback.volumeLeveling) return;
+  const ids = state.playback.queue
+    .slice(fromIndex, fromIndex + 5)
+    .filter((entry) => entry.loudness_lufs == null && entry.source !== 'preview' && !isPodcastTrack(entry))
+    .map((entry) => entry.id);
+  if (!ids.length) return;
+  try {
+    // Advisory only, and guarded rather than awaited: an older engine or a test
+    // double may not expose this at all, and nothing about starting a track is
+    // allowed to depend on it.
+    void api.requestLoudness?.(ids)?.catch(() => {});
+  } catch {
+    /* the sweep will reach these on its own */
+  }
 }
 
 function clearStallTimer(): void {
@@ -280,7 +358,7 @@ function stageNext(): void {
   // stream URL, and the URL is fixed the moment the deck starts loading it.
   const attemptId = randomId();
   stagedEntry = { queueId: next.queueId, attemptId, url: trackUrl(next, attemptId) };
-  audioService.stage(stagedEntry.url);
+  audioService.stage(stagedEntry.url, levelFor(next));
 }
 
 function discardFutureAutoplay(): void {
@@ -427,8 +505,11 @@ function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigg
   // A deck already holding this exact stream takes over without a request and
   // without an `src` assignment. From `ended` that keeps the handover inside the
   // media event, which is what lets it continue at all on a locked phone.
+  // Computed once and shared by both paths, so a handoff and a fresh load can
+  // never disagree about how loud this track should be.
+  const level = levelFor(track);
   const staged = stagedEntry?.queueId === track.queueId
-    ? audioService.takeStaged(stagedEntry.url)
+    ? audioService.takeStaged(stagedEntry.url, level)
     : null;
   const attempt = createPlaybackAttempt(
     track,
@@ -449,9 +530,10 @@ function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigg
     duration: staged ? audioEl().duration || 0 : 0,
   });
   updateMediaSession(track);
-  void (staged ?? audioService.load(trackUrl(track, attempt.id)))
+  void (staged ?? audioService.load(trackUrl(track, attempt.id), level))
     .catch(() => onPlaybackFailed(generation, 'load'));
   prefetchUpcoming();
+  requestUpcomingLoudness(i);
   queueMicrotask(() => {
     void ensureAutoplay();
     if (state.playback.radioMode || state.autoMode.active) {
@@ -511,9 +593,9 @@ function recoverCurrent(reason: 'load' | 'error' | 'stall'): boolean {
         .podcastPeek(track.podcast_enclosure_url)
         .then(({ stream_token }) => {
           if (!stream_token) throw new Error('no podcast stream token');
-          return audioService.recover(podcastStreamUrl(stream_token, attempt.id), position);
+          return audioService.recover(podcastStreamUrl(stream_token, attempt.id), position, 1);
         })
-    : audioService.recover(trackUrl(track, attempt.id), position);
+    : audioService.recover(trackUrl(track, attempt.id), position, levelFor(track));
   void recovery.catch(() => onPlaybackFailed(generation, reason));
   return true;
 }
@@ -668,7 +750,7 @@ function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
     index: 0,
   });
   updateMediaSession(track);
-  audioService.prime(trackUrl(track), pos);
+  audioService.prime(trackUrl(track), pos, levelFor(track));
 }
 
 /**
@@ -829,7 +911,7 @@ function commitTransition(
       // The route stays intact; plain playback is the safe fallback.
       if (index > 0) loadIndex(index, { trigger: 'next' });
     },
-  }, { manual });
+  }, { manual, level: levelFor(next) });
 }
 
 /** How far ahead of the commit point an unmeasured transition asks to be
@@ -1598,7 +1680,7 @@ export const actions = {
     try {
       const { stream_token } = await api.podcastPeek(ep.enclosure_url);
       if (!stream_token) throw new Error('no token');
-      await audioService.load(podcastStreamUrl(stream_token, attempt.id));
+      await audioService.load(podcastStreamUrl(stream_token, attempt.id), 1);
     } catch {
       onPlaybackFailed(generation, 'load');
     }
@@ -2161,6 +2243,20 @@ export const actions = {
     } catch {
       setState('playback', 'autoplayEnabled', previous);
       if (previous) queueMicrotask(() => void ensureAutoplay(true));
+      toast.error(tr('toast.updateFailed'));
+      return false;
+    }
+  },
+
+  async setVolumeLeveling(enabled: boolean): Promise<boolean> {
+    const previous = state.playback.volumeLeveling;
+    if (enabled === previous) return true;
+    applyVolumeLeveling(enabled);
+    try {
+      await api.setVolumeLeveling(enabled);
+      return true;
+    } catch {
+      applyVolumeLeveling(previous);
       toast.error(tr('toast.updateFailed'));
       return false;
     }
@@ -2806,6 +2902,13 @@ export function initStore(): void {
           if (settings.autoplay_enabled) queueMicrotask(() => void ensureAutoplay());
           else discardFutureAutoplay();
         }
+        // Reconcile the localStorage mirror the store booted from. A ramp
+        // rather than a jump, so a device that disagreed with the account
+        // corrects itself without a lurch a second into the session.
+        if (typeof settings.volume_leveling === 'boolean'
+          && settings.volume_leveling !== state.playback.volumeLeveling) {
+          applyVolumeLeveling(settings.volume_leveling);
+        }
       })
       .catch(() => {});
   } catch {
@@ -3001,6 +3104,12 @@ export function initStore(): void {
     resumeFromStarved();
   });
   socket.on('disconnect', () => setState('online', false));
+  // A sweep measured more of the library. Nothing re-levels mid-song; the new
+  // numbers ride the refreshed library and apply from the next track on.
+  socket.on('loudness_updated', () => {
+    actions.syncLibrarySoon();
+  });
+
   socket.on('library_updated', () => {
     // Shares the coalescing window with download completions, which arrive for
     // the same writes moments earlier.

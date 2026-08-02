@@ -157,7 +157,7 @@ async function armed() {
   outgoing.paused = false;
   outgoing.currentTime = 100;
   const handlers = callbacks();
-  module.audioService.armTransition('/next', plan, handlers);
+  module.audioService.armTransition('/next', plan, handlers, { level: 1 });
   const incoming = created.find((deck) => deck !== outgoing)!;
   return { ...module, outgoing, incoming, handlers };
 }
@@ -362,7 +362,7 @@ describe('two-deck mixer', () => {
   it('never lets the unlock clip disturb a track that claimed the deck', async () => {
     const module = await import('./audio');
     module.audioService.unlockAudio();
-    await module.audioService.load('/current');
+    await module.audioService.load('/current', 1);
 
     await vi.advanceTimersByTimeAsync(0);
     const active = module.audioEl() as unknown as FakeAudio;
@@ -373,16 +373,16 @@ describe('two-deck mixer', () => {
   it('keeps a staged deck so the next track starts without a request', async () => {
     const module = await import('./audio');
     const first = module.audioEl() as unknown as FakeAudio;
-    await module.audioService.load('/one');
+    await module.audioService.load('/one', 1);
 
-    module.audioService.stage('/two');
+    module.audioService.stage('/two', 1);
     const idle = created.find((deck) => deck !== first)!;
     expect(idle.src).toBe('/two');
     expect(idle.load).toHaveBeenCalledTimes(1);
     expect(idle.play).not.toHaveBeenCalled();
 
     // The handover touches neither `src` nor the network: it is a deck swap.
-    const taken = module.audioService.takeStaged('/two');
+    const taken = module.audioService.takeStaged('/two', 1);
     expect(taken).not.toBeNull();
     await taken;
     expect(module.audioEl()).toBe(idle as unknown as HTMLAudioElement);
@@ -394,9 +394,9 @@ describe('two-deck mixer', () => {
 
   it('refuses a staged deck that is holding a different track', async () => {
     const module = await import('./audio');
-    await module.audioService.load('/one');
-    module.audioService.stage('/two');
-    expect(module.audioService.takeStaged('/three')).toBeNull();
+    await module.audioService.load('/one', 1);
+    module.audioService.stage('/two', 1);
+    expect(module.audioService.takeStaged('/three', 1)).toBeNull();
   });
 
   it('abandons a graph that stops sounding and keeps the music going', async () => {
@@ -408,7 +408,7 @@ describe('two-deck mixer', () => {
     expect(module.audioService.graphReady()).toBe(true);
 
     const deck = module.audioEl() as unknown as FakeAudio;
-    await module.audioService.load('/current');
+    await module.audioService.load('/current', 1);
     deck.currentTime = 10;
     // Silence on the master bus while the media clock advances: the samples are
     // not reaching the speakers, whatever the element and the context claim.
@@ -438,7 +438,7 @@ describe('two-deck mixer', () => {
     const context = contexts.at(-1)!;
 
     const deck = module.audioEl() as unknown as FakeAudio;
-    await module.audioService.load('/current');
+    await module.audioService.load('/current', 1);
     deck.currentTime = 10;
     context.analyser.level = 128;
     for (let step = 0; step < 8; step += 1) {
@@ -470,5 +470,211 @@ describe('two-deck mixer', () => {
     expect(handlers.onDominant).toHaveBeenCalledOnce();
     expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
     expect(incoming.load).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Volume levelling.
+ *
+ * The graph builds master and monitor before it walks the decks, then for each
+ * deck a mix gain followed by a levelling gain — so `context.gains` is
+ * [master, monitor, deck0 mix, deck0 level, deck1 mix, deck1 level]. Reading
+ * the level nodes by that layout also pins the master/monitor indices the
+ * broadcast tests above depend on.
+ */
+function levelNode(context: FakeAudioContext, deckIndex: number): FakeGainNode {
+  return context.gains[3 + deckIndex * 2];
+}
+
+function levelValue(context: FakeAudioContext, deckIndex: number): number {
+  return levelNode(context, deckIndex).gain.value;
+}
+
+describe('volume levelling', () => {
+  it('inserts one levelling gain per deck without moving the master bus', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    expect(module.audioService.unlockAudio()).toBe(true);
+    const context = contexts[0];
+
+    // Two decks, each with a mix gain and a levelling gain, behind the
+    // unity-gain master and the downstream monitor.
+    expect(context.gains).toHaveLength(6);
+    expect(context.gains[0].gain.value).toBe(1);
+    expect(levelValue(context, 0)).toBe(1);
+    expect(levelValue(context, 1)).toBe(1);
+  });
+
+  it('carries a level set before the first gesture into the graph', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    // A track can be cued before anything has been tapped, so the shadow has to
+    // survive into the nodes the gesture eventually builds.
+    await module.audioService.load('/quiet', 1.8);
+    expect(module.audioService.unlockAudio()).toBe(true);
+
+    expect(levelValue(contexts[0], 0)).toBeCloseTo(1.8, 5);
+  });
+
+  it('leaves the level on the deck that was promoted, and resets the one released', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    const context = contexts[0];
+
+    await module.audioService.load('/one', 0.6);
+    module.audioService.stage('/two', 1.7);
+    expect(levelValue(context, 0)).toBeCloseTo(0.6, 5);
+    expect(levelValue(context, 1)).toBeCloseTo(1.7, 5);
+
+    await module.audioService.takeStaged('/two', 1.7);
+    // Nothing moved between nodes: only which deck is active changed.
+    expect(levelValue(context, 1)).toBeCloseTo(1.7, 5);
+    // And the deck that finished is back at unity, so it cannot lend its gain
+    // to whatever it is handed next.
+    expect(levelValue(context, 0)).toBe(1);
+  });
+
+  it('never lets one track inherit the previous track\'s level', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    const context = contexts[0];
+
+    // `load` reassigns `src` on the same deck without detaching, so this is the
+    // path where a leak would actually happen: a boosted song followed by an
+    // unmeasured podcast.
+    await module.audioService.load('/music', 1.9);
+    await module.audioService.load('/podcast', 1);
+    expect(levelValue(context, 0)).toBe(1);
+  });
+
+  it('levels only the incoming deck of a blend', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    const context = contexts[0];
+
+    await module.audioService.load('/current', 0.7);
+    module.audioService.armTransition('/next', plan, callbacks(), { level: 1.5 });
+
+    // The outgoing deck is still playing its own track at its own level.
+    expect(levelValue(context, 0)).toBeCloseTo(0.7, 5);
+    expect(levelValue(context, 1)).toBeCloseTo(1.5, 5);
+  });
+
+  it('returns a cancelled blend\'s dropped deck to unity', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    const context = contexts[0];
+
+    await module.audioService.load('/current', 0.7);
+    module.audioService.armTransition('/next', plan, callbacks(), { level: 1.5 });
+    module.audioService.cancelMix('superseded');
+
+    // Cancelled before the handoff, so the outgoing deck keeps playing and
+    // keeps its level; the incoming one is released.
+    expect(levelValue(context, 0)).toBeCloseTo(0.7, 5);
+    expect(levelValue(context, 1)).toBe(1);
+  });
+
+  it('returns both decks to unity on stop', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    const context = contexts[0];
+
+    await module.audioService.load('/one', 0.5);
+    module.audioService.stage('/two', 1.6);
+    module.audioService.stop();
+
+    expect(levelValue(context, 0)).toBe(1);
+    expect(levelValue(context, 1)).toBe(1);
+  });
+
+  it('ramps rather than steps when the listener toggles it mid-track', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    const context = contexts[0];
+
+    await module.audioService.load('/loud', 0.5);
+    const node = levelNode(context, 0);
+    node.gain.linearRampToValueAtTime.mockClear();
+
+    module.audioService.setLevelingEnabled(false);
+    // Turning it off restores unity exactly — not approximately — so the output
+    // is what it was before the feature existed.
+    expect(node.gain.value).toBe(1);
+    expect(node.gain.linearRampToValueAtTime).toHaveBeenCalled();
+
+    module.audioService.setLevelingEnabled(true);
+    // And switching back restores what the deck was already meant to be at,
+    // because the desired level was never thrown away.
+    expect(node.gain.value).toBeCloseTo(0.5, 5);
+  });
+
+  it('can never drive a deck to silence', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    const context = contexts[0];
+
+    // Silence on a deck whose clock is advancing is what `checkAudible` reads
+    // as a dead graph — it would tear the graph down and drop the live tap.
+    await module.audioService.load('/broken', 0);
+    expect(levelValue(context, 0)).toBeGreaterThan(0);
+
+    await module.audioService.load('/broken', Number.NaN);
+    expect(levelValue(context, 0)).toBe(1);
+  });
+
+  it('only ever attenuates when there is no audio graph', async () => {
+    const module = await import('./audio');
+    expect(module.audioService.unlockAudio()).toBe(false);
+
+    await module.audioService.load('/quiet', 0.5);
+    const deck = module.audioEl() as unknown as FakeAudio;
+    expect(deck.volume).toBeCloseTo(0.5, 5);
+
+    // An element's volume cannot amplify, so a boost is dropped rather than
+    // clipped at the top of the range.
+    await module.audioService.load('/loud', 1.8);
+    expect(deck.volume).toBe(1);
+  });
+
+  it('combines levelling with device volume on the no-graph path', async () => {
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    module.audioService.setVolume(0.5);
+
+    await module.audioService.load('/quiet', 0.5);
+    const deck = module.audioEl() as unknown as FakeAudio;
+    expect(deck.volume).toBeCloseTo(0.25, 5);
+    module.audioService.setVolume(1);
+  });
+
+  it('keeps the level on the track it rescues from a dead graph', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.setGraphReporter(() => {});
+    expect(module.audioService.unlockAudio()).toBe(true);
+
+    const deck = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/current', 0.5);
+    deck.currentTime = 10;
+    contexts.at(-1)!.analyser.level = 128;
+    for (let step = 0; step < 8; step += 1) {
+      deck.currentTime += 1;
+      await vi.advanceTimersByTimeAsync(500);
+    }
+
+    expect(module.audioService.graphReady()).toBe(false);
+    const rebuilt = module.audioEl() as unknown as FakeAudio;
+    expect(rebuilt).not.toBe(deck);
+    // The levels live in the shadow, not in the nodes that just died, so the
+    // rescued track comes back at the volume it was already playing at.
+    expect(rebuilt.volume).toBeCloseTo(0.5, 5);
   });
 });

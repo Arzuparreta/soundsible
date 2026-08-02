@@ -778,6 +778,18 @@ class LosslessUpgradeService:
                     old_path.unlink(missing_ok=True)
                 except OSError as exc:
                     logger.info("Could not remove superseded audio %s: %s", old_path, exc)
+
+            # The upgraded file is different audio at a different level, and it
+            # carries a new content hash — so it simply has no measurement yet
+            # rather than inheriting the old one. Measuring it here means the
+            # track is levelled the next time it plays instead of after the
+            # next sweep.
+            try:
+                from shared.loudness import get_loudness_service
+
+                get_loudness_service().measure_now(old_track.id)
+            except Exception:
+                logger.debug("Could not measure upgraded audio for %s", old_track.id, exc_info=True)
             return True
         except Exception as exc:
             self.store.update(
