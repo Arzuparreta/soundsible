@@ -6,10 +6,9 @@ import {
 } from './autoModeLayout';
 
 describe('Auto Mode desktop layout', () => {
-  it('starts with the Stage dominant between Browser and Route', () => {
+  it('starts with three equally sized panels', () => {
     expect(parseAutoModeLayout(null)).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
-    expect(DEFAULT_AUTO_MODE_LAYOUT.ratios.stage).toBeGreaterThan(DEFAULT_AUTO_MODE_LAYOUT.ratios.browser);
-    expect(DEFAULT_AUTO_MODE_LAYOUT.ratios.stage).toBeGreaterThan(DEFAULT_AUTO_MODE_LAYOUT.ratios.route);
+    expect(new Set(Object.values(DEFAULT_AUTO_MODE_LAYOUT.ratios))).toEqual(new Set([1 / 3]));
   });
 
   it('accepts only complete Auto panel layouts and normalizes their ratios', () => {
