@@ -39,6 +39,13 @@ function Rows<T>(props: {
   overscan?: number;
   children: (item: () => T | undefined, index: number) => JSX.Element;
 }) {
+  const initialRect = () => {
+    const element = props.scrollElement();
+    return {
+      width: element?.clientWidth || element?.offsetWidth || 0,
+      height: element?.clientHeight || element?.offsetHeight || 0,
+    };
+  };
   const measure = (): number => {
     const height = props.rowHeight;
     if (typeof height === 'number') return height;
@@ -74,6 +81,11 @@ function Rows<T>(props: {
     },
     getScrollElement: () => props.scrollElement(),
     estimateSize: () => rowH(),
+    // The observer reports subsequent resizes, but the first virtual range is
+    // calculated synchronously. Supplying the already-mounted scrollport keeps
+    // an initially visible list from starting at a zero-height range and only
+    // appearing after a tab switch forces another calculation.
+    initialRect: initialRect(),
     get overscan() {
       return props.overscan ?? 10;
     },

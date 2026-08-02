@@ -101,6 +101,14 @@
   display: none;
 }
 
+.lyricsPending {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+}
+
 /* ── Stage ── */
 .body {
   flex: 1;

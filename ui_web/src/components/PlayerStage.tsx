@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch, untrack, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { actions, isSavedTrack, state } from '../stores';
 import { artistPath } from '../lib/artistRoute';
@@ -25,6 +25,18 @@ import { openActionMenu } from './ActionMenu';
 import styles from './NowPlaying.module.css';
 
 export type PlayerStageMode = 'now-playing' | 'auto';
+
+function StageLyrics() {
+  return (
+    <Suspense fallback={
+      <div class={styles.lyricsPending}>
+        <Spinner size={22} label={t('lyricsPanel.loading')} />
+      </div>
+    }>
+      <LyricsPanel variant="stage" />
+    </Suspense>
+  );
+}
 
 export function PlayerStage(props: {
   mode: PlayerStageMode;
@@ -201,7 +213,13 @@ export function PlayerStage(props: {
                   <div class={styles.art} style={artBg()} role="img" aria-label={current().title} />
                   <Show when={!podcast() && mobileVisual().content === 'lyrics'}>
                     <div class={styles.mobileLyrics}>
-                      <LyricsPanel />
+                      <Suspense fallback={
+                        <div class={styles.lyricsPending}>
+                          <Spinner size={22} label={t('lyricsPanel.loading')} />
+                        </div>
+                      }>
+                        <LyricsPanel />
+                      </Suspense>
                     </div>
                   </Show>
                   <Show when={!podcast()}>
@@ -220,7 +238,7 @@ export function PlayerStage(props: {
                   </Show>
                   <Show when={desktopLyricsActive()}>
                     <div class={styles.desktopLyrics}>
-                      <LyricsPanel variant="stage" />
+                      <StageLyrics />
                     </div>
                   </Show>
                   <Show when={!podcast()}>

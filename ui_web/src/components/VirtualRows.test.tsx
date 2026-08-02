@@ -35,15 +35,11 @@ function renderRows(count: number) {
   return { ...result, items };
 }
 
-// jsdom performs no layout, so the visible window a virtualizer computes is
-// always empty here — how many rows it renders is only observable in a real
-// browser, and `tests/browser/` covers that. What these tests pin is the part
-// jsdom can see: the list never materialises every row, and the scroll extent
-// it reserves matches the full list.
 describe('VirtualRows', () => {
-  it('does not render a row per item', () => {
+  it('renders its initial visible range without waiting for a resize or tab switch', () => {
     renderRows(5000);
 
+    expect(screen.queryAllByTestId('row').length).toBeGreaterThan(0);
     expect(screen.queryAllByTestId('row').length).toBeLessThan(60);
   });
 
