@@ -421,7 +421,7 @@ export function PlayerSurface() {
               setCarouselLive(live);
               setCarouselProgress(index);
             }}
-            surfaceOpen={nowPlayingOpen()}
+            surfaceOpen={nowPlayingOpen() && !auto()}
             onCloseSurface={() => closeSurface()}
           />
         </div>
@@ -442,7 +442,7 @@ export function PlayerSurface() {
                   setCarouselLive(live);
                   setCarouselProgress(index);
                 }}
-                surfaceOpen={nowPlayingOpen()}
+                surfaceOpen={nowPlayingOpen() && auto()}
               />
             </Suspense>
           </Show>
