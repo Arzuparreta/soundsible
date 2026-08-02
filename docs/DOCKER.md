@@ -84,6 +84,13 @@ must use the container paths (`/config`, `/data`, `/cache`, `/logs`, `/music`).
 
 ## Operations
 
+The Docker path is continuously built and started in GitHub Actions for every
+pull request and change to `main` or `dev`. A scheduled clean rebuild also
+checks it against freshly pulled base images and package indexes. A green
+`docker` check means the actual Compose deployment started healthy, served the
+player, ran as its unprivileged user, and kept first-run configuration across a
+container recreation.
+
 View status and logs:
 
 ```bash
@@ -99,6 +106,29 @@ git pull --ff-only
 docker compose build --pull
 docker compose up -d
 ```
+
+`docker compose up -d` replaces the container when the image changes and keeps
+all five named volumes. Do not use automatic image-updaters: review and apply
+Soundsible releases deliberately, so an upstream change cannot silently alter
+your running music server.
+
+### Maintainer dependency updates
+
+The production image installs from the hash-checked
+`requirements.docker.lock`, generated for its Python 3.13 runtime. It prevents
+the same commit from resolving to a different Python dependency set tomorrow.
+When changing `requirements.txt` or deliberately refreshing dependencies,
+regenerate it and commit both files:
+
+```bash
+python3 -m pip install 'pip-tools==7.5.3'
+pip-compile --upgrade --generate-hashes --strip-extras \
+  --output-file requirements.docker.lock requirements.txt
+```
+
+CI rejects a Docker lock that does not satisfy a direct requirement. The daily
+clean Docker rebuild remains responsible for base-image and Debian package
+changes.
 
 Back up persistent state while the service is stopped:
 
