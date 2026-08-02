@@ -2,5 +2,5 @@ Flask==3.1.2
 Flask-Cors==6.0.2
 Flask-SocketIO==5.5.1
 cryptography==46.0.3
-gevent==25.9.1
+gevent==26.7.0
 gevent-websocket==0.10.1
