@@ -14,8 +14,8 @@ WORKDIR /build
 RUN apt-get update \
     && apt-get install --no-install-recommends -y build-essential \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt ./
-RUN pip wheel --wheel-dir /wheels -r requirements.txt
+COPY requirements.docker.lock ./
+RUN pip wheel --require-hashes --wheel-dir /wheels -r requirements.docker.lock
 
 
 FROM python:3.13-slim-bookworm AS runtime

@@ -46,15 +46,19 @@ continuation. Reordering cannot cross lane or generator boundaries.
   source; a paused song does not until it is resumed. Playing a different song
   while Auto is active is an immediate pivot, not an exit.
 - Only exact tracks may be pinned into the route. Reordering a generated row
-  pins that occurrence as a waypoint and replans around it. Removing a row is
-  neutral; `more like` reinforces its branch for this session and `less like`
-  removes that branch and its generated descendants for this session.
+  pins that occurrence as a waypoint and replans around it. A row menu can turn
+  the exact song into a visible open source, remove only that occurrence, or
+  exclude only that song for the session. These actions never imply feedback
+  about an artist, genre or hidden branch.
+- Adding a source expands eligibility at the next natural refill and does not
+  rewrite the visible route. Removing a source or tightening its boundary may
+  replan because music already prepared from it is no longer eligible.
 - Leaving Auto discards generated branches and bridges. Pending exact waypoints
   survive as ordinary manual queue entries.
 - **The committed handoff** is the one upcoming entry Auto Mode has already
   loaded and cued. It survives every replan, and manual insertions land behind
   it rather than in front of it. DJ, direction and request changes are debounced
-  and source or route feedback rewrites only the runway past that point — a session can be steered at any
+  and source-boundary changes rewrite only the runway past that point — a session can be steered at any
   moment without disturbing the mix that is already prepared.
 - Auto Mode's plans are **chained**: an entry's transition records which track
   its cue was planned out of, and a refill continues the route from the tail of

@@ -88,6 +88,7 @@ import {
 let userPlaybackStartedThisSession = false;
 let generatedQueue: GeneratedQueueController | null = null;
 let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
+let autoSessionEpoch = 0;
 const AUTOPLAY_TARGET = 8;
 const AUTOPLAY_PREPARE_THRESHOLD = 2;
 /** Matches REFILL_THRESHOLD.autoplay in generatedQueue: deep enough that a
@@ -848,6 +849,13 @@ function djItemRef(track: Track): DjItemRef {
   };
 }
 
+function autoRecommendationIdentity(track: Track): string {
+  if (track.recommendation?.identity) return track.recommendation.identity;
+  return track.source === 'preview'
+    ? `music:youtube:${track.youtube_id || track.id}`
+    : `music:track:${track.id}`;
+}
+
 /**
  * Upgrade a conservative transition once its analysis exists.
  *
@@ -1193,6 +1201,7 @@ export const actions = {
   enterAutoMode(): void {
     const current = state.playback.currentTrack;
     if (state.autoMode.active || (current && isPodcastTrack(current))) return;
+    autoSessionEpoch += 1;
     autoPlaybackPrefs = {
       shuffle: state.playback.shuffle,
       repeat: state.playback.repeat,
@@ -1225,7 +1234,7 @@ export const actions = {
         implicit: true,
       }] : [],
       heard: current && state.playback.isPlaying ? [current] : [],
-      feedback: [],
+      avoidedIdentities: [],
       requests: [],
       transition: { status: 'idle' },
       pendingDirection: false,
@@ -1269,7 +1278,7 @@ export const actions = {
       phase: 'idle',
       sources: [],
       heard: [],
-      feedback: [],
+      avoidedIdentities: [],
       requests: [],
       plan: {},
       pendingDirection: false,
@@ -1295,7 +1304,25 @@ export const actions = {
       void ensureGeneratedQueue().start('auto_mode', first, state.autoMode.profile);
       return;
     }
-    scheduleRunwayReplan(label);
+    // Adding eligibility does not invalidate a route the listener can already
+    // see. The new set joins at the next natural refill.
+  },
+
+  useAutoTrackAsSource(track: Track): void {
+    if (!state.autoMode.active || isPodcastTrack(track)) return;
+    const identity = queueIdentity(track);
+    const existing = state.autoMode.sources.find((source) => (
+      source.tracks.length === 1 && queueIdentity(source.tracks[0]) === identity
+    ));
+    if (existing) {
+      if (existing.boundary !== 'from') {
+        setState('autoMode', 'sources', (sources) => sources.map((source) => (
+          source.id === existing.id ? { ...source, boundary: 'from' } : source
+        )));
+      }
+      return;
+    }
+    actions.addAutoSource([track], track.title, 'from');
   },
 
   removeAutoSource(id: string): void {
@@ -1312,22 +1339,38 @@ export const actions = {
 
   setAutoSourceBoundary(id: string, boundary: AutoMusicSet['boundary']): void {
     setState('autoMode', 'sources', (sources) => sources.map((source) => source.id === id ? { ...source, boundary } : source));
-    scheduleRunwayReplan(tr('autoMode.note.direction'));
+    if (boundary === 'inside') scheduleRunwayReplan(tr('autoMode.note.direction'));
   },
 
-  feedbackAutoTrack(track: Track, value: 'more' | 'less'): void {
-    const plan = state.autoMode.plan[queueIdentity(track)];
-    if (!plan?.branchId) return;
-    setState('autoMode', 'feedback', (rows) => [
-      ...rows.filter((row) => row.branchId !== plan.branchId),
-      { branchId: plan.branchId!, value },
-    ]);
-    if (value === 'less') {
-      setState('playback', 'queue', (queue) => queue.filter((entry, index) => (
-        index <= state.playback.index || state.autoMode.plan[queueIdentity(entry)]?.branchId !== plan.branchId
-      )));
-    }
-    scheduleRunwayReplan(tr('autoMode.note.direction'));
+  removeAutoRouteOccurrence(queueId: string): void {
+    if (!state.autoMode.active || committedTransition?.queueId === queueId) return;
+    const track = state.playback.queue.find((entry) => entry.queueId === queueId);
+    if (!track) return;
+    setState('autoMode', 'requests', (requests) => requests.filter((request) => (
+      !request.track || queueIdentity(request.track) !== queueIdentity(track)
+    )));
+    actions.removeQueueEntry(queueId);
+    void generatedQueue?.ensureRunway();
+  },
+
+  avoidAutoTrackForSession(queueId: string): void {
+    if (!state.autoMode.active || committedTransition?.queueId === queueId) return;
+    const track = state.playback.queue.find((entry) => entry.queueId === queueId);
+    if (!track) return;
+    const identity = autoRecommendationIdentity(track);
+    const sessionEpoch = autoSessionEpoch;
+    setState('autoMode', 'avoidedIdentities', (identities) => (
+      identities.includes(identity) ? identities : [...identities, identity]
+    ));
+    setState('autoMode', 'requests', (requests) => requests.filter((request) => (
+      !request.track || queueIdentity(request.track) !== queueIdentity(track)
+    )));
+    actions.removeQueueEntry(queueId);
+    void generatedQueue?.ensureRunway();
+    toast.action(tr('autoMode.route.avoided', { title: track.title }), tr('common.undo'), () => {
+      if (!state.autoMode.active || autoSessionEpoch !== sessionEpoch) return;
+      setState('autoMode', 'avoidedIdentities', (identities) => identities.filter((value) => value !== identity));
+    });
   },
 
   setAutoProfile(profile: AutoProfile): void {
@@ -2521,8 +2564,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
           waypoints: state.autoMode.requests.flatMap((request) => request.track
             ? [{ id: request.id, track: request.track }]
             : []),
-          feedback: state.autoMode.feedback.map((row) => ({ branch_id: row.branchId, value: row.value })),
-          exclude,
+          exclude: [...new Set([...exclude, ...state.autoMode.avoidedIdentities])],
           limit,
         }, signal);
       }
@@ -2584,7 +2626,6 @@ function ensureGeneratedQueue(): GeneratedQueueController {
             requestId: item.request_id,
             sourceSetId: item.source_set_id,
             sourceSetLabel: item.source_set_label,
-            branchId: item.branch_id,
             lineage: item.lineage,
           };
           previousKey = id;

@@ -1034,7 +1034,7 @@ def test_dj_plan_v5_keeps_inside_music_sets_as_a_hard_boundary(tmp_path):
     assert body["items"][0]["source_boundary"] == "inside"
 
 
-def test_dj_plan_v5_walks_only_from_open_sources_and_honours_branch_feedback(tmp_path):
+def test_dj_plan_v5_walks_from_open_sources_and_applies_exact_exclusions(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
     mock_api["get_core"].return_value = (
@@ -1056,23 +1056,29 @@ def test_dj_plan_v5_walks_only_from_open_sources_and_honours_branch_feedback(tmp
             "id": "root-set", "label": "One root", "boundary": "from",
             "tracks": [{"id": "root", "track_id": "root", "title": "Root", "artist": "Artist"}],
         }],
-        "heard": [{"id": "root", "track_id": "root"}],
+        "exclude": ["music:track:root"],
         "limit": 4,
     }
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(_auto_mode, "_planner_context_related", return_value=(related, False)) as graph,
     ):
-        first = _make_app().test_client().post("/api/discovery/music/dj-plan", json=payload)
-        branch = first.get_json()["items"][0]["branch_id"]
-        rejected = _make_app().test_client().post(
+        root_excluded = _make_app().test_client().post("/api/discovery/music/dj-plan", json=payload)
+        related_excluded = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
-            json={**payload, "feedback": [{"branch_id": branch, "value": "less"}]},
+            json={
+                **payload,
+                "exclude": ["music:youtube:related001"],
+                "heard": [{"id": "root", "track_id": "root"}],
+            },
         )
 
     assert graph.call_args.kwargs["personalise"] is False
-    assert first.get_json()["items"][0]["lineage"] == ["music:track:root", "music:youtube:related001"]
-    assert rejected.get_json()["items"] == []
+    assert root_excluded.get_json()["items"][0]["lineage"] == ["music:track:root", "music:youtube:related001"]
+    assert all(
+        item["recommendation_identity"] != "music:youtube:related001"
+        for item in related_excluded.get_json()["items"]
+    )
 
 
 def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):

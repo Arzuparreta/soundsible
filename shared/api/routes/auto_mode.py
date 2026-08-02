@@ -972,7 +972,6 @@ def _music_set_item(raw: dict, *, source_id: str, label: str, boundary: str) -> 
         "source_set_id": source_id,
         "source_set_label": label,
         "source_boundary": boundary,
-        "branch_id": f"{source_id}:{item['recommendation_identity']}",
         "lineage": [item["recommendation_identity"]],
         "reason": f"Inside {label}" if boundary == "inside" else f"From {label}",
         "reason_code": "music_set_inside" if boundary == "inside" else "music_set_from",
@@ -1030,7 +1029,6 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
                 "source_set_id": source_id,
                 "source_set_label": label,
                 "source_boundary": boundary,
-                "branch_id": f"{source_id}:{root_identity}",
                 "lineage": [root_identity, item["recommendation_identity"]],
                 "reason": f"Reached from {label}",
                 "reason_code": "music_set_graph_walk",
@@ -1046,13 +1044,10 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         if normalised:
             heard.add(str(normalised["recommendation_identity"]))
     excluded = {str(value) for value in data.get("exclude", []) if str(value)}
-    feedback = [row for row in data.get("feedback", []) if isinstance(row, dict)]
-    killed = {str(row.get("branch_id")) for row in feedback if row.get("value") == "less"}
-    boosted = {str(row.get("branch_id")) for row in feedback if row.get("value") == "more"}
     unique: dict[str, dict] = {}
     for item in candidates:
         identity = str(item.get("recommendation_identity") or item.get("id") or "")
-        if not identity or identity in excluded or str(item.get("branch_id")) in killed:
+        if not identity or identity in excluded:
             continue
         unique.setdefault(identity, item)
     available = [item for key, item in unique.items() if key not in heard]
@@ -1073,7 +1068,6 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     if measured_energies:
         target = measured_energies[min(len(measured_energies) - 1, int(arc * len(measured_energies)))]
         analysed.sort(key=lambda pair: abs(float(pair[1].get("energy") or 0.5) - target))
-    analysed.sort(key=lambda pair: str(pair[0].get("branch_id")) not in boosted)
 
     waypoints = []
     for raw in data.get("waypoints", []):

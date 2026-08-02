@@ -193,7 +193,9 @@ export const zh: Dict = {
       routeEmpty: '添加来源或继续播放歌曲以启动 DJ',
     },
     route: {
-      pinned: '已固定', moreLike: '更多类似 {title}', lessLike: '减少类似 {title}', remove: '从路线移除 {title}',
+      pinned: '已固定', actions: '{title} 的操作', useAsSource: '从这首歌出发',
+      remove: '从路线移除', avoidSession: '本次会话中避开',
+      avoided: '本次会话中不会再次出现“{title}”',
     },
     workspace: {
       aria: '自动模式面板',

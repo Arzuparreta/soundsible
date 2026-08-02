@@ -138,7 +138,7 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 - Radio remains the explicit “more of this now” mode and continuously refills.
   Auto Mode uses the v5 `MusicSet` contract: visible ephemeral sources define
   hard `inside` boundaries or open `from` graph roots, while heard history,
-  exact route waypoints and branch feedback remain session-local. The director
+  exact route waypoints and exact-song exclusions remain session-local. The director
   builds a long energy arc from signal analysis and stochastic graph walks; it
   does not use an LLM or silently apply the account's global taste profile.
   Autoplay remains an invisible finite-context continuation. Search does not

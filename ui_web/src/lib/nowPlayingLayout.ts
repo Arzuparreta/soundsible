@@ -19,7 +19,7 @@ export const NOW_PLAYING_LAYOUT_KEY = 'np:desktopLayout:v1';
 export const DEFAULT_NOW_PLAYING_LAYOUT: NowPlayingDesktopLayout = {
   version: 1,
   order: ['browser', 'stage', 'queue'],
-  ratios: { browser: 0.25, stage: 0.5, queue: 0.25 },
+  ratios: { browser: 1 / 3, stage: 1 / 3, queue: 1 / 3 },
 };
 
 export const NOW_PLAYING_LAYOUT_PRESETS = buildThreePanelLayoutPresets(

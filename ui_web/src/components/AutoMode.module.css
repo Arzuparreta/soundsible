@@ -59,10 +59,19 @@
 .sourceBrowser { min-height: 0; flex: 1; }
 .sourceBrowser > * { height: 100%; }
 
-.routeActions { display: flex; gap: .18rem; }
-.routeActions button { width: 1.8rem; height: 1.8rem; padding: 0; border: 0; border-radius: 999px; background: var(--stage-material-quiet); color: var(--ink-secondary); }
+.routeMenu {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 .35rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: .72rem;
+  letter-spacing: .08em;
+}
 @media (hover: hover) and (pointer: fine) {
-  .routeActions button:hover { color: var(--ink-primary); background: var(--stage-material-active); }
+  .routeMenu:hover { color: var(--ink-primary); background: var(--stage-material-active); }
 }
 
 .booth {

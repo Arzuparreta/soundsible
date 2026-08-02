@@ -21,13 +21,34 @@ export function VirtualRows<T>(props: {
   overscan?: number;
   children: (item: () => T | undefined, index: number) => JSX.Element;
 }) {
+  const [layoutEpoch, setLayoutEpoch] = createSignal(1);
+
+  // A virtualizer samples its scrollport while it mounts. In a panel that has
+  // just been selected, the flex layout can still report a zero-height body
+  // for that one sample. ResizeObserver is not guaranteed to emit a second
+  // record when the panel has already reached its final size in the same
+  // frame, leaving a correctly sized but permanently empty spacer until a tab
+  // change happens to remount it. Keep the immediate mount for the usual
+  // case, then take one post-layout sample by remounting the tiny virtual
+  // window. This is before the user can scroll and does not build all rows.
+  createEffect(() => {
+    const element = props.scrollElement();
+    if (!element || typeof window === 'undefined') return;
+    const frame = window.requestAnimationFrame(() => setLayoutEpoch((epoch) => epoch + 1));
+    onCleanup(() => window.cancelAnimationFrame(frame));
+  });
+
   // The virtualizer observes its scroll element once, when it mounts. This
   // component renders inside that element, so on the first pass the parent's
   // ref has not been assigned yet — building the virtualizer then would leave
   // it observing nothing and rendering no rows at all. Wait for the element.
   return (
     <Show when={props.scrollElement()} keyed>
-      {(element) => <Rows {...props} scrollElement={() => element} />}
+      {(element) => (
+        <Show when={layoutEpoch()} keyed>
+          {(_epoch) => <Rows {...props} scrollElement={() => element} />}
+        </Show>
+      )}
     </Show>
   );
 }

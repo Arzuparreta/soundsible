@@ -193,7 +193,9 @@ export const fr: Dict = {
       routeEmpty: 'Ajoutez une source ou reprenez un morceau pour démarrer le DJ',
     },
     route: {
-      pinned: 'Épinglé', moreLike: 'Plus comme {title}', lessLike: 'Moins comme {title}', remove: 'Retirer {title} du parcours',
+      pinned: 'Épinglé', actions: 'Actions pour {title}', useAsSource: 'Depuis ce morceau',
+      remove: 'Retirer du parcours', avoidSession: 'Éviter pendant cette session',
+      avoided: '« {title} » ne reviendra pas pendant cette session',
     },
     workspace: {
       aria: 'Panneaux Auto Mode',

@@ -15,6 +15,7 @@ import { queueIdentity } from '../lib/queueDiscovery';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import { NowPlayingBrowser } from './NowPlayingBrowser';
+import { openActionMenu } from './ActionMenu';
 import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
@@ -77,11 +78,20 @@ export function AutoMode(props: {
         draggedQueueId = '';
       },
       trailing: committed ? undefined : (
-        <span class={styles.routeActions}>
-          <button type="button" aria-label={t('autoMode.route.moreLike', { title: track.title })} onClick={() => actions.feedbackAutoTrack(track, 'more')}>＋</button>
-          <button type="button" aria-label={t('autoMode.route.lessLike', { title: track.title })} onClick={() => actions.feedbackAutoTrack(track, 'less')}>−</button>
-          <button type="button" aria-label={t('autoMode.route.remove', { title: track.title })} onClick={() => actions.removeQueueEntry(track.queueId)}>×</button>
-        </span>
+        <button
+          class={styles.routeMenu}
+          type="button"
+          aria-label={t('autoMode.route.actions', { title: track.title })}
+          onClick={() => openActionMenu({
+            title: track.title,
+            subtitle: track.artist,
+            actions: [
+              { label: t('autoMode.route.useAsSource'), onSelect: () => actions.useAutoTrackAsSource(track) },
+              { label: t('autoMode.route.remove'), onSelect: () => actions.removeAutoRouteOccurrence(track.queueId) },
+              { label: t('autoMode.route.avoidSession'), danger: true, onSelect: () => actions.avoidAutoTrackForSession(track.queueId) },
+            ],
+          })}
+        >···</button>
       ),
     };
   }));

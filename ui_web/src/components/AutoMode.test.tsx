@@ -1,11 +1,12 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { actions, openContextMenu, state } = vi.hoisted(() => ({
+const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
   actions: {
-    setAutoSourceBoundary: vi.fn(), removeAutoSource: vi.fn(), feedbackAutoTrack: vi.fn(),
-    removeQueueEntry: vi.fn(), moveAutoRoute: vi.fn(), playNow: vi.fn(),
+    setAutoSourceBoundary: vi.fn(), removeAutoSource: vi.fn(), useAutoTrackAsSource: vi.fn(),
+    removeAutoRouteOccurrence: vi.fn(), avoidAutoTrackForSession: vi.fn(), moveAutoRoute: vi.fn(), playNow: vi.fn(),
   },
+  openActionMenu: vi.fn(),
   openContextMenu: vi.fn(),
   state: {
     playback: {
@@ -20,13 +21,14 @@ const { actions, openContextMenu, state } = vi.hoisted(() => ({
       sources: [{ id: 'source-1', label: 'Warehouse techno', boundary: 'from' as const, tracks: [{ id: 'root', title: 'Root', artist: 'DJ' }] }],
       requests: [],
       transition: { status: 'idle' as const },
-      plan: { next: { trackId: 'next', fromKey: 'current', source: 'related' as const, reasonKey: '', sourceSetLabel: 'Warehouse techno', branchId: 'branch-1', lineage: ['root', 'next'] } },
+      plan: { next: { trackId: 'next', fromKey: 'current', source: 'related' as const, reasonKey: '', sourceSetLabel: 'Warehouse techno', lineage: ['root', 'next'] } },
     },
   },
 }));
 
 vi.mock('../stores', () => ({ actions, state }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu }));
+vi.mock('./ActionMenu', () => ({ openActionMenu }));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/i18n', () => ({ t: (key: string, params?: Record<string, string | number>) => params ? `${key}:${Object.values(params).join(',')}` : key }));
 vi.mock('./PlayerStage', () => ({ PlayerStage: (props: { mode: string }) => <div data-testid="shared-stage" data-mode={props.mode} /> }));
@@ -50,15 +52,22 @@ describe('AutoMode workspace', () => {
     expect(actions.setAutoSourceBoundary).toHaveBeenCalledWith('source-1', 'inside');
   });
 
-  it('shows lineage and offers session-local route feedback', () => {
+  it('shows lineage and exposes explicit actions through one route menu', () => {
     renderAuto('route');
     expect(screen.getAllByText(/Warehouse techno/)).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.moreLike:Next song' }));
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.lessLike:Next song' }));
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.remove:Next song' }));
-    expect(actions.feedbackAutoTrack).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 'next' }), 'more');
-    expect(actions.feedbackAutoTrack).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 'next' }), 'less');
-    expect(actions.removeQueueEntry).toHaveBeenCalledWith('q-next');
+    expect(screen.queryByText('＋')).not.toBeInTheDocument();
+    expect(screen.queryByText('−')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.actions:Next song' }));
+    const menu = openActionMenu.mock.calls[0][0];
+    expect(menu.actions.map((action: { label: string }) => action.label)).toEqual([
+      'autoMode.route.useAsSource', 'autoMode.route.remove', 'autoMode.route.avoidSession',
+    ]);
+    menu.actions[0].onSelect();
+    menu.actions[1].onSelect();
+    menu.actions[2].onSelect();
+    expect(actions.useAutoTrackAsSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'next' }));
+    expect(actions.removeAutoRouteOccurrence).toHaveBeenCalledWith('q-next');
+    expect(actions.avoidAutoTrackForSession).toHaveBeenCalledWith('q-next');
   });
 
   it('keeps exact title-fit tiers exported for Stage', () => {
