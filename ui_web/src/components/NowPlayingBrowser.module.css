@@ -6,6 +6,7 @@
 .search input::-webkit-search-cancel-button{display:none}
 .scopeButton,.clear,.close,.viewHeader button,.sectionHead button{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;flex:0 0 auto;color:var(--ink-secondary);background:none;border:0;border-radius:var(--radius-full);cursor:pointer}
 .scopeButton svg,.clear svg,.close svg,.viewHeader svg,.sectionHead svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.viewHeader button:not([aria-label]){width:auto;min-width:36px;padding:0 8px;white-space:nowrap}
 @media (hover: hover) and (pointer: fine) {
   .scopeButton:hover,
   .clear:hover,
@@ -21,8 +22,9 @@
 .panel[data-purpose='auto-route'] .close,
 .panel[data-purpose='auto-source'] .close{display:inline-flex}
 .rootNav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
-.navCard{position:relative;display:grid;grid-template-columns:34px 1fr auto;grid-template-rows:auto auto;align-items:center;gap:1px 9px;min-width:0;padding:14px 12px;text-align:left;color:var(--ink-primary);background:var(--stage-material);border:1px solid var(--stage-line);border-radius:var(--radius-lg);cursor:pointer}
-.navCard>span{grid-row:1/3;display:grid;place-items:center;width:34px;height:34px;color: var(--accent-ink);background:var(--accent-faint);border-radius:10px}.navCard svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2}.navCard strong{font-size:var(--text-label);overflow:hidden;text-overflow:ellipsis}.navCard small{color:var(--ink-tertiary)}.navCard>svg{display:none}
+.rootNav .navCard:first-child{grid-column:1/-1}
+.navCard{position:relative;display:grid;grid-template-columns:32px minmax(0,1fr) auto;grid-template-rows:auto auto;align-items:center;gap:1px 8px;min-width:0;padding:11px 12px;text-align:left;color:var(--ink-primary);background:var(--stage-material);border:1px solid var(--stage-line);border-radius:var(--radius-lg);cursor:pointer}
+.navCard>span{grid-row:1/3;display:grid;place-items:center;width:32px;height:32px;color: var(--accent-ink);background:var(--accent-faint);border-radius:9px}.navCard svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2}.navCard strong{min-width:0;font-size:var(--text-label);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.navCard small{color:var(--ink-tertiary)}.navCard>svg{display:none}
 .section{margin-top:18px}.section>h2,.sectionHead h2{margin:0 0 8px;padding:0 4px;color:var(--ink-tertiary);font-size:var(--text-caption);font-weight:var(--fw-semibold);letter-spacing:.07em;text-transform:uppercase}
 .sectionHead{display:flex;align-items:center;justify-content:space-between}.sectionHead h2{margin:0}.sectionHead button{width:32px;height:32px}
 .quickGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.quick{display:flex;align-items:center;gap:9px;min-width:0;padding:10px;color:var(--ink-primary);background:var(--stage-material);border:1px solid var(--stage-line);border-radius:var(--radius-md);cursor:pointer}.quick:disabled{opacity:.38;cursor:not-allowed}.quick span{display:grid;place-items:center;width:28px;height:28px;color: var(--accent-ink);background:var(--accent-faint);border-radius:9px}.quick svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2}.quick strong{font-size:var(--text-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

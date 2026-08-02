@@ -257,9 +257,60 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
     await expect(autoStage).toHaveAttribute('inert', '');
 
     if (destination === 'browser') {
-      await expect(side.getByRole('button', { name: /^Biblioteca/ })).toBeVisible();
+      const libraryCard = side.getByRole('button', { name: /^Biblioteca/ });
+      const favouritesCard = side.getByRole('button', { name: /^Favoritos/ });
+      const playlistsCard = side.getByRole('button', { name: /^Listas/ });
+      await expect(libraryCard).toBeVisible();
+      await expect(favouritesCard).toBeVisible();
+      await expect(playlistsCard).toBeVisible();
+      const [libraryBox, favouritesBox, playlistsBox] = await Promise.all([
+        libraryCard.boundingBox(), favouritesCard.boundingBox(), playlistsCard.boundingBox(),
+      ]);
+      expect(libraryBox).not.toBeNull();
+      expect(favouritesBox).not.toBeNull();
+      expect(playlistsBox).not.toBeNull();
+      expect(Math.abs(favouritesBox!.y - playlistsBox!.y)).toBeLessThanOrEqual(1);
+      expect(favouritesBox!.y).toBeGreaterThan(libraryBox!.y + libraryBox!.height);
+      expect(Math.abs(favouritesBox!.width - playlistsBox!.width)).toBeLessThanOrEqual(1);
+      expect(libraryBox!.width).toBeGreaterThan(favouritesBox!.width + playlistsBox!.width);
     } else {
       await expect(side.getByRole('heading', { name: 'Ruta preparada' })).toBeVisible();
+      await side.getByRole('button', { name: 'Añadir' }).click();
+      const browser = page.locator('[data-auto-tile="browser"]');
+      await expect(browser).not.toHaveAttribute('inert', '');
+      await browser.getByRole('button', { name: /^Biblioteca/ }).click();
+      await browser.getByRole('button', { name: /Luz de verano/ }).first().click();
+      await expect(side).not.toHaveAttribute('inert', '');
+      await side.getByRole('button', { name: 'Añadir' }).click();
+      await expect(browser).not.toHaveAttribute('inert', '');
+      await browser.getByRole('button', { name: /Horizonte/ }).first().click();
+      await expect(side).not.toHaveAttribute('inert', '');
+      const dormantInsertionTargets = side.locator('button[aria-label^="Insertar una canción antes de"]');
+      await expect(dormantInsertionTargets).toHaveCount(2);
+      await expect(dormantInsertionTargets.first()).toBeHidden();
+      await expect(dormantInsertionTargets.last()).toBeHidden();
+
+      const carriedRow = side.locator('[draggable="true"]').first();
+      await carriedRow.dispatchEvent('pointerdown', { pointerType: 'touch', isPrimary: true });
+      await expect(dormantInsertionTargets.first()).toHaveAttribute('data-placement-active', '');
+      await expect(dormantInsertionTargets.first()).toBeVisible();
+      await expect(dormantInsertionTargets.last()).toBeVisible();
+      const targetGeometry = await dormantInsertionTargets.evaluateAll((targets) => targets.map((target) => {
+        const box = target.getBoundingClientRect();
+        const previous = target.previousElementSibling?.getBoundingClientRect();
+        const following = target.nextElementSibling?.getBoundingClientRect();
+        const marker = target.querySelector('span')?.getBoundingClientRect();
+        return {
+          height: box.height,
+          clearsPrevious: !previous || box.top >= previous.bottom,
+          clearsFollowing: !following || box.bottom <= following.top,
+          markerOffset: marker ? Math.abs((marker.top + marker.height / 2) - (box.top + box.height / 2)) : 99,
+        };
+      }));
+      expect(new Set(targetGeometry.map((target) => target.height)).size).toBe(1);
+      expect(targetGeometry.every((target) => target.clearsPrevious && target.clearsFollowing)).toBe(true);
+      expect(targetGeometry.every((target) => target.markerOffset <= 1)).toBe(true);
+      await carriedRow.dispatchEvent('pointerup', { pointerType: 'touch', isPrimary: true });
     }
 
     await holdCarousel(page, '[data-auto-carousel]');

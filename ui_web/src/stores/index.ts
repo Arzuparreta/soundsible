@@ -1988,7 +1988,7 @@ export const actions = {
     prefetchUpcoming();
   },
 
-  moveAutoRoute(queueId: string, beforeQueueId: string): void {
+  moveAutoRoute(queueId: string, beforeQueueId?: string): void {
     if (!state.autoMode.active || queueId === beforeQueueId) return;
     const removedBridgeIds = new Set(state.playback.queue
       .filter((entry) => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId)
@@ -1997,14 +1997,18 @@ export const actions = {
       entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId
     ));
     const from = queue.findIndex((entry) => entry.queueId === queueId);
-    const before = queue.findIndex((entry) => entry.queueId === beforeQueueId);
+    const before = beforeQueueId
+      ? queue.findIndex((entry) => entry.queueId === beforeQueueId)
+      : queue.length;
     if (from <= state.playback.index || before <= state.playback.index) return;
     const [rawEntry] = queue.splice(from, 1);
     const entry = {
       ...rawEntry,
       autoRoute: { kind: 'user' as const, placement: 'fixed' as const },
     };
-    const target = queue.findIndex((row) => row.queueId === beforeQueueId);
+    const target = beforeQueueId
+      ? queue.findIndex((row) => row.queueId === beforeQueueId)
+      : queue.length;
     queue.splice(target, 0, entry);
     setState('playback', 'queue', queue);
     setState('autoMode', 'plan', (plan) => Object.fromEntries(

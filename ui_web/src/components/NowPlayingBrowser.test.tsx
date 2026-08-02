@@ -70,6 +70,7 @@ vi.mock('../stores', async () => {
       library: () => storeMock.state.library,
       queue: () => storeMock.state.playback.queue,
     }),
+    favouriteTracks: () => storeMock.state.favorites.includes(storeMock.local.id) ? [storeMock.local] : [],
   };
 });
 vi.mock('./trackActions', () => ({ openTrackMenu: vi.fn() }));
@@ -99,6 +100,7 @@ describe('NowPlayingBrowser', () => {
     apiMock.resolveCatalogItem.mockResolvedValue({});
     nodeMock.items = [];
     nodeMock.loading = false;
+    storeMock.state.favorites = [];
   });
 
   afterEach(() => {
@@ -111,10 +113,44 @@ describe('NowPlayingBrowser', () => {
 
     expect(screen.getByPlaceholderText('Search everywhere')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Library/ })).toHaveAttribute('data-pressable');
+    expect(screen.getByRole('button', { name: /^Favourites/ })).toHaveAttribute('data-pressable');
     expect(screen.getByRole('button', { name: /^Playlists/ })).toHaveAttribute('data-pressable');
+    expect(screen.getByText('Listen now')).toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     expect(screen.queryByText('Podcasts')).not.toBeInTheDocument();
     expect(screen.queryByText('Settings')).not.toBeInTheDocument();
+  });
+
+  it.each(['auto-neutral', 'auto-source', 'auto-route'] as const)(
+    'hides Listen now in the %s Auto browser context',
+    (purpose) => {
+      render(() => <NowPlayingBrowser purpose={purpose} onClose={vi.fn()} />);
+
+      expect(screen.queryByText('Listen now')).not.toBeInTheDocument();
+    },
+  );
+
+  it('opens favourites as a first-class Now Playing collection', () => {
+    storeMock.state.favorites = ['local-1'];
+    render(() => <NowPlayingBrowser onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
+    expect(screen.getByRole('heading', { name: 'Favourites' })).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Local Song'));
+    expect(storeMock.actions.playFrom).toHaveBeenCalledWith(
+      [storeMock.local],
+      0,
+      { context: { id: 'favourites', kind: 'favourites', label: 'Favourites' } },
+    );
+  });
+
+  it('uses the same favourites view as an Auto source destination', () => {
+    storeMock.state.favorites = ['local-1'];
+    render(() => <NowPlayingBrowser purpose="auto-source" onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to sources' }));
+    expect(storeMock.actions.addAutoSource).toHaveBeenCalledWith([storeMock.local], 'Favourites');
   });
 
   it('only enters library scope explicitly and offers the same query globally', async () => {

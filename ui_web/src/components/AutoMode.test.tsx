@@ -39,7 +39,7 @@ function renderAuto(panel: 'browser' | 'stage' | 'route' = 'stage') {
   return render(() => <AutoMode panel={panel} onPanelChange={vi.fn()} surfaceOpen />);
 }
 
-afterEach(() => { vi.clearAllMocks(); localStorage.clear(); });
+afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); localStorage.clear(); });
 
 describe('AutoMode workspace', () => {
   it('keeps the browser neutral until Sources is chosen as the destination', () => {
@@ -67,6 +67,27 @@ describe('AutoMode workspace', () => {
     expect(actions.useAutoTrackAsSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'next' }));
     expect(actions.removeAutoRouteOccurrence).toHaveBeenCalledWith('q-next');
     expect(actions.avoidAutoTrackForSession).toHaveBeenCalledWith('q-next');
+  });
+
+  it('moves a carried route occurrence instead of inserting a duplicate', () => {
+    vi.useFakeTimers();
+    state.playback.queue.push({
+      id: 'later', queueId: 'q-later', title: 'Later song', artist: 'Later artist', source: 'preview' as const,
+    });
+    try {
+      renderAuto('route');
+      const targets = screen.getAllByRole('button', { name: /autoMode\.route\.insertBefore/ });
+      const firstRow = targets[0].nextElementSibling as HTMLElement;
+      fireEvent.pointerDown(firstRow, { pointerType: 'touch', isPrimary: true });
+      vi.advanceTimersByTime(460);
+
+      expect(targets[1]).toHaveAttribute('data-placement-active', '');
+      fireEvent.click(targets[1]);
+      expect(actions.moveAutoRoute).toHaveBeenCalledWith('q-next', 'q-later');
+      expect(actions.placeAutoTrack).not.toHaveBeenCalled();
+    } finally {
+      state.playback.queue.pop();
+    }
   });
 
   it('keeps exact title-fit tiers exported for Stage', () => {

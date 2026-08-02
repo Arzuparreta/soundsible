@@ -140,8 +140,41 @@
 .carry button { border: 0; background: transparent; color: inherit; font-size: 1.1rem; }
 
 @media (hover: none), (pointer: coarse) {
-  .routeGap { height: .9rem; }
-  .routeGap span { color: var(--ink-secondary); opacity: .7; transform: none; }
+  .routeGap {
+    width: calc(100% - 1.3rem);
+    height: 0;
+    margin: 0 .65rem;
+    overflow: hidden;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .routeGap[data-placement-active] {
+    grid-template-columns: minmax(0, 1fr) 1.5rem minmax(0, 1fr);
+    height: 1.75rem;
+    margin: .2rem .65rem;
+    align-items: center;
+    justify-items: stretch;
+    overflow: visible;
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .routeGap[data-placement-active]::before,
+  .routeGap[data-placement-active]::after {
+    height: 1px;
+    background: color-mix(in srgb, var(--accent) 42%, var(--stage-line));
+    content: '';
+  }
+
+  .routeGap[data-placement-active] span {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: var(--ink-primary);
+    justify-self: center;
+    opacity: 1;
+    transform: none;
+  }
 }
 @media (hover: hover) and (pointer: fine) {
   .routeMenu:hover { color: var(--ink-primary); background: var(--stage-material-active); }
