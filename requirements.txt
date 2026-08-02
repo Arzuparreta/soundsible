@@ -29,7 +29,7 @@ watchdog>=3.0.0            # Folder monitoring
 pyacoustid>=1.2.2          # Audio fingerprinting
 
 # Development
-pytest>=7.4.0              # Testing framework
+pytest>=9.1.1              # Testing framework
 pytest-asyncio>=0.21.0     # Async test support
 pytest-cov>=4.1.0          # Coverage reporting
 ruff>=0.1.0                # Fast Python linter (lint + format checks)
