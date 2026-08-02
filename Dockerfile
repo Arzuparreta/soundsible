@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS ui-build
+FROM node:26-bookworm-slim AS ui-build
 
 WORKDIR /build/ui_web
 COPY ui_web/package.json ui_web/package-lock.json ./
