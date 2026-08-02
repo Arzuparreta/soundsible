@@ -1,6 +1,6 @@
 # S3-Compatible Storage (Multi-Provider Support)
 boto3>=1.28.0              # AWS S3, Cloudflare R2, generic S3
-b2sdk>=1.19.0              # Backblaze B2 native SDK (fallback)
+b2sdk>=2.12.0              # Backblaze B2 native SDK (fallback)
 
 # Audio Processing
 mutagen>=1.46.0            # Audio metadata extraction
