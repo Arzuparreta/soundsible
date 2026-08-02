@@ -174,15 +174,11 @@ export interface DjTransitionPlan {
   };
 }
 
-export type DjRequestTarget =
-  | { id: string; kind: 'track'; label: string; track: Track }
-  | { id: string; kind: 'artist'; label: string; artist: { name: string } };
-
 export interface DjMusicSetSource {
   id: string;
   label: string;
-  boundary: 'inside' | 'from';
   tracks: Track[];
+  activation: number;
 }
 
 export interface DjCommandResponse {
@@ -244,7 +240,7 @@ export interface ListeningPlanItem {
 }
 
 export interface ListeningPlanResponse {
-  v: 1 | 2 | 3 | 4 | 5;
+  v: 1 | 2 | 3 | 4 | 5 | 6;
   plan_id: string;
   intent: ListeningPlanIntent;
   profile: ListeningPlanProfile;
@@ -259,25 +255,30 @@ export interface ListeningPlanResponse {
 }
 
 export interface DjPlanResponse extends ListeningPlanResponse {
-  v: 2 | 3 | 4 | 5;
+  v: 2 | 3 | 4 | 5 | 6;
   dj_profile: DjProfile;
   source_profile: ListeningPlanProfile;
   /** Features of the track the route continues from — the only reading the
    * player has for a song it did not plan itself. */
   seed_analysis?: { bpm?: number; key?: string | null; energy?: number; analysed?: boolean };
   items: ListeningPlanItem[];
-  requests: Array<{
-    id: string;
-    kind?: 'track' | 'artist';
-    label?: string;
-    status?: 'planned' | 'failed';
-    track_identity?: string | null;
-    eta_tracks: number | null;
-    scheduled_position?: number | null;
-    preferred_position?: number;
-    max_position?: number;
-    failure_code?: string | null;
+}
+
+export interface DjRouteRef extends DjItemRef {
+  queue_id: string;
+}
+
+export interface DjPlacementResponse {
+  v: 1;
+  insert_at: number;
+  before_queue_id: string | null;
+  requested_queue_id: string;
+  items: Array<ListeningPlanItem & {
+    route_kind: 'user' | 'bridge';
+    owner_queue_id?: string;
   }>;
+  following_transition?: DjTransitionPlan;
+  degraded: boolean;
 }
 
 export interface DiscoverySaveCandidate {
@@ -876,10 +877,8 @@ export const api = {
         album?: string;
         duration?: number;
       };
-      requests?: DjRequestTarget[];
       sources?: DjMusicSetSource[];
       heard?: Track[];
-      waypoints?: Array<{ id: string; track: Track }>;
       exclude?: string[];
       limit?: number;
     },
@@ -893,6 +892,25 @@ export const api = {
       timeoutMs: 20000,
       signal,
     }),
+  placeDjTrack: (
+    body: {
+      dj_profile: DjProfile;
+      seed: DjItemRef;
+      route: DjRouteRef[];
+      track: Track;
+      requested_queue_id: string;
+      before_queue_id?: string;
+      sources?: DjMusicSetSource[];
+      heard?: Track[];
+      exclude?: string[];
+    },
+    signal?: AbortSignal,
+  ) => request<DjPlacementResponse>('/api/discovery/music/dj-place', {
+    method: 'POST',
+    body,
+    timeoutMs: 20000,
+    signal,
+  }),
   interpretDjCommand: (text: string, signal?: AbortSignal) =>
     request<DjCommandResponse>('/api/discovery/music/dj-command', {
       method: 'POST',

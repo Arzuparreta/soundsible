@@ -958,7 +958,7 @@ def discovery_music_dj_command():
     })
 
 
-def _music_set_item(raw: dict, *, source_id: str, label: str, boundary: str) -> dict | None:
+def _music_set_item(raw: dict, *, source_id: str, label: str, weight: float = 1.0) -> dict | None:
     """Turn a browser track into a planner item without consulting taste history."""
     track = dict(raw)
     if track.get("source") == "preview":
@@ -971,10 +971,10 @@ def _music_set_item(raw: dict, *, source_id: str, label: str, boundary: str) -> 
     item.update({
         "source_set_id": source_id,
         "source_set_label": label,
-        "source_boundary": boundary,
+        "source_weight": max(0.05, min(1.0, weight)),
         "lineage": [item["recommendation_identity"]],
-        "reason": f"Inside {label}" if boundary == "inside" else f"From {label}",
-        "reason_code": "music_set_inside" if boundary == "inside" else "music_set_from",
+        "reason": f"From {label}",
+        "reason_code": "music_set_source",
         "recommendation_source": "auto_mode",
     })
     return item
@@ -987,17 +987,19 @@ def _auto_set_arc_position(heard_count: int, segment_index: int) -> float:
 
 
 def _build_music_set_route(data: dict) -> tuple[dict, int]:
-    """Auto v5: conduct explicit sets; never infer a permanent global crate.
+    """Auto v6: conduct accumulating sources without semantic fences.
 
-    Closed sets are hard eligibility boundaries. Open sets are graph roots. The
-    only memory accepted here is session-local ``heard`` and branch feedback.
+    Explicit sources and music that actually sounded are the only graph roots.
+    Candidates never become roots merely because a previous plan recommended
+    them, which prevents self-reinforcing recommendation walks.
     """
     seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
     sources = [row for row in data.get("sources", []) if isinstance(row, dict)]
     if not seed:
         return {"error": "seed is required"}, 400
-    if not sources:
-        return {"error": "at least one music set source is required"}, 400
+    raw_heard = data.get("heard") if isinstance(data.get("heard"), list) else []
+    if not sources and not raw_heard:
+        return {"error": "at least one source or heard track is required"}, 400
     try:
         limit = min(8, max(1, int(data.get("limit") or 8)))
         segment_index = max(0, int(data.get("segment_index") or 0))
@@ -1009,17 +1011,24 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     metadata = getattr(lib, "metadata", None)
     candidates: list[dict] = []
     degraded = False
-    for source in sources:
+    ordered_sources = sorted(
+        sources,
+        key=lambda row: int(row.get("activation") or 0),
+    )
+    source_count = max(1, len(ordered_sources))
+    for source_index, source in enumerate(ordered_sources):
         source_id = str(source.get("id") or uuid.uuid4())
         label = str(source.get("label") or "Music set").strip()
-        boundary = "inside" if source.get("boundary") == "inside" else "from"
+        # Old sources stay alive while the latest direction dominates. The
+        # floor deliberately remains non-zero: decay is not deletion.
+        weight = 0.38 + 0.62 * ((source_index + 1) / source_count)
         roots = [
             item for raw in source.get("tracks", [])
             if isinstance(raw, dict)
-            and (item := _music_set_item(raw, source_id=source_id, label=label, boundary=boundary))
+            and (item := _music_set_item(raw, source_id=source_id, label=label, weight=weight))
         ]
         candidates.extend(roots)
-        if boundary != "from" or not roots:
+        if not roots:
             continue
         related, graph_degraded = _planner_context_related(metadata, roots[-4:], personalise=False)
         degraded = degraded or graph_degraded
@@ -1028,21 +1037,39 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
             item.update({
                 "source_set_id": source_id,
                 "source_set_label": label,
-                "source_boundary": boundary,
+                "source_weight": weight,
                 "lineage": [root_identity, item["recommendation_identity"]],
                 "reason": f"Reached from {label}",
                 "reason_code": "music_set_graph_walk",
                 "recommendation_source": "auto_mode",
             })
+            item["score"] = float(item.get("score") or 0.5) * weight
         candidates.extend(related)
 
     heard: set[str] = set()
-    for raw in data.get("heard", []):
+    heard_roots = []
+    for raw in raw_heard[-4:]:
         if not isinstance(raw, dict):
             continue
-        normalised = _music_set_item(raw, source_id="heard", label="Heard", boundary="inside")
+        normalised = _music_set_item(raw, source_id="heard", label="Heard", weight=0.3)
         if normalised:
             heard.add(str(normalised["recommendation_identity"]))
+            heard_roots.append(normalised)
+    if heard_roots:
+        related, graph_degraded = _planner_context_related(metadata, heard_roots, personalise=False)
+        degraded = degraded or graph_degraded
+        for item in related:
+            item.update({
+                "source_set_id": "heard",
+                "source_set_label": "Heard",
+                "source_weight": 0.3,
+                "lineage": ["heard", item["recommendation_identity"]],
+                "reason": "Reached from music already heard",
+                "reason_code": "heard_context",
+                "recommendation_source": "auto_mode",
+            })
+            item["score"] = float(item.get("score") or 0.5) * 0.3
+        candidates.extend(related)
     excluded = {str(value) for value in data.get("exclude", []) if str(value)}
     unique: dict[str, dict] = {}
     for item in candidates:
@@ -1051,8 +1078,8 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
             continue
         unique.setdefault(identity, item)
     available = [item for key, item in unique.items() if key not in heard]
-    # Novelty relaxes only when the boundary has no unheard answer. Eligibility
-    # never leaks outside a closed set.
+    # Exact repeat exclusion is not a semantic fence. It may relax only when
+    # the available pool is exhausted.
     if not available:
         available = list(unique.values())
 
@@ -1069,30 +1096,9 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         target = measured_energies[min(len(measured_energies) - 1, int(arc * len(measured_energies)))]
         analysed.sort(key=lambda pair: abs(float(pair[1].get("energy") or 0.5) - target))
 
-    waypoints = []
-    for raw in data.get("waypoints", []):
-        if not isinstance(raw, dict):
-            continue
-        track = raw.get("track") if isinstance(raw.get("track"), dict) else raw
-        item = _music_set_item(track, source_id="waypoint", label="Route", boundary="inside")
-        if item:
-            item.update({"request_id": str(raw.get("id") or uuid.uuid4()), "reason_code": "route_waypoint"})
-            waypoints.append(item)
-
     ordered: list[tuple[dict, dict]] = []
     pool = analysed
     previous = _dj_item_analysis(metadata, seed, schedule=True)
-    for waypoint in waypoints:
-        if len(ordered) >= limit:
-            break
-        waypoint_analysis = _dj_item_analysis(metadata, waypoint)
-        segment = route_to_request(previous, pool, (waypoint, waypoint_analysis), profile="adaptive", max_starts=min(4, limit - len(ordered)))
-        if segment:
-            for row in segment:
-                ordered.append((row, row.get("analysis") or _dj_item_analysis(metadata, row)))
-            used = {str(row.get("recommendation_identity")) for row, _ in ordered}
-            pool = [pair for pair in pool if str(pair[0].get("recommendation_identity")) not in used]
-            previous = waypoint_analysis
     for item, analysis in pool:
         if len(ordered) >= limit:
             break
@@ -1106,7 +1112,7 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     for item in route:
         _dj_item_analysis(metadata, item, schedule=True)
     return {
-        "v": 5,
+        "v": 6,
         "plan_id": str(uuid.uuid4()),
         "intent": "auto_mode",
         "profile": "balanced",
@@ -1115,7 +1121,6 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         "seed_identity": str(seed.get("id") or seed.get("youtube_id") or ""),
         "seed_analysis": _dj_item_analysis(metadata, seed, schedule=True),
         "items": route,
-        "requests": [],
         "degraded": degraded or not route,
         "pool_counts": {
             "local": sum(1 for item in unique.values() if item.get("source_pool") == "local"),
@@ -1318,6 +1323,142 @@ def discovery_music_dj_plan():
         "items": route,
         "requests": request_statuses,
     })
+
+
+def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tuple[dict, dict]]:
+    """Build one-hop bridges from explicit sources and heard music only."""
+    roots = []
+    sources = data.get("sources") if isinstance(data.get("sources"), list) else []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        tracks = source.get("tracks") if isinstance(source.get("tracks"), list) else []
+        for raw in tracks:
+            if not isinstance(raw, dict):
+                continue
+            item = _music_set_item(
+                raw,
+                source_id=str(source.get("id") or "source"),
+                label=str(source.get("label") or "Source"),
+            )
+            if item:
+                roots.append(item)
+    heard = data.get("heard") if isinstance(data.get("heard"), list) else []
+    for raw in heard[-4:]:
+        if not isinstance(raw, dict):
+            continue
+        item = _music_set_item(raw, source_id="heard", label="Heard", weight=0.3)
+        if item:
+            roots.append(item)
+    if not roots:
+        return []
+    related, _ = _planner_context_related(metadata, roots[-8:], personalise=False)
+    candidates = []
+    for item in related:
+        identity = str(item.get("recommendation_identity") or item.get("id") or "")
+        if not identity or identity in occupied:
+            continue
+        occupied.add(identity)
+        candidates.append((item, _dj_item_analysis(metadata, item)))
+        if len(candidates) >= 12:
+            break
+    return candidates
+
+
+@discovery_bp.route("/api/discovery/music/dj-place", methods=["POST"])
+@rate_limit("discovery_music_dj_place", limit=90, window_sec=60)
+def discovery_music_dj_place():
+    """Place one song in the current route without rebuilding that route."""
+    data = request.get_json(silent=True) or {}
+    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
+    raw_track = data.get("track") if isinstance(data.get("track"), dict) else {}
+    raw_route = data.get("route") if isinstance(data.get("route"), list) else []
+    requested_queue_id = str(data.get("requested_queue_id") or "").strip()
+    if not seed or not raw_track or not requested_queue_id:
+        return jsonify({"error": "seed, track and requested_queue_id are required"}), 400
+    profile = str(data.get("dj_profile") or "adaptive").strip()
+    if profile not in DJ_PROFILES:
+        return jsonify({"error": "unsupported dj_profile"}), 400
+
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    metadata = getattr(lib, "metadata", None)
+    target = _music_set_item(raw_track, source_id="route", label="Route")
+    if not target:
+        return jsonify({"error": "track cannot be placed"}), 400
+    target.update({
+        "request_id": requested_queue_id,
+        "reason": "Placed in route",
+        "reason_code": "route_user",
+    })
+    target_analysis = _dj_item_analysis(metadata, target, schedule=True)
+
+    route: list[tuple[dict, dict]] = []
+    occupied = {str(target.get("recommendation_identity") or target.get("id") or "")}
+    for raw in raw_route[:16]:
+        if not isinstance(raw, dict):
+            continue
+        item = _music_set_item(raw, source_id="route", label="Route")
+        if not item:
+            continue
+        item["queue_id"] = str(raw.get("queue_id") or "")
+        occupied.add(str(item.get("recommendation_identity") or item.get("id") or ""))
+        route.append((item, _dj_item_analysis(metadata, item)))
+
+    before_queue_id = str(data.get("before_queue_id") or "").strip()
+    fixed_index = next(
+        (index for index, (item, _) in enumerate(route) if item.get("queue_id") == before_queue_id),
+        None,
+    ) if before_queue_id else None
+    if before_queue_id and fixed_index is None:
+        return jsonify({"error": "before_queue_id is not in the editable route"}), 409
+    gap_indexes = [fixed_index] if fixed_index is not None else list(range(len(route) + 1))
+    bridge_pool = [] if fixed_index is not None else _dj_place_bridge_pool(metadata, data, occupied)
+    seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
+
+    best = None
+    for gap in gap_indexes:
+        if gap is None:
+            continue
+        previous = seed_analysis if gap == 0 else route[gap - 1][1]
+        segment = route_to_request(
+            previous,
+            bridge_pool,
+            (target, target_analysis),
+            profile=profile,
+            max_starts=1 if fixed_index is not None else 3,
+        )
+        qualities = [float(row["transition"]["score"]) for row in segment]
+        following = None
+        if gap < len(route):
+            following = plan_transition(target_analysis, route[gap][1], profile=profile)
+            qualities.append(float(following["score"]))
+        score = sum(qualities) / max(1, len(qualities)) - gap * 0.009
+        candidate = (score, -gap, gap, segment, following)
+        if best is None or candidate[:2] > best[:2]:
+            best = candidate
+
+    if best is None:
+        return jsonify({"error": "route has no editable gap"}), 409
+    _, _, insert_at, segment, following = best
+    items = []
+    for row in segment:
+        placed = dict(row)
+        is_target = placed.get("request_id") == requested_queue_id
+        placed["route_kind"] = "user" if is_target else "bridge"
+        if not is_target:
+            placed["owner_queue_id"] = requested_queue_id
+        items.append(placed)
+        _dj_item_analysis(metadata, placed, schedule=True)
+    return jsonify({
+        "v": 1,
+        "insert_at": insert_at,
+        "before_queue_id": route[insert_at][0].get("queue_id") if insert_at < len(route) else None,
+        "requested_queue_id": requested_queue_id,
+        "items": items,
+        "following_transition": following,
+        "degraded": not bool(target_analysis.get("analysed")),
+    }), 200
 
 
 @discovery_bp.route("/api/discovery/music/dj-transition", methods=["POST"])

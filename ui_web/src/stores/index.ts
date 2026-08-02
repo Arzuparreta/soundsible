@@ -3,7 +3,6 @@ import {
   api,
   type DjDirection,
   type DjItemRef,
-  type DjPlanResponse,
   type DjProfile,
   type ListeningPlanItem,
   type RemotePlaybackState,
@@ -29,7 +28,6 @@ import {
   type AutoMusicSet,
   type AutoPlanItem,
   type AutoProfile,
-  type AutoRequest,
 } from '../lib/generatedQueue';
 import { createShortcutHandler } from '../lib/shortcuts';
 import { t as tr } from '../lib/i18n';
@@ -496,9 +494,6 @@ function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigg
     if (!state.autoMode.heard.some((heard) => queueIdentity(heard) === identity)) {
       setState('autoMode', 'heard', (heard) => [...heard, track].slice(-40));
     }
-    setState('autoMode', 'requests', (requests) => requests.filter((request) => (
-      !request.track || queueIdentity(request.track) !== identity
-    )));
   }
   userPlaybackStartedThisSession = true;
   const generation = beginLoad();
@@ -851,7 +846,6 @@ function commitTransition(
   const toKey = queueIdentity(next);
   const outgoing = state.playback.currentTrack;
   const outgoingDuration = playingDuration();
-  const fulfilledRequestId = state.autoMode.plan[toKey]?.requestId;
   const token = ++commitSeq;
   const owns = () => commitSeq === token;
   committedTransition = { queueId: next.queueId, fromKey, toKey };
@@ -885,9 +879,6 @@ function commitTransition(
         technique: plan.technique,
         nextTrackId: toKey,
       });
-      setState('autoMode', 'requests', (requests) =>
-        requests.filter((request) => request.id !== fulfilledRequestId),
-      );
       updateMediaSession(next);
       pushPlaybackState();
     },
@@ -951,7 +942,7 @@ function maybeRefineTransition(current: Track, next: PlaybackQueueEntry, fromKey
   const toKey = queueIdentity(next);
   const pair = `${fromKey}>${toKey}`;
   if (refinedPair === pair) return;
-  const item = state.autoMode.plan[toKey];
+  const item = state.autoMode.plan[next.queueId];
   if (!item || item.fromKey !== fromKey) return;
   if ((item.transition?.confidence ?? 0) >= TRUSTED_CONFIDENCE) return;
   refinedPair = pair;
@@ -963,8 +954,8 @@ function maybeRefineTransition(current: Track, next: PlaybackQueueEntry, fromKey
     })
     .then((result) => {
       if (!result.measured || !state.autoMode.active) return;
-      if (state.autoMode.plan[toKey]?.fromKey !== fromKey) return;
-      setState('autoMode', 'plan', toKey, 'transition', result.transition);
+      if (state.autoMode.plan[next.queueId]?.fromKey !== fromKey) return;
+      setState('autoMode', 'plan', next.queueId, 'transition', result.transition);
     })
     .catch(() => {
       /* the conservative plan stands */
@@ -979,7 +970,7 @@ function evaluateDjRunway(): void {
   const next = pb.queue[pb.index + 1];
   if (!current || !next || pb.loadError) return;
   const fromKey = queueIdentity(current);
-  const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[queueIdentity(next)]);
+  const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[next.queueId]);
   if (!plan) return;
   if (pb.currentTime >= plan.out_cue - COMMIT_LEAD_SECONDS - REFINE_LEAD_SECONDS) {
     maybeRefineTransition(current, next, fromKey);
@@ -1290,9 +1281,7 @@ export const actions = {
     };
     discardFutureAutoplay();
     cancelPendingRadio();
-    // Take the wheel: the finite context is replaceable, explicit requests are
-    // not. Keep the current occurrence plus every future manual request; Auto
-    // owns only the generated tail behind them.
+    // Take the wheel while preserving explicit queue occurrences.
     const prefix = state.playback.queue.slice(0, state.playback.index + 1);
     const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
     setState('playback', {
@@ -1308,16 +1297,9 @@ export const actions = {
       phase: current && state.playback.isPlaying ? 'planning' : 'idle',
       activity: null,
       plan: {},
-      sources: current && state.playback.isPlaying ? [{
-        id: 'implicit-current',
-        label: current.title,
-        boundary: 'from',
-        tracks: [current],
-        implicit: true,
-      }] : [],
+      sources: [],
       heard: current && state.playback.isPlaying ? [current] : [],
       avoidedIdentities: [],
-      requests: [],
       transition: { status: 'idle' },
       pendingDirection: false,
     });
@@ -1331,7 +1313,7 @@ export const actions = {
     }
   },
 
-  /** Leave Auto: generated guesses disappear; exact user waypoints survive. */
+  /** Leave Auto: generated guesses disappear; user route occurrences survive. */
   exitAutoMode(): void {
     cancelRunwayReplan();
     // A blend that is already sounding finishes on its own; cancelling it would
@@ -1339,14 +1321,10 @@ export const actions = {
     // prepared is dropped.
     if (audioService.mixPhase() !== 'crossfading') audioService.cancelMix('exit');
     const prefix = state.playback.queue.slice(0, state.playback.index + 1);
-    const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
-    const queued = new Set(manual.map(queueIdentity));
-    const waypoints = state.autoMode.requests.flatMap((request) => (
-      request.track && !queued.has(queueIdentity(request.track))
-        ? [createQueueEntry(request.track, 'manual', 'add_to_queue')]
-        : []
-    ));
-    setState('playback', 'queue', [...prefix, ...manual, ...waypoints]);
+    const survivors = futureEntries(state.playback.queue, state.playback.index)
+      .filter((entry) => entry.queueLane === 'manual' || entry.autoRoute?.kind === 'user')
+      .map((entry) => ({ ...entry, queueLane: 'manual' as const, queueSource: 'add_to_queue' as const, autoRoute: undefined }));
+    setState('playback', 'queue', [...prefix, ...survivors]);
     generatedQueue?.stop('auto_mode');
     if (autoPlaybackPrefs) {
       setState('playback', {
@@ -1361,33 +1339,25 @@ export const actions = {
       sources: [],
       heard: [],
       avoidedIdentities: [],
-      requests: [],
       plan: {},
       pendingDirection: false,
     });
   },
 
-  addAutoSource(tracks: Track[], label: string, boundary: AutoMusicSet['boundary'] = 'from'): void {
+  addAutoSource(tracks: Track[], label: string): void {
     const usable = tracks.filter((track) => !isPodcastTrack(track));
     if (!state.autoMode.active || usable.length === 0) return;
-    const source: AutoMusicSet = { id: randomId(), label: label.trim() || usable[0].title, boundary, tracks: usable };
+    const source: AutoMusicSet = {
+      id: randomId(),
+      label: label.trim() || usable[0].title,
+      tracks: usable,
+      activation: Math.max(0, ...state.autoMode.sources.map((item) => item.activation)) + 1,
+    };
     setState('autoMode', 'sources', (sources) => [...sources, source]);
-    if (!state.playback.currentTrack || !state.playback.isPlaying) {
-      const first = usable[0];
-      const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
-      setState('playback', {
-        queue: [createQueueEntry(first, 'generated', 'auto_mode'), ...manual],
-        index: 0,
-        shuffle: false,
-        repeat: 'off',
-      });
-      setState('autoMode', 'heard', [first]);
-      loadIndex(0);
-      void ensureGeneratedQueue().start('auto_mode', first, state.autoMode.profile);
-      return;
+    // A source is direction, never an implied playback request.
+    if (state.playback.currentTrack && state.playback.isPlaying) {
+      scheduleRunwayReplan(tr('autoMode.note.direction'));
     }
-    // Adding eligibility does not invalidate a route the listener can already
-    // see. The new set joins at the next natural refill.
   },
 
   useAutoTrackAsSource(track: Track): void {
@@ -1397,41 +1367,31 @@ export const actions = {
       source.tracks.length === 1 && queueIdentity(source.tracks[0]) === identity
     ));
     if (existing) {
-      if (existing.boundary !== 'from') {
-        setState('autoMode', 'sources', (sources) => sources.map((source) => (
-          source.id === existing.id ? { ...source, boundary: 'from' } : source
-        )));
-      }
       return;
     }
-    actions.addAutoSource([track], track.title, 'from');
+    actions.addAutoSource([track], track.title);
   },
 
   removeAutoSource(id: string): void {
     if (!state.autoMode.active) return;
     setState('autoMode', 'sources', (sources) => sources.filter((source) => source.id !== id));
-    if (state.autoMode.sources.length) {
+    if (state.playback.currentTrack && state.autoMode.heard.length) {
       scheduleRunwayReplan(tr('autoMode.note.direction'));
-    } else {
-      generatedQueue?.stop('auto_mode');
-      setState('playback', 'queue', state.playback.queue.slice(0, state.playback.index + 1));
-      setState('autoMode', { active: true, phase: 'idle', plan: {}, transition: { status: 'idle' } });
     }
-  },
-
-  setAutoSourceBoundary(id: string, boundary: AutoMusicSet['boundary']): void {
-    setState('autoMode', 'sources', (sources) => sources.map((source) => source.id === id ? { ...source, boundary } : source));
-    if (boundary === 'inside') scheduleRunwayReplan(tr('autoMode.note.direction'));
   },
 
   removeAutoRouteOccurrence(queueId: string): void {
     if (!state.autoMode.active || committedTransition?.queueId === queueId) return;
     const track = state.playback.queue.find((entry) => entry.queueId === queueId);
     if (!track) return;
-    setState('autoMode', 'requests', (requests) => requests.filter((request) => (
-      !request.track || queueIdentity(request.track) !== queueIdentity(track)
-    )));
-    actions.removeQueueEntry(queueId);
+    const owned = new Set(state.playback.queue
+      .filter((entry) => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId)
+      .map((entry) => entry.queueId));
+    owned.add(queueId);
+    setState('playback', 'queue', (queue) => queue.filter((entry) => !owned.has(entry.queueId)));
+    setState('autoMode', 'plan', (plan) => Object.fromEntries(
+      Object.entries(plan).filter(([id]) => !owned.has(id)),
+    ));
     void generatedQueue?.ensureRunway();
   },
 
@@ -1444,10 +1404,14 @@ export const actions = {
     setState('autoMode', 'avoidedIdentities', (identities) => (
       identities.includes(identity) ? identities : [...identities, identity]
     ));
-    setState('autoMode', 'requests', (requests) => requests.filter((request) => (
-      !request.track || queueIdentity(request.track) !== queueIdentity(track)
-    )));
-    actions.removeQueueEntry(queueId);
+    const owned = new Set(state.playback.queue
+      .filter((entry) => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId)
+      .map((entry) => entry.queueId));
+    owned.add(queueId);
+    setState('playback', 'queue', (queue) => queue.filter((entry) => !owned.has(entry.queueId)));
+    setState('autoMode', 'plan', (plan) => Object.fromEntries(
+      Object.entries(plan).filter(([id]) => !owned.has(id)),
+    ));
     void generatedQueue?.ensureRunway();
     toast.action(tr('autoMode.route.avoided', { title: track.title }), tr('common.undo'), () => {
       if (!state.autoMode.active || autoSessionEpoch !== sessionEpoch) return;
@@ -1489,55 +1453,135 @@ export const actions = {
     setState('autoMode', 'activity', { id: ++generatedActivityId, status, key, values });
   },
 
-  requestAutoTrack(track: Track): void {
+  async placeAutoTrack(track: Track, beforeQueueId?: string): Promise<void> {
     if (!state.autoMode.active || isPodcastTrack(track)) return;
-    const duplicate = state.autoMode.requests.some((request) =>
-      request.track ? queueIdentity(request.track) === queueIdentity(track) : false,
-    );
-    if (duplicate) return;
-    const request: AutoRequest = {
-      id: randomId(),
-      kind: 'track',
-      label: track.title,
-      track,
-      status: 'queued',
-      etaTracks: null,
+    const floor = insertionFloor();
+    const route = state.playback.queue.slice(floor + 1);
+    const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
+    const occurrence = {
+      ...createQueueEntry(track, 'generated', 'auto_mode'),
+      autoRoute: { kind: 'user' as const, placement: beforeQueueId ? 'fixed' as const : 'dj' as const },
     };
-    setState('autoMode', 'requests', (requests) => [...requests, request]);
-    scheduleRunwayReplan(tr('autoMode.note.added', { title: track.title }));
-  },
-
-  requestAutoArtist(name: string): void {
-    const artist = name.trim();
-    if (!state.autoMode.active || !artist) return;
-    const duplicate = state.autoMode.requests.some((request) =>
-      request.kind === 'artist' && request.artist?.name.toLocaleLowerCase() === artist.toLocaleLowerCase(),
-    );
-    if (duplicate) return;
-    const request: AutoRequest = {
-      id: randomId(),
-      kind: 'artist',
-      label: artist,
-      artist: { name: artist },
-      status: 'queued',
-      etaTracks: null,
-    };
-    setState('autoMode', 'requests', (requests) => [...requests, request]);
-    void api.emitDiscoveryEvent('music_requested_from_dj', {
-      media_type: 'music_track',
-      title: '',
-      artist,
-      source: 'auto_mode',
-    }).catch(() => {});
-    scheduleRunwayReplan(tr('autoMode.note.added', { title: artist }));
-  },
-
-  cancelAutoRequest(id: string): void {
-    const dropped = state.autoMode.requests.find((request) => request.id === id);
-    setState('autoMode', 'requests', (requests) => requests.filter((request) => request.id !== id));
-    scheduleRunwayReplan(
-      dropped ? tr('autoMode.note.dropped', { title: dropped.label }) : tr('autoMode.note.direction'),
-    );
+    if (!seed) {
+      setState('playback', { queue: [occurrence], index: 0, shuffle: false, repeat: 'off' });
+      loadIndex(0);
+      void ensureGeneratedQueue().start('auto_mode', occurrence, state.autoMode.profile);
+      return;
+    }
+    const sessionEpoch = autoSessionEpoch;
+    const routeSignature = route.map((entry) => entry.queueId).join('|');
+    const fallbackIndex = beforeQueueId
+      ? Math.max(floor + 1, state.playback.queue.findIndex((entry) => entry.queueId === beforeQueueId))
+      : floor + 1;
+    setState('autoMode', 'activity', {
+      id: ++generatedActivityId,
+      status: 'working',
+      key: 'autoMode.agent.placing',
+      values: { title: track.title },
+    });
+    try {
+      const response = await api.placeDjTrack({
+        dj_profile: state.autoMode.djProfile,
+        seed: djItemRef(seed),
+        route: route.map((entry) => ({ ...djItemRef(entry), queue_id: entry.queueId })),
+        track,
+        requested_queue_id: occurrence.queueId,
+        before_queue_id: beforeQueueId,
+        sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
+        heard: state.autoMode.heard,
+        exclude: state.autoMode.avoidedIdentities,
+      });
+      if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
+      const currentRoute = state.playback.queue.slice(insertionFloor() + 1);
+      if (currentRoute.map((entry) => entry.queueId).join('|') !== routeSignature) {
+        const currentFloor = insertionFloor();
+        const before = beforeQueueId
+          ? state.playback.queue.findIndex((entry) => entry.queueId === beforeQueueId)
+          : currentFloor + 1;
+        const at = before > currentFloor ? before : currentFloor + 1;
+        setState('playback', 'queue', (queue) => [...queue.slice(0, at), occurrence, ...queue.slice(at)]);
+        prefetchUpcoming();
+        return;
+      }
+      const entries = response.items.map((item) => {
+        const isUser = item.route_kind === 'user';
+        const entry = isUser
+          ? occurrence
+          : createQueueEntry(planItemTrack(item), 'generated', 'auto_mode');
+        return {
+          ...entry,
+          autoRoute: isUser
+            ? occurrence.autoRoute
+            : { kind: 'bridge' as const, ownerQueueId: occurrence.queueId },
+        };
+      });
+      const at = Math.min(state.playback.queue.length, floor + 1 + response.insert_at);
+      setState('playback', 'queue', (queue) => [...queue.slice(0, at), ...entries, ...queue.slice(at)]);
+      const plan = { ...state.autoMode.plan };
+      let fromKey = queueIdentity(state.playback.queue[at - 1] ?? seed);
+      for (let index = 0; index < entries.length; index += 1) {
+        const entry = entries[index];
+        const item = response.items[index];
+        plan[entry.queueId] = {
+          trackId: queueIdentity(entry),
+          source: item.source_pool,
+          reasonKey: autoReasonKey(item),
+          fromKey,
+          transition: item.transition,
+          bpm: item.analysis?.bpm,
+          key: item.analysis?.key,
+          sourceSetId: item.source_set_id,
+          sourceSetLabel: item.source_set_label,
+          lineage: item.lineage,
+        };
+        fromKey = queueIdentity(entry);
+      }
+      const following = state.playback.queue[at + entries.length];
+      if (following && response.following_transition) {
+        plan[following.queueId] = {
+          ...(plan[following.queueId] ?? {
+            trackId: queueIdentity(following),
+            source: 'local',
+            reasonKey: 'autoMode.reason.library',
+          }),
+          fromKey,
+          transition: response.following_transition,
+        };
+      }
+      setState('autoMode', {
+        plan,
+        activity: {
+          id: ++generatedActivityId,
+          status: 'done',
+          key: 'autoMode.agent.placed',
+          values: { title: track.title },
+        },
+      });
+      const insertedIds = new Set(entries.map((entry) => entry.queueId));
+      toast.action(tr('autoMode.note.added', { title: track.title }), tr('common.undo'), () => {
+        if (!state.autoMode.active) return;
+        setState('playback', 'queue', (queue) => queue.filter((entry) => !insertedIds.has(entry.queueId)));
+        setState('autoMode', 'plan', (current) => Object.fromEntries(
+          Object.entries(current).filter(([queueId]) => !insertedIds.has(queueId)),
+        ));
+        void generatedQueue?.ensureRunway();
+      });
+      prefetchUpcoming();
+    } catch {
+      // The user's placement is authoritative even if musical analysis is not.
+      setState('playback', 'queue', (queue) => [
+        ...queue.slice(0, fallbackIndex),
+        occurrence,
+        ...queue.slice(fallbackIndex),
+      ]);
+      setState('autoMode', 'activity', {
+        id: ++generatedActivityId,
+        status: 'error',
+        key: 'autoMode.agent.placedFallback',
+        values: { title: track.title },
+      });
+      prefetchUpcoming();
+    }
   },
 
   /**
@@ -1559,7 +1603,7 @@ export const actions = {
         audioService.startMixNow();
       } else if (next && current) {
         const fromKey = queueIdentity(current);
-        const item = state.autoMode.plan[queueIdentity(next)];
+        const item = state.autoMode.plan[next.queueId];
         const chained = item?.fromKey === fromKey ? item.transition : undefined;
         const trusted = (chained?.confidence ?? 0) >= TRUSTED_CONFIDENCE;
         commitTransition(next, fromKey, {
@@ -1735,14 +1779,7 @@ export const actions = {
     }
     else {
       if (state.autoMode.active && state.autoMode.sources.length === 0) {
-        const source: AutoMusicSet = {
-          id: 'implicit-current',
-          label: pb.currentTrack.title,
-          boundary: 'from',
-          tracks: [pb.currentTrack],
-          implicit: true,
-        };
-        setState('autoMode', { sources: [source], heard: [pb.currentTrack], phase: 'planning' });
+        setState('autoMode', { heard: [pb.currentTrack], phase: 'planning' });
         void ensureGeneratedQueue().start('auto_mode', pb.currentTrack, state.autoMode.profile);
       }
       const generation = beginLoad();
@@ -1824,11 +1861,6 @@ export const actions = {
       actions.playTrack(track);
       return;
     }
-    if (state.autoMode.active && state.autoMode.sources.length === 0
-      && pb.currentTrack && queueIdentity(pb.currentTrack) === queueIdentity(track)) {
-      actions.addAutoSource([track], track.title, 'from');
-      return;
-    }
     if (pb.currentTrack && queueIndexOf([pb.currentTrack], track) === 0) {
       if (pb.isLoading || pb.isPlaying) return;
       if (pb.loadError) actions.retryCurrent();
@@ -1839,25 +1871,15 @@ export const actions = {
       discardFutureAutoplay();
       cancelPendingRadio();
       if (audioService.mixPhase() !== 'crossfading') audioService.cancelMix('superseded');
-      const explicitSources = state.autoMode.sources.filter((source) => !source.implicit);
-      const pivot: AutoMusicSet = {
-        id: 'implicit-current',
-        label: track.title,
-        boundary: 'from',
-        tracks: [track],
-        implicit: true,
-      };
-      const waypoints = state.autoMode.requests.flatMap((request) => request.track
-        ? [createQueueEntry(request.track, 'manual', 'add_to_queue')]
-        : []);
+      const userRoute = futureEntries(state.playback.queue, state.playback.index)
+        .filter((entry) => entry.autoRoute?.kind === 'user');
       setState('autoMode', {
-        sources: [pivot, ...explicitSources],
         heard: [...state.autoMode.heard, track].slice(-40),
         plan: {},
         transition: { status: 'idle' },
       });
       setState('playback', {
-        queue: [createQueueEntry(track, 'generated', 'auto_mode'), ...waypoints],
+        queue: [{ ...createQueueEntry(track, 'generated', 'auto_mode'), autoRoute: { kind: 'generated' } }, ...userRoute],
         index: 0,
         radioMode: false,
         radioLoading: false,
@@ -1968,20 +1990,26 @@ export const actions = {
 
   moveAutoRoute(queueId: string, beforeQueueId: string): void {
     if (!state.autoMode.active || queueId === beforeQueueId) return;
-    const queue = state.playback.queue.slice();
+    const removedBridgeIds = new Set(state.playback.queue
+      .filter((entry) => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId)
+      .map((entry) => entry.queueId));
+    const queue = state.playback.queue.filter((entry) => !(
+      entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId
+    ));
     const from = queue.findIndex((entry) => entry.queueId === queueId);
     const before = queue.findIndex((entry) => entry.queueId === beforeQueueId);
     if (from <= state.playback.index || before <= state.playback.index) return;
-    const [entry] = queue.splice(from, 1);
+    const [rawEntry] = queue.splice(from, 1);
+    const entry = {
+      ...rawEntry,
+      autoRoute: { kind: 'user' as const, placement: 'fixed' as const },
+    };
     const target = queue.findIndex((row) => row.queueId === beforeQueueId);
     queue.splice(target, 0, entry);
     setState('playback', 'queue', queue);
-    actions.requestAutoTrack(entry);
-    const positions = new Map(queue.map((row, index) => [queueIdentity(row), index]));
-    setState('autoMode', 'requests', (requests) => requests.slice().sort((left, right) => (
-      (left.track ? positions.get(queueIdentity(left.track)) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER)
-      - (right.track ? positions.get(queueIdentity(right.track)) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER)
-    )));
+    setState('autoMode', 'plan', (plan) => Object.fromEntries(
+      Object.entries(plan).filter(([id]) => id !== queueId && !removedBridgeIds.has(id)),
+    ));
     prefetchUpcoming();
   },
 
@@ -2655,11 +2683,8 @@ function ensureGeneratedQueue(): GeneratedQueueController {
           segment_index: generatedSession?.segmentIndex,
           context: state.autoMode.heard.slice(-8).map(djItemRef),
           seed: seedBody,
-          sources: state.autoMode.sources.map(({ id, label, boundary, tracks }) => ({ id, label, boundary, tracks })),
+          sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
           heard: state.autoMode.heard,
-          waypoints: state.autoMode.requests.flatMap((request) => request.track
-            ? [{ id: request.id, track: request.track }]
-            : []),
           exclude: [...new Set([...exclude, ...state.autoMode.avoidedIdentities])],
           limit,
         }, signal);
@@ -2669,10 +2694,15 @@ function ensureGeneratedQueue(): GeneratedQueueController {
     applyPlan: (intent, response, replace, anchor) => {
       // What a replacing plan keeps: everything already played, every explicit
       // request, and the one handoff that is already loaded and cued.
+      const previousUpcoming = replace
+        ? futureEntries(state.playback.queue, state.playback.index)
+        : [];
       const held = replace
-        ? futureEntries(state.playback.queue, state.playback.index).filter(
-            (entry) => entry.queueLane === 'manual' || committedTransition?.queueId === entry.queueId,
-          )
+        ? previousUpcoming.filter((entry) => (
+            entry.queueLane === 'manual'
+            || entry.autoRoute?.kind === 'user'
+            || committedTransition?.queueId === entry.queueId
+          ))
         : [];
       const retained = replace
         ? [...state.playback.queue.slice(0, state.playback.index + 1), ...held]
@@ -2681,12 +2711,22 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         .map((item) => ({ item, track: planItemTrack(item) }))
         .filter(({ track }) => queueIndexOf(retained, track) === -1);
       if (candidates.length === 0) return 0;
-      const entries = candidates.map(({ track }) => createQueueEntry(track, 'generated', intent));
+      const entries = candidates.map(({ track }) => ({
+        ...createQueueEntry(track, 'generated', intent),
+        autoRoute: intent === 'auto_mode' ? { kind: 'generated' as const } : undefined,
+      }));
       if (replace) {
+        let generatedIndex = 0;
+        const runway = previousUpcoming.map((entry) => {
+          const preserved = entry.queueLane === 'manual'
+            || entry.autoRoute?.kind === 'user'
+            || committedTransition?.queueId === entry.queueId;
+          return preserved ? entry : entries[generatedIndex++];
+        }).filter((entry): entry is PlaybackQueueEntry => Boolean(entry));
+        runway.push(...entries.slice(generatedIndex));
         setState('playback', 'queue', [
           ...state.playback.queue.slice(0, state.playback.index + 1),
-          ...held,
-          ...entries,
+          ...runway,
         ]);
       } else {
         setState('playback', 'queue', (queue) => [...queue, ...entries]);
@@ -2700,7 +2740,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         // longer honour — a plain fade, rather than a cue from the wrong song.
         let previousKey = queueIdentity(anchor);
         let chained = true;
-        const accepted = new Set(candidates.map(({ item }) => item));
+        const accepted = new Map(candidates.map(({ item }, index) => [item, entries[index]] as const));
         for (const item of response.items) {
           if (!accepted.has(item)) {
             chained = false;
@@ -2708,7 +2748,8 @@ function ensureGeneratedQueue(): GeneratedQueueController {
           }
           const track = planItemTrack(item);
           const id = queueIdentity(track);
-          plan[id] = {
+          const entry = accepted.get(item)!;
+          plan[entry.queueId] = {
             trackId: id,
             source: item.source_pool,
             reasonKey: autoReasonKey(item),
@@ -2719,7 +2760,6 @@ function ensureGeneratedQueue(): GeneratedQueueController {
             transition: chained ? item.transition : undefined,
             bpm: item.analysis?.bpm,
             key: item.analysis?.key,
-            requestId: item.request_id,
             sourceSetId: item.source_set_id,
             sourceSetLabel: item.source_set_label,
             lineage: item.lineage,
@@ -2731,34 +2771,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         // it has no plan entry of its own. Recording its reading is what lets
         // the booth show a BPM for the song that is actually playing when a
         // session starts from whatever the listener already had on.
-        const seed = (response as Partial<DjPlanResponse>).seed_analysis;
-        const anchorKey = queueIdentity(anchor);
-        if (seed?.analysed && !plan[anchorKey]) {
-          plan[anchorKey] = {
-            trackId: anchorKey,
-            source: 'local',
-            reasonKey: 'autoMode.reason.library',
-            fromKey: '',
-            bpm: seed.bpm,
-            key: seed.key,
-          };
-        }
         setState('autoMode', 'plan', plan);
-        const djRequests = (response as Partial<DjPlanResponse>).requests;
-        if (Array.isArray(djRequests)) {
-          const statuses = new Map(djRequests.map((request) => [request.id, request]));
-          setState('autoMode', 'requests', (requests) => requests.map((request) => (
-            statuses.has(request.id)
-              ? {
-                  ...request,
-                  status: statuses.get(request.id)?.status === 'failed' ? 'failed' : 'planned',
-                  etaTracks: statuses.get(request.id)?.eta_tracks ?? null,
-                  scheduledPosition: statuses.get(request.id)?.scheduled_position ?? null,
-                  failureCode: statuses.get(request.id)?.failure_code ?? null,
-                }
-              : request
-          )));
-        }
       }
       prefetchUpcoming();
       // New runway. If the music ran out waiting for exactly this, start it

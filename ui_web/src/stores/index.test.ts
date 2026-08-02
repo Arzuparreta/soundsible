@@ -62,6 +62,25 @@ async function loadStore(
     searchYouTube: vi.fn(),
     relatedYouTube,
     emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
+    placeDjTrack: vi.fn().mockImplementation(async (body: { track: Track; requested_queue_id: string; route: Array<{ queue_id: string }> }) => ({
+      v: 1,
+      insert_at: Math.min(1, body.route.length),
+      before_queue_id: body.route[1]?.queue_id ?? null,
+      requested_queue_id: body.requested_queue_id,
+      items: [{
+        id: body.track.id,
+        youtube_id: body.track.id,
+        title: body.track.title,
+        artist: body.track.artist,
+        source: 'preview',
+        source_pool: 'related',
+        recommendation_identity: `music:youtube:${body.track.id}`,
+        recommendation_source: 'auto_mode',
+        route_kind: 'user',
+        request_id: body.requested_queue_id,
+      }],
+      degraded: false,
+    })),
     sendPlayTiming: vi.fn().mockResolvedValue({ status: 'ok' }),
     getDiscoverySettings: vi.fn().mockResolvedValue({ learning_enabled: true, autoplay_enabled: true }),
     setAutoplayEnabled: vi.fn().mockResolvedValue({ autoplay_enabled: true }),
@@ -766,10 +785,11 @@ describe('Auto Mode store contract', () => {
     actions.playNow(now);
     expect(state.autoMode.active).toBe(true);
     expect(state.playback.currentTrack?.id).toBe('now');
-    expect(state.autoMode.sources[0]).toMatchObject({ implicit: true, boundary: 'from', tracks: [now] });
+    expect(state.autoMode.sources).toEqual([]);
+    expect(state.autoMode.heard.at(-1)).toMatchObject(now);
   });
 
-  it('can enter empty and starts only when the listener supplies a source', async () => {
+  it('can enter empty and a source never implies playback', async () => {
     const { actions, state } = await loadStore();
     actions.enterAutoMode();
     expect(state.autoMode.active).toBe(true);
@@ -777,12 +797,24 @@ describe('Auto Mode store contract', () => {
     expect(state.playback.currentTrack).toBeNull();
 
     const source: Track = { id: 'source', title: 'Source', artist: 'Artist' };
-    actions.addAutoSource([source], 'My selection', 'inside');
-    expect(state.playback.currentTrack?.id).toBe('source');
-    expect(state.autoMode.sources[0]).toMatchObject({ label: 'My selection', boundary: 'inside' });
+    actions.addAutoSource([source], 'My selection');
+    expect(state.playback.currentTrack).toBeNull();
+    expect(state.autoMode.sources[0]).toMatchObject({ label: 'My selection', activation: 1 });
   });
 
-  it('adds a running source without rewriting the prepared route', async () => {
+  it('starts an empty Auto session only when a song is placed in the route', async () => {
+    const { actions, state } = await loadStore();
+    actions.enterAutoMode();
+    const placed: Track = { id: 'placed', title: 'Placed', artist: 'Listener' };
+
+    await actions.placeAutoTrack(placed);
+
+    expect(state.playback.currentTrack?.id).toBe('placed');
+    expect(state.playback.queue[0].autoRoute).toMatchObject({ kind: 'user', placement: 'dj' });
+    expect(state.autoMode.sources).toEqual([]);
+  });
+
+  it('adds a running source and replans generated music without implying playback', async () => {
     const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 8 }, (_, index) => `route-${index}`)));
     const { actions, state } = await loadStore({ planDjQueue });
     const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
@@ -793,9 +825,43 @@ describe('Auto Mode store contract', () => {
 
     actions.useAutoTrackAsSource(state.playback.queue[2]);
 
-    expect(state.autoMode.sources.at(-1)).toMatchObject({ boundary: 'from', tracks: [expect.objectContaining({ id: 'route-1' })] });
-    expect(state.playback.queue.map((track) => track.queueId)).toEqual(routeBefore);
+    expect(state.autoMode.sources.at(-1)).toMatchObject({ activation: 1, tracks: [expect.objectContaining({ id: 'route-1' })] });
+    await vi.waitFor(() => expect(planDjQueue).toHaveBeenCalledTimes(2));
+    expect(state.playback.queue[0].queueId).toBe(routeBefore[0]);
+  });
+
+  it('places a song in the existing route without making it a source or replacing neighbours', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 5 }, (_, index) => `route-${index}`)));
+    const { actions, state } = await loadStore({ planDjQueue });
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(6));
+    const neighbours = state.playback.queue.slice(1).map((entry) => entry.queueId);
+
+    await actions.placeAutoTrack({ id: 'wanted', title: 'Wanted', artist: 'Listener' });
+
+    const placed = state.playback.queue.find((entry) => entry.id === 'wanted');
+    expect(placed?.autoRoute).toMatchObject({ kind: 'user', placement: 'dj' });
+    expect(state.autoMode.sources).toEqual([]);
+    expect(state.playback.queue.slice(1).filter((entry) => entry.id !== 'wanted').map((entry) => entry.queueId)).toEqual(neighbours);
     expect(planDjQueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('composes source membership with an existing route occurrence independently', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
+    const occurrence = state.playback.queue[1];
+
+    actions.useAutoTrackAsSource(occurrence);
+    expect(state.autoMode.sources.at(-1)?.tracks[0].id).toBe(occurrence.id);
+    expect(state.playback.queue.some((entry) => entry.queueId === occurrence.queueId)).toBe(true);
+    actions.removeAutoSource(state.autoMode.sources.at(-1)!.id);
+    expect(state.playback.queue.some((entry) => entry.queueId === occurrence.queueId)).toBe(true);
   });
 
   it('distinguishes neutral removal from an exact session avoidance', async () => {

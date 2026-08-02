@@ -40,8 +40,9 @@ const storeMock = vi.hoisted(() => {
       enqueue: vi.fn(),
       startRadio: vi.fn(),
       linkCatalogItem: vi.fn(),
-      requestAutoTrack: vi.fn(),
-      requestAutoArtist: vi.fn(),
+      placeAutoTrack: vi.fn(),
+      addAutoSource: vi.fn(),
+      useAutoTrackAsSource: vi.fn(),
     },
   };
 });
@@ -210,26 +211,27 @@ describe('NowPlayingBrowser', () => {
       }],
       sections: [],
     });
-    const onRequested = vi.fn();
+    const onPlaced = vi.fn();
 
     render(() => (
       <NowPlayingBrowser
-        purpose="auto-request"
+        purpose="auto-route"
         onClose={vi.fn()}
-        onRequested={onRequested}
+        onPlaced={onPlaced}
       />
     ));
     vi.useFakeTimers();
     fireEvent.input(screen.getByPlaceholderText('Track or artist'), { target: { value: 'requested song' } });
     await vi.advanceTimersByTimeAsync(260);
     vi.useRealTimers();
-    fireEvent.click(await screen.findByRole('button', { name: 'Request from the DJ: Requested Song' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to route: Requested Song' }));
 
-    await waitFor(() => expect(storeMock.actions.requestAutoTrack).toHaveBeenCalledWith(
+    await waitFor(() => expect(storeMock.actions.placeAutoTrack).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'yt-requested', source: 'preview' }),
+      undefined,
     ));
     expect(storeMock.actions.playNow).not.toHaveBeenCalled();
-    expect(onRequested).toHaveBeenCalledOnce();
+    expect(onPlaced).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
   });
 });

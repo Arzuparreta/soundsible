@@ -247,7 +247,6 @@ const [state, setState] = createStore<AppState>({
     profile: initialAutoProfile(),
     djProfile: initialDjProfile(),
     direction: initialDjDirection(),
-    requests: [],
     sources: [],
     heard: [],
     avoidedIdentities: [],

@@ -11,14 +11,13 @@ import type { Track } from '../types/music';
 
 export type AutoProfile = ListeningPlanProfile;
 export type AutoPool = 'local' | 'related' | 'discovery';
-export type MusicSetBoundary = 'inside' | 'from';
-
 export interface AutoMusicSet {
   id: string;
   label: string;
-  boundary: MusicSetBoundary;
   tracks: Track[];
-  implicit?: boolean;
+  /** Monotonic order used to favour recent direction changes without erasing
+   * older sources. */
+  activation: number;
 }
 
 export type AutoPhase = 'idle' | 'following_queue' | 'planning' | 'ready' | 'degraded';
@@ -47,22 +46,9 @@ export interface AutoPlanItem {
   transition?: DjTransitionPlan;
   bpm?: number;
   key?: string | null;
-  requestId?: string;
   sourceSetId?: string;
   sourceSetLabel?: string;
   lineage?: string[];
-}
-
-export interface AutoRequest {
-  id: string;
-  kind: 'track' | 'artist';
-  label: string;
-  track?: Track;
-  artist?: { name: string };
-  status: 'queued' | 'planned' | 'playing' | 'failed';
-  etaTracks: number | null;
-  scheduledPosition?: number | null;
-  failureCode?: string | null;
 }
 
 export interface AutoModeState {
@@ -70,7 +56,6 @@ export interface AutoModeState {
   profile: AutoProfile;
   djProfile: DjProfile;
   direction: DjDirection;
-  requests: AutoRequest[];
   sources: AutoMusicSet[];
   heard: Track[];
   avoidedIdentities: string[];
@@ -328,7 +313,10 @@ export class GeneratedQueueController {
   private exclusions(replace = false): string[] {
     const values = new Set(this.recent);
     const retained = this.retained(replace);
-    for (const track of retained) {
+    const routeAnchors = replace
+      ? this.deps.snapshot().queue.filter((entry) => entry.autoRoute?.kind === 'user')
+      : [];
+    for (const track of [...retained, ...routeAnchors]) {
       const identity = this.deps.identity(track);
       if (identity) values.add(identity);
       if (track.recommendation?.identity) values.add(track.recommendation.identity);

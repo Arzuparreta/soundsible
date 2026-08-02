@@ -11,8 +11,10 @@ import {
   type AutoModeLayoutPresetId,
   type AutoModePanelId,
 } from '../lib/autoModeLayout';
+import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { queueIdentity } from '../lib/queueDiscovery';
 import { coverUrl } from '../lib/media';
+import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
 import { NowPlayingBrowser } from './NowPlayingBrowser';
 import { openActionMenu } from './ActionMenu';
@@ -39,7 +41,25 @@ export function AutoMode(props: {
   surfaceOpen: boolean;
 }) {
   const [layout, setLayout] = createSignal(readLayout());
-  let draggedQueueId = '';
+  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'source' | 'route'; beforeQueueId?: string }>({ kind: 'neutral' });
+  const [carriedTrack, setCarriedTrack] = createSignal<Track | null>(null);
+
+  const openDestination = (kind: 'source' | 'route', beforeQueueId?: string) => {
+    setDestination({ kind, beforeQueueId });
+    props.onPanelChange('browser');
+  };
+  const finishDestination = (panel: AutoModePanelId) => {
+    setDestination({ kind: 'neutral' });
+    props.onPanelChange(panel);
+  };
+  const placeInRoute = (track: Track, beforeQueueId?: string) => {
+    void actions.placeAutoTrack(track, beforeQueueId);
+    setCarriedTrack(null);
+  };
+  const addToSources = (track: Track) => {
+    actions.useAutoTrackAsSource(track);
+    setCarriedTrack(null);
+  };
 
   const setLayoutPersisted = (next: AutoModeDesktopLayout) => {
     setLayout(next);
@@ -53,10 +73,29 @@ export function AutoMode(props: {
 
   const upcoming = createMemo(() => state.playback.queue.slice(Math.max(0, state.playback.index + 1)));
   const routeEntries = createMemo<PlayerTrackListEntry[]>(() => upcoming().map((track, index) => {
-    const plan = state.autoMode.plan[queueIdentity(track)];
+    const plan = state.autoMode.plan[track.queueId];
     const committed = index === 0 && state.autoMode.transition.status !== 'idle';
-    const waypoint = state.autoMode.requests.some((request) => request.track
-      && queueIdentity(request.track) === queueIdentity(track));
+    const userPlaced = track.autoRoute?.kind === 'user';
+    const bridge = track.autoRoute?.kind === 'bridge';
+    const source = state.autoMode.sources.find((item) => item.tracks.some((candidate) => (
+      queueIdentity(candidate) === queueIdentity(track)
+    )));
+    const gap = (
+      <button
+        class={styles.routeGap}
+        type="button"
+        aria-label={t('autoMode.route.insertBefore', { title: track.title })}
+        onClick={() => carriedTrack() ? placeInRoute(carriedTrack()!, track.queueId) : openDestination('route', track.queueId)}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          const transfer = readAutoTrackTransfer(event);
+          if (!transfer) return;
+          if (transfer.queueId) actions.moveAutoRoute(transfer.queueId, track.queueId);
+          else placeInRoute(transfer.track, track.queueId);
+        }}
+      ><span>＋</span></button>
+    );
     return {
       id: track.queueId,
       title: track.title,
@@ -65,17 +104,22 @@ export function AutoMode(props: {
       position: index + 1,
       locked: committed,
       draggable: !committed,
-      annotation: plan?.sourceSetLabel
-        ? `${plan.sourceSetLabel} · ${plan.lineage && plan.lineage.length > 1 ? t('autoMode.source.from') : t('autoMode.source.inside')}`
-        : undefined,
-      badge: waypoint ? t('autoMode.route.pinned') : committed ? t('autoMode.dj.cued') : undefined,
-      onActivate: committed ? undefined : () => actions.playNow(track),
-      onDragStart: () => { draggedQueueId = track.queueId; },
+      annotation: source ? t('autoMode.source.title') : plan?.sourceSetLabel,
+      badge: committed
+        ? t('autoMode.dj.cued')
+        : userPlaced
+          ? track.autoRoute?.placement === 'fixed' ? t('autoMode.route.fixed') : t('autoMode.route.placed')
+          : bridge ? t('autoMode.route.bridge') : undefined,
+      before: gap,
+      onDragStart: (event) => writeAutoTrackTransfer(event, { track, queueId: track.queueId }),
+      onCarry: () => setCarriedTrack(track),
       onDragOver: (event) => event.preventDefault(),
       onDrop: (event) => {
         event.preventDefault();
-        if (draggedQueueId) actions.moveAutoRoute(draggedQueueId, track.queueId);
-        draggedQueueId = '';
+        const transfer = readAutoTrackTransfer(event);
+        if (!transfer) return;
+        if (transfer.queueId) actions.moveAutoRoute(transfer.queueId, track.queueId);
+        else placeInRoute(transfer.track, track.queueId);
       },
       trailing: committed ? undefined : (
         <button
@@ -101,28 +145,49 @@ export function AutoMode(props: {
       <header class={styles.sourceHeader}>
         {dragHandle}
         <span><small>{t('autoMode.label')}</small><strong>{t('autoMode.source.title')}</strong></span>
+        <button class={styles.sourceAdd} type="button" aria-label={t('autoMode.source.title')} aria-pressed={destination().kind === 'source'} onClick={() => openDestination('source')}>＋</button>
       </header>
-      <div class={styles.sourceTray}>
+      <div
+        class={styles.sourceTray}
+        data-target={destination().kind === 'source' || carriedTrack() ? '' : undefined}
+        onClick={() => carriedTrack() && addToSources(carriedTrack()!)}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          const transfer = readAutoTrackTransfer(event);
+          if (transfer) addToSources(transfer.track);
+        }}
+      >
         <Show when={state.autoMode.sources.length} fallback={
           <p class={styles.sourceEmpty}>{t('autoMode.source.empty')}</p>
         }>
           <For each={state.autoMode.sources}>{(source) => (
-            <div class={styles.sourceChip}>
+            <div
+              class={styles.sourceChip}
+              data-route-target={destination().kind === 'route' && source.tracks.length === 1 ? '' : undefined}
+              draggable={source.tracks.length === 1}
+              onDragStart={(event) => source.tracks[0] && writeAutoTrackTransfer(event, { track: source.tracks[0] })}
+              onClick={() => {
+                if (destination().kind !== 'route' || source.tracks.length !== 1) return;
+                placeInRoute(source.tracks[0], destination().beforeQueueId);
+                finishDestination('route');
+              }}
+            >
               <span><strong>{source.label}</strong><small>{source.tracks.length}</small></span>
-              <button
-                type="button"
-                aria-label={t('autoMode.source.toggle', { title: source.label })}
-                onClick={() => actions.setAutoSourceBoundary(source.id, source.boundary === 'inside' ? 'from' : 'inside')}
-              >
-                {source.boundary === 'inside' ? t('autoMode.source.inside') : t('autoMode.source.from')}
-              </button>
-              <button type="button" aria-label={t('autoMode.source.remove', { title: source.label })} onClick={() => actions.removeAutoSource(source.id)}>×</button>
+              <button type="button" aria-label={t('autoMode.source.remove', { title: source.label })} onClick={(event) => { event.stopPropagation(); actions.removeAutoSource(source.id); }}>×</button>
             </div>
           )}</For>
         </Show>
       </div>
       <div class={styles.sourceBrowser}>
-        <NowPlayingBrowser purpose="auto-source" onClose={() => props.onPanelChange('stage')} />
+        <NowPlayingBrowser
+          purpose={destination().kind === 'source' ? 'auto-source' : destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
+          routeBeforeQueueId={destination().beforeQueueId}
+          onPlaced={() => finishDestination('route')}
+          onSourceAdded={() => finishDestination('browser')}
+          onCarryTrack={setCarriedTrack}
+          onClose={() => finishDestination('stage')}
+        />
       </div>
     </section>
   );
@@ -135,6 +200,8 @@ export function AutoMode(props: {
       onOpenList={() => props.onPanelChange('route')}
       listActive={props.panel === 'route'}
       listLabel={t('autoMode.mobile.route')}
+      onTrackDragStart={(event, track) => writeAutoTrackTransfer(event, { track })}
+      onCarryTrack={setCarriedTrack}
     />
   );
   const Route = (dragHandle: JSX.Element) => (
@@ -143,6 +210,13 @@ export function AutoMode(props: {
       count={routeEntries().length}
       empty={state.autoMode.sources.length ? t('autoMode.mobile.routeEmpty') : t('autoMode.source.routeEmpty')}
       dragHandle={dragHandle}
+      headAction={{ label: t('autoMode.route.add'), onClick: () => carriedTrack() ? placeInRoute(carriedTrack()!) : openDestination('route') }}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        const transfer = readAutoTrackTransfer(event);
+        if (transfer) placeInRoute(transfer.track);
+      }}
       sections={[{ id: 'route', entries: routeEntries() }]}
     />
   );
@@ -178,6 +252,14 @@ export function AutoMode(props: {
         tileClass={styles.tile}
         renderPanel={(panel, dragHandle) => panel === 'browser' ? Browser(dragHandle) : panel === 'stage' ? Stage(dragHandle) : Route(dragHandle)}
       />
+      <Show when={carriedTrack()}>
+        {(track) => (
+          <div class={styles.carry} role="status">
+            <span><strong>{track().title}</strong><small>{track().artist}</small></span>
+            <button type="button" aria-label={t('common.cancel')} onClick={() => setCarriedTrack(null)}>×</button>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }

@@ -21,6 +21,7 @@ import { openPlaylistPicker } from './PlaylistPicker';
 import { RadioBadge, onStopRadio } from './RadioBadge';
 import { Spinner } from './Spinner';
 import { buildTrackMenu, openTrackMenu } from './trackActions';
+import type { Track } from '../types/music';
 import { openActionMenu } from './ActionMenu';
 import styles from './NowPlaying.module.css';
 
@@ -46,6 +47,8 @@ export function PlayerStage(props: {
   onOpenList?: () => void;
   listActive?: boolean;
   listLabel?: string;
+  onTrackDragStart?: (event: DragEvent, track: Track) => void;
+  onCarryTrack?: (track: Track) => void;
 }) {
   const navigate = useNavigate();
   const track = createMemo(() => state.playback.currentTrack);
@@ -53,6 +56,11 @@ export function PlayerStage(props: {
   const [mobileVisual, setMobileVisual] = createSignal(initialMobileVisualState);
   const [layoutBusy, setLayoutBusy] = createSignal(false);
   let rootEl: HTMLDivElement | undefined;
+  let carryTimer: number | undefined;
+  const cancelCarry = () => {
+    if (carryTimer !== undefined) window.clearTimeout(carryTimer);
+    carryTimer = undefined;
+  };
 
   const readDesktopLyrics = () => {
     try {
@@ -210,7 +218,22 @@ export function PlayerStage(props: {
                   data-lyrics-morph=""
                   data-lyrics-open={mobileVisual().content === 'lyrics' ? '' : undefined}
                 >
-                  <div class={styles.art} style={artBg()} role="img" aria-label={current().title} />
+                  <div
+                    class={styles.art}
+                    style={artBg()}
+                    role="img"
+                    aria-label={current().title}
+                    draggable={Boolean(props.onTrackDragStart)}
+                    onDragStart={(event) => props.onTrackDragStart?.(event, current())}
+                    onPointerDown={() => {
+                      if (!props.onCarryTrack) return;
+                      cancelCarry();
+                      carryTimer = window.setTimeout(() => props.onCarryTrack?.(current()), 460);
+                    }}
+                    onPointerMove={cancelCarry}
+                    onPointerUp={cancelCarry}
+                    onPointerCancel={cancelCarry}
+                  />
                   <Show when={!podcast() && mobileVisual().content === 'lyrics'}>
                     <div class={styles.mobileLyrics}>
                       <Suspense fallback={
