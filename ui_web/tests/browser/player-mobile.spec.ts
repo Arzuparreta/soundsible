@@ -257,6 +257,7 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
     await expect(autoStage).toHaveAttribute('inert', '');
 
     if (destination === 'browser') {
+      const browserPanel = side.locator('aside[data-purpose="auto-neutral"]');
       const libraryCard = side.getByRole('button', { name: /^Biblioteca/ });
       const favouritesCard = side.getByRole('button', { name: /^Favoritos/ });
       const playlistsCard = side.getByRole('button', { name: /^Listas/ });
@@ -273,6 +274,16 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
       expect(favouritesBox!.y).toBeGreaterThan(libraryBox!.y + libraryBox!.height);
       expect(Math.abs(favouritesBox!.width - playlistsBox!.width)).toBeLessThanOrEqual(1);
       expect(libraryBox!.width).toBeGreaterThan(favouritesBox!.width + playlistsBox!.width);
+      const [tileBox, panelBox] = await Promise.all([side.boundingBox(), browserPanel.boundingBox()]);
+      expect(tileBox).not.toBeNull();
+      expect(panelBox).not.toBeNull();
+      expect(Math.abs(panelBox!.x - tileBox!.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(panelBox!.width - tileBox!.width)).toBeLessThanOrEqual(2);
+      const panelRight = panelBox!.x + panelBox!.width;
+      const libraryRight = libraryBox!.x + libraryBox!.width;
+      const playlistsRight = playlistsBox!.x + playlistsBox!.width;
+      expect(Math.abs(libraryRight - playlistsRight)).toBeLessThanOrEqual(1);
+      expect(panelRight - libraryRight).toBeLessThanOrEqual(12);
     } else {
       await expect(side.getByRole('heading', { name: 'Ruta preparada' })).toBeVisible();
     }
