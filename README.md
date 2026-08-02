@@ -11,7 +11,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey?style=for-the-badge)]()
 
-[**Install**](#install) · [**Documentation**](#documentation) · [**Website**](https://arzuparreta.github.io/soundsible.github.io) · [**Contributing**](CONTRIBUTING.md)
+[**Install**](#install) · [**Docker**](#docker-installation) · [**Documentation**](#documentation) · [**Website**](https://arzuparreta.github.io/soundsible.github.io) · [**Contributing**](CONTRIBUTING.md)
 
 </div>
 
@@ -54,9 +54,56 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 
 ## Install
 
-Soundsible runs anywhere Python does. From a git clone you need **Python 3.10+**, **git**, **FFmpeg**, and **Node.js 22+** (one-time build of the SolidJS player — the production bundle is not committed to the repo). **Desktop beta** installers bundle the player, so they skip the Node.js build step.
+Choose one installation path:
 
-### 👉 Pick your OS — click to expand
+- **Docker installation** — the simplest self-hosted deployment. The image
+  includes Python, FFmpeg, Chromaprint, and the compiled web player.
+- **Native installation** — run directly on Linux, macOS, or Windows with full
+  access to the launcher and local development workflow.
+
+### Docker installation
+
+Install Docker and Git for your operating system first:
+
+- **Linux:** install [Docker Engine and the Compose plugin](https://docs.docker.com/engine/install/)
+  for your distribution, then allow your user to run Docker or use `sudo`.
+- **macOS:** install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
+- **Windows:** install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/)
+  with its WSL 2 backend and [Git for Windows](https://git-scm.com/download/win),
+  then run the commands below in PowerShell or WSL.
+
+The Soundsible commands are the same on every platform:
+
+```bash
+git clone https://github.com/Arzuparreta/soundsible.git
+cd soundsible
+docker compose up -d --build
+docker compose ps
+```
+
+Wait for `soundsible` to report `healthy`, then open
+**<http://localhost:5005/player/>**. The first start automatically creates a
+local-storage configuration. Configuration, application data, cache, logs, and
+downloaded music live in separate named volumes and survive image or container
+replacement.
+
+```bash
+docker compose logs -f soundsible # follow startup/runtime logs
+docker compose down               # stop without deleting your library
+docker compose up -d              # start it again
+```
+
+See [Docker deployment](docs/DOCKER.md) for host-library mounts, `.env`
+configuration, security, backups, upgrades, and direct `docker run` usage.
+
+### Native installation
+
+Native installs require **Python 3.10+**, **git**, **FFmpeg**, and **Node.js
+22+**. Node is used for the one-time SolidJS player build; the production
+bundle is not committed to the repo. **Desktop beta** installers bundle the
+player, so they skip the Node.js build step.
+
+#### Pick your OS
 
 <details>
 <summary><b>🐧 &nbsp; Linux</b></summary>
@@ -133,7 +180,7 @@ No `winget`? Install [Git](https://git-scm.com/download/win), [Python](https://w
 
 </details>
 
-### First run
+#### First native run
 
 The first `python3 run.py` creates the project virtualenv, installs Python dependencies, and — if you have not configured storage yet — starts the **setup wizard** at **<http://localhost:5099/setup>** (no terminal menu yet). Complete setup in the browser, then click **Launch** on the launcher page to start the engine.
 
@@ -176,6 +223,7 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 
 | Guide | What's inside |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [Docker deployment](docs/DOCKER.md) | Compose, volumes, host libraries, backups, upgrades, security |
 | [Install & Deployment](docs/INSTALL.md) | Servers, headless/SSH, Tailscale, reverse proxy, storage, security |
 | [Configuration](docs/CONFIGURATION.md) | Settings, environment variables, downloads, cookies |
 | [Architecture](docs/ARCHITECTURE.md) | How Soundsible works, and how data flows |

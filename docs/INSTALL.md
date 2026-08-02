@@ -2,7 +2,7 @@
 
 This guide covers running Soundsible **beyond the basic local setup** in the [README](../README.md) — on a server, kept running in the background, or exposed across your network.
 
-> **Just want to run it on your own machine?** Follow [Install in the README](../README.md#install). This page is for self-hosting (server, NAS, Tailscale, reverse proxy, systemd).
+> **Just want to run it on your own machine?** Follow [Install in the README](../README.md#install). For a containerized server, use the supported [Docker deployment](DOCKER.md). This page covers manual self-hosting (server, NAS, Tailscale, reverse proxy, systemd).
 
 The supported entry point everywhere is `python3 run.py`. It creates the project virtualenv, repairs a broken one, installs requirements, and then starts the launcher / engine. Server and SSH workflows use the legacy daemon on a fixed port (`:5005`); the desktop appliance runtime (`--desktop-engine`) binds loopback on a random port and is covered in the [README](../README.md) and [ARCHITECTURE.md](./ARCHITECTURE.md).
 

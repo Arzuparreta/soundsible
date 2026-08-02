@@ -1,0 +1,42 @@
+name: soundsible
+
+services:
+  soundsible:
+    build:
+      context: .
+      args:
+        SOUNDSIBLE_VERSION: ${SOUNDSIBLE_VERSION:-0.0.0-docker}
+        VCS_REF: ${VCS_REF:-local}
+    image: soundsible:local
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${SOUNDSIBLE_PORT:-5005}:5005"
+    environment:
+      SOUNDSIBLE_ADMIN_TOKEN: ${SOUNDSIBLE_ADMIN_TOKEN:-}
+      SOUNDSIBLE_YT_SEARCH_SOURCE: ${SOUNDSIBLE_YT_SEARCH_SOURCE:-ytmusic}
+      SOUNDSIBLE_PREVIEW_CACHE_MB: ${SOUNDSIBLE_PREVIEW_CACHE_MB:-2048}
+      SOUNDSIBLE_COMMUNITY_DISABLED: ${SOUNDSIBLE_COMMUNITY_DISABLED:-false}
+    volumes:
+      - soundsible-config:/config
+      - soundsible-data:/data
+      - soundsible-cache:/cache
+      - soundsible-logs:/logs
+      - soundsible-music:/music
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:5005/api/health', timeout=4); assert response.status == 200 and json.load(response).get('status') == 'healthy'"
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
+
+volumes:
+  soundsible-config:
+  soundsible-data:
+  soundsible-cache:
+  soundsible-logs:
+  soundsible-music:

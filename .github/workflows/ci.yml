@@ -81,6 +81,32 @@ jobs:
       - name: Build player bundle (vite + tailwind)
         run: npm run build
 
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build --tag soundsible:ci .
+      - name: Smoke test container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name soundsible-ci --publish 127.0.0.1:15005:5005 soundsible:ci
+          trap 'docker logs soundsible-ci; docker rm --force --volumes soundsible-ci' EXIT
+          for attempt in $(seq 1 45); do
+            health_state=$(docker inspect --format '{{.State.Health.Status}}' soundsible-ci)
+            if [[ "$health_state" == "healthy" ]]; then
+              break
+            fi
+            if [[ "$health_state" == "unhealthy" ]]; then
+              exit 1
+            fi
+            sleep 2
+          done
+          test "$health_state" = "healthy"
+          curl --fail --silent http://127.0.0.1:15005/api/health | grep '"status":"healthy"'
+          curl --fail --silent --output /dev/null http://127.0.0.1:15005/player/
+
   ui_accessibility:
     runs-on: ubuntu-latest
     defaults:
