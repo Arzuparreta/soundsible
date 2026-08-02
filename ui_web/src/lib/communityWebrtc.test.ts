@@ -18,7 +18,9 @@ const offer = [
 
 class FakePeerConnection {
   static configurations: RTCConfiguration[] = [];
+  static delayUsableCandidate = false;
   connectionState: RTCPeerConnectionState = 'new';
+  iceGatheringState: RTCIceGatheringState = 'complete';
   localDescription: RTCSessionDescriptionInit | null = null;
   listeners = new Map<string, Array<(event: any) => void>>();
   transceiverAdded = false;
@@ -31,6 +33,10 @@ class FakePeerConnection {
     const current = this.listeners.get(name) ?? [];
     current.push(callback);
     this.listeners.set(name, current);
+  }
+
+  removeEventListener(name: string, callback: (event: any) => void) {
+    this.listeners.set(name, (this.listeners.get(name) ?? []).filter((item) => item !== callback));
   }
 
   addTrack() {
@@ -51,11 +57,21 @@ class FakePeerConnection {
 
   async setLocalDescription(value: RTCSessionDescriptionInit) {
     this.localDescription = value;
+    if (FakePeerConnection.delayUsableCandidate) this.iceGatheringState = 'gathering';
     const candidate = {
       candidate: 'candidate:1 1 UDP 2122260223 192.0.2.10 50000 typ host',
       sdpMLineIndex: 0,
     };
     for (const callback of this.listeners.get('icecandidate') ?? []) callback({ candidate });
+    if (FakePeerConnection.delayUsableCandidate) {
+      setTimeout(() => {
+        const usableCandidate = {
+          candidate: 'candidate:2 1 UDP 1686052607 198.51.100.20 51000 typ srflx',
+          sdpMLineIndex: 0,
+        };
+        for (const callback of this.listeners.get('icecandidate') ?? []) callback({ candidate: usableCandidate });
+      }, 20);
+    }
   }
 
   async setRemoteDescription() {
@@ -70,6 +86,7 @@ class FakePeerConnection {
 afterEach(() => {
   vi.unstubAllGlobals();
   FakePeerConnection.configurations = [];
+  FakePeerConnection.delayUsableCandidate = false;
 });
 
 describe('Community WebRTC transport', () => {
@@ -146,6 +163,33 @@ describe('Community WebRTC transport', () => {
     const handle = await openCommunityListener({ endpoint: 'https://relay.example/media/live/whep' });
 
     expect((handle.pc as unknown as FakePeerConnection).transceiverAdded).toBe(true);
+    handle.close();
+  });
+
+  it('does not start the WHIP timeout while Firefox only has a host candidate', async () => {
+    vi.stubGlobal('RTCPeerConnection', FakePeerConnection);
+    FakePeerConnection.delayUsableCandidate = true;
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(init?.method ?? 'GET');
+      if (init?.method === 'OPTIONS') return new Response(null, { status: 204 });
+      if (init?.method === 'POST') {
+        return new Response('answer', { status: 201, headers: { Location: '/live/resource' } });
+      }
+      return new Response(null, { status: 204 });
+    }));
+    const stream = { getAudioTracks: () => [{ kind: 'audio' }] } as unknown as MediaStream;
+
+    const opening = openCommunityPublisher({
+      endpoint: 'https://relay.example/media/live/whip',
+      stream,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(calls).toEqual(['OPTIONS']);
+
+    const handle = await opening;
+    expect(calls).toContain('POST');
+    expect(calls).toContain('PATCH');
     handle.close();
   });
 

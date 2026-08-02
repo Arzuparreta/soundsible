@@ -25,6 +25,47 @@ interface OfferData {
   medias: string[];
 }
 
+// Firefox can take longer than MediaMTX's handshake window to obtain a STUN or
+// TURN candidate (notably when the Station itself is opened through Tailscale).
+// Starting WHIP with only an unroutable host candidate makes MediaMTX expire the
+// resource before Firefox's usable candidate reaches the PATCH endpoint.
+const USABLE_ICE_WAIT_MS = 15_000;
+
+function isRemotelyUsableCandidate(candidate: RTCIceCandidate): boolean {
+  return /\btyp\s+(?:srflx|relay)\b/i.test(candidate.candidate);
+}
+
+async function waitForUsableIceCandidate(
+  pc: RTCPeerConnection,
+  queuedCandidates: RTCIceCandidate[],
+): Promise<void> {
+  if (
+    pc.iceGatheringState === 'complete'
+    || queuedCandidates.some(isRemotelyUsableCandidate)
+  ) return;
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      pc.removeEventListener('icecandidate', onCandidate);
+      pc.removeEventListener('icegatheringstatechange', onGatheringStateChange);
+      resolve();
+    };
+    const onCandidate = (event: RTCPeerConnectionIceEvent) => {
+      if (!event.candidate || isRemotelyUsableCandidate(event.candidate)) finish();
+    };
+    const onGatheringStateChange = () => {
+      if (pc.iceGatheringState === 'complete') finish();
+    };
+    const timeout = setTimeout(finish, USABLE_ICE_WAIT_MS);
+    pc.addEventListener('icecandidate', onCandidate);
+    pc.addEventListener('icegatheringstatechange', onGatheringStateChange);
+  });
+}
+
 function unquote(value: string): string {
   try {
     return JSON.parse(`"${value}"`) as string;
@@ -156,6 +197,10 @@ async function openPeer(
     if (!offerSdp) throw new Error('webrtc_offer_missing_sdp');
     offerData = parseOffer(offerSdp);
     await pc.setLocalDescription({ type: 'offer', sdp: offerSdp });
+    // Do not start MediaMTX's handshake countdown until the browser has a
+    // candidate that can actually reach a remote relay. Trickle ICE remains in
+    // place for later candidates and for browsers that gather immediately.
+    await waitForUsableIceCandidate(pc, queuedCandidates);
     const response = await fetch(options.endpoint, {
       method: 'POST',
       headers: {

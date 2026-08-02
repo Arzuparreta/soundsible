@@ -27,6 +27,10 @@ webrtcLocalTCPAddress: :8189
 webrtcAdditionalHosts:
   - 84.247.161.82
   - live.84-247-161-82.sslip.io
+# Some Firefox profiles need more than the upstream 10-second default to
+# obtain a STUN/TURN candidate. The web client avoids starting this countdown
+# prematurely; this is the server-side safety margin for slow networks.
+webrtcHandshakeTimeout: 30s
 
 pathDefaults:
   source: publisher
