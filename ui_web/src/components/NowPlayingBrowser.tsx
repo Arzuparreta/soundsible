@@ -139,10 +139,11 @@ function trackCover(track: Track): string | undefined {
 export function NowPlayingBrowser(props: {
   onClose: () => void;
   dragHandle?: JSX.Element;
-  purpose?: 'browse' | 'auto-request';
+  purpose?: 'browse' | 'auto-request' | 'auto-source';
   onRequested?: () => void;
 }) {
   const requestMode = () => props.purpose === 'auto-request';
+  const sourceMode = () => props.purpose === 'auto-source';
   const [stack, setStack] = createSignal<BrowserView[]>([{ kind: 'root' }]);
   const [returnSearches, setReturnSearches] = createSignal<Array<SearchReturn | null>>([null]);
   const currentView = createMemo(() => stack()[stack().length - 1] ?? { kind: 'root' as const });
@@ -397,6 +398,7 @@ export function NowPlayingBrowser(props: {
     actions.requestAutoTrack(track);
     props.onRequested?.();
   };
+  const sourceTrack = (track: Track) => actions.addAutoSource([track], track.title, 'from');
 
   createEffect(() => {
     const ids = [
@@ -425,7 +427,7 @@ export function NowPlayingBrowser(props: {
   const renderTrack = (
     track: Track,
     onPlay: () => void,
-    onQueue: () => void = () => actions.enqueue(track),
+    onQueue: () => void = () => sourceMode() ? actions.requestAutoTrack(track) : actions.enqueue(track),
   ) => (
     <BrowserTrackRow
       title={track.title}
@@ -434,7 +436,7 @@ export function NowPlayingBrowser(props: {
       seed={track.id}
       active={isPlayingTrack(track)}
       queued={isQueuedTrack(track)}
-      onPlay={onPlay}
+      onPlay={sourceMode() ? () => sourceTrack(track) : onPlay}
       onQueue={onQueue}
       onMenu={(event) => openTrackActions(track, event)}
     />
@@ -444,7 +446,7 @@ export function NowPlayingBrowser(props: {
     <aside
       class={styles.panel}
       aria-label={requestMode() ? t('autoMode.dj.requestPanelAria') : t('nowPlayingBrowser.aria')}
-      data-purpose={requestMode() ? 'auto-request' : undefined}
+      data-purpose={props.purpose}
     >
       <header class={styles.topbar}>
         {props.dragHandle}
@@ -496,6 +498,7 @@ export function NowPlayingBrowser(props: {
               setScope('global');
               runSearch(value);
             }}
+            onUse={sourceMode() ? (tracks) => actions.addAutoSource(tracks, query(), 'from') : undefined}
           />
         </Match>
         <Match when={globalSearching()}>
@@ -508,10 +511,10 @@ export function NowPlayingBrowser(props: {
             failed={failed()}
             resolving={resolving()}
             onRetry={() => runSearch(query())}
-            primaryLabel={requestMode() ? t('autoMode.dj.requestAction') : undefined}
+            primaryLabel={requestMode() ? t('autoMode.dj.requestAction') : sourceMode() ? t('autoMode.source.from') : undefined}
             hideSecondary={requestMode()}
-            onTrack={(item) => void useItem(item, requestMode() ? requestTrack : actions.playNow)}
-            onQueue={(item) => void useItem(item, actions.enqueue)}
+            onTrack={(item) => void useItem(item, requestMode() ? requestTrack : sourceMode() ? sourceTrack : actions.playNow)}
+            onQueue={(item) => void useItem(item, sourceMode() ? requestTrack : actions.enqueue)}
             onEntity={(item) => {
               if (requestMode() && item.type === 'artist') {
                 actions.requestAutoArtist(itemArtist(item) || item.title);
@@ -537,7 +540,7 @@ export function NowPlayingBrowser(props: {
                 }, true);
               }
             }}
-            onYoutube={(result) => requestMode() ? requestTrack(resultTrack(result)) : actions.playNow(resultTrack(result))}
+            onYoutube={(result) => requestMode() ? requestTrack(resultTrack(result)) : sourceMode() ? sourceTrack(resultTrack(result)) : actions.playNow(resultTrack(result))}
           />
         </Match>
         <Match when={requestMode()}>
@@ -563,6 +566,12 @@ export function NowPlayingBrowser(props: {
                   const pool = surprisePool();
                   if (pool.length) void actions.startRadio(pool[Math.floor(Math.random() * pool.length)]);
                 }}
+                onUseLibrary={sourceMode() ? (boundary) => actions.addAutoSource(musicLibrary(), t('nav.library'), boundary) : undefined}
+                onUseFavourites={sourceMode() ? () => actions.addAutoSource(
+                  musicLibrary().filter((track) => favouriteLibraryIds().has(track.id)),
+                  t('library.favourites'),
+                  'from',
+                ) : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'library'}>
@@ -580,6 +589,7 @@ export function NowPlayingBrowser(props: {
                 name={(currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name}
                 onBack={back}
                 renderTrack={renderTrack}
+                onUse={sourceMode() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name, 'from') : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'playlists'}>
@@ -591,6 +601,7 @@ export function NowPlayingBrowser(props: {
                 byId={byId()}
                 onBack={back}
                 renderTrack={renderTrack}
+                onUse={sourceMode() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'playlist' }>).name, 'from') : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'catalogArtist'}>
@@ -598,12 +609,18 @@ export function NowPlayingBrowser(props: {
                 view={currentView() as Extract<BrowserView, { kind: 'catalogArtist' }>}
                 onBack={back}
                 onAlbum={(name, artist, deezerId) => push({ kind: 'catalogAlbum', name, artist, deezerId })}
+                sourceMode={sourceMode()}
+                onSourceItem={(item) => void useItem(item, sourceTrack)}
+                onRouteItem={(item) => void useItem(item, requestTrack)}
               />
             </Match>
             <Match when={currentView().kind === 'catalogAlbum'}>
               <CatalogAlbumView
                 view={currentView() as Extract<BrowserView, { kind: 'catalogAlbum' }>}
                 onBack={back}
+                sourceMode={sourceMode()}
+                onSourceItem={(item) => void useItem(item, sourceTrack)}
+                onRouteItem={(item) => void useItem(item, requestTrack)}
               />
             </Match>
           </Switch>
@@ -622,6 +639,8 @@ function RootView(props: {
   onPlaylists: () => void;
   onRadio: () => void;
   onSurprise: () => void;
+  onUseLibrary?: (boundary: 'inside' | 'from') => void;
+  onUseFavourites?: () => void;
 }) {
   return (
     <div class={styles.body}>
@@ -629,6 +648,13 @@ function RootView(props: {
         <NavigationCard icon={<LibraryIcon />} title={t('nav.library')} meta={`${props.libraryCount}`} onClick={props.onLibrary} />
         <NavigationCard icon={<PlaylistIcon />} title={t('nav.playlists')} meta={`${props.playlistCount}`} onClick={props.onPlaylists} />
       </section>
+      <Show when={props.onUseLibrary}>
+        <section class={styles.quickGrid} aria-label={t('autoMode.source.libraryActions')}>
+          <QuickAction title={t('autoMode.source.insideLibrary')} icon={<LibraryIcon />} disabled={!props.libraryCount} onClick={() => props.onUseLibrary?.('inside')} />
+          <QuickAction title={t('autoMode.source.fromLibrary')} icon={<ShuffleIcon />} disabled={!props.libraryCount} onClick={() => props.onUseLibrary?.('from')} />
+          <QuickAction title={t('library.favourites')} icon={<RadioIcon />} disabled={!props.onUseFavourites} onClick={() => props.onUseFavourites?.()} />
+        </section>
+      </Show>
       <section class={styles.section}>
         <h2>{t('nowPlayingBrowser.listenNow')}</h2>
         <div class={styles.quickGrid}>
@@ -751,6 +777,7 @@ function LibraryArtistView(props: {
   name: string;
   onBack: () => void;
   renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
+  onUse?: (tracks: Track[]) => void;
 }) {
   const tracks = createMemo(() =>
     musicLibrary().filter((track) =>
@@ -760,7 +787,9 @@ function LibraryArtistView(props: {
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
     <div class={styles.body} ref={setScrollRef}>
-      <ViewHeader title={props.name} meta={`${tracks().length}`} onBack={props.onBack} />
+      <ViewHeader title={props.name} meta={`${tracks().length}`} onBack={props.onBack}>
+        <Show when={props.onUse}><button type="button" disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}>{t('autoMode.source.from')}</button></Show>
+      </ViewHeader>
       <VirtualRows
         items={tracks()}
         scrollElement={scrollRef}
@@ -785,11 +814,14 @@ function LocalSearchView(props: {
   onArtist: (name: string) => void;
   renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
   onSearchGlobal: () => void;
+  onUse?: (tracks: Track[]) => void;
 }) {
   const tracks = createMemo(() => props.results.flatMap((result) => result.kind === 'track' ? [result.track] : []));
   return (
     <div class={styles.body}>
-      <ViewHeader title={t('nowPlayingBrowser.libraryResults')} meta={`${props.results.length}`} />
+      <ViewHeader title={t('nowPlayingBrowser.libraryResults')} meta={`${props.results.length}`}>
+        <Show when={props.onUse}><button type="button" disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}>{t('autoMode.source.from')}</button></Show>
+      </ViewHeader>
       <For each={props.results}>
         {(result) => result.kind === 'artist'
           ? <NavigationRow title={result.artist.name} subtitle={t('library.artistTrackCount', { count: result.artist.count })} cover={coverUrl(result.artist.coverId)} round onClick={() => props.onArtist(result.artist.name)} />
@@ -834,6 +866,7 @@ function PlaylistView(props: {
   byId: Map<string, Track>;
   onBack: () => void;
   renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
+  onUse?: (tracks: Track[]) => void;
 }) {
   const tracks = createMemo(() =>
     (state.playlists[props.name] ?? []).map((id) => props.byId.get(id)).filter((track): track is Track => !!track),
@@ -841,9 +874,11 @@ function PlaylistView(props: {
   return (
     <div class={styles.body}>
       <ViewHeader title={props.name} meta={`${tracks().length}`} onBack={props.onBack}>
-        <button type="button" disabled={tracks().length === 0} aria-label={t('playlistDetail.play')} onClick={() =>
-          actions.playFrom(tracks(), 0, { context: { id: `playlist:${props.name}`, kind: 'playlist', label: props.name } })
-        }><PlayIcon /></button>
+        <Show when={props.onUse} fallback={<button type="button" disabled={tracks().length === 0} aria-label={t('playlistDetail.play')} onClick={() =>
+            actions.playFrom(tracks(), 0, { context: { id: `playlist:${props.name}`, kind: 'playlist', label: props.name } })
+          }><PlayIcon /></button>}>
+          <button type="button" disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}>{t('autoMode.source.from')}</button>
+        </Show>
       </ViewHeader>
       <For each={tracks()}>
         {(track, index) => props.renderTrack(track, () =>
@@ -952,6 +987,9 @@ function CatalogArtistView(props: {
   view: Extract<BrowserView, { kind: 'catalogArtist' }>;
   onBack: () => void;
   onAlbum: (name: string, artist: string, deezerId?: string) => void;
+  sourceMode?: boolean;
+  onSourceItem: (item: CatalogItem) => void;
+  onRouteItem: (item: CatalogItem) => void;
 }) {
   const [profile] = createResource(
     () => [props.view.name, props.view.deezerId] as const,
@@ -962,9 +1000,12 @@ function CatalogArtistView(props: {
   return (
     <div class={styles.body}>
       <ViewHeader title={props.view.name} onBack={props.onBack}>
-        <button type="button" disabled={!profile()?.top_tracks.length} aria-label={t('artist.play')} onClick={() => {
+        <button type="button" disabled={!profile()?.top_tracks.length} aria-label={props.sourceMode ? t('autoMode.source.from') : t('artist.play')} onClick={() => {
           const tracks = profile()?.top_tracks ?? [];
-          if (tracks[0]) play(tracks[0], tracks);
+          if (props.sourceMode) {
+            const resolved = tracks.map(playableTrack).filter((track): track is Track => !!track);
+            if (resolved.length) actions.addAutoSource(resolved, props.view.name, 'from');
+          } else if (tracks[0]) play(tracks[0], tracks);
         }}><PlayIcon /></button>
       </ViewHeader>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
@@ -982,8 +1023,8 @@ function CatalogArtistView(props: {
                       seed={item.id}
                       active={isPlayingItem(item)}
                       queued={isQueuedItem(item)}
-                      onPlay={() => play(item, data().top_tracks.slice(0, 10))}
-                      onQueue={() => void enqueueCatalogItem(item)}
+                      onPlay={() => props.sourceMode ? props.onSourceItem(item) : play(item, data().top_tracks.slice(0, 10))}
+                      onQueue={() => props.sourceMode ? props.onRouteItem(item) : void enqueueCatalogItem(item)}
                     />
                   )}
                 </For>
@@ -1018,6 +1059,9 @@ function CatalogArtistView(props: {
 function CatalogAlbumView(props: {
   view: Extract<BrowserView, { kind: 'catalogAlbum' }>;
   onBack: () => void;
+  sourceMode?: boolean;
+  onSourceItem: (item: CatalogItem) => void;
+  onRouteItem: (item: CatalogItem) => void;
 }) {
   const [profile] = createResource(
     () => [props.view.name, props.view.artist, props.view.deezerId] as const,
@@ -1028,9 +1072,12 @@ function CatalogAlbumView(props: {
   return (
     <div class={styles.body}>
       <ViewHeader title={props.view.name} meta={props.view.artist} onBack={props.onBack}>
-        <button type="button" disabled={!profile()?.tracklist.length} aria-label={t('album.play')} onClick={() => {
+        <button type="button" disabled={!profile()?.tracklist.length} aria-label={props.sourceMode ? t('autoMode.source.from') : t('album.play')} onClick={() => {
           const tracks = profile()?.tracklist ?? [];
-          if (tracks[0]) play(tracks[0], tracks);
+          if (props.sourceMode) {
+            const resolved = tracks.map(playableTrack).filter((track): track is Track => !!track);
+            if (resolved.length) actions.addAutoSource(resolved, props.view.name, 'from');
+          } else if (tracks[0]) play(tracks[0], tracks);
         }}><PlayIcon /></button>
       </ViewHeader>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
@@ -1045,8 +1092,8 @@ function CatalogAlbumView(props: {
                   seed={item.id}
                   active={isPlayingItem(item)}
                   queued={isQueuedItem(item)}
-                  onPlay={() => play(item, data().tracklist)}
-                  onQueue={() => void enqueueCatalogItem(item)}
+                  onPlay={() => props.sourceMode ? props.onSourceItem(item) : play(item, data().tracklist)}
+                  onQueue={() => props.sourceMode ? props.onRouteItem(item) : void enqueueCatalogItem(item)}
                 />
               )}
             </For>

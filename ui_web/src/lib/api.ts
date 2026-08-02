@@ -178,6 +178,13 @@ export type DjRequestTarget =
   | { id: string; kind: 'track'; label: string; track: Track }
   | { id: string; kind: 'artist'; label: string; artist: { name: string } };
 
+export interface DjMusicSetSource {
+  id: string;
+  label: string;
+  boundary: 'inside' | 'from';
+  tracks: Track[];
+}
+
 export interface DjCommandResponse {
   v: 1;
   understood: boolean;
@@ -231,10 +238,14 @@ export interface ListeningPlanItem {
     analysed: boolean;
   };
   request_id?: string;
+  source_set_id?: string;
+  source_set_label?: string;
+  branch_id?: string;
+  lineage?: string[];
 }
 
 export interface ListeningPlanResponse {
-  v: 1 | 2 | 3 | 4;
+  v: 1 | 2 | 3 | 4 | 5;
   plan_id: string;
   intent: ListeningPlanIntent;
   profile: ListeningPlanProfile;
@@ -249,7 +260,7 @@ export interface ListeningPlanResponse {
 }
 
 export interface DjPlanResponse extends ListeningPlanResponse {
-  v: 2 | 3 | 4;
+  v: 2 | 3 | 4 | 5;
   dj_profile: DjProfile;
   source_profile: ListeningPlanProfile;
   /** Features of the track the route continues from — the only reading the
@@ -867,6 +878,10 @@ export const api = {
         duration?: number;
       };
       requests?: DjRequestTarget[];
+      sources?: DjMusicSetSource[];
+      heard?: Track[];
+      waypoints?: Array<{ id: string; track: Track }>;
+      feedback?: Array<{ branch_id: string; value: 'more' | 'less' }>;
       exclude?: string[];
       limit?: number;
     },

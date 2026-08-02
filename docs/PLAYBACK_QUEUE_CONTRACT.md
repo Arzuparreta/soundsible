@@ -36,14 +36,25 @@ continuation. Reordering cannot cross lane or generator boundaries.
   them, resumes the mix afterwards, and replenishes its generated runway until
   the listener stops Radio. Starting a new context or stopping Radio aborts
   in-flight generation.
-- **Auto Mode** preserves every pending manual request and owns only the
-  generated tail behind it. Its DJ requests are separate ephemeral session
-  state: they are route destinations with a maximum three-track ETA, not manual
-  queue entries.
+- **Auto Mode** is driven by ephemeral `MusicSet` sources. A source may be a
+  track, selection, filtered library view, favourites, playlist, album or
+  artist. `inside` is a hard eligibility boundary; `from` makes the set a root
+  for related-graph walks. Multiple sources form one set arc; they are not
+  quotas and are not round-robin lanes. No account-wide taste profile is
+  applied unless the listener explicitly adds such a set.
+- Auto may be entered empty. A currently sounding song becomes a visible open
+  source; a paused song does not until it is resumed. Playing a different song
+  while Auto is active is an immediate pivot, not an exit.
+- Only exact tracks may be pinned into the route. Reordering a generated row
+  pins that occurrence as a waypoint and replans around it. Removing a row is
+  neutral; `more like` reinforces its branch for this session and `less like`
+  removes that branch and its generated descendants for this session.
+- Leaving Auto discards generated branches and bridges. Pending exact waypoints
+  survive as ordinary manual queue entries.
 - **The committed handoff** is the one upcoming entry Auto Mode has already
   loaded and cued. It survives every replan, and manual insertions land behind
   it rather than in front of it. DJ, direction and request changes are debounced
-  and rewrite only the runway past that point — a session can be steered at any
+  and source or route feedback rewrites only the runway past that point — a session can be steered at any
   moment without disturbing the mix that is already prepared.
 - Auto Mode's plans are **chained**: an entry's transition records which track
   its cue was planned out of, and a refill continues the route from the tail of

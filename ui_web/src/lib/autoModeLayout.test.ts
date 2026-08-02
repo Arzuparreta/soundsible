@@ -6,20 +6,20 @@ import {
 } from './autoModeLayout';
 
 describe('Auto Mode desktop layout', () => {
-  it('starts with the Stage dominant between Booth and Route', () => {
+  it('starts with the Stage dominant between Browser and Route', () => {
     expect(parseAutoModeLayout(null)).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
-    expect(DEFAULT_AUTO_MODE_LAYOUT.ratios.stage).toBeGreaterThan(DEFAULT_AUTO_MODE_LAYOUT.ratios.booth);
+    expect(DEFAULT_AUTO_MODE_LAYOUT.ratios.stage).toBeGreaterThan(DEFAULT_AUTO_MODE_LAYOUT.ratios.browser);
     expect(DEFAULT_AUTO_MODE_LAYOUT.ratios.stage).toBeGreaterThan(DEFAULT_AUTO_MODE_LAYOUT.ratios.route);
   });
 
   it('accepts only complete Auto panel layouts and normalizes their ratios', () => {
     const parsed = parseAutoModeLayout(JSON.stringify({
       version: 1,
-      order: ['route', 'stage', 'booth'],
-      ratios: { booth: 2, stage: 5, route: 3 },
+      order: ['route', 'stage', 'browser'],
+      ratios: { browser: 2, stage: 5, route: 3 },
     }));
-    expect(parsed.order).toEqual(['route', 'stage', 'booth']);
-    expect(parsed.ratios).toEqual({ booth: 0.2, stage: 0.5, route: 0.3 });
+    expect(parsed.order).toEqual(['route', 'stage', 'browser']);
+    expect(parsed.ratios).toEqual({ browser: 0.2, stage: 0.5, route: 0.3 });
 
     expect(parseAutoModeLayout(JSON.stringify({
       version: 1,
@@ -28,22 +28,22 @@ describe('Auto Mode desktop layout', () => {
     }))).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
   });
 
-  it('maps the shared three-panel presets onto Booth, Stage and Route', () => {
+  it('maps the shared three-panel presets onto Browser, Stage and Route', () => {
     expect(autoModeLayoutFromPreset('balanced')).toEqual(DEFAULT_AUTO_MODE_LAYOUT);
     expect(autoModeLayoutFromPreset('stage')).toEqual({
       version: 1,
-      order: ['booth', 'stage', 'route'],
-      ratios: { booth: 0.2, stage: 0.6, route: 0.2 },
+      order: ['browser', 'stage', 'route'],
+      ratios: { browser: 0.2, stage: 0.6, route: 0.2 },
     });
     expect(autoModeLayoutFromPreset('left')).toEqual({
       version: 1,
-      order: ['stage', 'booth', 'route'],
-      ratios: { booth: 0.5, stage: 0.3, route: 0.2 },
+      order: ['stage', 'browser', 'route'],
+      ratios: { browser: 0.5, stage: 0.3, route: 0.2 },
     });
     expect(autoModeLayoutFromPreset('right')).toEqual({
       version: 1,
-      order: ['booth', 'route', 'stage'],
-      ratios: { booth: 0.2, stage: 0.3, route: 0.5 },
+      order: ['browser', 'route', 'stage'],
+      ratios: { browser: 0.2, stage: 0.3, route: 0.5 },
     });
   });
 
@@ -54,8 +54,8 @@ describe('Auto Mode desktop layout', () => {
 
     expect(autoModeLayoutFromPreset('stage')).toEqual({
       version: 1,
-      order: ['booth', 'stage', 'route'],
-      ratios: { booth: 0.2, stage: 0.6, route: 0.2 },
+      order: ['browser', 'stage', 'route'],
+      ratios: { browser: 0.2, stage: 0.6, route: 0.2 },
     });
   });
 });

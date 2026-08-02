@@ -566,7 +566,7 @@ describe('Global Autoplay', () => {
 });
 
 describe('Auto Mode store contract', () => {
-  it('preserves the manual queue and play state while restoring playback preferences on exit', async () => {
+  it('drops generated branches but preserves the manual queue and playback preferences on exit', async () => {
     const related = Array.from({ length: 10 }, (_, i) => ({
       id: `auto-${i}`,
       title: `Auto ${i}`,
@@ -600,7 +600,7 @@ describe('Auto Mode store contract', () => {
     expect(state.playback.isPlaying).toBe(wasPlaying);
     expect(state.playback.shuffle).toBe(true);
     expect(state.playback.repeat).toBe('one');
-    expect(state.playback.queue.length).toBeGreaterThan(2);
+    expect(state.playback.queue.map((track) => track.id)).toEqual(['current', 'manual']);
   });
 
   it('keeps every explicit request ahead of Auto Mode generation', async () => {
@@ -636,7 +636,7 @@ describe('Auto Mode store contract', () => {
     actions.exitAutoMode();
   });
 
-  it('keeps Auto for queued requests but yields immediately to a manual Play action', async () => {
+  it('keeps Auto and treats a manual Play action as an immediate pivot', async () => {
     const { actions, state } = await loadStore({
       relatedYouTube: vi.fn().mockResolvedValue([]),
       searchYouTube: vi.fn().mockResolvedValue([{ id: 'yt-current' }]),
@@ -652,8 +652,22 @@ describe('Auto Mode store contract', () => {
     expect(state.autoMode.active).toBe(true);
 
     actions.playNow(now);
-    expect(state.autoMode.active).toBe(false);
+    expect(state.autoMode.active).toBe(true);
     expect(state.playback.currentTrack?.id).toBe('now');
+    expect(state.autoMode.sources[0]).toMatchObject({ implicit: true, boundary: 'from', tracks: [now] });
+  });
+
+  it('can enter empty and starts only when the listener supplies a source', async () => {
+    const { actions, state } = await loadStore();
+    actions.enterAutoMode();
+    expect(state.autoMode.active).toBe(true);
+    expect(state.autoMode.sources).toEqual([]);
+    expect(state.playback.currentTrack).toBeNull();
+
+    const source: Track = { id: 'source', title: 'Source', artist: 'Artist' };
+    actions.addAutoSource([source], 'My selection', 'inside');
+    expect(state.playback.currentTrack?.id).toBe('source');
+    expect(state.autoMode.sources[0]).toMatchObject({ label: 'My selection', boundary: 'inside' });
   });
 
   it('does not enter Auto Mode for podcasts', async () => {

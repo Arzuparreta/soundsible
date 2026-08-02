@@ -179,9 +179,20 @@ export const en = {
     },
     upNext: 'Up next',
     panel: {
+      browser: 'Search / Library',
       booth: 'Booth',
       stage: 'Now playing',
       route: 'Route',
+    },
+    source: {
+      title: 'Search / Library', empty: 'Add a source. Auto can start empty.',
+      inside: 'Inside', from: 'From', libraryActions: 'Use the library as a source',
+      insideLibrary: 'Inside the library', fromLibrary: 'From the library',
+      toggle: 'Change the boundary for {title}', remove: 'Remove the {title} source',
+      routeEmpty: 'Add a source or resume a track to start the DJ',
+    },
+    route: {
+      pinned: 'Pinned', moreLike: 'More like {title}', lessLike: 'Less like {title}', remove: 'Remove {title} from the route',
     },
     workspace: {
       aria: 'Auto Mode panels',

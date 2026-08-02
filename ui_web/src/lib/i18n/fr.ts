@@ -180,9 +180,20 @@ export const fr: Dict = {
     },
     upNext: 'À suivre',
     panel: {
+      browser: 'Recherche / Bibliothèque',
       booth: 'Cabine',
       stage: 'Lecture en cours',
       route: 'Parcours',
+    },
+    source: {
+      title: 'Recherche / Bibliothèque', empty: 'Ajoutez une source. Auto peut démarrer vide.',
+      inside: 'Dedans', from: 'Depuis', libraryActions: 'Utiliser la bibliothèque comme source',
+      insideLibrary: 'Dans la bibliothèque', fromLibrary: 'Depuis la bibliothèque',
+      toggle: 'Changer la limite de {title}', remove: 'Retirer la source {title}',
+      routeEmpty: 'Ajoutez une source ou reprenez un morceau pour démarrer le DJ',
+    },
+    route: {
+      pinned: 'Épinglé', moreLike: 'Plus comme {title}', lessLike: 'Moins comme {title}', remove: 'Retirer {title} du parcours',
     },
     workspace: {
       aria: 'Panneaux Auto Mode',

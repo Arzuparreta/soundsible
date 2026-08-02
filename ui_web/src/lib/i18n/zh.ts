@@ -180,9 +180,20 @@ export const zh: Dict = {
     },
     upNext: '接下来播放',
     panel: {
+      browser: '搜索 / 音乐库',
       booth: 'DJ 台',
       stage: '正在播放',
       route: '路线',
+    },
+    source: {
+      title: '搜索 / 音乐库', empty: '添加一个来源。Auto 可以从空白开始。',
+      inside: '仅限其中', from: '从此出发', libraryActions: '将音乐库用作来源',
+      insideLibrary: '仅限音乐库', fromLibrary: '从音乐库出发',
+      toggle: '更改 {title} 的边界', remove: '移除来源 {title}',
+      routeEmpty: '添加来源或继续播放歌曲以启动 DJ',
+    },
+    route: {
+      pinned: '已固定', moreLike: '更多类似 {title}', lessLike: '减少类似 {title}', remove: '从路线移除 {title}',
     },
     workspace: {
       aria: '自动模式面板',

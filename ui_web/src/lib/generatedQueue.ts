@@ -10,7 +10,21 @@ import type { PlaybackQueueEntry } from './playbackQueue';
 import type { Track } from '../types/music';
 
 export type AutoProfile = ListeningPlanProfile;
-export type AutoSource = 'local' | 'related' | 'discovery';
+export type AutoPool = 'local' | 'related' | 'discovery';
+export type MusicSetBoundary = 'inside' | 'from';
+
+export interface AutoMusicSet {
+  id: string;
+  label: string;
+  boundary: MusicSetBoundary;
+  tracks: Track[];
+  implicit?: boolean;
+}
+
+export interface AutoBranchFeedback {
+  branchId: string;
+  value: 'more' | 'less';
+}
 export type AutoPhase = 'idle' | 'following_queue' | 'planning' | 'ready' | 'degraded';
 
 export interface AutoActivity {
@@ -22,7 +36,7 @@ export interface AutoActivity {
 
 export interface AutoPlanItem {
   trackId: string;
-  source: AutoSource;
+  source: AutoPool;
   reasonKey: string;
   reasonValues?: Record<string, string | number>;
   /**
@@ -38,6 +52,10 @@ export interface AutoPlanItem {
   bpm?: number;
   key?: string | null;
   requestId?: string;
+  sourceSetId?: string;
+  sourceSetLabel?: string;
+  branchId?: string;
+  lineage?: string[];
 }
 
 export interface AutoRequest {
@@ -58,6 +76,9 @@ export interface AutoModeState {
   djProfile: DjProfile;
   direction: DjDirection;
   requests: AutoRequest[];
+  sources: AutoMusicSet[];
+  heard: Track[];
+  feedback: AutoBranchFeedback[];
   transition: {
     /** `armed`: the next track is loaded, cued and no longer replannable.
      * `mixing`: the incoming deck already owns playback. */

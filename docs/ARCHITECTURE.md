@@ -136,7 +136,11 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
   final ordered segment. A single browser coordinator owns cancellation,
   retries, and refill; it never re-ranks the server response.
 - Radio remains the explicit “more of this now” mode and continuously refills.
-  Auto Mode retains its hands-off screen and Familiar/Balanced/Explore profiles;
+  Auto Mode uses the v5 `MusicSet` contract: visible ephemeral sources define
+  hard `inside` boundaries or open `from` graph roots, while heard history,
+  exact route waypoints and branch feedback remain session-local. The director
+  builds a long energy arc from signal analysis and stochastic graph walks; it
+  does not use an LLM or silently apply the account's global taste profile.
   Autoplay remains an invisible finite-context continuation. Search does not
   use the queue planner and its UI is unchanged.
 - **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (same ODST `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:

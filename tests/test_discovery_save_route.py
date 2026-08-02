@@ -997,6 +997,84 @@ def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
     assert len(queued) == 2, "only the seed and accepted route item should queue analysis"
 
 
+def test_dj_plan_v5_keeps_inside_music_sets_as_a_hard_boundary(tmp_path):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", side_effect=AssertionError("closed set escaped")),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={
+                "session_id": "session-a",
+                "seed": {"id": "seed", "track_id": "seed", "title": "Seed", "artist": "Artist"},
+                "sources": [{
+                    "id": "crate",
+                    "label": "Warehouse crate",
+                    "boundary": "inside",
+                    "tracks": [
+                        {"id": "a", "track_id": "a", "title": "A", "artist": "One"},
+                        {"id": "b", "track_id": "b", "title": "B", "artist": "Two"},
+                    ],
+                }],
+                "heard": [{"id": "a", "track_id": "a"}],
+                "limit": 4,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["v"] == 5
+    assert [item["track_id"] for item in body["items"]] == ["b"]
+    assert body["items"][0]["source_set_id"] == "crate"
+    assert body["items"][0]["source_boundary"] == "inside"
+
+
+def test_dj_plan_v5_walks_only_from_open_sources_and_honours_branch_feedback(tmp_path):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    related = [{
+        "id": "related001",
+        "youtube_id": "related001",
+        "title": "Related",
+        "artist": "Elsewhere",
+        "source": "preview",
+        "source_pool": "related",
+        "recommendation_identity": "music:youtube:related001",
+    }]
+    payload = {
+        "session_id": "session-b",
+        "seed": {"id": "seed", "track_id": "seed", "title": "Seed", "artist": "Artist"},
+        "sources": [{
+            "id": "root-set", "label": "One root", "boundary": "from",
+            "tracks": [{"id": "root", "track_id": "root", "title": "Root", "artist": "Artist"}],
+        }],
+        "heard": [{"id": "root", "track_id": "root"}],
+        "limit": 4,
+    }
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=(related, False)) as graph,
+    ):
+        first = _make_app().test_client().post("/api/discovery/music/dj-plan", json=payload)
+        branch = first.get_json()["items"][0]["branch_id"]
+        rejected = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={**payload, "feedback": [{"branch_id": branch, "value": "less"}]},
+        )
+
+    assert graph.call_args.kwargs["personalise"] is False
+    assert first.get_json()["items"][0]["lineage"] == ["music:track:root", "music:youtube:related001"]
+    assert rejected.get_json()["items"] == []
+
+
 def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
     _make_runtime(tmp_path)
     measured = {

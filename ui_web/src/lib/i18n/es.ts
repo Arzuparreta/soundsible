@@ -180,9 +180,20 @@ export const es: Dict = {
     },
     upNext: 'A continuación',
     panel: {
+      browser: 'Buscar / Biblioteca',
       booth: 'Cabina',
       stage: 'Sonando',
       route: 'Ruta',
+    },
+    source: {
+      title: 'Buscar / Biblioteca', empty: 'Añade una fuente. Auto puede empezar vacío.',
+      inside: 'Dentro', from: 'Desde', libraryActions: 'Usar la biblioteca como fuente',
+      insideLibrary: 'Dentro de la biblioteca', fromLibrary: 'Desde la biblioteca',
+      toggle: 'Cambiar el límite de {title}', remove: 'Quitar la fuente {title}',
+      routeEmpty: 'Añade una fuente o reanuda una canción para que el DJ empiece',
+    },
+    route: {
+      pinned: 'Fijada', moreLike: 'Más como {title}', lessLike: 'Menos como {title}', remove: 'Quitar {title} de la ruta',
     },
     workspace: {
       aria: 'Paneles de Auto Mode',

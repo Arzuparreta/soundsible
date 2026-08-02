@@ -8,7 +8,9 @@ transition between each pair.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import random
 import re
 import time
 import uuid
@@ -298,7 +300,12 @@ def _planner_uncached_related(video_id: str) -> list[dict]:
     return rows
 
 
-def _planner_context_related(metadata, context: list[dict]) -> tuple[list[dict], bool]:
+def _planner_context_related(
+    metadata,
+    context: list[dict],
+    *,
+    personalise: bool = True,
+) -> tuple[list[dict], bool]:
     """Collect a bounded semantic neighbourhood around the route that survives."""
     anchors: list[tuple[str, float]] = []
     for index, item in enumerate(context[-_AUTO_GRAPH_ANCHORS:]):
@@ -336,7 +343,8 @@ def _planner_context_related(metadata, context: list[dict]) -> tuple[list[dict],
     candidates: dict[str, dict] = {}
     for video_id, recency in anchors:
         rows = mixes.get(video_id) or []
-        for rank, raw in enumerate(rank_recommendation_rows(rows, source="auto_mode")[:25]):
+        ranked_rows = rank_recommendation_rows(rows, source="auto_mode") if personalise else rows
+        for rank, raw in enumerate(ranked_rows[:25]):
             item = _planner_item_from_related(raw)
             if not item:
                 continue
@@ -950,11 +958,191 @@ def discovery_music_dj_command():
     })
 
 
+def _music_set_item(raw: dict, *, source_id: str, label: str, boundary: str) -> dict | None:
+    """Turn a browser track into a planner item without consulting taste history."""
+    track = dict(raw)
+    if track.get("source") == "preview":
+        track.setdefault("youtube_id", track.get("id"))
+    else:
+        track.setdefault("track_id", track.get("id"))
+    item = _planner_item_from_feed(track, pool="local" if track.get("source") != "preview" else "related")
+    if not item:
+        return None
+    item.update({
+        "source_set_id": source_id,
+        "source_set_label": label,
+        "source_boundary": boundary,
+        "branch_id": f"{source_id}:{item['recommendation_identity']}",
+        "lineage": [item["recommendation_identity"]],
+        "reason": f"Inside {label}" if boundary == "inside" else f"From {label}",
+        "reason_code": "music_set_inside" if boundary == "inside" else "music_set_from",
+        "recommendation_source": "auto_mode",
+    })
+    return item
+
+
+def _auto_set_arc_position(heard_count: int, segment_index: int) -> float:
+    """A repeating club-shaped arc, with session-stable phase variation."""
+    phases = (0.34, 0.52, 0.74, 0.9, 0.78, 0.58)
+    return phases[(heard_count + segment_index) % len(phases)]
+
+
+def _build_music_set_route(data: dict) -> tuple[dict, int]:
+    """Auto v5: conduct explicit sets; never infer a permanent global crate.
+
+    Closed sets are hard eligibility boundaries. Open sets are graph roots. The
+    only memory accepted here is session-local ``heard`` and branch feedback.
+    """
+    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
+    sources = [row for row in data.get("sources", []) if isinstance(row, dict)]
+    if not seed:
+        return {"error": "seed is required"}, 400
+    if not sources:
+        return {"error": "at least one music set source is required"}, 400
+    try:
+        limit = min(8, max(1, int(data.get("limit") or 8)))
+        segment_index = max(0, int(data.get("segment_index") or 0))
+    except (TypeError, ValueError):
+        return {"error": "limit and segment_index must be numeric"}, 400
+
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    metadata = getattr(lib, "metadata", None)
+    candidates: list[dict] = []
+    degraded = False
+    for source in sources:
+        source_id = str(source.get("id") or uuid.uuid4())
+        label = str(source.get("label") or "Music set").strip()
+        boundary = "inside" if source.get("boundary") == "inside" else "from"
+        roots = [
+            item for raw in source.get("tracks", [])
+            if isinstance(raw, dict)
+            and (item := _music_set_item(raw, source_id=source_id, label=label, boundary=boundary))
+        ]
+        candidates.extend(roots)
+        if boundary != "from" or not roots:
+            continue
+        related, graph_degraded = _planner_context_related(metadata, roots[-4:], personalise=False)
+        degraded = degraded or graph_degraded
+        root_identity = roots[-1]["recommendation_identity"]
+        for item in related:
+            item.update({
+                "source_set_id": source_id,
+                "source_set_label": label,
+                "source_boundary": boundary,
+                "branch_id": f"{source_id}:{root_identity}",
+                "lineage": [root_identity, item["recommendation_identity"]],
+                "reason": f"Reached from {label}",
+                "reason_code": "music_set_graph_walk",
+                "recommendation_source": "auto_mode",
+            })
+        candidates.extend(related)
+
+    heard: set[str] = set()
+    for raw in data.get("heard", []):
+        if not isinstance(raw, dict):
+            continue
+        normalised = _music_set_item(raw, source_id="heard", label="Heard", boundary="inside")
+        if normalised:
+            heard.add(str(normalised["recommendation_identity"]))
+    excluded = {str(value) for value in data.get("exclude", []) if str(value)}
+    feedback = [row for row in data.get("feedback", []) if isinstance(row, dict)]
+    killed = {str(row.get("branch_id")) for row in feedback if row.get("value") == "less"}
+    boosted = {str(row.get("branch_id")) for row in feedback if row.get("value") == "more"}
+    unique: dict[str, dict] = {}
+    for item in candidates:
+        identity = str(item.get("recommendation_identity") or item.get("id") or "")
+        if not identity or identity in excluded or str(item.get("branch_id")) in killed:
+            continue
+        unique.setdefault(identity, item)
+    available = [item for key, item in unique.items() if key not in heard]
+    # Novelty relaxes only when the boundary has no unheard answer. Eligibility
+    # never leaks outside a closed set.
+    if not available:
+        available = list(unique.values())
+
+    seed_material = f"{data.get('session_id', '')}:{segment_index}:{','.join(sorted(unique))}"
+    entropy = int.from_bytes(hashlib.blake2s(seed_material.encode(), digest_size=8).digest(), "big")
+    rng = random.Random(entropy)
+    rng.shuffle(available)
+    analysed = [(item, _dj_item_analysis(metadata, item)) for item in available]
+    measured_energies = sorted(
+        float(analysis.get("energy") or 0.5) for _, analysis in analysed if analysis.get("analysed")
+    )
+    arc = _auto_set_arc_position(len(heard), segment_index)
+    if measured_energies:
+        target = measured_energies[min(len(measured_energies) - 1, int(arc * len(measured_energies)))]
+        analysed.sort(key=lambda pair: abs(float(pair[1].get("energy") or 0.5) - target))
+    analysed.sort(key=lambda pair: str(pair[0].get("branch_id")) not in boosted)
+
+    waypoints = []
+    for raw in data.get("waypoints", []):
+        if not isinstance(raw, dict):
+            continue
+        track = raw.get("track") if isinstance(raw.get("track"), dict) else raw
+        item = _music_set_item(track, source_id="waypoint", label="Route", boundary="inside")
+        if item:
+            item.update({"request_id": str(raw.get("id") or uuid.uuid4()), "reason_code": "route_waypoint"})
+            waypoints.append(item)
+
+    ordered: list[tuple[dict, dict]] = []
+    pool = analysed
+    previous = _dj_item_analysis(metadata, seed, schedule=True)
+    for waypoint in waypoints:
+        if len(ordered) >= limit:
+            break
+        waypoint_analysis = _dj_item_analysis(metadata, waypoint)
+        segment = route_to_request(previous, pool, (waypoint, waypoint_analysis), profile="adaptive", max_starts=min(4, limit - len(ordered)))
+        if segment:
+            for row in segment:
+                ordered.append((row, row.get("analysis") or _dj_item_analysis(metadata, row)))
+            used = {str(row.get("recommendation_identity")) for row, _ in ordered}
+            pool = [pair for pair in pool if str(pair[0].get("recommendation_identity")) not in used]
+            previous = waypoint_analysis
+    for item, analysis in pool:
+        if len(ordered) >= limit:
+            break
+        row = dict(item)
+        row["analysis"] = analysis
+        row["transition"] = plan_transition(previous, analysis, profile="adaptive")
+        ordered.append((row, analysis))
+        previous = analysis
+
+    route = [row for row, _ in ordered]
+    for item in route:
+        _dj_item_analysis(metadata, item, schedule=True)
+    return {
+        "v": 5,
+        "plan_id": str(uuid.uuid4()),
+        "intent": "auto_mode",
+        "profile": "balanced",
+        "dj_profile": "adaptive",
+        "source_profile": "balanced",
+        "seed_identity": str(seed.get("id") or seed.get("youtube_id") or ""),
+        "seed_analysis": _dj_item_analysis(metadata, seed, schedule=True),
+        "items": route,
+        "requests": [],
+        "degraded": degraded or not route,
+        "pool_counts": {
+            "local": sum(1 for item in unique.values() if item.get("source_pool") == "local"),
+            "related": sum(1 for item in unique.values() if item.get("source_pool") == "related"),
+            "discovery": 0,
+        },
+        "generated_at": int(time.time()),
+        "session_id": data.get("session_id"),
+        "segment_index": segment_index,
+        "arc": {"target": arc, "phase": (len(heard) + segment_index) % 6},
+    }, 200
+
+
 @discovery_bp.route("/api/discovery/music/dj-plan", methods=["POST"])
 @rate_limit("discovery_music_dj_plan", limit=60, window_sec=60)
 def discovery_music_dj_plan():
     """Build a short transition-aware route exclusively for Auto Mode."""
     data = request.get_json(silent=True) or {}
+    if isinstance(data.get("sources"), list):
+        payload, status = _build_music_set_route(data)
+        return jsonify(payload), status
     profile = str(data.get("dj_profile") or "adaptive").strip()
     if profile not in DJ_PROFILES:
         return jsonify({"error": "unsupported dj_profile"}), 400
