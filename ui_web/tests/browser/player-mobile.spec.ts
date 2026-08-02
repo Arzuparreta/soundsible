@@ -247,7 +247,7 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
   expect(containment.scrollTop).toBe(0);
   expect(containment.overflow).toBe('clip');
 
-  for (const destination of ['booth', 'route'] as const) {
+  for (const destination of ['browser', 'route'] as const) {
     const side = page.locator(`[data-auto-tile="${destination}"]`);
     await holdCarousel(page, '[data-auto-carousel]');
     await snapPlayerCarousel(page, 'auto', destination);
@@ -256,10 +256,10 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
     await expect(side).not.toHaveAttribute('inert', '');
     await expect(autoStage).toHaveAttribute('inert', '');
 
-    if (destination === 'booth') {
-      await expect(side.getByRole('textbox', { name: /Dile a la cabina/ })).toBeVisible();
+    if (destination === 'browser') {
+      await expect(side.getByRole('button', { name: /^Biblioteca/ })).toBeVisible();
     } else {
-      await expect(side).toContainText(/Luz de verano|Horizonte|El DJ aún está preparando/);
+      await expect(side.getByRole('heading', { name: 'Ruta preparada' })).toBeVisible();
     }
 
     await holdCarousel(page, '[data-auto-carousel]');
@@ -347,7 +347,7 @@ test('Now Playing and Auto share centered desktop Stage geometry through scale r
   await expect(page.locator('html')).toHaveAttribute('data-interface-size', 'large');
 
   const geometry = async (mode: 'now-playing' | 'auto') =>
-    page.locator(`[data-player-stage-mode="${mode}"]`).evaluate((stage) => {
+    page.locator(`[data-player-stage-mode="${mode}"]`).evaluate((stage, stageMode) => {
       const box = (element: Element) => {
         const rect = element.getBoundingClientRect();
         return {
@@ -360,12 +360,13 @@ test('Now Playing and Auto share centered desktop Stage geometry through scale r
           centerY: rect.y + rect.height / 2,
         };
       };
-      const transport = [...stage.querySelectorAll('button')]
-        .find((button) => Math.round(button.getBoundingClientRect().width) === 64);
+      const transport = stage.querySelector<HTMLButtonElement>(
+        'button[aria-label="Reintentar"], button[aria-label="Pausa"], button[aria-label="Reproducir"]',
+      );
       const tile = stage.closest('[data-player-tile]');
       const cover = stage.querySelector('[data-player-cover-slot]');
       const coverArt = cover?.firstElementChild;
-      if (!tile || !cover || !coverArt || !transport) throw new Error(`Incomplete ${mode} Stage`);
+      if (!tile || !cover || !coverArt || !transport) throw new Error(`Incomplete ${stageMode} Stage`);
       return {
         body: box(stage),
         tile: box(tile),
@@ -375,7 +376,7 @@ test('Now Playing and Auto share centered desktop Stage geometry through scale r
         emptyPresentationElements:
           stage.querySelectorAll(':scope > div[aria-hidden="true"]:empty').length,
       };
-    });
+    }, mode);
 
   for (const configuration of [
     { viewport: { width: 1366, height: 768 }, interfaceSize: 'normal' },
