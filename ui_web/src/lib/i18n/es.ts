@@ -281,6 +281,8 @@ export const es: Dict = {
     sortAZ: 'A–Z',
     sortFavFirst: 'Favoritos primero',
     sortTitle: 'Ordenar biblioteca',
+    filterTitle: 'Mostrar sólo',
+    filterDownloaded: 'Descargadas',
     searchLibrary: 'Buscar canciones y artistas',
     clearSearch: 'Limpiar búsqueda en la biblioteca',
     noSearchResults: 'No hay canciones ni artistas que coincidan.',

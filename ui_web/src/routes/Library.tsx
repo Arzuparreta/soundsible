@@ -8,7 +8,17 @@ import LibrarySearchResults from '../components/LibrarySearchResults';
 import { openActionMenu } from '../components/ActionMenu';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
-import { librarySort, setLibrarySort, libraryTab, setLibraryTab, sortTracks, buildArtists } from '../lib/libraryView';
+import {
+  librarySort,
+  setLibrarySort,
+  libraryFilter,
+  setLibraryFilter,
+  libraryTab,
+  setLibraryTab,
+  sortTracks,
+  filterTracks,
+  buildArtists,
+} from '../lib/libraryView';
 import { searchLibrary } from '../lib/librarySearch';
 import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Library.module.css';
@@ -23,7 +33,7 @@ export default function Library() {
   // Keyed off the resolved rows rather than library ids, so "favourites first"
   // also lifts the marked songs that have no file — they are in this list too.
   const favSet = createMemo(() => new Set(favouriteRows().map((row) => row.track.id)));
-  const songs = createMemo(() => musicLibrary());
+  const songs = createMemo(() => filterTracks(musicLibrary(), libraryFilter()));
   const sorted = createMemo(() => sortTracks(songs(), librarySort(), favSet()));
   const artists = createMemo(() => buildArtists(songs()));
   const [query, setQuerySignal] = createSignal(
@@ -180,15 +190,28 @@ export default function Library() {
 
   const sortLibrary = () =>
     openActionMenu({
-      title: t('library.sortTitle'),
-      actions: [
-        ['recent', t('library.sortRecent')],
-        ['az', t('library.sortAZ')],
-        ['fav', t('library.sortFavFirst')],
-      ].map(([value, label]) => ({
-        label: `${librarySort() === value ? '✓  ' : ''}${label}`,
-        onSelect: () => setLibrarySort(value),
-      })),
+      sections: [
+        {
+          label: t('library.sortTitle'),
+          actions: [
+            ['recent', t('library.sortRecent')],
+            ['az', t('library.sortAZ')],
+            ['fav', t('library.sortFavFirst')],
+          ].map(([value, label]) => ({
+            label: `${librarySort() === value ? '✓  ' : ''}${label}`,
+            onSelect: () => setLibrarySort(value),
+          })),
+        },
+        {
+          label: t('library.filterTitle'),
+          actions: [
+            {
+              label: `${libraryFilter() === 'downloaded' ? '✓  ' : ''}${t('library.filterDownloaded')}`,
+              onSelect: () => setLibraryFilter(libraryFilter() === 'downloaded' ? 'all' : 'downloaded'),
+            },
+          ],
+        },
+      ],
     });
 
   return (

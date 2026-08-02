@@ -281,6 +281,8 @@ export const zh: Dict = {
     sortAZ: 'A–Z',
     sortFavFirst: '收藏优先',
     sortTitle: '资料库排序',
+    filterTitle: '仅显示',
+    filterDownloaded: '已下载',
     searchLibrary: '搜索歌曲和艺人',
     clearSearch: '清除资料库搜索',
     noSearchResults: '没有匹配的歌曲或艺人。',

@@ -30,6 +30,27 @@
   text-overflow: ellipsis;
 }
 
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.section:not(:first-child) {
+  margin-top: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--hairline);
+}
+
+.sectionLabel {
+  padding: 0 var(--space-md) var(--space-2xs);
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-tertiary);
+}
+
 .item {
   display: flex;
   align-items: center;

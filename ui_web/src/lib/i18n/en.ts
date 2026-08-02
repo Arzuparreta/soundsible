@@ -280,6 +280,8 @@ export const en = {
     sortAZ: 'A–Z',
     sortFavFirst: 'Favourites first',
     sortTitle: 'Sort library',
+    filterTitle: 'Show only',
+    filterDownloaded: 'Downloaded',
     searchLibrary: 'Search songs and artists',
     clearSearch: 'Clear library search',
     noSearchResults: 'No songs or artists match this search.',

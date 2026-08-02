@@ -21,6 +21,7 @@ function persisted(key: string, def: string) {
 /** Persisted library browse preferences (shared so they survive navigation). */
 export const [librarySort, setLibrarySort] = persisted('library:sort', 'recent');
 export const [libraryTab, setLibraryTab] = persisted('library:tab', 'songs');
+export const [libraryFilter, setLibraryFilter] = persisted('library:filter', 'all');
 
 /** Sort a track list by the chosen mode. 'recent' keeps the engine's order. */
 export function sortTracks(tracks: Track[], mode: string, favSet: Set<string>): Track[] {
@@ -30,6 +31,14 @@ export function sortTracks(tracks: Track[], mode: string, favSet: Set<string>): 
   }
   // 'recent' — newest first (backend sends oldest → newest)
   return [...tracks].reverse();
+}
+
+/** Narrow a track list to what the chosen filter allows. 'downloaded' keeps
+ * only songs that own a file — `source: 'preview'` is a saved song still
+ * streaming, the same test `identity.ts` uses to split files from streaming. */
+export function filterTracks(tracks: Track[], filter: string): Track[] {
+  if (filter === 'downloaded') return tracks.filter((t) => t.source !== 'preview');
+  return tracks;
 }
 
 export interface ArtistEntry {
