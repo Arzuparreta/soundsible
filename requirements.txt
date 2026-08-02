@@ -3,7 +3,7 @@ boto3>=1.28.0              # AWS S3, Cloudflare R2, generic S3
 b2sdk>=1.19.0              # Backblaze B2 native SDK (fallback)
 
 # Audio Processing
-mutagen>=1.46.0            # Audio metadata extraction
+mutagen>=1.48.1            # Audio metadata extraction
 ffmpeg-python>=0.2.0       # Audio format conversion
 numpy>=1.26.0              # In-memory beat/key/structure analysis for Auto DJ
 
