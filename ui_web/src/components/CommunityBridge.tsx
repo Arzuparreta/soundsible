@@ -4,10 +4,12 @@ import {
   broadcastStream,
   programMixSnapshot,
   releaseBroadcastStream,
+  setBroadcastLostReporter,
 } from '../lib/audio';
 import {
   hostSession,
   publisherConnected,
+  reportBroadcastLost,
   resumeCommunityIfActive,
   sendProgramEvent,
   startHostPublisher,
@@ -17,6 +19,9 @@ import {
 } from '../lib/community';
 import type { Track } from '../types/music';
 import { coverUrl } from '../lib/media';
+
+/** How often a paused room repeats itself. Playing rooms emit every tick. */
+const PAUSED_HEARTBEAT_MS = 5000;
 
 const artworkUrls = new Map<string, string>();
 const artworkPending = new Set<string>();
@@ -71,8 +76,14 @@ export function CommunityBridge() {
   let lastTrack: Track | null = null;
   let publishing = false;
   let wasPlaying = false;
+  let pausedSince: number | null = null;
+  let lastEmit = 0;
 
   onMount(() => {
+    setBroadcastLostReporter(() => {
+      publishing = false;
+      reportBroadcastLost();
+    });
     void resumeCommunityIfActive();
     timer = window.setInterval(() => {
       const session = hostSession();
@@ -98,7 +109,15 @@ export function CommunityBridge() {
       }
       if (!publisherConnected()) return;
       const playing = state.playback.isPlaying;
-      if (!playing && !wasPlaying) return;
+      const now = Date.now();
+      if (playing) {
+        pausedSince = null;
+      } else {
+        pausedSince ??= now;
+        // A break needs a pulse, not a stream: enough for the directory and for
+        // whoever walks in mid-silence to see the room is resting, not broken.
+        if (!wasPlaying && now - lastEmit < PAUSED_HEARTBEAT_MS) return;
+      }
 
       const active = mix.decks.find((item) => item.index === mix.activeIndex);
       const other = mix.decks.find((item) => item.index !== mix.activeIndex);
@@ -112,9 +131,10 @@ export function CommunityBridge() {
       const payload: LiveProgram = {
         v: 1,
         seq: seq++,
-        emitted_at: Date.now(),
+        emitted_at: now,
         program_time: mix.contextTime,
         transport: playing ? 'playing' : 'paused',
+        paused_since: pausedSince,
         primary: deck(current, active?.position ?? state.playback.currentTime, active?.duration ?? state.playback.duration, active?.gain ?? 1),
         secondary: deck(secondaryTrack, other?.position ?? 0, other?.duration ?? secondaryTrack?.duration ?? 0, other?.gain ?? 0),
         transition: !playing || mix.phase === 'idle'
@@ -127,6 +147,7 @@ export function CommunityBridge() {
             },
       };
       sendProgramEvent(payload);
+      lastEmit = now;
       wasPlaying = playing;
       if (mix.phase === 'idle') previousTrack = null;
     }, 250);
@@ -136,11 +157,14 @@ export function CommunityBridge() {
     if (hostSession()) return;
     publishing = false;
     wasPlaying = false;
+    pausedSince = null;
+    lastEmit = 0;
     releaseBroadcastStream();
   });
 
   onCleanup(() => {
     window.clearInterval(timer);
+    setBroadcastLostReporter(null);
     releaseBroadcastStream();
     // Closing the page is allowed to use the 90-second resume window; do not
     // explicitly end the public room here.

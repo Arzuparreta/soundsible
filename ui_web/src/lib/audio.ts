@@ -79,6 +79,20 @@ export function setGraphReporter(fn: (failure: GraphFailure) => void): void {
   graphReporter = fn;
 }
 
+/**
+ * Register the live bridge's handler for a tap that died with its graph.
+ *
+ * Playback survives a failed graph on replacement elements, but the broadcast
+ * does not: the tap needs a context that this page load will not build again.
+ * Without this the publisher keeps a sender that will never carry a sample
+ * while the room still reads "on air".
+ */
+let broadcastLostReporter: (() => void) | null = null;
+
+export function setBroadcastLostReporter(fn: (() => void) | null): void {
+  broadcastLostReporter = fn;
+}
+
 /** Read the persisted volume without forcing the lazy elements into existence. */
 export function storedVolume(): number {
   const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(VOLUME_KEY) : null;
@@ -479,6 +493,10 @@ function checkAudible(): void {
 function discardGraph(): void {
   stopAudibilityWatch();
   const context = audioContext;
+  const lostBroadcast = broadcastDestination !== null;
+  if (broadcastDestination) {
+    for (const track of broadcastDestination.stream.getTracks()) track.stop();
+  }
   audioContext = null;
   deckGains = null;
   deckEffects = null;
@@ -490,6 +508,7 @@ function discardGraph(): void {
   analyser = null;
   silenceProbe = null;
   if (context && typeof context.close === 'function') void context.close().catch(() => {});
+  if (lostBroadcast) broadcastLostReporter?.();
 }
 
 /**

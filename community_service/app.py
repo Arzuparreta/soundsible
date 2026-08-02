@@ -36,6 +36,9 @@ TITLE_MAX = 96
 SIGNATURE_SKEW_SECONDS = 120
 RECONNECT_GRACE_SECONDS = int(os.getenv("COMMUNITY_RECONNECT_GRACE_SECONDS", "90"))
 MAX_ACTIVE_SESSIONS = int(os.getenv("COMMUNITY_MAX_ACTIVE_SESSIONS", "5"))
+# A room that never played holds one of the few slots the directory has. Its
+# socket keeps it alive indefinitely, so silence has to be what retires it.
+IDLE_SESSION_SECONDS = int(os.getenv("COMMUNITY_IDLE_SESSION_SECONDS", "1800"))
 MAX_SESSION_LISTENERS = int(os.getenv("COMMUNITY_MAX_SESSION_LISTENERS", "100"))
 MAX_TOTAL_LISTENERS = int(os.getenv("COMMUNITY_MAX_TOTAL_LISTENERS", "250"))
 DB_PATH = Path(os.getenv("COMMUNITY_DB_PATH", "/data/community.db"))
@@ -290,11 +293,25 @@ def _purge_artwork(session_id: str) -> None:
 
 
 def _delete_expired_sessions() -> None:
-    cutoff = _now() - RECONNECT_GRACE_SECONDS
+    """Retire rooms that ended, and rooms that never began.
+
+    A host that drops gets the reconnect grace. A host that opened a room and
+    never played gets far longer, but not forever: a waiting room is holding a
+    slot away from someone with music to put in it. `waiting` is exactly the
+    right signal, because the first program event promotes a room to `live` for
+    good — a DJ on a break keeps beating those events and is never idle. Age is
+    measured from creation rather than activity, which listeners coming and
+    going would otherwise keep refreshing on a room that never plays a note.
+    """
+    now = _now()
     with db() as conn:
         expired = conn.execute(
-            "SELECT id FROM sessions WHERE status = 'reconnecting' AND updated_at < ?",
-            (cutoff,),
+            """
+            SELECT id FROM sessions
+            WHERE (status = 'reconnecting' AND updated_at < ?)
+               OR (status = 'waiting' AND created_at < ?)
+            """,
+            (now - RECONNECT_GRACE_SECONDS, now - IDLE_SESSION_SECONDS),
         ).fetchall()
         conn.executemany("DELETE FROM sessions WHERE id = ?", [(row["id"],) for row in expired])
     for row in expired:
@@ -302,6 +319,7 @@ def _delete_expired_sessions() -> None:
         _purge_artwork(session_id)
         _programs.pop(session_id, None)
         _host_generation.pop(session_id, None)
+        socketio.emit("session_ended", {"session_id": session_id}, room=session_id)
 
 
 @app.get("/health")
@@ -615,7 +633,17 @@ def program_event(payload):
         return
     safe = {
         key: payload.get(key)
-        for key in ("v", "seq", "emitted_at", "program_time", "transport", "primary", "secondary", "transition")
+        for key in (
+            "v",
+            "seq",
+            "emitted_at",
+            "program_time",
+            "transport",
+            "paused_since",
+            "primary",
+            "secondary",
+            "transition",
+        )
     }
     _programs[session_id] = safe
     with db() as conn:

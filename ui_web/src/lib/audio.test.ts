@@ -427,6 +427,32 @@ describe('two-deck mixer', () => {
     expect(rebuilt.play).toHaveBeenCalled();
   });
 
+  it('takes the live tap down with the graph instead of leaving a dead sender', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    let lost = 0;
+    module.setGraphReporter(() => {});
+    module.setBroadcastLostReporter(() => { lost += 1; });
+    expect(module.audioService.unlockAudio()).toBe(true);
+    expect(module.audioService.broadcastStream()).not.toBeNull();
+    const context = contexts.at(-1)!;
+
+    const deck = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/current');
+    deck.currentTime = 10;
+    context.analyser.level = 128;
+    for (let step = 0; step < 8; step += 1) {
+      deck.currentTime += 1;
+      await vi.advanceTimersByTimeAsync(500);
+    }
+
+    expect(module.audioService.graphReady()).toBe(false);
+    expect(context.broadcastTrack.stop).toHaveBeenCalledOnce();
+    expect(lost).toBe(1);
+    // The tap needs a context this page load will not build again.
+    expect(module.audioService.broadcastStream()).toBeNull();
+  });
+
   it('gives up on a context whose clock never starts, before routing anything', async () => {
     vi.stubGlobal('AudioContext', DeadAudioContext);
     const module = await import('./audio');

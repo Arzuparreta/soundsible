@@ -63,7 +63,7 @@ python3 run.py --daemon   # fixed port 5005, reachable on the LAN
 
 4. From any device on your tailnet, open the HTTPS URL printed by `tailscale
    serve status`, followed by `/player/`. HTTPS is required for Live
-   broadcasting in browsers.
+   broadcasting in browsers — see [Live](LIVE.md#5-broadcasting-needs-https).
 5. If the `.ts.net` name does not resolve on a client, enable Tailscale DNS
    there with `sudo tailscale set --accept-dns=true`.
 6. Optionally install the web player as a PWA (see the [README](../README.md#listen-everywhere)).

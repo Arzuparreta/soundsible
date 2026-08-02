@@ -179,6 +179,7 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 | [Install & Deployment](docs/INSTALL.md) | Servers, headless/SSH, Tailscale, reverse proxy, storage, security |
 | [Configuration](docs/CONFIGURATION.md) | Settings, environment variables, downloads, cookies |
 | [Architecture](docs/ARCHITECTURE.md) | How Soundsible works, and how data flows |
+| [Live](docs/LIVE.md) | Broadcasting your station, sharing a room, and checking that it sounds |
 | [Legal & Acceptable Use](docs/LEGAL.md) | Disclaimer and your responsibilities |
 | [Contributing](CONTRIBUTING.md) | Dev setup and pull-request workflow |
 

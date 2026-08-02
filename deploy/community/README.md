@@ -14,7 +14,9 @@ room; a listener can type a request like any other message.
   UDP 443 and TCP 3478 for browsers behind restrictive networks.
 - Nginx: TLS and the single public origin.
 - Defaults: 5 concurrent sessions, 100 listeners per session, 250 listeners
-  total, 90 seconds for the DJ to reconnect.
+  total, 90 seconds for the DJ to reconnect, and 30 minutes before a room that
+  never played a note releases its slot (`COMMUNITY_IDLE_SESSION_SECONDS`). A
+  DJ on a break keeps reporting the programme, so a break never counts as idle.
 
 The service keeps no replay. Closing a session removes its database lease and
 uploaded artwork; chat messages are only emitted to clients currently in the

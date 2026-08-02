@@ -19,7 +19,9 @@ import {
   leaveLiveSession,
   listenerState,
   loadCommunityConfig,
+  publisherConnected,
   publisherState,
+  reportBroadcastLost,
   resetCommunityStateForTests,
   startHostPublisher,
   startListening,
@@ -221,6 +223,30 @@ describe('Community client state', () => {
     expect(whipCalls).toBe(2);
     expect(publisherState()).toBe('connected');
     expect(communityError()).toBeNull();
+  });
+
+  it('stops claiming to be on air when the mixing graph dies under the broadcast', async () => {
+    let whipCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/community/sessions')) return json({ session }, 201);
+      if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+      if (init?.method === 'OPTIONS') return new Response(null, { status: 204 });
+      whipCalls += 1;
+      return new Response('answer', { status: 201, headers: { Location: '/live/resource' } });
+    }));
+    await createHostSession('Saturday');
+    await startHostPublisher(new FakeMediaStream() as unknown as MediaStream);
+    expect(publisherState()).toBe('connected');
+
+    reportBroadcastLost();
+
+    expect(publisherState()).toBe('failed');
+    expect(publisherConnected()).toBe(false);
+    expect(communityError()).toBe('graph_lost');
+    // Retrying cannot help: the source stream is gone with its context.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(whipCalls).toBe(1);
   });
 
   it('rebuilds an authorised WHEP listener and leaves no retry behind', async () => {

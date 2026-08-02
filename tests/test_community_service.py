@@ -168,6 +168,63 @@ def test_deleted_session_rejects_late_program_events(tmp_path, monkeypatch):
     assert client.get(path).status_code == 404
 
 
+def test_idle_room_releases_its_slot_but_a_playing_one_keeps_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMMUNITY_DB_PATH", str(tmp_path / "community.db"))
+    monkeypatch.setenv("COMMUNITY_ARTWORK_DIR", str(tmp_path / "artwork"))
+    monkeypatch.setenv("COMMUNITY_SOCKET_ASYNC_MODE", "threading")
+    monkeypatch.setenv("COMMUNITY_IDLE_SESSION_SECONDS", "600")
+    import community_service.app as module
+    module = importlib.reload(module)
+    client = module.app.test_client()
+
+    body = {"title": "Never started", "profile": {"display_name": "DJ Test"}}
+    encoded, headers = _headers("POST", "/v1/sessions", body)
+    idle = client.post("/v1/sessions", data=encoded, headers=headers).get_json()["session"]
+    host = module.socketio.test_client(module.app, auth={
+        "session_id": idle["id"],
+        "host_token": idle["host_token"],
+    })
+
+    # A listener arriving keeps touching updated_at, which must not renew a room
+    # that has never played a note.
+    guest = module.socketio.test_client(module.app, auth={
+        "session_id": idle["id"],
+        "guest_id": "guest-idle",
+        "guest_name": "Guest-IDLE",
+    })
+    assert guest.is_connected()
+
+    with module.db() as conn:
+        conn.execute(
+            "UPDATE sessions SET created_at = ? WHERE id = ?",
+            (module._now() - 601, idle["id"]),
+        )
+
+    assert client.get("/v1/sessions").get_json()["sessions"] == []
+    assert client.get(f"/v1/sessions/{idle['id']}").status_code == 404
+    # The DJ is told, rather than left holding a room the directory forgot.
+    assert any(event["name"] == "session_ended" for event in host.get_received())
+    host.disconnect()
+    guest.disconnect()
+
+    encoded, headers = _headers("POST", "/v1/sessions", {"title": "Playing", "profile": {"display_name": "DJ Test"}})
+    live = client.post("/v1/sessions", data=encoded, headers=headers).get_json()["session"]
+    playing = module.socketio.test_client(module.app, auth={
+        "session_id": live["id"],
+        "host_token": live["host_token"],
+    })
+    playing.emit("program_event", {"v": 1, "seq": 1, "transport": "playing"})
+    with module.db() as conn:
+        conn.execute(
+            "UPDATE sessions SET created_at = ? WHERE id = ?",
+            (module._now() - 100_000, live["id"]),
+        )
+
+    # An eight-hour set is a long set, not an abandoned room.
+    assert len(client.get("/v1/sessions").get_json()["sessions"]) == 1
+    playing.disconnect()
+
+
 def test_signed_resume_rotates_media_credentials(tmp_path, monkeypatch):
     monkeypatch.setenv("COMMUNITY_DB_PATH", str(tmp_path / "community.db"))
     monkeypatch.setenv("COMMUNITY_ARTWORK_DIR", str(tmp_path / "artwork"))

@@ -12,6 +12,8 @@ const community = vi.hoisted(() => ({
   error: null as string | null,
   host: null as Record<string, unknown> | null,
   publisherState: 'idle',
+  program: null as Record<string, unknown> | null,
+  sessions: [] as Array<Record<string, unknown>>,
   secure: true,
   end: vi.fn(),
   retry: vi.fn(),
@@ -42,8 +44,9 @@ vi.mock('../lib/community', () => ({
   listenerState: () => 'idle',
   listenerStream: () => null,
   liveMediaSecure: () => community.secure,
-  liveProgram: () => null,
-  liveSessions: () => [],
+  liveProgram: () => community.program,
+  liveRoomLink: (id: string) => `https://hub.test/live/?session=${id}`,
+  liveSessions: () => community.sessions,
   publisherConnected: () => community.publisherState === 'connected',
   publisherState: () => community.publisherState,
   refreshLiveSessions: vi.fn(),
@@ -67,6 +70,8 @@ beforeEach(() => {
   community.error = null;
   community.host = null;
   community.publisherState = 'idle';
+  community.program = null;
+  community.sessions = [];
   community.secure = true;
   community.end.mockReset();
   community.retry.mockReset();
@@ -124,6 +129,114 @@ describe('Live operational UI', () => {
     expect(screen.queryByText('About to start')).not.toBeInTheDocument();
   });
 
+  it('hands out a public hub link that needs no station of its own', async () => {
+    community.host = {
+      id: 'session-test',
+      title: 'Saturday',
+      listener_count: 0,
+      host: { display_name: 'Local DJ' },
+    };
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+
+    render(() => <Live />);
+    await fireEvent.click(screen.getByRole('button', { name: 'Share room' }));
+
+    expect(writeText).toHaveBeenCalledWith('https://hub.test/live/?session=session-test');
+    expect(await screen.findByRole('button', { name: 'Link copied' })).toBeVisible();
+    vi.unstubAllGlobals();
+  });
+
+  it('tells the DJ how long the air has been silent', () => {
+    community.host = {
+      id: 'session-test',
+      title: 'Saturday',
+      listener_count: 2,
+      host: { display_name: 'Local DJ' },
+    };
+    community.publisherState = 'connected';
+    const since = Date.now();
+    community.program = {
+      transport: 'paused',
+      paused_since: since,
+      emitted_at: since + 95_000,
+      primary: { title: 'Hyperballad', artist: 'Björk' },
+    };
+
+    render(() => <Live />);
+
+    expect(screen.getByText('You have been silent on air for 1:35.')).toBeVisible();
+    expect(screen.queryByText('Your Soundsible master is live.')).not.toBeInTheDocument();
+  });
+
+  it('keeps a short gap between songs out of the host card', () => {
+    community.host = {
+      id: 'session-test',
+      title: 'Saturday',
+      listener_count: 2,
+      host: { display_name: 'Local DJ' },
+    };
+    community.publisherState = 'connected';
+    const since = Date.now();
+    community.program = {
+      transport: 'paused',
+      paused_since: since,
+      emitted_at: since + 4000,
+      primary: { title: 'Hyperballad', artist: 'Björk' },
+    };
+
+    render(() => <Live />);
+
+    expect(screen.getByText('Your Soundsible master is live.')).toBeVisible();
+  });
+
+  it('refuses to let the DJ join their own room and cut their own broadcast', () => {
+    community.host = {
+      id: 'session-test',
+      title: 'Saturday',
+      listener_count: 1,
+      host: { display_name: 'Local DJ' },
+    };
+    community.sessions = [{
+      id: 'session-test',
+      status: 'live',
+      title: 'Saturday',
+      listener_count: 1,
+      host: { id: 'me', display_name: 'Local DJ' },
+      created_at: 1,
+      updated_at: 1,
+      whep_url: 'https://relay.test/media/whep',
+    }];
+
+    render(() => <Live />);
+
+    expect(screen.getByText(/Your room/)).toBeVisible();
+    expect(screen.getByRole('button', { name: /Your room/ })).toBeDisabled();
+  });
+
+  it('marks a resting room in the directory instead of pretending it is playing', () => {
+    community.sessions = [{
+      id: 'other-session',
+      status: 'live',
+      title: 'Late shift',
+      listener_count: 8,
+      host: { id: 'dj', display_name: 'Remote DJ' },
+      created_at: 1,
+      updated_at: 1,
+      whep_url: 'https://relay.test/media/whep',
+      program: {
+        transport: 'paused',
+        paused_since: 1,
+        emitted_at: 2,
+        primary: { title: 'Hyperballad', artist: 'Björk' },
+      },
+    }];
+
+    render(() => <Live />);
+
+    expect(screen.getByText('On a break')).toHaveAttribute('data-status', 'paused');
+  });
+
   it('blocks broadcasting from an insecure IP origin and offers localhost', () => {
     community.secure = false;
 
@@ -133,5 +246,16 @@ describe('Live operational UI', () => {
     expect(screen.getByText(/Live broadcasting needs HTTPS/)).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open the secure station' }))
       .toHaveAttribute('href', 'https://station.tail.test/player/#/live');
+  });
+
+  it('gives an insecure station without a secure address the command that makes one', () => {
+    community.secure = false;
+    community.config = { ...community.config, secure_url: undefined as unknown as string };
+
+    render(() => <Live />);
+
+    expect(screen.getByRole('button', { name: 'Go live' })).toBeDisabled();
+    expect(screen.getByText('tailscale serve --bg --yes 5005')).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Open the secure station' })).not.toBeInTheDocument();
   });
 });

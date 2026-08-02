@@ -12,6 +12,7 @@ import {
   joinLiveSession,
   leaveLiveSession,
   listenerState,
+  liveRoomLink,
   listenerStream,
   liveMediaSecure,
   liveProgram,
@@ -31,6 +32,40 @@ import { t } from '../lib/i18n';
 import { ViewHeader } from '../components/ViewHeader';
 import { LiveRoomPanel } from '../components/LiveRoomPanel';
 import styles from './Live.module.css';
+
+/** How long the air stays quiet before the host card mentions it. */
+const BREAK_NOTICE_SECONDS = 30;
+
+/** Seconds the room has been silent, or null while the music is playing.
+ *
+ * The break is measured against the host's own clock inside the payload and
+ * then advanced locally, so a listener whose clock disagrees still counts the
+ * same break rather than an offset one. */
+function breakElapsed(): () => number | null {
+  const [seconds, setSeconds] = createSignal<number | null>(null);
+  createEffect(() => {
+    const program = liveProgram();
+    const since = program?.transport === 'paused' ? program.paused_since : null;
+    if (!program || since == null) {
+      setSeconds(null);
+      return;
+    }
+    const base = Math.max(0, Math.round((program.emitted_at - since) / 1000));
+    const arrived = Date.now();
+    setSeconds(base);
+    const timer = window.setInterval(
+      () => setSeconds(base + Math.round((Date.now() - arrived) / 1000)),
+      1000,
+    );
+    onCleanup(() => window.clearInterval(timer));
+  });
+  return seconds;
+}
+
+function clock(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+}
 
 function DeckLine(props: { deck: LiveDeck | null | undefined; secondary?: boolean }) {
   return (
@@ -52,9 +87,20 @@ function DeckLine(props: { deck: LiveDeck | null | undefined; secondary?: boolea
   );
 }
 
-function SessionCard(props: { session: LiveSession; onJoin: () => void }) {
+function SessionCard(props: { session: LiveSession; onJoin: () => void; own?: boolean }) {
+  const status = () => (
+    props.session.status === 'live' && props.session.program?.transport === 'paused'
+      ? 'paused'
+      : props.session.status
+  );
   return (
-    <button class={styles.card} type="button" onClick={props.onJoin}>
+    <button
+      class={styles.card}
+      type="button"
+      data-own={props.own ? '' : undefined}
+      disabled={props.own}
+      onClick={props.onJoin}
+    >
       <div class={styles.cardHead}>
         <span class={styles.avatar} style={{ background: props.session.host.avatar_color ?? undefined }}>
           {props.session.host.display_name.slice(0, 1).toUpperCase()}
@@ -63,8 +109,8 @@ function SessionCard(props: { session: LiveSession; onJoin: () => void }) {
           <strong>{props.session.title}</strong>
           <small>{props.session.host.display_name}</small>
         </span>
-        <span class={styles.status} data-status={props.session.status}>
-          {t(`live.status.${props.session.status}`)}
+        <span class={styles.status} data-status={status()}>
+          {t(`live.status.${status()}`)}
         </span>
       </div>
       <Show when={props.session.program?.primary} fallback={<p class={styles.waiting}>{t('live.waiting')}</p>}>
@@ -76,7 +122,11 @@ function SessionCard(props: { session: LiveSession; onJoin: () => void }) {
           <DeckLine deck={props.session.program?.secondary} secondary />
         </Show>
       </Show>
-      <footer>{t('live.listeners', { count: props.session.listener_count })}</footer>
+      <footer>
+        {props.own
+          ? t('live.ownRoom')
+          : t('live.listeners', { count: props.session.listener_count })}
+      </footer>
     </button>
   );
 }
@@ -85,6 +135,7 @@ function ListenerRoom() {
   let audio: HTMLAudioElement | undefined;
   const [starting, setStarting] = createSignal(false);
   const [failed, setFailed] = createSignal(false);
+  const onBreak = breakElapsed();
 
   createEffect(() => {
     const stream = listenerStream();
@@ -124,9 +175,16 @@ function ListenerRoom() {
           </Show>
         </div>
         <div class={styles.now}>
-          <span>{t(`live.status.${joinedSession()?.status ?? 'waiting'}`)}</span>
+          <span data-break={onBreak() !== null ? '' : undefined}>
+            <Show
+              when={onBreak() !== null}
+              fallback={t(`live.status.${joinedSession()?.status ?? 'waiting'}`)}
+            >
+              {t('live.onBreak', { time: clock(onBreak()!) })}
+            </Show>
+          </span>
           <h2>{liveProgram()?.primary?.title ?? joinedSession()?.title}</h2>
-          <p>{liveProgram()?.primary?.artist ?? t('live.waiting')}</p>
+          <p>{onBreak() !== null ? t('live.breakHint') : liveProgram()?.primary?.artist ?? t('live.waiting')}</p>
         </div>
         <Show when={liveProgram()?.secondary}>
           <div class={styles.blend}>
@@ -168,7 +226,11 @@ export default function Live() {
   const [title, setTitle] = createSignal('');
   const [creating, setCreating] = createSignal(false);
   const [editing, setEditing] = createSignal(false);
+  const [copied, setCopied] = createSignal(false);
   let refreshTimer: number | undefined;
+  const hostBreak = breakElapsed();
+  /** Dead air is normal between songs; it only deserves a word once it lasts. */
+  const resting = () => (hostBreak() ?? 0) >= BREAK_NOTICE_SECONDS;
   const mediaSecure = liveMediaSecure();
   const secureLiveUrl = () => {
     const origin = communityConfig()?.secure_url;
@@ -196,6 +258,18 @@ export default function Live() {
   const join = (session: LiveSession) => {
     if (state.playback.isPlaying) actions.togglePlay();
     joinLiveSession(session);
+  };
+
+  /** Hand out the public hub address: a listener needs no station of their own. */
+  const share = async (sessionId: string) => {
+    const link = liveRoomLink(sessionId);
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt(t('live.share'), link);
+    }
   };
 
   const retryIssue = async () => {
@@ -229,9 +303,16 @@ export default function Live() {
                 </button>
               }
             >
-              <button class={styles.endLive} type="button" onClick={() => void endHostSession()}>
-                {t('live.end')}
-              </button>
+              {(session) => (
+                <>
+                  <button class={styles.share} type="button" onClick={() => void share(session().id)}>
+                    {copied() ? t('live.linkCopied') : t('live.share')}
+                  </button>
+                  <button class={styles.endLive} type="button" onClick={() => void endHostSession()}>
+                    {t('live.end')}
+                  </button>
+                </>
+              )}
             </Show>
           }
         />
@@ -239,7 +320,13 @@ export default function Live() {
         <Show when={!mediaSecure}>
           <div class={styles.banner} data-state="secure_context">
             <span>{t('live.service.secure_context')}</span>
-            <Show when={secureLiveUrl()}>
+            <Show
+              when={secureLiveUrl()}
+              fallback={
+                // No secure address to offer: give the one command that makes one.
+                <code class={styles.secureHint}>tailscale serve --bg --yes 5005</code>
+              }
+            >
               {(url) => <a href={url()}>{t('live.openSecure')}</a>}
             </Show>
           </div>
@@ -249,7 +336,7 @@ export default function Live() {
           {(issue) => (
             <div class={styles.banner} data-state={issue()}>
               <span>{t(`live.service.${issue()}`)}</span>
-              <Show when={issue() !== 'loading' && issue() !== 'disabled' && issue() !== 'invalid'}>
+              <Show when={issue() !== 'loading' && issue() !== 'disabled' && issue() !== 'invalid' && issue() !== 'graph_lost'}>
                 <button type="button" onClick={() => void retryIssue().catch(() => {})}>{t('common.retry')}</button>
               </Show>
             </div>
@@ -283,7 +370,13 @@ export default function Live() {
                     <button type="submit">{t('common.save')}</button>
                   </form>
                 </Show>
-                <p>{publisherConnected() ? t('live.broadcasting') : t('live.startPlaying')}</p>
+                <p data-break={publisherConnected() && resting() ? '' : undefined}>
+                  {!publisherConnected()
+                    ? t('live.startPlaying')
+                    : resting()
+                      ? t('live.hostBreak', { time: clock(hostBreak()!) })
+                      : t('live.broadcasting')}
+                </p>
               </div>
               <LiveRoomPanel compact />
             </section>
@@ -298,7 +391,13 @@ export default function Live() {
           <Show when={liveSessions().length > 0} fallback={<p class={styles.empty}>{t('live.empty')}</p>}>
             <div class={styles.grid}>
               <For each={liveSessions()}>
-                {(session) => <SessionCard session={session} onJoin={() => join(session)} />}
+                {(session) => (
+                  <SessionCard
+                    session={session}
+                    own={session.id === hostSession()?.id}
+                    onJoin={() => join(session)}
+                  />
+                )}
               </For>
             </div>
           </Show>

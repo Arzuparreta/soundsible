@@ -33,6 +33,9 @@ export interface LiveProgram {
   emitted_at: number;
   program_time: number;
   transport: LiveTransport;
+  /** Host clock at the moment the music stopped, so a room that joins mid-break
+   * can say how long it has lasted. Null whenever the transport is playing. */
+  paused_since: number | null;
   primary: LiveDeck | null;
   secondary: LiveDeck | null;
   transition: LiveTransition | null;
@@ -87,7 +90,8 @@ export type CommunityIssue =
   | 'secure_context'
   | 'reconnecting'
   | 'publish_failed'
-  | 'listen_failed';
+  | 'listen_failed'
+  | 'graph_lost';
 export type MediaConnectionState = 'idle' | 'connecting' | 'connected' | 'recovering' | 'failed';
 
 export interface CommunityConfig {
@@ -98,6 +102,19 @@ export interface CommunityConfig {
   error?: { code: string; message: string } | null;
   identity?: { community_id: string } | null;
   secure_url?: string | null;
+}
+
+/** The public listener hub. Anyone can open a room there: no account, no
+ * station, nothing to install — which is what makes a room worth sharing. */
+export const LIVE_HUB_URL =
+  import.meta.env.VITE_SOUNDSIBLE_LIVE_HUB ||
+  'https://arzuparreta.github.io/soundsible.github.io/live/';
+
+/** The address a listener should be given for a room. */
+export function liveRoomLink(sessionId: string): string {
+  const url = new URL(LIVE_HUB_URL);
+  url.searchParams.set('session', sessionId);
+  return url.href;
 }
 
 const ACTIVE_HOST_KEY = 'community:active-host:v1';
@@ -541,6 +558,26 @@ export async function startHostPublisher(stream: MediaStream): Promise<void> {
     schedulePublisherRecovery(generation);
     throw error;
   }
+}
+
+/**
+ * The mixing graph died underneath a live broadcast.
+ *
+ * Retrying is pointless: the tap needs a context this page load will not build
+ * again, so the publisher is closed and the room says so instead of sitting on
+ * a connected peer that carries nothing but stopped tracks.
+ */
+export function reportBroadcastLost(): void {
+  if (!hostSession()) return;
+  publisherGeneration += 1;
+  clearPublisherRetry();
+  closePeer(publisher);
+  publisher = null;
+  publisherSource = null;
+  publisherRetryAttempt = 0;
+  setPublisherConnected(false);
+  setPublisherState('failed');
+  setCommunityError('graph_lost');
 }
 
 export async function retryHostPublisher(): Promise<void> {
