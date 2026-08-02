@@ -45,8 +45,8 @@ async function mockEngine(page: Page) {
 
 async function openNowPlaying(page: Page) {
   await page.goto('/player/#/');
-  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 1/ }).click();
-  await page.getByRole('button', { name: /Canción de biblioteca 1/ }).last().click();
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  await page.getByRole('button', { name: /Canción de biblioteca 320/ }).last().click();
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
 }
 
@@ -61,6 +61,6 @@ test('desktop Now Playing opens Library directly on visible virtual song rows', 
   const browser = page.locator('[data-now-playing-tile="browser"]');
   await browser.getByRole('button', { name: /^Biblioteca/ }).click();
 
-  await expect(browser.getByText('Canción de biblioteca 1', { exact: true })).toBeVisible();
+  await expect(browser.getByText('Canción de biblioteca 320', { exact: true })).toBeVisible();
   await expect.poll(() => browser.locator('[data-virtual-rows] > div').count()).toBeGreaterThan(0);
 });
