@@ -25,7 +25,7 @@ feedparser>=6.0.10         # Parse podcast feeds
 
 cryptography>=41.0.0       # Encrypt stored credentials
 pillow>=10.0.0             # Image processing (covers, branding)
-watchdog>=3.0.0            # Folder monitoring
+watchdog>=6.0.0            # Folder monitoring
 pyacoustid>=1.2.2          # Audio fingerprinting
 
 # Development
