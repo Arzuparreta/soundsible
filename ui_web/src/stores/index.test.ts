@@ -62,9 +62,30 @@ async function loadStore(
     searchYouTube: vi.fn(),
     relatedYouTube,
     emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
+    placeDjTrack: vi.fn().mockImplementation(async (body: { track: Track; requested_queue_id: string; route: Array<{ queue_id: string }> }) => ({
+      v: 1,
+      insert_at: Math.min(1, body.route.length),
+      before_queue_id: body.route[1]?.queue_id ?? null,
+      requested_queue_id: body.requested_queue_id,
+      items: [{
+        id: body.track.id,
+        youtube_id: body.track.id,
+        title: body.track.title,
+        artist: body.track.artist,
+        source: 'preview',
+        source_pool: 'related',
+        recommendation_identity: `music:youtube:${body.track.id}`,
+        recommendation_source: 'auto_mode',
+        route_kind: 'user',
+        request_id: body.requested_queue_id,
+      }],
+      degraded: false,
+    })),
     sendPlayTiming: vi.fn().mockResolvedValue({ status: 'ok' }),
     getDiscoverySettings: vi.fn().mockResolvedValue({ learning_enabled: true, autoplay_enabled: true }),
     setAutoplayEnabled: vi.fn().mockResolvedValue({ autoplay_enabled: true }),
+    setVolumeLeveling: vi.fn().mockResolvedValue({ volume_leveling: true }),
+    requestLoudness: vi.fn().mockResolvedValue({ queued: 0 }),
     ...apiOverrides,
   } as Record<string, any>;
   if (!apiOverrides.planMusicQueue) {
@@ -119,6 +140,9 @@ async function loadStore(
     cancelMix: vi.fn(),
     startMixNow: vi.fn(() => false),
     armTransition: vi.fn().mockResolvedValue(undefined),
+    setLevels: vi.fn(),
+    setLevelingEnabled: vi.fn(),
+    levelingEnabled: vi.fn(() => true),
     ...audioOverrides,
   };
 
@@ -208,7 +232,7 @@ describe('Solid store library and playback resume', () => {
     expect(state.playback.currentTrack?.id).toBe('t1');
     expect(state.playback.isPlaying).toBe(false);
     expect(state.playback.currentTime).toBe(37);
-    expect(audioService.prime).toHaveBeenCalledWith('/stream/t1', 37);
+    expect(audioService.prime).toHaveBeenCalledWith('/stream/t1', 37, 1);
   });
 
   it('keeps other-device playback as an explicit resume banner', async () => {
@@ -250,7 +274,7 @@ describe('Solid store library and playback resume', () => {
     initStore();
     await flush();
 
-    expect(audioService.prime).toHaveBeenCalledWith('/stream/t1', 37);
+    expect(audioService.prime).toHaveBeenCalledWith('/stream/t1', 37, 1);
     (deck as unknown as { currentSrc: string }).currentSrc = '/stream/t1';
     fireDeckEvent('error');
 
@@ -332,6 +356,96 @@ describe('Solid store library and playback resume', () => {
   });
 });
 
+describe('volume levelling', () => {
+  const measured: Track = {
+    id: 'loud', title: 'Loud', artist: 'Artist', duration: 200,
+    loudness_lufs: -6, loudness_peak_dbtp: -1,
+  };
+
+  it('attenuates a measured track and leaves an unmeasured one alone', async () => {
+    const { actions, audioService } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({
+        tracks: [measured], playlists: {}, settings: {}, podcast_subscriptions: [],
+      }),
+    });
+    await flush();
+
+    actions.playTrack(measured);
+    expect(audioService.load).toHaveBeenLastCalledWith('/stream/loud', expect.any(Number));
+    // -6 LUFS against a -14 target, with 0 dB of headroom to the ceiling.
+    expect(audioService.load.mock.lastCall?.[1]).toBeCloseTo(10 ** (-8 / 20), 4);
+
+    actions.playTrack(t2);
+    // Nothing has measured t2, so it plays exactly as it always did.
+    expect(audioService.load).toHaveBeenLastCalledWith('/stream/t2', 1);
+  });
+
+  it('reads the measurement from the library when the queue entry predates it', async () => {
+    const { actions, state, audioService } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({
+        tracks: [measured], playlists: {}, settings: {}, podcast_subscriptions: [],
+      }),
+    });
+    await flush();
+
+    // A queue entry is a snapshot taken when the track was enqueued, so a song
+    // the sweep measured afterwards carries the numbers only on the library copy.
+    await actions.syncLibrary();
+    const stale: Track = { id: 'loud', title: 'Loud', artist: 'Artist', duration: 200 };
+    actions.playTrack(stale);
+
+    expect(state.library[0].loudness_lufs).toBe(-6);
+    expect(audioService.load.mock.lastCall?.[1]).toBeLessThan(1);
+  });
+
+  it('levels a whole album to one reference, from the library copies', async () => {
+    const loud: Track = {
+      id: 'a1', title: 'Opener', artist: 'Artist', album: 'Record', duration: 200,
+      loudness_lufs: -8, loudness_peak_dbtp: -1,
+    };
+    const interlude: Track = {
+      id: 'a2', title: 'Interlude', artist: 'Artist', album: 'Record', duration: 60,
+      loudness_lufs: -24, loudness_peak_dbtp: -12,
+    };
+    const { actions, audioService } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({
+        tracks: [loud, interlude], playlists: {}, settings: {}, podcast_subscriptions: [],
+      }),
+    });
+    await actions.syncLibrary();
+
+    // Queued as an album, from snapshots that predate the measurements — the
+    // path where album levelling used to fall back to per-track without saying so.
+    const stale = [
+      { id: 'a1', title: 'Opener', artist: 'Artist', album: 'Record', duration: 200 },
+      { id: 'a2', title: 'Interlude', artist: 'Artist', album: 'Record', duration: 60 },
+    ] as Track[];
+    actions.playFrom(stale, 0, { context: { id: 'album:record', kind: 'album', label: 'Record' } });
+    const first = audioService.load.mock.lastCall?.[1] as number;
+
+    actions.next();
+    const second = audioService.load.mock.lastCall?.[1] as number;
+
+    // One reference for the record, so the quiet interlude stays 16 dB quieter
+    // than the opener, exactly as it was mastered.
+    expect(second).toBeCloseTo(first, 6);
+  });
+
+  it('plays everything at unity while the setting is off', async () => {
+    const { actions, audioService } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({
+        tracks: [measured], playlists: {}, settings: {}, podcast_subscriptions: [],
+      }),
+    });
+    await actions.syncLibrary();
+    await actions.setVolumeLeveling(false);
+
+    actions.playTrack(measured);
+    expect(audioService.load).toHaveBeenLastCalledWith('/stream/loud', 1);
+    expect(audioService.setLevelingEnabled).toHaveBeenCalledWith(false);
+  });
+});
+
 describe('Playback load coalescing', () => {
   const preview: Track = { id: 'previewid01', title: 'Preview', artist: 'Chan', source: 'preview' };
 
@@ -358,7 +472,7 @@ describe('Playback load coalescing', () => {
     actions.playTrack(other);
 
     expect(audioService.load).toHaveBeenCalledTimes(2);
-    expect(audioService.load).toHaveBeenLastCalledWith('/preview/previewid02');
+    expect(audioService.load).toHaveBeenLastCalledWith('/preview/previewid02', 1);
     expect(state.playback.currentTrack?.id).toBe('previewid02');
   });
 
@@ -671,10 +785,11 @@ describe('Auto Mode store contract', () => {
     actions.playNow(now);
     expect(state.autoMode.active).toBe(true);
     expect(state.playback.currentTrack?.id).toBe('now');
-    expect(state.autoMode.sources[0]).toMatchObject({ implicit: true, boundary: 'from', tracks: [now] });
+    expect(state.autoMode.sources).toEqual([]);
+    expect(state.autoMode.heard.at(-1)).toMatchObject(now);
   });
 
-  it('can enter empty and starts only when the listener supplies a source', async () => {
+  it('can enter empty and a source never implies playback', async () => {
     const { actions, state } = await loadStore();
     actions.enterAutoMode();
     expect(state.autoMode.active).toBe(true);
@@ -682,12 +797,24 @@ describe('Auto Mode store contract', () => {
     expect(state.playback.currentTrack).toBeNull();
 
     const source: Track = { id: 'source', title: 'Source', artist: 'Artist' };
-    actions.addAutoSource([source], 'My selection', 'inside');
-    expect(state.playback.currentTrack?.id).toBe('source');
-    expect(state.autoMode.sources[0]).toMatchObject({ label: 'My selection', boundary: 'inside' });
+    actions.addAutoSource([source], 'My selection');
+    expect(state.playback.currentTrack).toBeNull();
+    expect(state.autoMode.sources[0]).toMatchObject({ label: 'My selection', activation: 1 });
   });
 
-  it('adds a running source without rewriting the prepared route', async () => {
+  it('starts an empty Auto session only when a song is placed in the route', async () => {
+    const { actions, state } = await loadStore();
+    actions.enterAutoMode();
+    const placed: Track = { id: 'placed', title: 'Placed', artist: 'Listener' };
+
+    await actions.placeAutoTrack(placed);
+
+    expect(state.playback.currentTrack?.id).toBe('placed');
+    expect(state.playback.queue[0].autoRoute).toMatchObject({ kind: 'user', placement: 'dj' });
+    expect(state.autoMode.sources).toEqual([]);
+  });
+
+  it('adds a running source and replans generated music without implying playback', async () => {
     const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 8 }, (_, index) => `route-${index}`)));
     const { actions, state } = await loadStore({ planDjQueue });
     const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
@@ -698,9 +825,43 @@ describe('Auto Mode store contract', () => {
 
     actions.useAutoTrackAsSource(state.playback.queue[2]);
 
-    expect(state.autoMode.sources.at(-1)).toMatchObject({ boundary: 'from', tracks: [expect.objectContaining({ id: 'route-1' })] });
-    expect(state.playback.queue.map((track) => track.queueId)).toEqual(routeBefore);
+    expect(state.autoMode.sources.at(-1)).toMatchObject({ activation: 1, tracks: [expect.objectContaining({ id: 'route-1' })] });
+    await vi.waitFor(() => expect(planDjQueue).toHaveBeenCalledTimes(2));
+    expect(state.playback.queue[0].queueId).toBe(routeBefore[0]);
+  });
+
+  it('places a song in the existing route without making it a source or replacing neighbours', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 5 }, (_, index) => `route-${index}`)));
+    const { actions, state } = await loadStore({ planDjQueue });
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(6));
+    const neighbours = state.playback.queue.slice(1).map((entry) => entry.queueId);
+
+    await actions.placeAutoTrack({ id: 'wanted', title: 'Wanted', artist: 'Listener' });
+
+    const placed = state.playback.queue.find((entry) => entry.id === 'wanted');
+    expect(placed?.autoRoute).toMatchObject({ kind: 'user', placement: 'dj' });
+    expect(state.autoMode.sources).toEqual([]);
+    expect(state.playback.queue.slice(1).filter((entry) => entry.id !== 'wanted').map((entry) => entry.queueId)).toEqual(neighbours);
     expect(planDjQueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('composes source membership with an existing route occurrence independently', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
+    const occurrence = state.playback.queue[1];
+
+    actions.useAutoTrackAsSource(occurrence);
+    expect(state.autoMode.sources.at(-1)?.tracks[0].id).toBe(occurrence.id);
+    expect(state.playback.queue.some((entry) => entry.queueId === occurrence.queueId)).toBe(true);
+    actions.removeAutoSource(state.autoMode.sources.at(-1)!.id);
+    expect(state.playback.queue.some((entry) => entry.queueId === occurrence.queueId)).toBe(true);
   });
 
   it('distinguishes neutral removal from an exact session avoidance', async () => {
@@ -784,7 +945,7 @@ describe('Radio mode', () => {
     await actions.startRadio(seed2);
 
     expect(audioService.load).toHaveBeenCalledTimes(1);
-    expect(audioService.load).toHaveBeenCalledWith('/preview/seed2');
+    expect(audioService.load).toHaveBeenCalledWith('/preview/seed2', 1);
     expect(state.playback.radioMode).toBe(true);
     expect(state.playback.radioSeedId).toBe('seed2');
     expect(state.playback.queue.map((t) => t.id)).toEqual(['seed2', 'mix02']);
@@ -1207,7 +1368,7 @@ describe('the end of a track', () => {
     deck.currentTime = 72;
     fireDeckEvent('ended');
 
-    expect(audioService.recover).toHaveBeenCalledWith('/stream/t1', 72);
+    expect(audioService.recover).toHaveBeenCalledWith('/stream/t1', 72, 1);
     expect(state.playback.currentTrack?.id).toBe('t1');
     expect(state.playback.phase).toBe('recovering');
   });

@@ -89,8 +89,13 @@ def discovery_settings_patch():
         return jsonify({"error": "learning_enabled must be boolean"}), 400
     if "autoplay_enabled" in data and not isinstance(data.get("autoplay_enabled"), bool):
         return jsonify({"error": "autoplay_enabled must be boolean"}), 400
+    if "volume_leveling" in data and not isinstance(data.get("volume_leveling"), bool):
+        return jsonify({"error": "volume_leveling must be boolean"}), 400
     saved = save_discovery_settings(data)
-    _invalidate_personalized_cache()
+    # Volume levelling has nothing to do with what gets recommended, so a patch
+    # that only touches it must not throw away a warm personalized feed.
+    if set(data) - {"volume_leveling"}:
+        _invalidate_personalized_cache()
     return jsonify(saved)
 
 

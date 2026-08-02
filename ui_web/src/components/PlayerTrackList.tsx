@@ -19,6 +19,8 @@ export interface PlayerTrackListEntry {
   onDragStart?: (event: DragEvent) => void;
   onDragOver?: (event: DragEvent) => void;
   onDrop?: (event: DragEvent) => void;
+  before?: JSX.Element;
+  onCarry?: () => void;
 }
 
 export interface PlayerTrackListSection {
@@ -40,11 +42,13 @@ export function PlayerTrackList(props: {
     disabled?: boolean;
     onClick: () => void;
   };
+  onDragOver?: (event: DragEvent) => void;
+  onDrop?: (event: DragEvent) => void;
   setScrollerRef?: (element: HTMLDivElement) => void;
 }) {
   return (
     <div class={styles.panel}>
-      <header class={styles.head}>
+      <header class={styles.head} onDragOver={props.onDragOver} onDrop={props.onDrop}>
         <span class={styles.heading}>
           {props.dragHandle}
           <h2>{props.title}</h2>
@@ -78,7 +82,7 @@ export function PlayerTrackList(props: {
                     </div>
                   </Show>
                   <For each={section.entries}>
-                    {(entry) => <PlayerTrackListRow entry={entry} />}
+                    {(entry) => <>{entry.before}<PlayerTrackListRow entry={entry} /></>}
                   </For>
                   {section.footer}
                 </section>
@@ -97,6 +101,11 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry }) {
     disabled,
     onTap: () => props.entry.onActivate?.(),
   });
+  let carryTimer: number | undefined;
+  const cancelCarry = () => {
+    if (carryTimer !== undefined) window.clearTimeout(carryTimer);
+    carryTimer = undefined;
+  };
   return (
     <div
       class={styles.row}
@@ -106,6 +115,14 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry }) {
       onDragStart={props.entry.onDragStart}
       onDragOver={props.entry.onDragOver}
       onDrop={props.entry.onDrop}
+      onPointerDown={() => {
+        if (!props.entry.onCarry) return;
+        cancelCarry();
+        carryTimer = window.setTimeout(() => props.entry.onCarry?.(), 460);
+      }}
+      onPointerMove={cancelCarry}
+      onPointerUp={cancelCarry}
+      onPointerCancel={cancelCarry}
     >
       <button class={styles.main} type="button" disabled={disabled()} data-pressable {...tap}>
         <span class={styles.position}>

@@ -1054,6 +1054,16 @@ def _process_single_queue_item_bound(item):
             # file itself lives in the pool everyone shares.
             add_tracks_to_user_library([shared_track], user_id=item_user_id)
 
+            # Measure it now rather than waiting for the idle sweep: a song
+            # somebody just asked for is the one they are about to play, and one
+            # file costs well under a second.
+            try:
+                from shared.loudness import get_loudness_service
+
+                get_loudness_service().measure_now(shared_track.id)
+            except Exception:
+                logger.debug("API: could not measure loudness for %s", shared_track.id, exc_info=True)
+
             with app.app_context():
                 queue_manager_dl.remove_item(item_id)
                 _emit_item({'id': item_id, 'status': 'completed', 'track': track_dict})
@@ -1445,6 +1455,7 @@ from shared.api.routes.migration import migration_bp
 from shared.api.routes.car import car_bp
 from shared.api.routes.auth import auth_bp
 from shared.api.routes.lossless import lossless_bp
+from shared.api.routes.loudness import loudness_bp
 from shared.api.routes.community import community_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
@@ -1460,6 +1471,7 @@ app.register_blueprint(migration_bp)
 app.register_blueprint(car_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(lossless_bp)
+app.register_blueprint(loudness_bp)
 app.register_blueprint(community_bp)
 
 
@@ -1601,6 +1613,13 @@ def stop_api() -> None:
         stop_lossless_service_if_started()
     except Exception:
         logger.exception("API: Error stopping lossless idle worker")
+
+    try:
+        from shared.loudness import stop_loudness_service_if_started
+
+        stop_loudness_service_if_started()
+    except Exception:
+        logger.exception("API: Error stopping loudness idle worker")
 
     try:
         orchestrator.shutdown(wait=False)
@@ -1780,6 +1799,16 @@ def start_api(
             logger.info("API: Lossless idle worker scheduled.")
         except Exception:
             logger.debug("API: Lossless idle worker start skipped", exc_info=True)
+
+        # Loudness measurement is background work with the same shape: it waits
+        # for a quiet instance, and it reads each file exactly once, ever.
+        try:
+            from shared.loudness import get_loudness_service
+
+            get_loudness_service().start()
+            logger.info("API: Loudness idle worker scheduled.")
+        except Exception:
+            logger.debug("API: Loudness idle worker start skipped", exc_info=True)
 
         # Note: Pre-warm the discover node feed's persistent related-mix cache
         # for the top likely seeds (favourites + most-recent additions). This

@@ -997,15 +997,19 @@ def test_dj_plan_never_decodes_audio_on_the_interaction_path(tmp_path):
     assert len(queued) == 2, "only the seed and accepted route item should queue analysis"
 
 
-def test_dj_plan_v5_keeps_inside_music_sets_as_a_hard_boundary(tmp_path):
+def test_dj_plan_v6_ignores_legacy_boundaries_and_walks_explicit_sources(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
     mock_api["get_core"].return_value = (
         _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
     )
+    related = [{
+        "id": "related001", "youtube_id": "related001", "title": "Related", "artist": "Elsewhere",
+        "source": "preview", "source_pool": "related", "recommendation_identity": "music:youtube:related001",
+    }]
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", side_effect=AssertionError("closed set escaped")),
+        patch.object(_auto_mode, "_planner_context_related", return_value=(related, False)) as graph,
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -1028,13 +1032,13 @@ def test_dj_plan_v5_keeps_inside_music_sets_as_a_hard_boundary(tmp_path):
 
     assert response.status_code == 200
     body = response.get_json()
-    assert body["v"] == 5
-    assert [item["track_id"] for item in body["items"]] == ["b"]
-    assert body["items"][0]["source_set_id"] == "crate"
-    assert body["items"][0]["source_boundary"] == "inside"
+    assert body["v"] == 6
+    assert graph.called
+    assert any(item["recommendation_identity"] == "music:youtube:related001" for item in body["items"])
+    assert all("source_boundary" not in item for item in body["items"])
 
 
-def test_dj_plan_v5_walks_from_open_sources_and_applies_exact_exclusions(tmp_path):
+def test_dj_plan_v6_walks_from_sources_and_applies_exact_exclusions(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
     mock_api["get_core"].return_value = (
@@ -1079,6 +1083,39 @@ def test_dj_plan_v5_walks_from_open_sources_and_applies_exact_exclusions(tmp_pat
         item["recommendation_identity"] != "music:youtube:related001"
         for item in related_excluded.get_json()["items"]
     )
+
+
+def test_dj_place_inserts_exact_track_without_returning_a_replacement_route(tmp_path):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-place",
+            json={
+                "seed": {"id": "seed", "track_id": "seed", "title": "Seed", "artist": "Artist"},
+                "route": [
+                    {"queue_id": "q-a", "id": "a", "track_id": "a", "title": "A", "artist": "Artist"},
+                    {"queue_id": "q-b", "id": "b", "track_id": "b", "title": "B", "artist": "Artist"},
+                ],
+                "track": {"id": "wanted", "track_id": "wanted", "title": "Wanted", "artist": "Listener"},
+                "requested_queue_id": "q-wanted",
+                "before_queue_id": "q-b",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["insert_at"] == 1
+    assert body["before_queue_id"] == "q-b"
+    assert len(body["items"]) == 1
+    assert body["items"][0]["route_kind"] == "user"
+    assert body["items"][0]["request_id"] == "q-wanted"
 
 
 def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):

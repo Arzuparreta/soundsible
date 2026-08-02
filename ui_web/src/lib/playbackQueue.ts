@@ -45,6 +45,14 @@ export interface PlaybackQueueEntry extends Track {
   queueSource: QueueSource;
   queueContext?: PlaybackContextDescriptor;
   queueContextIndex?: number;
+  /** Auto Mode owns placement, not musical identity. A song may independently
+   * be present in the source tray and as one or more route occurrences. */
+  autoRoute?: {
+    kind: 'generated' | 'user' | 'bridge';
+    placement?: 'dj' | 'fixed';
+    /** queueId of the user occurrence this bridge exists for. */
+    ownerQueueId?: string;
+  };
 }
 
 let occurrenceSequence = 0;

@@ -1,3 +1,5 @@
+import { MAX_LINEAR as MAX_LEVEL, MIN_LINEAR as MIN_LEVEL } from './loudness';
+
 const VOLUME_KEY = 'volume';
 
 /** Media-clock supervision. Audio gain itself is sample-accurate automation. */
@@ -27,6 +29,21 @@ let activeIndex = 0;
 /** Shadow of each deck's mix gain, so volume changes can be reapplied without
  * an AudioContext. */
 const mixGains = [1, 0];
+/**
+ * Per-deck volume levelling, as a linear multiplier.
+ *
+ * Shadowed here rather than read back off the nodes, for the same reason as
+ * `mixGains`: a level can be set before the graph exists and has to survive the
+ * graph being rebuilt. The gain belongs to the *deck*, never to the track — so
+ * a handoff that swaps which deck is active never has to move a gain anywhere.
+ */
+const levelGains = [1, 1];
+let levelNodes: GainNode[] | null = null;
+/** Whether levelling is applied at all. Off means literally unity, so the
+ * output is what it was before this feature existed. */
+let levelingEnabled = true;
+/** Long enough not to click, short enough to feel immediate. */
+const LEVEL_RAMP_SEC = 0.15;
 let audioContext: AudioContext | null = null;
 let deckGains: GainNode[] | null = null;
 interface DeckEffects {
@@ -34,6 +51,9 @@ interface DeckEffects {
   filter?: BiquadFilterNode;
   /** Where the echo send taps the deck, kept so it can be built on demand. */
   source?: MediaElementAudioSourceNode;
+  /** This deck's levelling gain. The echo send taps it rather than `source`,
+   * so an echo tail is levelled like the programme it came from. */
+  level?: GainNode;
   delay?: DelayNode;
   echoWet?: GainNode;
   echoFeedback?: GainNode;
@@ -176,9 +196,25 @@ function applyDeckVolume(): void {
     return;
   }
   elements.forEach((deck, index) => {
-    deck.volume = Math.min(1, Math.max(0, mixGains[index] * masterVolume));
+    deck.volume = Math.min(1, Math.max(0, mixGains[index] * masterVolume * fallbackLevel(index)));
     deck.muted = allMuted;
   });
+}
+
+/** The applied level for one deck: unity whenever levelling is switched off. */
+function appliedLevel(index: number): number {
+  return levelingEnabled ? levelGains[index] : 1;
+}
+
+/**
+ * Levelling on the no-graph path, where the only control is `deck.volume`.
+ *
+ * An element's volume can attenuate but cannot amplify, so a boost is silently
+ * dropped and only cuts survive. That is a partial job, but a strictly closer
+ * one than doing nothing — and it can never distort, which matters more.
+ */
+function fallbackLevel(index: number): number {
+  return Math.min(1, appliedLevel(index));
 }
 
 /**
@@ -199,7 +235,51 @@ function setDeckGain(index: number, value: number): void {
     return;
   }
   const deck = decks()[index];
-  deck.volume = Math.min(1, Math.max(0, clamped * masterVolume));
+  deck.volume = Math.min(1, Math.max(0, clamped * masterVolume * fallbackLevel(index)));
+}
+
+/**
+ * Set one deck's volume levelling.
+ *
+ * Deliberately a node of its own rather than folded into `deckGains`: that
+ * parameter is driven by scheduled equal-power curves during a crossfade, and
+ * multiplying a second thing into an automated `AudioParam` is exactly what
+ * used to make the mixer crackle when a timer arrived late.
+ *
+ * The floor is the important part. A gain of zero is silence, and silence on a
+ * deck whose clock is advancing is what `checkAudible` reads as a dead graph —
+ * it would tear the graph down and take the live tap with it. Clamping here
+ * makes levelling-induced silence impossible by construction.
+ */
+function setDeckLevel(index: number, linear: number, ramp = false): void {
+  const safe = Number.isFinite(linear) ? Math.min(Math.max(linear, MIN_LEVEL), MAX_LEVEL) : 1;
+  levelGains[index] = safe;
+  const node = levelNodes?.[index];
+  if (node && audioContext) {
+    const target = appliedLevel(index);
+    const now = audioContext.currentTime;
+    const param = node.gain;
+    param.cancelScheduledValues(now);
+    if (ramp && typeof param.linearRampToValueAtTime === 'function') {
+      // Never a step: this is the one path that can run while a deck is
+      // already sounding, when the listener toggles the setting mid-track.
+      param.setValueAtTime(param.value, now);
+      param.linearRampToValueAtTime(target, now + LEVEL_RAMP_SEC);
+    } else {
+      param.setValueAtTime(target, now);
+    }
+    return;
+  }
+  applyDeckVolume();
+}
+
+/** Release a deck's stream and return it to unity.
+ *
+ * Pairing the two is what stops a levelled track leaking its gain onto whatever
+ * the deck is handed next. */
+function releaseDeck(index: number): void {
+  detach(decks()[index]);
+  setDeckLevel(index, 1);
 }
 
 /**
@@ -269,9 +349,17 @@ export function unlockAudio(): boolean {
       analyser = tap;
     }
     const effects: DeckEffects[] = [];
+    const levels: GainNode[] = [];
     const gains = list.map((deck, index) => {
       const gain = context.createGain();
       gain.gain.value = mixGains[index];
+      // Volume levelling sits upstream of `master`, so it reaches the broadcast
+      // tap as well as the speakers — a Live listener hears the same levelled
+      // programme the broadcaster does. Seeded from the shadow so a level set
+      // before the first gesture survives into the graph.
+      const level = context.createGain();
+      level.gain.value = appliedLevel(index);
+      levels.push(level);
       const source = context.createMediaElementSource(deck);
       if (typeof context.createBiquadFilter === 'function') {
         const low = context.createBiquadFilter();
@@ -282,18 +370,19 @@ export function unlockAudio(): boolean {
         filter.type = 'lowpass';
         filter.frequency.value = 22000;
         filter.Q.value = 0.7;
-        source.connect(low).connect(filter).connect(gain).connect(master);
+        source.connect(low).connect(filter).connect(level).connect(gain).connect(master);
         // No echo send here: see `ensureEcho`.
-        effects.push({ low, filter, source });
+        effects.push({ low, filter, source, level });
       } else {
-        source.connect(gain).connect(master);
-        effects.push({});
+        source.connect(level).connect(gain).connect(master);
+        effects.push({ source, level });
       }
       return gain;
     });
     for (const deck of list) deck.volume = 1;
     audioContext = context;
     deckGains = gains;
+    levelNodes = levels;
     deckEffects = effects;
     masterGain = master;
     monitorGain = monitor;
@@ -499,6 +588,9 @@ function discardGraph(): void {
   }
   audioContext = null;
   deckGains = null;
+  // The nodes go; `levelGains` stays, so the levels survive into whatever
+  // replaces the graph.
+  levelNodes = null;
   deckEffects = null;
   masterGain = null;
   monitorGain = null;
@@ -538,9 +630,15 @@ function abandonGraph(reason: GraphFailure['reason']): void {
 
   loadSeq += 1;
   elements = [createDeck(), createDeck()];
+  // The track being restored moves to deck 0, so its level moves with it.
+  // Without this a levelled track would come back at the wrong volume on top of
+  // whatever else just went wrong.
+  const restoredLevel = levelGains[activeIndex];
   activeIndex = 0;
   mixGains[0] = 1;
   mixGains[1] = 0;
+  levelGains[0] = restoredLevel;
+  levelGains[1] = 1;
   stagedUrl = '';
   applyDeckVolume();
   for (const deck of elements) deck.muted = allMuted;
@@ -732,7 +830,10 @@ let rateTimer: ReturnType<typeof setInterval> | null = null;
 function ensureEcho(index: number): void {
   const effect = deckEffects?.[index];
   if (!effect || effect.echoWet || !audioContext || !masterGain) return;
-  const source = effect.source;
+  // Tapped after levelling, not at the raw element: an echo tail returns
+  // straight into `masterGain`, so tapping `source` would put an un-levelled
+  // copy of the track under a levelled programme.
+  const source = effect.level ?? effect.source;
   if (!source || typeof audioContext.createDelay !== 'function') return;
   const delay = audioContext.createDelay(1);
   delay.delayTime.value = 0.28;
@@ -927,7 +1028,7 @@ function cancelMix(reason: MixCancelReason): void {
   setDeckGain(drop, 0);
   resetDeckEffects(keep);
   resetDeckEffects(drop);
-  detach(decks()[drop]);
+  releaseDeck(drop);
   if (current.dominant) scheduleRateReturn(keep);
   current.callbacks.onCancel(reason);
 }
@@ -947,7 +1048,7 @@ function finishMix(): void {
     activeIndex = current.toIndex;
     current.callbacks.onDominant();
   }
-  detach(decks()[current.fromIndex]);
+  releaseDeck(current.fromIndex);
   scheduleRateReturn(current.toIndex);
   current.callbacks.onComplete(incoming.currentTime);
 }
@@ -965,7 +1066,7 @@ function failMix(error: unknown): void {
   setDeckGain(1 - keep, 0);
   resetDeckEffects(keep);
   resetDeckEffects(1 - keep);
-  detach(decks()[1 - keep]);
+  releaseDeck(1 - keep);
   current.callbacks.onError(error);
 }
 
@@ -1073,12 +1174,16 @@ export const audioService = {
    * a newer load — the shape of a listener tapping through several previews
    * before any of them starts — resolves quietly instead.
    */
-  load(url: string): Promise<void> {
+  load(url: string, level: number): Promise<void> {
     cancelMix('load');
     const a = audioEl();
     const token = ++loadSeq;
     stopRateReturn();
     a.playbackRate = 1;
+    // Before `src`, and required rather than defaulted: this deck is not
+    // detached between tracks, so the only thing standing between a levelled
+    // song and the podcast after it is that every caller passes its own level.
+    setDeckLevel(activeIndex, level);
     // Assigning src runs the media load algorithm, which aborts the previous
     // fetch. No explicit detach: it would emit a spurious `pause` between the
     // two tracks and flicker the transport controls.
@@ -1090,10 +1195,11 @@ export const audioService = {
     });
   },
   /** Reload a stalled stream and resume from the last audible position. */
-  recover(url: string, positionSec: number): Promise<void> {
+  recover(url: string, positionSec: number, level: number): Promise<void> {
     cancelMix('load');
     const a = audioEl();
     const token = ++loadSeq;
+    setDeckLevel(activeIndex, level);
     a.src = url;
     const resumeAtPosition = async () => {
       if (token !== loadSeq) return;
@@ -1127,10 +1233,13 @@ export const audioService = {
     });
   },
   /** Load without playing, optionally cued to `positionSec` (cross-device resume). */
-  prime(url: string, positionSec = 0): void {
+  // `level` last, matching `recover`: with it second, an existing two-argument
+  // call would still typecheck and quietly pass a seek position as a gain.
+  prime(url: string, positionSec: number, level: number): void {
     cancelMix('load');
     const a = audioEl();
     const token = ++loadSeq;
+    setDeckLevel(activeIndex, level);
     a.src = url;
     a.load();
     const applyPosition = () => {
@@ -1179,8 +1288,8 @@ export const audioService = {
     loadSeq += 1;
     cancelMix('stop');
     stagedUrl = '';
-    detach(audioEl());
-    detach(decks()[1 - activeIndex]);
+    releaseDeck(activeIndex);
+    releaseDeck(1 - activeIndex);
   },
   seek(t: number): void {
     cancelMix('seek');
@@ -1206,6 +1315,31 @@ export const audioService = {
     allMuted = muted;
     applyDeckVolume();
   },
+  /**
+   * Set both decks' levelling at once, ramped.
+   *
+   * The one path allowed to change the level of a deck that is already
+   * sounding, because it is the listener asking for it. Everything else waits
+   * for the next track: a gain that moves under a song is exactly the artefact
+   * this feature exists to avoid.
+   */
+  setLevels(activeLevel: number, idleLevel: number): void {
+    setDeckLevel(activeIndex, activeLevel, true);
+    setDeckLevel(1 - activeIndex, idleLevel, true);
+  },
+  /** Turn levelling on or off. Off restores unity exactly, not approximately. */
+  setLevelingEnabled(enabled: boolean): void {
+    if (levelingEnabled === enabled) return;
+    levelingEnabled = enabled;
+    // Re-assert both decks so the change is heard now, ramped rather than
+    // stepped. The desired levels are untouched, so switching back on restores
+    // what each deck was already meant to be at.
+    setDeckLevel(activeIndex, levelGains[activeIndex], true);
+    setDeckLevel(1 - activeIndex, levelGains[1 - activeIndex], true);
+  },
+  levelingEnabled(): boolean {
+    return levelingEnabled;
+  },
   unlockAudio,
   graphReady,
   broadcastStream,
@@ -1223,10 +1357,14 @@ export const audioService = {
    * next one is what turned a moment of bad signal into silence for the rest of
    * the journey.
    */
-  stage(url: string): void {
+  stage(url: string, level: number): void {
     if (mix || !url) return;
     const index = 1 - activeIndex;
     const idle = decks()[index];
+    // Above the early return on purpose: re-staging the same URL is how a
+    // track that has only just been measured gets its level onto the silent
+    // deck before it is promoted.
+    setDeckLevel(index, level);
     if (stagedUrl === url && (idle.getAttribute('src') !== null || idle.currentSrc)) return;
     stagedUrl = url;
     setDeckGain(index, 0);
@@ -1240,7 +1378,7 @@ export const audioService = {
   clearStaged(): void {
     if (mix || !stagedUrl) return;
     stagedUrl = '';
-    detach(decks()[1 - activeIndex]);
+    releaseDeck(1 - activeIndex);
   },
 
   /**
@@ -1249,7 +1387,7 @@ export const audioService = {
    * Returns null when there is nothing usable staged, so the caller falls back
    * to an ordinary load.
    */
-  takeStaged(url: string): Promise<void> | null {
+  takeStaged(url: string, level: number): Promise<void> | null {
     if (mix || !url || stagedUrl !== url) return null;
     const toIndex = 1 - activeIndex;
     const to = decks()[toIndex];
@@ -1259,6 +1397,10 @@ export const audioService = {
     stagedUrl = '';
     stopRateReturn();
     to.playbackRate = 1;
+    // Already set by `stage`, but re-asserted because the caller may have a
+    // fresher measurement than it had when the track was cued. Nothing moves
+    // between decks here — only which deck is active.
+    setDeckLevel(toIndex, level);
     // Ownership moves first: the outgoing deck's `pause` and `error` from the
     // release below then belong to a deck the store is no longer listening to.
     activeIndex = toIndex;
@@ -1269,7 +1411,7 @@ export const audioService = {
       if (err instanceof Error && err.name === 'AbortError') return;
       throw err;
     });
-    detach(decks()[fromIndex]);
+    releaseDeck(fromIndex);
     return started;
   },
   mixPhase(): MixPhase {
@@ -1309,7 +1451,7 @@ export const audioService = {
     url: string,
     plan: LiveTransitionPlan,
     callbacks: MixCallbacks,
-    options: { manual?: boolean } = {},
+    options: { manual?: boolean; level: number },
   ): void {
     cancelMix('superseded');
     const generation = ++mixGeneration;
@@ -1336,6 +1478,10 @@ export const audioService = {
     const outCue = manual ? from.currentTime : Math.max(0, Number(plan.out_cue) || 0);
 
     setDeckGain(toIndex, 0);
+    // The incoming deck gets its own level; the outgoing one keeps its own,
+    // because it is still playing its own track. Set before `src` and before
+    // the manual `tick()` below, which can reach `crossfading` inside this call.
+    setDeckLevel(toIndex, options.level);
     resetDeckEffects(toIndex);
     resetDeckEffects(fromIndex);
     to.muted = graphReady() ? false : allMuted;

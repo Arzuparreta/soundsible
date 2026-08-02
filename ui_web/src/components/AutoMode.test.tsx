@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
   actions: {
-    setAutoSourceBoundary: vi.fn(), removeAutoSource: vi.fn(), useAutoTrackAsSource: vi.fn(),
-    removeAutoRouteOccurrence: vi.fn(), avoidAutoTrackForSession: vi.fn(), moveAutoRoute: vi.fn(), playNow: vi.fn(),
+    removeAutoSource: vi.fn(), useAutoTrackAsSource: vi.fn(), placeAutoTrack: vi.fn(),
+    removeAutoRouteOccurrence: vi.fn(), avoidAutoTrackForSession: vi.fn(), moveAutoRoute: vi.fn(),
   },
   openActionMenu: vi.fn(),
   openContextMenu: vi.fn(),
@@ -18,10 +18,9 @@ const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
     },
     autoMode: {
       active: true,
-      sources: [{ id: 'source-1', label: 'Warehouse techno', boundary: 'from' as const, tracks: [{ id: 'root', title: 'Root', artist: 'DJ' }] }],
-      requests: [],
+      sources: [{ id: 'source-1', label: 'Warehouse techno', activation: 1, tracks: [{ id: 'root', title: 'Root', artist: 'DJ' }] }],
       transition: { status: 'idle' as const },
-      plan: { next: { trackId: 'next', fromKey: 'current', source: 'related' as const, reasonKey: '', sourceSetLabel: 'Warehouse techno', lineage: ['root', 'next'] } },
+      plan: { 'q-next': { trackId: 'next', fromKey: 'current', source: 'related' as const, reasonKey: '', sourceSetLabel: 'Warehouse techno', lineage: ['root', 'next'] } },
     },
   },
 }));
@@ -40,22 +39,22 @@ function renderAuto(panel: 'browser' | 'stage' | 'route' = 'stage') {
   return render(() => <AutoMode panel={panel} onPanelChange={vi.fn()} surfaceOpen />);
 }
 
-afterEach(() => { vi.clearAllMocks(); localStorage.clear(); });
+afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); localStorage.clear(); });
 
 describe('AutoMode workspace', () => {
-  it('composes Search/Library, Stage and Route and exposes the source boundary', () => {
+  it('keeps the browser neutral until Sources is chosen as the destination', () => {
     renderAuto('browser');
     expect(screen.getByTestId('shared-stage')).toHaveAttribute('data-mode', 'auto');
+    expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-neutral');
+    expect(screen.getAllByText('Warehouse techno')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'autoMode.source.title' }));
     expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-source');
-    expect(screen.getByText('Warehouse techno')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.source.toggle:Warehouse techno' }));
-    expect(actions.setAutoSourceBoundary).toHaveBeenCalledWith('source-1', 'inside');
   });
 
   it('shows lineage and exposes explicit actions through one route menu', () => {
     renderAuto('route');
     expect(screen.getAllByText(/Warehouse techno/)).toHaveLength(2);
-    expect(screen.queryByText('＋')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'autoMode.route.insertBefore:Next song' })).toBeInTheDocument();
     expect(screen.queryByText('−')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.actions:Next song' }));
     const menu = openActionMenu.mock.calls[0][0];
@@ -68,6 +67,27 @@ describe('AutoMode workspace', () => {
     expect(actions.useAutoTrackAsSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'next' }));
     expect(actions.removeAutoRouteOccurrence).toHaveBeenCalledWith('q-next');
     expect(actions.avoidAutoTrackForSession).toHaveBeenCalledWith('q-next');
+  });
+
+  it('moves a carried route occurrence instead of inserting a duplicate', () => {
+    vi.useFakeTimers();
+    state.playback.queue.push({
+      id: 'later', queueId: 'q-later', title: 'Later song', artist: 'Later artist', source: 'preview' as const,
+    });
+    try {
+      renderAuto('route');
+      const targets = screen.getAllByRole('button', { name: /autoMode\.route\.insertBefore/ });
+      const firstRow = targets[0].nextElementSibling as HTMLElement;
+      fireEvent.pointerDown(firstRow, { pointerType: 'touch', isPrimary: true });
+      vi.advanceTimersByTime(460);
+
+      expect(targets[1]).toHaveAttribute('data-placement-active', '');
+      fireEvent.click(targets[1]);
+      expect(actions.moveAutoRoute).toHaveBeenCalledWith('q-next', 'q-later');
+      expect(actions.placeAutoTrack).not.toHaveBeenCalled();
+    } finally {
+      state.playback.queue.pop();
+    }
   });
 
   it('keeps exact title-fit tiers exported for Stage', () => {

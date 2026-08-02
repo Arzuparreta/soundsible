@@ -25,6 +25,10 @@ DEFAULT_SETTINGS = {
     "v": SETTINGS_VERSION,
     "learning_enabled": True,
     "autoplay_enabled": True,
+    # Automatic volume levelling. On by default: an unlevelled library is the
+    # thing listeners notice, and every correction is measured, peak-limited and
+    # reversible from Settings.
+    "volume_leveling": True,
 }
 
 POSITIVE_LISTENING_EVENTS = {
@@ -320,6 +324,8 @@ def _read_discovery_settings() -> dict[str, Any]:
         out["learning_enabled"] = data["learning_enabled"]
     if isinstance(data.get("autoplay_enabled"), bool):
         out["autoplay_enabled"] = data["autoplay_enabled"]
+    if isinstance(data.get("volume_leveling"), bool):
+        out["volume_leveling"] = data["volume_leveling"]
     return out
 
 
@@ -329,6 +335,8 @@ def save_discovery_settings(patch: dict[str, Any]) -> dict[str, Any]:
         current["learning_enabled"] = bool(patch["learning_enabled"])
     if "autoplay_enabled" in patch:
         current["autoplay_enabled"] = bool(patch["autoplay_enabled"])
+    if "volume_leveling" in patch:
+        current["volume_leveling"] = bool(patch["volume_leveling"])
     current["v"] = SETTINGS_VERSION
     path = _settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)

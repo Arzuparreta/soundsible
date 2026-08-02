@@ -11,10 +11,45 @@ export interface MenuAction {
   onSelect: () => void;
 }
 
+/** A labelled group of actions, rendered under its own heading. Lets one menu
+ * hold several independent choices (e.g. sort order and a display filter)
+ * without them reading as a single list. */
+export interface ActionMenuSection {
+  label: string;
+  actions: MenuAction[];
+}
+
 export interface ActionMenuOptions {
   title?: string;
   subtitle?: string;
-  actions: MenuAction[];
+  /** Flat action list. Ignored when `sections` is set. */
+  actions?: MenuAction[];
+  sections?: ActionMenuSection[];
+}
+
+function ActionButton(props: { action: MenuAction; close: () => void }) {
+  const tap = createResponsiveTap({
+    disabled: () => Boolean(props.action.disabled),
+    onTap: () => {
+      props.close();
+      props.action.onSelect();
+    },
+  });
+  return (
+    <button
+      type="button"
+      class={styles.item}
+      classList={{ [styles.danger]: props.action.danger }}
+      disabled={props.action.disabled}
+      data-pressable
+      {...tap}
+    >
+      <Show when={props.action.icon}>
+        <span class={styles.icon}>{props.action.icon}</span>
+      </Show>
+      <span class={styles.label}>{props.action.label}</span>
+    </button>
+  );
 }
 
 /** The menu body (header + action buttons). Shared by the bottom-sheet
@@ -30,32 +65,21 @@ export function ActionMenuList(props: { opts: ActionMenuOptions; close: () => vo
           </Show>
         </header>
       </Show>
-      <For each={props.opts.actions}>
-        {(a) => {
-          const tap = createResponsiveTap({
-            disabled: () => Boolean(a.disabled),
-            onTap: () => {
-              props.close();
-              a.onSelect();
-            },
-          });
-          return (
-            <button
-              type="button"
-              class={styles.item}
-              classList={{ [styles.danger]: a.danger }}
-              disabled={a.disabled}
-              data-pressable
-              {...tap}
-            >
-              <Show when={a.icon}>
-                <span class={styles.icon}>{a.icon}</span>
-              </Show>
-              <span class={styles.label}>{a.label}</span>
-            </button>
-          );
-        }}
-      </For>
+      <Show
+        when={props.opts.sections}
+        fallback={
+          <For each={props.opts.actions}>{(a) => <ActionButton action={a} close={props.close} />}</For>
+        }
+      >
+        <For each={props.opts.sections}>
+          {(section) => (
+            <div class={styles.section}>
+              <span class={styles.sectionLabel}>{section.label}</span>
+              <For each={section.actions}>{(a) => <ActionButton action={a} close={props.close} />}</For>
+            </div>
+          )}
+        </For>
+      </Show>
     </div>
   );
 }

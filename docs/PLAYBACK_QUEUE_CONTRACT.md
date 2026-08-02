@@ -25,9 +25,9 @@ continuation. Reordering cannot cross lane or generator boundaries.
 
 - **Server planners** own candidate ranking, diversification, exclusions, and
   final order. Autoplay and Radio use `POST /api/discovery/music/plan`. Auto
-  uses `POST /api/discovery/music/dj-plan`, which adds transition analysis,
-  short route search and exact-request deadlines. The browser never assembles
-  provider pools.
+  uses `POST /api/discovery/music/dj-plan` for source-driven runway changes and
+  `POST /api/discovery/music/dj-place` for local placement in an existing
+  route. The browser never assembles provider pools.
 - **Autoplay** is an account preference, enabled by default. Near the end of a
   finite music context it prepares a small related tail. It never runs for
   podcasts, Radio, Auto Mode, or while repeat is active. Failure ends playback
@@ -36,29 +36,29 @@ continuation. Reordering cannot cross lane or generator boundaries.
   them, resumes the mix afterwards, and replenishes its generated runway until
   the listener stops Radio. Starting a new context or stopping Radio aborts
   in-flight generation.
-- **Auto Mode** is driven by ephemeral `MusicSet` sources. A source may be a
-  track, selection, filtered library view, favourites, playlist, album or
-  artist. `inside` is a hard eligibility boundary; `from` makes the set a root
-  for related-graph walks. Multiple sources form one set arc; they are not
-  quotas and are not round-robin lanes. No account-wide taste profile is
-  applied unless the listener explicitly adds such a set.
-- Auto may be entered empty. A currently sounding song becomes a visible open
-  source; a paused song does not until it is resumed. Playing a different song
-  while Auto is active is an immediate pivot, not an exit.
-- Only exact tracks may be pinned into the route. Reordering a generated row
-  pins that occurrence as a waypoint and replans around it. A row menu can turn
-  the exact song into a visible open source, remove only that occurrence, or
-  exclude only that song for the session. These actions never imply feedback
-  about an artist, genre or hidden branch.
-- Adding a source expands eligibility at the next natural refill and does not
-  rewrite the visible route. Removing a source or tightening its boundary may
-  replan because music already prepared from it is no longer eligible.
-- Leaving Auto discards generated branches and bridges. Pending exact waypoints
+- **Auto Mode** has two independent, composable facts. A route occurrence will
+  sound; an ephemeral source steers generation. The same song may participate
+  in both without either fact implying the other. Sources may be tracks,
+  selections, filtered views, favourites, playlists, albums or artists.
+- Auto may be entered empty. Music that actually sounds joins rolling context,
+  but never becomes a visible source implicitly. Adding a source never starts
+  playback. Playing a different song while Auto is active remains an immediate
+  pivot, not an exit.
+- A song dropped into the route inlet is placed by the DJ among editable gaps;
+  a song dropped into a concrete gap is fixed there. Both are real queue
+  occurrences, not requests or waypoints. Local placement preserves existing
+  occurrence ids and order; any bridge belongs to the placed occurrence.
+- Adding or removing a source replans generated runway after the committed
+  handoff. User occurrences survive; fixed ones keep their slot. Sources
+  accumulate with recency decay and never impose a hard genre or set boundary.
+- Only explicit sources and tracks that actually sounded may seed one-hop
+  related retrieval. Unplayed recommendations never become graph roots.
+- Leaving Auto discards generated branches and bridges. User route occurrences
   survive as ordinary manual queue entries.
 - **The committed handoff** is the one upcoming entry Auto Mode has already
   loaded and cued. It survives every replan, and manual insertions land behind
   it rather than in front of it. DJ, direction and request changes are debounced
-  and source-boundary changes rewrite only the runway past that point — a session can be steered at any
+  and source changes rewrite only the runway past that point — a session can be steered at any
   moment without disturbing the mix that is already prepared.
 - Auto Mode's plans are **chained**: an entry's transition records which track
   its cue was planned out of, and a refill continues the route from the tail of

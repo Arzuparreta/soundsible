@@ -11,6 +11,7 @@ from urllib.parse import unquote
 from flask import Blueprint, request, jsonify
 from shared.hardening import SCOPE_ADMIN_DANGEROUS, SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 
+from shared.loudness import annotate_tracks
 from shared.path_resolver import resolve_local_track_path
 from odst_tool.audio_utils import download_image
 
@@ -86,7 +87,11 @@ def get_library():
     if not lib.metadata:
         lib.sync_library()
     if lib.metadata:
-        return jsonify(json.loads(lib.metadata.to_json()))
+        payload = json.loads(lib.metadata.to_json())
+        # Loudness rides the library the player already fetches, so levelling
+        # costs no extra request and is available before the first track loads.
+        annotate_tracks(payload.get("tracks") or [])
+        return jsonify(payload)
     return jsonify({"error": "Library not loaded"}), 404
 
 
@@ -181,7 +186,9 @@ def search_library():
     lib, _, _ = api["get_core"]()
     query = request.args.get("q", "").lower()
     results = lib.search(query)
-    return jsonify([t.to_dict() for t in results[:50]])
+    tracks = [t.to_dict() for t in results[:50]]
+    annotate_tracks(tracks)
+    return jsonify(tracks)
 
 
 @library_bp.route("/api/library/purge-missing", methods=["POST"])
