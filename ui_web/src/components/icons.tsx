@@ -4,36 +4,19 @@
  * several places and drifting copies would read as different affordances.
  */
 
-/** Handheld karaoke mic — round mesh head on a tapered body, the
- * "show lyrics" affordance. */
+/** Handheld stage mic — tilted, ring grille on a tapered body. Adapted
+ * from Phosphor Icons' "microphone-stage" (MIT). The "show lyrics"
+ * affordance. */
 export function KaraokeMicIcon(props: { size?: number }) {
   return (
     <svg
-      viewBox="0 0 24 24"
+      viewBox="0 0 256 256"
       width={props.size}
       height={props.size}
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.6"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+      fill="currentColor"
       aria-hidden="true"
     >
-      <path
-        d="M12 3
-           C9.8 3 7.8 5.3 7.8 8.2
-           C7.8 10.3 8.9 11.6 9.6 12.3
-           L9.3 19
-           C9.25 20.2 9.9 21 11 21
-           L13 21
-           C14.1 21 14.75 20.2 14.7 19
-           L14.4 12.3
-           C15.1 11.6 16.2 10.3 16.2 8.2
-           C16.2 5.3 14.2 3 12 3
-           Z"
-      />
-      <path d="M9.2 6.4h5.6" />
-      <path d="M9 8.3h6" />
+      <path d="M168,16A72.07,72.07,0,0,0,96,88a73.29,73.29,0,0,0,.63,9.42L27.12,192.22A15.93,15.93,0,0,0,28.71,213L43,227.29a15.93,15.93,0,0,0,20.78,1.59l94.81-69.53A73.29,73.29,0,0,0,168,160a72,72,0,1,0,0-144Zm56,72a55.72,55.72,0,0,1-11.16,33.52L134.49,43.16A56,56,0,0,1,224,88ZM54.32,216,40,201.68,102.14,117A72.37,72.37,0,0,0,139,153.86ZM112,88a55.67,55.67,0,0,1,11.16-33.51l78.34,78.34A56,56,0,0,1,112,88Zm-2.35,58.34a8,8,0,0,1,0,11.31l-8,8a8,8,0,1,1-11.31-11.31l8-8A8,8,0,0,1,109.67,146.33Z" />
     </svg>
   );
 }
