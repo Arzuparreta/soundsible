@@ -236,7 +236,7 @@ const [state, setState] = createStore<AppState>({
     requests: [],
     sources: [],
     heard: [],
-    feedback: [],
+    avoidedIdentities: [],
     transition: { status: 'idle' },
     pendingDirection: false,
     phase: 'idle',

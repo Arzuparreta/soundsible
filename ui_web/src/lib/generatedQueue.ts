@@ -21,10 +21,6 @@ export interface AutoMusicSet {
   implicit?: boolean;
 }
 
-export interface AutoBranchFeedback {
-  branchId: string;
-  value: 'more' | 'less';
-}
 export type AutoPhase = 'idle' | 'following_queue' | 'planning' | 'ready' | 'degraded';
 
 export interface AutoActivity {
@@ -54,7 +50,6 @@ export interface AutoPlanItem {
   requestId?: string;
   sourceSetId?: string;
   sourceSetLabel?: string;
-  branchId?: string;
   lineage?: string[];
 }
 
@@ -78,7 +73,7 @@ export interface AutoModeState {
   requests: AutoRequest[];
   sources: AutoMusicSet[];
   heard: Track[];
-  feedback: AutoBranchFeedback[];
+  avoidedIdentities: string[];
   transition: {
     /** `armed`: the next track is loaded, cued and no longer replannable.
      * `mixing`: the incoming deck already owns playback. */

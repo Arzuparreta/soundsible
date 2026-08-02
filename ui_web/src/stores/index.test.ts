@@ -4,6 +4,21 @@ import type { Track } from '../types/music';
 const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
 const t2: Track = { id: 't2', title: 'Two', artist: 'Artist', duration: 200 };
 
+function autoPlan(ids: string[]) {
+  return {
+    v: 5 as const,
+    plan_id: 'auto-plan', intent: 'auto_mode' as const, profile: 'balanced' as const,
+    dj_profile: 'adaptive' as const, source_profile: 'balanced' as const,
+    seed_identity: 'seed', degraded: false, generated_at: 1,
+    pool_counts: { local: 0, related: ids.length, discovery: 0 }, requests: [],
+    items: ids.map((id) => ({
+      id, youtube_id: id, title: id, artist: 'Generated', source: 'preview' as const,
+      source_pool: 'related' as const, recommendation_identity: `music:youtube:${id}`,
+      recommendation_source: 'auto_mode' as const,
+    })),
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((r) => {
@@ -147,12 +162,14 @@ async function loadStore(
     coverUrl: (id: string) => `/cover/${id}`,
     bustCovers: vi.fn(),
   }));
+  const toastAction = vi.fn();
   vi.doMock('../lib/toast', () => ({
     toast: {
       success: vi.fn(),
       error: vi.fn(),
       info: vi.fn(),
       loading: vi.fn(() => ({ update: vi.fn(), dismiss: vi.fn() })),
+      action: toastAction,
     },
   }));
   vi.doMock('../lib/haptics', () => ({ vibrate: vi.fn() }));
@@ -162,7 +179,7 @@ async function loadStore(
   }));
 
   const store = await import('./index');
-  return { ...store, api, audioService, deck, fireDeckEvent };
+  return { ...store, api, audioService, deck, fireDeckEvent, toastAction };
 }
 
 beforeEach(() => {
@@ -668,6 +685,47 @@ describe('Auto Mode store contract', () => {
     actions.addAutoSource([source], 'My selection', 'inside');
     expect(state.playback.currentTrack?.id).toBe('source');
     expect(state.autoMode.sources[0]).toMatchObject({ label: 'My selection', boundary: 'inside' });
+  });
+
+  it('adds a running source without rewriting the prepared route', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 8 }, (_, index) => `route-${index}`)));
+    const { actions, state } = await loadStore({ planDjQueue });
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+    const routeBefore = state.playback.queue.map((track) => track.queueId);
+
+    actions.useAutoTrackAsSource(state.playback.queue[2]);
+
+    expect(state.autoMode.sources.at(-1)).toMatchObject({ boundary: 'from', tracks: [expect.objectContaining({ id: 'route-1' })] });
+    expect(state.playback.queue.map((track) => track.queueId)).toEqual(routeBefore);
+    expect(planDjQueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('distinguishes neutral removal from an exact session avoidance', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 8 }, (_, index) => `route-${index}`)));
+    const { actions, state, toastAction } = await loadStore({ planDjQueue });
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    actions.removeAutoRouteOccurrence(state.playback.queue[1].queueId);
+    expect(state.autoMode.avoidedIdentities).toEqual([]);
+    const avoided = state.playback.queue[1];
+    actions.avoidAutoTrackForSession(avoided.queueId);
+    expect(state.autoMode.avoidedIdentities).toEqual([`music:youtube:${avoided.id}`]);
+    expect(state.playback.queue.some((track) => track.queueId === avoided.queueId)).toBe(false);
+
+    actions.playNow({ id: 'pivot', title: 'Pivot', artist: 'Other' });
+    await vi.waitFor(() => expect(planDjQueue).toHaveBeenCalledTimes(2));
+    expect(planDjQueue.mock.calls[1][0].exclude).toContain(`music:youtube:${avoided.id}`);
+
+    toastAction.mock.calls[0][2]();
+    expect(state.autoMode.avoidedIdentities).toEqual([]);
+    actions.exitAutoMode();
+    expect(state.autoMode.avoidedIdentities).toEqual([]);
   });
 
   it('does not enter Auto Mode for podcasts', async () => {

@@ -240,7 +240,6 @@ export interface ListeningPlanItem {
   request_id?: string;
   source_set_id?: string;
   source_set_label?: string;
-  branch_id?: string;
   lineage?: string[];
 }
 
@@ -881,7 +880,6 @@ export const api = {
       sources?: DjMusicSetSource[];
       heard?: Track[];
       waypoints?: Array<{ id: string; track: Track }>;
-      feedback?: Array<{ branch_id: string; value: 'more' | 'less' }>;
       exclude?: string[];
       limit?: number;
     },

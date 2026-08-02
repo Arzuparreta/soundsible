@@ -192,7 +192,9 @@ export const en = {
       routeEmpty: 'Add a source or resume a track to start the DJ',
     },
     route: {
-      pinned: 'Pinned', moreLike: 'More like {title}', lessLike: 'Less like {title}', remove: 'Remove {title} from the route',
+      pinned: 'Pinned', actions: 'Actions for {title}', useAsSource: 'From this track',
+      remove: 'Remove from route', avoidSession: 'Avoid during this session',
+      avoided: '“{title}” will not return during this session',
     },
     workspace: {
       aria: 'Auto Mode panels',

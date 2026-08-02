@@ -193,7 +193,9 @@ export const es: Dict = {
       routeEmpty: 'Añade una fuente o reanuda una canción para que el DJ empiece',
     },
     route: {
-      pinned: 'Fijada', moreLike: 'Más como {title}', lessLike: 'Menos como {title}', remove: 'Quitar {title} de la ruta',
+      pinned: 'Fijada', actions: 'Acciones para {title}', useAsSource: 'Desde esta canción',
+      remove: 'Quitar de la ruta', avoidSession: 'Evitar durante esta sesión',
+      avoided: '«{title}» no volverá a salir en esta sesión',
     },
     workspace: {
       aria: 'Paneles de Auto Mode',
