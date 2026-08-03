@@ -41,7 +41,7 @@ export const zh: Dict = {
     connectingAudio: '正在连接音频',
     reconnectingAudio: '正在恢复音频',
     publishFailed: '音频发布失败',
-    openSecure: '打开安全站点',
+    openSecure: '在安全站点开始直播',
     share: '分享房间',
     linkCopied: '链接已复制',
     ownRoom: '你的房间 — 在另一台设备上打开分享链接来检查',
@@ -815,6 +815,8 @@ export const zh: Dict = {
   resumeBanner: {
     aria: '继续播放',
     bannerTitle: '继续播放？',
+    autoTitle: '继续你的 Auto 会话？',
+    autoSession: 'Auto 会话',
     fallbackTrack: '一首曲目',
     fromDevice: ' 来自 {device}',
     fallbackDevice: '另一台设备',

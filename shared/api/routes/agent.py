@@ -263,6 +263,9 @@ def agent_play():
             "is_playing": True,
             "device_id": target["device_id"],
             "device_name": target.get("device_name"),
+            # A song asked for by name is not the target's own session carrying
+            # on. Say so, or the device restores a queue this track is not in.
+            "session": None,
         }
         api["put_playback_state"](scope, target_state)
         _emit_start(api, scope, target["device_id"], target_state, track=payload)

@@ -21,9 +21,10 @@ const community = vi.hoisted(() => ({
   create: vi.fn(),
 }));
 
+const stores = vi.hoisted(() => ({ publishSession: vi.fn(), togglePlay: vi.fn() }));
 vi.mock('../stores', () => ({
   state: { playback: { isPlaying: false } },
-  actions: { togglePlay: vi.fn() },
+  actions: { togglePlay: stores.togglePlay, publishSession: stores.publishSession },
 }));
 vi.mock('../lib/session', () => ({
   user: () => ({ display_name: 'Local DJ' }),
@@ -77,6 +78,8 @@ beforeEach(() => {
   community.retry.mockReset();
   community.init.mockReset();
   community.create.mockReset().mockResolvedValue({});
+  stores.publishSession.mockReset();
+  window.history.replaceState(null, '', '/player/');
 });
 
 describe('Live operational UI', () => {
@@ -244,8 +247,17 @@ describe('Live operational UI', () => {
 
     expect(screen.getByRole('button', { name: 'Go live' })).toBeDisabled();
     expect(screen.getByText(/Live broadcasting needs HTTPS/)).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Open the secure station' }))
-      .toHaveAttribute('href', 'https://station.tail.test/player/#/live');
+    expect(screen.getByRole('link', { name: 'Go live on the secure station' }))
+      .toHaveAttribute('href', 'https://station.tail.test/player/#/live?handoff=live');
+  });
+
+  it('publishes the session on the way out, so the secure origin finds it there', async () => {
+    community.secure = false;
+
+    render(() => <Live />);
+    await fireEvent.click(screen.getByRole('link', { name: 'Go live on the secure station' }));
+
+    expect(stores.publishSession).toHaveBeenCalledOnce();
   });
 
   it('gives an insecure station without a secure address the command that makes one', () => {
@@ -256,6 +268,48 @@ describe('Live operational UI', () => {
 
     expect(screen.getByRole('button', { name: 'Go live' })).toBeDisabled();
     expect(screen.getByText('tailscale serve --bg --yes 5005')).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'Open the secure station' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Go live on the secure station' })).not.toBeInTheDocument();
+  });
+
+  it('opens the room by itself when the secure station was opened to go live', async () => {
+    window.history.replaceState(null, '', '/player/#/live?handoff=live');
+
+    render(() => <Live />);
+
+    await vi.waitFor(() => expect(community.create).toHaveBeenCalledWith('Session by Local DJ'));
+    // The marker is spent: reloading the page is an ordinary visit to Live.
+    expect(window.location.hash).toBe('#/live');
+  });
+
+  it('waits for the relay rather than opening a room it cannot publish to', async () => {
+    window.history.replaceState(null, '', '/player/#/live?handoff=live');
+    community.error = 'loading';
+
+    render(() => <Live />);
+    await Promise.resolve();
+
+    expect(community.create).not.toHaveBeenCalled();
+  });
+
+  it('does not start a second room for a station that is already on air', async () => {
+    window.history.replaceState(null, '', '/player/#/live?handoff=live');
+    community.host = {
+      id: 'session-test',
+      title: 'Saturday',
+      listener_count: 0,
+      host: { display_name: 'Local DJ' },
+    };
+
+    render(() => <Live />);
+    await Promise.resolve();
+
+    expect(community.create).not.toHaveBeenCalled();
+  });
+
+  it('leaves an ordinary visit to Live alone', async () => {
+    render(() => <Live />);
+    await Promise.resolve();
+
+    expect(community.create).not.toHaveBeenCalled();
   });
 });

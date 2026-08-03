@@ -609,6 +609,14 @@ State includes:
 }
 ```
 
+Players may also publish a `session` object alongside it — the queue, the
+transport preferences and the Auto Mode workspace behind the song — which is
+what lets another device pick the session up rather than just the track. It is a
+delta: omit the key and whatever is stored for that device is kept, send `null`
+to end it. Agents have no reason to write one, and an agent that starts an
+unrelated song on a device should send `"session": null` so the device does not
+restore a queue that track is not in. Sessions over 256 KB are dropped.
+
 Read state:
 
 ```bash

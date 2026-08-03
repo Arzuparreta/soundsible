@@ -28,6 +28,7 @@ import {
   type LiveDeck,
   type LiveSession,
 } from '../lib/community';
+import { clearLiveHandoff, liveHandoffPending, secureLiveHandoffUrl } from '../lib/liveHandoff';
 import { t } from '../lib/i18n';
 import { ViewHeader } from '../components/ViewHeader';
 import { LiveRoomPanel } from '../components/LiveRoomPanel';
@@ -232,10 +233,9 @@ export default function Live() {
   /** Dead air is normal between songs; it only deserves a word once it lasts. */
   const resting = () => (hostBreak() ?? 0) >= BREAK_NOTICE_SECONDS;
   const mediaSecure = liveMediaSecure();
-  const secureLiveUrl = () => {
-    const origin = communityConfig()?.secure_url;
-    return origin ? new URL('/player/#/live', origin).href : null;
-  };
+  const secureLiveUrl = () => secureLiveHandoffUrl(communityConfig()?.secure_url);
+  /** Whether this page was opened by the banner below, on the other origin. */
+  const handedOver = liveHandoffPending();
 
   onMount(() => {
     setTitle(`Session by ${user()?.display_name ?? 'DJ'}`);
@@ -254,6 +254,28 @@ export default function Live() {
       setCreating(false);
     }
   };
+
+  /**
+   * Somebody pressed "go live" on a station that could not, and was sent here.
+   *
+   * That press is the decision; arriving is only the second half of it, so the
+   * room opens by itself as soon as the relay is reachable. Playback is left
+   * alone — the session being handed over is announced by the resume banner,
+   * and starting anything here would be the thing that stops it appearing.
+   */
+  let handoffStarted = false;
+  createEffect(() => {
+    if (!handedOver || handoffStarted || !mediaSecure) return;
+    if (hostSession() || !communityConfig()?.enabled || communityError()) return;
+    handoffStarted = true;
+    clearLiveHandoff();
+    void create();
+  });
+
+  /** Leaving for the secure origin is a device handoff: a different origin is a
+   * different store, a different device id, a different everything. Publishing
+   * the session first is what the page over there will be looking for. */
+  const handOver = () => actions.publishSession();
 
   const join = (session: LiveSession) => {
     if (state.playback.isPlaying) actions.togglePlay();
@@ -327,7 +349,7 @@ export default function Live() {
                 <code class={styles.secureHint}>tailscale serve --bg --yes 5005</code>
               }
             >
-              {(url) => <a href={url()}>{t('live.openSecure')}</a>}
+              {(url) => <a href={url()} onClick={handOver}>{t('live.openSecure')}</a>}
             </Show>
           </div>
         </Show>

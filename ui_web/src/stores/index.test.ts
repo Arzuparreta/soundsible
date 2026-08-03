@@ -249,13 +249,21 @@ async function loadStore(
     },
   }));
   vi.doMock('../lib/haptics', () => ({ vibrate: vi.fn() }));
+  /** Events the store subscribed to, so a test can send one the way the engine
+   * would — a remote control command, a handoff from another device. */
+  const socketHandlers = new Map<string, (data?: unknown) => void>();
   vi.doMock('../lib/socket', () => ({
-    createSocket: vi.fn(() => ({ on: vi.fn(), emit: vi.fn(), disconnect: vi.fn() })),
+    createSocket: vi.fn(() => ({
+      on: (event: string, handler: (data?: unknown) => void) => socketHandlers.set(event, handler),
+      emit: vi.fn(),
+      disconnect: vi.fn(),
+    })),
     dispatchDiscoverSeed: vi.fn(),
   }));
 
   const store = await import('./index');
-  return { ...store, api, audioService, deck, fireDeckEvent, toastAction };
+  const fireSocketEvent = (event: string, data?: unknown) => socketHandlers.get(event)?.(data);
+  return { ...store, api, audioService, deck, fireDeckEvent, fireSocketEvent, toastAction };
 }
 
 beforeEach(() => {
@@ -1972,5 +1980,256 @@ describe('download queue writes', () => {
     // The other row is the very same object: nothing rebuilt the array.
     expect(state.downloads.queue[1]).toBe(untouched);
     expect(api.retryDownload).toHaveBeenCalledWith('a');
+  });
+});
+
+describe('cross-device sessions', () => {
+  const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
+  const seed: Track = { id: 'seed', title: 'Seed', artist: 'Björk' };
+  const related = Array.from({ length: 10 }, (_, i) => ({
+    id: `auto-${i}`,
+    title: `Auto ${i}`,
+    channel: `Artist ${i}`,
+  }));
+
+  /** Everything one device publishes about an Auto session it is running. */
+  async function publishedAutoSession() {
+    const { actions, state, api } = await loadStore({
+      relatedYouTube: vi.fn().mockResolvedValue(related),
+      searchYouTube: vi.fn().mockResolvedValue([{ id: 'yt-current' }]),
+    });
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+    actions.addAutoSource([seed], 'Björk');
+    actions.setAutoDirection({ energy: 2, prompt: 'darker' });
+    await vi.waitFor(() => expect(state.playback.queue.length).toBeGreaterThan(1));
+
+    actions.seek(42);
+    await flush();
+    const body = api.putPlaybackState.mock.calls.at(-1)![0] as Record<string, any>;
+    return { body, queue: state.playback.queue.map((entry) => entry.id) };
+  }
+
+  /** The same state as it reaches a second device: another device, seen now. */
+  const asRemote = (body: Record<string, any>) => ({
+    ...body,
+    device_id: 'dev2',
+    device_name: 'Phone',
+    updated_at: Date.now() / 1000,
+  });
+
+  it('publishes the whole Auto workspace alongside the song', async () => {
+    const { body } = await publishedAutoSession();
+
+    expect(body.session.mode).toBe('auto');
+    expect(body.session.auto.sources.map((source: { label: string }) => source.label)).toEqual(['Björk']);
+    expect(body.session.auto.direction).toMatchObject({ energy: 2, prompt: 'darker' });
+    expect(body.session.queue.length).toBeGreaterThan(1);
+    expect(body.session.queue[body.session.index].id).toBe('current');
+  });
+
+  it('leaves the session out of a ping that only carries a new position', async () => {
+    const { actions, api, state } = await loadStore();
+    actions.playFrom([t1, t2], 0);
+    actions.seek(10);
+    await flush();
+
+    actions.seek(20);
+    await flush();
+
+    const [first, second] = api.putPlaybackState.mock.calls.slice(-2).map(([body]: [any]) => body);
+    expect(first.session ?? second.session).toBeDefined();
+    expect('session' in second).toBe(false);
+    // …until the session itself changes.
+    actions.enqueue(t2);
+    actions.seek(30);
+    await flush();
+    expect(api.putPlaybackState.mock.calls.at(-1)![0].session.queue).toHaveLength(3);
+    expect(state.playback.queue).toHaveLength(3);
+  });
+
+  it('says the session is over rather than resumable once nothing is playing', async () => {
+    const { actions, api } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      deleteTrack: vi.fn().mockResolvedValue({ status: 'ok' }),
+    });
+    await actions.syncLibrary();
+    actions.playFrom([t1], 0);
+
+    await actions.deleteTrack('t1');
+
+    expect(api.putPlaybackState).toHaveBeenCalledWith(
+      expect.objectContaining({ track_id: null, session: null }),
+      expect.anything(),
+    );
+  });
+
+  it('resumes an Auto session as an Auto session, route and sources included', async () => {
+    const { body, queue } = await publishedAutoSession();
+    const { actions, state, resumeState, audioService } = await loadStore({
+      getPlaybackState: vi.fn().mockResolvedValue(asRemote(body)),
+      relatedYouTube: vi.fn().mockResolvedValue(related),
+    });
+
+    await actions.syncLibrary();
+    await actions.checkResume();
+    expect(resumeState()?.device_name).toBe('Phone');
+
+    actions.resumeHere();
+
+    expect(state.autoMode.active).toBe(true);
+    expect(state.autoMode.sources.map((source) => source.label)).toEqual(['Björk']);
+    expect(state.autoMode.direction).toMatchObject({ energy: 2, prompt: 'darker' });
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(queue);
+    expect(state.playback.currentTrack?.id).toBe('current');
+    expect(state.playback.index).toBe(0);
+    expect(state.playback.isPlaying).toBe(true);
+    await vi.waitFor(() => expect(audioService.seek).toHaveBeenCalledWith(42));
+  });
+
+  it('puts this device\'s own session back paused, queue and all, after a reload', async () => {
+    const { body, queue } = await publishedAutoSession();
+    const { actions, state, resumeState, audioService } = await loadStore({
+      getPlaybackState: vi.fn().mockResolvedValue({ ...body, updated_at: Date.now() / 1000 }),
+    });
+
+    await actions.syncLibrary();
+    await actions.checkResume();
+
+    expect(resumeState()).toBeNull();
+    expect(state.autoMode.active).toBe(true);
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(queue);
+    expect(state.playback.isPlaying).toBe(false);
+    expect(state.playback.currentTime).toBe(42);
+    expect(audioService.prime).toHaveBeenCalledWith('/stream/current', 42, 1);
+  });
+
+  it('resumes the single song a session-less state names, as it always did', async () => {
+    const { actions, state, resumeState } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      getPlaybackState: vi.fn().mockResolvedValue({
+        device_id: 'dev2',
+        device_name: 'Phone',
+        track_id: 't1',
+        track: t1,
+        position_sec: 12,
+        is_playing: true,
+        updated_at: Date.now() / 1000,
+      }),
+    });
+
+    await actions.syncLibrary();
+    await actions.checkResume();
+    expect(resumeState()?.track_id).toBe('t1');
+
+    actions.resumeHere();
+
+    expect(state.playback.currentTrack?.id).toBe('t1');
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(['t1']);
+    expect(state.autoMode.active).toBe(false);
+  });
+
+  it('ignores a session that has moved on from the song the state names', async () => {
+    const { body } = await publishedAutoSession();
+    const { actions, state } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      getPlaybackState: vi.fn().mockResolvedValue(asRemote({ ...body, track_id: 't1', track: t1 })),
+    });
+
+    await actions.syncLibrary();
+    await actions.checkResume();
+    actions.resumeHere();
+
+    expect(state.autoMode.active).toBe(false);
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(['t1']);
+  });
+
+  it('takes the whole session over when another device hands playback here', async () => {
+    const { body, queue } = await publishedAutoSession();
+    const { initStore, state, fireSocketEvent } = await loadStore({
+      relatedYouTube: vi.fn().mockResolvedValue(related),
+    });
+    initStore();
+    await flush();
+
+    fireSocketEvent('playback_start_requested', {
+      track: body.track,
+      state: { ...body, device_id: 'dev1', position_sec: 42, is_playing: true },
+    });
+
+    expect(state.autoMode.active).toBe(true);
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(queue);
+    expect(state.playback.currentTrack?.id).toBe('current');
+    expect(state.playback.isPlaying).toBe(true);
+  });
+
+  it('sends a session too big for a keepalive request as an ordinary one', async () => {
+    const { initStore, actions, api } = await loadStore();
+    initStore();
+    await flush();
+
+    actions.playFrom([t1, t2], 0);
+    await flush();
+    api.putPlaybackState.mockClear();
+    window.dispatchEvent(new Event('pagehide'));
+    expect(api.putPlaybackState.mock.calls.at(-1)![1]).toEqual({ keepalive: true });
+
+    // A route long enough to pass the 64 KB a keepalive request may weigh: the
+    // position report has to survive even when the session cannot ride with it.
+    actions.playFrom(
+      Array.from({ length: 40 }, (_, i) => ({ id: `fat-${i}`, title: 'x'.repeat(1500), artist: 'Artist' })),
+      0,
+    );
+    await flush();
+    api.putPlaybackState.mockClear();
+    window.dispatchEvent(new Event('pagehide'));
+
+    const [body, opts] = api.putPlaybackState.mock.calls.at(-1)!;
+    expect(opts).toEqual({ keepalive: false });
+    expect(body.session.queue.length).toBeGreaterThan(1);
+  });
+
+  it('keeps asking for a session while a handoff is still publishing one', async () => {
+    vi.useFakeTimers();
+    try {
+      window.location.hash = '#/live?handoff=live';
+      const getPlaybackState = vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValue({
+          device_id: 'dev2',
+          device_name: 'Phone',
+          track_id: 't1',
+          track: t1,
+          position_sec: 5,
+          is_playing: true,
+          updated_at: Date.now() / 1000,
+        });
+      const { initStore, resumeState } = await loadStore({ getPlaybackState });
+
+      initStore();
+      await vi.advanceTimersByTimeAsync(6000);
+
+      expect(getPlaybackState.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(resumeState()?.device_name).toBe('Phone');
+    } finally {
+      window.location.hash = '';
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops asking after a handful of tries on an ordinary boot', async () => {
+    vi.useFakeTimers();
+    try {
+      const getPlaybackState = vi.fn().mockResolvedValue(undefined);
+      const { initStore } = await loadStore({ getPlaybackState });
+
+      initStore();
+      await vi.advanceTimersByTimeAsync(14000);
+
+      expect(getPlaybackState).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
