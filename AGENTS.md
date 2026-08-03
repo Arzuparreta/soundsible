@@ -4,4 +4,5 @@
   user does not create these commits manually.
 - Commit only the changes that belong to the completed task unless the user
   explicitly asks to include other working-tree changes.
-- Push only when the user explicitly requests it.
+- All work in Soundsible reaches `main` through a pull request from a branch —
+  never commit to `main` directly.

@@ -85,13 +85,13 @@ Open `http://localhost:5173/player/` — Vite proxies `/api` and `/socket.io` to
 
 ### Submitting pull requests
 
-1. Create a feature branch from **`dev`** (integration branch for ongoing work). Use **`main`** only if you are explicitly targeting a release/stable line.
+1. Create a feature branch from **`main`**. Everything lands on `main` through a pull request — nothing is committed to it directly.
 2. Make small, focused changes.
 3. Add or update tests when touching non‑trivial logic:
    - Python: `PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q`
    - Frontend: `cd ui_web && npm test`
 4. Run the app locally to verify core flows (launch, play music, basic navigation).
-5. Open a PR against **`dev`** by default, with a clear description of what you changed and why. Open against **`main`** when that matches maintainer guidance (e.g. hotfixes or release process).
+5. Open a PR against **`main`**, with a clear description of what you changed and why. CI runs on the pull request, so let the checks finish before asking for a review.
 
 ### Code style
 
