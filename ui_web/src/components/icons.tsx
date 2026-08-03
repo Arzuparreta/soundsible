@@ -20,3 +20,25 @@ export function KaraokeMicIcon(props: { size?: number }) {
     </svg>
   );
 }
+
+/** Take the session in this song's direction — a heading swept around a fixed
+ * point. Auto Mode's one native verb, on the route rows, the transport chip and
+ * the stage of the song currently on air. */
+export function SourceIcon(props: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={props.size ?? 18}
+      height={props.size ?? 18}
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="1.6" />
+      <path d="M12 4a8 8 0 0 1 8 8M12 20a8 8 0 0 1-8-8" />
+    </svg>
+  );
+}

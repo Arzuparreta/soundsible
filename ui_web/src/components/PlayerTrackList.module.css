@@ -70,6 +70,13 @@
   cursor: default;
 }
 
+/* Work is waiting on this one — a join with no transition planned for it. */
+.headAction[data-pending]:not(:disabled) {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
 .headActions {
   display: flex;
   align-items: center;
@@ -137,6 +144,18 @@
 
 .row[data-seam]::before {
   top: -1px;
+}
+
+/* A join with no transition planned for it. Reordering opens seams the DJ
+ * cannot mend on its own, and a dashed line says which ones are still waiting
+ * on a repair instead of leaving a plain fade to be discovered on arrival. */
+.row[data-stale]::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: 4px;
+  left: 4px;
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 .seamTail {

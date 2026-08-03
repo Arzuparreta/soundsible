@@ -16,6 +16,10 @@ export interface DragRow {
   /** Offset of the row's top edge, in the same space as the pointer. */
   top: number;
   height: number;
+  /** No drop may be inserted before this row. The cued handoff is already
+   * loaded and no longer anybody's to displace, so the seam above it describes
+   * a position nothing can take — better never offered than silently refused. */
+  fixed?: boolean;
 }
 
 export interface DropSlot {
@@ -28,9 +32,15 @@ export interface DropSlot {
 }
 
 /** Every seam in a list of rows, including the one before the first row and the
- * one after the last. `n` rows produce `n + 1` slots. */
+ * one after the last. `n` rows produce `n + 1` slots, less any that a `fixed`
+ * row rules out. Dropping a seam does not renumber the rest: `index` counts
+ * rows, not slots, so the survivors keep the positions they describe. */
 export function buildDropSlots(rows: readonly DragRow[]): DropSlot[] {
-  const slots: DropSlot[] = rows.map((row, index) => ({ index, beforeId: row.id, offset: row.top }));
+  const slots: DropSlot[] = [];
+  rows.forEach((row, index) => {
+    if (row.fixed) return;
+    slots.push({ index, beforeId: row.id, offset: row.top });
+  });
   const last = rows[rows.length - 1];
   slots.push({
     index: rows.length,
@@ -61,11 +71,15 @@ export function nearestSlot(slots: readonly DropSlot[], pointerY: number): DropS
  * Dragging a row onto its own top edge, or onto the edge just below it, both
  * describe the position it already occupies. Reporting those as real moves
  * makes a list flicker and costs a needless re-plan.
+ *
+ * What is dragged may be several rows travelling as one — a bridge belongs with
+ * the song it leads into — so the span between the block's own edges, and every
+ * seam inside it, all describe where it already is.
  */
-export function isNoopMove(ids: readonly string[], draggedId: string, slot: DropSlot): boolean {
-  const from = ids.indexOf(draggedId);
-  if (from === -1) return false;
-  return slot.index === from || slot.index === from + 1;
+export function isNoopMove(ids: readonly string[], blockIds: readonly string[], slot: DropSlot): boolean {
+  const positions = blockIds.map((id) => ids.indexOf(id)).filter((index) => index !== -1);
+  if (!positions.length) return false;
+  return slot.index >= Math.min(...positions) && slot.index <= Math.max(...positions) + 1;
 }
 
 export const EDGE_SCROLL_ZONE = 48;
@@ -101,6 +115,7 @@ export function readDragRows(container: HTMLElement): DragRow[] {
       id: element.dataset.dragRow ?? '',
       top: rect.top - origin,
       height: rect.height,
+      fixed: element.dataset.dragFixed !== undefined,
     };
   });
 }

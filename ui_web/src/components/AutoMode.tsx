@@ -11,7 +11,7 @@ import {
   type AutoModeLayoutPresetId,
   type AutoModePanelId,
 } from '../lib/autoModeLayout';
-import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
+import { autoTrackDragging, readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { isNoopMove } from '../lib/dragReorder';
 import { queueIdentity } from '../lib/queueDiscovery';
 import { coverUrl } from '../lib/media';
@@ -22,6 +22,7 @@ import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
+import { SourceIcon } from './icons';
 import styles from './AutoMode.module.css';
 
 const AUTO_MINIMUMS = { browser: 280, stage: 390, route: 280 };
@@ -52,6 +53,11 @@ export function AutoMode(props: {
   // that armed it looked like pressing nothing.
   const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'route'; beforeQueueId?: string }>({ kind: 'neutral' });
   const [carriedTrack, setCarriedTrack] = createSignal<CarriedTrack | null>(null);
+  const [trayOver, setTrayOver] = createSignal(false);
+  let trayDepth = 0;
+  // Something is in the air and the tray can take it. Saying so the instant a
+  // drag begins is the whole difference between a gesture and a secret.
+  const trayArmed = createMemo(() => Boolean(autoTrackDragging() || carriedTrack()));
 
   const openDestination = (kind: 'route', beforeQueueId?: string) => {
     setDestination({ kind, beforeQueueId });
@@ -88,6 +94,20 @@ export function AutoMode(props: {
   };
 
   const upcoming = createMemo(() => state.playback.queue.slice(Math.max(0, state.playback.index + 1)));
+  const staleSeams = createMemo(() => new Set(state.autoMode.staleSeams));
+  /** The rows that travel together. A bridge exists only to reach the song it
+   * leads into, so aiming at either of them describes the same block. */
+  const routeBlock = (queueId: string): string[] => {
+    const entry = upcoming().find((row) => row.queueId === queueId);
+    const ownerId = entry?.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId
+      ? entry.autoRoute.ownerQueueId
+      : queueId;
+    const block = upcoming()
+      .filter((row) => row.queueId === ownerId
+        || (row.autoRoute?.kind === 'bridge' && row.autoRoute.ownerQueueId === ownerId))
+      .map((row) => row.queueId);
+    return block.length ? block : [queueId];
+  };
   const routeEntries = createMemo<PlayerTrackListEntry[]>(() => upcoming().map((track, index) => {
     const plan = state.autoMode.plan[track.queueId];
     const committed = index === 0 && state.autoMode.transition.status !== 'idle';
@@ -114,6 +134,9 @@ export function AutoMode(props: {
       cover: track.cover ?? coverUrl(track.id),
       position: index + 1,
       locked: committed,
+      // A committed handoff is loaded and cued: whatever the route did around
+      // it, the blend it will actually play is the planned one.
+      stale: !committed && staleSeams().has(track.queueId),
       draggable: !committed,
       annotation: source ? t('autoMode.source.title') : plan?.sourceSetLabel,
       badge: committed
@@ -147,6 +170,8 @@ export function AutoMode(props: {
     };
   }));
 
+  const mixPending = createMemo(() => routeEntries().some((entry) => entry.stale));
+
   const Browser = (dragHandle: JSX.Element) => (
     <section class={styles.sourcePanel}>
       <header class={styles.sourceHeader}>
@@ -155,18 +180,35 @@ export function AutoMode(props: {
       </header>
       <div
         class={styles.sourceTray}
-        data-target={carriedTrack() ? '' : undefined}
+        data-target={trayArmed() ? '' : undefined}
+        data-over={trayOver() ? '' : undefined}
         onClick={() => carriedTrack() && addToSources(carriedTrack()!.track)}
-        onDragOver={(event) => event.preventDefault()}
+        // `dragleave` fires for every child the pointer crosses, so only a
+        // matched count of them means the drag has actually left the tray.
+        onDragEnter={() => { trayDepth += 1; setTrayOver(true); }}
+        onDragLeave={() => {
+          trayDepth = Math.max(0, trayDepth - 1);
+          if (!trayDepth) setTrayOver(false);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          // A source is a copy: the song keeps its place in the route.
+          if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+        }}
         onDrop={(event) => {
           event.preventDefault();
+          trayDepth = 0;
+          setTrayOver(false);
           const transfer = readAutoTrackTransfer(event);
           if (transfer) addToSources(transfer.track);
         }}
       >
         <Show when={state.autoMode.sources.length} fallback={
-          <p class={styles.sourceEmpty}>{t('autoMode.source.empty')}</p>
+          <p class={styles.sourceEmpty}>{trayArmed() ? t('autoMode.source.add') : t('autoMode.source.empty')}</p>
         }>
+          <Show when={trayArmed()}>
+            <p class={styles.sourceHint}>{t('autoMode.source.add')}</p>
+          </Show>
           <For each={state.autoMode.sources}>{(source) => (
             <div
               class={styles.sourceChip}
@@ -219,7 +261,10 @@ export function AutoMode(props: {
       headAction={[
         {
           label: state.autoMode.repairing ? t('autoMode.route.fixing') : t('autoMode.route.fix'),
-          title: t('autoMode.route.fixHint'),
+          // Reordering opens joins the DJ never chose. The button says so
+          // rather than waiting for a plain fade to announce it on arrival.
+          title: mixPending() ? t('autoMode.route.mixPending') : t('autoMode.route.fixHint'),
+          pending: mixPending(),
           disabled: state.autoMode.repairing
             || state.autoMode.pendingDirection
             || routeEntries().filter((entry) => !entry.locked).length < 2,
@@ -234,7 +279,12 @@ export function AutoMode(props: {
       onDrop={(event) => {
         event.preventDefault();
         const transfer = readAutoTrackTransfer(event);
-        if (transfer) placeInRoute(transfer.track);
+        if (!transfer) return;
+        // The header means "at the end". A row that is already in the route
+        // moves there rather than being copied into a second occurrence of
+        // itself, which is what dropping short of a seam used to earn.
+        if (transfer.queueId) actions.moveAutoRoute(transfer.queueId);
+        else placeInRoute(transfer.track);
       }}
       onDropAtSlot={(slot, event) => {
         const transfer = readAutoTrackTransfer(event);
@@ -246,7 +296,7 @@ export function AutoMode(props: {
         // Dropping a row back where it already sits would still re-stamp it as
         // fixed and throw away the transition it was planned with — a plain
         // fade earned by changing nothing.
-        if (isNoopMove(upcoming().map((entry) => entry.queueId), transfer.queueId, slot)) return;
+        if (isNoopMove(upcoming().map((entry) => entry.queueId), routeBlock(transfer.queueId), slot)) return;
         actions.moveAutoRoute(transfer.queueId, slot.beforeId);
       }}
       sections={[{ id: 'route', entries: routeEntries() }]}
@@ -288,6 +338,17 @@ export function AutoMode(props: {
         {(track) => (
           <div class={styles.carry} role="status">
             <span><strong>{track().track.title}</strong><small>{track().track.artist}</small></span>
+            {/* On a phone the panels are a carousel with the inactive ones
+              * inert, so a song can never be dragged from the route to the
+              * tray. Carrying it here is that gesture, and this is where it
+              * lands without making anyone swipe panels to find the target. */}
+            <button
+              class={styles.carrySource}
+              type="button"
+              aria-label={t('autoMode.route.useAsSource')}
+              title={t('autoMode.route.useAsSource')}
+              onClick={() => addToSources(track().track)}
+            ><SourceIcon /></button>
             <button type="button" aria-label={t('common.cancel')} onClick={() => setCarriedTrack(null)}>×</button>
           </div>
         )}
@@ -296,11 +357,10 @@ export function AutoMode(props: {
   );
 }
 
-const routeIcon = (path: JSX.Element) => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{path}</svg>
+const RemoveIcon = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="m7 7 10 10M17 7 7 17" />
+  </svg>
 );
-/** Take the session in this song's direction. */
-const SourceIcon = () => routeIcon(<><circle cx="12" cy="12" r="1.6" /><path d="M12 4a8 8 0 0 1 8 8M12 20a8 8 0 0 1-8-8" /></>);
-const RemoveIcon = () => routeIcon(<path d="m7 7 10 10M17 7 7 17" />);
 
 export { titleFit } from '../lib/titleFit';

@@ -195,6 +195,8 @@ export const zh: Dict = {
       title: '来源', add: '添加到来源', empty: '将音乐拖到此处以调整播放方向。',
       libraryActions: '将音乐库用作来源', remove: '移除来源 {title}',
       routeEmpty: '向路线添加歌曲或继续播放',
+      added: '正从《{title}》调整播放方向',
+      already: '《{title}》已经是你的来源之一',
     },
     route: {
       pinned: '已固定', actions: '{title} 的操作', useAsSource: '从这首歌出发',
@@ -204,6 +206,8 @@ export const zh: Dict = {
       addToRoute: '把《{title}》加入路线', addHere: '把《{title}》加到这里',
       fix: '修复混音', fixing: '修复中…',
       fixHint: '围绕你放入的歌曲重建混音',
+      mixPending: '有衔接尚未安排过渡',
+      moved: '《{title}》已移动 · 混音仍需重建',
       dropHere: '放开以插入此处',
     },
     workspace: {

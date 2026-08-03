@@ -1125,6 +1125,7 @@ function dropAutoRouteOccurrence(queueId: string): PlaybackQueueEntry | null {
   setState('autoMode', 'plan', (plan) => Object.fromEntries(
     Object.entries(plan).filter(([id]) => !owned.has(id)),
   ));
+  setState('autoMode', 'staleSeams', (seams) => seams.filter((id) => !owned.has(id)));
   void generatedQueue?.ensureRunway();
   return track;
 }
@@ -1502,6 +1503,7 @@ export const actions = {
       transition: { status: 'idle' },
       pendingDirection: false,
       repairing: false,
+      staleSeams: [],
     });
     // Normally a no-op — the graph was built at the session's first touch — but
     // it also covers a listener who reached Auto Mode without one (a keyboard
@@ -1542,6 +1544,7 @@ export const actions = {
       plan: {},
       pendingDirection: false,
       repairing: false,
+      staleSeams: [],
     });
   },
 
@@ -1561,6 +1564,11 @@ export const actions = {
     }
   },
 
+  /** Steer the session from one song.
+   *
+   * It answers out loud in both directions: the tray is a drop target you can
+   * reach from a panel it is not on, and dropping a song that was already a
+   * source used to land on silence indistinguishable from a missed target. */
   useAutoTrackAsSource(track: Track): void {
     if (!state.autoMode.active || isPodcastTrack(track)) return;
     const identity = queueIdentity(track);
@@ -1568,9 +1576,11 @@ export const actions = {
       source.tracks.length === 1 && queueIdentity(source.tracks[0]) === identity
     ));
     if (existing) {
+      toast.info(tr('autoMode.source.already', { title: track.title }));
       return;
     }
     actions.addAutoSource([track], track.title);
+    toast.info(tr('autoMode.source.added', { title: track.title }));
   },
 
   removeAutoSource(id: string): void {
@@ -1792,6 +1802,7 @@ export const actions = {
     const routeSignature = route.map((entry) => entry.queueId).join('|');
     const previousQueue = state.playback.queue.slice();
     const previousPlan = { ...state.autoMode.plan };
+    const previousStaleSeams = state.autoMode.staleSeams.slice();
     const anchors = route.filter((entry) => autoRouteKind(entry) === 'user').map((entry) => entry.queueId);
 
     setState('autoMode', {
@@ -1878,6 +1889,9 @@ export const actions = {
       });
       setState('autoMode', {
         plan,
+        // The whole route was just re-seamed: every join it covers is planned
+        // again, which is exactly what this list was tracking.
+        staleSeams: [],
         activity: { id: ++generatedActivityId, status: 'done', key: 'autoMode.agent.repaired' },
       });
       prefetchUpcoming();
@@ -1886,7 +1900,7 @@ export const actions = {
         if (insertionFloor() !== floor) return;
         if (state.playback.queue[floor]?.queueId !== previousQueue[floor]?.queueId) return;
         setState('playback', 'queue', previousQueue);
-        setState('autoMode', 'plan', previousPlan);
+        setState('autoMode', { plan: previousPlan, staleSeams: previousStaleSeams });
         prefetchUpcoming();
       });
     } catch {
@@ -2327,33 +2341,64 @@ export const actions = {
     prefetchUpcoming();
   },
 
+  /**
+   * Move one route entry, carrying the bridges that belong with it.
+   *
+   * A bridge exists only to reach the song it leads into, so the two travel as
+   * one block: dragging either row moves the pair, and dragging the owner no
+   * longer deletes the bridge out from under the cursor mid-drag. Landing marks
+   * the entry as the listener's, which is what makes a later repair re-seam
+   * *around* it instead of putting it back.
+   *
+   * What a move deliberately does not do is mend the mix. The joins it opens go
+   * into `staleSeams` for the route to show, and the toast carries the repair —
+   * re-planning on every drag would spend a round trip per nudge and rewrite
+   * rows the listener is still aiming at.
+   */
   moveAutoRoute(queueId: string, beforeQueueId?: string): void {
     if (!state.autoMode.active || queueId === beforeQueueId) return;
-    const removedBridgeIds = new Set(state.playback.queue
-      .filter((entry) => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId)
+    const source = state.playback.queue.find((entry) => entry.queueId === queueId);
+    if (!source) return;
+    // Grabbing a bridge is a request to move what it leads into: on its own it
+    // connects nothing, and leaving it behind would strand its owner.
+    const ownerId = source.autoRoute?.kind === 'bridge' && source.autoRoute.ownerQueueId
+      ? source.autoRoute.ownerQueueId
+      : queueId;
+    const blockIds = new Set(state.playback.queue
+      .filter((entry) => entry.queueId === ownerId
+        || (entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === ownerId))
       .map((entry) => entry.queueId));
-    const queue = state.playback.queue.filter((entry) => !(
-      entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId
-    ));
-    const from = queue.findIndex((entry) => entry.queueId === queueId);
-    const before = beforeQueueId
-      ? queue.findIndex((entry) => entry.queueId === beforeQueueId)
-      : queue.length;
-    if (from <= state.playback.index || before <= state.playback.index) return;
-    const [rawEntry] = queue.splice(from, 1);
-    const entry = {
-      ...rawEntry,
-      autoRoute: { kind: 'user' as const, placement: 'fixed' as const },
-    };
-    const target = beforeQueueId
-      ? queue.findIndex((row) => row.queueId === beforeQueueId)
-      : queue.length;
-    queue.splice(target, 0, entry);
+    if (!blockIds.has(ownerId) || (beforeQueueId && blockIds.has(beforeQueueId))) return;
+
+    const floor = insertionFloor();
+    const start = state.playback.queue.findIndex((entry) => blockIds.has(entry.queueId));
+    if (start <= floor) return;
+    const block = state.playback.queue.filter((entry) => blockIds.has(entry.queueId));
+    const rest = state.playback.queue.filter((entry) => !blockIds.has(entry.queueId));
+    // Everything before the block is untouched by lifting it out, so the row
+    // that closes over the gap is the one that lands on its old index.
+    const closed = rest[start]?.queueId;
+    const target = beforeQueueId ? rest.findIndex((entry) => entry.queueId === beforeQueueId) : rest.length;
+    // Never in front of a handoff that is already loaded. The route panel stops
+    // offering that seam; this is what happens if anything else asks for it.
+    const at = Math.max(floor + 1, target === -1 ? rest.length : target);
+    const moved = block.map((entry) => (entry.queueId === ownerId
+      ? { ...entry, autoRoute: { kind: 'user' as const, placement: 'fixed' as const } }
+      : entry));
+    const queue = [...rest.slice(0, at), ...moved, ...rest.slice(at)];
+
+    const opened = [moved[0].queueId, closed, rest[at]?.queueId]
+      .filter((id): id is string => Boolean(id));
     setState('playback', 'queue', queue);
-    setState('autoMode', 'plan', (plan) => Object.fromEntries(
-      Object.entries(plan).filter(([id]) => id !== queueId && !removedBridgeIds.has(id)),
-    ));
+    setState('autoMode', 'staleSeams', (seams) => {
+      const live = new Set(queue.map((entry) => entry.queueId));
+      return [...new Set([...seams.filter((id) => live.has(id)), ...opened])];
+    });
     prefetchUpcoming();
+    const owner = block.find((entry) => entry.queueId === ownerId) ?? source;
+    toast.action(tr('autoMode.route.moved', { title: owner.title }), tr('autoMode.route.fix'), () => {
+      if (state.autoMode.active) void actions.repairAutoRoute();
+    });
   },
 
   /** Clear explicit upcoming requests without touching context or generators. */
@@ -3115,6 +3160,13 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         // the booth show a BPM for the song that is actually playing when a
         // session starts from whatever the listener already had on.
         setState('autoMode', 'plan', plan);
+        // A replacing plan re-seams every join it writes, so the only unplanned
+        // ones left are those belonging to rows it was not allowed to touch.
+        setState('autoMode', 'staleSeams', (seams) => {
+          if (!replace) return seams;
+          const live = new Set(state.playback.queue.map((entry) => entry.queueId));
+          return seams.filter((id) => live.has(id) && plan[id] === undefined);
+        });
       }
       prefetchUpcoming();
       // New runway. If the music ran out waiting for exactly this, start it

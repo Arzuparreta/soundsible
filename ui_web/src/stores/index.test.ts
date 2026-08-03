@@ -983,6 +983,85 @@ describe('Auto Mode store contract', () => {
     expect(planDjQueue).toHaveBeenCalledTimes(1);
   });
 
+  it('carries a bridge with the song it leads into, and pins only the song', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1', 'route-2', 'route-3']));
+    const placeDjTrack = vi.fn().mockImplementation(async (body: { track: Track; requested_queue_id: string }) => ({
+      v: 1,
+      insert_at: 0,
+      before_queue_id: null,
+      requested_queue_id: body.requested_queue_id,
+      items: [
+        {
+          id: 'bridge', youtube_id: 'bridge', title: 'Bridge', artist: 'DJ', source: 'preview',
+          source_pool: 'related', recommendation_identity: 'music:youtube:bridge',
+          recommendation_source: 'auto_mode', route_kind: 'bridge',
+        },
+        {
+          id: body.track.id, youtube_id: body.track.id, title: body.track.title, artist: body.track.artist,
+          source: 'preview', source_pool: 'related', recommendation_identity: `music:youtube:${body.track.id}`,
+          recommendation_source: 'auto_mode', route_kind: 'user', request_id: body.requested_queue_id,
+        },
+      ],
+      degraded: false,
+    }));
+    const { actions, state } = await loadStore({ planDjQueue, placeDjTrack });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(5));
+
+    await actions.placeAutoTrack({ id: 'wanted', title: 'Wanted', artist: 'Listener' });
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(7));
+    const bridge = state.playback.queue.find((entry) => entry.id === 'bridge')!;
+    const wanted = state.playback.queue.find((entry) => entry.id === 'wanted')!;
+    expect(bridge.autoRoute).toMatchObject({ kind: 'bridge', ownerQueueId: wanted.queueId });
+
+    // Grabbing the bridge is a request to move what it leads into: on its own
+    // it connects nothing, and it used to be deleted out from under the drag.
+    actions.moveAutoRoute(bridge.queueId);
+
+    expect(state.playback.queue.map((entry) => entry.id).slice(-2)).toEqual(['bridge', 'wanted']);
+    expect(state.playback.queue.filter((entry) => entry.id === 'bridge')).toHaveLength(1);
+    expect(state.playback.queue.at(-1)!.autoRoute).toMatchObject({ kind: 'user', placement: 'fixed' });
+    expect(state.playback.queue.at(-2)!.autoRoute).toMatchObject({ kind: 'bridge', ownerQueueId: wanted.queueId });
+  });
+
+  it('never moves a route entry in front of the song that is playing', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1', 'route-2']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(4));
+    const last = state.playback.queue[3];
+
+    actions.moveAutoRoute(last.queueId, state.playback.queue[0].queueId);
+
+    expect(state.playback.queue[0].id).toBe('current');
+    expect(state.playback.queue[1].queueId).toBe(last.queueId);
+    expect(state.playback.index).toBe(0);
+  });
+
+  it('names the joins a move opens and offers the repair that closes them', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1', 'route-2', 'route-3']));
+    const { actions, state, toastAction } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(5));
+    const [, moved, closed, before] = state.playback.queue;
+
+    actions.moveAutoRoute(moved.queueId, before.queueId);
+
+    // The three joins that changed: into the moved song, into the one that
+    // closed over the gap it left, and into the one it now sits in front of.
+    expect([...state.autoMode.staleSeams].sort())
+      .toEqual([moved.queueId, closed.queueId, before.queueId].sort());
+    expect(state.playback.queue.map((entry) => entry.queueId))
+      .toEqual([state.playback.queue[0].queueId, closed.queueId, moved.queueId, before.queueId, state.playback.queue[4].queueId]);
+    expect(toastAction.mock.calls.at(-1)![1]).toBe('Fix mix');
+
+    toastAction.mock.calls.at(-1)![2]();
+    await vi.waitFor(() => expect(state.autoMode.staleSeams).toEqual([]));
+  });
+
   it('composes source membership with an existing route occurrence independently', async () => {
     const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1']));
     const { actions, state } = await loadStore({ planDjQueue });

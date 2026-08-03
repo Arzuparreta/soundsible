@@ -195,6 +195,8 @@ export const fr: Dict = {
       title: 'Sources', add: 'Ajouter aux sources', empty: 'Faites glisser de la musique ici pour orienter la session.',
       libraryActions: 'Utiliser la bibliothèque comme source', remove: 'Retirer la source {title}',
       routeEmpty: 'Ajoutez un morceau au parcours ou reprenez la lecture',
+      added: 'La session s’oriente depuis « {title} »',
+      already: '« {title} » fait déjà partie de vos sources',
     },
     route: {
       pinned: 'Épinglé', actions: 'Actions pour {title}', useAsSource: 'Depuis ce morceau',
@@ -204,6 +206,8 @@ export const fr: Dict = {
       addToRoute: 'Ajouter {title} au parcours', addHere: 'Ajouter {title} ici',
       fix: 'Réparer le mix', fixing: 'Réparation…',
       fixHint: 'Reconstruire le mix autour des morceaux que vous avez placés',
+      mixPending: 'Des enchaînements n’ont pas encore de transition prévue',
+      moved: '« {title} » déplacé · le mix reste à reconstruire',
       dropHere: 'Relâchez pour placer ici',
     },
     workspace: {
