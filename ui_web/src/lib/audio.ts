@@ -83,6 +83,9 @@ let limiter: DynamicsCompressorNode | null = null;
 /** The post-limiter node shared by the local monitor and an optional live tap. */
 let programOutput: AudioNode | null = null;
 let broadcastDestination: MediaStreamAudioDestinationNode | null = null;
+let broadcastCapture: BroadcastCapture | null = null;
+let broadcastElement: HTMLAudioElement | null = null;
+let broadcastCaptureCleanup: (() => void) | null = null;
 /** Master-bus tap used to tell "quiet music" from "no output at all". */
 let analyser: AnalyserNode | null = null;
 
@@ -124,6 +127,23 @@ let broadcastLostReporter: (() => void) | null = null;
 
 export function setBroadcastLostReporter(fn: (() => void) | null): void {
   broadcastLostReporter = fn;
+}
+
+export type BroadcastCaptureKind = 'program' | 'element';
+
+/**
+ * The one audio source Live is allowed to publish.
+ *
+ * Normally this is the post-limiter program tap, which preserves the DJ mix.
+ * If a browser forces this page load into the deliberately safe, direct-deck
+ * playback mode, `element` keeps Live usable without trying to resurrect the
+ * failed AudioContext. Its track can change whenever the element changes URL,
+ * so the bridge subscribes and replaces the WebRTC sender in place.
+ */
+export interface BroadcastCapture {
+  kind: BroadcastCaptureKind;
+  stream: MediaStream;
+  onTrackChange: (listener: (track: MediaStreamTrack | null) => void) => () => void;
 }
 
 /** Read the persisted volume without forcing the lazy elements into existence. */
@@ -605,10 +625,8 @@ function checkAudible(): void {
 function discardGraph(): void {
   stopAudibilityWatch();
   const context = audioContext;
-  const lostBroadcast = broadcastDestination !== null;
-  if (broadcastDestination) {
-    for (const track of broadcastDestination.stream.getTracks()) track.stop();
-  }
+  const lostBroadcast = broadcastCapture?.kind === 'program';
+  releaseBroadcastCapture();
   audioContext = null;
   deckGains = null;
   // The nodes go; `levelGains` stays, so the levels survive into whatever
@@ -619,7 +637,6 @@ function discardGraph(): void {
   monitorGain = null;
   limiter = null;
   programOutput = null;
-  broadcastDestination = null;
   analyser = null;
   silenceProbe = null;
   if (context && typeof context.close === 'function') void context.close().catch(() => {});
@@ -711,29 +728,136 @@ export function graphReady(): boolean {
   return graphState === 'ready' && Boolean(audioContext && deckGains && masterGain && monitorGain);
 }
 
-/** Lazily expose the post-limiter Soundsible program as a WebRTC-ready stream. */
-export function broadcastStream(): MediaStream | null {
-  if (!graphReady() || !audioContext || !programOutput) return null;
-  if (!broadcastDestination) {
-    if (typeof audioContext.createMediaStreamDestination !== 'function') return null;
-    broadcastDestination = audioContext.createMediaStreamDestination();
-    programOutput.connect(broadcastDestination);
-    const track = broadcastDestination.stream.getAudioTracks()[0];
-    if (track && 'contentHint' in track) track.contentHint = 'music';
+function activeAudioTrack(stream: MediaStream): MediaStreamTrack | null {
+  return stream.getAudioTracks().find((track) => track.readyState !== 'ended') ?? null;
+}
+
+function deckIsPlaying(deck: HTMLAudioElement): boolean {
+  return !deck.paused && !deck.ended && Boolean(deck.currentSrc || deck.getAttribute('src'));
+}
+
+/** The element is the source of truth across Music, Auto and Now Playing. */
+export function broadcastPlaybackActive(): boolean {
+  return deckIsPlaying(audioEl());
+}
+
+function releaseBroadcastCapture(): void {
+  const capture = broadcastCapture;
+  broadcastCapture = null;
+  broadcastElement = null;
+  const cleanup = broadcastCaptureCleanup;
+  broadcastCaptureCleanup = null;
+  cleanup?.();
+  if (!capture) return;
+  if (capture.kind === 'program' && broadcastDestination) {
+    try {
+      programOutput?.disconnect(broadcastDestination);
+    } catch {
+      /* the graph was already torn down */
+    }
+    broadcastDestination = null;
   }
-  return broadcastDestination.stream;
+  for (const track of capture.stream.getTracks()) track.stop();
+}
+
+function programBroadcastCapture(): BroadcastCapture | null {
+  if (!graphReady() || !audioContext || !programOutput) return null;
+  if (broadcastCapture?.kind === 'program') return broadcastCapture;
+  releaseBroadcastCapture();
+  if (typeof audioContext.createMediaStreamDestination !== 'function') return null;
+  broadcastDestination = audioContext.createMediaStreamDestination();
+  programOutput.connect(broadcastDestination);
+  const track = activeAudioTrack(broadcastDestination.stream);
+  if (track && 'contentHint' in track) track.contentHint = 'music';
+  const stream = broadcastDestination.stream;
+  broadcastCapture = {
+    kind: 'program',
+    stream,
+    onTrackChange: () => () => {},
+  };
+  return broadcastCapture;
+}
+
+interface CapturableAudioElement extends HTMLAudioElement {
+  captureStream?: () => MediaStream;
+  mozCaptureStream?: () => MediaStream;
+}
+
+function elementBroadcastCapture(element: HTMLAudioElement): BroadcastCapture | null {
+  if (broadcastCapture?.kind === 'element' && broadcastElement === element) return broadcastCapture;
+  releaseBroadcastCapture();
+  const capture = (element as CapturableAudioElement).captureStream
+    ?? (element as CapturableAudioElement).mozCaptureStream;
+  if (!capture) return null;
+  let stream: MediaStream;
+  try {
+    stream = capture.call(element);
+  } catch {
+    return null;
+  }
+  const listeners = new Set<(track: MediaStreamTrack | null) => void>();
+  let observedTrack: MediaStreamTrack | null = null;
+  const observeTrack = () => {
+    const next = activeAudioTrack(stream);
+    if (next === observedTrack) return;
+    if (observedTrack && typeof observedTrack.removeEventListener === 'function') {
+      observedTrack.removeEventListener('ended', notify);
+    }
+    observedTrack = next;
+    if (observedTrack && typeof observedTrack.addEventListener === 'function') {
+      observedTrack.addEventListener('ended', notify);
+    }
+  };
+  const notify = () => {
+    observeTrack();
+    const track = activeAudioTrack(stream);
+    for (const listener of listeners) listener(track);
+  };
+  stream.addEventListener('addtrack', notify);
+  stream.addEventListener('removetrack', notify);
+  observeTrack();
+  broadcastCaptureCleanup = () => {
+    stream.removeEventListener('addtrack', notify);
+    stream.removeEventListener('removetrack', notify);
+    if (observedTrack && typeof observedTrack.removeEventListener === 'function') {
+      observedTrack.removeEventListener('ended', notify);
+    }
+    listeners.clear();
+  };
+  broadcastElement = element;
+  broadcastCapture = {
+    kind: 'element',
+    stream,
+    onTrackChange: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  return broadcastCapture;
+}
+
+/**
+ * Acquire a Live source without changing local playback. The normal route is
+ * the post-limiter program. Direct element capture is only used after the
+ * graph's own recovery has chosen its safe, graphless mode for this page load.
+ */
+export function acquireBroadcastCapture(): BroadcastCapture | null {
+  const program = programBroadcastCapture();
+  if (program) return program;
+  const element = audioEl();
+  if (!element.currentSrc && !element.getAttribute('src')) return null;
+  const fallback = elementBroadcastCapture(element);
+  return fallback && activeAudioTrack(fallback.stream) ? fallback : null;
+}
+
+/** Backwards-compatible stream-only access for consumers that do not need swaps. */
+export function broadcastStream(): MediaStream | null {
+  return acquireBroadcastCapture()?.stream ?? null;
 }
 
 /** Release the live tap without disturbing the local monitor graph. */
 export function releaseBroadcastStream(): void {
-  if (!broadcastDestination) return;
-  try {
-    programOutput?.disconnect(broadcastDestination);
-  } catch {
-    /* already disconnected by a context failure */
-  }
-  for (const track of broadcastDestination.stream.getTracks()) track.stop();
-  broadcastDestination = null;
+  releaseBroadcastCapture();
 }
 
 export interface ProgramMixSnapshot {
@@ -1431,6 +1555,8 @@ export const audioService = {
   },
   unlockAudio,
   graphReady,
+  acquireBroadcastCapture,
+  broadcastPlaybackActive,
   broadcastStream,
   releaseBroadcastStream,
   programMixSnapshot,
