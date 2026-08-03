@@ -76,6 +76,24 @@ def test_a_stream_carries_something_to_revalidate_against(client, downloaded_tra
     assert response.headers.get("Accept-Ranges") == "bytes"
 
 
+def test_a_downloaded_track_may_be_kept_by_the_browser(client, downloaded_track):
+    """The bytes behind a track id never change, so asking again is waste.
+
+    `send_file` defaults to `no-cache`, which sends the player back over the
+    network for a file it already has on every play. A cached preview has always
+    been allowed to skip that; a downloaded track was not, and from outside the
+    house that is several round trips in front of a song that is on disk.
+    """
+    response = client.get(f"/api/static/stream/{downloaded_track}")
+    cache_control = response.headers.get("Cache-Control", "")
+
+    assert "no-cache" not in cache_control
+    assert "no-store" not in cache_control
+    assert "max-age=" in cache_control
+    # Someone else's library is not for shared caches to hold.
+    assert "private" in cache_control
+
+
 def test_replaying_a_track_costs_a_304_and_no_bytes(client, downloaded_track):
     first = client.get(f"/api/static/stream/{downloaded_track}")
     etag = first.headers.get("ETag")

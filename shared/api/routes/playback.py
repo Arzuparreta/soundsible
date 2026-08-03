@@ -304,6 +304,13 @@ def stream_local_track(track_id):
     mimetypes = {"mp3": "audio/mpeg", "m4a": "audio/mp4", "flac": "audio/flac", "ogg": "audio/ogg", "wav": "audio/wav"}
     try:
         response = send_file(path, mimetype=mimetypes.get(ext, "audio/mpeg"), conditional=True)
+        # A downloaded track is content-addressed — the file on disk is named
+        # after its own hash — so the bytes behind one id never change, exactly
+        # as for a cached preview. Without this `send_file` sends `no-cache`,
+        # which sends the player back over the network for a file it already has
+        # every single time it is played. On a LAN that is free; from outside it
+        # is several round trips in front of a song that is sitting on disk.
+        response.headers["Cache-Control"] = "private, max-age=86400"
         response.headers.add("Access-Control-Allow-Origin", "*")
         response.headers.add("Access-Control-Allow-Methods", "GET, OPTIONS")
         response.headers.add("Access-Control-Allow-Headers", "Range")
@@ -323,7 +330,10 @@ def stream_local_track(track_id):
             segments={
                 "open_ms": round((time.perf_counter() - started) * 1000, 1),
                 "ranged": bool(request.headers.get("Range")),
-                "served_bytes": int(response.headers.get("Content-Length") or 0),
+                # What was promised, not what reached the listener: the client
+                # can abandon the response mid-flight and routinely does. Named
+                # for what it is so it is not read as bytes on the wire.
+                "content_length": int(response.headers.get("Content-Length") or 0),
                 "file_bytes": os.path.getsize(path),
                 # A whole-second `ts` cannot show the gap between the requests a
                 # player makes for one track, which is the interesting part.
