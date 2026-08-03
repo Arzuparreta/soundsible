@@ -77,6 +77,16 @@ type SearchReturn = {
   scope: 'global' | 'library';
 };
 
+/** What a song row needs to know about the session it is being listed inside.
+ * Built once per row by `NowPlayingBrowser.autoRow` and handed down, so every
+ * list gets the same behaviour without repeating the reasoning. */
+interface AutoRowProps {
+  variant: 'browse' | 'auto';
+  onAddToRoute?: () => void;
+  track?: Track;
+  onCarryTrack?: (track: Track) => void;
+}
+
 function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
@@ -405,11 +415,41 @@ export function NowPlayingBrowser(props: {
 
   const placeTrack = (track: Track) => {
     void actions.placeAutoTrack(track, props.routeBeforeQueueId);
-    props.onPlaced?.();
+    // Only a placement aimed at a seam is a finished errand. Adding from
+    // ordinary browsing leaves the listener where they are, free to add more —
+    // bouncing them to the route after every song made building a set a chore.
+    if (routeMode()) props.onPlaced?.();
   };
   const sourceTrack = (track: Track) => {
     actions.useAutoTrackAsSource(track);
     props.onSourceAdded?.();
+  };
+
+  /**
+   * The Auto-Mode half of a song row, for anything the panel can list.
+   *
+   * A catalog entry has to be resolved to something playable before it can be
+   * placed, which is why this accepts either shape. Every list routes through
+   * here, so "add to the route" reaches library, favourites, playlists, local
+   * and global search, artist pages, album pages and the discover rail alike —
+   * rather than only the handful of call sites that happened to pass the right
+   * props.
+   */
+  const autoRow = (target: Track | CatalogItem | null): AutoRowProps => {
+    // `type` is what a catalog entry has and a track does not.
+    const item = target && 'type' in target ? target : null;
+    const track = item ? playableTrack(item) : (target as Track | null);
+    const auto = Boolean(props.purpose?.startsWith('auto-'));
+    return {
+      variant: auto ? 'auto' : 'browse',
+      // Picking a source is its own errand; offering the route mid-way through
+      // it would be answering a question the listener did not ask.
+      onAddToRoute: auto && !sourceMode() && target
+        ? () => item ? void useItem(item, placeTrack) : placeTrack(target as Track)
+        : undefined,
+      track: track ?? undefined,
+      onCarryTrack: props.onCarryTrack,
+    };
   };
 
   createEffect(() => {
@@ -451,9 +491,7 @@ export function NowPlayingBrowser(props: {
       onPlay={routeMode() ? () => placeTrack(track) : sourceMode() ? () => sourceTrack(track) : onPlay}
       onQueue={onQueue}
       onMenu={(event) => openTrackActions(track, event)}
-      track={track}
-      onCarryTrack={props.onCarryTrack}
-      hideSecondary={autoNeutral() || routeMode() || sourceMode()}
+      {...autoRow(track)}
     />
   );
 
@@ -527,7 +565,7 @@ export function NowPlayingBrowser(props: {
             resolving={resolving()}
             onRetry={() => runSearch(query())}
             primaryLabel={routeMode() ? t('autoMode.dj.routeAction') : sourceMode() ? t('autoMode.source.title') : undefined}
-            hideSecondary={autoNeutral() || routeMode() || sourceMode()}
+            autoRow={autoRow}
             onTrack={(item) => void useItem(item, routeMode() ? placeTrack : sourceMode() ? sourceTrack : actions.playNow)}
             onQueue={(item) => void useItem(item, actions.enqueue)}
             onEntity={(item) => {
@@ -551,13 +589,13 @@ export function NowPlayingBrowser(props: {
               }
             }}
             onYoutube={(result) => routeMode() ? placeTrack(resultTrack(result)) : sourceMode() ? sourceTrack(resultTrack(result)) : actions.playNow(resultTrack(result))}
-            onCarryTrack={props.onCarryTrack}
           />
         </Match>
         <Match when={true}>
           <Switch>
             <Match when={currentView().kind === 'root'}>
               <RootView
+                autoRow={autoRow}
                 libraryCount={musicLibrary().length}
                 favouriteCount={favourites().length}
                 playlistCount={playlistNames().length}
@@ -628,7 +666,7 @@ export function NowPlayingBrowser(props: {
                 onAlbum={(name, artist, deezerId) => push({ kind: 'catalogAlbum', name, artist, deezerId })}
                 sourceMode={sourceMode()}
                 routeMode={routeMode()}
-                hideSecondary={autoNeutral()}
+                autoRow={autoRow}
                 onSourceItem={(item) => void useItem(item, sourceTrack)}
                 onRouteItem={(item) => void useItem(item, placeTrack)}
               />
@@ -639,7 +677,7 @@ export function NowPlayingBrowser(props: {
                 onBack={back}
                 sourceMode={sourceMode()}
                 routeMode={routeMode()}
-                hideSecondary={autoNeutral()}
+                autoRow={autoRow}
                 onSourceItem={(item) => void useItem(item, sourceTrack)}
                 onRouteItem={(item) => void useItem(item, placeTrack)}
               />
@@ -652,6 +690,7 @@ export function NowPlayingBrowser(props: {
 }
 
 function RootView(props: {
+  autoRow: (track: Track) => AutoRowProps;
   libraryCount: number;
   favouriteCount: number;
   playlistCount: number;
@@ -702,6 +741,7 @@ function RootView(props: {
                   onPlay={() => actions.playNow(track)}
                   onQueue={() => actions.enqueue(track)}
                   onMenu={(event) => openTrackMenu(track, {}, event)}
+                  {...props.autoRow(track)}
                 />
               );
             }}
@@ -955,8 +995,7 @@ function GlobalSearchView(props: {
   onEntity: (item: CatalogItem) => void;
   onYoutube: (result: SearchResult) => void;
   primaryLabel?: string;
-  hideSecondary?: boolean;
-  onCarryTrack?: (track: Track) => void;
+  autoRow: (target: Track | CatalogItem) => AutoRowProps;
 }) {
   const empty = () => props.sections.every((section) => section.items.length === 0);
   // The panel is a list, not a page: the server's *order* applies, its grid and
@@ -981,11 +1020,9 @@ function GlobalSearchView(props: {
         resolving={props.resolving.has(item.id)}
         owned={item.type === 'library_track' || !!ownedTrackForItem(item)}
         primaryLabel={props.primaryLabel}
-        hideSecondary={props.hideSecondary}
         onPlay={() => props.onTrack(item)}
         onQueue={() => props.onQueue(item)}
-        track={playableTrack(item) ?? undefined}
-        onCarryTrack={props.onCarryTrack}
+        {...props.autoRow(item)}
       />
     );
 
@@ -999,10 +1036,10 @@ function GlobalSearchView(props: {
         {(section) => <For each={section.items}>{(item) => row(item)}</For>}
       </For>
       <Show when={props.direct}>
-        {(result) => <YoutubeRow result={result()} onPlay={() => props.onYoutube(result())} primaryLabel={props.primaryLabel} hideSecondary={props.hideSecondary} onCarryTrack={props.onCarryTrack} />}
+        {(result) => <YoutubeRow result={result()} onPlay={() => props.onYoutube(result())} primaryLabel={props.primaryLabel} autoRow={props.autoRow} />}
       </Show>
       <For each={props.youtube}>
-        {(result) => <YoutubeRow result={result} onPlay={() => props.onYoutube(result)} primaryLabel={props.primaryLabel} hideSecondary={props.hideSecondary} onCarryTrack={props.onCarryTrack} />}
+        {(result) => <YoutubeRow result={result} onPlay={() => props.onYoutube(result)} primaryLabel={props.primaryLabel} autoRow={props.autoRow} />}
       </For>
       <Show when={!props.loading && !props.direct && empty() && props.youtube.length === 0}>
         <div class={styles.empty}>
@@ -1018,9 +1055,9 @@ function YoutubeRow(props: {
   result: SearchResult;
   onPlay: () => void;
   primaryLabel?: string;
-  hideSecondary?: boolean;
-  onCarryTrack?: (track: Track) => void;
+  autoRow: (target: Track | CatalogItem) => AutoRowProps;
 }) {
+  const track = () => resultTrack(props.result);
   return (
     <BrowserTrackRow
       title={props.result.title}
@@ -1031,12 +1068,10 @@ function YoutubeRow(props: {
       queued={isQueuedResult(props.result)}
       owned={!!ownedTrackForResult(props.result)}
       primaryLabel={props.primaryLabel}
-      hideSecondary={props.hideSecondary}
       onPlay={props.onPlay}
-      onQueue={() => actions.enqueue(resultTrack(props.result))}
-      onMenu={(event) => openTrackMenu(resultTrack(props.result), {}, event)}
-      track={resultTrack(props.result)}
-      onCarryTrack={props.onCarryTrack}
+      onQueue={() => actions.enqueue(track())}
+      onMenu={(event) => openTrackMenu(track(), {}, event)}
+      {...props.autoRow(track())}
     />
   );
 }
@@ -1047,7 +1082,7 @@ function CatalogArtistView(props: {
   onAlbum: (name: string, artist: string, deezerId?: string) => void;
   sourceMode?: boolean;
   routeMode?: boolean;
-  hideSecondary?: boolean;
+  autoRow: (target: Track | CatalogItem) => AutoRowProps;
   onSourceItem: (item: CatalogItem) => void;
   onRouteItem: (item: CatalogItem) => void;
 }) {
@@ -1085,7 +1120,7 @@ function CatalogArtistView(props: {
                       queued={isQueuedItem(item)}
                       onPlay={() => props.routeMode ? props.onRouteItem(item) : props.sourceMode ? props.onSourceItem(item) : play(item, data().top_tracks.slice(0, 10))}
                       onQueue={() => void enqueueCatalogItem(item)}
-                      hideSecondary={props.hideSecondary || props.sourceMode || props.routeMode}
+                      {...props.autoRow(item)}
                     />
                   )}
                 </For>
@@ -1122,7 +1157,7 @@ function CatalogAlbumView(props: {
   onBack: () => void;
   sourceMode?: boolean;
   routeMode?: boolean;
-  hideSecondary?: boolean;
+  autoRow: (target: Track | CatalogItem) => AutoRowProps;
   onSourceItem: (item: CatalogItem) => void;
   onRouteItem: (item: CatalogItem) => void;
 }) {
@@ -1157,7 +1192,7 @@ function CatalogAlbumView(props: {
                   queued={isQueuedItem(item)}
                   onPlay={() => props.routeMode ? props.onRouteItem(item) : props.sourceMode ? props.onSourceItem(item) : play(item, data().tracklist)}
                   onQueue={() => void enqueueCatalogItem(item)}
-                  hideSecondary={props.hideSecondary || props.sourceMode || props.routeMode}
+                  {...props.autoRow(item)}
                 />
               )}
             </For>
@@ -1204,6 +1239,16 @@ function QuickAction(props: { title: string; icon: JSX.Element; disabled: boolea
   return <button class={styles.quick} type="button" disabled={props.disabled} data-pressable {...tap}><span>{props.icon}</span><strong>{props.title}</strong></button>;
 }
 
+/**
+ * One song, in either of the panel's two lives.
+ *
+ * `browse` is the ordinary library row. `auto` is the same song inside a DJ
+ * session, where a queue and an overflow menu full of *Play next* / *Add to
+ * queue* / *Start radio* are answers to questions nobody is asking: there is no
+ * manual queue in Auto Mode, only the route. It gets exactly one control, and
+ * every list in the panel gets it — that is the whole point of the variant
+ * living here rather than at each call site.
+ */
 function BrowserTrackRow(props: {
   title: string;
   subtitle: string;
@@ -1217,10 +1262,12 @@ function BrowserTrackRow(props: {
   onQueue: () => void;
   onMenu?: (event: MouseEvent) => void;
   primaryLabel?: string;
-  hideSecondary?: boolean;
+  variant?: 'browse' | 'auto';
+  onAddToRoute?: () => void;
   track?: Track;
   onCarryTrack?: (track: Track) => void;
 }) {
+  const auto = () => props.variant === 'auto';
   const tap = createResponsiveTap({ onTap: props.onPlay });
   let holdTimer: number | undefined;
   const cancelHold = () => {
@@ -1241,7 +1288,7 @@ function BrowserTrackRow(props: {
       onPointerUp={cancelHold}
       onPointerCancel={cancelHold}
       onContextMenu={(event) => {
-      if (!props.onMenu) return;
+      if (!props.onMenu || auto()) return;
       event.preventDefault();
       props.onMenu(event);
     }}>
@@ -1251,10 +1298,24 @@ function BrowserTrackRow(props: {
       </button>
       <Show when={props.resolving}><Spinner size={14} /></Show>
       <Show when={props.owned || props.queued}><span class={styles.check}>✓</span></Show>
-      <Show when={!props.hideSecondary}>
-        <button class={styles.rowAction} type="button" aria-label={t('searchPanel.ariaAddQueue')} onClick={props.onQueue}><QueueIcon /></button>
+      <Show when={auto()} fallback={
+        <>
+          <button class={styles.rowAction} type="button" aria-label={t('searchPanel.ariaAddQueue')} onClick={props.onQueue}><QueueIcon /></button>
+          <Show when={props.onMenu}>
+            <button class={styles.rowAction} type="button" aria-label={t('common.more')} onClick={(event) => props.onMenu?.(event)}>•••</button>
+          </Show>
+        </>
+      }>
+        <Show when={props.onAddToRoute}>
+          <button
+            class={styles.rowAdd}
+            type="button"
+            aria-label={props.primaryLabel ?? t('autoMode.route.addToRoute', { title: props.title })}
+            title={props.primaryLabel ?? t('autoMode.route.addToRoute', { title: props.title })}
+            onClick={props.onAddToRoute}
+          ><AddRouteIcon /></button>
+        </Show>
       </Show>
-      <Show when={props.onMenu && !props.hideSecondary}><button class={styles.rowAction} type="button" aria-label={t('common.more')} onClick={(event) => props.onMenu?.(event)}>•••</button></Show>
     </div>
   );
 }
@@ -1272,4 +1333,7 @@ const ShuffleIcon = () => icon(<><path d="M4 5h3l10 14h3M17 5h3v3M4 19h3l3-4M14 
 const SortIcon = () => icon(<path d="M4 7h16M7 12h10M10 17h4" />);
 const PlayIcon = () => icon(<path d="m8 5 11 7-11 7z" />);
 const QueueIcon = () => icon(<><path d="M3 6h13M3 12h9M3 18h9M16 14v6M19 17h-6" /></>);
+/** Put this song in the route. Deliberately not the queue glyph — in Auto Mode
+ * there is no queue to add to. */
+const AddRouteIcon = () => icon(<><path d="M4 18c5 0 3-12 8-12M12 6h4M16 3l3 3-3 3" /><path d="M9 18H4" /></>);
 const RefreshIcon = (props: { spinning: boolean }) => <span classList={{ [styles.spinning]: props.spinning }}>{icon(<path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6" />)}</span>;

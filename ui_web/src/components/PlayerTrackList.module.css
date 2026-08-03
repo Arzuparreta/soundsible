@@ -70,6 +70,12 @@
   cursor: default;
 }
 
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .rows {
   min-height: 0;
   flex: 1;
@@ -113,6 +119,29 @@
 .row[data-current],
 .row[data-locked] {
   background: var(--stage-material-active);
+}
+
+/* The seam a drop would land on. Drawn on the row it inserts *before*, so the
+ * line sits where the song would actually appear. */
+.row[data-seam]::before,
+.seamTail {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.row[data-seam]::before {
+  top: -1px;
+}
+
+.seamTail {
+  position: relative;
+  margin: 3px 0;
 }
 
 .main {

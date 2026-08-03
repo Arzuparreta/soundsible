@@ -1118,6 +1118,173 @@ def test_dj_place_inserts_exact_track_without_returning_a_replacement_route(tmp_
     assert body["items"][0]["request_id"] == "q-wanted"
 
 
+def _repair_route(*kinds: str) -> list[dict]:
+    return [
+        {
+            "queue_id": f"q-{index}",
+            "id": f"t{index}",
+            "track_id": f"t{index}",
+            "title": f"T{index}",
+            "artist": "Artist",
+            "route_kind": kind,
+        }
+        for index, kind in enumerate(kinds)
+    ]
+
+
+_REPAIR_SEED = {"id": "seed", "track_id": "seed", "title": "Seed", "artist": "Artist"}
+
+
+def _post_repair(body: dict, related=None):
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=(related or [], False)),
+    ):
+        return _make_app().test_client().post("/api/discovery/music/dj-repair", json=body)
+
+
+def test_dj_repair_keeps_every_pinned_song_at_the_depth_it_was_given(tmp_path):
+    # Holding only their relative order would let a song dropped at slot five
+    # surface as the very next one: order intact, intent destroyed.
+    _make_runtime(tmp_path)
+    route = _repair_route("generated", "generated", "user", "generated", "generated", "user", "generated")
+    response = _post_repair({"seed": _REPAIR_SEED, "route": route})
+
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    assert [index for index, item in enumerate(items) if item["route_kind"] == "user"] == [2, 5]
+    assert [item["queue_id"] for item in items if item["route_kind"] == "user"] == ["q-2", "q-5"]
+    assert all(item.get("transition") for item in items)
+    assert response.get_json()["dropped"] == []
+
+
+def test_dj_repair_bridges_into_a_pinned_song_where_placement_cannot(tmp_path):
+    # dj-place drops its bridge pool the moment a position is fixed, so this is
+    # the one thing no existing endpoint can do.
+    _make_runtime(tmp_path)
+    measured = {
+        "seed": {"duration": 220, "bpm": 100, "key": "C", "mode": "major", "energy": 0.4, "confidence": 0.9, "analysed": True},
+        "t0": {"duration": 220, "bpm": 128, "key": "D", "mode": "major", "energy": 0.8, "confidence": 0.9, "analysed": True},
+        "bridge01": {"duration": 220, "bpm": 113, "key": "G", "mode": "major", "energy": 0.6, "confidence": 0.9, "analysed": True},
+    }
+
+    def analysis(_metadata, item, *, schedule=False):
+        key = str(item.get("track_id") or item.get("youtube_id") or item.get("id") or "")
+        return measured.get(key, _auto_mode._dj_fallback_analysis(float(item.get("duration") or 0)))
+
+    related = [{
+        "id": "bridge01", "youtube_id": "bridge01", "title": "Bridge", "artist": "Other",
+        "duration": 220, "source": "preview", "source_pool": "related",
+        "recommendation_identity": "music:youtube:bridge01", "recommendation_source": "auto_mode",
+        "score": 0.9, "semantic_score": 0.9, "external_ids": {"youtube_id": "bridge01"},
+    }]
+    with patch.object(_auto_mode, "_dj_item_analysis", side_effect=analysis):
+        response = _post_repair(
+            {
+                "seed": _REPAIR_SEED,
+                "route": _repair_route("user"),
+                "sources": [{
+                    "id": "s1", "label": "Set",
+                    "tracks": [{"id": "root", "track_id": "root", "title": "Root", "artist": "Artist"}],
+                }],
+            },
+            related=related,
+        )
+
+    items = response.get_json()["items"]
+    bridges = [item for item in items if item["route_kind"] == "bridge"]
+    assert bridges, "a bridge should have been admitted between a 100 BPM seed and a 128 BPM pin"
+    assert all(bridge["owner_queue_id"] == "q-0" for bridge in bridges)
+    assert items[-1]["route_kind"] == "user"
+
+
+def test_dj_repair_never_decodes_audio_on_the_interaction_path(tmp_path):
+    _make_runtime(tmp_path)
+    queued: list[str] = []
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)),
+        patch.object(_auto_mode, "_dj_source_path", return_value="/library/candidate.mp3"),
+        patch.object(_auto_mode, "cached_analysis", return_value=None),
+        patch.object(_auto_mode, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
+        patch("shared.dj_engine._decode", side_effect=AssertionError("decoded during a repair request")),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-repair",
+            json={"seed": _REPAIR_SEED, "route": _repair_route("generated", "user", "generated")},
+        )
+
+    assert response.status_code == 200
+    # Candidate evaluation is read-only; only the seed and what was accepted
+    # are worth measuring for real.
+    assert queued
+
+
+def test_dj_repair_reuses_the_route_before_reaching_for_new_songs(tmp_path):
+    _make_runtime(tmp_path)
+    response = _post_repair({"seed": _REPAIR_SEED, "route": _repair_route("generated", "generated", "generated")})
+
+    items = response.get_json()["items"]
+    assert len(items) == 3
+    assert sorted(item["queue_id"] for item in items) == ["q-0", "q-1", "q-2"]
+
+
+def test_dj_repair_keeps_a_pinned_song_the_planner_cannot_name(tmp_path):
+    # `_music_set_item` returns None for a reference with no track id and no
+    # valid video id. Placement may skip one of those; repair may not.
+    _make_runtime(tmp_path)
+    response = _post_repair({
+        "seed": _REPAIR_SEED,
+        "route": [
+            {"queue_id": "q-0", "id": "t0", "track_id": "t0", "title": "T0", "artist": "Artist", "route_kind": "generated"},
+            {"queue_id": "q-pin", "id": "", "title": "Opaque", "artist": "Listener", "route_kind": "user"},
+        ],
+    })
+
+    items = response.get_json()["items"]
+    pinned = [item for item in items if item["route_kind"] == "user"]
+    assert [item["queue_id"] for item in pinned] == ["q-pin"]
+    assert response.get_json()["dropped"] == []
+
+
+def test_dj_repair_does_not_let_an_exclusion_drop_a_pinned_song(tmp_path):
+    _make_runtime(tmp_path)
+    response = _post_repair({
+        "seed": _REPAIR_SEED,
+        "route": _repair_route("generated", "user"),
+        "exclude": ["music:track:t1"],
+    })
+
+    items = response.get_json()["items"]
+    assert any(item["queue_id"] == "q-1" and item["route_kind"] == "user" for item in items)
+
+
+def test_dj_repair_reorders_a_route_with_nothing_pinned(tmp_path):
+    _make_runtime(tmp_path)
+    response = _post_repair({"seed": _REPAIR_SEED, "route": _repair_route("generated", "generated", "bridge")})
+
+    items = response.get_json()["items"]
+    assert len(items) == 3
+    assert {item["route_kind"] for item in items} == {"generated"}
+
+
+def test_dj_repair_validates_its_body(tmp_path):
+    _make_runtime(tmp_path)
+    route = _repair_route("user")
+    assert _post_repair({"route": route}).status_code == 400
+    assert _post_repair({"seed": _REPAIR_SEED, "route": []}).status_code == 400
+    assert _post_repair({"seed": _REPAIR_SEED, "route": route, "dj_profile": "nope"}).status_code == 400
+    assert _post_repair({"seed": _REPAIR_SEED, "route": route, "limit": "many"}).status_code == 400
+
+
 def test_dj_transition_upgrades_a_pair_once_it_has_been_measured(tmp_path):
     _make_runtime(tmp_path)
     measured = {

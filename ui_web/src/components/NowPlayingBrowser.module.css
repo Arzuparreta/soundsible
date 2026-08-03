@@ -44,6 +44,12 @@
     background: var(--stage-material-hover);
   }
 
+  .rowAdd:hover {
+    color: var(--accent-ink);
+    background: var(--accent-faint);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+
   .navCard:hover,
   .quick:not(:disabled):hover {
     border-color: var(--stage-line-strong);
@@ -55,3 +61,9 @@
 .searchEverywhere{display:grid;place-items:center;gap:8px;padding:18px 10px;color:var(--ink-secondary);text-align:center}.searchEverywhere p{margin:0}.searchEverywhere button{min-height:34px;padding:0 13px;color: var(--accent-ink);font:inherit;font-size:var(--text-caption);font-weight:var(--fw-semibold);background:var(--accent-faint);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:var(--radius-full);cursor:pointer}
 .spinning{display:grid;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.spinning{animation:none}.navCard,.quick{transition:none}}
+
+/* Auto Mode's one row control. It reads as an affordance rather than an icon
+   button because in a DJ session it is the only thing a song row does. */
+.rowAdd{display:grid;place-items:center;width:32px;height:32px;flex:0 0 auto;padding:0;color:var(--ink-secondary);background:var(--stage-material);border:1px solid var(--stage-line);border-radius:var(--radius-full);cursor:pointer}
+.rowAdd svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.rowAdd:focus-visible{color:var(--accent-ink);background:var(--accent-faint)}

@@ -72,6 +72,9 @@ export interface AutoModeState {
   /** A direction change is waiting out its debounce before the runway is
    * rewritten. The UI uses it to promise "from the next track". */
   pendingDirection: boolean;
+  /** A route repair is in flight. Reactive rather than a module flag because
+   * the button that starts one has to disable itself while it runs. */
+  repairing: boolean;
   phase: AutoPhase;
   activity: AutoActivity | null;
   plan: Record<string, AutoPlanItem>;

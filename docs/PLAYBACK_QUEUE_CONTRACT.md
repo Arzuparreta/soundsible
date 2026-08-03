@@ -25,9 +25,10 @@ continuation. Reordering cannot cross lane or generator boundaries.
 
 - **Server planners** own candidate ranking, diversification, exclusions, and
   final order. Autoplay and Radio use `POST /api/discovery/music/plan`. Auto
-  uses `POST /api/discovery/music/dj-plan` for source-driven runway changes and
-  `POST /api/discovery/music/dj-place` for local placement in an existing
-  route. The browser never assembles provider pools.
+  uses `POST /api/discovery/music/dj-plan` for source-driven runway changes,
+  `POST /api/discovery/music/dj-place` for local placement in an existing route,
+  and `POST /api/discovery/music/dj-repair` to re-seam a route the listener has
+  rearranged. The browser never assembles provider pools.
 - **Autoplay** is an account preference, enabled by default. Near the end of a
   finite music context it prepares a small related tail. It never runs for
   podcasts, Radio, Auto Mode, or while repeat is active. Failure ends playback
@@ -51,6 +52,18 @@ continuation. Reordering cannot cross lane or generator boundaries.
 - Adding or removing a source replans generated runway after the committed
   handoff. User occurrences survive; fixed ones keep their slot. Sources
   accumulate with recency decay and never impose a hard genre or set boundary.
+- **Reordering the route never re-plans.** A moved occurrence loses the plan
+  entry it can no longer honour, so the seams it disturbed fall back to a plain
+  fade. This is the safe reading, not a defect: a listener rearranging their set
+  is not asking for the runway to be rewritten underneath them.
+- **Repair is the only rebuild, and only on request.** `dj-repair` re-seams the
+  route around the songs the listener placed: every user occurrence — including
+  a `manual` entry, which is as explicit a request as a dragged one — keeps its
+  order *and its depth*, while generated and bridge occurrences between them may
+  be replaced, dropped or newly invented. Bridges are the one thing allowed to
+  make a route longer; filler never is. A repair answering for a route that has
+  since changed is discarded rather than applied, and one that came back missing
+  a user occurrence is refused outright.
 - Only explicit sources and tracks that actually sounded may seed one-hop
   related retrieval. Unplayed recommendations never become graph roots.
 - Leaving Auto discards generated branches and bridges. User route occurrences

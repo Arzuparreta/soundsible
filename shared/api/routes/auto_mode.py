@@ -1461,6 +1461,196 @@ def discovery_music_dj_place():
     }), 200
 
 
+_DJ_REPAIR_ROUTE_CAP = 16
+_DJ_REPAIR_MAX_BRIDGES = 2
+_DJ_REPAIR_STABILITY_BONUS = 0.06
+
+
+def _dj_repair_anchor(raw: dict) -> dict:
+    """A pinned song keeps its slot even when the planner cannot name it.
+
+    Placement is free to skip a reference it cannot read; repair is not. The
+    listener put this song where it is, so an unreadable reference becomes an
+    opaque anchor with a conservative reading rather than a hole in their route.
+    """
+    item = _music_set_item(raw, source_id="route", label="Route")
+    if item:
+        return item
+    title = str(raw.get("title") or "Unknown")
+    artist = str(raw.get("artist") or "")
+    identity = canonical_music_identity(artist, title, channel=artist)
+    recommendation_identity = str(raw.get("recommendation_identity") or identity.key)
+    return {
+        "id": str(raw.get("id") or raw.get("queue_id") or ""),
+        "track_id": None,
+        "youtube_id": None,
+        "title": identity.title,
+        "artist": identity.artist,
+        "source_title": title,
+        "source_artist": artist,
+        "playback_source_kind": identity.source_kind,
+        "canonical_identity": identity.key,
+        "album": str(raw.get("album") or ""),
+        "duration": int(raw.get("duration") or 0),
+        "cover": str(raw.get("cover") or ""),
+        "source": "preview",
+        "source_pool": "local",
+        "reason": "Placed in route",
+        "reason_code": "route_user",
+        "recommendation_identity": recommendation_identity,
+        "score": 1.0,
+        "external_ids": {},
+        "source_set_id": "route",
+        "source_set_label": "Route",
+        "source_weight": 1.0,
+        "lineage": [recommendation_identity],
+    }
+
+
+def _dj_repair_identity(item: dict) -> str:
+    return str(item.get("recommendation_identity") or item.get("id") or "")
+
+
+@discovery_bp.route("/api/discovery/music/dj-repair", methods=["POST"])
+@rate_limit("discovery_music_dj_repair", limit=30, window_sec=60)
+def discovery_music_dj_repair():
+    """Rebuild the mix around whatever the listener has done to the route.
+
+    Every song they placed keeps its slot and its order; the material between
+    those anchors is re-chosen so each seam mixes. Placement can pin a song or
+    bridge into one, never both — `dj-place` drops its bridge pool the moment a
+    position is fixed. This does both at once, which is what makes "move things
+    around, then press the button" safe.
+
+    Stateless like the rest of the DJ surface: the whole route is posted, and
+    the whole repaired route comes back. A diff would force the caller to
+    rebuild a transition chain across items it never received, which is exactly
+    how a cue ends up belonging to the wrong song.
+    """
+    data = request.get_json(silent=True) or {}
+    seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
+    raw_route = data.get("route") if isinstance(data.get("route"), list) else []
+    if not seed or not raw_route:
+        return jsonify({"error": "seed and route are required"}), 400
+    profile = str(data.get("dj_profile") or "adaptive").strip()
+    if profile not in DJ_PROFILES:
+        return jsonify({"error": "unsupported dj_profile"}), 400
+    raw_limit = data.get("limit")
+    if raw_limit is not None and not isinstance(raw_limit, int):
+        return jsonify({"error": "limit must be an integer"}), 400
+
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    metadata = getattr(lib, "metadata", None)
+
+    refs = [raw for raw in raw_route[:_DJ_REPAIR_ROUTE_CAP] if isinstance(raw, dict)]
+    parsed: list[tuple[bool, dict, dict]] = []
+    for raw in refs:
+        pinned = str(raw.get("route_kind") or "generated").strip() == "user"
+        item = _dj_repair_anchor(raw) if pinned else _music_set_item(raw, source_id="route", label="Route")
+        if not item:
+            continue
+        item["queue_id"] = str(raw.get("queue_id") or "")
+        parsed.append((pinned, item, _dj_item_analysis(metadata, item)))
+    if not parsed:
+        return jsonify({"error": "route has nothing to repair"}), 400
+
+    anchors = [(item, analysis) for pinned, item, analysis in parsed if pinned]
+    spares = [(item, analysis) for pinned, item, analysis in parsed if not pinned]
+    # How deep each pin sat, measured in songs before it. Holding only their
+    # relative order would let a song the listener dropped at slot nine surface
+    # as the very next one — order intact, intent destroyed. Repair re-chooses
+    # what fills a gap, never how long the gap is.
+    depths: list[int] = []
+    run = 0
+    for pinned, _, _ in parsed:
+        if pinned:
+            depths.append(run)
+            run = 0
+        else:
+            run += 1
+
+    # Avoided songs stay out of the filler, but never out of a pin: choosing a
+    # song you earlier waved away is a change of mind, and the pin wins.
+    occupied = {str(value) for value in (data.get("exclude") or []) if value}
+    occupied.update(_dj_repair_identity(item) for item, _ in (*anchors, *spares))
+    occupied.discard("")
+
+    # An equal-quality seam should keep the row already on screen. `order_route`
+    # weights relevance at 0.20, so this is a tiebreak rather than a thumb on
+    # the scale — a genuinely bad seam still loses its slot.
+    pool: list[tuple[dict, dict]] = [
+        ({**item, "score": min(1.0, float(item.get("score") or 0.5) + _DJ_REPAIR_STABILITY_BONUS)}, analysis)
+        for item, analysis in spares
+    ]
+    pool.extend(_dj_place_bridge_pool(metadata, data, occupied))
+
+    seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
+    target = min(_DJ_REPAIR_ROUTE_CAP, max(len(refs), int(raw_limit or len(refs))))
+    built: list[dict] = []
+    previous = seed_analysis
+    def spend(rows: list[dict]) -> None:
+        spent = {_dj_repair_identity(row) for row in rows}
+        pool[:] = [row for row in pool if _dj_repair_identity(row[0]) not in spent]
+
+    for position, (anchor_item, anchor_analysis) in enumerate(anchors):
+        # Room the anchors still to come have already claimed is not spendable.
+        remaining = len(anchors) - position
+        fill = order_route(
+            previous, pool, profile=profile,
+            limit=max(0, min(depths[position], target - len(built) - remaining)),
+        )
+        for row in fill:
+            row["route_kind"] = "generated"
+        built.extend(fill)
+        spend(fill)
+        if fill:
+            previous = fill[-1]["analysis"]
+        # Bridges may push past the route's original length, and only bridges
+        # may. Measuring their room against that length instead meant a route
+        # the listener had filled entirely with their own songs — the exact case
+        # this endpoint exists for — could never be given a way into them.
+        headroom = _DJ_REPAIR_ROUTE_CAP - len(built) - remaining
+        segment = route_to_request(
+            previous,
+            pool,
+            (anchor_item, anchor_analysis),
+            profile=profile,
+            max_starts=1 + max(0, min(_DJ_REPAIR_MAX_BRIDGES, headroom)),
+        )
+        for row in segment[:-1]:
+            row["route_kind"] = "bridge"
+            row["owner_queue_id"] = anchor_item.get("queue_id") or ""
+        segment[-1]["route_kind"] = "user"
+        built.extend(segment)
+        spend(segment)
+        previous = anchor_analysis
+
+    # Repair re-seams a route, it does not grow one. When the pool runs dry the
+    # tail comes back short and the browser's own refill tops it up at the next
+    # natural moment; there should not be a second thing that lengthens a route.
+    tail = order_route(previous, pool, profile=profile, limit=max(0, target - len(built)))
+    for row in tail:
+        row["route_kind"] = "generated"
+    built.extend(tail)
+
+    for row in built:
+        row["queue_id"] = row.get("queue_id") or None
+        _dj_item_analysis(metadata, row, schedule=True)
+
+    kept = {row["queue_id"] for row in built if row["queue_id"]}
+    return jsonify({
+        "v": 1,
+        "seed_analysis": seed_analysis,
+        "items": built,
+        "dropped": [
+            queue_id for raw in refs
+            if (queue_id := str(raw.get("queue_id") or "")) and queue_id not in kept
+        ],
+        "degraded": any(not analysis.get("analysed") for _, analysis in anchors),
+    }), 200
+
+
 @discovery_bp.route("/api/discovery/music/dj-transition", methods=["POST"])
 @rate_limit("discovery_music_dj_transition", limit=240, window_sec=60)
 def discovery_music_dj_transition():

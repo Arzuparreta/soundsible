@@ -130,6 +130,69 @@ describe('NowPlayingBrowser', () => {
     },
   );
 
+  it.each(['auto-neutral', 'auto-route'] as const)(
+    'gives every song one route control and no browse clutter in %s',
+    async (purpose) => {
+      nodeMock.items = [{ id: 'node-1', title: 'Node Song', channel: 'Node Artist' }];
+      storeMock.state.favorites = ['local-1'];
+      render(() => <NowPlayingBrowser purpose={purpose} onClose={vi.fn()} />);
+
+      // The discover rail sits on the root view and used to keep both browse
+      // controls in Auto Mode, because it never received the flag that hid them.
+      expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Add Node Song to the route' })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
+      const add = await screen.findByRole('button', { name: 'Add Local Song to the route' });
+      expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
+      fireEvent.click(add);
+      expect(storeMock.actions.placeAutoTrack).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'local-1' }),
+        undefined,
+      );
+    },
+  );
+
+  it('keeps the queue and overflow controls outside Auto Mode', () => {
+    nodeMock.items = [{ id: 'node-1', title: 'Node Song', channel: 'Node Artist' }];
+    render(() => <NowPlayingBrowser onClose={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Add to queue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /to the route$/ })).not.toBeInTheDocument();
+  });
+
+  it('reaches the route from a catalog artist page too', async () => {
+    // The two catalog views passed neither a track nor a carry handler, so a
+    // song found by browsing an artist could not be dragged or added at all.
+    apiMock.searchCatalog.mockResolvedValue({
+      items: [{ id: 'deezer:artist:1', type: 'artist', source: 'deezer', title: 'Radiohead', artist: 'Radiohead' }],
+      sections: [{ id: 'artists', layout: 'rows', item_ids: ['deezer:artist:1'], total: 1 }],
+    });
+    apiMock.getArtistProfile.mockResolvedValue({
+      top_tracks: [{
+        id: 'deezer:track:9', type: 'track', source: 'deezer', title: 'Creep', artist: 'Radiohead',
+        external_ids: { youtube_id: 'ytCreep0001' },
+      }],
+      albums: [],
+    });
+    // A Deezer row is not playable on its own; adding it has to resolve first.
+    apiMock.resolveCatalogItem.mockResolvedValue({ video_id: 'ytCreep0001' });
+
+    render(() => <NowPlayingBrowser purpose="auto-neutral" onClose={vi.fn()} />);
+    await typeGlobalQuery('radiohead');
+    fireEvent.click(await screen.findByRole('button', { name: /Radiohead/ }));
+
+    const add = await screen.findByRole('button', { name: 'Add Creep to the route' });
+    expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
+    fireEvent.click(add);
+    await waitFor(() => expect(storeMock.actions.placeAutoTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Creep' }),
+      undefined,
+    ));
+  });
+
   it('opens favourites as a first-class Now Playing collection', () => {
     storeMock.state.favorites = ['local-1'];
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);

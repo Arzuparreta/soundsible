@@ -266,7 +266,12 @@ export interface DjPlanResponse extends ListeningPlanResponse {
 
 export interface DjRouteRef extends DjItemRef {
   queue_id: string;
+  /** Only `dj-repair` reads this: it is the difference between a song the
+   * listener put here and filler the DJ is free to replace. */
+  route_kind?: DjRouteKind;
 }
+
+export type DjRouteKind = 'user' | 'generated' | 'bridge';
 
 export interface DjPlacementResponse {
   v: 1;
@@ -278,6 +283,26 @@ export interface DjPlacementResponse {
     owner_queue_id?: string;
   }>;
   following_transition?: DjTransitionPlan;
+  degraded: boolean;
+}
+
+/**
+ * The whole route, re-seamed around the songs the listener pinned.
+ *
+ * `items[i].transition` is always planned out of `items[i-1]`, and `items[0]`
+ * out of the seed — the same chain `dj-plan` guarantees. A non-null `queue_id`
+ * names an occurrence that already exists and should be kept rather than
+ * recreated.
+ */
+export interface DjRepairResponse {
+  v: 1;
+  seed_analysis?: DjPlanResponse['seed_analysis'];
+  items: Array<ListeningPlanItem & {
+    queue_id: string | null;
+    route_kind: DjRouteKind;
+    owner_queue_id?: string;
+  }>;
+  dropped: string[];
   degraded: boolean;
 }
 
@@ -906,6 +931,26 @@ export const api = {
     },
     signal?: AbortSignal,
   ) => request<DjPlacementResponse>('/api/discovery/music/dj-place', {
+    method: 'POST',
+    body,
+    timeoutMs: 20000,
+    signal,
+  }),
+  /** Re-seam the whole route around the songs the listener pinned. Every ref
+   * has to carry its `route_kind`; that is the only way the server can tell an
+   * anchor from filler it may replace. */
+  repairDjRoute: (
+    body: {
+      dj_profile: DjProfile;
+      seed: DjItemRef;
+      route: DjRouteRef[];
+      sources?: DjMusicSetSource[];
+      heard?: Track[];
+      exclude?: string[];
+      limit?: number;
+    },
+    signal?: AbortSignal,
+  ) => request<DjRepairResponse>('/api/discovery/music/dj-repair', {
     method: 'POST',
     body,
     timeoutMs: 20000,

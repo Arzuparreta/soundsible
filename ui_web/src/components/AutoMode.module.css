@@ -80,16 +80,23 @@
 .sourceBrowser { min-height: 0; flex: 1; }
 .sourceBrowser > * { height: 100%; }
 
-.routeMenu {
-  min-width: 2rem;
+.routeAction {
+  display: grid;
+  width: 2rem;
   height: 2rem;
-  padding: 0 .35rem;
+  place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--ink-secondary);
-  font-size: .72rem;
-  letter-spacing: .08em;
+  color: var(--ink-tertiary);
+  cursor: pointer;
+}
+
+.routeAction:focus-visible { color: var(--ink-primary); background: var(--stage-material-active); }
+
+@media (hover: hover) and (pointer: fine) {
+  .routeAction:hover { color: var(--ink-primary); background: var(--stage-material-active); }
 }
 
 .routeGap {
@@ -176,9 +183,6 @@
     opacity: 1;
     transform: none;
   }
-}
-@media (hover: hover) and (pointer: fine) {
-  .routeMenu:hover { color: var(--ink-primary); background: var(--stage-material-active); }
 }
 
 .booth {
