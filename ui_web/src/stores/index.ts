@@ -44,6 +44,12 @@ import {
   type PlaybackQueueEntry,
   type QueueSource,
 } from '../lib/playbackQueue';
+import {
+  buildPlaybackSession,
+  readPlaybackSession,
+  type PlaybackSessionSnapshot,
+} from '../lib/playbackSession';
+import { liveHandoffPending } from '../lib/liveHandoff';
 import { shuffled } from '../lib/shuffle';
 import type { Track, SavedEntry, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
@@ -753,6 +759,35 @@ function onPlaybackFailed(generation: number, reason = 'media_error'): void {
   toast.error(tr('toast.trackUnavailable'));
 }
 
+/** This device's session as it would be handed over right now. */
+function sessionSnapshot(): PlaybackSessionSnapshot | null {
+  const pb = state.playback;
+  return buildPlaybackSession({
+    queue: pb.queue,
+    index: pb.index,
+    shuffle: pb.shuffle,
+    repeat: pb.repeat,
+    radioMode: pb.radioMode,
+    radioSeedId: pb.radioSeedId,
+    auto: state.autoMode,
+  });
+}
+
+/**
+ * The session as the engine last accepted it, serialized.
+ *
+ * Position is published every fifteen seconds and on every transport event; the
+ * queue and the workspace behind it change far more rarely. Comparing against
+ * what was actually stored is what keeps a fifty-entry route out of a ping that
+ * only had a new position to report.
+ */
+let publishedSession: string | null = null;
+
+/** Whether this device holds a session the engine has not been told about. */
+function sessionOutOfDate(): boolean {
+  return JSON.stringify(sessionSnapshot() ?? null) !== publishedSession;
+}
+
 function playbackStateBody(
   override: Partial<{
     track: Track | null;
@@ -762,6 +797,11 @@ function playbackStateBody(
 ) {
   const pb = state.playback;
   const track = override.track !== undefined ? override.track : pb.currentTrack;
+  // No track is the end of a session, not a session nobody described: clearing
+  // it explicitly is what stops another device offering to resume music this
+  // one has already stopped playing.
+  const session = track ? sessionSnapshot() : null;
+  const serialized = JSON.stringify(session ?? null);
   return {
     track_id: track?.id ?? null,
     track: track ?? null,
@@ -770,13 +810,43 @@ function playbackStateBody(
     device_id: state.device.device_id,
     device_name: state.device.device_name,
     device_type: state.device.device_type,
+    ...(serialized === publishedSession ? {} : { session }),
   };
 }
+
+/** Where the music actually is. The store's clock stops with the page; the
+ * element's does not, and a state published as the page leaves has to say where
+ * the listener was, not where the last frame left them. */
+function livePosition(): number {
+  const live = audioEl().currentTime;
+  return Number.isFinite(live) ? live : state.playback.currentTime || 0;
+}
+
+/**
+ * What a `keepalive` request may weigh.
+ *
+ * The platform limit is 64 KB across all in-flight keepalive requests, and over
+ * it the fetch is rejected outright — so a session big enough to need the
+ * guarantee is exactly the one that would lose the position report with it.
+ * Past the budget the request is sent as an ordinary one instead: it goes out
+ * immediately and usually lands, rather than being refused for certain.
+ */
+const KEEPALIVE_BUDGET_BYTES = 56 * 1024;
 
 /** Publish this device's current playback to the engine so other devices can
  * offer to resume it. Best-effort: fire-and-forget, errors swallowed. */
 function pushPlaybackState(opts: { keepalive?: boolean; body?: ReturnType<typeof playbackStateBody> } = {}): void {
-  void api.putPlaybackState(opts.body ?? playbackStateBody(), { keepalive: opts.keepalive }).catch(() => {});
+  const body = opts.body ?? playbackStateBody();
+  const sent = 'session' in body ? JSON.stringify(body.session ?? null) : null;
+  const keepalive = opts.keepalive && JSON.stringify(body).length <= KEEPALIVE_BUDGET_BYTES;
+  void api.putPlaybackState(body, { keepalive })
+    // Only once it is stored. A session dropped by a failed request has to ride
+    // the next ping, or the device that picks this one up gets the song without
+    // anything that was around it.
+    .then(() => {
+      if (sent !== null) publishedSession = sent;
+    })
+    .catch(() => {});
 }
 
 function pushEmptyPlaybackState(opts: { keepalive?: boolean } = {}): void {
@@ -828,10 +898,125 @@ function restorePlaybackSnapshot(snapshot: PlaybackState): void {
   updateMediaSession(snapshot.currentTrack);
 }
 
+/** A restored occurrence, told against the library this device actually has:
+ * the song may have been downloaded since it was queued somewhere else. */
+function hydrateSessionEntry(entry: PlaybackQueueEntry): PlaybackQueueEntry {
+  const owned = state.library.find((track) => track.id === entry.id);
+  if (!owned) return entry;
+  const { queueId, queueLane, queueSource, queueContext, queueContextIndex, autoRoute } = entry;
+  return { ...owned, queueId, queueLane, queueSource, queueContext, queueContextIndex, autoRoute };
+}
+
+/**
+ * Rebuild a session — one another device published, or this device's own from
+ * before a reload.
+ *
+ * Everything the session was made of travels together: the queue and the place
+ * in it, the transport preferences that belong to the session rather than to
+ * the device, and, when Auto was driving, its sources, direction, route plan
+ * and what it had already heard. Restoring used to mean a queue of one song,
+ * which handed an Auto session back as an ordinary Now Playing one.
+ *
+ * Leaves the transport paused and the decks untouched. Whether this is a resume
+ * the listener asked for out loud or a session quietly put back where they left
+ * it is the caller's to decide.
+ */
+function applySessionSnapshot(
+  snapshot: PlaybackSessionSnapshot,
+  position: number,
+): PlaybackQueueEntry | null {
+  const queue = snapshot.queue.map(hydrateSessionEntry);
+  const index = Math.min(Math.max(snapshot.index, 0), queue.length - 1);
+  const entry = queue[index];
+  if (!entry) return null;
+
+  cancelActiveAttempt('session_restored');
+  // Auto's own teardown rewrites the queue, so it has to run before the
+  // restored one is written rather than over the top of it.
+  if (state.autoMode.active) actions.exitAutoMode();
+  generatedQueue?.stop();
+  stagedEntry = null;
+  audioService.clearStaged();
+
+  setState('playback', {
+    currentTrack: entry,
+    queue,
+    index,
+    isPlaying: false,
+    isLoading: false,
+    loadError: false,
+    needsGesture: false,
+    phase: 'paused',
+    currentTime: position,
+    duration: entry.duration ?? 0,
+    shuffle: snapshot.shuffle,
+    repeat: snapshot.repeat,
+    radioMode: snapshot.radio.active,
+    radioLoading: false,
+    radioSeedId: snapshot.radio.seedId,
+  });
+
+  const auto = snapshot.auto;
+  if (auto) {
+    autoSessionEpoch += 1;
+    autoPlaybackPrefs = null;
+    setState('autoMode', {
+      active: true,
+      profile: auto.profile,
+      djProfile: auto.djProfile,
+      direction: auto.direction,
+      sources: auto.sources,
+      heard: auto.heard,
+      avoidedIdentities: auto.avoidedIdentities,
+      plan: auto.plan,
+      staleSeams: auto.staleSeams,
+      transition: { status: 'idle' },
+      pendingDirection: false,
+      repairing: false,
+      activity: null,
+      // The planner is started by whoever presses play. Until then the route
+      // that arrived is the runway, and `planning` would promise a request
+      // nobody has made yet.
+      phase: futureEntries(queue, index, 'generated').length > 0 ? 'ready' : 'idle',
+    });
+  }
+  updateMediaSession(entry);
+  return entry;
+}
+
+/** The session behind a published state, when it describes the same song that
+ * state is a position into. Anything else is a state from a build that did not
+ * publish sessions, or one that has moved on since. */
+function sessionFor(remote: RemotePlaybackState): PlaybackSessionSnapshot | null {
+  const session = readPlaybackSession(remote.session);
+  return session && session.queue[session.index]?.id === remote.track_id ? session : null;
+}
+
+/** Restore a session and carry on playing it from where it was left. */
+function playRestoredSession(session: PlaybackSessionSnapshot, position: number): boolean {
+  const entry = applySessionSnapshot(session, position);
+  if (!entry) return false;
+  userPlaybackStartedThisSession = true;
+  // Before the load, not after: loading an entry asks the live session for more
+  // runway in the same tick, and there has to be one to ask.
+  if (state.autoMode.active) {
+    void ensureGeneratedQueue().start('auto_mode', entry, state.autoMode.profile);
+  }
+  loadIndex(state.playback.index, { restart: true, trigger: 'resume' });
+  if (position > 0) setTimeout(() => actions.seek(position), 400);
+  return true;
+}
+
 function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
   const track = state.library.find((t) => t.id === remote.track_id) ?? remote.track ?? null;
   if (!track) return;
   const pos = Math.max(0, Number(remote.position_sec) || 0);
+  const session = sessionFor(remote);
+  const restored = session ? applySessionSnapshot(session, pos) : null;
+  if (restored) {
+    audioService.prime(trackUrl(restored), pos, levelFor(restored));
+    return;
+  }
   setState('playback', {
     currentTrack: track,
     isPlaying: false,
@@ -2121,8 +2306,14 @@ export const actions = {
       resumeFromStarved();
       return;
     }
-    if (state.autoMode.active && state.autoMode.sources.length === 0) {
-      setState('autoMode', { heard: [pb.currentTrack], phase: 'planning' });
+    // An Auto session with nobody planning for it: the workspace was entered
+    // before there was anything to plan from, or it was restored from another
+    // device, which brings the route and the sources but no planner behind
+    // them. Pressing play is what starts one.
+    if (state.autoMode.active && generatedQueue?.activeIntent() !== 'auto_mode') {
+      if (state.autoMode.sources.length === 0) {
+        setState('autoMode', { heard: [pb.currentTrack], phase: 'planning' });
+      }
       void ensureGeneratedQueue().start('auto_mode', pb.currentTrack, state.autoMode.profile);
     }
     const generation = beginLoad();
@@ -2958,7 +3149,7 @@ export const actions = {
   },
 
   // ── Cross-device resume ──
-  /** On boot: if another device has recent playback and we're idle, offer to resume it. */
+  /** On boot: if a device has recent playback and we're idle, offer to resume it. */
   async checkResume(): Promise<void> {
     if (state.playback.currentTrack || userPlaybackStartedThisSession) return;
     let remote: RemotePlaybackState | undefined;
@@ -2981,7 +3172,12 @@ export const actions = {
     if (now < suppressUntil && updatedAt * 1000 <= cooldownAt) return;
     setResumeState(remote);
   },
-  /** Accept the resume offer: play that track here, seeking to its position. */
+  /**
+   * Accept the resume offer: carry on here, from the same place in the same
+   * session — the queue, the mode, and the whole workspace when Auto was the
+   * one driving. Only a state published without a session, by a build that had
+   * none to publish, falls back to the single song it named.
+   */
   resumeHere(): void {
     const r = resumeState();
     setResumeState(null);
@@ -2989,9 +3185,23 @@ export const actions = {
     const track = state.library.find((t) => t.id === r.track_id) ?? r.track ?? null;
     if (!track) return;
     userPlaybackStartedThisSession = true;
+    const pos = Math.max(0, Number(r.position_sec) || 0);
+    const session = sessionFor(r);
+    if (session && playRestoredSession(session, pos)) return;
     actions.playTrack(track);
-    const pos = Number(r.position_sec) || 0;
     if (pos > 0) setTimeout(() => actions.seek(pos), 400);
+  },
+  /**
+   * Publish this session now, because it is about to be somebody else's.
+   *
+   * Called on the way out of a deliberate handoff — following the secure
+   * station's address is one — so the arriving page has something to find at
+   * the moment it starts looking, instead of whatever the last position ping
+   * happened to leave behind up to fifteen seconds ago.
+   */
+  publishSession(): void {
+    if (!state.playback.currentTrack) return;
+    pushPlaybackState({ keepalive: true, body: playbackStateBody({ position_sec: livePosition() }) });
   },
   /** Decline the resume offer and suppress it for 30 minutes. */
   dismissResume(): void {
@@ -3001,6 +3211,35 @@ export const actions = {
     localStorage.setItem('resume_cooldown_at', String(now));
   },
 };
+
+/** Gap between boot-time asks for a session to pick up. */
+const RESUME_SEARCH_INTERVAL_MS = 2000;
+/** Asks an ordinary boot makes: enough to cover a device that published a
+ * moment after this one started asking. */
+const RESUME_SEARCH_ATTEMPTS = 3;
+/** Asks a boot that arrived carrying a handoff makes. The page being left
+ * publishes its session as it unloads and the page arriving asks for it as it
+ * boots — the same instant, in two browsing contexts that cannot see each
+ * other. Keeping the question open is what turns that race into a wait. */
+const RESUME_HANDOFF_ATTEMPTS = 10;
+
+/**
+ * Look for a session to pick up, and keep looking for a little while.
+ *
+ * Stops at the first answer: a same-device session restores itself, and a
+ * session from elsewhere raises the banner. Either way there is nothing left to
+ * ask about — and neither is worth asking about once the listener has started
+ * playing something themselves.
+ */
+async function searchForResume(attempts: number): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, RESUME_SEARCH_INTERVAL_MS));
+    }
+    if (state.playback.currentTrack || userPlaybackStartedThisSession || resumeState()) return;
+    await actions.checkResume();
+  }
+}
 
 let generatedActivityId = 0;
 
@@ -3283,6 +3522,11 @@ function installAudioUnlock(): void {
 
 export function initStore(): void {
   if (socket) return;
+
+  // Read now, spent later. Live clears the marker as soon as it has opened the
+  // room it was sent here to open, and that can happen before the library sync
+  // this decision waits on has come back.
+  const resumeAttempts = liveHandoffPending() ? RESUME_HANDOFF_ATTEMPTS : RESUME_SEARCH_ATTEMPTS;
 
   installAudioUnlock();
   setGraphReporter((failure) => {
@@ -3568,6 +3812,18 @@ export function initStore(): void {
   });
   socket.on('playback_start_requested', (data) => {
     const trk = data?.track;
+    // A handoff from another device carries that device's whole session, so
+    // this one continues it rather than starting the same song over on its own.
+    const handedOver = trk && typeof trk.id === 'string'
+      ? sessionFor({ ...(data?.state ?? {}), track_id: trk.id })
+      : null;
+    const handoffPosition = Number(data?.state?.position_sec);
+    if (handedOver && playRestoredSession(
+      handedOver,
+      Number.isFinite(handoffPosition) ? Math.max(0, handoffPosition) : 0,
+    )) {
+      return;
+    }
     if (trk && typeof trk.id === 'string') {
       const t: Track = {
         id: trk.id,
@@ -3592,24 +3848,25 @@ export function initStore(): void {
     if (Number.isFinite(p)) actions.seek(p);
   });
 
-  // Keep the published position fresh so other devices resume near where we are.
+  // Keep the published position fresh so other devices resume near where we are
+  // — and the session with it, including while paused: a route reordered or a
+  // source added during a break is part of what a handoff hands over.
   setInterval(() => {
-    if (state.playback.currentTrack && state.playback.isPlaying) pushPlaybackState();
+    if (!state.playback.currentTrack) return;
+    if (state.playback.isPlaying || sessionOutOfDate()) pushPlaybackState();
   }, 15000);
 
   const pushStateOnUnload = () => {
     if (!state.playback.currentTrack) return;
-    const live = audioEl().currentTime;
-    const position = Number.isFinite(live) ? live : state.playback.currentTime || 0;
     pushPlaybackState({
       keepalive: true,
-      body: playbackStateBody({ position_sec: position, is_playing: false }),
+      body: playbackStateBody({ position_sec: livePosition(), is_playing: false }),
     });
   };
   window.addEventListener('beforeunload', pushStateOnUnload);
   window.addEventListener('pagehide', pushStateOnUnload);
 
-  void actions.syncLibrary().then(() => actions.checkResume());
+  void actions.syncLibrary().then(() => searchForResume(resumeAttempts));
   void actions.loadDownloads();
   // Warm the discovery feed so Search and Podcasts render cached rails instantly.
   void import('../lib/discover').then((m) => m.ensureDiscover());

@@ -41,7 +41,7 @@ export const fr: Dict = {
     connectingAudio: 'Connexion audio',
     reconnectingAudio: 'Récupération audio',
     publishFailed: 'Échec de la diffusion audio',
-    openSecure: 'Ouvrir la station sécurisée',
+    openSecure: 'Passer en direct sur la station sécurisée',
     share: 'Partager la salle',
     linkCopied: 'Lien copié',
     ownRoom: 'Votre salle — ouvrez le lien sur un autre appareil pour la vérifier',
@@ -834,6 +834,8 @@ export const fr: Dict = {
   resumeBanner: {
     aria: 'Reprendre la lecture',
     bannerTitle: 'Reprendre la lecture ?',
+    autoTitle: 'Reprendre votre session Auto ?',
+    autoSession: 'Session Auto',
     fallbackTrack: 'Un titre',
     fromDevice: ' depuis {device}',
     fallbackDevice: 'un autre appareil',

@@ -14,6 +14,7 @@ import type {
 } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode, PodcastSearchResult } from '../types/podcast';
 import type { DownloadQueueItem } from '../types/download';
+import type { PlaybackSessionSnapshot } from './playbackSession';
 
 export interface DownloadItem {
   source_type: string;
@@ -376,6 +377,10 @@ export interface RemotePlaybackState {
   track?: Track | null;
   position_sec?: number;
   is_playing?: boolean;
+  /** The session behind the song: queue, transport preferences and the whole
+   * Auto Mode workspace when Auto was driving. Absent on states published
+   * before the snapshot existed, or by a device that had nothing to describe. */
+  session?: PlaybackSessionSnapshot | null;
   /** Unix seconds the engine last stored this state. */
   updated_at?: number;
 }
@@ -585,7 +590,11 @@ export const api = {
     request<RemotePlaybackState | undefined>(
       `/api/playback/state?exclude_device=${encodeURIComponent(excludeDeviceId)}`,
     ),
-  /** Publish this device's playback state so others can offer to resume it. */
+  /** Publish this device's playback state so others can offer to resume it.
+   *
+   * `session` is a delta: omitted leaves whatever the engine already holds for
+   * this device — position pings are frequent and the session behind them
+   * rarely changes — while an explicit `null` clears it. */
   putPlaybackState: (body: {
     track_id: string | null;
     track: Track | null;
@@ -594,6 +603,7 @@ export const api = {
     device_id: string;
     device_name?: string;
     device_type?: string;
+    session?: PlaybackSessionSnapshot | null;
   }, opts?: { keepalive?: boolean }) =>
     request<{ status?: string }>('/api/playback/state', { method: 'PUT', body, keepalive: opts?.keepalive }),
 

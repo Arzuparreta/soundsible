@@ -79,7 +79,13 @@ Browsers hide the ICE candidates WebRTC needs on origins they do not trust, so
 | Your own domain | Put Soundsible behind HTTPS and set `SOUNDSIBLE_HTTPS_URL=https://your.domain` |
 
 When the origin is not trusted, the Live page says so and offers a link to the
-secure address if it can find one.
+secure address if it can find one. Following that link is a handoff, not just a
+change of address: the insecure page publishes its session on the way out, the
+secure one opens the room by itself on arrival, and the session you were
+listening to — queue, mode, and the whole Auto Mode workspace when Auto was
+driving — is offered back by the resume banner. A different origin is a
+different device as far as the browser is concerned, which is why it arrives as
+an offer rather than simply carrying on.
 
 **Listening has no such requirement** — the public hub is already HTTPS.
 

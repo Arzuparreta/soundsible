@@ -40,7 +40,7 @@ export const en = {
     connectingAudio: 'Connecting audio',
     reconnectingAudio: 'Recovering audio',
     publishFailed: 'Audio publishing failed',
-    openSecure: 'Open the secure station',
+    openSecure: 'Go live on the secure station',
     share: 'Share room',
     linkCopied: 'Link copied',
     ownRoom: 'Your room — open the shared link on another device to check it',
@@ -823,6 +823,8 @@ export const en = {
   resumeBanner: {
     aria: 'Resume playback',
     bannerTitle: 'Resume playback?',
+    autoTitle: 'Resume your Auto session?',
+    autoSession: 'Auto session',
     fallbackTrack: 'A track',
     fromDevice: ' from {device}',
     fallbackDevice: 'another device',

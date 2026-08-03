@@ -15,6 +15,10 @@ from typing import Any, Optional
 from shared.user_context import current_user_id, user_config_dir
 
 DEFAULT_SCOPE = "default"
+# Note: A published session — queue, transport preferences, Auto Mode workspace —
+# is bounded by the client, which keeps a window rather than a whole history.
+# This is the backstop that keeps a client which does not from filling a disk.
+MAX_SESSION_BYTES = 256 * 1024
 ACTIVE_DEVICE_TTL_SEC = 90
 ACTIVE_DEVICE_CONSIDERED_RECENT_SEC = 60
 STATE_TTL_SEC = 24 * 3600  # Note: 24H optional; state older can be ignored on GET
@@ -222,6 +226,45 @@ def list_registered_devices(scope: str) -> list[dict[str, Any]]:
         ]
 
 
+def _sanitize_session(value: Any) -> Optional[dict[str, Any]]:
+    """A session payload worth storing, or None.
+
+    The contents are the client's business — it owns the shape and the version
+    inside it. What is checked here is only that it is an object at all and that
+    it is not large enough to be a problem for a file rewritten on every ping.
+    """
+    if not isinstance(value, dict):
+        return None
+    try:
+        encoded = json.dumps(value)
+    except (TypeError, ValueError):
+        return None
+    if len(encoded.encode("utf-8")) > MAX_SESSION_BYTES:
+        return None
+    return value
+
+
+def _stored_session(scope: str, device_id: str) -> Optional[dict[str, Any]]:
+    """The session already held for a device. Call with the lock held."""
+    active = _active_devices.get(scope, {}).get(device_id)
+    if isinstance(active, dict):
+        session = active.get("session")
+        return session if isinstance(session, dict) else None
+    # No memory of this device at all: a restarted engine, whose only memory is
+    # the file. Every later ping is answered from the entry this one rebuilds.
+    path = _state_path(scope)
+    if not path.exists():
+        return None
+    try:
+        persisted = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(persisted, dict) or persisted.get("device_id") != device_id:
+        return None
+    session = persisted.get("session")
+    return session if isinstance(session, dict) else None
+
+
 def get_state(
     scope: str,
     exclude_device_id: Optional[str] = None,
@@ -247,6 +290,7 @@ def get_state(
                     "is_playing": data.get("is_playing", False),
                     "device_id": device_id,
                     "device_name": data.get("device_name"),
+                    "session": data.get("session"),
                     "updated_at": data.get("updated_at"),
                 }
 
@@ -268,6 +312,7 @@ def get_state(
                         "is_playing": data.get("is_playing", False),
                         "device_id": did,
                         "device_name": data.get("device_name"),
+                        "session": data.get("session"),
                         "updated_at": data.get("updated_at"),
                     }
             if best:
@@ -293,7 +338,14 @@ def get_state(
 
 
 def put_state(scope: str, payload: dict[str, Any]) -> None:
-    """Persist playback state and update active_devices for this scope."""
+    """Persist playback state and update active_devices for this scope.
+
+    ``session`` is a delta. Position is published every few seconds and the
+    session behind it changes far more rarely, so a payload that omits the key
+    keeps whatever is already stored for that device; an explicit ``null``
+    clears it — which is how a device that stopped playing says the session is
+    over rather than merely quiet.
+    """
     device_id = payload.get("device_id")
     if not device_id:
         return
@@ -310,6 +362,13 @@ def put_state(scope: str, payload: dict[str, Any]) -> None:
     with _lock:
         _ensure_scope(scope)
         _cleanup_scope(scope)
+        session = (
+            _stored_session(scope, device_id)
+            if "session" not in payload
+            else _sanitize_session(payload.get("session"))
+        )
+        if session is not None:
+            state["session"] = session
         registered = _registered_devices[scope].get(device_id)
         if registered:
             registered["device_name"] = payload.get("device_name") or registered.get("device_name")
