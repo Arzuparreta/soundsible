@@ -1309,7 +1309,7 @@ function BrowserTrackRow(props: {
             aria-label={props.primaryLabel ?? t('autoMode.route.addToRoute', { title: props.title })}
             title={props.primaryLabel ?? t('autoMode.route.addToRoute', { title: props.title })}
             onClick={props.onAddToRoute}
-          ><AddRouteIcon /></button>
+          ><QueueIcon /></button>
         </Show>
       </Show>
     </div>
@@ -1328,8 +1328,7 @@ const RadioIcon = () => icon(<><path d="M4 12a8 8 0 0 1 8-8M4 12a8 8 0 0 0 8 8M8
 const ShuffleIcon = () => icon(<><path d="M4 5h3l10 14h3M17 5h3v3M4 19h3l3-4M14 9l3-4h3" /></>);
 const SortIcon = () => icon(<path d="M4 7h16M7 12h10M10 17h4" />);
 const PlayIcon = () => icon(<path d="m8 5 11 7-11 7z" />);
+/** "A list, plus one." Serves both the queue outside Auto Mode and the route
+ * inside it — the two never share a row, and they are the same idea. */
 const QueueIcon = () => icon(<><path d="M3 6h13M3 12h9M3 18h9M16 14v6M19 17h-6" /></>);
-/** Put this song in the route. Deliberately not the queue glyph — in Auto Mode
- * there is no queue to add to. */
-const AddRouteIcon = () => icon(<><path d="M4 18c5 0 3-12 8-12M12 6h4M16 3l3 3-3 3" /><path d="M9 18H4" /></>);
 const RefreshIcon = (props: { spinning: boolean }) => <span classList={{ [styles.spinning]: props.spinning }}>{icon(<path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6" />)}</span>;
