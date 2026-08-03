@@ -346,9 +346,12 @@ function repeatCycle(queue: PlaybackQueueEntry[]): PlaybackQueueEntry[] {
  * `stageNext`. */
 function prefetchUpcoming(): void {
   const pb = state.playback;
-  // Same job, one level closer to the speakers: whenever what comes next
-  // changes, the deck holding it has to change with it.
-  stageNext();
+  // Deliberately *not* staging here. A staged deck downloads the whole of the
+  // next track, and starting that in the same breath as the track the listener
+  // just asked for means two full files crossing the link at once: measured on
+  // one session, eight clicks pulled 171 MB and the song being waited on had to
+  // share the connection with the song after it. `watchRunway` cues it instead,
+  // inside the last minute, where there is time to spare and nobody waiting.
   if (pb.shuffle) return;
   const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5);
   // Only one full download here: the track immediately after this one is held

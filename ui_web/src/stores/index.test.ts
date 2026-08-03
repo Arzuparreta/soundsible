@@ -517,21 +517,30 @@ describe('volume levelling', () => {
     expect(api.requestLoudness).toHaveBeenCalledTimes(1);
   });
 
-  it('waits for the song to be audible before warming anything', async () => {
-    const { actions, api, audioService, initStore, fireDeckEvent } = await loadStore();
+  it('never downloads the next track while the current one is still starting', async () => {
+    // A staged deck pulls the whole of the next track. Starting that alongside
+    // the song the listener just clicked puts two full files on the link at
+    // once — measured on one session, eight clicks moved 171 MB and every
+    // click had to share the connection with the song after it.
+    const { actions, api, audioService, deck, initStore, fireDeckEvent } = await loadStore();
     initStore();
 
     actions.playFrom([t1, t2], 0);
     await flush();
-    // Neither the second full-file request nor the lookahead POST is allowed to
-    // compete with the song the listener is waiting for.
     expect(audioService.stage).not.toHaveBeenCalled();
     expect(api.requestLoudness).not.toHaveBeenCalled();
 
+    // Still not when it starts sounding: there is a whole track to do it in.
     fireDeckEvent('playing');
     await flush();
-    expect(audioService.stage).toHaveBeenCalledWith('/stream/t2', expect.any(Number));
+    expect(audioService.stage).not.toHaveBeenCalled();
     expect(api.requestLoudness).toHaveBeenCalled();
+
+    // Inside the last minute, where nothing is waiting on the link.
+    (deck as unknown as { currentTime: number }).currentTime = 130;
+    fireDeckEvent('timeupdate');
+    await flush();
+    expect(audioService.stage).toHaveBeenCalledWith('/stream/t2', expect.any(Number));
   });
 
   it('plays everything at unity while the setting is off', async () => {
@@ -1469,14 +1478,15 @@ describe('the end of a track', () => {
     // cue it sent every track change back to the network — and a locked iPhone
     // freezes the page the moment nothing is sounding, so that request never
     // returns.
-    const { actions, state, audioService, fireDeckEvent } = await playing();
+    const { actions, state, audioService, deck, fireDeckEvent } = await playing();
     actions.toggleShuffle();
     expect(state.playback.shuffle).toBe(true);
     audioService.stage.mockClear();
     audioService.clearStaged.mockClear();
 
     actions.playFrom([t1, t2], 0);
-    fireDeckEvent('playing');
+    (deck as unknown as { currentTime: number }).currentTime = 130;
+    fireDeckEvent('timeupdate');
     await flush();
 
     expect(audioService.clearStaged).not.toHaveBeenCalled();
@@ -1487,14 +1497,15 @@ describe('the end of a track', () => {
   });
 
   it('cues the first entry when repeat-all is about to wrap', async () => {
-    const { actions, state, audioService, fireDeckEvent } = await playing([t1, t2]);
+    const { actions, state, audioService, deck, fireDeckEvent } = await playing([t1, t2]);
     actions.cycleRepeat();
     while (state.playback.repeat !== 'all') actions.cycleRepeat();
     actions.next();
     expect(state.playback.index).toBe(1);
     audioService.stage.mockClear();
 
-    fireDeckEvent('playing');
+    deck.currentTime = 130;
+    fireDeckEvent('timeupdate');
     await flush();
 
     // Whatever is cued has to be what `next` will actually play at the wrap.
