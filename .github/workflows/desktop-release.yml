@@ -5,8 +5,19 @@ on:
     branches: [main, dev]
     tags:
       - "desktop-v*"
+    paths: &desktop-paths
+      - 'desktop-shell/**'
+      - 'shared/**'
+      - 'soundsible_engine.py'
+      - 'run.py'
+      - 'tests/test_desktop_engine_smoke.py'
+      - 'tests/test_desktop_bootstrap.py'
+      - 'tests/test_desktop_engine_entry.py'
+      - 'requirements.txt'
+      - '.github/workflows/desktop-release.yml'
   pull_request:
     branches: [main, dev]
+    paths: *desktop-paths
   workflow_dispatch:
 
 permissions:

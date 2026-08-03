@@ -392,6 +392,7 @@ export function PlayerSurface() {
               onClick={showAuto}
             >
               {t('autoMode.label')}
+              <span class={styles.betaTag} aria-hidden="true">BETA</span>
             </button>
           </div>
 
