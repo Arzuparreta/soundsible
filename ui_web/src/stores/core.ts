@@ -252,6 +252,7 @@ const [state, setState] = createStore<AppState>({
     avoidedIdentities: [],
     transition: { status: 'idle' },
     pendingDirection: false,
+    repairing: false,
     phase: 'idle',
     activity: null,
     plan: {},

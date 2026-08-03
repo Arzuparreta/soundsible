@@ -4,6 +4,7 @@ import {
   type DjDirection,
   type DjItemRef,
   type DjProfile,
+  type DjRouteKind,
   type ListeningPlanItem,
   type RemotePlaybackState,
 } from '../lib/api';
@@ -1090,6 +1091,58 @@ function insertionFloor(): number {
   return committed > pb.index ? committed : pb.index;
 }
 
+/**
+ * What a repair is allowed to do with one route entry.
+ *
+ * A `manual` entry carries no `autoRoute` at all — `enqueue` and `playNext`
+ * drop explicit requests straight into the route span — but a song asked for by
+ * name is every bit as pinned as one that was dragged there, and both
+ * `applyPlan` and `exitAutoMode` already treat the two alike. Classifying on
+ * `autoRoute` alone would hand the planner permission to delete them.
+ */
+function autoRouteKind(entry: PlaybackQueueEntry): DjRouteKind {
+  if (entry.queueLane === 'manual' || entry.autoRoute?.kind === 'user') return 'user';
+  return entry.autoRoute?.kind ?? 'generated';
+}
+
+/**
+ * Take one occurrence out of the route, along with any bridges the DJ built to
+ * reach it — they exist only to arrive somewhere nobody is going any more.
+ *
+ * Returns the entry that was dropped so the caller can name it, or null when
+ * the request is refused: the cued handoff is already loaded and is not
+ * anybody's to remove.
+ */
+function dropAutoRouteOccurrence(queueId: string): PlaybackQueueEntry | null {
+  if (!state.autoMode.active || committedTransition?.queueId === queueId) return null;
+  const track = state.playback.queue.find((entry) => entry.queueId === queueId);
+  if (!track) return null;
+  const owned = new Set(state.playback.queue
+    .filter((entry) => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId)
+    .map((entry) => entry.queueId));
+  owned.add(queueId);
+  setState('playback', 'queue', (queue) => queue.filter((entry) => !owned.has(entry.queueId)));
+  setState('autoMode', 'plan', (plan) => Object.fromEntries(
+    Object.entries(plan).filter(([id]) => !owned.has(id)),
+  ));
+  void generatedQueue?.ensureRunway();
+  return track;
+}
+
+/** Keep a song out of the rest of this session, undoably. Removal is the
+ * caller's business; this only decides what the planner may reach for. */
+function avoidAutoIdentity(track: Track): void {
+  const identity = autoRecommendationIdentity(track);
+  const sessionEpoch = autoSessionEpoch;
+  setState('autoMode', 'avoidedIdentities', (identities) => (
+    identities.includes(identity) ? identities : [...identities, identity]
+  ));
+  toast.action(tr('autoMode.route.avoided', { title: track.title }), tr('common.undo'), () => {
+    if (!state.autoMode.active || autoSessionEpoch !== sessionEpoch) return;
+    setState('autoMode', 'avoidedIdentities', (identities) => identities.filter((value) => value !== identity));
+  });
+}
+
 let replanTimer: ReturnType<typeof setTimeout> | null = null;
 const REPLAN_DEBOUNCE_MS = 800;
 
@@ -1448,6 +1501,7 @@ export const actions = {
       avoidedIdentities: [],
       transition: { status: 'idle' },
       pendingDirection: false,
+      repairing: false,
     });
     // Normally a no-op — the graph was built at the session's first touch — but
     // it also covers a listener who reached Auto Mode without one (a keyboard
@@ -1487,6 +1541,7 @@ export const actions = {
       avoidedIdentities: [],
       plan: {},
       pendingDirection: false,
+      repairing: false,
     });
   },
 
@@ -1526,43 +1581,24 @@ export const actions = {
     }
   },
 
+  /** Drop one occurrence.
+   *
+   * The toast carries the stronger reading of the same gesture — "and don't
+   * bring it back" — which is why the route row needs no overflow menu to
+   * reach it. Removing and avoiding are the same act at two strengths, so they
+   * belong on one control rather than two.
+   */
   removeAutoRouteOccurrence(queueId: string): void {
-    if (!state.autoMode.active || committedTransition?.queueId === queueId) return;
-    const track = state.playback.queue.find((entry) => entry.queueId === queueId);
+    const track = dropAutoRouteOccurrence(queueId);
     if (!track) return;
-    const owned = new Set(state.playback.queue
-      .filter((entry) => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId)
-      .map((entry) => entry.queueId));
-    owned.add(queueId);
-    setState('playback', 'queue', (queue) => queue.filter((entry) => !owned.has(entry.queueId)));
-    setState('autoMode', 'plan', (plan) => Object.fromEntries(
-      Object.entries(plan).filter(([id]) => !owned.has(id)),
-    ));
-    void generatedQueue?.ensureRunway();
+    toast.action(tr('autoMode.note.dropped', { title: track.title }), tr('autoMode.route.avoidSession'), () => {
+      if (state.autoMode.active) avoidAutoIdentity(track);
+    });
   },
 
   avoidAutoTrackForSession(queueId: string): void {
-    if (!state.autoMode.active || committedTransition?.queueId === queueId) return;
-    const track = state.playback.queue.find((entry) => entry.queueId === queueId);
-    if (!track) return;
-    const identity = autoRecommendationIdentity(track);
-    const sessionEpoch = autoSessionEpoch;
-    setState('autoMode', 'avoidedIdentities', (identities) => (
-      identities.includes(identity) ? identities : [...identities, identity]
-    ));
-    const owned = new Set(state.playback.queue
-      .filter((entry) => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId)
-      .map((entry) => entry.queueId));
-    owned.add(queueId);
-    setState('playback', 'queue', (queue) => queue.filter((entry) => !owned.has(entry.queueId)));
-    setState('autoMode', 'plan', (plan) => Object.fromEntries(
-      Object.entries(plan).filter(([id]) => !owned.has(id)),
-    ));
-    void generatedQueue?.ensureRunway();
-    toast.action(tr('autoMode.route.avoided', { title: track.title }), tr('common.undo'), () => {
-      if (!state.autoMode.active || autoSessionEpoch !== sessionEpoch) return;
-      setState('autoMode', 'avoidedIdentities', (identities) => identities.filter((value) => value !== identity));
-    });
+    const track = dropAutoRouteOccurrence(queueId);
+    if (track) avoidAutoIdentity(track);
   },
 
   setAutoProfile(profile: AutoProfile): void {
@@ -1727,6 +1763,140 @@ export const actions = {
         values: { title: track.title },
       });
       prefetchUpcoming();
+    }
+  },
+
+  /**
+   * Re-seam the route around whatever the listener has done to it.
+   *
+   * Every song they put there keeps its slot and the depth they gave it; the
+   * material between those songs is re-chosen so each seam mixes. Nothing here
+   * runs on its own — dragging a row into a bad position leaves a plain fade,
+   * which is the honest fallback, and this is the one thing that rebuilds.
+   *
+   * Unlike `placeAutoTrack`, a stale answer is discarded rather than applied.
+   * A placement is authoritative even when the analysis behind it is not, but a
+   * repair describes a route that no longer exists: applying one would
+   * resurrect removed songs and reorder around a handoff that has since
+   * committed. Do not "fix" this into symmetry with `placeAutoTrack`.
+   */
+  async repairAutoRoute(): Promise<void> {
+    if (!state.autoMode.active || state.autoMode.repairing) return;
+    const floor = insertionFloor();
+    const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
+    const route = state.playback.queue.slice(floor + 1);
+    // One seam is a transition, not a route. There is nothing to re-seam.
+    if (!seed || route.length < 2) return;
+
+    const sessionEpoch = autoSessionEpoch;
+    const routeSignature = route.map((entry) => entry.queueId).join('|');
+    const previousQueue = state.playback.queue.slice();
+    const previousPlan = { ...state.autoMode.plan };
+    const anchors = route.filter((entry) => autoRouteKind(entry) === 'user').map((entry) => entry.queueId);
+
+    setState('autoMode', {
+      repairing: true,
+      activity: { id: ++generatedActivityId, status: 'working', key: 'autoMode.agent.repairing' },
+    });
+    try {
+      const response = await api.repairDjRoute({
+        dj_profile: state.autoMode.djProfile,
+        seed: djItemRef(seed),
+        route: route.map((entry) => ({
+          ...djItemRef(entry),
+          queue_id: entry.queueId,
+          route_kind: autoRouteKind(entry),
+        })),
+        sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
+        heard: state.autoMode.heard,
+        exclude: state.autoMode.avoidedIdentities,
+      });
+      if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
+      const currentFloor = insertionFloor();
+      const unchanged = state.playback.queue
+        .slice(currentFloor + 1)
+        .map((entry) => entry.queueId)
+        .join('|') === routeSignature;
+      // A handoff that committed mid-flight moves the floor, so it shows up
+      // here as a changed route and is caught by the same check.
+      if (!unchanged) {
+        setState('autoMode', 'activity', {
+          id: ++generatedActivityId, status: 'error', key: 'autoMode.agent.repairSkipped',
+        });
+        return;
+      }
+      // Cheap insurance against a server regression: a repair that lost one of
+      // the listener's songs does nothing at all, rather than losing it here.
+      const returned = response.items.filter((item) => item.route_kind === 'user').map((item) => item.queue_id ?? '');
+      if (returned.join('|') !== anchors.join('|')) {
+        setState('autoMode', 'activity', {
+          id: ++generatedActivityId, status: 'error', key: 'autoMode.agent.repairSkipped',
+        });
+        return;
+      }
+
+      const byQueueId = new Map(route.map((entry) => [entry.queueId, entry] as const));
+      const entries = response.items.map((item) => {
+        const kept = item.queue_id ? byQueueId.get(item.queue_id) : undefined;
+        const autoRoute = item.route_kind === 'bridge'
+          ? { kind: 'bridge' as const, ownerQueueId: item.owner_queue_id }
+          : { kind: 'generated' as const };
+        // Spreading the kept entry preserves its lane and context, which is how
+        // an explicitly queued song stays an explicit request through a repair.
+        if (kept) return item.route_kind === 'user' ? kept : { ...kept, autoRoute };
+        return { ...createQueueEntry(planItemTrack(item), 'generated', 'auto_mode'), autoRoute };
+      });
+      setState('playback', 'queue', (queue) => [...queue.slice(0, floor + 1), ...entries]);
+
+      // Everything up to and including the floor keeps its plan. Wiping it
+      // wholesale would strip the cued handoff's own entry and turn a blend
+      // that is already loaded into a fade at the moment it fires.
+      const prefix = new Set(state.playback.queue.slice(0, floor + 1).map((entry) => entry.queueId));
+      const plan: Record<string, AutoPlanItem> = Object.fromEntries(
+        Object.entries(state.autoMode.plan).filter(([id]) => prefix.has(id)),
+      );
+      let fromKey = queueIdentity(state.playback.queue[floor] ?? seed);
+      entries.forEach((entry, index) => {
+        const item = response.items[index];
+        // The server rebuilds a kept row as a generic "Route" item, so its own
+        // provenance is the better answer for where the song came from.
+        const held = previousPlan[entry.queueId];
+        plan[entry.queueId] = {
+          ...held,
+          trackId: queueIdentity(entry),
+          source: item.source_pool,
+          reasonKey: held?.reasonKey ?? autoReasonKey(item),
+          sourceSetId: held?.sourceSetId ?? item.source_set_id,
+          sourceSetLabel: held?.sourceSetLabel ?? item.source_set_label,
+          lineage: held?.lineage ?? item.lineage,
+          fromKey,
+          transition: item.transition,
+          bpm: item.analysis?.bpm,
+          key: item.analysis?.key,
+        };
+        fromKey = queueIdentity(entry);
+      });
+      setState('autoMode', {
+        plan,
+        activity: { id: ++generatedActivityId, status: 'done', key: 'autoMode.agent.repaired' },
+      });
+      prefetchUpcoming();
+      toast.action(tr('autoMode.note.repaired'), tr('common.undo'), () => {
+        if (!state.autoMode.active || autoSessionEpoch !== sessionEpoch) return;
+        if (insertionFloor() !== floor) return;
+        if (state.playback.queue[floor]?.queueId !== previousQueue[floor]?.queueId) return;
+        setState('playback', 'queue', previousQueue);
+        setState('autoMode', 'plan', previousPlan);
+        prefetchUpcoming();
+      });
+    } catch {
+      // Nothing was written — the queue is only touched once an answer lands —
+      // so there is no half-repaired route to unwind.
+      setState('autoMode', 'activity', {
+        id: ++generatedActivityId, status: 'error', key: 'autoMode.agent.repairFailed',
+      });
+    } finally {
+      setState('autoMode', 'repairing', false);
     }
   },
 

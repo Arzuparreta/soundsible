@@ -26,6 +26,10 @@ export interface TrackMenuContext {
   /** Opens the metadata editor, which also owns cover art. */
   onEditMetadata?: (track: Track) => void;
   onPlayOnDevice?: (track: Track) => void;
+  /** Inside a DJ session. There is no manual queue to add to, no station to
+   * start, and no second device to hand the set to — offering any of them is
+   * offering to break the thing the listener is currently running. */
+  auto?: boolean;
 }
 
 const sw = (d: string): JSX.Element => (
@@ -73,7 +77,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   // A streamed podcast episode plays via a minted token, not a `previewUrl`, so
   // the generic queue can't re-load it — keep it out of queue/playlist flows.
   // Downloaded episodes are real library files and queue fine.
-  const queueable = !isPodcast || isLibrary;
+  const queueable = (!isPodcast || isLibrary) && !ctx.auto;
   const list: MenuAction[] = [];
 
   if (queueable) {
@@ -82,7 +86,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   }
   if (ctx.onAddToPlaylist && !isPodcast)
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
-  if (!isPodcast)
+  if (!isPodcast && !ctx.auto)
     list.push({ icon: icons.radio(), label: t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
   if (ctx.navigate && track.artist && isLibrary && !isPodcast)
     list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist, { view: 'library' })) });
@@ -145,7 +149,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
       });
     }
   }
-  if (ctx.onPlayOnDevice && isLibrary)
+  if (ctx.onPlayOnDevice && isLibrary && !ctx.auto)
     list.push({ icon: icons.device(), label: t('trackActions.playOnDevice'), onSelect: () => ctx.onPlayOnDevice!(track) });
   if (ctx.playlistName && ctx.onRemoveFromPlaylist)
     list.push({ icon: icons.remove(), label: t('trackActions.removeFromPlaylist'), danger: true, onSelect: () => ctx.onRemoveFromPlaylist!(track) });

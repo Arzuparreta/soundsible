@@ -12,12 +12,12 @@ import {
   type AutoModePanelId,
 } from '../lib/autoModeLayout';
 import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
+import { isNoopMove } from '../lib/dragReorder';
 import { queueIdentity } from '../lib/queueDiscovery';
 import { coverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
 import { NowPlayingBrowser } from './NowPlayingBrowser';
-import { openActionMenu } from './ActionMenu';
 import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
@@ -46,10 +46,14 @@ export function AutoMode(props: {
   surfaceOpen: boolean;
 }) {
   const [layout, setLayout] = createSignal(readLayout());
-  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'source' | 'route'; beforeQueueId?: string }>({ kind: 'neutral' });
+  // Aiming at a seam is the only mode left. Picking sources used to be one too,
+  // and it was a mode with no visible state: its whole payload was deferred
+  // until you happened to navigate into a collection, so pressing the button
+  // that armed it looked like pressing nothing.
+  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'route'; beforeQueueId?: string }>({ kind: 'neutral' });
   const [carriedTrack, setCarriedTrack] = createSignal<CarriedTrack | null>(null);
 
-  const openDestination = (kind: 'source' | 'route', beforeQueueId?: string) => {
+  const openDestination = (kind: 'route', beforeQueueId?: string) => {
     setDestination({ kind, beforeQueueId });
     props.onPanelChange('browser');
   };
@@ -92,6 +96,8 @@ export function AutoMode(props: {
     const source = state.autoMode.sources.find((item) => item.tracks.some((candidate) => (
       queueIdentity(candidate) === queueIdentity(track)
     )));
+    // Tapping a seam is the touch path: drops are handled by the list itself,
+    // which can aim at the nearest seam instead of asking for a hit on this.
     const gap = (
       <button
         class={styles.routeGap}
@@ -99,14 +105,6 @@ export function AutoMode(props: {
         data-placement-active={carriedTrack() ? '' : undefined}
         aria-label={t('autoMode.route.insertBefore', { title: track.title })}
         onClick={() => carriedTrack() ? placeCarriedInRoute(track.queueId) : openDestination('route', track.queueId)}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          const transfer = readAutoTrackTransfer(event);
-          if (!transfer) return;
-          if (transfer.queueId) actions.moveAutoRoute(transfer.queueId, track.queueId);
-          else placeInRoute(transfer.track, track.queueId);
-        }}
       ><span>＋</span></button>
     );
     return {
@@ -126,29 +124,25 @@ export function AutoMode(props: {
       before: gap,
       onDragStart: (event) => writeAutoTrackTransfer(event, { track, queueId: track.queueId }),
       onCarry: () => setCarriedTrack({ track, queueId: track.queueId }),
-      onDragOver: (event) => event.preventDefault(),
-      onDrop: (event) => {
-        event.preventDefault();
-        const transfer = readAutoTrackTransfer(event);
-        if (!transfer) return;
-        if (transfer.queueId) actions.moveAutoRoute(transfer.queueId, track.queueId);
-        else placeInRoute(transfer.track, track.queueId);
-      },
+      // Two things worth doing to a queued song, both one press away. Removing
+      // carries the stronger reading — "and don't bring it back" — on its toast.
       trailing: committed ? undefined : (
-        <button
-          class={styles.routeMenu}
-          type="button"
-          aria-label={t('autoMode.route.actions', { title: track.title })}
-          onClick={() => openActionMenu({
-            title: track.title,
-            subtitle: track.artist,
-            actions: [
-              { label: t('autoMode.route.useAsSource'), onSelect: () => actions.useAutoTrackAsSource(track) },
-              { label: t('autoMode.route.remove'), onSelect: () => actions.removeAutoRouteOccurrence(track.queueId) },
-              { label: t('autoMode.route.avoidSession'), danger: true, onSelect: () => actions.avoidAutoTrackForSession(track.queueId) },
-            ],
-          })}
-        >···</button>
+        <>
+          <button
+            class={styles.routeAction}
+            type="button"
+            aria-label={t('autoMode.route.useAsSource')}
+            title={t('autoMode.route.useAsSource')}
+            onClick={() => actions.useAutoTrackAsSource(track)}
+          ><SourceIcon /></button>
+          <button
+            class={styles.routeAction}
+            type="button"
+            aria-label={t('autoMode.route.remove')}
+            title={t('autoMode.route.remove')}
+            onClick={() => actions.removeAutoRouteOccurrence(track.queueId)}
+          ><RemoveIcon /></button>
+        </>
       ),
     };
   }));
@@ -158,11 +152,10 @@ export function AutoMode(props: {
       <header class={styles.sourceHeader}>
         {dragHandle}
         <span><small>{t('autoMode.label')}</small><strong>{t('autoMode.source.title')}</strong></span>
-        <button class={styles.sourceAdd} type="button" aria-label={t('autoMode.source.title')} aria-pressed={destination().kind === 'source'} onClick={() => openDestination('source')}>＋</button>
       </header>
       <div
         class={styles.sourceTray}
-        data-target={destination().kind === 'source' || carriedTrack() ? '' : undefined}
+        data-target={carriedTrack() ? '' : undefined}
         onClick={() => carriedTrack() && addToSources(carriedTrack()!.track)}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
@@ -194,10 +187,9 @@ export function AutoMode(props: {
       </div>
       <div class={styles.sourceBrowser}>
         <NowPlayingBrowser
-          purpose={destination().kind === 'source' ? 'auto-source' : destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
+          purpose={destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
           routeBeforeQueueId={destination().beforeQueueId}
           onPlaced={() => finishDestination('route')}
-          onSourceAdded={() => finishDestination('browser')}
           onCarryTrack={(track) => setCarriedTrack({ track })}
           onClose={() => finishDestination('stage')}
         />
@@ -223,12 +215,39 @@ export function AutoMode(props: {
       count={routeEntries().length}
       empty={state.autoMode.sources.length ? t('autoMode.mobile.routeEmpty') : t('autoMode.source.routeEmpty')}
       dragHandle={dragHandle}
-      headAction={{ label: t('autoMode.route.add'), onClick: () => carriedTrack() ? placeCarriedInRoute() : openDestination('route') }}
+      placing={Boolean(carriedTrack())}
+      headAction={[
+        {
+          label: state.autoMode.repairing ? t('autoMode.route.fixing') : t('autoMode.route.fix'),
+          title: t('autoMode.route.fixHint'),
+          disabled: state.autoMode.repairing
+            || state.autoMode.pendingDirection
+            || routeEntries().filter((entry) => !entry.locked).length < 2,
+          onClick: () => void actions.repairAutoRoute(),
+        },
+        {
+          label: t('autoMode.route.add'),
+          onClick: () => carriedTrack() ? placeCarriedInRoute() : openDestination('route'),
+        },
+      ]}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
         const transfer = readAutoTrackTransfer(event);
         if (transfer) placeInRoute(transfer.track);
+      }}
+      onDropAtSlot={(slot, event) => {
+        const transfer = readAutoTrackTransfer(event);
+        if (!transfer) return;
+        if (!transfer.queueId) {
+          placeInRoute(transfer.track, slot.beforeId);
+          return;
+        }
+        // Dropping a row back where it already sits would still re-stamp it as
+        // fixed and throw away the transition it was planned with — a plain
+        // fade earned by changing nothing.
+        if (isNoopMove(upcoming().map((entry) => entry.queueId), transfer.queueId, slot)) return;
+        actions.moveAutoRoute(transfer.queueId, slot.beforeId);
       }}
       sections={[{ id: 'route', entries: routeEntries() }]}
     />
@@ -276,5 +295,12 @@ export function AutoMode(props: {
     </div>
   );
 }
+
+const routeIcon = (path: JSX.Element) => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{path}</svg>
+);
+/** Take the session in this song's direction. */
+const SourceIcon = () => routeIcon(<><circle cx="12" cy="12" r="1.6" /><path d="M12 4a8 8 0 0 1 8 8M12 20a8 8 0 0 1-8-8" /></>);
+const RemoveIcon = () => routeIcon(<path d="m7 7 10 10M17 7 7 17" />);
 
 export { titleFit } from '../lib/titleFit';

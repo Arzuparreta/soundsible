@@ -182,7 +182,14 @@ export function PlayerStage(props: {
             onSelect: () => state.playback.radioMode ? void onStopRadio() : void actions.startRadio(current),
           },
         ] : []),
+        // The one Auto-native thing to do with the song on air: take the rest
+        // of the session in its direction.
+        ...(props.mode === 'auto' ? [{
+          label: t('autoMode.route.useAsSource'),
+          onSelect: () => actions.useAutoTrackAsSource(current),
+        }] : []),
         ...buildTrackMenu(current, {
+          auto: props.mode === 'auto',
           onAddToPlaylist: openPlaylistPicker,
           onEditMetadata: openMetadataEditor,
           onPlayOnDevice: openPlayOnDevice,

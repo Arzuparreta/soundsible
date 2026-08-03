@@ -104,6 +104,29 @@ async function loadStore(
       }],
       degraded: false,
     })),
+    // Echoes the posted route straight back: a repair that changes nothing is
+    // still a repair, and it keeps every assertion about what the *client* does
+    // with the answer independent of what the planner chose.
+    repairDjRoute: vi.fn().mockImplementation(async (body: {
+      route: Array<{ queue_id: string; route_kind: string; title?: string; artist?: string }>;
+    }) => ({
+      v: 1,
+      items: body.route.map((ref) => ({
+        id: ref.queue_id,
+        youtube_id: ref.queue_id,
+        title: ref.title ?? ref.queue_id,
+        artist: ref.artist ?? 'Generated',
+        source: 'preview',
+        source_pool: 'related',
+        recommendation_identity: `music:youtube:${ref.queue_id}`,
+        recommendation_source: 'auto_mode',
+        queue_id: ref.queue_id,
+        route_kind: ref.route_kind,
+        transition: { technique: 'long_blend', score: 0.8 },
+      })),
+      dropped: [],
+      degraded: false,
+    })),
     sendPlayTiming: vi.fn().mockResolvedValue({ status: 'ok' }),
     getDiscoverySettings: vi.fn().mockResolvedValue({ learning_enabled: true, autoplay_enabled: true }),
     setAutoplayEnabled: vi.fn().mockResolvedValue({ autoplay_enabled: true }),
@@ -988,6 +1011,9 @@ describe('Auto Mode store contract', () => {
     expect(state.autoMode.avoidedIdentities).toEqual([]);
     const avoided = state.playback.queue[1];
     actions.avoidAutoTrackForSession(avoided.queueId);
+    // Captured now: the removal above left a toast of its own behind, and that
+    // one escalates rather than undoes.
+    const undoAvoidance = toastAction.mock.calls.at(-1)![2];
     expect(state.autoMode.avoidedIdentities).toEqual([`music:youtube:${avoided.id}`]);
     expect(state.playback.queue.some((track) => track.queueId === avoided.queueId)).toBe(false);
 
@@ -995,10 +1021,220 @@ describe('Auto Mode store contract', () => {
     await vi.waitFor(() => expect(planDjQueue).toHaveBeenCalledTimes(2));
     expect(planDjQueue.mock.calls[1][0].exclude).toContain(`music:youtube:${avoided.id}`);
 
-    toastAction.mock.calls[0][2]();
+    undoAvoidance();
     expect(state.autoMode.avoidedIdentities).toEqual([]);
     actions.exitAutoMode();
     expect(state.autoMode.avoidedIdentities).toEqual([]);
+  });
+
+  it('lets a plain removal become an avoidance from its own toast', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 8 }, (_, index) => `route-${index}`)));
+    const { actions, state, toastAction } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    const dropped = state.playback.queue[1];
+    actions.removeAutoRouteOccurrence(dropped.queueId);
+    expect(state.autoMode.avoidedIdentities).toEqual([]);
+    expect(toastAction.mock.calls[0][1]).toBe('Avoid during this session');
+
+    toastAction.mock.calls[0][2]();
+    expect(state.autoMode.avoidedIdentities).toEqual([`music:youtube:${dropped.id}`]);
+  });
+
+  it('keeps every pinned song, in order, when the route is repaired', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 8 }, (_, index) => `route-${index}`)));
+    const { actions, state, api } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    await actions.placeAutoTrack({ id: 'mine', title: 'Mine', artist: 'Listener', source: 'preview' });
+    const pinned = state.playback.queue.find((entry) => entry.id === 'mine')!;
+    await actions.repairAutoRoute();
+
+    const posted = api.repairDjRoute.mock.calls[0][0];
+    expect(posted.route.filter((ref: { route_kind: string }) => ref.route_kind === 'user'))
+      .toEqual([expect.objectContaining({ queue_id: pinned.queueId })]);
+    const kept = state.playback.queue.find((entry) => entry.queueId === pinned.queueId);
+    expect(kept?.autoRoute).toMatchObject({ kind: 'user' });
+    expect(state.autoMode.repairing).toBe(false);
+  });
+
+  it('keeps an explicitly queued song through a repair', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 8 }, (_, index) => `route-${index}`)));
+    const { actions, state, api } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    actions.enqueue({ id: 'asked-for', title: 'Asked for', artist: 'Listener', source: 'preview' });
+    const manual = state.playback.queue.find((entry) => entry.id === 'asked-for')!;
+    expect(manual.queueLane).toBe('manual');
+
+    await actions.repairAutoRoute();
+
+    // A song asked for by name has no `autoRoute`, but it is every bit as
+    // pinned as one that was dragged: the planner must be told so.
+    const posted = api.repairDjRoute.mock.calls[0][0];
+    expect(posted.route.find((ref: { queue_id: string }) => ref.queue_id === manual.queueId).route_kind).toBe('user');
+    const survivor = state.playback.queue.find((entry) => entry.queueId === manual.queueId);
+    expect(survivor?.queueLane).toBe('manual');
+  });
+
+  it('rebuilds the chain so every repaired entry names the track it mixes out of', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 4 }, (_, index) => `route-${index}`)));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(5));
+
+    await actions.repairAutoRoute();
+
+    const upcoming = state.playback.queue.slice(1);
+    let previous = 'yt-current';
+    for (const entry of upcoming) {
+      expect(state.autoMode.plan[entry.queueId]?.fromKey).toBe(previous);
+      previous = entry.youtube_id ?? entry.id;
+    }
+  });
+
+  it('leaves the route exactly as it was when a repair fails', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 4 }, (_, index) => `route-${index}`)));
+    const repairDjRoute = vi.fn().mockRejectedValue(new Error('offline'));
+    const { actions, state } = await loadStore({ planDjQueue, repairDjRoute });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(5));
+    const before = state.playback.queue.map((entry) => entry.queueId);
+    const plan = { ...state.autoMode.plan };
+
+    await actions.repairAutoRoute();
+
+    expect(state.playback.queue.map((entry) => entry.queueId)).toEqual(before);
+    expect(state.autoMode.plan).toEqual(plan);
+    expect(state.autoMode.activity?.status).toBe('error');
+    expect(state.autoMode.repairing).toBe(false);
+  });
+
+  it('discards a repair that answers for a route the listener has already changed', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 6 }, (_, index) => `route-${index}`)));
+    const gate = deferred<unknown>();
+    const repairDjRoute = vi.fn().mockReturnValue(gate.promise);
+    const { actions, state } = await loadStore({ planDjQueue, repairDjRoute });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(7));
+
+    const pending = actions.repairAutoRoute();
+    const posted = repairDjRoute.mock.calls[0][0];
+    actions.removeAutoRouteOccurrence(state.playback.queue[2].queueId);
+    const after = state.playback.queue.map((entry) => entry.queueId);
+
+    gate.resolve({
+      v: 1,
+      items: posted.route.map((ref: { queue_id: string; route_kind: string }) => ({
+        id: ref.queue_id, youtube_id: ref.queue_id, title: ref.queue_id, artist: 'Generated',
+        source: 'preview', source_pool: 'related',
+        recommendation_identity: `music:youtube:${ref.queue_id}`, recommendation_source: 'auto_mode',
+        queue_id: ref.queue_id, route_kind: ref.route_kind,
+      })),
+      dropped: [], degraded: false,
+    });
+    await pending;
+
+    expect(state.playback.queue.map((entry) => entry.queueId)).toEqual(after);
+    expect(state.autoMode.activity?.key).toBe('autoMode.agent.repairSkipped');
+  });
+
+  it('refuses a repair that came back missing one of the listener’s songs', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 6 }, (_, index) => `route-${index}`)));
+    const { actions, state, api } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(7));
+    await actions.placeAutoTrack({ id: 'mine', title: 'Mine', artist: 'Listener', source: 'preview' });
+    const before = state.playback.queue.map((entry) => entry.queueId);
+
+    api.repairDjRoute.mockImplementationOnce(async (body: { route: Array<{ queue_id: string; route_kind: string }> }) => ({
+      v: 1,
+      items: body.route
+        .filter((ref) => ref.route_kind !== 'user')
+        .map((ref) => ({
+          id: ref.queue_id, youtube_id: ref.queue_id, title: ref.queue_id, artist: 'Generated',
+          source: 'preview', source_pool: 'related',
+          recommendation_identity: `music:youtube:${ref.queue_id}`, recommendation_source: 'auto_mode',
+          queue_id: ref.queue_id, route_kind: ref.route_kind,
+        })),
+      dropped: [], degraded: false,
+    }));
+    await actions.repairAutoRoute();
+
+    expect(state.playback.queue.map((entry) => entry.queueId)).toEqual(before);
+    expect(state.autoMode.activity?.key).toBe('autoMode.agent.repairSkipped');
+  });
+
+  it('never asks a repair to touch what is already playing', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 5 }, (_, index) => `route-${index}`)));
+    const { actions, state, api } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(6));
+    const playing = state.playback.queue[0];
+
+    await actions.repairAutoRoute();
+
+    const posted = api.repairDjRoute.mock.calls[0][0];
+    expect(posted.seed.youtube_id ?? posted.seed.track_id).toBe('yt-current');
+    expect(posted.route.some((ref: { queue_id: string }) => ref.queue_id === playing.queueId)).toBe(false);
+    expect(state.playback.queue[0].queueId).toBe(playing.queueId);
+  });
+
+  it('ignores a second press while a repair is in flight', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 5 }, (_, index) => `route-${index}`)));
+    const gate = deferred<unknown>();
+    const repairDjRoute = vi.fn().mockReturnValue(gate.promise);
+    const { actions, state } = await loadStore({ planDjQueue, repairDjRoute });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(6));
+
+    const pending = actions.repairAutoRoute();
+    expect(state.autoMode.repairing).toBe(true);
+    await actions.repairAutoRoute();
+    expect(repairDjRoute).toHaveBeenCalledTimes(1);
+
+    gate.resolve({ v: 1, items: [], dropped: [], degraded: false });
+    await pending;
+    expect(state.autoMode.repairing).toBe(false);
+  });
+
+  it('undoes a repair back to the route and plan it replaced', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 5 }, (_, index) => `route-${index}`)));
+    const { actions, state, toastAction } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(6));
+    const before = state.playback.queue.map((entry) => entry.queueId);
+    const plan = { ...state.autoMode.plan };
+
+    await actions.repairAutoRoute();
+    toastAction.mock.calls.at(-1)![2]();
+
+    expect(state.playback.queue.map((entry) => entry.queueId)).toEqual(before);
+    expect(state.autoMode.plan).toEqual(plan);
+  });
+
+  it('has nothing to re-seam when the route is a single song', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0']));
+    const { actions, state, api } = await loadStore({ planDjQueue });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+
+    await actions.repairAutoRoute();
+    expect(api.repairDjRoute).not.toHaveBeenCalled();
   });
 
   it('does not enter Auto Mode for podcasts', async () => {

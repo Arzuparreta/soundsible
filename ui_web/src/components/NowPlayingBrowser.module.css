@@ -19,8 +19,7 @@
 }
 .body{flex:1;min-height:0;overflow:auto;padding:10px 10px max(28px,var(--player-mobile-footer-clearance,28px));overscroll-behavior:contain}
 @media(min-width:1024px){.body{padding-bottom:28px}.close{display:none}}
-.panel[data-purpose='auto-route'] .close,
-.panel[data-purpose='auto-source'] .close{display:inline-flex}
+.panel[data-purpose='auto-route'] .close{display:inline-flex}
 .rootNav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
 .rootNav .navCard:first-child{grid-column:1/-1}
 .navCard{position:relative;display:grid;grid-template-columns:32px minmax(0,1fr) auto;grid-template-rows:auto auto;align-items:center;gap:1px 8px;min-width:0;padding:11px 12px;text-align:left;color:var(--ink-primary);background:var(--stage-material);border:1px solid var(--stage-line);border-radius:var(--radius-lg);cursor:pointer}
@@ -44,6 +43,12 @@
     background: var(--stage-material-hover);
   }
 
+  .rowAdd:hover {
+    color: var(--accent-ink);
+    background: var(--accent-faint);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+
   .navCard:hover,
   .quick:not(:disabled):hover {
     border-color: var(--stage-line-strong);
@@ -55,3 +60,9 @@
 .searchEverywhere{display:grid;place-items:center;gap:8px;padding:18px 10px;color:var(--ink-secondary);text-align:center}.searchEverywhere p{margin:0}.searchEverywhere button{min-height:34px;padding:0 13px;color: var(--accent-ink);font:inherit;font-size:var(--text-caption);font-weight:var(--fw-semibold);background:var(--accent-faint);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:var(--radius-full);cursor:pointer}
 .spinning{display:grid;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.spinning{animation:none}.navCard,.quick{transition:none}}
+
+/* Auto Mode's one row control. It reads as an affordance rather than an icon
+   button because in a DJ session it is the only thing a song row does. */
+.rowAdd{display:grid;place-items:center;width:32px;height:32px;flex:0 0 auto;padding:0;color:var(--ink-secondary);background:var(--stage-material);border:1px solid var(--stage-line);border-radius:var(--radius-full);cursor:pointer}
+.rowAdd svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.rowAdd:focus-visible{color:var(--accent-ink);background:var(--accent-faint)}
