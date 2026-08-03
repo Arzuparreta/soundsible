@@ -1512,6 +1512,31 @@ describe('the end of a track', () => {
     expect(audioService.stage).toHaveBeenCalledWith('/stream/t1', expect.any(Number));
   });
 
+  it('tells the OS it is playing every time the track changes', async () => {
+    // CarPlay showed each new track sitting paused while it was audibly
+    // playing, and stayed wrong until the phone was unlocked. `playbackState`
+    // was published only from the decks' `play` event, which is filtered to
+    // whichever deck owns playback — and a DJ blend starts the incoming deck
+    // before handing it ownership, so that event was discarded.
+    const controls = stubMediaSession();
+    const { actions, deck, initStore, fireDeckEvent } = await loadStore();
+    initStore();
+
+    actions.playFrom([t1, t2], 0);
+    expect(controls.mediaSession.playbackState).toBe('playing');
+
+    actions.pausePlayback();
+    (deck as unknown as { paused: boolean }).paused = true;
+    fireDeckEvent('pause');
+    expect(controls.mediaSession.playbackState).toBe('paused');
+
+    // The next track is published as playing on the metadata change itself,
+    // without waiting for a `play` event that a DJ blend never delivers to the
+    // deck the store is listening to.
+    actions.next();
+    expect(controls.mediaSession.playbackState).toBe('playing');
+  });
+
   it('answers the OS play button with play, never a toggle', async () => {
     // After a spell frozen in a pocket the store's `isPlaying` is whatever it
     // was when the page stopped running. A lock screen or a steering wheel says

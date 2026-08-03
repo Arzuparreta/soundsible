@@ -475,7 +475,33 @@ function updateMediaSession(track: Track | null): void {
     album: track.album ?? '',
     artwork: art ? [{ src: art, sizes: '512x512' }] : [],
   });
+  publishPlaybackState();
   updatePositionState();
+}
+
+/**
+ * Tell the OS whether this is playing, alongside every change of metadata.
+ *
+ * `playbackState` used to be set only from the decks' own `play` and `pause`
+ * events, and those are filtered to whichever deck currently owns playback. A
+ * DJ blend starts the incoming deck *before* handing it ownership, so its `play`
+ * was discarded and the state was never re-published — CarPlay showed the new
+ * track sitting paused while it was audibly playing, and stayed wrong until the
+ * phone was unlocked and the page caught up.
+ *
+ * Read from the store rather than the element on purpose: at a track change this
+ * runs while the new deck is still opening its stream, and the honest answer to
+ * "is this playing?" is what the listener asked for. The `play` and `pause`
+ * handlers correct it the moment reality disagrees.
+ */
+function publishPlaybackState(): void {
+  if (!('mediaSession' in navigator)) return;
+  const pb = state.playback;
+  if (!pb.currentTrack) {
+    navigator.mediaSession.playbackState = 'none';
+    return;
+  }
+  navigator.mediaSession.playbackState = pb.isPlaying ? 'playing' : 'paused';
 }
 
 /**
@@ -3206,6 +3232,9 @@ export function initStore(): void {
         duration: Number.isFinite(duration) && duration > 0 ? duration : state.playback.duration,
         isPlaying: !deck.paused && !deck.ended,
       });
+      // The element is the authority after a spell asleep, and the OS card may
+      // have been reading a state nobody corrected while the page was frozen.
+      publishPlaybackState();
       updatePositionState();
       if (hiddenSince !== null && drift > 1) {
         emitPlaybackEvent('ui_visibility_resume', {
