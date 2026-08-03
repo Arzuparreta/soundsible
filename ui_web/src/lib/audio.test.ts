@@ -83,6 +83,26 @@ class DeadAudioContext extends FakeAudioContext {
   }
 }
 
+class FakeCapturedStream extends EventTarget {
+  constructor(readonly tracks: Array<{ kind: string; readyState: string; contentHint: string; stop: ReturnType<typeof vi.fn> }>) {
+    super();
+  }
+
+  getAudioTracks() {
+    return this.tracks;
+  }
+
+  getTracks() {
+    return this.tracks;
+  }
+
+  replaceAudioTrack(track: { kind: string; readyState: string; contentHint: string; stop: ReturnType<typeof vi.fn> }) {
+    this.tracks.splice(0, this.tracks.length, track);
+    this.dispatchEvent(new Event('removetrack'));
+    this.dispatchEvent(new Event('addtrack'));
+  }
+}
+
 class FakeAudio extends EventTarget {
   src = '';
   currentSrc = '';
@@ -99,6 +119,8 @@ class FakeAudio extends EventTarget {
   preservesPitch = true;
   preload = '';
   crossOrigin: string | null = null;
+  captureTrack = { kind: 'audio', readyState: 'live', contentHint: '', stop: vi.fn() };
+  capturedStream = new FakeCapturedStream([this.captureTrack]);
 
   constructor() {
     super();
@@ -118,6 +140,7 @@ class FakeAudio extends EventTarget {
   });
 
   load = vi.fn();
+  captureStream = vi.fn(() => this.capturedStream as unknown as MediaStream);
 
   removeAttribute(name: string) {
     if (name === 'src') {
@@ -550,7 +573,7 @@ describe('two-deck mixer', () => {
     expect(rebuilt.play).toHaveBeenCalled();
   });
 
-  it('takes the live tap down with the graph instead of leaving a dead sender', async () => {
+  it('moves Live to direct deck capture when the mixer takes its tap down', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
     let lost = 0;
@@ -572,8 +595,17 @@ describe('two-deck mixer', () => {
     expect(module.audioService.graphReady()).toBe(false);
     expect(context.broadcastTrack.stop).toHaveBeenCalledOnce();
     expect(lost).toBe(1);
-    // The tap needs a context this page load will not build again.
-    expect(module.audioService.broadcastStream()).toBeNull();
+    // The page will not rebuild that context, but playback and Live share the
+    // direct replacement deck instead of leaving Live stuck waiting forever.
+    const capture = module.audioService.acquireBroadcastCapture();
+    expect(capture?.kind).toBe('element');
+    const rebuilt = module.audioEl() as unknown as FakeAudio;
+    expect(capture?.stream).toBe(rebuilt.capturedStream);
+    let replacement: MediaStreamTrack | null = null;
+    capture?.onTrackChange((track) => { replacement = track; });
+    const nextTrack = { kind: 'audio', readyState: 'live', contentHint: '', stop: vi.fn() };
+    rebuilt.capturedStream.replaceAudioTrack(nextTrack);
+    expect(replacement).toBe(nextTrack);
   });
 
   it('gives up on a context whose clock never starts, before routing anything', async () => {

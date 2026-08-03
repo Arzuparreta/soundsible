@@ -1,14 +1,17 @@
 import { createEffect, onCleanup, onMount } from 'solid-js';
 import { state } from '../stores';
 import {
-  broadcastStream,
+  acquireBroadcastCapture,
+  broadcastPlaybackActive,
   programMixSnapshot,
   releaseBroadcastStream,
   setBroadcastLostReporter,
+  type BroadcastCapture,
 } from '../lib/audio';
 import {
   hostSession,
   publisherConnected,
+  replaceHostPublisherTrack,
   reportBroadcastLost,
   resumeCommunityIfActive,
   sendProgramEvent,
@@ -22,6 +25,9 @@ import { coverUrl } from '../lib/media';
 
 /** How often a paused room repeats itself. Playing rooms emit every tick. */
 const PAUSED_HEARTBEAT_MS = 5000;
+/** A source being loaded can briefly have no capturable track. Past this it is
+ * a real, actionable failure, not a room that pretends it is about to start. */
+const CAPTURE_WAIT_MS = 2000;
 
 const artworkUrls = new Map<string, string>();
 const artworkPending = new Set<string>();
@@ -78,10 +84,33 @@ export function CommunityBridge() {
   let wasPlaying = false;
   let pausedSince: number | null = null;
   let lastEmit = 0;
+  let capture: BroadcastCapture | null = null;
+  let stopTrackWatch: (() => void) | null = null;
+  let captureMissingSince: number | null = null;
+  let reportedMissingCapture = false;
+
+  const resetCapture = () => {
+    stopTrackWatch?.();
+    stopTrackWatch = null;
+    capture = null;
+  };
+
+  const watchCapture = (next: BroadcastCapture) => {
+    if (capture === next) return;
+    resetCapture();
+    capture = next;
+    stopTrackWatch = next.onTrackChange((track) => {
+      if (capture !== next || !track) return;
+      void replaceHostPublisherTrack(next.stream).catch(() => {
+        publishing = false;
+      });
+    });
+  };
 
   onMount(() => {
     setBroadcastLostReporter(() => {
       publishing = false;
+      resetCapture();
       reportBroadcastLost();
     });
     void resumeCommunityIfActive();
@@ -96,19 +125,33 @@ export function CommunityBridge() {
       if (current) lastTrack = current;
       ensureArtwork(current);
 
-      if (state.playback.isPlaying && !publishing) {
-        publishing = true;
-        const stream = broadcastStream();
-        if (stream) {
-          void startHostPublisher(stream).catch(() => {
-            publishing = false;
-          });
-        } else {
-          publishing = false;
+      // The media element, not a route-local playback flag, is authoritative.
+      // That makes starting Live equally reliable from Music, Auto, podcasts,
+      // Now Playing, and a player that was already running before Live opened.
+      const playing = broadcastPlaybackActive();
+      const nextCapture = playing ? acquireBroadcastCapture() : null;
+      if (nextCapture) {
+        captureMissingSince = null;
+        reportedMissingCapture = false;
+        watchCapture(nextCapture);
+      } else if (playing) {
+        captureMissingSince ??= Date.now();
+        if (!reportedMissingCapture && Date.now() - captureMissingSince >= CAPTURE_WAIT_MS) {
+          reportedMissingCapture = true;
+          reportBroadcastLost();
         }
+      } else {
+        captureMissingSince = null;
+        reportedMissingCapture = false;
+      }
+
+      if (playing && nextCapture && !publishing) {
+        publishing = true;
+        void startHostPublisher(nextCapture.stream).catch(() => {
+          publishing = false;
+        });
       }
       if (!publisherConnected()) return;
-      const playing = state.playback.isPlaying;
       const now = Date.now();
       if (playing) {
         pausedSince = null;
@@ -159,14 +202,18 @@ export function CommunityBridge() {
     wasPlaying = false;
     pausedSince = null;
     lastEmit = 0;
+    captureMissingSince = null;
+    reportedMissingCapture = false;
+    resetCapture();
     releaseBroadcastStream();
   });
 
   onCleanup(() => {
     window.clearInterval(timer);
     setBroadcastLostReporter(null);
+    resetCapture();
     releaseBroadcastStream();
-    // Closing the page is allowed to use the 90-second resume window; do not
+    // Closing the page is allowed to use the short resume window; do not
     // explicitly end the public room here.
   });
 

@@ -34,7 +34,9 @@ STREAM_RE = re.compile(r"^live_[A-Za-z0-9_-]{16,64}$")
 CHAT_MAX = 500
 TITLE_MAX = 96
 SIGNATURE_SKEW_SECONDS = 120
-RECONNECT_GRACE_SECONDS = int(os.getenv("COMMUNITY_RECONNECT_GRACE_SECONDS", "90"))
+# Closing the only encoder should retire its public room promptly, while still
+# leaving enough time for a browser reload or brief network flap to resume it.
+RECONNECT_GRACE_SECONDS = int(os.getenv("COMMUNITY_RECONNECT_GRACE_SECONDS", "15"))
 MAX_ACTIVE_SESSIONS = int(os.getenv("COMMUNITY_MAX_ACTIVE_SESSIONS", "5"))
 # A room that never played holds one of the few slots the directory has. Its
 # socket keeps it alive indefinitely, so silence has to be what retires it.

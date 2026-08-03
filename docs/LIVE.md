@@ -53,8 +53,8 @@ There is no time limit. A session lives as long as your browser tab is open and
 connected.
 
 - **Your browser is the encoder.** Closing the tab stops the broadcast.
-- **Ninety seconds of grace.** If the tab closes or the connection drops, the
-  room is held for 90 seconds and resumes automatically if you come back. After
+- **Fifteen seconds of grace.** If the tab closes or the connection drops, the
+  room is held for 15 seconds and resumes automatically if you come back. After
   that the room is deleted.
 - **Thirty minutes of patience.** A room that never plays a single note
   releases its slot after 30 minutes, so it does not hold one of the few
@@ -101,7 +101,7 @@ Two things to know:
   check, but it will not catch problems that only appear on other networks.
 
 If the listener side fails on a restrictive network, it will reconnect on its
-own for 90 seconds before giving up and offering a manual retry.
+own for a short bounded window before giving up and offering a manual retry.
 
 ## 7. Turning it off
 

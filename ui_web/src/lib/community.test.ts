@@ -21,6 +21,7 @@ import {
   loadCommunityConfig,
   publisherConnected,
   publisherState,
+  replaceHostPublisherTrack,
   reportBroadcastLost,
   resetCommunityStateForTests,
   startHostPublisher,
@@ -30,6 +31,7 @@ import {
 
 class FakeMediaStream {
   tracks: unknown[] = [];
+  fallbackTrack = { kind: 'audio' };
   addTrack(track: unknown) {
     this.tracks.push(track);
   }
@@ -37,21 +39,31 @@ class FakeMediaStream {
     return this.tracks;
   }
   getAudioTracks() {
-    return this.tracks.length ? this.tracks : [{ kind: 'audio' }];
+    return this.tracks.length ? this.tracks : [this.fallbackTrack];
   }
 }
 
 class FakePeerConnection {
+  static last: FakePeerConnection | null = null;
   connectionState = 'new';
   iceGatheringState = 'complete';
   localDescription: RTCSessionDescriptionInit | null = null;
   listeners = new Map<string, Array<() => void>>();
-  addTrack() {
-    return {
+  senders: Array<{ track: { kind: string }; replaceTrack: ReturnType<typeof vi.fn> }> = [];
+  constructor() {
+    FakePeerConnection.last = this;
+  }
+  addTrack(track: { kind: string }) {
+    const sender = {
+      track,
       getParameters: () => ({ encodings: [] as RTCRtpEncodingParameters[] }),
       setParameters: async () => undefined,
+      replaceTrack: vi.fn(async (track: { kind: string }) => { sender.track = track; }),
     };
+    this.senders.push(sender);
+    return sender;
   }
+  getSenders() { return this.senders; }
   addTransceiver() {
     return {};
   }
@@ -104,7 +116,7 @@ const session: HostLiveSession = {
   stream_path: 'live_test',
   host_token: 'host-token',
   publish_token: 'publish-token',
-  reconnect_grace_seconds: 90,
+  reconnect_grace_seconds: 15,
 };
 
 function json(payload: unknown, status = 200, headers?: HeadersInit) {
@@ -225,7 +237,7 @@ describe('Community client state', () => {
     expect(communityError()).toBeNull();
   });
 
-  it('stops claiming to be on air when the mixing graph dies under the broadcast', async () => {
+  it('restarts from a replacement capture when the mixing graph dies under the broadcast', async () => {
     let whipCalls = 0;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -244,9 +256,28 @@ describe('Community client state', () => {
     expect(publisherState()).toBe('failed');
     expect(publisherConnected()).toBe(false);
     expect(communityError()).toBe('graph_lost');
-    // Retrying cannot help: the source stream is gone with its context.
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(whipCalls).toBe(1);
+    // The bridge can now hand over the restored direct-deck capture.
+    await startHostPublisher(new FakeMediaStream() as unknown as MediaStream);
+    expect(whipCalls).toBe(2);
+    expect(publisherState()).toBe('connected');
+    expect(communityError()).toBeNull();
+  });
+
+  it('replaces an element-capture track without reopening the room', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/community/sessions')) return json({ session }, 201);
+      if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+      if (init?.method === 'OPTIONS') return new Response(null, { status: 204 });
+      return new Response('answer', { status: 201, headers: { Location: '/live/resource' } });
+    }));
+    await createHostSession('Saturday');
+    await startHostPublisher(new FakeMediaStream() as unknown as MediaStream);
+
+    await replaceHostPublisherTrack(new FakeMediaStream() as unknown as MediaStream);
+
+    expect(publisherState()).toBe('connected');
+    expect(FakePeerConnection.last?.senders[0].replaceTrack).toHaveBeenCalledOnce();
   });
 
   it('rebuilds an authorised WHEP listener and leaves no retry behind', async () => {

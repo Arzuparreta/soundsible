@@ -6,6 +6,7 @@ const { audio, community, state } = vi.hoisted(() => ({
   audio: {
     stream: { id: 'broadcast' } as unknown as MediaStream | null,
     lost: null as (() => void) | null,
+    trackChanged: null as ((track: MediaStreamTrack | null) => void) | null,
     release: vi.fn(),
     mix: {
       contextTime: 0,
@@ -21,6 +22,7 @@ const { audio, community, state } = vi.hoisted(() => ({
     connected: true,
     sent: [] as LiveProgram[],
     publish: vi.fn(),
+    replaceTrack: vi.fn(),
     reportLost: vi.fn(),
   },
   state: {
@@ -38,7 +40,15 @@ const { audio, community, state } = vi.hoisted(() => ({
 vi.mock('../stores', () => ({ state }));
 vi.mock('../lib/media', () => ({ coverUrl: () => '/cover.jpg' }));
 vi.mock('../lib/audio', () => ({
-  broadcastStream: () => audio.stream,
+  acquireBroadcastCapture: () => audio.stream ? {
+    kind: 'program',
+    stream: audio.stream,
+    onTrackChange: (listener: () => void) => {
+      audio.trackChanged = listener;
+      return () => { audio.trackChanged = null; };
+    },
+  } : null,
+  broadcastPlaybackActive: () => state.playback.isPlaying,
   programMixSnapshot: () => audio.mix,
   releaseBroadcastStream: audio.release,
   setBroadcastLostReporter: (fn: (() => void) | null) => { audio.lost = fn; },
@@ -46,6 +56,7 @@ vi.mock('../lib/audio', () => ({
 vi.mock('../lib/community', () => ({
   hostSession: () => community.host,
   publisherConnected: () => community.connected,
+  replaceHostPublisherTrack: community.replaceTrack,
   reportBroadcastLost: community.reportLost,
   resumeCommunityIfActive: vi.fn(),
   sendProgramEvent: (payload: LiveProgram) => { community.sent.push(payload); },
@@ -59,10 +70,12 @@ beforeEach(() => {
   vi.useFakeTimers();
   audio.stream = { id: 'broadcast' } as unknown as MediaStream;
   audio.lost = null;
+  audio.trackChanged = null;
   community.host = { id: 'session-test' };
   community.connected = true;
   community.sent = [];
   community.publish.mockReset().mockResolvedValue(undefined);
+  community.replaceTrack.mockReset().mockResolvedValue(undefined);
   community.reportLost.mockReset();
   state.playback.isPlaying = true;
 });
@@ -110,17 +123,39 @@ describe('CommunityBridge', () => {
     expect(community.sent.at(-1)!.paused_since).toBeNull();
   });
 
-  it('stops claiming to publish when the mixing graph takes the tap down', async () => {
+  it('reacquires the safe capture when the mixing graph takes the tap down', async () => {
     render(() => <CommunityBridge />);
     await vi.advanceTimersByTimeAsync(250);
     expect(community.publish).toHaveBeenCalledOnce();
 
-    // The graph died: the tap is gone and will not come back this page load.
+    // The graph died: the old tap is gone, but direct deck capture may follow.
     audio.stream = null;
     audio.lost?.();
     expect(community.reportLost).toHaveBeenCalledOnce();
 
     await vi.advanceTimersByTimeAsync(1000);
     expect(community.publish).toHaveBeenCalledOnce();
+
+    audio.stream = { id: 'safe-deck-capture' } as unknown as MediaStream;
+    await vi.advanceTimersByTimeAsync(250);
+    expect(community.publish).toHaveBeenCalledTimes(2);
+  });
+
+  it('replaces the publisher track when an element capture rolls sources', async () => {
+    render(() => <CommunityBridge />);
+    await vi.advanceTimersByTimeAsync(250);
+
+    audio.trackChanged?.({ kind: 'audio' } as MediaStreamTrack);
+
+    expect(community.replaceTrack).toHaveBeenCalledWith(audio.stream);
+  });
+
+  it('turns a missing capture into an actionable failure instead of waiting forever', async () => {
+    audio.stream = null;
+    render(() => <CommunityBridge />);
+
+    await vi.advanceTimersByTimeAsync(2250);
+
+    expect(community.reportLost).toHaveBeenCalledOnce();
   });
 });

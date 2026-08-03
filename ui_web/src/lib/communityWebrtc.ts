@@ -237,7 +237,7 @@ async function openPeer(
 
 export function openCommunityPublisher(options: PublisherOptions): Promise<CommunityPeerHandle> {
   return openPeer(options, (pc) => {
-    const track = options.stream.getAudioTracks()[0];
+    const track = options.stream.getAudioTracks().find((item) => item.readyState !== 'ended');
     if (!track) throw new Error('program_stream_missing');
     const sender = pc.addTrack(track, options.stream);
     const parameters = sender.getParameters();
@@ -245,6 +245,20 @@ export function openCommunityPublisher(options: PublisherOptions): Promise<Commu
     parameters.encodings[0].maxBitrate = 192_000;
     void sender.setParameters(parameters).catch(() => {});
   }, options.transformOffer);
+}
+
+/** Keep an established WHIP resource alive when an element capture rolls its
+ * track on a URL change. `replaceTrack` is renegotiation-free, so listeners do
+ * not see a room disappear between songs. */
+export async function replaceCommunityPublisherTrack(
+  handle: CommunityPeerHandle,
+  stream: MediaStream,
+): Promise<void> {
+  const track = stream.getAudioTracks().find((item) => item.readyState !== 'ended');
+  if (!track) throw new Error('program_stream_missing');
+  const sender = handle.pc.getSenders().find((item) => item.track?.kind === 'audio');
+  if (!sender) throw new Error('program_sender_missing');
+  await sender.replaceTrack(track);
 }
 
 export function openCommunityListener(options: ListenerOptions): Promise<CommunityPeerHandle> {

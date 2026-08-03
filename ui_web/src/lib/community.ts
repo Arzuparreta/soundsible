@@ -4,6 +4,7 @@ import { ApiError, request } from './api';
 import {
   openCommunityListener,
   openCommunityPublisher,
+  replaceCommunityPublisherTrack,
   type CommunityPeerHandle,
 } from './communityWebrtc';
 
@@ -163,7 +164,13 @@ let publisherRetryAttempt = 0;
 let listenerRetryAttempt = 0;
 let listenerAuthorized = false;
 
-const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
+// A host gets fifteen seconds of server-side grace. Keep retries comfortably
+// inside it so a transient loss recovers before the room is retired.
+const RETRY_DELAYS_MS = [500, 1000, 2000, 4000];
+
+function hostReconnectGraceMs(): number {
+  return Math.max(1, hostSession()?.reconnect_grace_seconds ?? 15) * 1000;
+}
 
 function activeHostId(): string | null {
   try {
@@ -261,9 +268,9 @@ function connectSocket(session: LiveSession, host?: HostLiveSession): void {
   socket = io(endpoint, {
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionAttempts: 8,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 8000,
+    reconnectionAttempts: 4,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 4000,
     auth: host
       ? { session_id: session.id, host_token: host.host_token }
       : { session_id: session.id, guest_id: guest.id, guest_name: guest.name },
@@ -484,6 +491,24 @@ async function establishHostPublisher(stream: MediaStream, generation: number): 
     return;
   }
   publisher = handle;
+  // A direct element capture may roll while WHIP is gathering ICE. Do not let
+  // the offer finish with the already-ended track it started with.
+  const currentTrack = publisherSource?.getAudioTracks().find((track) => track.readyState !== 'ended');
+  const sender = pc.getSenders().find((item) => item.track?.kind === 'audio');
+  if (!currentTrack || !sender) {
+    publisher = null;
+    handle.close();
+    throw new Error('program_stream_missing');
+  }
+  if (sender.track !== currentTrack) {
+    try {
+      await replaceCommunityPublisherTrack(handle, publisherSource!);
+    } catch (error) {
+      publisher = null;
+      handle.close();
+      throw error;
+    }
+  }
   pc.addEventListener('connectionstatechange', () => {
     if (generation !== publisherGeneration || publisher?.pc !== pc) return;
     const connected = pc.connectionState === 'connected';
@@ -491,7 +516,11 @@ async function establishHostPublisher(stream: MediaStream, generation: number): 
     if (connected) {
       publisherRetryAttempt = 0;
       setPublisherState('connected');
-      if (communityError() === 'publish_failed' || communityError() === 'reconnecting') {
+      if (
+        communityError() === 'publish_failed'
+        || communityError() === 'reconnecting'
+        || communityError() === 'graph_lost'
+      ) {
         setCommunityError(null);
       }
     }
@@ -517,7 +546,7 @@ async function establishHostPublisher(stream: MediaStream, generation: number): 
 function schedulePublisherRecovery(generation: number): void {
   if (generation !== publisherGeneration || publisherRetryTimer !== undefined || !publisherSource) return;
   if (publisherRetryAttempt === 0 && publisherState() === 'connected') {
-    publisherRecoveryDeadline = Date.now() + (hostSession()?.reconnect_grace_seconds ?? 90) * 1000;
+    publisherRecoveryDeadline = Date.now() + hostReconnectGraceMs();
   }
   if (Date.now() >= publisherRecoveryDeadline) {
     setPublisherState('failed');
@@ -549,7 +578,7 @@ export async function startHostPublisher(stream: MediaStream): Promise<void> {
   if (publisher || publisherState() === 'connecting' || publisherState() === 'recovering') return;
   publisherGeneration += 1;
   const generation = publisherGeneration;
-  publisherRecoveryDeadline = Date.now() + (hostSession()?.reconnect_grace_seconds ?? 90) * 1000;
+  publisherRecoveryDeadline = Date.now() + hostReconnectGraceMs();
   publisherRetryAttempt = 0;
   clearPublisherRetry();
   try {
@@ -563,9 +592,9 @@ export async function startHostPublisher(stream: MediaStream): Promise<void> {
 /**
  * The mixing graph died underneath a live broadcast.
  *
- * Retrying is pointless: the tap needs a context this page load will not build
- * again, so the publisher is closed and the room says so instead of sitting on
- * a connected peer that carries nothing but stopped tracks.
+ * The bridge immediately looks for the safe direct-deck capture after this.
+ * Until it has a track the room reports a real recovery problem, never a
+ * misleading connected publisher with stopped tracks.
  */
 export function reportBroadcastLost(): void {
   if (!hostSession()) return;
@@ -580,6 +609,37 @@ export function reportBroadcastLost(): void {
   setCommunityError('graph_lost');
 }
 
+/**
+ * A media element capture ends its track when its source changes. Keep the
+ * same WHIP resource when possible; rebuilding is reserved for browsers that
+ * reject `replaceTrack`.
+ */
+export async function replaceHostPublisherTrack(stream: MediaStream): Promise<void> {
+  publisherSource = stream;
+  if (!publisher || !hostSession()) return;
+  try {
+    await replaceCommunityPublisherTrack(publisher, stream);
+  } catch (error) {
+    publisherGeneration += 1;
+    const generation = publisherGeneration;
+    clearPublisherRetry();
+    const previous = publisher;
+    publisher = null;
+    closePeer(previous);
+    publisherRetryAttempt = 0;
+    publisherRecoveryDeadline = Date.now() + hostReconnectGraceMs();
+    setPublisherConnected(false);
+    setPublisherState('recovering');
+    setCommunityError('reconnecting');
+    try {
+      await establishHostPublisher(stream, generation);
+    } catch {
+      schedulePublisherRecovery(generation);
+      throw error;
+    }
+  }
+}
+
 export async function retryHostPublisher(): Promise<void> {
   if (!publisherSource || !hostSession()) return;
   publisherGeneration += 1;
@@ -588,7 +648,7 @@ export async function retryHostPublisher(): Promise<void> {
   closePeer(publisher);
   publisher = null;
   publisherRetryAttempt = 0;
-  publisherRecoveryDeadline = Date.now() + (hostSession()?.reconnect_grace_seconds ?? 90) * 1000;
+  publisherRecoveryDeadline = Date.now() + hostReconnectGraceMs();
   setCommunityError(null);
   try {
     await establishHostPublisher(publisherSource, generation);

@@ -246,7 +246,7 @@ def test_signed_resume_rotates_media_credentials(tmp_path, monkeypatch):
     assert session["id"] == original["id"]
     assert session["host_token"] != original["host_token"]
     assert session["publish_token"] != original["publish_token"]
-    assert session["reconnect_grace_seconds"] == 90
+    assert session["reconnect_grace_seconds"] == 15
 
 
 def test_health_checks_sqlite_and_mediamtx(tmp_path, monkeypatch):
