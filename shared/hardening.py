@@ -155,6 +155,37 @@ def _context_from_stored_token(record: dict) -> Optional[dict]:
     return None
 
 
+#: How stale `last_used_at` may get before it is worth a write. This column is a
+#: "seen recently" indicator, not an audit log, and a minute is invisible in
+#: every surface that shows it.
+AUTH_TOUCH_THROTTLE_SEC = 60
+
+
+def _touch_auth_token(record: dict) -> None:
+    """Record that a credential was used — at most once a minute.
+
+    Every authenticated request used to take a SQLite *write*, and an audio
+    stream is not one request: seeking through a track is a burst of Range
+    requests, each of which took the write lock on the same connection-per-
+    greenlet the rest of the app is trying to read through.
+    """
+    from datetime import datetime, timezone
+
+    seen = record.get("last_used_at")
+    if seen:
+        try:
+            stamp = datetime.fromisoformat(str(seen).replace(" ", "T"))
+            if stamp.tzinfo is None:
+                # SQLite's CURRENT_TIMESTAMP is UTC without a marker.
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            if (datetime.now(timezone.utc) - stamp).total_seconds() < AUTH_TOUCH_THROTTLE_SEC:
+                return
+        except (TypeError, ValueError):
+            # An unreadable stamp is a reason to write a good one, not to skip.
+            pass
+    _db().touch_auth_token(record["id"])
+
+
 def get_request_auth_context(*, allow_trusted_network: bool = False) -> Optional[dict]:
     cached = getattr(g, "_soundsible_auth_context", None)
     if cached is not None:
@@ -166,7 +197,7 @@ def get_request_auth_context(*, allow_trusted_network: bool = False) -> Optional
     if session_token:
         record = _db().get_auth_token_by_hash(_hash_token(session_token))
         if record and record.get("kind") == "session" and record.get("user_id"):
-            _db().touch_auth_token(record["id"])
+            _touch_auth_token(record)
             context = {
                 "source": "session",
                 "kind": "session",
@@ -180,7 +211,7 @@ def get_request_auth_context(*, allow_trusted_network: bool = False) -> Optional
         token_hash = _hash_token(token)
         record = _db().get_auth_token_by_hash(token_hash)
         if record:
-            _db().touch_auth_token(record["id"])
+            _touch_auth_token(record)
             context = _context_from_stored_token(record)
         elif has_valid_admin_token():
             context = {

@@ -73,6 +73,24 @@ def test_requesting_priority_measurement(client):
     assert response.get_json()["queued"] == 2
 
 
+def test_a_priority_request_never_reads_the_library(client, monkeypatch):
+    """The route the player fires as a song starts, on the hub streaming it.
+
+    Reading the library here is a few thousand un-yielding `stat` calls, and the
+    listener hears them as a second of silence before the track begins.
+    """
+    from shared.loudness.service import LoudnessService
+
+    def explode(self):
+        raise AssertionError("the request handler read the library")
+
+    monkeypatch.setattr(LoudnessService, "_default_inventory", explode)
+
+    response = client.post("/api/loudness/request", json={"track_ids": ["a", "b"]})
+    assert response.status_code == 200
+    assert response.get_json()["queued"] == 2
+
+
 def test_a_malformed_priority_request_is_rejected(client):
     assert client.post("/api/loudness/request", json={"track_ids": "a"}).status_code == 400
 

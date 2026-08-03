@@ -114,11 +114,78 @@ def test_priority_work_ignores_the_idle_gate(library):
 
 
 def test_priority_skips_what_is_already_known(library):
-    service = build(library)
+    calls = []
+    service = build(library, measure=lambda path, **_: calls.append(path) or MEASUREMENT)
     service.run_once()
+    assert len(calls) == 3
 
     service.request(["alpha"])
-    assert service._priority == []
+    assert service.run_once() is False
+    assert len(calls) == 3
+
+
+def test_a_priority_request_never_reads_the_library(library):
+    """The regression that made every downloaded track take a second to start.
+
+    `request` runs inside the web request the player fires as it starts a song,
+    on the greenlet hub that is streaming that song. Resolving ids to paths
+    there read the whole library, and nothing about that yields.
+    """
+
+    def forbidden():
+        raise AssertionError("the request handler read the library")
+
+    service = build(library, inventory=forbidden)
+    service.request(["alpha", "beta"])
+
+    assert service._priority_ids == {"alpha", "beta"}
+
+
+def test_the_library_is_not_re_read_for_every_request(library):
+    reads = []
+
+    def counted():
+        reads.append(1)
+        return iter(library)
+
+    service = build(library, inventory=counted)
+    service.request(["alpha"])
+    service.run_once()
+    service.request(["beta"])
+    service.run_once()
+
+    assert len(reads) == 1
+    assert set(LoudnessStore().measured()) == {"alpha", "beta"}
+
+
+def test_a_priority_batch_stays_small_and_serial_while_something_is_playing(library):
+    # Priority work skips the *idle gate* — that is the feature. It may not also
+    # take the disk the current song is being read from.
+    import threading
+
+    threads = set()
+    service = build(
+        library,
+        foreground_busy=lambda: True,
+        quiet_seconds=60,
+        measure=lambda path, **_: threads.add(threading.current_thread().ident) or MEASUREMENT,
+    )
+    service._worker_count = lambda: 3  # an SSD, as far as the sweep can tell
+    service.request(["alpha", "beta", "gamma"])
+
+    from shared.loudness import service as service_module
+
+    original = service_module.PRIORITY_BATCH
+    try:
+        service_module.PRIORITY_BATCH = 2
+        assert service.run_once() is True
+        assert len(LoudnessStore().measured()) == 2
+        assert service.run_once() is True
+    finally:
+        service_module.PRIORITY_BATCH = original
+
+    assert len(LoudnessStore().measured()) == 3
+    assert threads == {threading.current_thread().ident}
 
 
 def test_a_failed_attempt_backs_off_rather_than_concluding_anything(library):

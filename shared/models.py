@@ -358,25 +358,51 @@ class LibraryMetadata:
             return cls(version=1, tracks=[], playlists={}, settings={}, podcast_subscriptions=[], podcast_episode_cache={})
         return cls.from_dict(data)
     
+    def _lookup(self, attribute: str, value: str) -> Optional[Track]:
+        """Find one track by `id` or `file_hash`, through a lazy index.
+
+        Every request for a stream resolves the track first, and a Range request
+        is not one request — seeking through a track is a burst of them. On a
+        library of any size the linear scan this replaces was the most-executed
+        loop in the engine.
+
+        The index is rebuilt whenever the list it was built from changed length,
+        and a hit is verified before it is returned, so a track edited in place
+        can never be answered with a stale object.
+        """
+        index = getattr(self, "_indexes", None)
+        if index is not None and getattr(self, "_indexed_count", -1) == len(self.tracks):
+            found = index[attribute].get(value)
+            # A track whose identity was edited in place would still be indexed
+            # under the old one. Cheap to check, and it turns a wrong answer
+            # into a rebuild.
+            if found is None or getattr(found, attribute, None) == value:
+                return found
+
+        by_id: Dict[str, Track] = {}
+        by_hash: Dict[str, Track] = {}
+        for track in self.tracks:
+            by_id.setdefault(track.id, track)
+            if track.file_hash:
+                by_hash.setdefault(track.file_hash, track)
+        self._indexes = {"id": by_id, "file_hash": by_hash}
+        self._indexed_count = len(self.tracks)
+        return self._indexes[attribute].get(value)
+
     def get_track_by_id(self, track_id: str) -> Optional[Track]:
         """Find track by ID."""
-        for track in self.tracks:
-            if track.id == track_id:
-                return track
-        return None
+        return self._lookup("id", track_id)
 
     def get_track_by_hash(self, file_hash: str) -> Optional[Track]:
         """Find track by file hash."""
-        for track in self.tracks:
-            if track.file_hash == file_hash:
-                return track
-        return None
+        return self._lookup("file_hash", file_hash)
 
     def add_track(self, track: Track) -> None:
         """Add a track to the library."""
         self.tracks.append(track)
+        self._indexes = None
         self.last_updated = utc_now_iso_naive()
-    
+
     def remove_track(self, track_id: str) -> bool:
         """
         Remove track from library.
@@ -387,6 +413,7 @@ class LibraryMetadata:
         for i, track in enumerate(self.tracks):
             if track.id == track_id:
                 self.tracks.pop(i)
+                self._indexes = None
                 self.last_updated = utc_now_iso_naive()
                 return True
         return False

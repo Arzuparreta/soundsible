@@ -34,6 +34,11 @@ QUIET_SECONDS = 60
 FILE_SLEEP_SEC = 0.1
 #: How often the library is re-read looking for new or changed files.
 INVENTORY_INTERVAL_SEC = 3600
+#: How long a read of the library stays usable for the *other* readers — the
+#: priority lookahead, and the ordering pass. Reading it costs a `realpath` and
+#: one or two `stat` calls per track, and under gevent none of that yields, so
+#: doing it per track change is felt as a stall in whatever is streaming.
+INVENTORY_CACHE_SEC = 120
 #: A file still being written has a moving size and mtime; measuring it would
 #: only invalidate itself a second later.
 MIN_FILE_AGE_SEC = 10
@@ -42,6 +47,13 @@ MIN_FILE_AGE_SEC = 10
 NOTIFY_INTERVAL_SEC = 300
 #: How many files one pass takes before re-checking whether to yield.
 BATCH = 24
+#: How many the *priority* lane takes. Four is the player's lookahead; a sweep's
+#: twenty-four decoded against the disk the current song is being read from is
+#: what a listener hears as a track that will not start.
+PRIORITY_BATCH = 4
+#: Ids the priority lane will hold at once. The player asks for five per track
+#: change; anything past this is a backlog, and backlogs belong to the sweep.
+MAX_PRIORITY_IDS = 200
 
 
 def loudness_analysis_enabled() -> bool:
@@ -85,9 +97,17 @@ class LoudnessService:
         # Work the listener is waiting on: tracks about to be played that nobody
         # has measured yet. Jumps the whole sweep and ignores the idle gate,
         # because it is bounded to a handful of files and finishes in a second.
+        #
+        # Two stages on purpose. `_priority_ids` is what the request handler is
+        # allowed to touch — a set of ids and nothing else. Turning those into
+        # paths means reading the library, which is the expensive half, and that
+        # belongs to the sweep.
+        self._priority_ids: set[str] = set()
         self._priority: list[tuple[str, str]] = []
         self._queue: list[tuple[str, str]] = []
         self._measured_since_notify = 0
+        self._inventory_cache: list[tuple[Any, str]] | None = None
+        self._inventory_cache_at: float = 0.0
 
     # ----- lifecycle -----
 
@@ -124,19 +144,23 @@ class LoudnessService:
         The result never touches the track that is already sounding — the player
         refuses to re-level a playing deck — so this is about the *next* few
         songs being right rather than rescuing the current one.
+
+        Nothing but recording the ids happens here. This runs inside the web
+        request the player fires as it starts a song, on the same greenlet hub
+        that is streaming that song: resolving these to paths used to read the
+        whole library, which does not yield, and the listener heard it as a
+        second of silence before every downloaded track. Resolution is the
+        sweep's job now — see `_take_priority`.
         """
         wanted = {str(i) for i in identities if i}
         if not wanted:
             return
-        for track, path in self._inventory():
-            identity = identity_for(track)
-            if identity not in wanted:
-                continue
-            stamp = self._stamp(path)
-            if stamp and not self.store.is_current(identity, stamp):
-                self._priority.append((identity, path))
-        if self._priority:
-            self.wake()
+        self._priority_ids |= wanted
+        # A lookahead, not an import queue. Anything beyond this is not what the
+        # listener is about to hear and the ordinary sweep will reach it.
+        if len(self._priority_ids) > MAX_PRIORITY_IDS:
+            self._priority_ids = set(list(self._priority_ids)[-MAX_PRIORITY_IDS:])
+        self.wake()
 
     def measure_now(self, track_id: str) -> None:
         """Measure one track immediately — a download that just finished.
@@ -147,6 +171,10 @@ class LoudnessService:
         """
         if not loudness_analysis_enabled():
             return
+        # A file that did not exist a moment ago cannot be in a cached reading
+        # of the library, so this one goes to the real thing — and drops the
+        # cache on the way, since it is now demonstrably out of date.
+        self.invalidate_inventory()
         try:
             for track, path in self._inventory():
                 if track.id != track_id and identity_for(track) != track_id:
@@ -170,7 +198,7 @@ class LoudnessService:
         return {
             "enabled": loudness_analysis_enabled(),
             "activity": activity,
-            "pending": len(self._queue) + len(self._priority),
+            "pending": len(self._queue) + len(self._priority) + len(self._priority_ids),
             **coverage,
         }
 
@@ -194,9 +222,12 @@ class LoudnessService:
 
         # Priority work is what a listener is waiting on, so it ignores the idle
         # gate: a handful of files, measured now, is worth more than a perfectly
-        # quiet disk.
+        # quiet disk. Bounded far tighter than a sweep, because the disk it
+        # would otherwise monopolise is the one the current song is coming off.
+        if self._priority_ids:
+            self._take_priority()
         if self._priority:
-            batch, self._priority = self._priority[:BATCH], self._priority[BATCH:]
+            batch, self._priority = self._priority[:PRIORITY_BATCH], self._priority[PRIORITY_BATCH:]
             return self._measure_batch(batch, "priority")
 
         if self._foreground_busy():
@@ -228,6 +259,12 @@ class LoudnessService:
             return False
         self._set_activity(activity)
         workers = self._worker_count()
+        # Priority work skips the idle gate by design, so it is the one path that
+        # can run while a song is being read off the same disk. It may skip the
+        # gate; it may not also take three parallel decodes and the seeks that
+        # come with them. One at a time, with the usual breather.
+        if activity == "priority" and self._foreground_busy():
+            workers = 1
         if workers <= 1:
             for identity, path in batch:
                 if self._stop.is_set():
@@ -261,6 +298,44 @@ class LoudnessService:
         self.store.put(identity, stamp, result)
         self._measured_since_notify += 1
 
+    def _take_priority(self) -> None:
+        """Turn the ids the player asked for into files to measure.
+
+        The expensive half of what `request` used to do, moved to where it can
+        afford to be expensive — and reading a cached library rather than the
+        real one, so a queue walked track by track does not re-read the whole
+        thing five times a minute.
+        """
+        wanted, self._priority_ids = self._priority_ids, set()
+        try:
+            inventory = self._cached_inventory()
+        except Exception:
+            logger.debug("Loudness: could not read the library for priority work", exc_info=True)
+            return
+        known = {identity for identity, _ in self._priority}
+        for track, path in inventory:
+            identity = identity_for(track)
+            if identity not in wanted or identity in known:
+                continue
+            stamp = self._stamp(path)
+            if stamp and not self.store.is_current(identity, stamp):
+                self._priority.append((identity, path))
+
+    def _cached_inventory(self) -> list[tuple[Any, str]]:
+        """The library, re-read at most every `INVENTORY_CACHE_SEC`."""
+        now = time.monotonic()
+        cache = self._inventory_cache
+        if cache is not None and now - self._inventory_cache_at < INVENTORY_CACHE_SEC:
+            return cache
+        items = list(self._inventory())
+        self._inventory_cache = items
+        self._inventory_cache_at = now
+        return items
+
+    def invalidate_inventory(self) -> None:
+        """Forget the cached library — something was added, removed or moved."""
+        self._inventory_cache = None
+
     def _refresh_queue(self) -> None:
         candidates: list[tuple[str, str]] = []
         stamps: list[tuple[str, str]] = []
@@ -277,7 +352,7 @@ class LoudnessService:
 
     def _ordered_inventory(self) -> list[tuple[Any, str]]:
         """The library, favourites first, then most recently added."""
-        items = list(self._inventory())
+        items = self._cached_inventory()
         try:
             favourites = self._favourite_ids()
         except Exception:
