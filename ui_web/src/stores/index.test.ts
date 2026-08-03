@@ -33,6 +33,29 @@ async function flush() {
   await Promise.resolve();
 }
 
+/**
+ * A stand-in for the OS media controls — a lock screen, a steering wheel, a car
+ * head unit. jsdom has none, and `initStore` registers the handlers on import,
+ * so this has to be in place before the store is loaded.
+ */
+function stubMediaSession() {
+  const handlers = new Map<string, (details?: unknown) => void>();
+  const mediaSession = {
+    metadata: null,
+    playbackState: 'none',
+    setActionHandler: vi.fn((action: string, handler: (details?: unknown) => void) => {
+      handlers.set(action, handler);
+    }),
+    setPositionState: vi.fn(),
+  };
+  Object.defineProperty(navigator, 'mediaSession', {
+    configurable: true,
+    value: mediaSession,
+  });
+  vi.stubGlobal('MediaMetadata', class { constructor(init: unknown) { Object.assign(this, init); } });
+  return { mediaSession, press: (action: string) => handlers.get(action)?.() };
+}
+
 async function loadStore(
   apiOverrides: Record<string, unknown> = {},
   audioOverrides: Record<string, unknown> = {},
@@ -429,6 +452,64 @@ describe('volume levelling', () => {
     // One reference for the record, so the quiet interlude stays 16 dB quieter
     // than the opener, exactly as it was mastered.
     expect(second).toBeCloseTo(first, 6);
+  });
+
+  it('never asks the engine to measure what the library already knows', async () => {
+    // Asking is not free: the engine used to answer it by reading the whole
+    // library, on the same hub that was streaming the song being started. A
+    // queue entry predating the measurement is the common case, so testing the
+    // snapshot rather than the library meant asking again for every track, for
+    // ever.
+    const { actions, api, state, initStore, fireDeckEvent } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({
+        tracks: [measured], playlists: {}, settings: {}, podcast_subscriptions: [],
+      }),
+    });
+    initStore();
+    await actions.syncLibrary();
+    await flush();
+    expect(state.library[0].loudness_lufs).toBe(-6);
+
+    actions.playFrom([{ id: 'loud', title: 'Loud', artist: 'Artist', duration: 200 }], 0);
+    fireDeckEvent('playing');
+    await flush();
+
+    expect(api.requestLoudness).not.toHaveBeenCalled();
+  });
+
+  it('asks at most once for the same track', async () => {
+    const { actions, api, initStore, fireDeckEvent } = await loadStore();
+    initStore();
+
+    actions.playFrom([t1, t2], 0);
+    fireDeckEvent('playing');
+    await flush();
+    expect(api.requestLoudness).toHaveBeenCalledTimes(1);
+    expect(api.requestLoudness).toHaveBeenCalledWith(['t1', 't2']);
+
+    actions.next();
+    fireDeckEvent('playing');
+    await flush();
+    // The engine only announces new measurements every few minutes. Re-sending
+    // the same ids in the meantime is work nobody is waiting for.
+    expect(api.requestLoudness).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for the song to be audible before warming anything', async () => {
+    const { actions, api, audioService, initStore, fireDeckEvent } = await loadStore();
+    initStore();
+
+    actions.playFrom([t1, t2], 0);
+    await flush();
+    // Neither the second full-file request nor the lookahead POST is allowed to
+    // compete with the song the listener is waiting for.
+    expect(audioService.stage).not.toHaveBeenCalled();
+    expect(api.requestLoudness).not.toHaveBeenCalled();
+
+    fireDeckEvent('playing');
+    await flush();
+    expect(audioService.stage).toHaveBeenCalledWith('/stream/t2', expect.any(Number));
+    expect(api.requestLoudness).toHaveBeenCalled();
   });
 
   it('plays everything at unity while the setting is off', async () => {
@@ -1359,6 +1440,62 @@ describe('the end of a track', () => {
     store.actions.playFrom(queue, 0);
     return { ...store, deck: store.deck as unknown as { duration: number; currentTime: number } };
   }
+
+  it('cues the next track even in shuffle', async () => {
+    // The old guard here read an arrangement the player stopped using: shuffle
+    // is written into the queue order itself, so `next` is knowable. Refusing to
+    // cue it sent every track change back to the network — and a locked iPhone
+    // freezes the page the moment nothing is sounding, so that request never
+    // returns.
+    const { actions, state, audioService, fireDeckEvent } = await playing();
+    actions.toggleShuffle();
+    expect(state.playback.shuffle).toBe(true);
+    audioService.stage.mockClear();
+    audioService.clearStaged.mockClear();
+
+    actions.playFrom([t1, t2], 0);
+    fireDeckEvent('playing');
+    await flush();
+
+    expect(audioService.clearStaged).not.toHaveBeenCalled();
+    expect(audioService.stage).toHaveBeenCalledWith(
+      `/stream/${state.playback.queue[1].id}`,
+      expect.any(Number),
+    );
+  });
+
+  it('cues the first entry when repeat-all is about to wrap', async () => {
+    const { actions, state, audioService, fireDeckEvent } = await playing([t1, t2]);
+    actions.cycleRepeat();
+    while (state.playback.repeat !== 'all') actions.cycleRepeat();
+    actions.next();
+    expect(state.playback.index).toBe(1);
+    audioService.stage.mockClear();
+
+    fireDeckEvent('playing');
+    await flush();
+
+    // Whatever is cued has to be what `next` will actually play at the wrap.
+    expect(audioService.stage).toHaveBeenCalledWith('/stream/t1', expect.any(Number));
+  });
+
+  it('answers the OS play button with play, never a toggle', async () => {
+    // After a spell frozen in a pocket the store's `isPlaying` is whatever it
+    // was when the page stopped running. A lock screen or a steering wheel says
+    // which action it wants; answering `play` with a toggle pauses the music the
+    // listener just asked to hear.
+    const controls = stubMediaSession();
+    const { actions, state, audioService } = await playing();
+    audioService.resume.mockClear();
+    actions.pausePlayback();
+    expect(state.playback.isPlaying).toBe(false);
+    // Stale, the way a frozen page leaves it.
+    state.playback.isPlaying = true;
+
+    controls.press('play');
+    expect(audioService.resume).toHaveBeenCalled();
+    expect(audioService.pause).not.toHaveBeenCalledTimes(2);
+  });
 
   it('recovers a stream that was cut instead of skipping the rest of the song', async () => {
     const { state, deck, fireDeckEvent, audioService } = await playing();

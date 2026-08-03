@@ -19,12 +19,20 @@ def _percentile(values: list[float], percentile: float) -> float:
     return ordered[index]
 
 
+#: Triggers worth keeping apart from each other in the `local` bucket. A click
+#: has to reach the disk from cold; a track boundary is handed over from a deck
+#: that has been holding the stream for minutes. Averaging the two hides exactly
+#: the regression a listener notices, which is the click.
+LOCAL_TRIGGERS = {"selection", "next", "ended", "retry", "resume", "recovery"}
+
+
 def _bucket(row: dict) -> str:
     source = str(row.get("source_kind") or "unknown")
     cache = str(row.get("cache_state") or "unknown")
     egress = str(row.get("egress") or "unknown")
     if source == "local":
-        return "local"
+        trigger = str(row.get("trigger") or "")
+        return f"local_{trigger}" if trigger in LOCAL_TRIGGERS else "local"
     if source == "podcast":
         return "podcast"
     if cache == "disk":

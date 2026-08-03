@@ -124,3 +124,48 @@ def test_legacy_admin_env_token_still_grants_admin_scope(tmp_path, monkeypatch):
     response = client.post("/admin", headers={"Authorization": "Bearer legacy-secret"})
 
     assert response.status_code == 200
+
+
+def test_using_a_token_is_not_a_write_on_every_request(tmp_path, monkeypatch):
+    """An audio stream is not one request.
+
+    Seeking through a track is a burst of Range requests, and each one used to
+    take a SQLite write lock recording `last_used_at` — on the same greenlet hub
+    that was trying to serve the audio.
+    """
+    reset_runtime()
+    _make_runtime(tmp_path, advanced_mode=False)
+    app = _make_app()
+    db = instance_db()
+    db.create_auth_token(
+        str(uuid.uuid4()),
+        _hash("play"),
+        kind="agent",
+        scopes=[SCOPE_PLAYBACK_CONTROL],
+        user_id=TEST_USER_ID,
+    )
+
+    writes = []
+    original = DatabaseManager.touch_auth_token
+
+    def counted(self, token_id):
+        writes.append(token_id)
+        return original(self, token_id)
+
+    monkeypatch.setattr(DatabaseManager, "touch_auth_token", counted)
+    client = app.test_client()
+    headers = {"Authorization": "Bearer play"}
+
+    for _ in range(5):
+        assert client.post("/playback", headers=headers).status_code == 200
+    assert len(writes) == 1
+
+    # Once the record is genuinely stale, it is written again: this is a
+    # throttle, not a one-shot.
+    with db._get_connection() as conn:
+        conn.execute(
+            "UPDATE auth_tokens SET last_used_at = '2000-01-01 00:00:00' WHERE token_hash = ?",
+            (_hash("play"),),
+        )
+    assert client.post("/playback", headers=headers).status_code == 200
+    assert len(writes) == 2

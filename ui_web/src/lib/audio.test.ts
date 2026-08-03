@@ -89,6 +89,8 @@ class FakeAudio extends EventTarget {
   currentTime = 0;
   duration = 240;
   readyState = 4;
+  /** `NETWORK_LOADING`. A deck holding nothing reports `NETWORK_NO_SOURCE` (3). */
+  networkState = 2;
   paused = true;
   ended = false;
   volume = 1;
@@ -175,6 +177,18 @@ async function play(deck: FakeAudio, position: number) {
   await vi.advanceTimersByTimeAsync(300);
 }
 
+/** Put the page in the background, the way a phone going into a pocket does. */
+function setVisibility(value: 'visible' | 'hidden') {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => value,
+  });
+  document.dispatchEvent(new Event('visibilitychange'));
+}
+
+const hide = () => setVisibility('hidden');
+const reveal = () => setVisibility('visible');
+
 beforeEach(() => {
   created.length = 0;
   contexts.length = 0;
@@ -182,6 +196,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal('Audio', FakeAudio);
   vi.stubGlobal('AudioContext', undefined);
+  reveal();
 });
 
 afterEach(() => {
@@ -397,6 +412,114 @@ describe('two-deck mixer', () => {
     await module.audioService.load('/one', 1);
     module.audioService.stage('/two', 1);
     expect(module.audioService.takeStaged('/three', 1)).toBeNull();
+  });
+
+  it('takes a staged deck that has not finished buffering', async () => {
+    // Safari downgrades `preload="auto"` to metadata-only, so an iPhone's staged
+    // deck sits at HAVE_METADATA however long it has been cued. Refusing it
+    // there sent every track change back to the network — which is the one thing
+    // a locked phone will not do.
+    const module = await import('./audio');
+    const first = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/one', 1);
+    module.audioService.stage('/two', 1);
+    const idle = created.find((deck) => deck !== first)!;
+    idle.readyState = 1;
+
+    const taken = module.audioService.takeStaged('/two', 1);
+    expect(taken).not.toBeNull();
+    await taken;
+    expect(module.audioEl()).toBe(idle as unknown as HTMLAudioElement);
+    expect(idle.play).toHaveBeenCalledOnce();
+    // Still one load: the deck kept whatever it had rather than re-requesting.
+    expect(idle.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a staged deck that is holding nothing at all', async () => {
+    const module = await import('./audio');
+    const first = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/one', 1);
+    module.audioService.stage('/two', 1);
+    const idle = created.find((deck) => deck !== first)!;
+    idle.networkState = 3; // NETWORK_NO_SOURCE
+
+    expect(module.audioService.takeStaged('/two', 1)).toBeNull();
+  });
+
+  it('keeps the outgoing stream while the page is hidden', async () => {
+    // `load()` resets a media element, and on iOS that hands the audio session
+    // back. Doing it the instant a handoff completes — before the incoming deck
+    // has produced a sample — is how a locked phone goes quiet between songs.
+    const module = await import('./audio');
+    const first = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/one', 1);
+    module.audioService.stage('/two', 1);
+    const idle = created.find((deck) => deck !== first)!;
+
+    hide();
+    await module.audioService.takeStaged('/two', 1);
+    expect(first.src).toBe('/one');
+    expect(module.audioEl()).toBe(idle as unknown as HTMLAudioElement);
+
+    reveal();
+    expect(first.src).toBe('');
+  });
+
+  it('never rebuilds the decks while the page is hidden', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    const failures: unknown[] = [];
+    module.setGraphReporter((failure) => failures.push(failure));
+    expect(module.audioService.unlockAudio()).toBe(true);
+
+    const deck = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/current', 1);
+    deck.currentTime = 10;
+    contexts.at(-1)!.analyser.level = 128;
+
+    hide();
+    const before = created.length;
+    for (let step = 0; step < 8; step += 1) {
+      deck.currentTime += 1;
+      await vi.advanceTimersByTimeAsync(500);
+    }
+    // A backgrounded page's silence reading is meaningless — its timers are
+    // throttled — and the verdict would destroy the elements holding the session.
+    expect(created).toHaveLength(before);
+    expect(module.audioService.graphReady()).toBe(true);
+    expect(failures).toHaveLength(0);
+
+    // Not forgotten either: once the page is real again the same silence is
+    // judged on a clock that means something, and the recovery runs there.
+    reveal();
+    for (let step = 0; step < 8; step += 1) {
+      deck.currentTime += 1;
+      await vi.advanceTimersByTimeAsync(500);
+    }
+    expect(module.audioService.graphReady()).toBe(false);
+    expect(failures).toHaveLength(1);
+  });
+
+  it('drives a blend from the media clock when timers are throttled', async () => {
+    // A blend is normally supervised by a chain of timeouts. iOS throttles those
+    // in the background and stops them once the page is frozen, so the handoff
+    // has to be reachable from `timeupdate` and `ended` — which keep arriving
+    // for as long as the element is sounding.
+    const { audioService, outgoing, incoming } = await armed();
+    vi.clearAllTimers();
+
+    outgoing.currentTime = 118;
+    outgoing.dispatchEvent(new Event('timeupdate'));
+    expect(incoming.play).toHaveBeenCalled();
+
+    outgoing.ended = true;
+    outgoing.dispatchEvent(new Event('ended'));
+    incoming.paused = false;
+    for (let step = 0; step < 8; step += 1) {
+      incoming.currentTime += 1;
+      incoming.dispatchEvent(new Event('timeupdate'));
+    }
+    expect(audioService.mixPhase()).toBe('idle');
   });
 
   it('abandons a graph that stops sounding and keeps the music going', async () => {

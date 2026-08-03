@@ -23,6 +23,19 @@ const MAX_PREROLL = 4;
 const MIN_OVERLAP = 1.2;
 /** After a beatmatched blend the incoming deck drifts back to its own tempo. */
 const RATE_RETURN_MS = 8_000;
+/** `HTMLMediaElement.NETWORK_NO_SOURCE`, named rather than read off the global:
+ * the constant is missing under jsdom, and a deck holding nothing is exactly
+ * the case this has to recognise. */
+const NETWORK_NO_SOURCE = 3;
+
+/** True while the page is in the background — a locked phone, another app, a
+ * different tab. Everything that would reset a media element, rebuild the audio
+ * graph, or trust a throttled timer has to know: iOS keeps a backgrounded page
+ * alive only while an element is actually sounding, so those are the moments
+ * they are most likely to run and least able to survive. */
+function pageHidden(): boolean {
+  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+}
 
 let elements: HTMLAudioElement[] | null = null;
 let activeIndex = 0;
@@ -163,6 +176,7 @@ function decks(): HTMLAudioElement[] {
   if (!elements) {
     elements = [createDeck(), createDeck()];
     applyDeckVolume();
+    bindLifecycle();
   }
   return elements;
 }
@@ -548,6 +562,15 @@ function checkAudible(): void {
     stopAudibilityWatch();
     return;
   }
+  // A backgrounded page cannot be judged. Its `setInterval` is throttled to
+  // whatever the platform feels like, so the elapsed time this verdict rests on
+  // is not the elapsed time it thinks it is — and the verdict tears down the
+  // audio graph. Reset the clock and wait until the page is real again.
+  if (pageHidden()) {
+    silenceSince = null;
+    lastAudiblePosition = -1;
+    return;
+  }
   const deck = decks()[activeIndex];
   if (deck.paused || deck.ended) {
     silenceSince = null;
@@ -614,6 +637,15 @@ function discardGraph(): void {
  */
 function abandonGraph(reason: GraphFailure['reason']): void {
   if (graphState !== 'ready') return;
+  // This replaces both media elements. In the background that is not a recovery
+  // but the failure itself: the elements that hold iOS's audio session are
+  // destroyed and the new ones cannot claim it back without a gesture, so a
+  // graph that was merely quiet becomes a drive that ends in silence. Whatever
+  // is wrong will still be wrong when the listener is looking.
+  if (pageHidden()) {
+    pendingAbandon = reason;
+    return;
+  }
   const contextState = audioContext?.state ?? 'closed';
   const previous = decks()[activeIndex];
   const restore = {
@@ -1000,10 +1032,67 @@ function scheduleRateReturn(index: number): void {
 function detach(deck: HTMLAudioElement): void {
   deck.pause();
   deck.playbackRate = 1;
-  if (deck.getAttribute('src') !== null || deck.currentSrc) {
-    deck.removeAttribute('src');
-    deck.load();
+  if (deck.getAttribute('src') === null && !deck.currentSrc) return;
+  // Not while the page is in the background. This runs the instant a handoff
+  // completes, before the incoming deck has produced a single sample, and
+  // `load()` is what resets a media element — on iOS that is enough to hand the
+  // audio session back and end playback for a phone that is locked in a pocket.
+  // Holding the stream costs nothing until then: `stage` assigns this same deck
+  // a new `src` milliseconds later, which aborts the old request anyway.
+  if (pageHidden()) {
+    pendingDetach.add(deck);
+    return;
   }
+  deck.removeAttribute('src');
+  deck.load();
+}
+
+/** Decks whose stream outlived their track because the page was hidden. */
+const pendingDetach = new Set<HTMLAudioElement>();
+/** A graph teardown the background refused to carry out. See `abandonGraph`. */
+let pendingAbandon: GraphFailure['reason'] | null = null;
+
+/** Finish what the background deferred, now that the page can afford it. */
+function flushDeferredWork(): void {
+  for (const deck of pendingDetach) {
+    // Skip a deck that has been handed a real track in the meantime — `stage`
+    // and `load` both assign `src` without going through `detach`.
+    if (deck.paused && (deck.getAttribute('src') !== null || deck.currentSrc)) {
+      deck.removeAttribute('src');
+      deck.load();
+    }
+  }
+  pendingDetach.clear();
+  const reason = pendingAbandon;
+  pendingAbandon = null;
+  if (reason) abandonGraph(reason);
+}
+
+let lifecycleBound = false;
+
+/** Watch for the page coming back, once per session. Registered from `decks()`
+ * so it exists as early as the elements themselves do. */
+function bindLifecycle(): void {
+  if (lifecycleBound) return;
+  lifecycleBound = true;
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'hidden') flushDeferredWork();
+    });
+  }
+  // A blend is driven by a chain of timeouts, and a backgrounded page does not
+  // get to keep its timers: iOS throttles them to whatever it likes and stops
+  // them altogether once the page is frozen. `timeupdate` and `ended` come from
+  // the media element itself and keep arriving for as long as it is sounding,
+  // which on a locked phone is the only clock left. `tick` reads media clocks
+  // and compares them, so being called twice for the same moment costs nothing
+  // and being called at all is the difference between a handoff and silence.
+  onDeckEvent('timeupdate', () => {
+    if (mix) tick();
+  });
+  onDeckEvent('ended', () => {
+    if (mix) tick();
+  });
 }
 
 /**
@@ -1391,7 +1480,15 @@ export const audioService = {
     if (mix || !url || stagedUrl !== url) return null;
     const toIndex = 1 - activeIndex;
     const to = decks()[toIndex];
-    if (to.readyState < 2) return null;
+    // Deliberately not a `readyState` gate. Safari downgrades `preload="auto"`
+    // to metadata-only — on cellular, and for a second media element, near
+    // always — so an iPhone's staged deck sits at `HAVE_METADATA` however long
+    // it has been cued. Refusing it there sent every track change back to the
+    // network, which is precisely what a locked phone will not do. A deck that
+    // is holding the right URL is always the better start: `play()` buffers what
+    // it still needs, and the fallback would make the same request from scratch
+    // and throw away everything this one already has.
+    if (to.networkState === NETWORK_NO_SOURCE) return null;
     const fromIndex = activeIndex;
     const token = ++loadSeq;
     stagedUrl = '';
