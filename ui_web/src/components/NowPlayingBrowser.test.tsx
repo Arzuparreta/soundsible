@@ -121,7 +121,7 @@ describe('NowPlayingBrowser', () => {
     expect(screen.queryByText('Settings')).not.toBeInTheDocument();
   });
 
-  it.each(['auto-neutral', 'auto-source', 'auto-route'] as const)(
+  it.each(['auto-neutral', 'auto-route'] as const)(
     'hides Listen now in the %s Auto browser context',
     (purpose) => {
       render(() => <NowPlayingBrowser purpose={purpose} onClose={vi.fn()} />);
@@ -207,13 +207,23 @@ describe('NowPlayingBrowser', () => {
     );
   });
 
-  it('uses the same favourites view as an Auto source destination', () => {
+  it('offers a whole collection as a source without arming a mode first', () => {
+    // This used to sit behind a ＋ in the Sources header whose only visible
+    // effect was a highlight: the button it unlocked lived two screens away.
     storeMock.state.favorites = ['local-1'];
-    render(() => <NowPlayingBrowser purpose="auto-source" onClose={vi.fn()} />);
+    render(() => <NowPlayingBrowser purpose="auto-neutral" onClose={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Add to sources' }));
     expect(storeMock.actions.addAutoSource).toHaveBeenCalledWith([storeMock.local], 'Favourites');
+  });
+
+  it('keeps sources out of the way outside Auto Mode', () => {
+    storeMock.state.favorites = ['local-1'];
+    render(() => <NowPlayingBrowser onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
+    expect(screen.queryByRole('button', { name: 'Add to sources' })).not.toBeInTheDocument();
   });
 
   it('only enters library scope explicitly and offers the same query globally', async () => {

@@ -46,10 +46,14 @@ export function AutoMode(props: {
   surfaceOpen: boolean;
 }) {
   const [layout, setLayout] = createSignal(readLayout());
-  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'source' | 'route'; beforeQueueId?: string }>({ kind: 'neutral' });
+  // Aiming at a seam is the only mode left. Picking sources used to be one too,
+  // and it was a mode with no visible state: its whole payload was deferred
+  // until you happened to navigate into a collection, so pressing the button
+  // that armed it looked like pressing nothing.
+  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'route'; beforeQueueId?: string }>({ kind: 'neutral' });
   const [carriedTrack, setCarriedTrack] = createSignal<CarriedTrack | null>(null);
 
-  const openDestination = (kind: 'source' | 'route', beforeQueueId?: string) => {
+  const openDestination = (kind: 'route', beforeQueueId?: string) => {
     setDestination({ kind, beforeQueueId });
     props.onPanelChange('browser');
   };
@@ -148,11 +152,10 @@ export function AutoMode(props: {
       <header class={styles.sourceHeader}>
         {dragHandle}
         <span><small>{t('autoMode.label')}</small><strong>{t('autoMode.source.title')}</strong></span>
-        <button class={styles.sourceAdd} type="button" aria-label={t('autoMode.source.title')} aria-pressed={destination().kind === 'source'} onClick={() => openDestination('source')}>＋</button>
       </header>
       <div
         class={styles.sourceTray}
-        data-target={destination().kind === 'source' || carriedTrack() ? '' : undefined}
+        data-target={carriedTrack() ? '' : undefined}
         onClick={() => carriedTrack() && addToSources(carriedTrack()!.track)}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
@@ -184,10 +187,9 @@ export function AutoMode(props: {
       </div>
       <div class={styles.sourceBrowser}>
         <NowPlayingBrowser
-          purpose={destination().kind === 'source' ? 'auto-source' : destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
+          purpose={destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
           routeBeforeQueueId={destination().beforeQueueId}
           onPlaced={() => finishDestination('route')}
-          onSourceAdded={() => finishDestination('browser')}
           onCarryTrack={(track) => setCarriedTrack({ track })}
           onClose={() => finishDestination('stage')}
         />

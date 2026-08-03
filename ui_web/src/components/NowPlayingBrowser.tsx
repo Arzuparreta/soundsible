@@ -153,14 +153,13 @@ function trackCover(track: Track): string | undefined {
 export function NowPlayingBrowser(props: {
   onClose: () => void;
   dragHandle?: JSX.Element;
-  purpose?: 'browse' | 'auto-neutral' | 'auto-route' | 'auto-source';
+  purpose?: 'browse' | 'auto-neutral' | 'auto-route';
   routeBeforeQueueId?: string;
   onPlaced?: () => void;
-  onSourceAdded?: () => void;
   onCarryTrack?: (track: Track) => void;
 }) {
   const routeMode = () => props.purpose === 'auto-route';
-  const sourceMode = () => props.purpose === 'auto-source';
+  const inAuto = () => Boolean(props.purpose?.startsWith('auto-'));
   const autoNeutral = () => props.purpose === 'auto-neutral';
   const [stack, setStack] = createSignal<BrowserView[]>([{ kind: 'root' }]);
   const [returnSearches, setReturnSearches] = createSignal<Array<SearchReturn | null>>([null]);
@@ -420,11 +419,6 @@ export function NowPlayingBrowser(props: {
     // bouncing them to the route after every song made building a set a chore.
     if (routeMode()) props.onPlaced?.();
   };
-  const sourceTrack = (track: Track) => {
-    actions.useAutoTrackAsSource(track);
-    props.onSourceAdded?.();
-  };
-
   /**
    * The Auto-Mode half of a song row, for anything the panel can list.
    *
@@ -444,7 +438,7 @@ export function NowPlayingBrowser(props: {
       variant: auto ? 'auto' : 'browse',
       // Picking a source is its own errand; offering the route mid-way through
       // it would be answering a question the listener did not ask.
-      onAddToRoute: auto && !sourceMode() && target
+      onAddToRoute: auto && target
         ? () => item ? void useItem(item, placeTrack) : placeTrack(target as Track)
         : undefined,
       track: track ?? undefined,
@@ -488,7 +482,7 @@ export function NowPlayingBrowser(props: {
       seed={track.id}
       active={isPlayingTrack(track)}
       queued={isQueuedTrack(track)}
-      onPlay={routeMode() ? () => placeTrack(track) : sourceMode() ? () => sourceTrack(track) : onPlay}
+      onPlay={routeMode() ? () => placeTrack(track) : onPlay}
       onQueue={onQueue}
       onMenu={(event) => openTrackActions(track, event)}
       {...autoRow(track)}
@@ -551,7 +545,7 @@ export function NowPlayingBrowser(props: {
               setScope('global');
               runSearch(value);
             }}
-            onUse={sourceMode() ? (tracks) => actions.addAutoSource(tracks, query()) : undefined}
+            onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, query()) : undefined}
           />
         </Match>
         <Match when={globalSearching()}>
@@ -564,9 +558,9 @@ export function NowPlayingBrowser(props: {
             failed={failed()}
             resolving={resolving()}
             onRetry={() => runSearch(query())}
-            primaryLabel={routeMode() ? t('autoMode.dj.routeAction') : sourceMode() ? t('autoMode.source.title') : undefined}
+            primaryLabel={routeMode() ? t('autoMode.dj.routeAction') : undefined}
             autoRow={autoRow}
-            onTrack={(item) => void useItem(item, routeMode() ? placeTrack : sourceMode() ? sourceTrack : actions.playNow)}
+            onTrack={(item) => void useItem(item, routeMode() ? placeTrack : actions.playNow)}
             onQueue={(item) => void useItem(item, actions.enqueue)}
             onEntity={(item) => {
               if (item.type === 'artist') {
@@ -588,7 +582,7 @@ export function NowPlayingBrowser(props: {
                 }, true);
               }
             }}
-            onYoutube={(result) => routeMode() ? placeTrack(resultTrack(result)) : sourceMode() ? sourceTrack(resultTrack(result)) : actions.playNow(resultTrack(result))}
+            onYoutube={(result) => routeMode() ? placeTrack(resultTrack(result)) : actions.playNow(resultTrack(result))}
           />
         </Match>
         <Match when={true}>
@@ -623,7 +617,7 @@ export function NowPlayingBrowser(props: {
                 onSearch={activateLibrarySearch}
                 onArtist={(name) => push({ kind: 'libraryArtist', name })}
                 renderTrack={renderTrack}
-                onUse={sourceMode() ? (tracks) => actions.addAutoSource(tracks, t('nav.library')) : undefined}
+                onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, t('nav.library')) : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'favourites'}>
@@ -635,7 +629,7 @@ export function NowPlayingBrowser(props: {
                 onBack={back}
                 renderTrack={renderTrack}
                 showPlayAll={!routeMode()}
-                onUse={sourceMode() ? (tracks) => actions.addAutoSource(tracks, t('nav.favourites')) : undefined}
+                onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, t('nav.favourites')) : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'libraryArtist'}>
@@ -643,7 +637,7 @@ export function NowPlayingBrowser(props: {
                 name={(currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name}
                 onBack={back}
                 renderTrack={renderTrack}
-                onUse={sourceMode() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name) : undefined}
+                onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name) : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'playlists'}>
@@ -656,7 +650,7 @@ export function NowPlayingBrowser(props: {
                 onBack={back}
                 renderTrack={renderTrack}
                 showPlayAll={!routeMode()}
-                onUse={sourceMode() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'playlist' }>).name) : undefined}
+                onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'playlist' }>).name) : undefined}
               />
             </Match>
             <Match when={currentView().kind === 'catalogArtist'}>
@@ -664,10 +658,9 @@ export function NowPlayingBrowser(props: {
                 view={currentView() as Extract<BrowserView, { kind: 'catalogArtist' }>}
                 onBack={back}
                 onAlbum={(name, artist, deezerId) => push({ kind: 'catalogAlbum', name, artist, deezerId })}
-                sourceMode={sourceMode()}
+                inAuto={inAuto()}
                 routeMode={routeMode()}
                 autoRow={autoRow}
-                onSourceItem={(item) => void useItem(item, sourceTrack)}
                 onRouteItem={(item) => void useItem(item, placeTrack)}
               />
             </Match>
@@ -675,10 +668,9 @@ export function NowPlayingBrowser(props: {
               <CatalogAlbumView
                 view={currentView() as Extract<BrowserView, { kind: 'catalogAlbum' }>}
                 onBack={back}
-                sourceMode={sourceMode()}
+                inAuto={inAuto()}
                 routeMode={routeMode()}
                 autoRow={autoRow}
-                onSourceItem={(item) => void useItem(item, sourceTrack)}
                 onRouteItem={(item) => void useItem(item, placeTrack)}
               />
             </Match>
@@ -1080,10 +1072,9 @@ function CatalogArtistView(props: {
   view: Extract<BrowserView, { kind: 'catalogArtist' }>;
   onBack: () => void;
   onAlbum: (name: string, artist: string, deezerId?: string) => void;
-  sourceMode?: boolean;
+  inAuto?: boolean;
   routeMode?: boolean;
   autoRow: (target: Track | CatalogItem) => AutoRowProps;
-  onSourceItem: (item: CatalogItem) => void;
   onRouteItem: (item: CatalogItem) => void;
 }) {
   const [profile] = createResource(
@@ -1095,12 +1086,15 @@ function CatalogArtistView(props: {
   return (
     <div class={styles.body}>
       <ViewHeader title={props.view.name} onBack={props.onBack}>
-        <button type="button" disabled={!profile()?.top_tracks.length} aria-label={props.sourceMode ? t('autoMode.source.add') : t('artist.play')} onClick={() => {
-          const tracks = profile()?.top_tracks ?? [];
-          if (props.sourceMode) {
-            const resolved = tracks.map(playableTrack).filter((track): track is Track => !!track);
+        <Show when={props.inAuto}>
+          <button type="button" disabled={!profile()?.top_tracks.length} onClick={() => {
+            const resolved = (profile()?.top_tracks ?? []).map(playableTrack).filter((track): track is Track => !!track);
             if (resolved.length) actions.addAutoSource(resolved, props.view.name);
-          } else if (tracks[0]) play(tracks[0], tracks);
+          }}>{t('autoMode.source.add')}</button>
+        </Show>
+        <button type="button" disabled={!profile()?.top_tracks.length} aria-label={t('artist.play')} onClick={() => {
+          const tracks = profile()?.top_tracks ?? [];
+          if (tracks[0]) play(tracks[0], tracks);
         }}><PlayIcon /></button>
       </ViewHeader>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
@@ -1118,7 +1112,7 @@ function CatalogArtistView(props: {
                       seed={item.id}
                       active={isPlayingItem(item)}
                       queued={isQueuedItem(item)}
-                      onPlay={() => props.routeMode ? props.onRouteItem(item) : props.sourceMode ? props.onSourceItem(item) : play(item, data().top_tracks.slice(0, 10))}
+                      onPlay={() => props.routeMode ? props.onRouteItem(item) : play(item, data().top_tracks.slice(0, 10))}
                       onQueue={() => void enqueueCatalogItem(item)}
                       {...props.autoRow(item)}
                     />
@@ -1155,10 +1149,9 @@ function CatalogArtistView(props: {
 function CatalogAlbumView(props: {
   view: Extract<BrowserView, { kind: 'catalogAlbum' }>;
   onBack: () => void;
-  sourceMode?: boolean;
+  inAuto?: boolean;
   routeMode?: boolean;
   autoRow: (target: Track | CatalogItem) => AutoRowProps;
-  onSourceItem: (item: CatalogItem) => void;
   onRouteItem: (item: CatalogItem) => void;
 }) {
   const [profile] = createResource(
@@ -1170,12 +1163,15 @@ function CatalogAlbumView(props: {
   return (
     <div class={styles.body}>
       <ViewHeader title={props.view.name} meta={props.view.artist} onBack={props.onBack}>
-        <button type="button" disabled={!profile()?.tracklist.length} aria-label={props.sourceMode ? t('autoMode.source.add') : t('album.play')} onClick={() => {
-          const tracks = profile()?.tracklist ?? [];
-          if (props.sourceMode) {
-            const resolved = tracks.map(playableTrack).filter((track): track is Track => !!track);
+        <Show when={props.inAuto}>
+          <button type="button" disabled={!profile()?.tracklist.length} onClick={() => {
+            const resolved = (profile()?.tracklist ?? []).map(playableTrack).filter((track): track is Track => !!track);
             if (resolved.length) actions.addAutoSource(resolved, props.view.name);
-          } else if (tracks[0]) play(tracks[0], tracks);
+          }}>{t('autoMode.source.add')}</button>
+        </Show>
+        <button type="button" disabled={!profile()?.tracklist.length} aria-label={t('album.play')} onClick={() => {
+          const tracks = profile()?.tracklist ?? [];
+          if (tracks[0]) play(tracks[0], tracks);
         }}><PlayIcon /></button>
       </ViewHeader>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
@@ -1190,7 +1186,7 @@ function CatalogAlbumView(props: {
                   seed={item.id}
                   active={isPlayingItem(item)}
                   queued={isQueuedItem(item)}
-                  onPlay={() => props.routeMode ? props.onRouteItem(item) : props.sourceMode ? props.onSourceItem(item) : play(item, data().tracklist)}
+                  onPlay={() => props.routeMode ? props.onRouteItem(item) : play(item, data().tracklist)}
                   onQueue={() => void enqueueCatalogItem(item)}
                   {...props.autoRow(item)}
                 />

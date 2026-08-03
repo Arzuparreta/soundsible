@@ -45,13 +45,14 @@ function renderAuto(panel: 'browser' | 'stage' | 'route' = 'stage') {
 afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); localStorage.clear(); });
 
 describe('AutoMode workspace', () => {
-  it('keeps the browser neutral until Sources is chosen as the destination', () => {
+  it('browses without arming a mode, and offers no button that only highlights a tray', () => {
     renderAuto('browser');
     expect(screen.getByTestId('shared-stage')).toHaveAttribute('data-mode', 'auto');
     expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-neutral');
     expect(screen.getAllByText('Warehouse techno')).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.source.title' }));
-    expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-source');
+    // The Sources ＋ armed a mode whose whole payload was deferred until you
+    // navigated into a collection, so pressing it looked like pressing nothing.
+    expect(screen.queryByRole('button', { name: 'autoMode.source.title' })).not.toBeInTheDocument();
   });
 
   it('shows lineage and puts both route actions one press away, with no menu', () => {
