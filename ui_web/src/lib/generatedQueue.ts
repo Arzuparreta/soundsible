@@ -78,6 +78,15 @@ export interface AutoModeState {
   phase: AutoPhase;
   activity: AutoActivity | null;
   plan: Record<string, AutoPlanItem>;
+  /**
+   * Occurrences whose incoming transition is no longer the one that was planned.
+   *
+   * Reordering the route opens joins the DJ never chose, and re-seaming them
+   * costs a round trip nobody asked for mid-drag. Naming them instead lets the
+   * route show where the mix is waiting on a repair, rather than leaving a
+   * plain fade to be discovered when it fires.
+   */
+  staleSeams: string[];
 }
 
 export interface GeneratedSnapshot {

@@ -256,6 +256,7 @@ const [state, setState] = createStore<AppState>({
     phase: 'idle',
     activity: null,
     plan: {},
+    staleSeams: [],
   },
   downloads: {
     queue: [],

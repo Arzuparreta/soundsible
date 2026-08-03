@@ -194,6 +194,8 @@ export const en = {
       title: 'Sources', add: 'Add to sources', empty: 'Drag music here to steer the session.',
       libraryActions: 'Use the library as a source', remove: 'Remove the {title} source',
       routeEmpty: 'Add a track to the route or resume playback',
+      added: 'Steering the session from “{title}”',
+      already: '“{title}” is already one of your sources',
     },
     route: {
       pinned: 'Pinned', actions: 'Actions for {title}', useAsSource: 'From this track',
@@ -203,6 +205,8 @@ export const en = {
       addToRoute: 'Add {title} to the route', addHere: 'Add {title} here',
       fix: 'Fix mix', fixing: 'Fixing…',
       fixHint: 'Rebuild the mix around the songs you placed',
+      mixPending: 'Some joins have no transition planned yet',
+      moved: '“{title}” moved · the mix still needs rebuilding',
       dropHere: 'Drop to place here',
     },
     workspace: {

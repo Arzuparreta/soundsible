@@ -42,11 +42,31 @@ describe('dragReorder', () => {
   it('treats both edges of a row as the place it already is', () => {
     const slots = buildDropSlots(rows);
     const ids = rows.map((row) => row.id);
-    expect(isNoopMove(ids, 'b', slots[1])).toBe(true);
-    expect(isNoopMove(ids, 'b', slots[2])).toBe(true);
-    expect(isNoopMove(ids, 'b', slots[0])).toBe(false);
-    expect(isNoopMove(ids, 'b', slots[3])).toBe(false);
-    expect(isNoopMove(ids, 'missing', slots[0])).toBe(false);
+    expect(isNoopMove(ids, ['b'], slots[1])).toBe(true);
+    expect(isNoopMove(ids, ['b'], slots[2])).toBe(true);
+    expect(isNoopMove(ids, ['b'], slots[0])).toBe(false);
+    expect(isNoopMove(ids, ['b'], slots[3])).toBe(false);
+    expect(isNoopMove(ids, ['missing'], slots[0])).toBe(false);
+  });
+
+  it('treats a whole block, and every seam inside it, as where it already is', () => {
+    const slots = buildDropSlots(rows);
+    const ids = rows.map((row) => row.id);
+    // A bridge and the song it leads into travel as one.
+    expect(isNoopMove(ids, ['a', 'b'], slots[0])).toBe(true);
+    expect(isNoopMove(ids, ['a', 'b'], slots[1])).toBe(true);
+    expect(isNoopMove(ids, ['a', 'b'], slots[2])).toBe(true);
+    expect(isNoopMove(ids, ['a', 'b'], slots[3])).toBe(false);
+    expect(isNoopMove(ids, [], slots[0])).toBe(false);
+  });
+
+  it('never offers the seam above a fixed row, and does not renumber the rest', () => {
+    // The cued handoff leads the route: nothing may be put in front of it.
+    const slots = buildDropSlots([{ ...rows[0], fixed: true }, rows[1], rows[2]]);
+    expect(slots.map((slot) => slot.beforeId)).toEqual(['b', 'c', undefined]);
+    // "before b" still means one row sits ahead of the seam.
+    expect(slots.map((slot) => slot.index)).toEqual([1, 2, 3]);
+    expect(nearestSlot(slots, -900)?.beforeId).toBe('b');
   });
 
   it('scrolls only near an edge, and ramps rather than switching on', () => {

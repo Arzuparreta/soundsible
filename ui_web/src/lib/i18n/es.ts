@@ -195,6 +195,8 @@ export const es: Dict = {
       title: 'Fuentes', add: 'Añadir a fuentes', empty: 'Arrastra aquí música para orientar la sesión.',
       libraryActions: 'Usar la biblioteca como fuente', remove: 'Quitar la fuente {title}',
       routeEmpty: 'Añade una canción a la ruta o reanuda la reproducción',
+      added: 'Orientando la sesión desde «{title}»',
+      already: '«{title}» ya está entre tus fuentes',
     },
     route: {
       pinned: 'Fijada', actions: 'Acciones para {title}', useAsSource: 'Desde esta canción',
@@ -204,6 +206,8 @@ export const es: Dict = {
       addToRoute: 'Añadir {title} a la ruta', addHere: 'Añadir {title} aquí',
       fix: 'Arreglar mezcla', fixing: 'Arreglando…',
       fixHint: 'Rehacer la mezcla alrededor de las canciones que has puesto',
+      mixPending: 'Hay uniones sin transición planeada',
+      moved: '«{title}» se ha movido · falta rehacer la mezcla',
       dropHere: 'Suelta para colocar aquí',
     },
     workspace: {

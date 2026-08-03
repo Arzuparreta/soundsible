@@ -8,12 +8,13 @@ import {
   initialMobileVisualState,
   toggleMobileLyrics,
 } from '../lib/nowPlayingMobileVisual';
+import { responsiveTapConstants } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
-import { KaraokeMicIcon } from './icons';
+import { KaraokeMicIcon, SourceIcon } from './icons';
 import { LyricsPanel } from './LyricsPanel';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
@@ -57,9 +58,20 @@ export function PlayerStage(props: {
   const [layoutBusy, setLayoutBusy] = createSignal(false);
   let rootEl: HTMLDivElement | undefined;
   let carryTimer: number | undefined;
+  let carryStart: { x: number; y: number } | null = null;
   const cancelCarry = () => {
     if (carryTimer !== undefined) window.clearTimeout(carryTimer);
     carryTimer = undefined;
+    carryStart = null;
+  };
+  // A held finger is never perfectly still: cancelling on any movement at all
+  // made the long press a gesture only a mouse could land.
+  const trackCarry = (event: PointerEvent) => {
+    if (!carryStart) return;
+    const slop = responsiveTapConstants.TAP_SLOP;
+    if (Math.abs(event.clientX - carryStart.x) > slop || Math.abs(event.clientY - carryStart.y) > slop) {
+      cancelCarry();
+    }
   };
 
   const readDesktopLyrics = () => {
@@ -182,12 +194,10 @@ export function PlayerStage(props: {
             onSelect: () => state.playback.radioMode ? void onStopRadio() : void actions.startRadio(current),
           },
         ] : []),
-        // The one Auto-native thing to do with the song on air: take the rest
-        // of the session in its direction.
-        ...(props.mode === 'auto' ? [{
-          label: t('autoMode.route.useAsSource'),
-          onSelect: () => actions.useAutoTrackAsSource(current),
-        }] : []),
+        // The one Auto-native thing to do with the song on air now has a button
+        // of its own in the actions bar — the song playing is not in the route
+        // panel, so a menu entry was the only way to reach it and nothing said
+        // it was there.
         ...buildTrackMenu(current, {
           auto: props.mode === 'auto',
           onAddToPlaylist: openPlaylistPicker,
@@ -232,12 +242,13 @@ export function PlayerStage(props: {
                     aria-label={current().title}
                     draggable={Boolean(props.onTrackDragStart)}
                     onDragStart={(event) => props.onTrackDragStart?.(event, current())}
-                    onPointerDown={() => {
+                    onPointerDown={(event) => {
                       if (!props.onCarryTrack) return;
                       cancelCarry();
+                      carryStart = { x: event.clientX, y: event.clientY };
                       carryTimer = window.setTimeout(() => props.onCarryTrack?.(current()), 460);
                     }}
-                    onPointerMove={cancelCarry}
+                    onPointerMove={trackCarry}
                     onPointerUp={cancelCarry}
                     onPointerCancel={cancelCarry}
                   />
@@ -426,6 +437,18 @@ export function PlayerStage(props: {
                         <path d="M11 17a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
                         <path d="M17 17V4h4M13 5H3M3 9h10M9 13H3" />
                       </svg>
+                    </button>
+                  </Show>
+
+                  <Show when={props.mode === 'auto' && !podcast()}>
+                    <button
+                      class={styles.actBtn}
+                      type="button"
+                      aria-label={t('autoMode.route.useAsSource')}
+                      title={t('autoMode.route.useAsSource')}
+                      onClick={() => actions.useAutoTrackAsSource(current())}
+                    >
+                      <SourceIcon size={20} />
                     </button>
                   </Show>
 

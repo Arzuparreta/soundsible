@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
-import { createResponsiveTap } from '../lib/responsiveTap';
+import { createResponsiveTap, responsiveTapConstants } from '../lib/responsiveTap';
 import {
   buildDropSlots,
   containerPointer,
@@ -20,6 +20,8 @@ export interface PlayerTrackListEntry {
   current?: boolean;
   paused?: boolean;
   locked?: boolean;
+  /** The join above this row has no transition planned for it any more. */
+  stale?: boolean;
   annotation?: string;
   badge?: string;
   onActivate?: () => void;
@@ -44,6 +46,9 @@ export interface PlayerTrackListHeadAction {
   label: string;
   title?: string;
   disabled?: boolean;
+  /** There is work waiting on this action. Draws attention to it without
+   * pretending it is the only thing the header does. */
+  pending?: boolean;
   onClick: () => void;
 }
 
@@ -126,6 +131,7 @@ export function PlayerTrackList(props: {
                   class={styles.headAction}
                   type="button"
                   title={action.title}
+                  data-pending={action.pending ? '' : undefined}
                   disabled={action.disabled}
                   onClick={action.onClick}
                 >
@@ -207,27 +213,42 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry; seam?: boolean
     onTap: () => props.entry.onActivate?.(),
   });
   let carryTimer: number | undefined;
+  let carryStart: { x: number; y: number } | null = null;
   const cancelCarry = () => {
     if (carryTimer !== undefined) window.clearTimeout(carryTimer);
     carryTimer = undefined;
+    carryStart = null;
   };
   return (
     <div
       class={styles.row}
       data-drag-row={props.entry.id}
+      // The cued handoff is already loaded: nothing may be inserted in front of
+      // it, so the list never draws that seam.
+      data-drag-fixed={props.entry.locked ? '' : undefined}
       data-seam={props.seam ? '' : undefined}
       data-current={props.entry.current ? '' : undefined}
       data-locked={props.entry.locked ? '' : undefined}
+      data-stale={props.entry.stale ? '' : undefined}
       draggable={props.entry.draggable}
       onDragStart={props.entry.onDragStart}
       onDragOver={props.entry.onDragOver}
       onDrop={props.entry.onDrop}
-      onPointerDown={() => {
+      onPointerDown={(event) => {
         if (!props.entry.onCarry) return;
         cancelCarry();
+        carryStart = { x: event.clientX, y: event.clientY };
         carryTimer = window.setTimeout(() => props.entry.onCarry?.(), 460);
       }}
-      onPointerMove={cancelCarry}
+      // A held finger is never perfectly still. Cancelling on any movement at
+      // all made the long press a gesture only a mouse could land.
+      onPointerMove={(event) => {
+        if (!carryStart) return;
+        const slop = responsiveTapConstants.TAP_SLOP;
+        if (Math.abs(event.clientX - carryStart.x) > slop || Math.abs(event.clientY - carryStart.y) > slop) {
+          cancelCarry();
+        }
+      }}
       onPointerUp={cancelCarry}
       onPointerCancel={cancelCarry}
     >
