@@ -40,10 +40,30 @@ def _bucket(row: dict) -> str:
     return f"preview_{egress}_{cache}"
 
 
+#: How far apart a server row and the client row for the same track may be and
+#: still describe one play. Generous: the client stamps when the sound started,
+#: the server when it opened the file, and a slow start is the whole point.
+JOIN_WINDOW_SEC = 60
+
+
+def _nearest(by_track: dict[str, list[dict]], client_row: dict) -> dict | None:
+    """The server row most likely to describe this client row's play."""
+    candidates = by_track.get(str(client_row.get("track_id") or ""))
+    if not candidates:
+        return None
+    when = float(client_row.get("ts") or 0)
+    best = min(candidates, key=lambda row: abs(float(row.get("ts") or 0) - when))
+    return best if abs(float(best.get("ts") or 0) - when) <= JOIN_WINDOW_SEC else None
+
+
 def build_report(path: Path, *, days: int) -> dict:
     cutoff = time.time() - days * 86400
     starts: dict[str, dict] = {}
     server: dict[str, dict] = {}
+    #: Server rows with no attempt id, by track. The stream URL no longer
+    #: carries one — that made every play a fresh cache key — so these are
+    #: matched on the track and the clock instead.
+    by_track: dict[str, list[dict]] = defaultdict(list)
     samples: dict[str, list[float]] = defaultdict(list)
     failures: dict[str, int] = defaultdict(int)
     stalls: dict[str, int] = defaultdict(int)
@@ -62,7 +82,10 @@ def build_report(path: Path, *, days: int) -> dict:
                 continue
             phase = row.get("phase")
             if phase == "server_stream_ready":
-                server[attempt_id] = row
+                if attempt_id:
+                    server[attempt_id] = row
+                else:
+                    by_track[str(row.get("track_id") or "")].append(row)
             elif phase == "ui_click_to_playing":
                 starts[attempt_id] = row
             elif phase == "ui_attempt_failed":
@@ -70,7 +93,7 @@ def build_report(path: Path, *, days: int) -> dict:
 
     for attempt_id, row in starts.items():
         joined = {**row}
-        upstream = server.get(attempt_id)
+        upstream = server.get(attempt_id) or _nearest(by_track, row)
         if upstream:
             for key in ("cache_state", "egress"):
                 if upstream.get(key):

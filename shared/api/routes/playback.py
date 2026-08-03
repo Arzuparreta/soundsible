@@ -285,6 +285,7 @@ def list_playback_devices():
 
 @playback_bp.route("/api/static/stream/<track_id>", methods=["GET"])
 def stream_local_track(track_id):
+    started = time.perf_counter()
     api = _get_api()
     lib, _, _ = api["get_core"]()
     track = api["get_track_by_id"](lib, track_id)
@@ -309,6 +310,26 @@ def stream_local_track(track_id):
         response.headers.add("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges")
         response.headers["X-Soundsible-Playback-Source"] = "local"
         response.headers["X-Soundsible-Playback-Egress"] = "direct"
+        # The local path used to report nothing at all, so every downloaded
+        # track read back as a client-side number with no server half to compare
+        # it against — which is exactly the shape of "it takes seconds to start"
+        # that cannot be attributed to anything.
+        _emit_stream_timing(
+            attempt_id=_clean_attempt_id(),
+            track_id=track_id,
+            cache_state="disk",
+            egress="direct",
+            source_kind="local",
+            segments={
+                "open_ms": round((time.perf_counter() - started) * 1000, 1),
+                "ranged": bool(request.headers.get("Range")),
+                "served_bytes": int(response.headers.get("Content-Length") or 0),
+                "file_bytes": os.path.getsize(path),
+                # A whole-second `ts` cannot show the gap between the requests a
+                # player makes for one track, which is the interesting part.
+                "at_ms": round(time.time() * 1000),
+            },
+        )
         return response
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -328,9 +349,12 @@ def _emit_stream_timing(
     cache_state: str,
     egress: str,
     segments: dict[str, int | float | bool],
+    source_kind: str = "preview",
 ) -> None:
-    if not attempt_id:
-        return
+    # No attempt id is the normal case now: it used to ride the stream URL,
+    # which made every play a fresh cache key and re-fetched music the browser
+    # already had. The report joins these to the client's rows on the track and
+    # the clock instead — see `scripts/playback_report.py`.
     from shared.telemetry import emit
 
     emit(
@@ -339,10 +363,10 @@ def _emit_stream_timing(
             "v": 2,
             "event": "play_timing",
             "ts": int(time.time()),
-            "attempt_id": attempt_id,
+            "attempt_id": attempt_id or "",
             "track_id": track_id[:128],
             "phase": "server_stream_ready",
-            "source_kind": "preview",
+            "source_kind": source_kind,
             "cache_state": cache_state,
             "egress": egress,
             "segments": segments,

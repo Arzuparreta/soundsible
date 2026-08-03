@@ -20,16 +20,31 @@ export const coverUrl = (id: string): string => {
   return `${apiOrigin()}/api/static/cover/${encodeURIComponent(id)}${v ? `?v=${v}` : ''}`;
 };
 
-/** Audio stream for a library track. */
-const attemptQuery = (attemptId?: string): string =>
-  attemptId ? `?attempt_id=${encodeURIComponent(attemptId)}` : '';
+/**
+ * Audio stream for a library track.
+ *
+ * The URL for a track is the same every time it is played, and that is a
+ * requirement rather than a detail. A media URL is a cache key: tagging each
+ * play with its own attempt id — as this did, to make server and client
+ * telemetry easy to join — gave every play a key nothing had ever seen, so the
+ * browser could not reuse a byte of what it already had. Downloaded music was
+ * re-fetched in full on every play, which on a LAN is invisible and over a
+ * remote link is seconds of staring at a spinner. The engine sends an `ETag`
+ * and answers a conditional request with a 304 in about a millisecond; keeping
+ * the URL stable is what lets any of that happen.
+ *
+ * Telemetry is joined on the track and the clock instead. See
+ * `scripts/playback_report.py`.
+ */
+export const streamUrl = (id: string): string =>
+  `${apiOrigin()}/api/static/stream/${encodeURIComponent(id)}`;
 
-export const streamUrl = (id: string, attemptId?: string): string =>
-  `${apiOrigin()}/api/static/stream/${encodeURIComponent(id)}${attemptQuery(attemptId)}`;
-
-/** Preview audio stream for a not-yet-downloaded YouTube video (Discover). */
-export const previewUrl = (videoId: string, attemptId?: string): string =>
-  `${apiOrigin()}/api/preview/stream/${encodeURIComponent(videoId)}${attemptQuery(attemptId)}`;
+/** Preview audio stream for a not-yet-downloaded YouTube video (Discover).
+ * Stable for the same reason as `streamUrl`, and it matters at least as much
+ * here: a preview the engine already cached to disk should never be proxied
+ * twice. */
+export const previewUrl = (videoId: string): string =>
+  `${apiOrigin()}/api/preview/stream/${encodeURIComponent(videoId)}`;
 
 /**
  * Return the YouTube identity used by playback for this track.
@@ -43,5 +58,5 @@ export const playbackYoutubeId = (track: TrackMediaIdentity): string | null =>
   track.source === 'preview' ? track.id : track.youtube_id || null;
 
 /** Tokenized podcast episode stream (token minted via api.podcastPeek). */
-export const podcastStreamUrl = (token: string, attemptId?: string): string =>
-  `${apiOrigin()}/api/podcasts/stream/${encodeURIComponent(token)}${attemptQuery(attemptId)}`;
+export const podcastStreamUrl = (token: string): string =>
+  `${apiOrigin()}/api/podcasts/stream/${encodeURIComponent(token)}`;

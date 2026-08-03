@@ -123,11 +123,14 @@ function playbackSourceKind(track: Track): PlaybackSourceKind {
   return track.source === 'preview' ? 'preview' : 'local';
 }
 
-function trackUrl(track: Track, attemptId?: string): string {
+/** Where this entry's audio comes from. Stable per track — see `streamUrl`:
+ * the URL is the browser's cache key, so it may not carry anything that
+ * changes from one play to the next. */
+function trackUrl(track: Track): string {
   const previewId = playbackYoutubeId(track);
   return track.source === 'preview' && previewId
-    ? previewUrl(previewId, attemptId)
-    : streamUrl(track.id, attemptId);
+    ? previewUrl(previewId)
+    : streamUrl(track.id);
 }
 
 /**
@@ -398,10 +401,11 @@ function stageNext(): void {
     return;
   }
   if (stagedEntry?.queueId === next.queueId) return;
-  // The attempt id is minted here rather than at playback: it travels in the
-  // stream URL, and the URL is fixed the moment the deck starts loading it.
+  // Minted here rather than at playback so a handoff reports the same attempt
+  // the deck was cued under. It identifies the attempt in telemetry only — it
+  // is deliberately not in the URL, which has to stay cacheable.
   const attemptId = randomId();
-  stagedEntry = { queueId: next.queueId, attemptId, url: trackUrl(next, attemptId) };
+  stagedEntry = { queueId: next.queueId, attemptId, url: trackUrl(next) };
   audioService.stage(stagedEntry.url, levelFor(next));
 }
 
@@ -552,7 +556,7 @@ function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigg
   const staged = stagedEntry?.queueId === track.queueId
     ? audioService.takeStaged(stagedEntry.url, level)
     : null;
-  const attempt = createPlaybackAttempt(
+  createPlaybackAttempt(
     track,
     generation,
     opts.trigger ?? 'selection',
@@ -571,7 +575,7 @@ function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigg
     duration: staged ? audioEl().duration || 0 : 0,
   });
   updateMediaSession(track);
-  void (staged ?? audioService.load(trackUrl(track, attempt.id), level))
+  void (staged ?? audioService.load(trackUrl(track), level))
     .catch(() => onPlaybackFailed(generation, 'load'));
   // Warming the next track is a second full-file GET and the loudness lookahead
   // is a POST that used to make the engine read the whole library. Firing them
@@ -657,9 +661,9 @@ function recoverCurrent(reason: 'load' | 'error' | 'stall'): boolean {
         .podcastPeek(track.podcast_enclosure_url)
         .then(({ stream_token }) => {
           if (!stream_token) throw new Error('no podcast stream token');
-          return audioService.recover(podcastStreamUrl(stream_token, attempt.id), position, 1);
+          return audioService.recover(podcastStreamUrl(stream_token), position, 1);
         })
-    : audioService.recover(trackUrl(track, attempt.id), position, levelFor(track));
+    : audioService.recover(trackUrl(track), position, levelFor(track));
   void recovery.catch(() => onPlaybackFailed(generation, reason));
   return true;
 }
@@ -1814,7 +1818,7 @@ export const actions = {
     if (pb.currentTrack?.id === track.id && (pb.isLoading || pb.isPlaying)) return;
     userPlaybackStartedThisSession = true;
     const generation = beginLoad();
-    const attempt = createPlaybackAttempt(track, generation, 'podcast');
+    createPlaybackAttempt(track, generation, 'podcast');
     setState('playback', {
       currentTrack: track,
       queue: [createQueueEntry(track, 'context', 'podcast', {
@@ -1837,7 +1841,7 @@ export const actions = {
     try {
       const { stream_token } = await api.podcastPeek(ep.enclosure_url);
       if (!stream_token) throw new Error('no token');
-      await audioService.load(podcastStreamUrl(stream_token, attempt.id), 1);
+      await audioService.load(podcastStreamUrl(stream_token), 1);
     } catch {
       onPlaybackFailed(generation, 'load');
     }

@@ -200,12 +200,18 @@ async function loadStore(
     storedVolume: () => 1,
     isCurrentLoad: () => true,
   }));
+  // Faithful about *arity*, on purpose. These used to swallow any extra
+  // argument, which is how a per-play attempt id rode into the stream URL —
+  // making every play a fresh cache key — without a single test noticing. Now
+  // anything the store passes beyond the id shows up in the URL, so a URL that
+  // varies between two plays of the same track fails a test instead of a drive.
+  const extra = (rest: unknown[]) => (rest.length ? `?${rest.join('&')}` : '');
   vi.doMock('../lib/media', () => ({
-    streamUrl: (id: string) => `/stream/${id}`,
-    previewUrl: (id: string) => `/preview/${id}`,
+    streamUrl: (id: string, ...rest: unknown[]) => `/stream/${id}${extra(rest)}`,
+    previewUrl: (id: string, ...rest: unknown[]) => `/preview/${id}${extra(rest)}`,
     playbackYoutubeId: (track: { id: string; youtube_id?: string | null; source?: 'preview' }) =>
       track.source === 'preview' ? track.id : track.youtube_id || null,
-    podcastStreamUrl: (id: string) => `/podcast/${id}`,
+    podcastStreamUrl: (id: string, ...rest: unknown[]) => `/podcast/${id}${extra(rest)}`,
     coverUrl: (id: string) => `/cover/${id}`,
     bustCovers: vi.fn(),
   }));
@@ -452,6 +458,22 @@ describe('volume levelling', () => {
     // One reference for the record, so the quiet interlude stays 16 dB quieter
     // than the opener, exactly as it was mastered.
     expect(second).toBeCloseTo(first, 6);
+  });
+
+  it('asks for the same URL every time a track is played', async () => {
+    // The URL is the browser's cache key. When it carried a per-play attempt id
+    // every play was a cold fetch of a file the browser already had in full —
+    // invisible on a LAN, seconds of spinner over a remote link.
+    const { actions, audioService } = await loadStore();
+
+    actions.playTrack(t1);
+    const first = audioService.load.mock.lastCall?.[0];
+    actions.playTrack(t2);
+    actions.playTrack(t1);
+    const second = audioService.load.mock.lastCall?.[0];
+
+    expect(first).toBe(second);
+    expect(first).not.toContain('?');
   });
 
   it('never asks the engine to measure what the library already knows', async () => {
