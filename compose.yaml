@@ -7,6 +7,10 @@ services:
       args:
         SOUNDSIBLE_VERSION: ${SOUNDSIBLE_VERSION:-0.0.0-docker}
         VCS_REF: ${VCS_REF:-local}
+      cache_from:
+        - type=gha,scope=docker-amd64
+      cache_to:
+        - type=gha,mode=max,scope=docker-amd64
     image: soundsible:local
     restart: unless-stopped
     init: true
