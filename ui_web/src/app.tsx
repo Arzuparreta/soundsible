@@ -1,4 +1,5 @@
 import type { RouteSectionProps } from '@solidjs/router';
+import { state } from './stores';
 import { ToastOutlet } from './lib/toast';
 import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
@@ -17,7 +18,11 @@ import styles from './app.module.css';
  */
 export default function Shell(props: RouteSectionProps) {
   return (
-    <div class={styles.app}>
+    // The mini-player floats over the routes on touch, so the shell has to say
+    // when it is up: that is what lets every scroller reserve room for it
+    // (app.css). Same condition the pill hides itself on — there is one track
+    // or there is not.
+    <div class={styles.app} data-mini-player={state.playback.currentTrack ? '' : undefined}>
       <ScrollHistoryManager />
       <CommunityBridge />
       <Sidebar />
