@@ -13,6 +13,7 @@ from shared.api.memo import Memo
 from shared.constants import DEFAULT_CACHE_DIR
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import resolve_local_track_path
+from shared.range_stream import bound_open_range, requested_start
 from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.url_utils import validate_youtube_video_id
 
@@ -303,6 +304,16 @@ def stream_local_track(track_id):
     ext = os.path.splitext(path)[1].lower().replace(".", "")
     mimetypes = {"mp3": "audio/mpeg", "m4a": "audio/mp4", "flac": "audio/flac", "ogg": "audio/ogg", "wav": "audio/wav"}
     try:
+        file_bytes = os.path.getsize(path)
+        # A player opens a track with `bytes=0-`, and answering that literally
+        # means one response carrying tens or hundreds of megabytes. Narrow it to
+        # a chunk here and `send_file` below still does the rest: same 206, same
+        # `Content-Range` against the real total, same validators, same bytes.
+        bounded = bound_open_range(
+            request.environ,
+            total_bytes=file_bytes,
+            duration_sec=getattr(track, "duration", None),
+        )
         response = send_file(path, mimetype=mimetypes.get(ext, "audio/mpeg"), conditional=True)
         # A downloaded track is content-addressed — the file on disk is named
         # after its own hash — so the bytes behind one id never change, exactly
@@ -334,7 +345,15 @@ def stream_local_track(track_id):
                 # can abandon the response mid-flight and routinely does. Named
                 # for what it is so it is not read as bytes on the wire.
                 "content_length": int(response.headers.get("Content-Length") or 0),
-                "file_bytes": os.path.getsize(path),
+                "file_bytes": file_bytes,
+                # Where in the file this request started, and whether this
+                # response was narrowed to a chunk (the last chunk of a track is
+                # not: what remained already fitted). Rows written before bounded
+                # ranges existed carry neither key at all, and that absence is
+                # what lets the report separate the two regimes without needing a
+                # separate experiment flag.
+                "range_start": requested_start(request.headers.get("Range")),
+                "bounded": bounded is not None,
                 # A whole-second `ts` cannot show the gap between the requests a
                 # player makes for one track, which is the interesting part.
                 "at_ms": round(time.time() * 1000),
@@ -449,6 +468,14 @@ def preview_stream_proxy(video_id):
     cached = preview_cache.get_cached(video_id)
     if cached:
         path, content_type = cached
+        # Same reshaping as a downloaded track: a cached preview is a file on
+        # disk, and answering `bytes=0-` with all of it has the same failure mode.
+        # No duration to size the chunks by here — the route is keyed by video id,
+        # not by a library row — so this falls back to the byte-sized defaults.
+        try:
+            bound_open_range(request.environ, total_bytes=os.path.getsize(path))
+        except OSError:
+            pass
         response = send_file(str(path), mimetype=content_type, conditional=True)
         # The bytes are content-addressed by video id and never change, so let
         # the browser skip us entirely when the listener replays the track.
