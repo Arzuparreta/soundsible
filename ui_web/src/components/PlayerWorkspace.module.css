@@ -25,7 +25,7 @@
   overflow: hidden;
   background: var(--stage-panel);
   border: 1px solid var(--stage-line);
-  border-radius: clamp(18px, 1.7vw, 28px);
+  border-radius: var(--radius-panel);
   box-shadow: var(--stage-shadow-md), inset 0 1px var(--stage-rim);
   backdrop-filter: var(--stage-material-filter);
   -webkit-backdrop-filter: var(--stage-material-filter);

@@ -95,6 +95,12 @@
   --radius-full: 999px;
   /* Compatibility alias used by older player modules. */
   --radius-pill: var(--radius-full);
+  /* The corner a panel gets: the player's workspace tiles, and the floating
+     mini-player that opens them. Viewport-responsive rather than a step on the
+     scale above, because the same corner has to read the same on a 390px phone
+     and on a wide desktop tile. One declaration, so the pill you press and the
+     panel it uncovers cannot drift apart. */
+  --radius-panel: clamp(18px, 1.7vw, 28px);
 
   /* ── Elevation (subtle — "pro" restraint) ── */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);

@@ -44,7 +44,9 @@
     /* The shorthand also retires the base rule's border-bottom: a straight line
        running under a rounded box is the seam we are getting rid of. */
     border: 1px solid var(--glass-line);
-    border-radius: var(--radius-lg);
+    /* The same corner the workspace tiles cut, not a rounder one of its own:
+       pressing this opens a room made of those panels. */
+    border-radius: var(--radius-panel);
     background: linear-gradient(180deg, var(--glass-gloss), transparent), var(--glass-fill);
     box-shadow: var(--shadow-2), inset 0 1px var(--glass-rim);
     backdrop-filter: var(--glass-filter);
