@@ -41,12 +41,31 @@
     linear-gradient(180deg, var(--ambient-highlight), transparent 180px);
 }
 
+/* Every route but Live wraps itself in `.view` and owns a [data-primary-scroll]
+   body, which is where the floating mini-player's clearance is paid (app.css).
+   Live scrolls through this column instead, so its last rows would end up under
+   the pill with nothing to hang that clearance from. The :has() is what keeps
+   this from also firing on the routes that do own a scroller: there the column
+   never scrolls, and space added here would just be a dead strip. */
+@media (max-width: 1023px) {
+  .app[data-mini-player] .content:not(:has(:global(.view)))::after {
+    display: block;
+    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2);
+    content: '';
+  }
+}
+
 /* No backdrop-filter here, deliberately. The dock is its own row of the shell —
    its own grid area on desktop, a flex sibling on mobile — so `.content` never
    scrolls beneath it and the only thing behind the glass was the app's own
    static gradient. It bought a permanent compositing surface at the bottom of
    the window in exchange for blurring a flat colour. The 8% of see-through is
-   gone with it for the same reason: over a smooth gradient it reads identical. */
+   gone with it for the same reason: over a smooth gradient it reads identical.
+
+   The glass people do see at the bottom of a phone is the mini-player's, and it
+   earns its blur precisely by NOT being this: it leaves the dock's flow and
+   floats over the scroller, where there is a moving library behind it. This
+   plate stays flat and opaque underneath. */
 .dock {
   position: relative;
   z-index: var(--z-omni);

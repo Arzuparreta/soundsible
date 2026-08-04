@@ -1,7 +1,12 @@
+/* The home indicator's strip IS the bar's bottom margin — adding padding on top
+   of the inset is what left a dead band under the labels and made the whole row
+   read as floating rather than sitting on the edge of the screen. `max()` so a
+   device without an inset (Android on gestures off, any desktop browser) still
+   gets a margin of its own instead of labels flush against the bezel. */
 .bar {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
 }
 
 /* Most tabs are links; the one that opens a window is a button. Both wear this
@@ -12,9 +17,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  min-height: calc(var(--control-h) + 14px);
-  padding: 7px 2px 8px;
+  gap: 4px;
+  min-height: calc(var(--control-h) + 6px);
+  padding: 6px 2px 2px;
   color: var(--ink-tertiary);
   text-decoration: none;
   font-family: inherit;
@@ -36,9 +41,12 @@
   color: var(--accent-ink);
 }
 
+/* An explicit line-height so the label's box measures the type and not the
+   body's 1.5 — that inherited leading was slack the row paid for twice. */
 .label {
   max-width: 100%;
   font-weight: var(--fw-medium);
+  line-height: var(--lh-tight);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -69,7 +77,7 @@
 }
 
 :global(html[data-interface-size='large']) .tab {
-  min-height: calc(var(--control-h) + 26px);
+  min-height: calc(var(--control-h) + 18px);
   font-size: var(--text-tiny);
 }
 

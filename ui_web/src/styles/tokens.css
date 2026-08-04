@@ -109,6 +109,22 @@
   --skeleton-base: #17171b;
   --skeleton-highlight: #24242a;
 
+  /* ── Glass (outside the player stage) ──
+     The stage has its own material palette, but it lives under
+     [data-player-stage] and the shell's dock is not inside one. These are the
+     same recipe at app scale, so the mini-player reads as the same substance as
+     the room it opens: a translucent surface over a blur, a gloss down from the
+     top edge, a rim of light along it, and a hairline around.
+
+     The blur is real here — the pill floats over the scrolling library, not
+     over the dock's flat plate — so the fill is what keeps a title legible no
+     matter which album art passes underneath. */
+  --glass-fill: rgba(16, 16, 20, 0.66);
+  --glass-gloss: rgba(255, 255, 255, 0.055);
+  --glass-line: rgba(255, 255, 255, 0.09);
+  --glass-rim: rgba(255, 255, 255, 0.08);
+  --glass-filter: blur(22px) saturate(1.2);
+
   /* Compatibility alias retained for modules authored before tokens.css settled. */
   --accent-primary: var(--accent);
 
@@ -143,6 +159,13 @@
   --cover-sm: 44px; /* row thumbnail */
   --gutter: 16px; /* page horizontal padding */
   --list-gap: 2px; /* gap between rows */
+  /* The floating mini-player. Its height lives here, with the other density
+     recipes, because the shell has to reserve room for a pill it does not
+     contain: it is positioned out of flow over the scroller. One value, so the
+     pill and the clearance under it can never drift apart. */
+  --mini-player-h: 64px;
+  /* The same gap on every free side — left, right, and down to the tab bar. */
+  --mini-player-inset: 10px;
 }
 
 /* Normal is the product default. Compact is the exact pre-accessibility UI
@@ -180,6 +203,7 @@
   --segment-h: 42px;
   --cover-sm: 50px;
   --gutter: 18px;
+  --mini-player-h: 68px;
 }
 
 :root[data-interface-size='large'] {
@@ -215,6 +239,7 @@
   --cover-sm: 60px;
   --gutter: 20px;
   --list-gap: 3px;
+  --mini-player-h: 76px;
 }
 
 /* Light theme: token overrides only (every surface reads these vars). */
@@ -249,6 +274,15 @@
   --skeleton-base: #e8e8eb;
   --skeleton-highlight: #f6f6f7;
 
+  /* Same inversion the light stage makes with --stage-material: a high-alpha
+     white, so dark ink stays readable over whatever scrolls past, and a dark
+     hairline instead of a light one to hold the edge against a pale page. */
+  --glass-fill: rgba(255, 255, 255, 0.74);
+  --glass-gloss: rgba(255, 255, 255, 0.55);
+  --glass-line: rgba(15, 15, 22, 0.1);
+  --glass-rim: rgba(255, 255, 255, 0.9);
+  --glass-filter: blur(24px) saturate(1.8);
+
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.08);
   --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.12);
   --shadow-3: 0 18px 48px rgba(0, 0, 0, 0.16);
@@ -271,6 +305,13 @@
   --accent-soft: rgba(255, 149, 47, 0.22);
   --accent-faint: rgba(255, 149, 47, 0.13);
   --ink-on-accent: #160b01;
+
+  /* Same trade the stage makes in high contrast: the effect is spent on
+     separation. The surface goes nearly opaque so nothing scrolling underneath
+     can compete with the title, and the edge becomes a line you can see. */
+  --glass-fill: rgba(8, 8, 11, 0.94);
+  --glass-line: rgba(255, 255, 255, 0.34);
+  --glass-rim: rgba(255, 255, 255, 0.16);
 }
 
 :root[data-theme='light'][data-high-contrast='true'] {
@@ -288,6 +329,13 @@
   --accent-soft: rgba(168, 62, 0, 0.16);
   --accent-faint: rgba(168, 62, 0, 0.09);
   --ink-on-accent: #ffffff;
+
+  /* The dark high-contrast block above matches here too and would repaint the
+     pill in near-black on a pale page. Take the light surface back and spend
+     the contrast on the line, as that block does. */
+  --glass-fill: rgba(255, 255, 255, 0.96);
+  --glass-line: rgba(15, 15, 22, 0.34);
+  --glass-rim: rgba(255, 255, 255, 0.9);
 }
 
 /* ── Player stage ──

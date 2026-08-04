@@ -183,6 +183,26 @@ html[data-player-surface='auto'] #app {
   overscroll-behavior-y: contain;
 }
 
+/* On touch the mini-player floats over these surfaces instead of sitting in a
+   row of its own (OmniBar.module.css), so the last item of every list would end
+   up underneath it. This is the clearance that buys it back.
+
+   A trailing box rather than `padding-bottom`, because each of these scrollers
+   already carries an end padding of its own — --space-lg here, --space-2xl
+   there — and this has to add to that, not replace it. `flex` for the handful
+   that are flex columns; on the block ones it is simply ignored.
+
+   Scoped to the shell's own attribute because the pill hides itself while
+   nothing is playing: no pill, nothing to clear. */
+@media (max-width: 1023px) {
+  [data-mini-player] [data-primary-scroll]::after {
+    display: block;
+    flex: 0 0 auto;
+    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2);
+    content: '';
+  }
+}
+
 [data-horizontal-scroll] {
   min-width: 0;
   max-width: 100%;

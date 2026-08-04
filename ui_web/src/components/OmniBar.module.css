@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  height: 64px;
+  height: var(--mini-player-h);
   padding: 0 var(--space-sm) 0 var(--gutter);
   border-bottom: 1px solid var(--hairline-soft);
   background: linear-gradient(180deg, var(--ambient-highlight), transparent);
@@ -23,6 +23,35 @@
 @media (max-width: 1023px) {
   .empty {
     display: none;
+  }
+
+  /* On touch this is a pill you press to open a room, so it wears that room's
+     material — the same surface + rim + hairline the stage gives its
+     chromeButton and modePill — and it floats the way that room's chrome
+     floats, over the library rather than beside it.
+
+     Out of the dock's flow and anchored to its top edge, so the blur has the
+     scrolling list behind it to bite on. `.dock` is the positioned ancestor and
+     already owns --z-omni, so this rides its stacking context and needs no
+     z-index of its own. The room it uncovers is paid for in app.css, where
+     every primary scroller gets that much clearance after its last row. */
+  .omni {
+    position: absolute;
+    left: var(--mini-player-inset);
+    right: var(--mini-player-inset);
+    bottom: calc(100% + var(--mini-player-inset));
+    padding: 0 var(--space-xs) 0 var(--space-sm);
+    /* The shorthand also retires the base rule's border-bottom: a straight line
+       running under a rounded box is the seam we are getting rid of. */
+    border: 1px solid var(--glass-line);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, var(--glass-gloss), transparent), var(--glass-fill);
+    box-shadow: var(--shadow-2), inset 0 1px var(--glass-rim);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+    /* .progress is absolute at the top edge; without this it would keep its
+       square corners and poke out past the rounded ones. */
+    overflow: hidden;
   }
 }
 
@@ -415,10 +444,9 @@
   }
 }
 
-:global(html[data-interface-size='normal']) .omni {
-  height: 68px;
-}
-
+/* Height is --mini-player-h, in tokens.css beside the other density recipes:
+   the shell has to reserve exactly this much clearance for a pill it does not
+   contain, so it cannot be a number that only this file knows. */
 :global(html[data-interface-size='normal']) .cover {
   width: 50px;
   height: 50px;
@@ -429,10 +457,6 @@
   height: 48px;
 }
 
-:global(html[data-interface-size='large']) .omni {
-  height: 76px;
-}
-
 :global(html[data-interface-size='large']) .cover {
   width: 58px;
   height: 58px;
@@ -441,4 +465,15 @@
 :global(html[data-interface-size='large']) .ctrl {
   width: 56px;
   height: 56px;
+}
+
+/* Without a backdrop-filter the fill is the only thing between a title and the
+   list scrolling behind it, and 0.66 alpha is not enough to read against album
+   art. Fall back to the opaque surface, as the stage does for its own glass. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  @media (max-width: 1023px) {
+    .omni {
+      background: var(--bg-elevated);
+    }
+  }
 }
