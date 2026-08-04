@@ -2236,8 +2236,8 @@ describe('cross-device sessions', () => {
 
 describe('playback delivery telemetry', () => {
   /** Every play-timing row of one phase, newest last. */
-  const rowsFor = (api: { sendPlayTiming: { mock: { calls: unknown[][] } } }, phase: string) =>
-    api.sendPlayTiming.mock.calls
+  const rowsFor = (api: Record<string, any>, phase: string) =>
+    (api.sendPlayTiming.mock.calls as unknown[][])
       .map(([row]) => row as { phase: string; segments: Record<string, number> })
       .filter((row) => row.phase === phase);
 
