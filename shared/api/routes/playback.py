@@ -309,7 +309,7 @@ def stream_local_track(track_id):
         # means one response carrying tens or hundreds of megabytes. Narrow it to
         # a chunk here and `send_file` below still does the rest: same 206, same
         # `Content-Range` against the real total, same validators, same bytes.
-        bounded = bound_open_range(
+        decision = bound_open_range(
             request.environ,
             total_bytes=file_bytes,
             duration_sec=getattr(track, "duration", None),
@@ -353,7 +353,21 @@ def stream_local_track(track_id):
                 # what lets the report separate the two regimes without needing a
                 # separate experiment flag.
                 "range_start": requested_start(request.headers.get("Range")),
-                "bounded": bounded is not None,
+                "bounded": decision.bounded,
+                # `bounded: false` covered several unrelated situations and reading
+                # them apart took an afternoon of raw rows. `range_kind` is what the
+                # client asked for and `bound_outcome` is what happened to it, so a
+                # demuxer that never reaches the policy is one `group by` away
+                # instead of an afternoon. `range_span` is the share of the
+                # remaining file the request wanted: near 1.0 on a closed range is a
+                # whole-file fetch spelled differently, and small is a `moov` hunt
+                # doing exactly what it should.
+                "range_kind": decision.kind,
+                "bound_outcome": decision.outcome,
+                "range_span": None if decision.span_ratio is None else round(decision.span_ratio, 3),
+                # Which half of the library this is. The chunk walk engages on FLAC
+                # and not on MP4, and that split is invisible without the container.
+                "format": ext or "unknown",
                 # A whole-second `ts` cannot show the gap between the requests a
                 # player makes for one track, which is the interesting part.
                 "at_ms": round(time.time() * 1000),
@@ -472,8 +486,11 @@ def preview_stream_proxy(video_id):
         # disk, and answering `bytes=0-` with all of it has the same failure mode.
         # No duration to size the chunks by here — the route is keyed by video id,
         # not by a library row — so this falls back to the byte-sized defaults.
+        cached_bytes = 0
+        decision = None
         try:
-            bound_open_range(request.environ, total_bytes=os.path.getsize(path))
+            cached_bytes = os.path.getsize(path)
+            decision = bound_open_range(request.environ, total_bytes=cached_bytes)
         except OSError:
             pass
         response = send_file(str(path), mimetype=content_type, conditional=True)
@@ -483,12 +500,28 @@ def preview_stream_proxy(video_id):
         response.headers["X-Soundsible-Playback-Source"] = "preview"
         response.headers["X-Soundsible-Playback-Cache"] = "disk"
         response.headers["X-Soundsible-Playback-Egress"] = "direct"
+        # A cached preview is reshaped by the same policy as a downloaded track and
+        # used to report none of it, so half the traffic the change touches was
+        # invisible to the report that exists to judge the change.
         _emit_stream_timing(
             attempt_id=_clean_attempt_id(),
             track_id=video_id,
             cache_state="disk",
             egress="direct",
-            segments={"server_ready_ms": 0},
+            segments={
+                "server_ready_ms": 0,
+                "content_length": int(response.headers.get("Content-Length") or 0),
+                "file_bytes": cached_bytes,
+                "range_start": requested_start(request.headers.get("Range")),
+                "bounded": bool(decision and decision.bounded),
+                "range_kind": decision.kind if decision else "unknown",
+                "bound_outcome": decision.outcome if decision else "unknown",
+                "range_span": (
+                    None if decision is None or decision.span_ratio is None else round(decision.span_ratio, 3)
+                ),
+                "format": os.path.splitext(path)[1].lower().replace(".", "") or "unknown",
+                "at_ms": round(time.time() * 1000),
+            },
         )
         return response
 

@@ -4,9 +4,9 @@ A browser opens a track by asking for `Range: bytes=0-`, and the engine used to
 answer with the whole thing: one HTTP response carrying the entire file. For a
 library of 24-bit FLAC that is a p50 of 36 MB and a p90 of 124 MB riding a single
 connection that has to survive for minutes. It frequently does not. Measured over
-265 local streams on a real station: 89% of plays stalled at least once, one track
-was requested 82 times, and 40 distinct tracks cost 2.3 GB — 3.6x their own size,
-re-fetched by a player restarting responses that died in flight.
+265 local streams on a real station, 40 distinct tracks cost 2.3 GB — 1.55x their
+own size, re-fetched by a player restarting responses that died in flight, and one
+track was requested 82 times.
 
 The engine itself was never slow; `open_ms` was 0.2 ms at the median. What costs
 the listener is the *shape* of the response, so that is what this module changes:
@@ -27,6 +27,17 @@ the WSGI environ and hands off to `send_file(..., conditional=True)` exactly as
 before; Werkzeug reads the range from that environ and keeps producing the 206,
 the `Content-Range` against the file's true total length, `Content-Length`,
 `Accept-Ranges`, and the validators.
+
+Every decision is returned as a `RangeDecision` rather than as a bare slice-or-None,
+because "this response was not narrowed" turned out to cover several very different
+situations and the log could not tell them apart. Post-merge measurement of the first
+16 minutes of real traffic: 69 of 95 requests went through untouched, and reading
+*why* took an afternoon of picking through raw rows by hand. Fifty-three of them were
+explicit ranges that asked for essentially the whole remaining file — an MP4 demuxer,
+which never sends `bytes=N-` at all and so never reaches the narrowing path. Nine were
+the small explicit ranges of a `moov` hunt, which must keep passing through untouched.
+Those two look identical under a boolean. They are not the same finding, and the one
+that matters is worth being able to read off a report.
 """
 
 from __future__ import annotations
@@ -65,6 +76,40 @@ _OPEN_RANGE_RE = re.compile(r"^\s*bytes\s*=\s*(\d+)\s*-\s*$")
 
 #: Any range that names a first byte, open-ended or not. Only used for reporting.
 _RANGE_START_RE = re.compile(r"^\s*bytes\s*=\s*(\d+)\s*-")
+
+#: Both ends named: `bytes=100-200`. What an MP4 demuxer sends, for everything.
+_CLOSED_RANGE_RE = re.compile(r"^\s*bytes\s*=\s*(\d+)\s*-\s*(\d+)\s*$")
+
+#: The last N bytes: `bytes=-1024`. How a `moov` atom parked at the end is found.
+_SUFFIX_RANGE_RE = re.compile(r"^\s*bytes\s*=\s*-\s*(\d+)\s*$")
+
+#: A closed range asking for at least this much of what is left of the file is a
+#: whole-file request wearing a different header, whatever the client believes it
+#: is doing. Below it, the request is a demuxer reading a specific structure and
+#: the size it asked for is the size it needs. The line is drawn for reporting
+#: only — nothing is narrowed on the strength of it — but it is the number that
+#: says how much of the traffic the current policy cannot reach.
+WHOLE_FILE_SPAN_RATIO = 0.95
+
+#: What kind of `Range` header arrived. Recorded for every request.
+KIND_NONE = "none"
+KIND_OPEN = "open"
+KIND_CLOSED = "closed"
+KIND_SUFFIX = "suffix"
+KIND_OTHER = "other"
+
+#: What was done about it. `bounded` is the only one that reshapes a response;
+#: every `passthrough_*` answers the request exactly as it arrived, and they are
+#: kept apart because they are not one finding.
+OUTCOME_BOUNDED = "bounded"
+OUTCOME_DISABLED = "passthrough_disabled"
+OUTCOME_NO_RANGE = "passthrough_no_range"
+OUTCOME_CLOSED = "passthrough_closed"
+OUTCOME_SUFFIX = "passthrough_suffix"
+OUTCOME_OTHER = "passthrough_other"
+OUTCOME_TAIL_FITS = "passthrough_tail_fits"
+OUTCOME_PAST_END = "passthrough_past_end"
+OUTCOME_EMPTY = "passthrough_empty_file"
 
 
 def requested_start(range_header: str | None) -> int:
@@ -140,33 +185,98 @@ class BoundedRange:
         return self.end - self.start + 1
 
 
+@dataclass(frozen=True)
+class RangeDecision:
+    """What arrived, what was done about it, and how much of the file it wanted.
+
+    `applied` is the only field that describes a change to the response. The rest
+    exists so the log can answer "which requests does this policy never reach, and
+    how much traffic is that" without anyone re-deriving it from raw offsets.
+    """
+
+    kind: str
+    outcome: str
+    applied: BoundedRange | None = None
+    #: How much of what remains of the file this request asked for, where that is
+    #: knowable — 1.0 for an open-ended range, the measured share for a closed one,
+    #: None for a suffix range or no range at all. The share is what separates an
+    #: MP4 demuxer asking for everything from the same demuxer reading an atom.
+    span_ratio: float | None = None
+
+    @property
+    def bounded(self) -> bool:
+        return self.applied is not None
+
+    @property
+    def wants_whole_remainder(self) -> bool:
+        """A request for essentially all of what is left, however it was spelled."""
+        return self.span_ratio is not None and self.span_ratio >= WHOLE_FILE_SPAN_RATIO
+
+
+def classify_range(range_header: str | None, *, total_bytes: int = 0) -> tuple[str, float | None]:
+    """The shape of a `Range` header, and the share of the remaining file it wants.
+
+    Split out from the narrowing decision because it has to run even when nothing
+    is narrowed: a request that never reaches the policy is exactly the one worth
+    counting.
+    """
+    raw = (range_header or "").strip()
+    if not raw:
+        return KIND_NONE, None
+    if _OPEN_RANGE_RE.match(raw):
+        return KIND_OPEN, 1.0
+    closed = _CLOSED_RANGE_RE.match(raw)
+    if closed:
+        start, end = int(closed.group(1)), int(closed.group(2))
+        remaining = total_bytes - start
+        if remaining <= 0 or end < start:
+            return KIND_CLOSED, None
+        return KIND_CLOSED, min(1.0, (end - start + 1) / remaining)
+    if _SUFFIX_RANGE_RE.match(raw):
+        return KIND_SUFFIX, None
+    return KIND_OTHER, None
+
+
 def bound_open_range(
     environ: dict,
     *,
     total_bytes: int,
     duration_sec: float | None = None,
-) -> BoundedRange | None:
+) -> RangeDecision:
     """Narrow an open-ended `Range` in `environ`, in place.
 
-    Returns the slice that was applied, or None when the request was left exactly
-    as it arrived — which covers a disabled kill switch, a missing or explicit or
-    suffix or multi range, a start past the end of the file (Werkzeug owns that
-    416), and the last chunk of a file, where what remains already fits.
+    Always returns a decision; `decision.applied` is the slice that was written, or
+    None when the request was left exactly as it arrived. What is left alone has not
+    changed: a disabled kill switch, a missing or closed or suffix or multi range, a
+    start past the end of the file (Werkzeug owns that 416), and the last chunk of a
+    file, where what remains already fits. Only the reporting around it is new.
     """
-    if not is_enabled() or total_bytes <= 0:
-        return None
-    match = _OPEN_RANGE_RE.match(environ.get("HTTP_RANGE") or "")
-    if not match:
-        return None
-    start = int(match.group(1))
+    kind, span = classify_range(environ.get("HTTP_RANGE"), total_bytes=total_bytes)
+    if total_bytes <= 0:
+        return RangeDecision(kind, OUTCOME_EMPTY, span_ratio=span)
+    if not is_enabled():
+        return RangeDecision(kind, OUTCOME_DISABLED, span_ratio=span)
+    if kind != KIND_OPEN:
+        outcome = {
+            KIND_NONE: OUTCOME_NO_RANGE,
+            KIND_CLOSED: OUTCOME_CLOSED,
+            KIND_SUFFIX: OUTCOME_SUFFIX,
+        }.get(kind, OUTCOME_OTHER)
+        return RangeDecision(kind, outcome, span_ratio=span)
+    start = int(_OPEN_RANGE_RE.match(environ["HTTP_RANGE"]).group(1))
     if start >= total_bytes:
-        return None
+        return RangeDecision(kind, OUTCOME_PAST_END, span_ratio=span)
     size = chunk_bytes(total_bytes=total_bytes, duration_sec=duration_sec, is_first=start == 0)
     end = start + size - 1
     if end >= total_bytes - 1:
         # The tail already fits in one chunk. Rewriting `bytes=N-` into an explicit
         # range that means the same thing would only cost the reader a header it
         # cannot act on.
-        return None
+        return RangeDecision(kind, OUTCOME_TAIL_FITS, span_ratio=span)
     environ["HTTP_RANGE"] = f"bytes={start}-{end}"
-    return BoundedRange(start=start, end=end, total_bytes=total_bytes)
+    return RangeDecision(
+        kind,
+        OUTCOME_BOUNDED,
+        applied=BoundedRange(start=start, end=end, total_bytes=total_bytes),
+        span_ratio=span,
+    )
