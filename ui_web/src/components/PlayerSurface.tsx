@@ -18,7 +18,14 @@ const SWIPE_ACTIVATE_THRESHOLD = 2;
 const HORIZONTAL_CANCEL_THRESHOLD = 6;
 /** How much taller than wide a drag must be before it counts as a close. */
 const SWIPE_VERTICAL_BIAS = 1.5;
-const CLOSE_ANIMATION_TIMEOUT = 420;
+/* Time the exit is worth end to end; a partial travel is scaled down from it.
+   Deliberately under the 300ms of the entrance (--dur-medium): leaving should
+   feel a step quicker than arriving. Kept in sync with the CSS fallback. */
+const EXIT_DURATION = 260;
+/** Floor for the last sliver, so a release near the bottom still moves visibly. */
+const EXIT_DURATION_MIN = 110;
+/** Grace on top of the exit before the fallback timer gives up on `animationend`. */
+const CLOSE_ANIMATION_GRACE = 140;
 /* Controls that own the touch themselves. Plain buttons are deliberately absent:
    in the mobile layout the queue rows and the browser cards *are* full-width
    buttons, so excluding them left most of the surface unswipeable. A tap never
@@ -81,6 +88,10 @@ export function PlayerSurface() {
   let swipeStart: { x: number; y: number; at: number; id: number; scroller: HTMLElement | null } | null = null;
   let swipeActive = false;
   let closeTimer: number | undefined;
+  /* Where the exit starts and how long it is worth, handed over by whatever
+     closed the surface. Null when the close came from somewhere that has no
+     gesture behind it — the keyboard shortcut — which then gets the full exit. */
+  let pendingExit: { from: number; duration: number } | null = null;
 
   createEffect(() => {
     const next = art();
@@ -145,9 +156,15 @@ export function PlayerSurface() {
      transform the swipe leaves behind; an animation is immune to both, so the
      surface slides out even when a gesture or a layout flush lands mid-close. */
   const beginClose = () => {
+    const exit = pendingExit ?? { from: 0, duration: EXIT_DURATION };
+    pendingExit = null;
+    if (surfaceEl) {
+      surfaceEl.style.setProperty('--surface-exit-from', `${exit.from}px`);
+      surfaceEl.style.setProperty('--surface-exit-duration', `${exit.duration}ms`);
+    }
     setClosing(true);
     window.clearTimeout(closeTimer);
-    closeTimer = window.setTimeout(endClose, CLOSE_ANIMATION_TIMEOUT);
+    closeTimer = window.setTimeout(endClose, exit.duration + CLOSE_ANIMATION_GRACE);
     surfaceEl?.addEventListener('animationend', onCloseAnimationEnd);
   };
 
@@ -162,6 +179,7 @@ export function PlayerSurface() {
     closeTimer = undefined;
     surfaceEl?.removeEventListener('animationend', onCloseAnimationEnd);
     surfaceEl?.style.removeProperty('--surface-exit-from');
+    surfaceEl?.style.removeProperty('--surface-exit-duration');
     // Untracked: the open/close effect calls this, and taking a dependency on
     // `closing` there would make it re-run on its own state change.
     if (!untrack(closing)) return;
@@ -188,14 +206,35 @@ export function PlayerSurface() {
     else delete document.documentElement.dataset.playerSwiping;
   };
 
-  const closeSurface = (fromY = 0) => {
+  /**
+   * Close the surface, continuing whatever movement brought it here.
+   *
+   * `fromY` is the offset the sheet is already at and `velocity` the speed it
+   * had (px/ms, downward) when the finger left — both zero for the close button,
+   * which starts the travel from rest. The exit covers the distance that is
+   * actually left, in the time that distance is worth: a sheet released halfway
+   * down does not restart a full-height animation, and a flick keeps its speed
+   * instead of dropping into a slow settle. The floor is what stops a release
+   * near the bottom from finishing in a single frame — which is the whole
+   * complaint: an exit too short to see is an exit nobody believes happened.
+   */
+  const closeSurface = (fromY = 0, velocity = 0) => {
     if (!nowPlayingOpen()) return;
+    // Measured first, on purpose: this is a forced layout, and it has to land
+    // while the drag flags are still up. Between dropping `data-player-swiping`
+    // and dropping `data-player-surface` the app shell is momentarily styled
+    // hidden, and a flush in that gap is the one way it could be seen.
+    const height = surfaceEl?.getBoundingClientRect().height || window.innerHeight || 1;
+    const from = Math.min(Math.max(0, fromY), height);
+    const remaining = height - from;
+    const paced = velocity > 0 ? remaining / velocity : Number.POSITIVE_INFINITY;
+    const scaled = Math.min(EXIT_DURATION * (remaining / height), paced);
+    pendingExit = { from, duration: Math.max(EXIT_DURATION_MIN, Math.round(scaled)) };
     if (surfaceEl) {
       // Synchronously, before `.open` goes: an inline transform left over from
       // the gesture would otherwise outrank the exit for a frame.
       setSwiping(false);
       surfaceEl.style.transform = '';
-      surfaceEl.style.setProperty('--surface-exit-from', `${Math.max(0, fromY)}px`);
     }
     setNowPlayingOpen(false);
   };
@@ -291,9 +330,9 @@ export function PlayerSurface() {
     const close = swipeActive
       && (dy > SWIPE_CLOSE_THRESHOLD || (dy > SWIPE_FAST_CLOSE_THRESHOLD && velocity > SWIPE_CLOSE_VELOCITY));
     resetSwipe();
-    // Hand the exit the offset the finger let go at, so the surface carries on
-    // from where it was instead of snapping back up first.
-    if (close) closeSurface(dy);
+    // Hand the exit the offset and the speed the finger let go at, so the
+    // surface carries on from where it was instead of snapping back up first.
+    if (close) closeSurface(Math.max(0, dy), Math.max(0, velocity));
   };
 
   const cancelSwipe = () => {
