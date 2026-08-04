@@ -1,27 +1,26 @@
 import { For, Show, createResource, createSignal } from 'solid-js';
-import { useNavigate } from '@solidjs/router';
-import Button from '../components/Button';
-import { ViewHeader } from '../components/ViewHeader';
+import Button from './Button';
 import { confirmDialog } from '../lib/confirm';
 import { passwordDialog } from '../lib/passwordDialog';
 import { toast } from '../lib/toast';
 import { copyText } from '../lib/clipboard';
 import { t } from '../lib/i18n';
-import PasswordFields from '../components/PasswordFields';
+import PasswordFields from './PasswordFields';
 import { invites, isAdmin, user, users, type Role, type User } from '../lib/session';
-import styles from './Users.module.css';
-import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
+import styles from './UsersPanel.module.css';
 
 function initials(person: User): string {
   return (person.display_name || person.username).trim().slice(0, 1);
 }
 
 /**
- * Account management. Admin-only — the engine enforces it too, this just keeps
- * the door shut in the UI rather than showing 403s.
+ * Account management, as a settings submenu. Admin-only — the engine enforces
+ * it too, this just keeps the door shut in the UI rather than showing 403s.
+ *
+ * The window supplies the title, the back affordance and the scroller, so this
+ * is only the content — same contract as `DevicesPanel`.
  */
-export default function Users_() {
-  const navigate = useNavigate();
+export function UsersPanel() {
   const [list, { refetch }] = createResource(async () => (await users.list()).users);
   const [username, setUsername] = createSignal('');
   const [displayName, setDisplayName] = createSignal('');
@@ -118,13 +117,7 @@ export default function Users_() {
   };
 
   return (
-    <section
-      ref={(element) => registerPrimaryScroll(element, () => !list.loading)}
-      class={styles.page}
-      data-primary-scroll
-    >
-      <ViewHeader title={t('users.title')} />
-
+    <section class={styles.panel}>
       <Show
         when={isAdmin()}
         fallback={<p class={styles.intro}>{t('users.adminOnly')}</p>}
@@ -250,10 +243,6 @@ export default function Users_() {
             {t('users.add')}
           </Button>
         </form>
-
-        <Button variant="ghost" onClick={() => navigateBackOr(navigate, '/settings')}>
-          {t('common.back')}
-        </Button>
       </Show>
     </section>
   );

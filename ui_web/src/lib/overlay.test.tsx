@@ -43,6 +43,55 @@ describe('overlay manager (anti-leak)', () => {
     await waitFor(() => expect(screen.queryByText('Sticky')).toBeNull());
   });
 
+  it('stacks a dialog opened from inside a window above it, and only closes that one', async () => {
+    // The reason the settings window is an entry in this registry rather than a
+    // portal of its own: settings content opens confirm/prompt/password
+    // dialogs, and a second portal at the same z-index would stack by DOM order
+    // instead of by open order. Here the last one opened is the one Escape gets.
+    render(() => <OverlayOutlet />);
+    openOverlay(() => <p>Window body</p>, { variant: 'window', ariaLabel: 'Window' });
+    expect(await screen.findByText('Window body')).toBeInTheDocument();
+
+    openOverlay(() => <p>Nested confirm</p>, { ariaLabel: 'Confirm' });
+    expect(await screen.findByText('Nested confirm')).toBeInTheDocument();
+
+    const dialogs = document.querySelectorAll('[role="dialog"]');
+    expect([...dialogs].map((dialog) => dialog.getAttribute('aria-label'))).toEqual([
+      'Window',
+      'Confirm',
+    ]);
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByText('Nested confirm')).toBeNull());
+    expect(screen.queryByText('Window body')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByText('Window body')).toBeNull());
+  });
+
+  it('marks the surface so a window can be sized differently from a sheet', async () => {
+    render(() => <OverlayOutlet />);
+    const close = openOverlay(() => <p>Windowed</p>, { variant: 'window' });
+
+    expect(await screen.findByText('Windowed')).toBeInTheDocument();
+    expect(document.querySelector('[role="dialog"]')).toHaveAttribute('data-variant', 'window');
+
+    close();
+    await waitFor(() => expect(screen.queryByText('Windowed')).toBeNull());
+  });
+
+  it('defaults to the sheet surface', async () => {
+    render(() => <OverlayOutlet />);
+    const close = openOverlay(() => <p>Sheeted</p>);
+
+    expect(await screen.findByText('Sheeted')).toBeInTheDocument();
+    expect(document.querySelector('[role="dialog"]')).toHaveAttribute('data-variant', 'sheet');
+
+    close();
+    await waitFor(() => expect(screen.queryByText('Sheeted')).toBeNull());
+  });
+
   it('returns focus to the control that opened a dismissed overlay', async () => {
     const trigger = document.createElement('button');
     document.body.append(trigger);

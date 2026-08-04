@@ -372,8 +372,7 @@ export const en = {
     title: 'Settings',
     searchPlaceholder: 'Search settings',
     searchNoResults: 'Nothing matches “{query}”',
-    pickSection: 'Pick a category',
-    pickSectionBody: 'Everything is grouped on the left — choose one to see its options.',
+    close: 'Close settings',
     playback: 'Playback',
     deviceName: 'Name',
     community: 'Community',
@@ -398,6 +397,7 @@ export const en = {
       accessibility: 'Interface size, contrast and vibration',
       playback: 'Autoplay and how recommendations learn',
       library: 'Sync, import, clean up and remove tracks',
+      users: 'Who else can sign in, and what they are allowed to do',
       downloads: 'Audio quality and the download engine',
       devices: 'This device, paired phones and remote control',
       community: 'Official Live service or your own relay',
@@ -421,7 +421,6 @@ export const en = {
     /* Footers: the quiet line under a group that says what it actually does. */
     note: {
       noPassword: 'This account has no password yet',
-      people: 'Everyone gets their own library, playlists and history. Music files are shared.',
       theme: 'System follows whatever your device is set to.',
       haptics: 'Short vibrations when you use the player controls, on devices that support them.',
       autoplay: 'When the queue runs out, keep playing music that fits what you were listening to.',

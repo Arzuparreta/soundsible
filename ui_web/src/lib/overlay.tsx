@@ -4,12 +4,33 @@ import styles from './overlay.module.css';
 
 type OverlayRender = (close: () => void) => JSX.Element;
 
+/**
+ * `sheet` is the default surface: a bottom sheet on mobile, a centred card on
+ * desktop, sized to its own content. `window` is the self-contained window —
+ * full screen on mobile, a fixed-size pane on desktop — for a surface that owns
+ * its own header and scrollers, like settings.
+ */
+type OverlayVariant = 'sheet' | 'window';
+
+/**
+ * A thunk keeps the accessible name live. It matters for anything that can be
+ * opened before the interface has settled — a window opened by a deep link at
+ * boot would otherwise keep whichever language happened to be loaded in that
+ * first frame, forever.
+ */
+type OverlayLabel = string | (() => string);
+
 interface OverlayEntry {
   id: number;
   render: OverlayRender;
   dismissable: boolean;
-  ariaLabel?: string;
+  variant: OverlayVariant;
+  ariaLabel?: OverlayLabel;
   returnFocus?: HTMLElement | null;
+}
+
+function labelOf(label: OverlayLabel | undefined): string | undefined {
+  return typeof label === 'function' ? label() : label;
 }
 
 const [overlays, setOverlays] = createSignal<OverlayEntry[]>([]);
@@ -30,7 +51,7 @@ function remove(id: number) {
  */
 export function openOverlay(
   render: OverlayRender,
-  opts: { dismissable?: boolean; ariaLabel?: string } = {},
+  opts: { dismissable?: boolean; ariaLabel?: OverlayLabel; variant?: OverlayVariant } = {},
 ): () => void {
   const id = nextId++;
   setOverlays((list) => [
@@ -39,6 +60,7 @@ export function openOverlay(
       id,
       render,
       dismissable: opts.dismissable ?? true,
+      variant: opts.variant ?? 'sheet',
       ariaLabel: opts.ariaLabel,
       returnFocus: typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null,
     },
@@ -91,14 +113,16 @@ export const OverlayOutlet: Component = () => {
           return (
             <div
               class={styles.scrim}
+              data-variant={entry.variant}
               onClick={() => entry.dismissable && close()}
               role="presentation"
             >
               <div
                 class={styles.sheet}
+                data-variant={entry.variant}
                 role="dialog"
                 aria-modal="true"
-                aria-label={entry.ariaLabel}
+                aria-label={labelOf(entry.ariaLabel)}
                 tabindex="-1"
                 ref={(element) => {
                   queueMicrotask(() => {

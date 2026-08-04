@@ -2,6 +2,7 @@ import { For, Show } from 'solid-js';
 import { A } from '@solidjs/router';
 import { downloadCounts } from '../stores';
 import { t } from '../lib/i18n';
+import { openSettings, settingsOpen } from '../lib/settingsSurface';
 import { primaryNavigation, type PrimaryNavItem } from './primaryNavigation';
 import styles from './Sidebar.module.css';
 
@@ -37,15 +38,40 @@ const shortcuts: PrimaryNavItem[] = [
   },
 ];
 
-function Item(props: { item: PrimaryNavItem; badge?: number }) {
+function ItemBody(props: { item: PrimaryNavItem; badge?: number }) {
   return (
-    <A href={props.item.href} end={props.item.end} class={styles.item} activeClass={styles.active}>
+    <>
       <span class={styles.icon}>{props.item.icon()}</span>
       <span class={styles.label}>{props.item.label()}</span>
       <Show when={props.badge}>
         <span class={styles.badge}>{props.badge}</span>
       </Show>
-    </A>
+    </>
+  );
+}
+
+function Item(props: { item: PrimaryNavItem; badge?: number }) {
+  // An overlay item is not a destination, so it cannot borrow the router's
+  // active state. It stays lit for exactly as long as its window is up.
+  return (
+    <Show
+      when={!props.item.overlay}
+      fallback={
+        <button
+          type="button"
+          class={styles.item}
+          classList={{ [styles.active]: settingsOpen() }}
+          aria-current={settingsOpen() ? 'true' : undefined}
+          onClick={() => openSettings()}
+        >
+          <ItemBody item={props.item} badge={props.badge} />
+        </button>
+      }
+    >
+      <A href={props.item.href} end={props.item.end} class={styles.item} activeClass={styles.active}>
+        <ItemBody item={props.item} badge={props.badge} />
+      </A>
+    </Show>
   );
 }
 

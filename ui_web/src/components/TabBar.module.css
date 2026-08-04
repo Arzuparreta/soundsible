@@ -4,6 +4,8 @@
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
+/* Most tabs are links; the one that opens a window is a button. Both wear this
+   same rule, so the reset lives here rather than in a second class. */
 .tab {
   min-width: 0;
   display: flex;
@@ -15,7 +17,11 @@
   padding: 7px 2px 8px;
   color: var(--ink-tertiary);
   text-decoration: none;
+  font-family: inherit;
   font-size: var(--text-caption);
+  background: none;
+  border: none;
+  cursor: pointer;
   transition: color var(--dur-short) var(--ease-out);
 }
 
