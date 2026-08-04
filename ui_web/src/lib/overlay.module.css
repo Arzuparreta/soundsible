@@ -107,6 +107,29 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-3);
   }
+
+  /* Deliberately scoped to the desktop block: below 1024px this variant is an
+     opaque --bg-base surface, and veiling it in translucent black would make
+     the whole settings window see-through. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .scrim[data-variant='window'] {
+      background: rgba(0, 0, 0, 0.88);
+    }
+  }
+}
+
+/* Every other glass surface in the player carries this fallback — NowPlaying,
+   PlayerSurface, OmniBar, PlayerWorkspace — and the scrim was the one that did
+   not. Where backdrop-filter is unavailable the blur silently does nothing and
+   only the 0.68 black lands, so bright content behind the overlay stays far
+   more legible than the design intends: a thin white glyph reads at 0.32 of
+   its own brightness instead of being smeared into its dark surroundings
+   first. Deepen the veil to roughly the same result, so the separation
+   survives the missing filter. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .scrim {
+    background: rgba(0, 0, 0, 0.88);
+  }
 }
 
 @keyframes scrim-in {
