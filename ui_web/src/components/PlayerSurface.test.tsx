@@ -253,6 +253,47 @@ describe('PlayerSurface', () => {
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('stage');
   });
 
+  it('gives a button close the whole travel to animate', () => {
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]') as HTMLElement;
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
+
+    expect(surface.className).toContain('closing');
+    expect(surface.style.getPropertyValue('--surface-exit-from')).toBe('0px');
+    expect(surface.style.getPropertyValue('--surface-exit-duration')).toBe('380ms');
+  });
+
+  it('continues a released drag from where the finger left it', () => {
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]') as HTMLElement;
+
+    swipeDown(screen.getByRole('button', { name: 'simulate swipe' }));
+
+    // The sheet is already 140px down, so the exit starts there rather than
+    // snapping back to the top, and only pays for the distance still to cover.
+    expect(surface.className).toContain('closing');
+    expect(surface.style.getPropertyValue('--surface-exit-from')).toBe('140px');
+    const duration = Number.parseInt(surface.style.getPropertyValue('--surface-exit-duration'), 10);
+    expect(duration).toBeGreaterThanOrEqual(150);
+    expect(duration).toBeLessThan(380);
+  });
+
+  it('drops the exit values once the surface is off screen', () => {
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+    const surface = screen.getByTestId('now-playing-view').closest('[data-player-stage]') as HTMLElement;
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
+    fireEvent.animationEnd(surface);
+
+    expect(surface.className).not.toContain('closing');
+    expect(surface.style.getPropertyValue('--surface-exit-from')).toBe('');
+    expect(surface.style.getPropertyValue('--surface-exit-duration')).toBe('');
+  });
+
   it('closes on a swipe that starts on a button', () => {
     // The queue rows and the browser cards are full-width buttons, so excluding
     // buttons from the gesture left most of the surface unswipeable.

@@ -10,6 +10,11 @@
       var(--player-carousel-height) + 8px
       + max(0px, calc(var(--player-carousel-bottom) - var(--player-mobile-safe-bottom)))
     );
+  /* Deliberately not --ease-out: that curve spends 85% of its travel in the
+     first third of the duration, which on a phone is four frames and reads as
+     the sheet vanishing rather than leaving. Ease-out-cubic keeps the movement
+     legible the whole way down, and picks up a released drag without a jolt. */
+  --surface-exit-ease: cubic-bezier(0.215, 0.61, 0.355, 1);
   position: fixed;
   top: 0;
   right: 0;
@@ -52,17 +57,30 @@
    starting value, so the surface still slides out when a swipe left a transform
    behind or a layout flush landed in the same tick as the class change — both
    of which happen on mobile and neither of which does on desktop.
-   `--surface-exit-from` lets a swipe-close continue from where the finger was. */
+
+   The two inline values are what make the exit read as one continuous move:
+   `--surface-exit-from` is where the finger let go (0 for the close button), and
+   `--surface-exit-duration` is the time the remaining travel is worth at the
+   speed the gesture had. Both carry defaults, so a close from anywhere else in
+   the app (the keyboard shortcut) still gets the full-height exit. */
 .closing {
   visibility: visible;
   pointer-events: none;
-  animation: surfaceOut var(--dur-medium) var(--ease-out) forwards;
+  animation: surfaceOut var(--surface-exit-duration, 380ms) var(--surface-exit-ease) forwards;
 }
 
+/* The sheet is opaque and covers the viewport, so fading it while it travels
+   would show the library through it — a ghost, not a dismissal. It stays solid
+   until it is essentially gone, and the last sliver of fade only exists so the
+   held `forwards` state matches the resting one. */
 @keyframes surfaceOut {
   from {
     opacity: 1;
     transform: translateY(var(--surface-exit-from, 0px));
+  }
+
+  88% {
+    opacity: 1;
   }
 
   to {
