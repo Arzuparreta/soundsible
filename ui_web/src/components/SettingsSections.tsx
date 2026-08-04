@@ -15,6 +15,7 @@ import { DevicesPanel } from './DeviceSheet';
 import { PairedDevicesPanel } from './PairDevice';
 import { DisplayPreferences } from './DisplayPreferences';
 import { LosslessUpgrades } from './LosslessUpgrades';
+import { UsersPanel } from './UsersPanel';
 import {
   ActionRow,
   InputRow,
@@ -29,7 +30,7 @@ import {
 import styles from './SettingsSections.module.css';
 
 /**
- * Every setting in the product, sorted into eight self-contained submenus.
+ * Every setting in the product, sorted into self-contained submenus.
  * A section owns its own data: nothing is fetched until you open it, and the
  * index only ever needs the static descriptor above `content`.
  */
@@ -161,12 +162,6 @@ function AccountSection() {
               onClick={updatePassword}
             />
           </SettingsGroup>
-
-          <Show when={isAdmin()}>
-            <SettingsGroup label={t('users.title')} note={t('settings.note.people')}>
-              <NavRow href="/settings/users" label={t('account.manageUsers')} />
-            </SettingsGroup>
-          </Show>
 
           <SettingsGroup>
             <ActionRow label={t('account.signOut')} onClick={signOut} danger />
@@ -782,6 +777,28 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     content: () => <DevicesSection />,
   },
   {
+    id: 'users',
+    title: () => t('users.title'),
+    blurb: () => t('settings.blurb.users'),
+    tone: 'info',
+    adminOnly: true,
+    icon: () =>
+      svg(
+        <>
+          <path d="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1" />
+          <circle cx="9.5" cy="7" r="3" />
+          <path d="M21 19v-1a4 4 0 00-3-3.87M16.5 4.13a4 4 0 010 7.75" />
+        </>,
+      ),
+    keywords: () => [
+      t('account.manageUsers'),
+      t('users.invite'),
+      t('users.addTitle'),
+      t('users.roleAdmin'),
+    ],
+    content: () => <UsersPanel />,
+  },
+  {
     id: 'community',
     title: () => t('settings.community'),
     blurb: () => t('settings.blurb.community'),
@@ -819,11 +836,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   },
 ];
 
-/** The index, grouped so the eight submenus read as three intentions. */
+/** The index, grouped so the submenus read as three intentions. */
 export const SETTINGS_GROUPS: { label: () => string; ids: string[] }[] = [
   { label: () => t('settings.group.you'), ids: ['account'] },
   { label: () => t('settings.group.preferences'), ids: ['appearance', 'accessibility', 'playback'] },
-  { label: () => t('settings.group.system'), ids: ['library', 'downloads', 'devices', 'community', 'about'] },
+  {
+    label: () => t('settings.group.system'),
+    ids: ['library', 'users', 'downloads', 'devices', 'community', 'about'],
+  },
 ];
 
 /** Sections the signed-in account is actually allowed to open. */

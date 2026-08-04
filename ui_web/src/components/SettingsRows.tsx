@@ -1,6 +1,6 @@
 import { For, Show, type JSX } from 'solid-js';
-import { A, useNavigate } from '@solidjs/router';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { closeSettings } from '../lib/settingsSurface';
 import styles from './SettingsRows.module.css';
 
 /**
@@ -153,20 +153,32 @@ export function ActionRow(props: {
 }
 
 /** Row that navigates elsewhere in the app. */
+/**
+ * A row that leaves settings for a full page.
+ *
+ * It navigates by hash rather than through router primitives on purpose: the
+ * settings window mounts from the overlay outlet, which lives outside the
+ * router so overlays also work on the login screen, before any route exists.
+ * And it closes the window on the way out — otherwise the destination would
+ * load behind it, unreachable.
+ */
 export function NavRow(props: { href: string; label: string; hint?: string }) {
-  const navigate = useNavigate();
+  const go = () => {
+    closeSettings();
+    window.location.hash = `#${props.href}`;
+  };
   const tap = createResponsiveTap({
     onTap: (event) => {
       event.preventDefault();
-      navigate(props.href);
+      go();
     },
   });
 
   return (
-    <A href={props.href} class={styles.rowLink} data-pressable {...tap}>
+    <a href={`#${props.href}`} class={styles.rowLink} data-pressable {...tap}>
       <RowText label={props.label} hint={props.hint} />
       <Chevron />
-    </A>
+    </a>
   );
 }
 

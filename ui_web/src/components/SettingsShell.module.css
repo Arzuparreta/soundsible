@@ -1,0 +1,387 @@
+/* The settings window. One composition, two shapes: a rail beside the open
+   submenu on desktop, a push stack on mobile. Which one is live is decided in
+   the component (`desktopShell()`), so nothing here hides structure — these
+   rules only size what is already on screen. */
+
+.window {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.window[data-layout='split'] {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+/* ── Rail ───────────────────────────────────────────────────────────────── */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.window[data-layout='split'] .rail {
+  border-right: 1px solid var(--hairline);
+  background: var(--bg-inset);
+}
+
+.railHead {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--gutter) var(--space-sm);
+  /* Full screen on mobile means the header sits under the notch. */
+  padding-top: max(var(--space-lg), env(safe-area-inset-top, 0));
+}
+
+.railTitle {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-h1);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  flex-shrink: 0;
+  color: var(--ink-primary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out);
+}
+
+.close svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .close:hover {
+    background: var(--bg-hover);
+  }
+}
+
+/* Grid, not a flex column: in a scrollable flex column every child is
+   shrinkable, so once the list is taller than the rail the search field and the
+   rows get squeezed instead of scrolling. `align-content: start` keeps each row
+   at its own height and lets the overflow do its job. */
+.railScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-xl);
+  padding: var(--space-sm) var(--gutter);
+  padding-bottom: max(var(--space-2xl), env(safe-area-inset-bottom, 0));
+}
+
+.window[data-layout='split'] .railScroll {
+  gap: var(--space-lg);
+  padding: var(--space-sm) var(--space-sm) var(--space-xl);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* Secondary, not tertiary: tertiary on any of the window's surfaces lands at
+   ~3.7:1, under AA. It went unnoticed while these labels sat on the shell's
+   gradient, where a contrast checker can only shrug — the window's flat rail is
+   what made it measurable. */
+.groupLabel {
+  margin: 0;
+  padding: 0 var(--space-md);
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+.catList {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+}
+
+.catList > * + * {
+  border-top: 1px solid var(--hairline-soft);
+}
+
+/* In the rail the rows are the navigation itself, not a card of links: flat,
+   with the selection carrying the only weight. */
+.window[data-layout='split'] .catList {
+  gap: 2px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  box-shadow: none;
+}
+
+.window[data-layout='split'] .catList > * + * {
+  border-top: none;
+}
+
+.cat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  min-height: var(--row-h);
+  padding: var(--space-sm) var(--space-lg);
+  font: inherit;
+  text-align: start;
+  color: var(--ink-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out);
+}
+
+.window[data-layout='split'] .cat {
+  gap: var(--space-sm);
+  min-height: var(--control-h);
+  padding: var(--space-2xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cat:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.catCurrent {
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-raised));
+}
+
+.catCurrent .catTitle {
+  color: var(--accent-ink);
+  font-weight: var(--fw-semibold);
+}
+
+.catIcon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  background: var(--bg-inset);
+}
+
+.window[data-layout='split'] .catIcon {
+  width: 26px;
+  height: 26px;
+  background: none;
+}
+
+.catIcon svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.catIcon[data-tone='accent'] {
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.catIcon[data-tone='info'] {
+  color: color-mix(in srgb, var(--info) 82%, var(--ink-primary));
+  background: color-mix(in srgb, var(--info) 22%, transparent);
+}
+
+.catIcon[data-tone='success'] {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+}
+
+.catIcon[data-tone='warning'] {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+}
+
+.catIcon[data-tone='danger'] {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+/* The rail is 260px wide; the tone wash reads as noise at that size and the
+   label needs every pixel. Keep the hue on the glyph, drop the plate. */
+.window[data-layout='split'] .catIcon[data-tone='accent'],
+.window[data-layout='split'] .catIcon[data-tone='info'],
+.window[data-layout='split'] .catIcon[data-tone='success'],
+.window[data-layout='split'] .catIcon[data-tone='warning'],
+.window[data-layout='split'] .catIcon[data-tone='danger'] {
+  background: none;
+}
+
+.catText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.catTitle {
+  font-size: var(--text-body);
+  line-height: var(--lh-snug);
+  color: var(--ink-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window[data-layout='split'] .catTitle {
+  font-size: var(--text-label);
+}
+
+.catBlurb {
+  font-size: var(--text-caption);
+  line-height: var(--lh-snug);
+  color: color-mix(in srgb, var(--ink-secondary) 70%, var(--ink-primary));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catChevron {
+  flex-shrink: 0;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-xl) var(--space-md);
+  font-size: var(--text-label);
+  color: var(--ink-secondary);
+  text-align: center;
+}
+
+/* ── Detail ─────────────────────────────────────────────────────────────── */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.detailHead {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--gutter) var(--space-md);
+  padding-top: max(var(--space-lg), env(safe-area-inset-top, 0));
+}
+
+.window[data-layout='split'] .detailHead {
+  padding: var(--space-lg) var(--space-xl) var(--space-md);
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.back {
+  display: grid;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  margin-left: calc(var(--space-sm) * -1);
+  flex-shrink: 0;
+  color: var(--ink-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out);
+}
+
+.back svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .back:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.detailTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-h1);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window[data-layout='split'] .detailTitle {
+  font-size: var(--text-h2);
+  font-weight: var(--fw-semibold);
+}
+
+/* Grid for the same reason as the rail: a submenu taller than the window must
+   scroll, not compress its own rows. */
+.detailScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-xl);
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-xs) var(--gutter);
+  padding-bottom: max(var(--space-2xl), env(safe-area-inset-bottom, 0));
+}
+
+.window[data-layout='split'] .detailScroll {
+  max-width: none;
+  padding: var(--space-lg) var(--space-xl) var(--space-2xl);
+}
+
+/* The submenu arrives from the side it was pushed from. */
+@media (prefers-reduced-motion: no-preference) {
+  .window[data-layout='stack'] .detail {
+    animation: submenu-enter var(--dur-short) var(--ease-out) both;
+  }
+}
+
+@keyframes submenu-enter {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}

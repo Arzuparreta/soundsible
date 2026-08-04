@@ -5,6 +5,11 @@ export interface PrimaryNavItem {
   href: string;
   label: () => string;
   end?: boolean;
+  /**
+   * Opens a window over the app instead of navigating to it. `href` stays as
+   * the item's identity and as the address deep links still arrive on.
+   */
+  overlay?: boolean;
   icon: () => JSX.Element;
 }
 
@@ -53,6 +58,7 @@ export const primaryNavigation: PrimaryNavItem[] = [
   {
     href: '/settings',
     label: () => t('nav.settings'),
+    overlay: true,
     icon: () => (
       <svg
         viewBox="0 0 24 24"

@@ -70,18 +70,26 @@
   color: var(--ink-tertiary);
 }
 
+/* Most items are links; the one that opens a window is a button. Both wear this
+   same rule, so the reset lives here rather than in a second class. */
 .item {
   position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-md);
+  width: 100%;
   min-height: 40px;
   padding: 0 var(--space-md);
   border-radius: var(--radius-sm);
   color: var(--ink-secondary);
+  text-align: start;
   text-decoration: none;
+  font-family: inherit;
   font-size: var(--text-body);
   font-weight: var(--fw-medium);
+  background: none;
+  border: none;
+  cursor: pointer;
   transition:
     color var(--dur-short) var(--ease-out),
     background var(--dur-short) var(--ease-out);
