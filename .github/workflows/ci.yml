@@ -67,6 +67,9 @@ jobs:
       - name: Phase 1 gates (pytest + coverage)
         env:
           PYTHONPATH: .
+          # Leave the version to shared/version.py, so the suite checks what the
+          # source tree declares rather than whatever the runner exported.
+          SOUNDSIBLE_VERSION: ""
         run: >-
           pytest -q
           --cov=shared --cov=player --cov=odst_tool --cov=setup_tool

@@ -1,0 +1,81 @@
+name: Bug report
+description: Something works differently than it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The three things that make a report
+        actionable are the version, how you run it, and what you did.
+
+        For a security problem, do not use this form — see
+        [SECURITY.md](https://github.com/Arzuparreta/soundsible/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      placeholder: |
+        1. Open the player and search for …
+        2. Press …
+        3. …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >-
+        From Settings → About, or `curl http://localhost:5005/api/health`.
+      placeholder: "0.1.0, or edge (sha-1a2b3c4)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it
+      options:
+        - Docker / Compose
+        - Native (python3 run.py)
+        - Desktop app (Tauri)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Host and client
+      description: The machine running the engine, and the device you play on.
+      placeholder: "Debian 12 on a Pi 5; Firefox on Android 15"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        `docker compose logs soundsible` or the `/logs` directory. Browser
+        console errors help for playback and UI problems. Redact tokens.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues
+          required: true
+        - label: This is not a security vulnerability
+          required: true

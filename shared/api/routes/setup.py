@@ -27,6 +27,7 @@ from shared.runtime import (
 )
 from shared.security import is_safe_path
 from shared.setup_session import ensure_session, normalize_setup_session_id
+from shared.version import resolve_version
 
 setup_bp = Blueprint("setup", __name__, url_prefix="")
 
@@ -151,7 +152,7 @@ def post_music_dir_setting():
         if runtime.owner_token_file:
             write_runtime_state(
                 runtime,
-                version=os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"),
+                version=resolve_version(),
             )
     except Exception:
         pass

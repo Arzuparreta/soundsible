@@ -223,6 +223,8 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 
 | Guide | What's inside |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [Roadmap](docs/ROADMAP.md) | What Soundsible is, where it is going, and what it will not do |
+| [Changelog](CHANGELOG.md) | What changed in each version |
 | [Install & Deployment](docs/INSTALL.md) | Servers, headless/SSH, Tailscale, reverse proxy, storage, security |
 | [Docker deployment](docs/DOCKER.md) | Compose, volumes, host libraries, backups, upgrades, security |
 | [Configuration](docs/CONFIGURATION.md) | Settings, environment variables, downloads, cookies |
@@ -241,7 +243,13 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 | [Desktop (Beta)](docs/DESKTOP_BETA.md) · [Desktop Shell](desktop-shell/README.md) | Desktop app status, build, and dev workflow |
 | [Telemetry & Privacy](docs/TELEMETRY_PRIVACY.md) | Local-only telemetry contract |
 | [yt-dlp formats troubleshooting](docs/troubleshooting-yt-dlp-formats.md) | Fixing download format / extractor issues |
-| [Appliance Rework Plan](docs/appliance-rework-plan.md) · [Premium Quality Contract](docs/PREMIUM_QUALITY_CONTRACT.md) · [Layer Contracts](docs/LAYER_CONTRACTS.md) | Roadmap & internal contracts |
+
+Working notes that go stale and are not maintained for readers — the
+[Roadmap](docs/ROADMAP.md) is the one to read instead:
+[Appliance Rework Plan](docs/appliance-rework-plan.md) ·
+[Premium Quality Contract](docs/PREMIUM_QUALITY_CONTRACT.md) ·
+[Layer Contracts](docs/LAYER_CONTRACTS.md) ·
+[UI Rebuild Plan](docs/UI_REBUILD_PLAN.md)
 
 </details>
 
