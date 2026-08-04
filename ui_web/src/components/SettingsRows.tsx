@@ -1,6 +1,6 @@
 import { For, Show, type JSX } from 'solid-js';
 import { createResponsiveTap } from '../lib/responsiveTap';
-import { closeSettings } from '../lib/settingsSurface';
+import { dismissSettings } from '../lib/settingsSurface';
 import styles from './SettingsRows.module.css';
 
 /**
@@ -161,10 +161,14 @@ export function ActionRow(props: {
  * router so overlays also work on the login screen, before any route exists.
  * And it closes the window on the way out — otherwise the destination would
  * load behind it, unreachable.
+ *
+ * Dismissing rather than closing: the entries the window pushed stay in
+ * history, so going back from the destination returns to settings, which is
+ * where you came from.
  */
 export function NavRow(props: { href: string; label: string; hint?: string }) {
   const go = () => {
-    closeSettings();
+    dismissSettings();
     window.location.hash = `#${props.href}`;
   };
   const tap = createResponsiveTap({
@@ -269,7 +273,9 @@ export function InputRow(props: {
         value={props.value}
         placeholder={props.placeholder}
         aria-label={props.label}
-        autocomplete={props.autocomplete}
+        // Opt out unless a row asks for filling. A settings field is almost
+        // never an account field, and browsers guess otherwise.
+        autocomplete={props.autocomplete ?? 'off'}
         onInput={(event) => props.onInput(event.currentTarget.value)}
       />
     </div>

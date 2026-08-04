@@ -34,7 +34,6 @@ import { initLocale, t } from './lib/i18n';
 import { registerServiceWorker } from './lib/pwa';
 import { OverlayOutlet } from './lib/overlay';
 import { openSettings } from './lib/settingsSurface';
-import { navigateBackOr } from './lib/scrollHistory';
 import { installSessionGuard, ready, refreshSession, requiresLogin, user } from './lib/session';
 // Self-host the design-system typefaces (DESIGN.md) so they render for every
 // user, not only those who happen to have them installed locally. Subsets load
@@ -106,8 +105,12 @@ function SettingsLink() {
   const params = useParams();
   const navigate = useNavigate();
   onMount(() => {
-    openSettings(params.section);
-    navigateBackOr(navigate, '/');
+    // Step off the address first: the window pushes its own history entries on
+    // top of wherever the app ends up, and replacing afterwards would overwrite
+    // the first of them.
+    const section = params.section;
+    navigate('/', { replace: true });
+    openSettings(section);
   });
   return null;
 }

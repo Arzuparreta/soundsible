@@ -2,7 +2,7 @@ import { fireEvent, render, within } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setLocale } from '../lib/i18n';
-import { closeSettings, settingsOpen } from '../lib/settingsSurface';
+import { dismissSettings, settingsOpen } from '../lib/settingsSurface';
 import { Sidebar } from './Sidebar';
 
 function renderSidebar() {
@@ -19,7 +19,7 @@ beforeEach(async () => {
   window.history.pushState({}, '', '/');
 });
 
-afterEach(() => closeSettings());
+afterEach(() => dismissSettings());
 
 describe('desktop sidebar', () => {
   it('uses the same five primary destinations and order as mobile', () => {

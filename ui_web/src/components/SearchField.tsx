@@ -23,10 +23,23 @@ export function SearchField(props: SearchFieldProps) {
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-4-4" />
       </svg>
+      {/* An unnamed text field with no autocomplete is what browser and
+          password-manager heuristics latch onto: Chrome decides a search box
+          is an account field, drops a saved email into it and paints it its
+          autofill yellow. Naming it and opting out of every filler we can name
+          is the only reliable way to be left alone. */}
       <input
         class={styles.input}
         data-global-search-input={props.global ? '' : undefined}
         type="search"
+        name="q"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="none"
+        spellcheck={false}
+        data-1p-ignore
+        data-lpignore="true"
+        data-form-type="other"
         placeholder={props.placeholder}
         aria-label={props.ariaLabel ?? props.placeholder}
         value={props.value}

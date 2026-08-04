@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLocale } from '../lib/i18n';
-import { closeSettings, settingsOpen } from '../lib/settingsSurface';
+import { dismissSettings, settingsOpen } from '../lib/settingsSurface';
 import { TabBar } from './TabBar';
 
 function renderTabs() {
@@ -26,7 +26,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  closeSettings();
+  dismissSettings();
   document.querySelectorAll('[data-primary-scroll]').forEach((node) => node.remove());
 });
 

@@ -234,6 +234,37 @@ test.describe('interface scale geometry', () => {
     await expect(window_).toBeHidden();
   });
 
+  test('the back gesture unwinds settings instead of the page under it', async ({ page }) => {
+    await mockEngine(page, true);
+    await installPreferences(page, 'normal');
+    await page.goto('/player/#/');
+    await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
+
+    const window_ = page.getByRole('dialog', { name: 'Ajustes' });
+    const desktop = page.viewportSize()!.width >= 1024;
+
+    await page.getByRole('button', { name: 'Ajustes' }).click();
+    await expect(window_).toBeVisible();
+    await window_.getByRole('button', { name: /Apariencia/ }).click();
+    await expect(window_.getByRole('heading', { name: 'Apariencia', level: 1 })).toBeVisible();
+
+    await page.goBack();
+
+    if (desktop) {
+      // The index never left, so there is no step back into settings to take.
+      await expect(window_).toBeHidden();
+    } else {
+      // A submenu really is pushed over the index, so back returns to it —
+      // rather than unwinding the library underneath and leaving the window up.
+      await expect(window_).toBeVisible();
+      await expect(window_.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
+      await page.goBack();
+      await expect(window_).toBeHidden();
+    }
+
+    await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
+  });
+
   test('a device link still opens settings on the submenu it names', async ({ page }) => {
     await mockEngine(page, true);
     await installPreferences(page, 'normal');

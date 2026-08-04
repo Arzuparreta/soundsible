@@ -55,6 +55,26 @@
   display: none;
 }
 
+/* Belt to the attributes' braces. A password manager can fill a field whatever
+   the markup asks, and Chromium then paints its own opaque yellow through
+   `background-color`, which no ordinary declaration can override. An inset
+   shadow is the one paint that lands on top of it, and the fill colour has to
+   be restated because the autofill style overrides `color` too.
+
+   The usual snippet repeats this for `:hover` and `:focus`; it does not need
+   to. `:-webkit-autofill` stays matched in both states, and the field has no
+   competing rule on the input itself — only the focus-within one below, which
+   already outranks this. */
+.input:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink-primary);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-inset) inset;
+  caret-color: var(--ink-primary);
+}
+
+.field:focus-within .input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-raised) inset;
+}
+
 .clear {
   display: inline-flex;
   align-items: center;
