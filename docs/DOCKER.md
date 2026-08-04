@@ -4,14 +4,48 @@ Soundsible ships a multi-stage production image and a Compose stack. The image
 contains FFmpeg, Chromaprint, Python dependencies, and the compiled SolidJS
 player; Node.js and build tools do not remain in the runtime image.
 
-## Quick start
+Images are published to the GitHub Container Registry for `linux/amd64` and
+`linux/arm64`, so a NAS, a Raspberry Pi, or an Apple Silicon Mac runs the same
+image as an x86 server without compiling anything.
+
+| Tag | What it is |
+| --- | --- |
+| `ghcr.io/arzuparreta/soundsible:edge` | Every commit that lands on `main`. Current default. |
+| `ghcr.io/arzuparreta/soundsible:latest` | The most recent tagged release. |
+| `ghcr.io/arzuparreta/soundsible:X.Y.Z` · `:X.Y` | A specific release, pinned. |
+
+Every published image carries a signed build-provenance attestation. Verify one
+before you run it:
 
 ```bash
-git clone https://github.com/Arzuparreta/soundsible.git
-cd soundsible
-docker compose up -d --build
+gh attestation verify oci://ghcr.io/arzuparreta/soundsible:edge --repo Arzuparreta/soundsible
+```
+
+## Quick start
+
+No checkout, no build toolchain:
+
+```bash
+curl -O https://raw.githubusercontent.com/Arzuparreta/soundsible/main/compose.yaml
+docker compose up -d
 docker compose ps
 ```
+
+Or without Compose at all:
+
+```bash
+docker run -d --name soundsible \
+  -p 5005:5005 \
+  -v soundsible-config:/config \
+  -v soundsible-data:/data \
+  -v soundsible-cache:/cache \
+  -v soundsible-logs:/logs \
+  -v soundsible-music:/music \
+  ghcr.io/arzuparreta/soundsible:edge
+```
+
+Pin a release instead of tracking `main` by setting `SOUNDSIBLE_TAG` in a `.env`
+file beside `compose.yaml`, or by naming the tag directly in `docker run`.
 
 When the service reports `healthy`, open <http://localhost:5005/player/>.
 The first boot creates a local provider configuration for `/music`. Later boots
@@ -58,6 +92,7 @@ not.
 Compose reads optional values from a `.env` file beside `compose.yaml`:
 
 ```dotenv
+SOUNDSIBLE_TAG=edge
 SOUNDSIBLE_PORT=5005
 SOUNDSIBLE_ADMIN_TOKEN=replace-with-a-long-random-value
 SOUNDSIBLE_YT_SEARCH_SOURCE=ytmusic
@@ -89,7 +124,9 @@ pull request and change to `main` or `dev`. A scheduled clean rebuild also
 checks it against freshly pulled base images and package indexes. A green
 `docker` check means the actual Compose deployment started healthy, served the
 player, ran as its unprivileged user, and kept first-run configuration across a
-container recreation.
+container recreation. Only after those checks pass does the `publish` job push
+the multi-architecture image, so nothing reaches `edge` that has not already
+started and served the player in CI.
 
 View status and logs:
 
@@ -99,11 +136,10 @@ docker compose logs -f soundsible
 curl --fail http://localhost:5005/api/health
 ```
 
-Upgrade the checkout and recreate the service without touching volumes:
+Upgrade to a newer image and recreate the service without touching volumes:
 
 ```bash
-git pull --ff-only
-docker compose build --pull
+docker compose pull
 docker compose up -d
 ```
 
@@ -147,6 +183,27 @@ docker compose start soundsible
 
 Back up the music volume separately when it contains the only copy of your
 audio. The cache and logs volumes are optional in backups.
+
+## Build from source instead
+
+`compose.yaml` deliberately has no `build:` section, so it can never quietly
+compile on hardware that cannot afford it. Stack `compose.build.yaml` on top
+when you want the image built from your working tree:
+
+```bash
+git clone https://github.com/Arzuparreta/soundsible.git
+cd soundsible
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
+
+Set it once for the shell instead of repeating both `-f` flags:
+
+```bash
+export COMPOSE_FILE=compose.yaml:compose.build.yaml
+```
+
+This is what CI does, so the pull-request smoke test exercises the commit under
+review rather than the last published image.
 
 ## Build the image directly
 
