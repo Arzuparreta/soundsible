@@ -1,10 +1,10 @@
 """One click must not cost one enormous HTTP response.
 
 A player opens a track by asking for `bytes=0-`, and the engine used to answer
-with the whole file. Measured on a real station over 265 local streams: 89% of
-plays stalled at least once, one track was fetched 82 times, and 40 distinct
-tracks cost 2.3 GB — 3.6x their own size, because a response carrying 124 MB of
-24-bit FLAC keeps dying in flight and the player keeps starting it again.
+with the whole file. Measured on a real station over 265 local streams, 40
+distinct tracks cost 2.3 GB — 1.55x their own size — and one track was fetched 82
+times, because a response carrying 124 MB of 24-bit FLAC keeps dying in flight and
+the player keeps starting it again.
 
 These tests hold the two halves of the fix that can be broken by accident. That
 an open-ended range comes back as a chunk, and — the one that matters most —
@@ -12,6 +12,11 @@ that walking those chunks reassembles the file byte for byte. The point of
 slicing rather than transcoding is that nothing about the audio changes, and
 `test_a_chunk_walk_reassembles_the_file_exactly` is what makes that a fact
 rather than an intention.
+
+The last test holds the telemetry instead of the bytes. It is here rather than in
+the report's own tests because what the route writes is the only thing the report
+can ever read, and a field quietly dropped from one row is a measurement nobody
+can reconstruct afterwards.
 """
 
 from __future__ import annotations
@@ -262,3 +267,41 @@ def test_slicing_does_not_cost_the_headers_that_keep_a_track_cached(client, big_
     assert "private" in cache_control and "max-age=" in cache_control
     assert response.headers.get("ETag") or response.headers.get("Last-Modified")
     assert response.headers.get("X-Soundsible-Playback-Source") == "local"
+
+
+@pytest.fixture
+def emitted(monkeypatch):
+    """Every telemetry row the route writes during a test."""
+    rows: list[dict] = []
+    monkeypatch.setattr("shared.telemetry.emit", lambda event, row: rows.append(row))
+    return rows
+
+
+def test_a_passthrough_records_why_it_was_not_reshaped(client, big_track, emitted):
+    """`bounded: false` alone cannot be read.
+
+    The first measurement after this shipped showed 69 of 95 requests going through
+    untouched, and telling "an MP4 demuxer sent a closed range and never reached the
+    policy" apart from "the tail already fitted" meant walking raw offsets by hand
+    for an afternoon. Both rows below say `bounded: false`; everything that makes
+    them different findings is in the other fields.
+    """
+    track_id, payload = big_track
+
+    client.get(f"/api/static/stream/{track_id}", headers={"Range": "bytes=0-"})
+    client.get(
+        f"/api/static/stream/{track_id}",
+        headers={"Range": f"bytes=65536-{len(payload) - 1}"},
+    )
+    client.get(f"/api/static/stream/{track_id}", headers={"Range": "bytes=16375-65535"})
+
+    walk, everything, an_atom = (row["segments"] for row in emitted[:3])
+    assert (walk["bounded"], walk["range_kind"]) == (True, "open")
+    assert (everything["bounded"], everything["range_kind"]) == (False, "closed")
+    assert everything["bound_outcome"] == "passthrough_closed"
+    # The one that sizes the gap: a closed range for all of what is left is the
+    # old failure shape, and a closed range for 48 KB is a demuxer reading a
+    # structure. Same `bounded`, same `range_kind`, and not the same thing at all.
+    assert everything["range_span"] == 1.0
+    assert an_atom["range_span"] < 0.05
+    assert walk["format"] == "flac"

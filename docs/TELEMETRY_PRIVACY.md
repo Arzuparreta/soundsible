@@ -71,7 +71,19 @@ opaque `attempt_id`. They may include:
 - `cache_state`: disk, URL-warm, cold, or unknown;
 - `egress`: direct, relay, or unknown;
 - trigger, queue lane, terminal state and bounded failure reason;
-- click-to-playing, resolution, upstream TTFB, stalls and recovery counts.
+- click-to-playing, resolution, upstream TTFB, and recovery counts;
+- how a response was delivered: the size of the file, the size of what was
+  promised, the byte offset asked for, the shape of the `Range` header, whether
+  it was narrowed to a chunk and why not when it was not, and the container
+  extension. All of it describes the transfer, none of it the audio;
+- once per audible play (`ui_play_delivery`): how long it sounded, and how often
+  and for how long it stopped after starting.
+
+Buffering before the first sound and buffering after it are recorded as separate
+fields. They used to be one counter emitted at the moment of first sound, where
+the second kind cannot have happened yet — so it reported the opening wait that
+`click_to_playing_ms` already described, and read the same on essentially every
+play whatever the delivery did.
 
 Cancelled and superseded attempts are written explicitly and are not counted as
 successful latency samples. Timing values ending in `_ms` outside the accepted

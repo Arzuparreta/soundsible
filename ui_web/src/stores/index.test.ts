@@ -2233,3 +2233,84 @@ describe('cross-device sessions', () => {
     }
   });
 });
+
+describe('playback delivery telemetry', () => {
+  /** Every play-timing row of one phase, newest last. */
+  const rowsFor = (api: Record<string, any>, phase: string) =>
+    (api.sendPlayTiming.mock.calls as unknown[][])
+      .map(([row]) => row as { phase: string; segments: Record<string, number> })
+      .filter((row) => row.phase === phase);
+
+  it('does not report the opening buffer as a stall', async () => {
+    // It was reported as one, on `ui_click_to_playing`, which fires at the instant
+    // of first sound — so the only spell it could ever contain was the wait the
+    // listener had just sat through, and `click_to_playing_ms` beside it already
+    // described that. It read 1 on 56 of 58 plays before the delivery change and 8
+    // of 9 after: a metric that cannot move measures nothing.
+    const { actions, api, initStore, fireDeckEvent } = await loadStore();
+    initStore();
+
+    actions.playFrom([t1, t2], 0);
+    fireDeckEvent('waiting');
+    fireDeckEvent('playing');
+    await flush();
+
+    const [start] = rowsFor(api, 'ui_click_to_playing');
+    expect(start.segments.click_to_playing_ms).toBeGreaterThanOrEqual(0);
+    expect(start.segments).not.toHaveProperty('stall_count');
+    expect(start.segments).toHaveProperty('startup_stall_ms');
+  });
+
+  it('counts audio that stopped after it started, once the play is over', async () => {
+    const { actions, api, initStore, fireDeckEvent } = await loadStore();
+    initStore();
+
+    actions.playFrom([t1, t2], 0);
+    fireDeckEvent('playing');
+    // The stream died mid-song and came back. This is the event the old counter
+    // was supposed to be catching and never could.
+    fireDeckEvent('waiting');
+    fireDeckEvent('playing');
+    fireDeckEvent('ended');
+    await flush();
+
+    const [delivery] = rowsFor(api, 'ui_play_delivery');
+    expect(delivery.segments.rebuffer_count).toBe(1);
+    expect(delivery.segments.seek_rebuffer_count).toBe(0);
+  });
+
+  it('does not blame delivery for audio that stopped because the listener seeked', async () => {
+    // Dragging the scrubber into un-buffered audio stops the sound, and the
+    // element reports it exactly as it reports a stream that died. Summed
+    // together, a day of heavy scrubbing reads as a delivery regression.
+    const { actions, api, initStore, fireDeckEvent } = await loadStore();
+    initStore();
+
+    actions.playFrom([t1, t2], 0);
+    fireDeckEvent('playing');
+    fireDeckEvent('seeking');
+    fireDeckEvent('waiting');
+    fireDeckEvent('playing');
+    fireDeckEvent('ended');
+    await flush();
+
+    const [delivery] = rowsFor(api, 'ui_play_delivery');
+    expect(delivery.segments.rebuffer_count).toBe(0);
+    expect(delivery.segments.seek_rebuffer_count).toBe(1);
+  });
+
+  it('reports a play that never made a sound as an attempt, not as a delivery', async () => {
+    // `ui_play_delivery` answers "did the music keep playing". A track that never
+    // played has no answer to give, and `ui_attempt_cancelled` already covers it.
+    const { actions, api, initStore } = await loadStore();
+    initStore();
+
+    actions.playFrom([t1, t2], 0);
+    await flush();
+    actions.next();
+    await flush();
+
+    expect(rowsFor(api, 'ui_play_delivery')).toHaveLength(0);
+    expect(rowsFor(api, 'ui_attempt_cancelled').length).toBeGreaterThan(0);
+  });
+});

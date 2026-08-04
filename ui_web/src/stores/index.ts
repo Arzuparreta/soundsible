@@ -112,11 +112,36 @@ interface PlaybackAttempt {
   queueLane: string;
   startedAt: number;
   audibleAt: number | null;
-  stallStartedAt: number | null;
-  stallCount: number;
-  stallMs: number;
+  /** When the current buffering spell began, or null between spells. */
+  bufferStartedAt: number | null;
+  /**
+   * Buffering before the first sound, and buffering after it, kept apart.
+   *
+   * They used to be one counter reported on `ui_click_to_playing`, which fires at
+   * the moment of first sound — so the only spell it could ever contain was the
+   * opening one, which every cold start has. It read 1 on 56 of 58 plays before
+   * the chunk change and 8 of 9 after, and a metric that cannot move is not
+   * measuring anything. The opening wait is already `click_to_playing_ms`; what
+   * `rebuffer` counts is playback that was running and stopped, which is the only
+   * one of the two that means delivery failed.
+   */
+  startupStallMs: number;
+  rebufferCount: number;
+  rebufferMs: number;
+  /**
+   * Rebuffers that follow a seek the listener asked for.
+   *
+   * Dragging the scrubber into un-buffered audio stops the sound, and the element
+   * reports that the same way it reports a stream that died. One is the listener
+   * getting what they asked for and the other is a fault, so they are counted
+   * apart rather than summed into a number that flatters or damns the change
+   * depending on how much anyone scrubbed that day.
+   */
+  seekRebufferCount: number;
+  seekPending: boolean;
   recoveryCount: number;
   reportedRecoveryCount: number;
+  concluded: boolean;
   generation: number;
 }
 
@@ -294,6 +319,33 @@ function emitPlaybackEvent(
     .catch(() => {});
 }
 
+/**
+ * Close the books on a play that made a sound.
+ *
+ * `ui_click_to_playing` can only ever describe the start, because it is emitted at
+ * the start. Whether the music then kept playing is a different question and it has
+ * to be asked at a different time, which is here: once per audible attempt, however
+ * it ended. An attempt that never sounded has nothing to report that
+ * `ui_attempt_failed` and `ui_attempt_cancelled` do not already carry.
+ */
+function concludeAttempt(attempt: PlaybackAttempt | null, outcome: string): void {
+  if (!attempt || attempt.concluded || attempt.audibleAt === null) return;
+  attempt.concluded = true;
+  const now = performance.now();
+  // A spell still open at this point ended the play — the track was cut off while
+  // buffering. Counting it needs doing here or it is lost.
+  const pending = attempt.bufferStartedAt === null ? 0 : Math.max(0, now - attempt.bufferStartedAt);
+  attempt.bufferStartedAt = null;
+  emitAttempt(attempt, 'ui_play_delivery', outcome, {
+    audible_ms: Math.round(now - attempt.audibleAt),
+    startup_stall_ms: Math.round(attempt.startupStallMs),
+    rebuffer_count: attempt.rebufferCount,
+    rebuffer_ms: Math.round(attempt.rebufferMs + pending),
+    seek_rebuffer_count: attempt.seekRebufferCount,
+    recovery_count: attempt.recoveryCount,
+  });
+}
+
 function cancelActiveAttempt(reason = 'superseded'): void {
   clearStallTimer();
   const attempt = activeAttempt;
@@ -306,6 +358,8 @@ function cancelActiveAttempt(reason = 'superseded'): void {
       { elapsed_ms: Math.round(performance.now() - attempt.startedAt) },
       reason,
     );
+  } else {
+    concludeAttempt(attempt, reason);
   }
   activeAttempt = null;
 }
@@ -325,11 +379,15 @@ function createPlaybackAttempt(
     queueLane: 'queueLane' in track && typeof track.queueLane === 'string' ? track.queueLane : 'context',
     startedAt: performance.now(),
     audibleAt: null,
-    stallStartedAt: null,
-    stallCount: 0,
-    stallMs: 0,
+    bufferStartedAt: null,
+    startupStallMs: 0,
+    rebufferCount: 0,
+    rebufferMs: 0,
+    seekRebufferCount: 0,
+    seekPending: false,
     recoveryCount: 0,
     reportedRecoveryCount: 0,
+    concluded: false,
     generation,
   };
   activeAttempt = attempt;
@@ -669,9 +727,11 @@ function recoverCurrent(reason: 'load' | 'error' | 'stall'): boolean {
   if (!attempt || !track || attempt.recoveryCount >= 1) return false;
   attempt.recoveryCount += 1;
   clearStallTimer();
-  if (attempt.stallStartedAt !== null) {
-    attempt.stallMs += Math.max(0, performance.now() - attempt.stallStartedAt);
-    attempt.stallStartedAt = null;
+  if (attempt.bufferStartedAt !== null) {
+    const spell = Math.max(0, performance.now() - attempt.bufferStartedAt);
+    if (attempt.audibleAt === null) attempt.startupStallMs += spell;
+    else attempt.rebufferMs += spell;
+    attempt.bufferStartedAt = null;
   }
   const generation = beginLoad();
   attempt.generation = generation;
@@ -736,12 +796,17 @@ function onPlaybackFailed(generation: number, reason = 'media_error'): void {
       'failed',
       {
         elapsed_ms: Math.round(performance.now() - attempt.startedAt),
-        stall_count: attempt.stallCount,
-        stall_ms: Math.round(attempt.stallMs),
+        startup_stall_ms: Math.round(attempt.startupStallMs),
+        rebuffer_count: attempt.rebufferCount,
+        rebuffer_ms: Math.round(attempt.rebufferMs),
         recovery_count: attempt.recoveryCount,
       },
       reason,
     );
+    // A failure after the music had started is still a play, and one that ended
+    // badly is the most worth counting. `concludeAttempt` no-ops on an attempt
+    // that never sounded, which is what the event above already covers.
+    concludeAttempt(attempt, 'failed');
     activeAttempt = null;
   }
   setState('playback', { isPlaying: false, isLoading: false, loadError: true, phase: 'failed' });
@@ -1150,6 +1215,7 @@ function commitTransition(
       const queue = state.playback.queue;
       const index = queue.findIndex((entry) => entry.queueId === next.queueId);
       // The incoming deck is already audible; there is no undo. Follow it.
+      concludeAttempt(activeAttempt, 'handoff');
       activeAttempt = null;
       const deck = audioEl();
       setState('playback', {
@@ -1499,6 +1565,9 @@ function boundaryFacts(): Record<string, boolean> {
 }
 
 function onEnded(): void {
+  // The track played to its end either way, so its delivery is reportable before
+  // anything is decided about what follows.
+  concludeAttempt(activeAttempt, 'ended');
   // A committed handoff owns the end of this track: the mixer starts the blend
   // off the same moment, and advancing the queue here would cancel it.
   if (audioService.mixPhase() !== 'idle') {
@@ -3612,15 +3681,22 @@ export function initStore(): void {
     if (!activeAttempt) return;
     onPlaybackFailed(loadGeneration, 'media_error');
   });
+  // A seek the listener asked for. Remembered so that the `waiting` it is about
+  // to cause is not filed as a stream that died.
+  a.addEventListener('seeking', () => {
+    if (activeAttempt) activeAttempt.seekPending = true;
+  });
   // Buffering, both cold (nothing has sounded yet) and mid-track. Either way the
-  // transport shows progress instead of a stuck play button.
+  // transport shows progress instead of a stuck play button — but only the second
+  // one is a delivery failure, and they are counted apart.
   a.addEventListener('waiting', () => {
     if (!state.playback.currentTrack) return;
     const attempt = activeAttempt;
-    if (attempt) {
-      if (attempt.stallStartedAt === null) {
-        attempt.stallStartedAt = performance.now();
-        attempt.stallCount += 1;
+    if (attempt && attempt.bufferStartedAt === null) {
+      attempt.bufferStartedAt = performance.now();
+      if (attempt.audibleAt !== null) {
+        if (attempt.seekPending) attempt.seekRebufferCount += 1;
+        else attempt.rebufferCount += 1;
       }
     }
     setState('playback', { isLoading: true, phase: 'buffering' });
@@ -3639,22 +3715,26 @@ export function initStore(): void {
     const attempt = activeAttempt;
     if (!attempt || state.playback.currentTrack?.id !== attempt.trackId) return;
     const now = performance.now();
-    if (attempt.stallStartedAt !== null) {
-      attempt.stallMs += Math.max(0, now - attempt.stallStartedAt);
-      attempt.stallStartedAt = null;
-    }
+    const spell = attempt.bufferStartedAt === null ? 0 : Math.max(0, now - attempt.bufferStartedAt);
+    attempt.bufferStartedAt = null;
+    if (attempt.audibleAt === null) attempt.startupStallMs += spell;
+    else attempt.rebufferMs += spell;
+    attempt.seekPending = false;
     if (attempt.audibleAt === null) {
       attempt.audibleAt = now;
+      // No stall counters here. At this instant nothing can have stalled yet —
+      // the sound has only just started — so any number reported here describes
+      // the wait that `click_to_playing_ms` already describes. `ui_play_delivery`
+      // asks the stall question at a time when it has an answer.
       emitAttempt(attempt, 'ui_click_to_playing', 'playing', {
         click_to_playing_ms: Math.round(now - attempt.startedAt),
-        stall_count: attempt.stallCount,
-        stall_ms: Math.round(attempt.stallMs),
+        startup_stall_ms: Math.round(attempt.startupStallMs),
         recovery_count: attempt.recoveryCount,
       });
     } else if (attempt.recoveryCount > attempt.reportedRecoveryCount) {
       emitAttempt(attempt, 'ui_recovery_succeeded', 'playing', {
-        stall_count: attempt.stallCount,
-        stall_ms: Math.round(attempt.stallMs),
+        rebuffer_count: attempt.rebufferCount,
+        rebuffer_ms: Math.round(attempt.rebufferMs),
         recovery_count: attempt.recoveryCount,
       });
       attempt.reportedRecoveryCount = attempt.recoveryCount;
