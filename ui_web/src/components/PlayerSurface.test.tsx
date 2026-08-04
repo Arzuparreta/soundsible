@@ -262,7 +262,8 @@ describe('PlayerSurface', () => {
 
     expect(surface.className).toContain('closing');
     expect(surface.style.getPropertyValue('--surface-exit-from')).toBe('0px');
-    expect(surface.style.getPropertyValue('--surface-exit-duration')).toBe('380ms');
+    // Under the 300ms of the entrance: the sheet leaves quicker than it arrives.
+    expect(surface.style.getPropertyValue('--surface-exit-duration')).toBe('260ms');
   });
 
   it('continues a released drag from where the finger left it', () => {
@@ -277,8 +278,8 @@ describe('PlayerSurface', () => {
     expect(surface.className).toContain('closing');
     expect(surface.style.getPropertyValue('--surface-exit-from')).toBe('140px');
     const duration = Number.parseInt(surface.style.getPropertyValue('--surface-exit-duration'), 10);
-    expect(duration).toBeGreaterThanOrEqual(150);
-    expect(duration).toBeLessThan(380);
+    expect(duration).toBeGreaterThanOrEqual(110);
+    expect(duration).toBeLessThan(260);
   });
 
   it('drops the exit values once the surface is off screen', () => {

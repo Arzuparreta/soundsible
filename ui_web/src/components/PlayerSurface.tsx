@@ -18,10 +18,12 @@ const SWIPE_ACTIVATE_THRESHOLD = 2;
 const HORIZONTAL_CANCEL_THRESHOLD = 6;
 /** How much taller than wide a drag must be before it counts as a close. */
 const SWIPE_VERTICAL_BIAS = 1.5;
-/** Time the exit is worth end to end; a partial travel is scaled down from it. */
-const EXIT_DURATION = 380;
+/* Time the exit is worth end to end; a partial travel is scaled down from it.
+   Deliberately under the 300ms of the entrance (--dur-medium): leaving should
+   feel a step quicker than arriving. Kept in sync with the CSS fallback. */
+const EXIT_DURATION = 260;
 /** Floor for the last sliver, so a release near the bottom still moves visibly. */
-const EXIT_DURATION_MIN = 150;
+const EXIT_DURATION_MIN = 110;
 /** Grace on top of the exit before the fallback timer gives up on `animationend`. */
 const CLOSE_ANIMATION_GRACE = 140;
 /* Controls that own the touch themselves. Plain buttons are deliberately absent:
@@ -211,7 +213,7 @@ export function PlayerSurface() {
    * had (px/ms, downward) when the finger left — both zero for the close button,
    * which starts the travel from rest. The exit covers the distance that is
    * actually left, in the time that distance is worth: a sheet released halfway
-   * down does not restart a full 380ms animation, and a flick keeps its speed
+   * down does not restart a full-height animation, and a flick keeps its speed
    * instead of dropping into a slow settle. The floor is what stops a release
    * near the bottom from finishing in a single frame — which is the whole
    * complaint: an exit too short to see is an exit nobody believes happened.

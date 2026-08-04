@@ -12,9 +12,10 @@
     );
   /* Deliberately not --ease-out: that curve spends 85% of its travel in the
      first third of the duration, which on a phone is four frames and reads as
-     the sheet vanishing rather than leaving. Ease-out-cubic keeps the movement
-     legible the whole way down, and picks up a released drag without a jolt. */
-  --surface-exit-ease: cubic-bezier(0.215, 0.61, 0.355, 1);
+     the sheet vanishing rather than leaving. This one commits hard enough to
+     feel snappy while the movement stays legible the whole way down, and it
+     picks up a released drag without a jolt. */
+  --surface-exit-ease: cubic-bezier(0.2, 0.72, 0.3, 1);
   position: fixed;
   top: 0;
   right: 0;
@@ -66,7 +67,7 @@
 .closing {
   visibility: visible;
   pointer-events: none;
-  animation: surfaceOut var(--surface-exit-duration, 380ms) var(--surface-exit-ease) forwards;
+  animation: surfaceOut var(--surface-exit-duration, 260ms) var(--surface-exit-ease) forwards;
 }
 
 /* The sheet is opaque and covers the viewport, so fading it while it travels
