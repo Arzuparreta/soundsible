@@ -3578,7 +3578,11 @@ function installAudioUnlock(): void {
   if (typeof window === 'undefined') return;
   const unlock = () => {
     audioService.unlockAudio();
-    if (state.playback.needsGesture) {
+    // Carrying on from an interruption, never starting something nobody asked
+    // for: this fires on any tap on the page, so the only thing it may act on is
+    // music that was playing until the platform took the audio session away.
+    // `needsGesture` is set from exactly that and nothing else.
+    if (state.playback.needsGesture && state.playback.currentTrack) {
       setState('playback', 'needsGesture', false);
       void audioService.resume().catch(() => {});
     }
@@ -3601,10 +3605,20 @@ export function initStore(): void {
   setGraphReporter((failure) => {
     emitPlaybackEvent(
       'ui_graph_state',
-      { resumed: failure.resumed, position_sec: Math.round(failure.positionSec) },
+      {
+        was_playing: failure.wasPlaying,
+        resumed: failure.resumed,
+        position_sec: Math.round(failure.positionSec),
+      },
       { failure_reason: failure.reason, context_state: failure.contextState, display_mode: displayMode() },
     );
-    if (failure.resumed) return;
+    // Only music that was actually sounding can fail to come back. A graph
+    // rebuilt under a paused player — the session this device put back on boot
+    // and nobody has pressed play on yet — leaves it exactly as it was, and
+    // saying "tap play to resume" there invents an interruption that never
+    // happened. Worse, the offer is honoured by the next tap anywhere on the
+    // page, which is a paused song starting on its own.
+    if (failure.resumed || !failure.wasPlaying) return;
     setState('playback', { isPlaying: false, needsGesture: true });
     toast.error(tr('toast.audioNeedsGesture'));
   });

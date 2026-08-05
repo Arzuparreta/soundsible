@@ -103,6 +103,10 @@ let graphState: GraphState = 'untested';
 
 export interface GraphFailure {
   reason: 'context_stalled' | 'silent_output';
+  /** Whether the decks were sounding when the graph was taken down. A paused
+   * player has nothing to restore, so `resumed: false` there is the expected
+   * outcome rather than a failure anybody has to be told about. */
+  wasPlaying: boolean;
   /** Whether playback was restored on the replacement decks by itself. */
   resumed: boolean;
   contextState: string;
@@ -712,7 +716,13 @@ function abandonGraph(reason: GraphFailure['reason']): void {
       void deck.play().catch(() => {
         // Some platforms want a fresh gesture for an element that has never
         // played. The store turns this into a visible "tap to resume".
-        graphReporter?.({ reason, resumed: false, contextState, positionSec: restore.position });
+        graphReporter?.({
+          reason,
+          wasPlaying: restore.wasPlaying,
+          resumed: false,
+          contextState,
+          positionSec: restore.position,
+        });
       });
     }
   }
@@ -720,7 +730,13 @@ function abandonGraph(reason: GraphFailure['reason']): void {
   // after this one can start without a gesture the listener will not be there
   // to give. Best effort — this does not run from one.
   unlockDecks();
-  graphReporter?.({ reason, resumed, contextState, positionSec: restore.position });
+  graphReporter?.({
+    reason,
+    wasPlaying: restore.wasPlaying,
+    resumed,
+    contextState,
+    positionSec: restore.position,
+  });
 }
 
 /** Whether the decks are routed through a graph that is believed to be sounding. */
@@ -1453,6 +1469,11 @@ export const audioService = {
     const a = audioEl();
     const token = ++loadSeq;
     setDeckLevel(activeIndex, level);
+    // Explicitly, before the stream is handed over. A deck that is mid-`play()`
+    // from `unlockDecks` — the silent sample every gesture spends on an empty
+    // deck — would otherwise carry that play straight into the track being
+    // primed, and a session put back on boot would start sounding on its own.
+    a.pause();
     a.src = url;
     a.load();
     const applyPosition = () => {

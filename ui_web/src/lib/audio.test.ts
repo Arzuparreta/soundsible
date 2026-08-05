@@ -616,6 +616,44 @@ describe('two-deck mixer', () => {
     expect(module.audioService.graphReady()).toBe(false);
   });
 
+  it('rebuilds the decks under a paused player without starting it', async () => {
+    // A session put back on boot sits cued and paused until somebody presses
+    // play. Whatever the graph does underneath it, that has to stay true: there
+    // is no music to restore, and the store must not be told a resume failed.
+    vi.stubGlobal('AudioContext', DeadAudioContext);
+    const module = await import('./audio');
+    const failures: Array<{ wasPlaying: boolean; resumed: boolean }> = [];
+    module.setGraphReporter((failure) => { failures.push(failure); });
+    module.audioService.prime('/restored', 42, 1);
+    const primed = module.audioEl() as unknown as FakeAudio;
+
+    module.audioService.unlockAudio();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(module.audioService.graphReady()).toBe(false);
+    expect(failures).toEqual([expect.objectContaining({ wasPlaying: false, resumed: false })]);
+    const rebuilt = module.audioEl() as unknown as FakeAudio;
+    expect(rebuilt).not.toBe(primed);
+    // Cued back where the session was left, and silent.
+    expect(rebuilt.src).toBe('/restored');
+    expect(rebuilt.currentTime).toBe(42);
+    expect(rebuilt.play).not.toHaveBeenCalled();
+  });
+
+  it('never carries a deck unlock over into the track it primes', async () => {
+    // `unlockDecks` spends a silent sample on every empty deck, from any
+    // gesture. A restore landing while that play is in flight used to inherit
+    // it — the paused song the listener came back to started on its own.
+    const module = await import('./audio');
+    const deck = module.audioEl() as unknown as FakeAudio;
+    deck.paused = false;
+
+    module.audioService.prime('/restored', 42, 1);
+
+    expect(deck.pause).toHaveBeenCalled();
+    expect(deck.paused).toBe(true);
+  });
+
   it('lets a listener skip straight into the blend that was already prepared', async () => {
     const { audioEl, audioService, incoming, handlers } = await armed();
 
