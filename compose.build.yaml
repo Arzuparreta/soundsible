@@ -12,7 +12,9 @@ services:
       context: .
       target: runtime
       args:
-        SOUNDSIBLE_VERSION: ${SOUNDSIBLE_VERSION:-0.0.0-docker}
+        # Empty by default so a local build reports what shared/version.py
+        # declares, rather than inventing a second answer only containers gave.
+        SOUNDSIBLE_VERSION: ${SOUNDSIBLE_VERSION:-}
         VCS_REF: ${VCS_REF:-local}
     image: soundsible:local
     pull_policy: never
