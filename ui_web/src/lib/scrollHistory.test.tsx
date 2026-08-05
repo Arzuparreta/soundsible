@@ -76,7 +76,10 @@ describe('scroll history', () => {
     // on that, and the failure it produces — scrollTop still 0 — looks exactly
     // like the regression this test is for.
     await waitFor(() => expect(restored.scrollTop).toBe(240), { timeout: 5_000 });
-  });
+    // The waitFor budget above is only real if the test is allowed to outlive
+    // it. At vitest's default 5s the two deadlines are the same, so the test
+    // died first and the raised budget bought nothing.
+  }, 15_000);
 
   it('starts a fresh visit at the top even when the URL existed earlier', async () => {
     function A() {
