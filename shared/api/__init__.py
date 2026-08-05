@@ -862,7 +862,30 @@ def _fill_youtube_runtime_hint(dl, song_str: str, item: dict, metadata_evidence:
 
     if not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str):
         runtime_hint.pop("title", None)
+
+    _orient_runtime_hint(runtime_hint)
     return runtime_hint
+
+
+def _orient_runtime_hint(runtime_hint: dict) -> None:
+    """Settle artist/title by lookup before the pair is written to a file.
+
+    This is the last point where the pair is still cheap to change. Past here
+    it is embedded in tags, hashed into the track id, and copied into the
+    manifest, the favourites entry and every playlist that references it —
+    renaming it afterwards means a re-encode and a new id.
+    """
+    from shared.artist_title_orientation import resolve_orientation
+
+    artist = str(runtime_hint.get("artist") or "").strip()
+    title = str(runtime_hint.get("title") or "").strip()
+    if not artist or not title:
+        return
+
+    decided = resolve_orientation(artist, title)
+    if decided.swapped:
+        runtime_hint["artist"] = decided.artist
+        runtime_hint["title"] = decided.title
 
 
 def _process_single_queue_item(item):
