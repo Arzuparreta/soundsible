@@ -58,7 +58,7 @@ python3 run.py --daemon   # fixed port 5005, reachable on the LAN
 
    ```bash
    sudo tailscale set --operator="$USER"
-   tailscale serve --bg --yes 5005
+   tailscale serve --bg --yes --https=443 5005
    ```
 
 4. From any device on your tailnet, open the HTTPS URL printed by `tailscale
@@ -67,6 +67,67 @@ python3 run.py --daemon   # fixed port 5005, reachable on the LAN
 5. If the `.ts.net` name does not resolve on a client, enable Tailscale DNS
    there with `sudo tailscale set --accept-dns=true`.
 6. Optionally install the web player as a PWA (see the [README](../README.md#listen-everywhere)).
+
+### Sharing the node with other services
+
+Tailscale's `serve` and `funnel` state belongs to the **machine**, not to
+Soundsible. Each HTTPS port routes `/` to exactly one backend, and only ports
+`443`, `8443` and `10000` are available. Whatever configures a port last wins,
+silently — nothing warns the service it displaced.
+
+That is why step 3 spells out `--https=443` instead of relying on the default:
+the port is a choice, and on a machine that already publishes something else you
+should make it a different one.
+
+```bash
+tailscale serve --bg --yes --https=8443 5005   # Soundsible alongside another service
+```
+
+Soundsible never writes this configuration for you. It reads your Tailscale
+address when it needs it, but publishing the station stays a deliberate act, so
+installing it can never take a port another project is already serving.
+
+### The station is up but the `.ts.net` URL returns 502
+
+A `502 Bad Gateway` means Tailscale accepted the request and found nothing
+listening behind the port. The Station Engine is usually fine — check where the
+node is actually pointing before looking at Soundsible at all:
+
+```bash
+tailscale serve status                       # which backend owns each port?
+curl -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5005/   # 200 = engine is healthy
+```
+
+If `serve status` shows a port aimed somewhere other than `5005`, another
+service claimed it — commonly one installed as a systemd unit that reclaims the
+port on every boot, which is why this tends to appear right after a reboot
+rather than when you install it. Re-run step 3 to take the port back, and give
+the other service a port of its own so the two stop trading it.
+
+To make your own choice survive reboots, install it as a unit instead of leaving
+it to a command you ran once:
+
+```ini
+# ~/.config/systemd/user/tailscale-funnel-soundsible.service
+[Unit]
+Description=Tailscale Funnel for Soundsible Station Engine
+After=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/tailscale funnel --bg --https=443 5005
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now tailscale-funnel-soundsible.service
+```
 
 ---
 

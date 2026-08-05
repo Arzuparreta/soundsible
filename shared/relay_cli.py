@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import errno
 import getpass
 import json
 import os
 from pathlib import Path
+import re
+import socket
 import statistics
 import subprocess
 import sys
@@ -15,6 +18,9 @@ import time
 from urllib.request import urlopen
 
 from shared.relay_server import is_tailscale_ipv4, serve, wait_for_tailscale_ipv4
+
+RELAY_UNIT = "soundsible-relay.service"
+RELAY_UNIT_PATH = Path("/etc/systemd/system") / RELAY_UNIT
 
 DEFAULT_PROBES = (
     "dQw4w9WgXcQ",
@@ -40,6 +46,11 @@ def _parser() -> argparse.ArgumentParser:
     install.add_argument("--port", type=int, default=8888)
     install.add_argument("--user", help="Linux service user; defaults to the invoking user")
     install.add_argument("--no-start", action="store_true")
+    install.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing unit file that differs from the one we would write",
+    )
 
     sub.add_parser("status", help="Show systemd status and relay health")
 
@@ -81,8 +92,53 @@ WantedBy=multi-user.target
 """
 
 
+def _systemd_available() -> bool:
+    return os.name == "posix" and Path("/run/systemd/system").exists()
+
+
+def _unit_is_active(unit: str = RELAY_UNIT) -> bool:
+    return subprocess.run(["systemctl", "is-active", "--quiet", unit]).returncode == 0
+
+
+def installed_port(unit_path: Path | None = None) -> int | None:
+    """Return the port the currently installed relay unit serves on, if any."""
+    try:
+        match = re.search(r"--port (\d+)", (unit_path or RELAY_UNIT_PATH).read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    return int(match.group(1)) if match else None
+
+
+def describe_listener(port: int) -> str | None:
+    """Describe whatever already listens on the port, or None when it is free.
+
+    Binding the wildcard address fails when any interface-specific socket holds
+    the port, which is what the relay would hit at startup after we handed it a
+    port somebody else already owns.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("0.0.0.0", port))
+        except OSError as exc:
+            # Only a genuine address clash means somebody owns the port; any
+            # other bind failure is a different problem and reporting it as a
+            # conflict would send the user chasing the wrong thing.
+            if exc.errno != errno.EADDRINUSE:
+                return None
+        else:
+            return None
+    try:
+        result = subprocess.run(
+            ["ss", "-ltnp", f"sport = :{port}"], text=True, capture_output=True, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "another process"
+    names = sorted(set(re.findall(r'users:\(\("([^"]+)"', result.stdout)))
+    return ", ".join(names) if names else "another process"
+
+
 def _install(args: argparse.Namespace) -> int:
-    if os.name != "posix" or not Path("/run/systemd/system").exists():
+    if not _systemd_available():
         print("Relay service installation currently supports Linux systemd only.", file=sys.stderr)
         return 2
     if os.geteuid() != 0:
@@ -97,25 +153,45 @@ def _install(args: argparse.Namespace) -> int:
         return 2
     user = args.user or os.getenv("SUDO_USER") or getpass.getuser()
     repo_root = Path(__file__).resolve().parents[1]
-    unit_path = Path("/etc/systemd/system/soundsible-relay.service")
-    unit_path.write_text(
-        _unit_text(repo_root=repo_root, user=user, stations=stations, port=args.port),
-        encoding="utf-8",
-    )
-    unit_path.chmod(0o644)
+    unit_text = _unit_text(repo_root=repo_root, user=user, stations=stations, port=args.port)
+
+    # Everything below inspects the machine before we write to it: a relay that
+    # claims a port or a unit file somebody else owns is the failure we are
+    # trying not to ship.
+    if RELAY_UNIT_PATH.exists() and not args.force:
+        try:
+            current = RELAY_UNIT_PATH.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"Cannot read {RELAY_UNIT_PATH}: {exc}", file=sys.stderr)
+            return 2
+        if current != unit_text:
+            print(f"{RELAY_UNIT_PATH} already exists and differs from this install.", file=sys.stderr)
+            print("Review it, then re-run with --force to replace it.", file=sys.stderr)
+            return 2
+
+    # A port held by our own already-running relay is a reinstall, not a clash.
+    reinstalling = _unit_is_active() and installed_port() == args.port
+    listener = None if reinstalling else describe_listener(args.port)
+    if listener:
+        print(f"Port {args.port} is already in use by {listener}.", file=sys.stderr)
+        print("Pick a free port with --port, or stop that service first.", file=sys.stderr)
+        return 2
+
+    RELAY_UNIT_PATH.write_text(unit_text, encoding="utf-8")
+    RELAY_UNIT_PATH.chmod(0o644)
     subprocess.run(["systemctl", "daemon-reload"], check=True)
-    subprocess.run(["systemctl", "enable", "soundsible-relay.service"], check=True)
+    subprocess.run(["systemctl", "enable", RELAY_UNIT], check=True)
     if not args.no_start:
-        subprocess.run(["systemctl", "restart", "soundsible-relay.service"], check=True)
+        subprocess.run(["systemctl", "restart", RELAY_UNIT], check=True)
     relay_ip = wait_for_tailscale_ipv4(10)
-    print(f"Installed soundsible-relay.service")
+    print(f"Installed {RELAY_UNIT}")
     print(f"Set on the Station: SOUNDSIBLE_YT_PROXY=http://{relay_ip}:{args.port}")
     return 0
 
 
 def _status() -> int:
     result = subprocess.run(
-        ["systemctl", "show", "soundsible-relay.service", "--property=ActiveState,SubState,NRestarts"],
+        ["systemctl", "show", RELAY_UNIT, "--property=ActiveState,SubState,NRestarts"],
         text=True,
         capture_output=True,
     )

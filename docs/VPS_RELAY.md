@@ -37,6 +37,17 @@ Replace `100.x.y.z` with the VPS Tailscale IPv4. The installer creates and
 enables `soundsible-relay.service`. It waits for `tailscaled.service` and for a
 usable tailnet address instead of failing repeatedly during boot.
 
+The installer inspects the machine before it writes anything, so it cannot take
+something another project already owns:
+
+- **The port is busy.** It refuses to install and names the process holding it.
+  Pass `--port` to pick a free one. A port held by an already-running relay on
+  the same port is a reinstall, not a clash, and proceeds normally.
+- **`/etc/systemd/system/soundsible-relay.service` already exists and differs**
+  — for instance because you edited it by hand. It stops rather than overwrite
+  your file; re-run with `--force` once you have reviewed it. An identical unit
+  is left alone, so repeat installs are idempotent.
+
 The command prints the value to configure on the VPS:
 
 ```bash
