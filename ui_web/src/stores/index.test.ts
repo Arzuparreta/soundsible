@@ -1723,12 +1723,45 @@ describe('Solid store favourites', () => {
     });
 
     await actions.syncLibrary();
-    // Browsable exactly like a file, which is the point of saving it.
-    expect(musicLibrary().map((t) => t.id)).toEqual(['t1', 'dQw4w9WgXcQ']);
+    // Browsable exactly like a file, which is the point of saving it. Files
+    // last, because `sortTracks` reverses this list for "recent" and a reversed
+    // concatenation swaps the blocks — see the memo's own note.
+    expect(musicLibrary().map((t) => t.id)).toEqual(['dQw4w9WgXcQ', 't1']);
 
-    // The download lands: the same song, now as its file — listed once, not twice.
+    // The download lands: the same song, now as its file — listed once, not
+    // twice. No streaming rows left, so the files keep the engine's order.
     await actions.syncLibrary();
     expect(musicLibrary().map((t) => t.id)).toEqual(['t1', 'hash9f2a']);
+  });
+
+  it('puts a finished download at the top of "recent", not under every old save', async () => {
+    // The bug this pins: with the blocks the other way round, every song ever
+    // saved and never downloaded sat above every file. In the library it was
+    // found in that was 72 saves, so a track downloaded a minute earlier opened
+    // at position 73 and read as missing.
+    const older = { id: 'old-file', title: 'Downloaded days ago', artist: 'A' };
+    const justDownloaded = { id: 'new-file', title: 'Downloaded a minute ago', artist: 'B' };
+    const { actions, musicLibrary } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({
+        // The engine appends, so the newest file is last.
+        tracks: [older, justDownloaded],
+        playlists: {},
+        settings: {},
+        podcast_subscriptions: [],
+      }),
+      getSaved: vi.fn().mockResolvedValue([
+        { keys: ['yt:aaaaaaaaaaa'], title: 'Saved weeks ago', artist: 'C' },
+        { keys: ['yt:bbbbbbbbbbb'], title: 'Saved weeks ago too', artist: 'D' },
+      ]),
+    });
+
+    await actions.syncLibrary();
+
+    const { sortTracks } = await import('../lib/libraryView');
+    const shown = sortTracks(musicLibrary(), 'recent', new Set()).map((t) => t.id);
+
+    expect(shown[0]).toBe('new-file');
+    expect(shown.slice(0, 2)).toEqual(['new-file', 'old-file']);
   });
 
   it('reverts the optimistic save when the engine rejects it', async () => {

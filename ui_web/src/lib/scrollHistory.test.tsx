@@ -71,7 +71,11 @@ describe('scroll history', () => {
     expect(restored.scrollTop).toBe(0);
 
     setReady(true);
-    await waitFor(() => expect(restored.scrollTop).toBe(240));
+    // Restoration waits for the list to report it has content, then for a frame.
+    // A loaded CI runner can spend longer than testing-library's default second
+    // on that, and the failure it produces — scrollTop still 0 — looks exactly
+    // like the regression this test is for.
+    await waitFor(() => expect(restored.scrollTop).toBe(240), { timeout: 5_000 });
   });
 
   it('starts a fresh visit at the top even when the URL existed earlier', async () => {
