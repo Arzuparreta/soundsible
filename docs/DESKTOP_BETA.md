@@ -81,7 +81,12 @@ deliberate act that used to be "press publish". See
 
 ## Stable-release blockers
 
-1. Obtain a Windows code-signing certificate and sign app, sidecar and installer.
+1. Sign app, sidecar and installer with a Windows code-signing certificate.
+   **Blocked by choice, not by work.** A certificate costs money and requires a
+   legal identity, and Soundsible is not buying one. If the community funds it,
+   the release workflow gains a signing step; until then the desktop app stays
+   in beta and its installers ship unsigned, which is what the warning about an
+   unknown publisher means. Nothing else on this list is waiting on it.
 2. Complete one human Windows 11 x64 run and one ARM64 run.
 3. Validate real playback, tray behaviour, Defender and SmartScreen.
 4. Validate upgrade from the latest public beta without losing configuration.
