@@ -56,37 +56,13 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 
 Choose one installation path:
 
-- **Docker** — one command, nothing to compile. Recommended, and the only
-  practical option on a NAS or a Raspberry Pi.
-- **Native installation** — run directly on Linux, macOS, or Windows with full
-  access to the launcher and local development workflow.
-
-### Docker (recommended)
-
-Published for `linux/amd64` and `linux/arm64`, with FFmpeg, Chromaprint, Python
-and the compiled web player already inside:
-
-```bash
-curl -O https://raw.githubusercontent.com/Arzuparreta/soundsible/main/compose.yaml
-docker compose up -d
-```
-
-Wait for `soundsible` to report `healthy`, then open
-**<http://localhost:5005/player/>**. The first start creates a local-storage
-configuration by itself. Configuration, application data, cache, logs, and
-downloaded music live in separate named volumes and survive image or container
-replacement.
-
-```bash
-docker compose logs -f soundsible # follow startup/runtime logs
-docker compose pull && docker compose up -d   # upgrade
-docker compose down               # stop without deleting your library
-```
-
-`:edge` tracks `main`; `:latest` and `:X.Y.Z` track releases. See
-[Docker deployment](docs/DOCKER.md) for host-library mounts, `.env`
-configuration, provenance verification, security, backups, and building from
-source instead.
+- **Native installation** — run directly on Linux, macOS, or Windows, with full
+  access to the launcher and the local development workflow. This is the
+  primary installation method and the one the maintainer runs and maintains.
+- **Docker** — one command, nothing to compile, and the practical option on a
+  NAS or a Raspberry Pi. Supported, but not the primary path.
+- **Desktop app (beta)** — a one-click app for Linux and Windows with no
+  terminal, for a single machine rather than a server.
 
 ### Native installation
 
@@ -183,6 +159,33 @@ python3 run.py          # choose "Start Station Engine & Open Station"
 ```
 
 That starts the engine and opens **<http://localhost:5005/player/>**. Keep the terminal open while you play; closing it stops the engine.
+
+### Docker
+
+Published for `linux/amd64` and `linux/arm64`, with FFmpeg, Chromaprint, Python
+and the compiled web player already inside:
+
+```bash
+curl -O https://raw.githubusercontent.com/Arzuparreta/soundsible/main/compose.yaml
+docker compose up -d
+```
+
+Wait for `soundsible` to report `healthy`, then open
+**<http://localhost:5005/player/>**. The first start creates a local-storage
+configuration by itself. Configuration, application data, cache, logs, and
+downloaded music live in separate named volumes and survive image or container
+replacement.
+
+```bash
+docker compose logs -f soundsible # follow startup/runtime logs
+docker compose pull && docker compose up -d   # upgrade
+docker compose down               # stop without deleting your library
+```
+
+`:edge` tracks `main`; `:latest` and `:X.Y.Z` track releases. See
+[Docker deployment](docs/DOCKER.md) for host-library mounts, `.env`
+configuration, provenance verification, security, backups, and building from
+source instead.
 
 ### Web player
 
