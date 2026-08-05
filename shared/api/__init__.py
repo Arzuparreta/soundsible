@@ -862,7 +862,30 @@ def _fill_youtube_runtime_hint(dl, song_str: str, item: dict, metadata_evidence:
 
     if not _youtube_metadata_title_usable(runtime_hint.get("title"), song_str):
         runtime_hint.pop("title", None)
+
+    _orient_runtime_hint(runtime_hint)
     return runtime_hint
+
+
+def _orient_runtime_hint(runtime_hint: dict) -> None:
+    """Settle artist/title by lookup before the pair is written to a file.
+
+    This is the last point where the pair is still cheap to change. Past here
+    it is embedded in tags, hashed into the track id, and copied into the
+    manifest, the favourites entry and every playlist that references it —
+    renaming it afterwards means a re-encode and a new id.
+    """
+    from shared.artist_title_orientation import resolve_orientation
+
+    artist = str(runtime_hint.get("artist") or "").strip()
+    title = str(runtime_hint.get("title") or "").strip()
+    if not artist or not title:
+        return
+
+    decided = resolve_orientation(artist, title)
+    if decided.swapped:
+        runtime_hint["artist"] = decided.artist
+        runtime_hint["title"] = decided.title
 
 
 def _process_single_queue_item(item):
@@ -1278,20 +1301,62 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
         _loaded_user_library()
 
     added = 0
+    newly_added = []
     for track in tracks:
         if lib.metadata.get_track_by_id(track.id):
             continue
         track_dict = track.to_dict()
         track_dict.pop("local_path", None)
-        lib.metadata.add_track(Track.from_dict(track_dict))
+        stored = Track.from_dict(track_dict)
+        lib.metadata.add_track(stored)
+        newly_added.append(stored)
         added += 1
 
     if added:
+        promoted = _promote_favourites_to_library(newly_added, user_id=target)
+
         def _emit_updated():
             with app.app_context():
                 emit_to_user('library_updated', user_id=target)
+                if promoted:
+                    emit_to_user('favourites_updated', user_id=target)
         orchestrator.schedule_metadata_commit(lib._save_metadata, _emit_updated)
     return added
+
+
+def _promote_favourites_to_library(tracks, *, user_id: str) -> int:
+    """Give a favourited song its ``lib:`` key once the file is actually here.
+
+    Favouriting from a search row saves a bare ``yt:<video id>`` entry, because
+    at that moment that is the only identity the song has. Downloading it later
+    is supposed to promote the same entry rather than leave a second one — that
+    is the whole point of matching on key intersection.
+
+    Nothing ever performed that promotion, so the entry kept only its ``yt:``
+    key. :meth:`FavouritesManager.get_all` reads ``lib:`` keys, which is what
+    the Favourites view lists, so a song you had hearted and then downloaded
+    disappeared from it: present in the library, present in favourites.json,
+    and invisible in both views.
+    """
+    try:
+        manager = get_favourites_manager(user_id)
+    except Exception as exc:  # pragma: no cover — favourites are never load-bearing
+        logger.debug("API: no favourites manager for %s: %s", user_id, exc)
+        return 0
+
+    from player.favourites_manager import library_key
+
+    promoted = 0
+    for track in tracks:
+        video_id = getattr(track, "youtube_id", None)
+        if not video_id or not track.id:
+            continue
+        try:
+            if manager.update_keys([f"yt:{video_id}"], [library_key(track.id)]):
+                promoted += 1
+        except Exception as exc:  # pragma: no cover
+            logger.debug("API: could not promote favourite for %s: %s", video_id, exc)
+    return promoted
 
 
 def _sync_odst_to_main_core():

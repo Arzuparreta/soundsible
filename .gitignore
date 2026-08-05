@@ -92,3 +92,6 @@ temp/
 # Project-specific
 gha-creds-*.json
 .gstack/
+
+# Stray scratch images at the repo root
+/example.png

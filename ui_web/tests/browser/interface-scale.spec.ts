@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { settle } from './settle';
 
 type InterfaceSize = 'compact' | 'normal' | 'large';
 
@@ -222,6 +223,7 @@ test.describe('interface scale geometry', () => {
       await expect(window_.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
     }
 
+    await settle(page, '[role="dialog"]');
     await assertGeometry(page, '[role="dialog"]');
     const results = await new AxeBuilder({ page })
       .include('[role="dialog"]')
@@ -302,13 +304,7 @@ test.describe('interface scale geometry', () => {
     await page.getByRole('button', { name: 'Abrir ajustes de accesibilidad visual' }).click();
     const dialog = page.getByRole('dialog', { name: 'Accesibilidad' });
     await expect(dialog).toBeVisible();
-    // WebKit can expose the sheet to Axe during the first animation frame,
-    // when ancestor opacity is still near zero and every descendant appears to
-    // have dark blended text. Audit the settled UI, not an intermediate frame.
-    await dialog.evaluate(async (element) => {
-      const animations = element.getAnimations({ subtree: true });
-      await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
-    });
+    await settle(page, '[role="dialog"]');
     await assertGeometry(page);
 
     const results = await new AxeBuilder({ page })

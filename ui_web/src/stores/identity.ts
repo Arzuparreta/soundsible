@@ -110,11 +110,25 @@ export const identity = createRoot(() => {
   /**
    * The library as the user thinks of it: everything they have claimed.
    *
-   * Files first in the engine's own order, then the songs that have no file —
-   * a save is the most recent thing that happened to the collection, and
-   * `sortTracks` reverses this list for "recent", which floats them to the top
-   * where the user just put them. A saved song that has since been downloaded
-   * resolves to its library track and is dropped here rather than listed twice.
+   * The songs with no file come first, then the files in the engine's own
+   * order. A saved song that has since been downloaded resolves to its library
+   * track and is dropped here rather than listed twice.
+   *
+   * The order matters because `sortTracks` reverses this whole list for
+   * "recent", and reversing a concatenation swaps the blocks:
+   * `reverse(a ++ b)` is `reverse(b) ++ reverse(a)`. Files last here means
+   * files first there, which is what "recent" has to mean the moment a
+   * download finishes — putting the streaming block first put every song the
+   * user had ever saved and not downloaded above every file, forever. With 72
+   * such saves a track downloaded a minute ago opened at position 73, below
+   * songs from weeks earlier, and read as missing.
+   *
+   * This still is not a true recency order: a song saved just now sorts below
+   * every file. Merging the two properly needs a `date_added` on tracks —
+   * 150 of 197 files in the library this was found in carry no timestamp of
+   * any kind. That column is the first item of the library-schema work in
+   * docs/ROADMAP.md, and this ordering is what should be replaced once it
+   * exists.
    */
   const libraryTracks = createMemo(() => {
     const files = state.library.filter(isMusicTrack);
@@ -122,7 +136,7 @@ export const identity = createRoot(() => {
       .filter((row) => row.track.source === 'preview' && isMusicTrack(row.track))
       .map((row) => row.track)
       .reverse();
-    return streaming.length === 0 ? files : [...files, ...streaming];
+    return streaming.length === 0 ? files : [...streaming, ...files];
   });
   // The marked subset that lives on disk, by library id — what the surfaces
   // that only speak library ids (sort, radio seeds, Auto Mode) already expect.

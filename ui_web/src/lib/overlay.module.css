@@ -125,7 +125,16 @@
    more legible than the design intends: a thin white glyph reads at 0.32 of
    its own brightness instead of being smeared into its dark surroundings
    first. Deepen the veil to roughly the same result, so the separation
-   survives the missing filter. */
+   survives the missing filter.
+
+   Worth knowing what this does *not* catch. Playwright's Linux WebKit parses
+   `backdrop-filter` — so @supports answers yes — and then never paints it.
+   Measured over the sidebar logo the scrim reads (82,82,82) with this block in
+   place, exactly as it did without it, against (28,28,28) on Chromium. A guard
+   on declared support cannot see a claim that is not honoured; only a runtime
+   probe could. Left as-is because it is the codebase's established pattern and
+   is correct for engines that report honestly, and because the engines real
+   listeners use — Safari since 9, Firefox since 103 — do paint it. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .scrim {
     background: rgba(0, 0, 0, 0.88);
