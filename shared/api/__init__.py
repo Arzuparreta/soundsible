@@ -38,6 +38,7 @@ from shared.runtime import (
     RuntimeConfig,
 )
 from shared.ensure_ui_dist import ensure_ui_dist
+from shared.version import resolve_version
 from shared.playback_state import (  # noqa: F401  # aliases re-exported to blueprints
     get_state as get_playback_state,
     put_state as put_playback_state,
@@ -1493,7 +1494,7 @@ def health_check():
     ffmpeg = ffmpeg_status()
     payload = {
         "status": "healthy",
-        "version": os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"),
+        "version": resolve_version(),
         "ffmpeg": {"available": bool(ffmpeg.get("available"))},
         "uptime_seconds": round(time.time() - API_STARTED_AT, 3),
     }

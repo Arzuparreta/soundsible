@@ -20,7 +20,10 @@ RUN pip wheel --require-hashes --wheel-dir /wheels -r requirements.docker.lock
 
 FROM python:3.13-slim-bookworm AS runtime
 
-ARG SOUNDSIBLE_VERSION=0.0.0-docker
+# Left empty on purpose. An arg-less build then reports the version that
+# shared/version.py declares, instead of inventing a second answer that only
+# containers ever gave. CI passes the real one.
+ARG SOUNDSIBLE_VERSION=
 ARG VCS_REF=unknown
 
 LABEL org.opencontainers.image.title="Soundsible" \
