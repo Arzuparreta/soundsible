@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { settle } from './settle';
 
 type InterfaceSize = 'compact' | 'normal' | 'large';
 
@@ -77,25 +78,6 @@ async function installPreferences(page: Page, size?: InterfaceSize, highContrast
     },
     { selectedSize: size, contrast: highContrast },
   );
-}
-
-/**
- * Wait for a surface to finish arriving before auditing it.
- *
- * WebKit can expose a sheet to Axe during the first animation frame, when
- * ancestor opacity is still near zero and every descendant looks like dark text
- * blended into dark background — one intermediate frame reported 688 contrast
- * violations on a page that has none. `reducedMotion: 'reduce'` does not cover
- * it: the app still runs the entrance, just shorter.
- *
- * Every Axe scan of an overlay goes through here, so the audit always describes
- * the settled UI.
- */
-async function settled(page: Page, selector: string) {
-  await page.locator(selector).evaluate(async (element) => {
-    const animations = element.getAnimations({ subtree: true });
-    await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
-  });
 }
 
 /**
@@ -241,7 +223,7 @@ test.describe('interface scale geometry', () => {
       await expect(window_.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
     }
 
-    await settled(page, '[role="dialog"]');
+    await settle(page, '[role="dialog"]');
     await assertGeometry(page, '[role="dialog"]');
     const results = await new AxeBuilder({ page })
       .include('[role="dialog"]')
@@ -322,7 +304,7 @@ test.describe('interface scale geometry', () => {
     await page.getByRole('button', { name: 'Abrir ajustes de accesibilidad visual' }).click();
     const dialog = page.getByRole('dialog', { name: 'Accesibilidad' });
     await expect(dialog).toBeVisible();
-    await settled(page, '[role="dialog"]');
+    await settle(page, '[role="dialog"]');
     await assertGeometry(page);
 
     const results = await new AxeBuilder({ page })

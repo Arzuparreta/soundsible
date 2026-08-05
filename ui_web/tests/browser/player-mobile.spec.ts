@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { settle } from './settle';
 import AxeBuilder from '@axe-core/playwright';
 
 const TRACKS = [
@@ -381,9 +382,7 @@ test('the shared mode pill and Auto workspace stay contained in compact viewport
       // Switching modes slides the pill's marker, and the centring assertion
       // below allows one pixel. Measuring mid-transition is measuring where the
       // pill was passing through, not where it comes to rest.
-      await page.evaluate(async () => {
-        await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined)));
-      });
+      await settle(page);
 
       const pill = page.getByRole('tablist');
       const close = page.getByRole('button', { name: 'Cerrar' });
