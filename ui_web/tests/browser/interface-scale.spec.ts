@@ -80,6 +80,25 @@ async function installPreferences(page: Page, size?: InterfaceSize, highContrast
 }
 
 /**
+ * Wait for a surface to finish arriving before auditing it.
+ *
+ * WebKit can expose a sheet to Axe during the first animation frame, when
+ * ancestor opacity is still near zero and every descendant looks like dark text
+ * blended into dark background — one intermediate frame reported 688 contrast
+ * violations on a page that has none. `reducedMotion: 'reduce'` does not cover
+ * it: the app still runs the entrance, just shorter.
+ *
+ * Every Axe scan of an overlay goes through here, so the audit always describes
+ * the settled UI.
+ */
+async function settled(page: Page, selector: string) {
+  await page.locator(selector).evaluate(async (element) => {
+    const animations = element.getAnimations({ subtree: true });
+    await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
+  });
+}
+
+/**
  * `within` scopes the control and text checks to one surface. Settings is a
  * window now: it opens over whatever you were on, so an unscoped sweep would
  * grade the page behind the scrim instead of the thing under test. Page-level
@@ -222,6 +241,7 @@ test.describe('interface scale geometry', () => {
       await expect(window_.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
     }
 
+    await settled(page, '[role="dialog"]');
     await assertGeometry(page, '[role="dialog"]');
     const results = await new AxeBuilder({ page })
       .include('[role="dialog"]')
@@ -302,13 +322,7 @@ test.describe('interface scale geometry', () => {
     await page.getByRole('button', { name: 'Abrir ajustes de accesibilidad visual' }).click();
     const dialog = page.getByRole('dialog', { name: 'Accesibilidad' });
     await expect(dialog).toBeVisible();
-    // WebKit can expose the sheet to Axe during the first animation frame,
-    // when ancestor opacity is still near zero and every descendant appears to
-    // have dark blended text. Audit the settled UI, not an intermediate frame.
-    await dialog.evaluate(async (element) => {
-      const animations = element.getAnimations({ subtree: true });
-      await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
-    });
+    await settled(page, '[role="dialog"]');
     await assertGeometry(page);
 
     const results = await new AxeBuilder({ page })

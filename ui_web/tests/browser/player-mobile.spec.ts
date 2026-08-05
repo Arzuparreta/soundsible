@@ -378,6 +378,13 @@ test('the shared mode pill and Auto workspace stay contained in compact viewport
       if (mode === 'auto') await page.getByRole('tab', { name: 'AUTO' }).click();
       else await page.getByRole('tab', { name: 'Now Playing' }).click();
 
+      // Switching modes slides the pill's marker, and the centring assertion
+      // below allows one pixel. Measuring mid-transition is measuring where the
+      // pill was passing through, not where it comes to rest.
+      await page.evaluate(async () => {
+        await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined)));
+      });
+
       const pill = page.getByRole('tablist');
       const close = page.getByRole('button', { name: 'Cerrar' });
       const pillBox = await pill.boundingBox();
