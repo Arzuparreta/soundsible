@@ -640,6 +640,37 @@ describe('two-deck mixer', () => {
     expect(rebuilt.play).not.toHaveBeenCalled();
   });
 
+  it('never mistakes the unlock sample for music the graph took down with it', async () => {
+    // Every gesture spends a silent sample on each empty deck, and `play()`
+    // clears `paused` the moment it is called — the platform answers when it
+    // feels like it. A graph abandoned inside that window used to see a deck
+    // that was "playing", restore a silent WAV onto the replacement as if it
+    // were the current track, and tell the listener their audio was interrupted.
+    vi.stubGlobal('AudioContext', DeadAudioContext);
+    const module = await import('./audio');
+    const failures: Array<{ wasPlaying: boolean; resumed: boolean }> = [];
+    module.setGraphReporter((failure) => { failures.push(failure); });
+    const deck = module.audioEl() as unknown as FakeAudio;
+    deck.play.mockImplementation(() => {
+      deck.paused = false;
+      deck.currentSrc = deck.src;
+      return new Promise<void>(() => {});
+    });
+
+    module.audioService.unlockAudio();
+    // The window: a deck that holds nothing but looks exactly like one that does.
+    expect(deck.paused).toBe(false);
+    expect(module.broadcastPlaybackActive()).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(module.audioService.graphReady()).toBe(false);
+    expect(failures).toEqual([expect.objectContaining({ wasPlaying: false, resumed: false })]);
+    const rebuilt = module.audioEl() as unknown as FakeAudio;
+    expect(rebuilt).not.toBe(deck);
+    expect(rebuilt.src).toBe('');
+  });
+
   it('never carries a deck unlock over into the track it primes', async () => {
     // `unlockDecks` spends a silent sample on every empty deck, from any
     // gesture. A restore landing while that play is in flight used to inherit

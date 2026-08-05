@@ -455,6 +455,20 @@ const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAA
  */
 const unlockedDecks = new WeakSet<HTMLAudioElement>();
 
+/**
+ * Whether this deck is spending its unlock sample rather than playing music.
+ *
+ * `play()` clears `paused` the moment it is called and the platform answers when
+ * it feels like it — on a cold iOS launch that can be hundreds of milliseconds.
+ * For that whole window an empty deck is indistinguishable from a sounding one
+ * unless the sample is recognised for what it is, and everything that asks "is
+ * this playing?" gets the wrong answer: the graph watchdog, and Live's view of
+ * whether the broadcaster has anything to send.
+ */
+function holdsUnlockSample(deck: HTMLAudioElement): boolean {
+  return (deck.currentSrc || deck.getAttribute('src') || '') === SILENT_WAV;
+}
+
 function unlockDecks(): void {
   for (const deck of decks()) {
     // Once per element, and never over a deck that is holding a track: this is
@@ -669,11 +683,17 @@ function abandonGraph(reason: GraphFailure['reason']): void {
   }
   const contextState = audioContext?.state ?? 'closed';
   const previous = decks()[activeIndex];
+  // A deck holding the unlock sample is holding nothing: restoring it would hand
+  // the replacement deck a silent WAV as the track it is meant to be playing,
+  // and reporting it as music that failed to come back tells the listener their
+  // audio was interrupted when the only thing that happened was a tap on a page
+  // with nothing playing.
+  const unlocking = holdsUnlockSample(previous);
   const restore = {
-    url: previous.currentSrc || previous.getAttribute('src') || '',
-    position: previous.currentTime || 0,
+    url: unlocking ? '' : previous.currentSrc || previous.getAttribute('src') || '',
+    position: unlocking ? 0 : previous.currentTime || 0,
     rate: previous.playbackRate || 1,
-    wasPlaying: !previous.paused && !previous.ended,
+    wasPlaying: !unlocking && !previous.paused && !previous.ended,
   };
   graphState = 'unavailable';
   cancelMix('failed');
@@ -749,7 +769,10 @@ function activeAudioTrack(stream: MediaStream): MediaStreamTrack | null {
 }
 
 function deckIsPlaying(deck: HTMLAudioElement): boolean {
-  return !deck.paused && !deck.ended && Boolean(deck.currentSrc || deck.getAttribute('src'));
+  return !deck.paused
+    && !deck.ended
+    && Boolean(deck.currentSrc || deck.getAttribute('src'))
+    && !holdsUnlockSample(deck);
 }
 
 /** The element is the source of truth across Music, Auto and Now Playing. */
