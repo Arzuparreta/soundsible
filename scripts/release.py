@@ -68,6 +68,22 @@ def run(*args: str, check: bool = True) -> str:
     return result.stdout.strip()
 
 
+def attempt(*args: str) -> bool:
+    """Run a command whose failure is survivable. True if it worked.
+
+    Used for the steps that come after the pull request already exists.
+    Dying there would leave the release half-made — a branch pushed and a pull
+    request open — behind a stack trace that says nothing about how to finish.
+    """
+    result = subprocess.run(
+        args, capture_output=True, text=True, check=False, encoding="utf-8"
+    )
+    if result.returncode == 0:
+        return True
+    print(f"  {result.stderr.strip() or result.stdout.strip()}", file=sys.stderr)
+    return False
+
+
 @dataclass(frozen=True)
 class MergedPR:
     number: int
@@ -228,8 +244,14 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         "--body", body,
         "--label", "impact:none",
     ).splitlines()[-1]
-    run("gh", "pr", "merge", url, "--squash", "--auto", "--delete-branch")
-    print(f"\n{url}\nAuto-merge armed. When it lands: scripts/release.py finish")
+    print(f"\n{url}")
+    if attempt("gh", "pr", "merge", url, "--squash", "--auto", "--delete-branch"):
+        print("Auto-merge armed. When it lands: scripts/release.py finish")
+    else:
+        print(
+            "Could not arm auto-merge — the pull request above is still good.\n"
+            "Merge it yourself, then: scripts/release.py finish"
+        )
     return 0
 
 

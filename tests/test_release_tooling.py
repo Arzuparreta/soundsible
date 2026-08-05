@@ -116,6 +116,21 @@ def test_impacts_are_ordered_by_how_far_they_move_the_number():
     assert highest == "major"
 
 
+def test_a_failed_step_after_the_pull_request_exists_does_not_abort(capsys):
+    """The regression this exists for.
+
+    Arming auto-merge failed because the repository had the feature turned
+    off. `prepare` had already pushed the branch and opened the pull request,
+    but died on that step, so the release looked broken when it was one merge
+    from done.
+    """
+    assert release.attempt("false") is False
+    assert release.attempt("true") is True
+
+    with pytest.raises(SystemExit):
+        release.run("false")
+
+
 def test_an_unlabelled_pull_request_is_never_silently_ignored():
     """It counts as something, and the bump PR body has to name it."""
     assert release.UNLABELLED in release.IMPACTS
