@@ -1,5 +1,5 @@
 import { createSignal, type JSX } from 'solid-js';
-import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { HashRouter, Route, useNavigate, type RouteSectionProps } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -18,14 +18,76 @@ function RouterShell(props: RouteSectionProps): JSX.Element {
   );
 }
 
+/**
+ * Scroll history schedules its work on animation frames, so these tests own the
+ * frame clock instead of racing it.
+ *
+ * Waiting on real frames is what made this file flaky: on a loaded runner the
+ * restore did not land inside the budget, the assertion read `scrollTop` as 0,
+ * and that is indistinguishable from the regression the test exists to catch. A
+ * green run meant "the runner was quick enough today", which is not a claim
+ * worth blocking a merge on.
+ *
+ * Driving the frames explicitly asserts the same behaviour — that restoration
+ * happens on a frame, after the surface reports ready — and asserts it the same
+ * way on every machine.
+ */
+function installManualFrames() {
+  let nextHandle = 1;
+  const pending = new Map<number, FrameRequestCallback>();
+
+  const originalRequest = globalThis.requestAnimationFrame;
+  const originalCancel = globalThis.cancelAnimationFrame;
+
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    const handle = nextHandle;
+    nextHandle += 1;
+    pending.set(handle, callback);
+    return handle;
+  }) as typeof globalThis.requestAnimationFrame;
+
+  globalThis.cancelAnimationFrame = ((handle: number) => {
+    pending.delete(handle);
+  }) as typeof globalThis.cancelAnimationFrame;
+
+  return {
+    /**
+     * Run every queued frame, then let microtasks settle, repeatedly — a frame
+     * callback is allowed to schedule the next one, and Solid's effects land in
+     * between. Bounded so a callback that reschedules itself forever fails the
+     * test instead of hanging it.
+     */
+    async flush(rounds = 12): Promise<void> {
+      for (let round = 0; round < rounds; round += 1) {
+        if (pending.size === 0) {
+          await Promise.resolve();
+          if (pending.size === 0) return;
+        }
+        const due = [...pending.entries()];
+        pending.clear();
+        for (const [, callback] of due) callback(performance.now());
+        await Promise.resolve();
+      }
+    },
+    restore(): void {
+      globalThis.requestAnimationFrame = originalRequest;
+      globalThis.cancelAnimationFrame = originalCancel;
+    },
+  };
+}
+
 describe('scroll history', () => {
+  let frames: ReturnType<typeof installManualFrames>;
+
   beforeEach(() => {
+    frames = installManualFrames();
     resetScrollHistoryForTests();
     window.history.replaceState(null, '', '/#/a');
   });
 
   afterEach(() => {
     resetScrollHistoryForTests();
+    frames.restore();
   });
 
   it('restores a traversed entry once its asynchronous surface is ready', async () => {
@@ -57,29 +119,28 @@ describe('scroll history', () => {
     ));
 
     const original = await screen.findByTestId('scroll-a');
-    await waitFor(() => expect(window.history.state?.__soundsibleScroll?.id).toBeTruthy());
+    await frames.flush();
+    expect(window.history.state?.__soundsibleScroll?.id).toBeTruthy();
     original.scrollTop = 240;
     fireEvent.scroll(original);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open B' }));
     await screen.findByRole('button', { name: 'Back' });
-    await waitFor(() => expect(window.location.hash).toBe('#/b'));
+    await frames.flush();
+    expect(window.location.hash).toBe('#/b');
 
     setReady(false);
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     const restored = await screen.findByTestId('scroll-a');
+    await frames.flush();
+    // Still at the top: the surface has not reported that its content is there,
+    // so restoring now would scroll against a page of the wrong height.
     expect(restored.scrollTop).toBe(0);
 
     setReady(true);
-    // Restoration waits for the list to report it has content, then for a frame.
-    // A loaded CI runner can spend longer than testing-library's default second
-    // on that, and the failure it produces — scrollTop still 0 — looks exactly
-    // like the regression this test is for.
-    await waitFor(() => expect(restored.scrollTop).toBe(240), { timeout: 5_000 });
-    // The waitFor budget above is only real if the test is allowed to outlive
-    // it. At vitest's default 5s the two deadlines are the same, so the test
-    // died first and the raised budget bought nothing.
-  }, 15_000);
+    await frames.flush();
+    expect(restored.scrollTop).toBe(240);
+  });
 
   it('starts a fresh visit at the top even when the URL existed earlier', async () => {
     function A() {
@@ -105,16 +166,19 @@ describe('scroll history', () => {
     ));
 
     const original = await screen.findByTestId('scroll-a');
-    await waitFor(() => expect(window.history.state?.__soundsibleScroll?.id).toBeTruthy());
+    await frames.flush();
+    expect(window.history.state?.__soundsibleScroll?.id).toBeTruthy();
     original.scrollTop = 180;
     fireEvent.scroll(original);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open B' }));
     await screen.findByRole('button', { name: 'Open new A' });
+    await frames.flush();
     fireEvent.click(screen.getByRole('button', { name: 'Open new A' }));
 
     const fresh = await screen.findByTestId('scroll-a');
-    await waitFor(() => expect(fresh.scrollTop).toBe(0));
+    await frames.flush();
+    expect(fresh.scrollTop).toBe(0);
   });
 
   it('uses a canonical fallback only for a directly opened detail', async () => {
