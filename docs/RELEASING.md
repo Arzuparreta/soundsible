@@ -25,16 +25,29 @@ release, marked as a pre-release, and never moves the `latest` container tag.
 
 ### What 1.0 will mean
 
-Not "it feels finished". Three specific things, all of them on the
-[roadmap](ROADMAP.md):
+Not "it feels finished". Two specific things, both of them on the
+[roadmap](ROADMAP.md) and both of them engineering:
 
 - The OpenSubsonic API is stable enough that third-party clients can depend on
   it without pinning a version.
 - The library lives in SQLite as the source of truth, and upgrades migrate it
   forward without anyone touching a file.
-- The desktop app is out of beta.
 
 Until then, 0.x is the honest answer.
+
+**The desktop app is not on that list**, and its beta status does not hold
+1.0 back. What stands between it and a stable label is a Windows code-signing
+certificate — money and a legal identity, not code. Soundsible will not buy
+one; if the community wants signed Windows builds enough to fund it, the
+release workflow gains a signing step and nothing else changes. Until then the
+installers ship unsigned, with build-provenance attestations, and Windows will
+warn about an unknown publisher. That is a fair trade for a beta and a bad one
+for something called stable, which is why [the beta gates](DESKTOP_BETA.md)
+still say an unsigned build must not be published as stable.
+
+The desktop app carries the same version as everything else regardless. `0.4.0`
+is `0.4.0` whether you installed it as a container or as an app; "beta" is a
+statement about the desktop shell's maturity, not a separate number.
 
 ## Where the version lives
 
