@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 from shared.daemon_launcher import MSG_CONFIG_MISSING
+from shared.version import resolve_version
 from shared.desktop_bootstrap import ensure_consumer_config
 from shared.desktop_runtime import (
     clear_runtime_state,
@@ -106,7 +107,7 @@ def desktop_readiness_payload(runtime: RuntimeConfig) -> dict:
         "host": runtime.host,
         "port": runtime.port,
         "pid": os.getpid(),
-        "version": os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"),
+        "version": resolve_version(),
         "health": "/api/health",
         "owner_token_file": str(runtime.owner_token_file) if runtime.owner_token_file else None,
     }
@@ -123,7 +124,7 @@ def run_desktop_engine(args: argparse.Namespace) -> None:
     from shared.api import start_api
 
     def _on_ready(ready_runtime: RuntimeConfig) -> None:
-        write_runtime_state(ready_runtime, version=os.getenv("SOUNDSIBLE_VERSION", "0.0.0-dev"))
+        write_runtime_state(ready_runtime, version=resolve_version())
         print(json.dumps(desktop_readiness_payload(ready_runtime)), flush=True)
 
     try:

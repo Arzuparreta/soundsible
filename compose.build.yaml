@@ -1,0 +1,20 @@
+# Build override for development and CI. Stacks on top of compose.yaml and
+# replaces the published image with one built from the working tree:
+#
+#   docker compose -f compose.yaml -f compose.build.yaml up -d --build
+#
+# CI stacks it through COMPOSE_FILE, so the smoke test exercises the code in
+# the pull request rather than the last thing that was published.
+
+services:
+  soundsible:
+    build:
+      context: .
+      target: runtime
+      args:
+        # Empty by default so a local build reports what shared/version.py
+        # declares, rather than inventing a second answer only containers gave.
+        SOUNDSIBLE_VERSION: ${SOUNDSIBLE_VERSION:-}
+        VCS_REF: ${VCS_REF:-local}
+    image: soundsible:local
+    pull_policy: never
