@@ -19,6 +19,13 @@ jobs:
   # gates them to a fast skip instead of a full rebuild. Skipped is still a
   # passing conclusion for required status checks, so it doesn't weaken the
   # merge gate — it only avoids redundant work.
+  #
+  # A tag is the exception, and the jobs opt out of this filter for one. A tag
+  # push has no base to diff against, so the filter reports that nothing
+  # changed and every image job skips — while `publish`, which tolerates skips,
+  # goes ahead and pushes the image anyway. v0.2.0 shipped that way: built and
+  # published without the dependency-lock check, the Compose contract or the
+  # deployment smoke test ever running against it.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -154,6 +161,7 @@ jobs:
     needs: changes
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v') ||
       needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     env:
@@ -231,6 +239,7 @@ jobs:
     needs: changes
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v') ||
       needs.changes.outputs.community == 'true'
     runs-on: ubuntu-latest
     env:
@@ -280,6 +289,7 @@ jobs:
     needs: [changes, docker]
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v') ||
       needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     steps:
