@@ -1,17 +1,15 @@
 name: soundsible
 
+# This file pulls a published image. Nothing here builds, so `docker compose
+# up -d` works on a NAS or a Pi that could never compile the Node bundle and
+# the Python wheels itself.
+#
+# To build from your working tree instead, add the override:
+#   docker compose -f compose.yaml -f compose.build.yaml up -d --build
+
 services:
   soundsible:
-    build:
-      context: .
-      args:
-        SOUNDSIBLE_VERSION: ${SOUNDSIBLE_VERSION:-0.0.0-docker}
-        VCS_REF: ${VCS_REF:-local}
-      cache_from:
-        - type=gha,scope=docker-amd64
-      cache_to:
-        - type=gha,mode=max,scope=docker-amd64
-    image: soundsible:local
+    image: ghcr.io/arzuparreta/soundsible:${SOUNDSIBLE_TAG:-edge}
     restart: unless-stopped
     init: true
     ports:

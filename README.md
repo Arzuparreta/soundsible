@@ -56,10 +56,37 @@ Soundsible is a music app you run on your **own** machine. Browse, stream, and s
 
 Choose one installation path:
 
+- **Docker** — one command, nothing to compile. Recommended, and the only
+  practical option on a NAS or a Raspberry Pi.
 - **Native installation** — run directly on Linux, macOS, or Windows with full
   access to the launcher and local development workflow.
-- **Docker installation** — containerized deployment. The image includes
-  Python, FFmpeg, Chromaprint, and the compiled web player.
+
+### Docker (recommended)
+
+Published for `linux/amd64` and `linux/arm64`, with FFmpeg, Chromaprint, Python
+and the compiled web player already inside:
+
+```bash
+curl -O https://raw.githubusercontent.com/Arzuparreta/soundsible/main/compose.yaml
+docker compose up -d
+```
+
+Wait for `soundsible` to report `healthy`, then open
+**<http://localhost:5005/player/>**. The first start creates a local-storage
+configuration by itself. Configuration, application data, cache, logs, and
+downloaded music live in separate named volumes and survive image or container
+replacement.
+
+```bash
+docker compose logs -f soundsible # follow startup/runtime logs
+docker compose pull && docker compose up -d   # upgrade
+docker compose down               # stop without deleting your library
+```
+
+`:edge` tracks `main`; `:latest` and `:X.Y.Z` track releases. See
+[Docker deployment](docs/DOCKER.md) for host-library mounts, `.env`
+configuration, provenance verification, security, backups, and building from
+source instead.
 
 ### Native installation
 
@@ -156,41 +183,6 @@ python3 run.py          # choose "Start Station Engine & Open Station"
 ```
 
 That starts the engine and opens **<http://localhost:5005/player/>**. Keep the terminal open while you play; closing it stops the engine.
-
-### Docker installation
-
-Install Docker and Git for your operating system first:
-
-- **Linux:** install [Docker Engine and the Compose plugin](https://docs.docker.com/engine/install/)
-  for your distribution, then allow your user to run Docker or use `sudo`.
-- **macOS:** install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
-- **Windows:** install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/)
-  with its WSL 2 backend and [Git for Windows](https://git-scm.com/download/win),
-  then run the commands below in PowerShell or WSL.
-
-The Soundsible commands are the same on every platform:
-
-```bash
-git clone https://github.com/Arzuparreta/soundsible.git
-cd soundsible
-docker compose up -d --build
-docker compose ps
-```
-
-Wait for `soundsible` to report `healthy`, then open
-**<http://localhost:5005/player/>**. The first start automatically creates a
-local-storage configuration. Configuration, application data, cache, logs, and
-downloaded music live in separate named volumes and survive image or container
-replacement.
-
-```bash
-docker compose logs -f soundsible # follow startup/runtime logs
-docker compose down               # stop without deleting your library
-docker compose up -d              # start it again
-```
-
-See [Docker deployment](docs/DOCKER.md) for host-library mounts, `.env`
-configuration, security, backups, upgrades, and direct `docker run` usage.
 
 ### Web player
 
