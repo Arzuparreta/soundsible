@@ -1,10 +1,11 @@
-name: Desktop Release
+name: Desktop Build
 
+# Builds the installers and stops there. Releasing them is release.yml's job,
+# which calls this workflow on a `v*` tag: one tag produces the images and the
+# installers, so a version always exists in every form it can be installed in.
 on:
   push:
     branches: [main, dev]
-    tags:
-      - "desktop-v*"
     paths: &desktop-paths
       - 'desktop-shell/**'
       - 'shared/**'
@@ -14,14 +15,15 @@ on:
       - 'tests/test_desktop_bootstrap.py'
       - 'tests/test_desktop_engine_entry.py'
       - 'requirements.txt'
-      - '.github/workflows/desktop-release.yml'
+      - '.github/workflows/desktop-build.yml'
   pull_request:
     branches: [main, dev]
     paths: *desktop-paths
+  workflow_call:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
   attestations: write
 
@@ -202,23 +204,3 @@ jobs:
             desktop-shell/src-tauri/target/release/bundle/nsis/SHA256SUMS-*.txt
           if-no-files-found: error
 
-  release:
-    needs: [build-linux, build-windows]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    if: startsWith(github.ref, 'refs/tags/desktop-v')
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**
-          generate_release_notes: true
-          draft: true
-          prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

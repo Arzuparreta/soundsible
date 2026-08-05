@@ -73,8 +73,11 @@ npm run build
 ```
 
 The release workflow builds x64 and ARM64 installers, emits SHA-256 manifests,
-adds GitHub build-provenance attestations, and creates a draft prerelease for
-tags matching `desktop-v*`. Publishing remains a deliberate manual action.
+adds GitHub build-provenance attestations, and publishes them on a `v*` tag
+alongside the server images. A release candidate — `vX.Y.Z-rc.N` — is marked as
+a prerelease and never moves the `latest` container tag, so cutting one is the
+deliberate act that used to be "press publish". See
+[RELEASING.md](RELEASING.md).
 
 ## Stable-release blockers
 

@@ -19,7 +19,7 @@ As of **2026-05-19** (see also [DESKTOP_BETA.md](./DESKTOP_BETA.md) for validati
 ### In progress (beta gates, not yet signed off)
 
 - **1a consumer proof:** clean VM install → folder → play in ≤10 min ([DESKTOP_BETA.md](./DESKTOP_BETA.md) Gate A1).
-- **GitHub Release** installers (`.github/workflows/desktop-release.yml`).
+- **GitHub Release** installers (`.github/workflows/release.yml`).
 - **Phase 0 HDD soak** — 30 min scan + download + UI (Gate B1).
 
 ### Still open (explicitly deferred)

@@ -90,6 +90,30 @@ jobs:
       - name: Ruff check
         run: ruff check .
 
+  # shared/version.py is the declaration; the desktop manifests are copies,
+  # because Cargo, npm and Tauri cannot read Python. Copies drift, and drift
+  # here is invisible until an installer reports a version that was never
+  # released. This is the job that makes the copies trustworthy.
+  version_consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Manifests agree with the declaration
+        run: python scripts/version_sync.py --check
+      # A tag is a promise about what the source tree said at that commit.
+      - name: Tag matches the declared version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          declared="$(python scripts/version_sync.py --print)"
+          if [ "v$declared" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::$GITHUB_REF_NAME was pushed, but the tree declares $declared."
+            exit 1
+          fi
+          echo "$GITHUB_REF_NAME matches the declaration."
+
   security:
     runs-on: ubuntu-latest
     steps:
@@ -307,12 +331,13 @@ jobs:
   # `latest`. The docker jobs are allowed to be *skipped* (paths-filter decided
   # nothing in the image changed) but never allowed to have failed.
   publish:
-    needs: [tests, lint, ui_build, docker, docker_arm64]
+    needs: [tests, lint, ui_build, version_consistency, docker, docker_arm64]
     if: >-
       !cancelled()
       && needs.tests.result == 'success'
       && needs.lint.result == 'success'
       && needs.ui_build.result == 'success'
+      && needs.version_consistency.result == 'success'
       && needs.docker.result != 'failure'
       && needs.docker_arm64.result != 'failure'
       && github.event_name == 'push'
@@ -343,7 +368,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-rc.') }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,format=short
           labels: |

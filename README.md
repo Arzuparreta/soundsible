@@ -209,7 +209,7 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
   [sharing the node](docs/INSTALL.md#sharing-the-node-with-other-services).
 - **Servers, reverse proxies, security** — see the [Install & Deployment guide](docs/INSTALL.md).
 
-> 🖥️ **Desktop app (beta)** — a one-click Tauri app with no terminal is available for early testers. Install from [GitHub Releases](https://github.com/Arzuparreta/soundsible/releases) (tag `desktop-v*`) or build locally — see [docs/DESKTOP_BETA.md](docs/DESKTOP_BETA.md).
+> 🖥️ **Desktop app (beta)** — a one-click Tauri app with no terminal is available for early testers. Install from [GitHub Releases](https://github.com/Arzuparreta/soundsible/releases) — every release carries the installers alongside the server images — or build locally — see [docs/DESKTOP_BETA.md](docs/DESKTOP_BETA.md).
 
 ---
 
@@ -225,6 +225,7 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 | [Live](docs/LIVE.md) | Broadcasting your station, sharing a room, and checking that it sounds |
 | [Legal & Acceptable Use](docs/LEGAL.md) | Disclaimer and your responsibilities |
 | [Contributing](CONTRIBUTING.md) | Dev setup and pull-request workflow |
+| [Versioning & releases](docs/RELEASING.md) | What a version number promises, and how one is cut |
 
 <details>
 <summary>Integrations & internals</summary>
