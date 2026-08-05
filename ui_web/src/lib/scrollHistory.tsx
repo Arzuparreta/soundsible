@@ -98,9 +98,19 @@ function tryRestore(): void {
       pendingRestore !== pending
       || pending.entryId !== activeEntry?.id
       || pending.route !== activeRoute
-      || !registration.element.isConnected
-      || !registration.ready()
     ) {
+      // Superseded: this restore is no longer owed to anyone.
+      return;
+    }
+    if (!registration.element.isConnected || !registration.ready()) {
+      // The surface this frame was scheduled against went away — a remount
+      // between scheduling and the frame landing — or stopped being ready.
+      // The restore is still owed, and nothing else is going to ask for it:
+      // anything that tried while this frame was in flight bailed on
+      // `restoreFrame != null`. Dropping it here is how a slow device ends up
+      // back at the top of a list instead of where it left off. Ask again,
+      // against whatever is mounted now.
+      tryRestore();
       return;
     }
     pendingRestore = null;
