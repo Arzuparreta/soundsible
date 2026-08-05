@@ -1,0 +1,85 @@
+name: Release
+
+# One tag, one release. `v0.2.0` publishes the container images (through the
+# CI workflow, which also triggers on the tag) and the desktop installers, and
+# turns them into a single GitHub Release. Before this, engine tags published
+# images and no release page, desktop tags published draft releases nobody
+# ever pressed publish on, and the two lines used different numbers.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  # Ninety minutes of Windows and Linux builds are not worth spending on a tag
+  # that contradicts the tree it points at. CI checks this too; here it is a
+  # precondition rather than a report.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Tag matches the declared version
+        run: |
+          declared="$(python scripts/version_sync.py --print)"
+          if [ "v$declared" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::$GITHUB_REF_NAME was pushed, but the tree declares $declared."
+            exit 1
+          fi
+          python scripts/version_sync.py --check
+
+  installers:
+    needs: verify
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/desktop-build.yml
+
+  publish:
+    needs: installers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      # Image tags carry no `v`; the git tag does. Quoting the wrong one in
+      # the install instructions gives a pull command that cannot resolve.
+      - name: Strip the tag prefix
+        id: image
+        run: echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # `-rc` in the tag is the only thing that marks a release as a
+      # pre-release, so the channel is visible in the number itself and cannot
+      # be set to one thing and named another.
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Soundsible ${{ github.ref_name }}
+          files: artifacts/**
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc.') }}
+          body: |
+            ## Install
+
+            **Server (Docker)**
+
+            ```
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.image.outputs.tag }}
+            ```
+
+            **Desktop** — download the installer for your platform below.
+
+            ---
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

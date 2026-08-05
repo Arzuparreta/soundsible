@@ -1,0 +1,53 @@
+name: PR guardrails
+
+# Separate from CI on purpose. This has to re-run when a label changes, and
+# `labeled`/`unlabeled` on the CI workflow would rebuild both container images
+# every time someone touched a label.
+on:
+  pull_request:
+    branches: [main, dev]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  # The version a release gets is derived from these labels, so a pull request
+  # without one would silently ship as a patch. Declaring the impact is the
+  # only thing this repository asks of whoever opens a pull request, and it is
+  # asked once, at the moment the change is still fresh.
+  impact_label:
+    name: impact_label
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require exactly one impact label
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t impact < <(jq -r '.[] | select(startswith("impact:"))' <<<"$LABELS")
+
+          if [ "${#impact[@]}" -eq 1 ]; then
+            echo "::notice::${impact[0]}"
+            exit 0
+          fi
+
+          if [ "${#impact[@]}" -eq 0 ]; then
+            echo "::error::This pull request has no impact label."
+          else
+            echo "::error::Conflicting impact labels: ${impact[*]}"
+          fi
+
+          cat <<'EOF'
+          Add exactly one, describing what merging this does to someone who
+          upgrades:
+
+            impact:major   they have to do something by hand to upgrade
+            impact:minor   new capability, upgrading is still just a pull
+            impact:patch   a fix
+            impact:none    nothing a user could observe (docs, CI, tests)
+
+            gh pr edit <number> --add-label impact:minor
+          EOF
+          exit 1
