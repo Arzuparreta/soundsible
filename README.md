@@ -218,7 +218,6 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 | Guide | What's inside |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
 | [Roadmap](docs/ROADMAP.md) | What Soundsible is, where it is going, and what it will not do |
-| [Changelog](CHANGELOG.md) | What changed in each version |
 | [Install & Deployment](docs/INSTALL.md) | Servers, headless/SSH, Tailscale, reverse proxy, storage, security |
 | [Docker deployment](docs/DOCKER.md) | Compose, volumes, host libraries, backups, upgrades, security |
 | [Configuration](docs/CONFIGURATION.md) | Settings, environment variables, downloads, cookies |
