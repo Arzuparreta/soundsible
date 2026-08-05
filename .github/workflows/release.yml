@@ -72,13 +72,25 @@ jobs:
           body: |
             ## Install
 
-            **Server (Docker)**
+            **Native — the primary installation method.** Run the engine
+            directly on Linux, macOS or Windows:
+
+            ```
+            git clone --branch ${{ github.ref_name }} https://github.com/${{ github.repository }}.git
+            cd soundsible && python3 run.py
+            ```
+
+            Prerequisites and per-OS steps: [Install & Deployment](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/INSTALL.md).
+
+            **Docker** — supported, and the practical option on a NAS or a
+            Raspberry Pi:
 
             ```
             docker pull ghcr.io/${{ github.repository }}:${{ steps.image.outputs.tag }}
             ```
 
-            **Desktop** — download the installer for your platform below.
+            **Desktop app (beta)** — one machine, no terminal. Installers for
+            Linux and Windows are attached below.
 
             ---
         env:
