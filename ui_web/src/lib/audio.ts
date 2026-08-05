@@ -335,19 +335,25 @@ function releaseDeck(index: number): void {
  * sequence that works, and it is why this runs at the first tap rather than at
  * the tap that opens Auto Mode.
  *
+ * The deck unlock is part of that order, not a preamble to it. Spending the
+ * silent sample first is what makes `createMediaElementSource` route two decks
+ * that are sounding at that instant — the punished sequence, arrived at from the
+ * other side — so it happens once the decks are routed and still untouched.
+ *
  * Idempotent and safe to call from anywhere. `probeContext` and the audibility
  * watch behind it are the proof that it worked; neither is trusted on faith.
  */
 export function unlockAudio(): boolean {
-  unlockDecks();
   if (graphState !== 'untested') {
     resumeContext();
+    unlockDecks();
     return graphState === 'ready';
   }
   const Context = globalThis.AudioContext
     ?? (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Context) {
     graphState = 'unavailable';
+    unlockDecks();
     return false;
   }
   try {
@@ -427,13 +433,17 @@ export function unlockAudio(): boolean {
     graphState = 'ready';
     bindAudibilityTriggers();
     watchContextState(context);
+    // Routed and never played: now the sample can be spent, still inside the
+    // gesture that owes the decks their playback permission.
+    unlockDecks();
     probeContext(context);
-    if (!decks()[activeIndex].paused) startAudibilityWatch();
+    if (deckIsPlaying(decks()[activeIndex])) startAudibilityWatch();
     return true;
   } catch {
     discardGraph();
     graphState = 'unavailable';
     applyDeckVolume();
+    unlockDecks();
     return false;
   }
 }

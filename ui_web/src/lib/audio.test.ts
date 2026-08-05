@@ -60,7 +60,7 @@ class FakeAudioContext {
     this.gains.push(gain);
     return gain;
   };
-  createMediaElementSource = () => new FakeAudioNode();
+  createMediaElementSource = (_element: HTMLAudioElement) => new FakeAudioNode();
   createAnalyser = () => this.analyser;
   sampleRate = 44100;
   createBuffer = () => ({});
@@ -81,6 +81,18 @@ class DeadAudioContext extends FakeAudioContext {
   override get currentTime() {
     return 10;
   }
+}
+
+/** What each deck was doing at the instant it was routed. WebKit refuses the
+ * audio session to a context that is handed an element which is already
+ * sounding, and the refusal is permanent: the routing cannot be undone. */
+const routedDecks: Array<{ src: string; paused: boolean }> = [];
+
+class RoutingAudioContext extends FakeAudioContext {
+  override createMediaElementSource = (element: HTMLAudioElement) => {
+    routedDecks.push({ src: element.src, paused: element.paused });
+    return new FakeAudioNode();
+  };
 }
 
 class FakeCapturedStream extends EventTarget {
@@ -216,6 +228,7 @@ beforeEach(() => {
   created.length = 0;
   contexts.length = 0;
   automatedCurves.length = 0;
+  routedDecks.length = 0;
   vi.useFakeTimers();
   vi.stubGlobal('Audio', FakeAudio);
   vi.stubGlobal('AudioContext', undefined);
@@ -606,6 +619,27 @@ describe('two-deck mixer', () => {
     const nextTrack = { kind: 'audio', readyState: 'live', contentHint: '', stop: vi.fn() };
     rebuilt.capturedStream.replaceAudioTrack(nextTrack);
     expect(replacement).toBe(nextTrack);
+  });
+
+  it('routes decks that have never played, and only then spends their unlock sample', async () => {
+    // The order this function documents, and the one iOS grants an audio
+    // session for. Unlocking first put both decks mid-`play()` at the moment
+    // `createMediaElementSource` claimed them — the punished sequence reached
+    // from the other side, and an irreversible one: the context stayed
+    // suspended and the installed app spent the session without its mixer.
+    vi.stubGlobal('AudioContext', RoutingAudioContext);
+    const module = await import('./audio');
+
+    expect(module.audioService.unlockAudio()).toBe(true);
+
+    expect(routedDecks).toEqual([
+      { src: '', paused: true },
+      { src: '', paused: true },
+    ]);
+    // And the sample is still spent — from the same gesture, which is what
+    // makes a later gestureless start legal on a locked phone.
+    expect(created).toHaveLength(2);
+    expect(created.every((deck) => deck.play.mock.calls.length === 1)).toBe(true);
   });
 
   it('gives up on a context whose clock never starts, before routing anything', async () => {
