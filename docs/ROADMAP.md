@@ -43,6 +43,13 @@ JSON.
 - [ ] `POST /api/library/scan` — point Soundsible at a folder you already have
 - [ ] Read ReplayGain / R128 tags when a file carries them
 - [ ] Write MusicBrainz IDs on acquisition
+- [ ] Decide artist/title orientation by lookup, not by position. A YouTube
+      title is split on the first separator and the left side is taken as the
+      artist, unverified. Uploads titled "Song - Artist" therefore land
+      reversed, which files the track under the wrong name and makes it
+      unfindable. The providers that could settle it — Deezer, MusicBrainz —
+      are already wired in for search, and `shared/resolution_confidence.py`
+      already scores a pair.
 - [ ] OpenSubsonic API with on-the-fly transcoding
 - [ ] Album, genre and year browsing in the player
 

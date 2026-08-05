@@ -150,6 +150,11 @@ def canonical_music_identity(
     parts = _SEPARATOR_RE.split(clean_title, maxsplit=1)
     title_artist = ""
     if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+        # Positional, and therefore a guess: "Artist - Song" is the convention,
+        # but uploaders write "Song - Artist" often enough that this files those
+        # tracks under the wrong name with no signal that it happened. Settling
+        # it needs a provider lookup, which this function deliberately cannot
+        # do — see the roadmap entry on orientation by lookup.
         title_artist, clean_title = parts[0].strip(), parts[1].strip()
 
     channel_artist = clean_artist(raw_channel)
