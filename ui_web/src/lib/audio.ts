@@ -103,6 +103,10 @@ let graphState: GraphState = 'untested';
 
 export interface GraphFailure {
   reason: 'context_stalled' | 'silent_output';
+  /** Whether the decks were sounding when the graph was taken down. A paused
+   * player has nothing to restore, so `resumed: false` there is the expected
+   * outcome rather than a failure anybody has to be told about. */
+  wasPlaying: boolean;
   /** Whether playback was restored on the replacement decks by itself. */
   resumed: boolean;
   contextState: string;
@@ -331,19 +335,25 @@ function releaseDeck(index: number): void {
  * sequence that works, and it is why this runs at the first tap rather than at
  * the tap that opens Auto Mode.
  *
+ * The deck unlock is part of that order, not a preamble to it. Spending the
+ * silent sample first is what makes `createMediaElementSource` route two decks
+ * that are sounding at that instant — the punished sequence, arrived at from the
+ * other side — so it happens once the decks are routed and still untouched.
+ *
  * Idempotent and safe to call from anywhere. `probeContext` and the audibility
  * watch behind it are the proof that it worked; neither is trusted on faith.
  */
 export function unlockAudio(): boolean {
-  unlockDecks();
   if (graphState !== 'untested') {
     resumeContext();
+    unlockDecks();
     return graphState === 'ready';
   }
   const Context = globalThis.AudioContext
     ?? (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Context) {
     graphState = 'unavailable';
+    unlockDecks();
     return false;
   }
   try {
@@ -423,13 +433,17 @@ export function unlockAudio(): boolean {
     graphState = 'ready';
     bindAudibilityTriggers();
     watchContextState(context);
+    // Routed and never played: now the sample can be spent, still inside the
+    // gesture that owes the decks their playback permission.
+    unlockDecks();
     probeContext(context);
-    if (!decks()[activeIndex].paused) startAudibilityWatch();
+    if (deckIsPlaying(decks()[activeIndex])) startAudibilityWatch();
     return true;
   } catch {
     discardGraph();
     graphState = 'unavailable';
     applyDeckVolume();
+    unlockDecks();
     return false;
   }
 }
@@ -450,6 +464,20 @@ const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAA
  * never interfere with a real track that started in the same gesture.
  */
 const unlockedDecks = new WeakSet<HTMLAudioElement>();
+
+/**
+ * Whether this deck is spending its unlock sample rather than playing music.
+ *
+ * `play()` clears `paused` the moment it is called and the platform answers when
+ * it feels like it — on a cold iOS launch that can be hundreds of milliseconds.
+ * For that whole window an empty deck is indistinguishable from a sounding one
+ * unless the sample is recognised for what it is, and everything that asks "is
+ * this playing?" gets the wrong answer: the graph watchdog, and Live's view of
+ * whether the broadcaster has anything to send.
+ */
+function holdsUnlockSample(deck: HTMLAudioElement): boolean {
+  return (deck.currentSrc || deck.getAttribute('src') || '') === SILENT_WAV;
+}
 
 function unlockDecks(): void {
   for (const deck of decks()) {
@@ -665,11 +693,17 @@ function abandonGraph(reason: GraphFailure['reason']): void {
   }
   const contextState = audioContext?.state ?? 'closed';
   const previous = decks()[activeIndex];
+  // A deck holding the unlock sample is holding nothing: restoring it would hand
+  // the replacement deck a silent WAV as the track it is meant to be playing,
+  // and reporting it as music that failed to come back tells the listener their
+  // audio was interrupted when the only thing that happened was a tap on a page
+  // with nothing playing.
+  const unlocking = holdsUnlockSample(previous);
   const restore = {
-    url: previous.currentSrc || previous.getAttribute('src') || '',
-    position: previous.currentTime || 0,
+    url: unlocking ? '' : previous.currentSrc || previous.getAttribute('src') || '',
+    position: unlocking ? 0 : previous.currentTime || 0,
     rate: previous.playbackRate || 1,
-    wasPlaying: !previous.paused && !previous.ended,
+    wasPlaying: !unlocking && !previous.paused && !previous.ended,
   };
   graphState = 'unavailable';
   cancelMix('failed');
@@ -712,7 +746,13 @@ function abandonGraph(reason: GraphFailure['reason']): void {
       void deck.play().catch(() => {
         // Some platforms want a fresh gesture for an element that has never
         // played. The store turns this into a visible "tap to resume".
-        graphReporter?.({ reason, resumed: false, contextState, positionSec: restore.position });
+        graphReporter?.({
+          reason,
+          wasPlaying: restore.wasPlaying,
+          resumed: false,
+          contextState,
+          positionSec: restore.position,
+        });
       });
     }
   }
@@ -720,7 +760,13 @@ function abandonGraph(reason: GraphFailure['reason']): void {
   // after this one can start without a gesture the listener will not be there
   // to give. Best effort — this does not run from one.
   unlockDecks();
-  graphReporter?.({ reason, resumed, contextState, positionSec: restore.position });
+  graphReporter?.({
+    reason,
+    wasPlaying: restore.wasPlaying,
+    resumed,
+    contextState,
+    positionSec: restore.position,
+  });
 }
 
 /** Whether the decks are routed through a graph that is believed to be sounding. */
@@ -733,7 +779,10 @@ function activeAudioTrack(stream: MediaStream): MediaStreamTrack | null {
 }
 
 function deckIsPlaying(deck: HTMLAudioElement): boolean {
-  return !deck.paused && !deck.ended && Boolean(deck.currentSrc || deck.getAttribute('src'));
+  return !deck.paused
+    && !deck.ended
+    && Boolean(deck.currentSrc || deck.getAttribute('src'))
+    && !holdsUnlockSample(deck);
 }
 
 /** The element is the source of truth across Music, Auto and Now Playing. */
@@ -1453,6 +1502,11 @@ export const audioService = {
     const a = audioEl();
     const token = ++loadSeq;
     setDeckLevel(activeIndex, level);
+    // Explicitly, before the stream is handed over. A deck that is mid-`play()`
+    // from `unlockDecks` — the silent sample every gesture spends on an empty
+    // deck — would otherwise carry that play straight into the track being
+    // primed, and a session put back on boot would start sounding on its own.
+    a.pause();
     a.src = url;
     a.load();
     const applyPosition = () => {

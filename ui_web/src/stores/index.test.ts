@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GraphFailure } from '../lib/audio';
 import type { Track } from '../types/music';
 
 const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
@@ -210,6 +211,9 @@ async function loadStore(
       handler({ currentTarget: deck } as unknown as Event);
     }
   };
+  /** The store's verdict on a mixing graph that had to be abandoned, so a test
+   * can hand it one the way the audio service would. */
+  let graphReporter: ((failure: GraphFailure) => void) | null = null;
   vi.doMock('../lib/audio', () => ({
     audioEl: vi.fn(() => deck),
     onDeckEvent: vi.fn((type: string, handler: (event: Event) => void) => {
@@ -218,7 +222,7 @@ async function loadStore(
       deckHandlers.set(type, list);
     }),
     isActiveDeck: vi.fn(() => true),
-    setGraphReporter: vi.fn(),
+    setGraphReporter: vi.fn((fn: (failure: GraphFailure) => void) => { graphReporter = fn; }),
     audioService,
     storedVolume: () => 1,
     isCurrentLoad: () => true,
@@ -263,7 +267,15 @@ async function loadStore(
 
   const store = await import('./index');
   const fireSocketEvent = (event: string, data?: unknown) => socketHandlers.get(event)?.(data);
-  return { ...store, api, audioService, deck, fireDeckEvent, fireSocketEvent, toastAction };
+  const fireGraphFailure = (failure: Partial<GraphFailure>) => graphReporter?.({
+    reason: 'context_stalled',
+    wasPlaying: false,
+    resumed: false,
+    contextState: 'suspended',
+    positionSec: 0,
+    ...failure,
+  });
+  return { ...store, api, audioService, deck, fireDeckEvent, fireSocketEvent, fireGraphFailure, toastAction };
 }
 
 beforeEach(() => {
@@ -341,6 +353,70 @@ describe('Solid store library and playback resume', () => {
     expect(state.playback.phase).toBe('paused');
     expect(state.playback.loadError).toBe(false);
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('leaves a restored session alone when the mixing graph is rebuilt under it', async () => {
+    // Closing the app and opening it again puts the session back, paused. If the
+    // graph is taken down and rebuilt in the meantime — an iOS audio session
+    // that was interrupted while the app was away — there was no music to lose,
+    // so there is nothing to offer to carry on with. Saying otherwise invents an
+    // interruption, and the offer is taken up by the next tap anywhere on the
+    // page: a paused song that starts on its own.
+    const { initStore, state, audioService, fireGraphFailure } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      getPlaybackState: vi.fn().mockResolvedValue({
+        device_id: 'dev1',
+        device_name: 'Soundsible Web',
+        track_id: 't1',
+        track: t1,
+        position_sec: 37,
+        is_playing: false,
+        updated_at: Date.now() / 1000,
+      }),
+    });
+    const { toast } = await import('../lib/toast');
+
+    initStore();
+    await flush();
+    expect(state.playback.currentTrack?.id).toBe('t1');
+
+    fireGraphFailure({ reason: 'context_stalled', wasPlaying: false, resumed: false });
+
+    expect(state.playback.needsGesture).toBe(false);
+    expect(toast.error).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event('pointerdown'));
+    expect(audioService.resume).not.toHaveBeenCalled();
+    expect(state.playback.isPlaying).toBe(false);
+  });
+
+  it('offers to carry on when music that was sounding lost its graph', async () => {
+    const { initStore, state, audioService, fireGraphFailure } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      getPlaybackState: vi.fn().mockResolvedValue({
+        device_id: 'dev1',
+        device_name: 'Soundsible Web',
+        track_id: 't1',
+        track: t1,
+        position_sec: 37,
+        is_playing: false,
+        updated_at: Date.now() / 1000,
+      }),
+    });
+    const { toast } = await import('../lib/toast');
+
+    initStore();
+    await flush();
+    // Playing, and cut off by a graph that could not be restarted on its own.
+    fireGraphFailure({ reason: 'silent_output', wasPlaying: true, resumed: false });
+
+    expect(state.playback.needsGesture).toBe(true);
+    expect(toast.error).toHaveBeenCalled();
+
+    // Any gesture is the one the platform was waiting for.
+    window.dispatchEvent(new Event('pointerdown'));
+    expect(audioService.resume).toHaveBeenCalled();
+    expect(state.playback.needsGesture).toBe(false);
   });
 
   it('removes a deleted track from library-derived and playback state immediately', async () => {

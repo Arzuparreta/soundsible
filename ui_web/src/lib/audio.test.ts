@@ -60,7 +60,7 @@ class FakeAudioContext {
     this.gains.push(gain);
     return gain;
   };
-  createMediaElementSource = () => new FakeAudioNode();
+  createMediaElementSource = (_element: HTMLAudioElement) => new FakeAudioNode();
   createAnalyser = () => this.analyser;
   sampleRate = 44100;
   createBuffer = () => ({});
@@ -81,6 +81,18 @@ class DeadAudioContext extends FakeAudioContext {
   override get currentTime() {
     return 10;
   }
+}
+
+/** What each deck was doing at the instant it was routed. WebKit refuses the
+ * audio session to a context that is handed an element which is already
+ * sounding, and the refusal is permanent: the routing cannot be undone. */
+const routedDecks: Array<{ src: string; paused: boolean }> = [];
+
+class RoutingAudioContext extends FakeAudioContext {
+  override createMediaElementSource = (element: HTMLAudioElement) => {
+    routedDecks.push({ src: element.src, paused: element.paused });
+    return new FakeAudioNode();
+  };
 }
 
 class FakeCapturedStream extends EventTarget {
@@ -216,6 +228,7 @@ beforeEach(() => {
   created.length = 0;
   contexts.length = 0;
   automatedCurves.length = 0;
+  routedDecks.length = 0;
   vi.useFakeTimers();
   vi.stubGlobal('Audio', FakeAudio);
   vi.stubGlobal('AudioContext', undefined);
@@ -608,12 +621,102 @@ describe('two-deck mixer', () => {
     expect(replacement).toBe(nextTrack);
   });
 
+  it('routes decks that have never played, and only then spends their unlock sample', async () => {
+    // The order this function documents, and the one iOS grants an audio
+    // session for. Unlocking first put both decks mid-`play()` at the moment
+    // `createMediaElementSource` claimed them — the punished sequence reached
+    // from the other side, and an irreversible one: the context stayed
+    // suspended and the installed app spent the session without its mixer.
+    vi.stubGlobal('AudioContext', RoutingAudioContext);
+    const module = await import('./audio');
+
+    expect(module.audioService.unlockAudio()).toBe(true);
+
+    expect(routedDecks).toEqual([
+      { src: '', paused: true },
+      { src: '', paused: true },
+    ]);
+    // And the sample is still spent — from the same gesture, which is what
+    // makes a later gestureless start legal on a locked phone.
+    expect(created).toHaveLength(2);
+    expect(created.every((deck) => deck.play.mock.calls.length === 1)).toBe(true);
+  });
+
   it('gives up on a context whose clock never starts, before routing anything', async () => {
     vi.stubGlobal('AudioContext', DeadAudioContext);
     const module = await import('./audio');
     module.audioService.unlockAudio();
     await vi.advanceTimersByTimeAsync(1_000);
     expect(module.audioService.graphReady()).toBe(false);
+  });
+
+  it('rebuilds the decks under a paused player without starting it', async () => {
+    // A session put back on boot sits cued and paused until somebody presses
+    // play. Whatever the graph does underneath it, that has to stay true: there
+    // is no music to restore, and the store must not be told a resume failed.
+    vi.stubGlobal('AudioContext', DeadAudioContext);
+    const module = await import('./audio');
+    const failures: Array<{ wasPlaying: boolean; resumed: boolean }> = [];
+    module.setGraphReporter((failure) => { failures.push(failure); });
+    module.audioService.prime('/restored', 42, 1);
+    const primed = module.audioEl() as unknown as FakeAudio;
+
+    module.audioService.unlockAudio();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(module.audioService.graphReady()).toBe(false);
+    expect(failures).toEqual([expect.objectContaining({ wasPlaying: false, resumed: false })]);
+    const rebuilt = module.audioEl() as unknown as FakeAudio;
+    expect(rebuilt).not.toBe(primed);
+    // Cued back where the session was left, and silent.
+    expect(rebuilt.src).toBe('/restored');
+    expect(rebuilt.currentTime).toBe(42);
+    expect(rebuilt.play).not.toHaveBeenCalled();
+  });
+
+  it('never mistakes the unlock sample for music the graph took down with it', async () => {
+    // Every gesture spends a silent sample on each empty deck, and `play()`
+    // clears `paused` the moment it is called — the platform answers when it
+    // feels like it. A graph abandoned inside that window used to see a deck
+    // that was "playing", restore a silent WAV onto the replacement as if it
+    // were the current track, and tell the listener their audio was interrupted.
+    vi.stubGlobal('AudioContext', DeadAudioContext);
+    const module = await import('./audio');
+    const failures: Array<{ wasPlaying: boolean; resumed: boolean }> = [];
+    module.setGraphReporter((failure) => { failures.push(failure); });
+    const deck = module.audioEl() as unknown as FakeAudio;
+    deck.play.mockImplementation(() => {
+      deck.paused = false;
+      deck.currentSrc = deck.src;
+      return new Promise<void>(() => {});
+    });
+
+    module.audioService.unlockAudio();
+    // The window: a deck that holds nothing but looks exactly like one that does.
+    expect(deck.paused).toBe(false);
+    expect(module.broadcastPlaybackActive()).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(module.audioService.graphReady()).toBe(false);
+    expect(failures).toEqual([expect.objectContaining({ wasPlaying: false, resumed: false })]);
+    const rebuilt = module.audioEl() as unknown as FakeAudio;
+    expect(rebuilt).not.toBe(deck);
+    expect(rebuilt.src).toBe('');
+  });
+
+  it('never carries a deck unlock over into the track it primes', async () => {
+    // `unlockDecks` spends a silent sample on every empty deck, from any
+    // gesture. A restore landing while that play is in flight used to inherit
+    // it — the paused song the listener came back to started on its own.
+    const module = await import('./audio');
+    const deck = module.audioEl() as unknown as FakeAudio;
+    deck.paused = false;
+
+    module.audioService.prime('/restored', 42, 1);
+
+    expect(deck.pause).toHaveBeenCalled();
+    expect(deck.paused).toBe(true);
   });
 
   it('lets a listener skip straight into the blend that was already prepared', async () => {
