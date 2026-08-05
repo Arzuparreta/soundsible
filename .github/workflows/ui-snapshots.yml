@@ -1,0 +1,75 @@
+name: Refresh UI snapshots
+
+# Reviewed screenshot baselines are committed per engine and per viewport, and
+# they are named `-linux` because they only mean anything on the platform that
+# produced them. Regenerating them on a laptop invites a diff made of font
+# hinting rather than of the change under review, so this does it on the same
+# runner image CI compares them on.
+#
+# Run it from the Actions tab against the branch that needs new baselines. The
+# updated PNGs are always uploaded as an artifact; committing them back is the
+# default and can be turned off to inspect first.
+#
+# The commit is pushed with GITHUB_TOKEN, which by design does not retrigger
+# workflows. Re-run CI on the branch afterwards to see the baselines go green.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit the refreshed baselines back to the branch
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui_web/package-lock.json
+      - name: Install JS dependencies
+        working-directory: ui_web
+        run: npm ci
+      - name: Install browser engines
+        working-directory: ui_web
+        run: npx playwright install --with-deps chromium webkit
+      # --update-snapshots rewrites every baseline it can reach, so all four
+      # projects land in one commit and the engines cannot drift apart again
+      # the way chromium and webkit did.
+      - name: Regenerate every reviewed baseline
+        working-directory: ui_web
+        run: npm run test:ui-scale:update
+      - name: Report what changed
+        id: diff
+        run: |
+          git add --all ui_web/tests
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Baselines already match this branch."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --cached --stat
+          fi
+      - name: Upload the refreshed baselines for review
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshots
+          path: ui_web/tests/browser/**/*.png
+          retention-days: 14
+      - name: Commit them back to the branch
+        if: steps.diff.outputs.changed == 'true' && inputs.commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Regenerar los baselines de captura en el runner de CI"
+          git push origin HEAD:${{ github.ref_name }}
