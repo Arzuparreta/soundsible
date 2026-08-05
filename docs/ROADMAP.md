@@ -84,7 +84,8 @@ The catalog depends on yt-dlp working against YouTube, and YouTube changes.
 
 ## Shipped
 
-See [CHANGELOG.md](../CHANGELOG.md).
+See the [releases](https://github.com/Arzuparreta/soundsible/releases) and the
+commit history.
 
 ## Internals
 
