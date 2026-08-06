@@ -20,7 +20,7 @@ final class AudioSessionController {
     var onRouteGone: (() -> Void)?
 
     private let log = Logger(subsystem: "com.soundsible.player", category: "audio-session")
-    private var observers: [NSObjectProtocol] = []
+    private var observers: [Task<Void, Never>] = []
 
     func activate() {
         let session = AVAudioSession.sharedInstance()
@@ -37,6 +37,8 @@ final class AudioSessionController {
     }
 
     func deactivate() {
+        observers.forEach { $0.cancel() }
+        observers.removeAll()
         do {
             try AVAudioSession.sharedInstance().setActive(
                 false,
@@ -47,53 +49,62 @@ final class AudioSessionController {
         }
     }
 
+    // Notifications are consumed as an async sequence rather than through
+    // `addObserver(forName:queue:using:)`. The callback form hands you a
+    // `@Sendable` closure, which cannot touch this main-actor-isolated object
+    // without an `assumeIsolated` dance; awaiting the sequence from a task that
+    // is already on the main actor has no such problem.
     private func observeInterruptions() {
-        let observer = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification,
-            object: AVAudioSession.sharedInstance(),
-            queue: .main
-        ) { [weak self] notification in
-            guard let self,
-                  let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-                  let type = AVAudioSession.InterruptionType(rawValue: raw)
-            else { return }
+        let task = Task { [weak self] in
+            let notifications = NotificationCenter.default.notifications(
+                named: AVAudioSession.interruptionNotification,
+                object: AVAudioSession.sharedInstance()
+            )
+            for await notification in notifications {
+                guard let self else { return }
+                guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      let type = AVAudioSession.InterruptionType(rawValue: raw)
+                else { continue }
 
-            switch type {
-            case .began:
-                self.onInterruptionBegan?()
-            case .ended:
-                let options = (notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt)
-                    .map(AVAudioSession.InterruptionOptions.init(rawValue:)) ?? []
-                self.onInterruptionEnded?(options.contains(.shouldResume))
-            @unknown default:
-                break
+                switch type {
+                case .began:
+                    self.onInterruptionBegan?()
+                case .ended:
+                    let options = (notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt)
+                        .map(AVAudioSession.InterruptionOptions.init(rawValue:)) ?? []
+                    self.onInterruptionEnded?(options.contains(.shouldResume))
+                @unknown default:
+                    break
+                }
             }
         }
-        observers.append(observer)
+        observers.append(task)
     }
 
     private func observeRouteChanges() {
-        let observer = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.routeChangeNotification,
-            object: AVAudioSession.sharedInstance(),
-            queue: .main
-        ) { [weak self] notification in
-            guard let self,
-                  let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
-                  let reason = AVAudioSession.RouteChangeReason(rawValue: raw)
-            else { return }
+        let task = Task { [weak self] in
+            let notifications = NotificationCenter.default.notifications(
+                named: AVAudioSession.routeChangeNotification,
+                object: AVAudioSession.sharedInstance()
+            )
+            for await notification in notifications {
+                guard let self else { return }
+                guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                      let reason = AVAudioSession.RouteChangeReason(rawValue: raw)
+                else { continue }
 
-            // Leaving the car must not mean the phone starts playing out loud in
-            // your hand. iOS calls this "old device unavailable" and every media
-            // app is expected to pause on it.
-            if reason == .oldDeviceUnavailable {
-                self.onRouteGone?()
+                // Leaving the car must not mean the phone starts playing out
+                // loud in your hand. iOS calls this "old device unavailable"
+                // and every media app is expected to pause on it.
+                if reason == .oldDeviceUnavailable {
+                    self.onRouteGone?()
+                }
             }
         }
-        observers.append(observer)
+        observers.append(task)
     }
 
     deinit {
-        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.forEach { $0.cancel() }
     }
 }

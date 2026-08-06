@@ -4,15 +4,16 @@ import SwiftUI
 
 /// Whether we have a Soundsible to talk to, and what it says.
 @MainActor
-final class AppModel: ObservableObject {
+@Observable
+final class AppModel {
     enum Phase: Equatable {
         case checking
         case unpaired
         case paired(ServerConnection)
     }
 
-    @Published private(set) var phase: Phase = .checking
-    @Published var lastError: String?
+    private(set) var phase: Phase = .checking
+    var lastError: String?
 
     let tokenStore: TokenStore
     let client: SoundsibleClient

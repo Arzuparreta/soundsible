@@ -4,7 +4,7 @@ import SwiftUI
 
 /// First run: point the app at a Soundsible.
 struct PairingView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
 
     @State private var isScanning = false
     @State private var serverAddress = ""

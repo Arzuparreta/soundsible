@@ -10,13 +10,14 @@ import SwiftUI
 /// wiring between it, the decks, and the surfaces that describe playback to the
 /// outside world.
 @MainActor
-final class PlayerModel: ObservableObject {
-    @Published private(set) var current: CarItem?
-    @Published private(set) var isPlaying = false
-    @Published private(set) var positionSec: Double = 0
-    @Published private(set) var durationSec: Double?
-    @Published private(set) var queue = PlayQueue()
-    @Published var crossfadeSeconds: Double = UserDefaults.standard.object(
+@Observable
+final class PlayerModel {
+    private(set) var current: CarItem?
+    private(set) var isPlaying = false
+    private(set) var positionSec: Double = 0
+    private(set) var durationSec: Double?
+    private(set) var queue = PlayQueue()
+    var crossfadeSeconds: Double = UserDefaults.standard.object(
         forKey: "com.soundsible.player.crossfade"
     ) as? Double ?? 0 {
         didSet { UserDefaults.standard.set(crossfadeSeconds, forKey: "com.soundsible.player.crossfade") }

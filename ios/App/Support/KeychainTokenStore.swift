@@ -8,7 +8,7 @@ import SoundsibleKit
 /// `WhenUnlocked` on purpose: the app has to be able to keep playing, and to
 /// resume after a reboot in a car dock, without somebody unlocking the phone
 /// first.
-final class KeychainTokenStore: TokenStore, @unchecked Sendable {
+nonisolated final class KeychainTokenStore: TokenStore, @unchecked Sendable {
     private let service = "com.soundsible.player.connection"
     private let account = "paired-device"
     private let lock = NSLock()

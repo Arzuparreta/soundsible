@@ -8,9 +8,10 @@ import SoundsibleKit
 /// this type is the part that touches the disk, which is why the policy is
 /// tested on Linux and this is kept as thin as it can be.
 @MainActor
-final class OfflineStore: ObservableObject {
-    @Published private(set) var library: OfflineLibrary
-    @Published private(set) var inFlight: Set<String> = []
+@Observable
+final class OfflineStore {
+    private(set) var library: OfflineLibrary
+    private(set) var inFlight: Set<String> = []
 
     private let directory: URL
     private let indexURL: URL

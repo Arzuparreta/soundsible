@@ -12,7 +12,7 @@ import os
 ///
 /// Ranges matter here — seeking in a 60 MB FLAC works because the engine answers
 /// `206` with `Content-Range` and this forwards that faithfully.
-final class StreamAssetLoader: NSObject {
+nonisolated final class StreamAssetLoader: NSObject {
     /// Scheme swapped in so `AVPlayer` hands the request to us instead of
     /// fetching it itself.
     static let scheme = "soundsible-stream"

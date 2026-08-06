@@ -9,9 +9,9 @@ struct BrowseView: View {
     let itemID: String?
     let title: String
 
-    @EnvironmentObject private var model: AppModel
-    @EnvironmentObject private var player: PlayerModel
-    @EnvironmentObject private var offline: OfflineStore
+    @Environment(AppModel.self) private var model
+    @Environment(PlayerModel.self) private var player
+    @Environment(OfflineStore.self) private var offline
 
     @State private var items: [CarItem] = []
     @State private var isLoading = true

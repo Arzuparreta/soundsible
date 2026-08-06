@@ -2,21 +2,44 @@ import SoundsibleKit
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject private var model: AppModel
-    @EnvironmentObject private var player: PlayerModel
-    @EnvironmentObject private var offline: OfflineStore
+    @Environment(AppModel.self) private var model
+    @Environment(PlayerModel.self) private var player
+    @Environment(OfflineStore.self) private var offline
 
     @State private var confirmUnpair = false
+    @State private var deviceName = DeviceIdentity.name
 
     var body: some View {
+        // `@Observable` models have no `$` of their own; `@Bindable` is what
+        // hands a binding back for a two-way control.
+        @Bindable var player = player
+
         Form {
-            Section("Server") {
+            Section {
                 if case let .paired(connection) = model.phase {
                     LabeledContent("Address", value: connection.baseURL.absoluteString)
                 }
                 Button("Unpair this device", role: .destructive) {
                     confirmUnpair = true
                 }
+            } header: {
+                Text("Server")
+            }
+
+            Section {
+                TextField("This device", text: $deviceName)
+                    .autocorrectionDisabled()
+                    .onSubmit { DeviceIdentity.name = deviceName }
+            } header: {
+                Text("Device name")
+            } footer: {
+                Text(
+                    """
+                    How this phone is listed in your Soundsible's paired devices. \
+                    iOS stopped telling apps what you called your phone, so it is \
+                    worth setting if you pair more than one.
+                    """
+                )
             }
 
             Section {
@@ -64,6 +87,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { DeviceIdentity.name = deviceName }
         .confirmationDialog(
             "Unpair this device?",
             isPresented: $confirmUnpair,

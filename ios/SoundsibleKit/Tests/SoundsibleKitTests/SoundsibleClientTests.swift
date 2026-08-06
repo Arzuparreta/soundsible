@@ -25,10 +25,13 @@ final class StubTransport: HTTPTransport, @unchecked Sendable {
     }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        lock.lock()
-        requests.append(request)
-        let exchange = queued.isEmpty ? Exchange(status: 500, body: Data()) : queued.removeFirst()
-        lock.unlock()
+        // `withLock` rather than `lock()`/`unlock()`: Swift 6 rejects the pair
+        // in an async context, because nothing stops a suspension between them
+        // from parking the task while it still holds the lock.
+        let exchange = lock.withLock {
+            requests.append(request)
+            return queued.isEmpty ? Exchange(status: 500, body: Data()) : queued.removeFirst()
+        }
 
         let response = HTTPURLResponse(
             url: request.url!,

@@ -80,7 +80,7 @@ def build_source(*, version: str, ipa_bytes: int, released_on: str) -> dict:
                         ),
                         "downloadURL": download_url,
                         "size": ipa_bytes,
-                        "minOSVersion": "17.0",
+                        "minOSVersion": "26.0",
                     }
                 ],
                 # Declared so a client can show what the app asks for before it

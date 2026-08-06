@@ -70,14 +70,14 @@ def test_size_is_the_real_ipa_size():
 
 def test_minimum_os_matches_the_deployment_target():
     entry = _source()["apps"][0]["versions"][0]
-    assert entry["minOSVersion"] == "17.0"
+    assert entry["minOSVersion"] == "26.0"
 
     project = (
         __import__("pathlib").Path(__file__).resolve().parent.parent
         / "ios"
         / "project.yml"
     ).read_text(encoding="utf-8")
-    assert 'iOS: "17.0"' in project
+    assert 'iOS: "26.0"' in project
 
 
 def test_permissions_explain_the_camera_and_the_local_network():

@@ -33,7 +33,7 @@ jobs:
     name: kit
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    container: swift:6.1
+    container: swift:6.3
     steps:
       - uses: actions/checkout@v4
 
@@ -50,7 +50,9 @@ jobs:
   app:
     name: app
     needs: kit
-    runs-on: macos-15
+    # macOS 26 with the Xcode 26 SDK: the app targets iOS 26, and building
+    # against that SDK is also what makes it pick up Liquid Glass.
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +127,13 @@ jobs:
           # refusal is silent.
           /usr/libexec/PlistBuddy -c "Print :NSLocalNetworkUsageDescription" "$plist" >/dev/null \
             || { echo "::error::NSLocalNetworkUsageDescription is missing"; exit 1; }
+
+          # The app is built against the current SDK and targets the current
+          # OS. A silent drop back to an older target is how an app quietly
+          # stops looking like the system it runs on.
+          minimum="$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$plist")"
+          [ "$minimum" = "26.0" ] \
+            || { echo "::error::MinimumOSVersion is $minimum, expected 26.0"; exit 1; }
 
           version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")"
           declared="$(python3 ../scripts/version_sync.py --print)"

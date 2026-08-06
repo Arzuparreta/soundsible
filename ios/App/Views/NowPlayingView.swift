@@ -20,7 +20,7 @@ struct RoutePickerButton: UIViewRepresentable {
 }
 
 struct NowPlayingView: View {
-    @EnvironmentObject private var player: PlayerModel
+    @Environment(PlayerModel.self) private var player
     @Environment(\.dismiss) private var dismiss
 
     @State private var scrubbing: Double?

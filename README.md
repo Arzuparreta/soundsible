@@ -209,7 +209,8 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
   the background, which on a phone is most of the time. The native app keeps
   playing with the screen locked, downloads music for offline listening, and
   shows title, artwork and working controls on a car's screen. It is not on the
-  App Store; it installs through [SideStore](https://sidestore.io). See
+  App Store; it installs through [SideStore](https://sidestore.io) and needs iOS
+  26 or newer. See
   [iOS](docs/IOS.md).
 - **From anywhere** — publish the station with `tailscale serve --bg --yes --https=443 5005`
   and open the HTTPS `.ts.net/player/` URL it prints. HTTPS also enables Live

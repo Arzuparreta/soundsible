@@ -2,8 +2,8 @@ import SoundsibleKit
 import SwiftUI
 
 struct RootView: View {
-    @EnvironmentObject private var model: AppModel
-    @EnvironmentObject private var player: PlayerModel
+    @Environment(AppModel.self) private var model
+    @Environment(PlayerModel.self) private var player
     @State private var showNowPlaying = false
 
     var body: some View {
@@ -32,7 +32,7 @@ struct RootView: View {
 
 /// The strip above the tab bar. Tapping it opens the full player.
 struct MiniPlayerBar: View {
-    @EnvironmentObject private var player: PlayerModel
+    @Environment(PlayerModel.self) private var player
     let onTap: () -> Void
 
     var body: some View {
@@ -65,8 +65,10 @@ struct MiniPlayerBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        // Liquid Glass rather than a material: built against the iOS 26 SDK this
+        // is what floats-above-content is supposed to look like, and it picks up
+        // the same lighting as the navigation bar behind it.
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
         .padding(.horizontal, 10)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)

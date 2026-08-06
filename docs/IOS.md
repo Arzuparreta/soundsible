@@ -15,7 +15,7 @@ It is not on the App Store, and that is deliberate. See
 
 ## Installing
 
-You need an iPhone or iPad on **iOS 17 or newer** and a sideloading app.
+You need an iPhone or iPad on **iOS 26 or newer** and a sideloading app.
 **[SideStore](https://sidestore.io)** is the recommended one: after a one-time
 setup it re-signs your apps on the phone itself, with no computer.
 
@@ -34,7 +34,8 @@ setup it re-signs your apps on the phone itself, with no computer.
 
 > **The seven-day thing.** A free Apple ID can sign at most **3** sideloaded
 > apps, and the signature lasts **7 days**. SideStore renews it in the
-> background on the phone. This is Apple's limit on sideloading, not something
+> background on the phone, and pairing it with **LiveContainer** works around
+> the three-app cap. Both are Apple's limits on sideloading, not something
 > Soundsible can lift.
 
 You can also grab the `.ipa` straight from a
@@ -129,7 +130,7 @@ Swift:
 
 ```bash
 # Core library — API client, queue, offline policy. Runs anywhere.
-docker run --rm -v "$PWD/ios/SoundsibleKit":/w -w /w swift:6.1 swift test
+docker run --rm -v "$PWD/ios/SoundsibleKit":/w -w /w swift:6.3 swift test
 ```
 
 The app shell needs Xcode, and the `iOS` GitHub Actions workflow is where that
@@ -158,6 +159,13 @@ cd ios && xcodegen generate && open Soundsible.xcodeproj
 | `ios/App/Model/` | `AppModel` (paired or not) and `PlayerModel` (what is sounding). |
 | `ios/App/Views/` | Pairing, browse, Now Playing, settings. |
 | `ios/project.yml` | The Xcode project, as YAML. |
+
+The app targets **iOS 26** and is built against the iOS 26 SDK, so it adopts
+Liquid Glass rather than opting out with `UIDesignRequiresCompatibility` — an
+escape hatch Apple removes in Xcode 27 anyway. The app target runs under the
+Swift 6 language mode with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, Xcode
+26's default for a new project; `SoundsibleKit` deliberately stays `nonisolated`
+because it is the part that does work off the main thread.
 
 ### What it asks of the engine
 
