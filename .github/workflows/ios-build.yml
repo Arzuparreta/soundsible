@@ -1,0 +1,140 @@
+name: iOS
+
+# Nobody on this project owns a Mac. This workflow is the Mac.
+#
+# The split matters: `SoundsibleKit` is plain Swift with no Apple framework in
+# it, so it compiles and its tests run on Linux in seconds — that is where the
+# parsing, the queue and the offline policy are actually verified. The macOS
+# runner exists only to compile the SwiftUI and AVFoundation shell around it,
+# and macOS runners are free and unmetered for public repositories.
+on:
+  push:
+    branches: [main, dev]
+    paths: &ios-paths
+      - 'ios/**'
+      - '.github/workflows/ios-build.yml'
+  pull_request:
+    branches: [main, dev]
+    paths: *ios-paths
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Everything that can fail on logic rather than on a framework fails here, in
+  # about a minute, on a Linux runner.
+  kit:
+    name: kit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit tests (Linux)
+        working-directory: ios/SoundsibleKit
+        run: swift test --parallel
+
+      # A warning in the kit is a warning in the app, and finding it here costs
+      # a minute instead of a round trip to a macOS runner.
+      - name: Build without warnings
+        working-directory: ios/SoundsibleKit
+        run: swift build -Xswiftc -warnings-as-errors
+
+  app:
+    name: app
+    needs: kit
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately not pinned to an Xcode version. The runner image ships a
+      # current one, and a pin here rots into a "no such directory" failure the
+      # first time GitHub retires it — for a project with no iOS-version-
+      # specific code to protect.
+      - name: Show the toolchain
+        run: xcodebuild -version
+
+      - name: Install build tools
+        run: brew install xcodegen xcbeautify
+
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: xcodegen generate --spec project.yml
+
+      # The archive is unsigned on purpose. This app is re-signed on the device
+      # by AltStore or SideStore with the installing person's own Apple ID, so
+      # there is no certificate on this machine and there must not be one.
+      - name: Build the archive
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project Soundsible.xcodeproj \
+            -scheme Soundsible \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Soundsible.xcarchive \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            | xcbeautify --renderer github-actions
+
+      - name: Package the IPA
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          app="build/Soundsible.xcarchive/Products/Applications/Soundsible.app"
+          test -d "$app" || { echo "::error::No app was produced at $app"; exit 1; }
+
+          # An IPA is a zip with the bundle under `Payload/`. `xcodebuild
+          # -exportArchive` refuses to do this without a signing identity, so
+          # the bundle is packaged directly.
+          rm -rf build/Payload && mkdir -p build/Payload
+          cp -R "$app" build/Payload/
+          (cd build && zip -qry Soundsible.ipa Payload)
+          ls -lh build/Soundsible.ipa
+
+      - name: Check what the bundle claims about itself
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          plist="build/Soundsible.xcarchive/Products/Applications/Soundsible.app/Info.plist"
+
+          # The one setting the whole app exists for. If `audio` is missing from
+          # UIBackgroundModes, playback dies with the lock button and every
+          # other check here is beside the point.
+          /usr/libexec/PlistBuddy -c "Print :UIBackgroundModes" "$plist" | grep -q audio \
+            || { echo "::error::UIBackgroundModes is missing 'audio' — playback would stop when the screen locks"; exit 1; }
+
+          # A LAN engine is plain HTTP; without this the app cannot reach it.
+          /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity:NSAllowsLocalNetworking" "$plist" \
+            | grep -qi true \
+            || { echo "::error::NSAllowsLocalNetworking is not set — a LAN Soundsible would be unreachable"; exit 1; }
+
+          # iOS refuses the local network without a purpose string, and the
+          # refusal is silent.
+          /usr/libexec/PlistBuddy -c "Print :NSLocalNetworkUsageDescription" "$plist" >/dev/null \
+            || { echo "::error::NSLocalNetworkUsageDescription is missing"; exit 1; }
+
+          version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")"
+          declared="$(python3 ../scripts/version_sync.py --print)"
+          [ "$version" = "$declared" ] \
+            || { echo "::error::The bundle says $version but the tree declares $declared"; exit 1; }
+          echo "Soundsible $version"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soundsible-ios-ipa
+          path: ios/build/Soundsible.ipa
+          if-no-files-found: error
+          retention-days: 14
