@@ -62,25 +62,48 @@ Root collections:
 
 Playlist IDs are encoded as `playlist:<url-encoded-name>`.
 
-## iOS Companion Target
+## iOS Companion — built
 
-The iOS app should be a native audio client:
+The native iOS client lives in [`ios/`](../ios) and is documented in
+[IOS.md](IOS.md). It does what this document specified:
 
-- Pair through the existing Soundsible pairing flow and store the paired-device token in Keychain.
-- Use `/api/car/home` and `/api/car/items/<item_id>` for browse.
-- Use `AVPlayer` for `stream_url` playback.
-- Enable background audio.
-- Publish `MPNowPlayingInfoCenter` metadata from the selected item.
-- Register `MPRemoteCommandCenter` handlers for play, pause, next, previous, and seek.
-- Keep the server playback state updated through existing `/api/playback/state` once a native device ID exists.
+- Pairs through the existing flow and keeps the paired-device token in the Keychain.
+- Browses `/api/car/home` and `/api/car/items/<item_id>`.
+- Plays `stream_url` through `AVPlayer`, with background audio enabled.
+- Publishes `MPNowPlayingInfoCenter` and handles `MPRemoteCommandCenter`.
+- Registers as `device_type: "ios"` and publishes state to `/api/playback/state`.
 
-The native client should register itself as `device_type: "ios"` through `POST /api/devices/register`. Remote commands accepted by Soundsible are `play`, `pause`, `next`, `previous`, and `seek`.
+Two things the original sketch did not say, and both matter:
+
+**`AVPlayer` cannot carry an `Authorization` header** through any public API. The
+app routes authenticated streams through an `AVAssetResourceLoaderDelegate` on a
+custom scheme, which forwards byte ranges to `URLSession` where headers are
+ordinary. The private `AVURLAssetHTTPHeaderFieldsKey` is not used.
+
+**Now Playing is not a formality.** A head unit's progress bar only moves if
+`MPNowPlayingInfoPropertyElapsedPlaybackTime` and
+`MPNowPlayingInfoPropertyPlaybackRate` are both published, and head units draw
+their buttons from which `MPRemoteCommand`s are enabled — so commands the queue
+cannot honour are disabled rather than left on.
 
 ## CarPlay Target
 
-CarPlay is a native entitlement path, not a PWA capability. The implementation should only start after the iOS app has stable background playback and Now Playing behavior.
+**Blocked, and not by us.** The `com.apple.developer.carplay-audio` entitlement
+is granted only to apps published on the App Store, and Soundsible is not going
+there: guideline 5.2.3 forbids downloading media from YouTube, which is what
+Soundsible does. The app is distributed by sideloading instead (see
+[IOS.md](IOS.md)).
 
-Minimum CarPlay tree:
+This costs less than it sounds. A CarPlay app would add **browsing your library
+on the car screen**. Everything else a car shows — title, artist, artwork, a
+progress bar that tracks, transport buttons on the wheel, and Soundsible's Now
+Playing screen inside CarPlay itself — comes from `MPNowPlayingInfoCenter` and
+`MPRemoteCommandCenter`, needs no entitlement, and already works.
+
+If Soundsible ever ships through **AltStore PAL** (EU marketplaces, 99 €/year,
+Notarization checks security rather than content) that is still not the App
+Store, so the entitlement stays out of reach. The tree below is what a CarPlay
+target would render if that ever changes:
 
 - Home
 - Favourites
