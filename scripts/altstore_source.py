@@ -9,6 +9,14 @@ subscribes to; it lists the app and every version it can install.
 The source is published as a release asset rather than a page in the website
 repo, because ``releases/latest/download/apps.json`` is already a stable URL that
 always points at the newest release. One less repository to keep in step.
+
+The sideloading half of this is exercised on every release. The AltStore PAL
+half — anything reached through ``--marketplace-id`` — has never produced a
+source that a real client installed from, because that needs a paid Apple
+Developer account and there is no account. Its field names come from AltStore's
+schema documentation read on 2026-08-06
+(https://faq.altstore.io/developers/make-a-source); see
+``.github/workflows/ios-altstore-pal.yml`` for the rest of the provenance.
 """
 
 from __future__ import annotations

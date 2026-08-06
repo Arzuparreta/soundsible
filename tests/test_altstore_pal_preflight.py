@@ -69,3 +69,57 @@ def test_every_required_credential_explains_itself():
     # just paid 99 EUR and wants to know what to paste where.
     for description in {**REQUIRED_SECRETS, **REQUIRED_VARIABLES}.values():
         assert len(description) > 20, description
+
+
+def test_every_unverified_file_says_so_where_it_will_be_read():
+    """The AltStore PAL path must keep announcing that it has never run.
+
+    This is not documentation hygiene. Those files sit beside code CI exercises
+    on every push, and nothing about how they look tells them apart — so a
+    reader, human or agent, can reasonably conclude the path works and build on
+    it. It does not work; nobody has ever been able to try it. If a rewrite
+    drops the warning, this fails and says why.
+
+    Delete this test only when somebody has actually shipped through AltStore
+    PAL, and delete the warnings in the same commit.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    # Each file, and a phrase that only survives if the warning survives.
+    unverified = {
+        ".github/workflows/ios-altstore-pal.yml": "HAS NEVER RUN",
+        "ios/exportOptions/app-store-connect.plist": "NOT VERIFIED",
+        "scripts/altstore_pal_preflight.py": "What it is a checklist\nfor is not",
+        "scripts/altstore_source.py": "has never produced a",
+        "docs/IOS.md": "Never executed. Not once.",
+        "AGENTS.md": "has never been executed",
+    }
+
+    for relative, phrase in unverified.items():
+        text = (root / relative).read_text(encoding="utf-8")
+        assert phrase in text, (
+            f"{relative} no longer warns that the AltStore PAL path is "
+            f"unverified. Expected to find {phrase!r}."
+        )
+
+
+def test_the_sources_and_the_date_stay_with_the_guesses():
+    """A claim copied from a vendor page is only checkable if it says where and when.
+
+    Apple and AltStore both rewrite these pages. Without the date and the links,
+    the next person cannot tell a still-true statement from a stale one.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    workflow = (root / ".github/workflows/ios-altstore-pal.yml").read_text(encoding="utf-8")
+    docs = (root / "docs/IOS.md").read_text(encoding="utf-8")
+
+    assert "2026-08-06" in workflow and "2026-08-06" in docs
+    for url in (
+        "faq.altstore.io/developers/distribute-with-altstore-pal",
+        "developer.apple.com/help/app-store-connect/managing-alternative-distribution",
+    ):
+        assert url in workflow, f"{url} is no longer cited in the workflow"
+        assert url in docs, f"{url} is no longer cited in docs/IOS.md"

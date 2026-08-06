@@ -199,14 +199,63 @@ python3 scripts/altstore_pal_preflight.py --confirm membership
 Both sources keep the same bundle identifier, so PAL upgrades an existing
 sideloaded install rather than putting a second copy beside it.
 
-### What is not verified
+### What is verified, and what is not
 
-`.github/workflows/ios-altstore-pal.yml` has never run against a real Apple
-account, because there is no account. It is written from Apple's and AltStore's
-documentation and it fails early and loudly on anything missing, but expect the
-first run to need corrections — most likely around signing identities and the
-exact `altool` invocation. The parts that *are* verified are the source
-generator and the preflight, both of which have tests.
+This matters more than it looks. The PAL files sit in the repository next to
+code that CI exercises on every push, and nothing about their *appearance*
+distinguishes them. Anyone — a person or an agent — reading
+`ios-altstore-pal.yml` could reasonably assume it works. It does not, because it
+has never been given the chance.
+
+| | Status |
+|---|---|
+| `ios-build.yml`, the sideloading path | **Verified.** Builds a real IPA on every push. |
+| `scripts/altstore_source.py`, sideloading half | **Verified.** Runs on every release; has tests. |
+| `scripts/altstore_source.py`, `--marketplace-id` half | Field names from documentation; has tests for its *shape*, but no client has ever installed from a source it produced. |
+| `scripts/altstore_pal_preflight.py` | **Verified.** Has tests and runs. It is a checklist for something unverified. |
+| `.github/workflows/ios-altstore-pal.yml` | **Never executed. Not once.** |
+| `ios/exportOptions/app-store-connect.plist` | **Never used.** |
+
+CI passing says nothing about the last two: nothing in CI runs them.
+
+### Where the PAL steps came from
+
+All read **2026-08-06**. Apple and AltStore both move these pages, so re-check
+before relying on any of it.
+
+1. [Distribute with AltStore PAL](https://faq.altstore.io/developers/distribute-with-altstore-pal)
+   — the ordered steps, the Developer ID registration through their REST API,
+   the App Store Connect marketplace token, and the requirement to host the ADP
+   with its directory structure and file hashes intact.
+2. [Make a Source](https://faq.altstore.io/developers/make-a-source) — the JSON
+   schema, and that `marketplaceID` is required only for notarized apps in PAL.
+3. [Submit for Notarization](https://developer.apple.com/help/app-store-connect/managing-alternative-distribution/submit-for-notarization)
+   — that the build is uploaded like any other, that the difference is the
+   Review Type, and that Apple generates the ADP itself on acceptance.
+4. [DMA and apps in the EU](https://developer.apple.com/support/dma-and-apps-in-the-eu/)
+   — that Notarization reviews security and integrity rather than content, that
+   an individual developer needs no organisation, and that the Core Technology
+   Fee starts above a million first annual installs.
+
+### The guesses, in the order they will probably bite
+
+- **`method: app-store-connect`** in the export plist. The method list found
+  while researching was *app-store, ad-hoc, package, enterprise, development,
+  developer-id, mac-application* — with no `app-store-connect` in it. Recent
+  Xcode renamed `app-store` to `app-store-connect`; which one Xcode 26 wants was
+  never confirmed. If the export complains about the method, try `app-store`.
+- **`xcrun altool --upload-app`.** Documented for App Store Connect uploads, but
+  altool was deprecated in favour of `notarytool` on macOS and may be gone or
+  changed in Xcode 26. Fallbacks: `xcrun notarytool`, or an exportOptions
+  `destination: upload` with `-authenticationKeyPath`.
+- **`~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`.** altool's documented
+  lookup path, and moot if the point above changes.
+- **`CODE_SIGN_IDENTITY="Apple Distribution"`.** The exact string depends on
+  what the certificate is called. `security find-identity -v -p codesigning` on
+  the runner will say.
+- **Whether step 9 is needed at all.** AltStore's documentation mentions PAL
+  processing builds automatically, which may make collecting the ADP by hand
+  unnecessary.
 
 ---
 

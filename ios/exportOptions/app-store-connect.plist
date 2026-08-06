@@ -9,6 +9,17 @@
 
   There is no `alternative-distribution` export method to pass here — the ADP is
   produced on Apple's side, after review, and collected afterwards.
+
+  NOT VERIFIED. This file has never been used: there is no paid Apple Developer
+  account to use it with. `method` in particular is a guess — the documented
+  list of methods found while writing this was "app-store, ad-hoc, package,
+  enterprise, development, developer-id, mac-application", with no
+  `app-store-connect` among them, and recent Xcode renamed `app-store` to
+  `app-store-connect`. Which one Xcode 26 accepts was never confirmed. If the
+  export fails complaining about the method, try `app-store`.
+
+  See the header of .github/workflows/ios-altstore-pal.yml for the full source
+  list and the rest of the assumptions.
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">

@@ -17,6 +17,14 @@ Nothing here talks to Apple. Membership, the EU terms addendum and the
 Notarization submission all happen in a browser and leave no trace this can
 read, so those are declared by hand with `--confirm`. Everything that lives in
 this repository's configuration is detected.
+
+This script is verified — it has tests, and it runs. **What it is a checklist
+for is not.** Nobody has ever shipped through AltStore PAL from this repository,
+so the steps below, the credential names and the workflow they lead to were all
+written from documentation on 2026-08-06. Sources and known guesses are listed
+in the header of `.github/workflows/ios-altstore-pal.yml`; the runbook is in
+`docs/IOS.md`. Reaching "everything is in place" means the paperwork is done,
+not that the build is known to work.
 """
 
 from __future__ import annotations
