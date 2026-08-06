@@ -55,7 +55,10 @@ nonisolated final class StreamAssetLoader: NSObject {
     }
 }
 
-extension StreamAssetLoader: AVAssetResourceLoaderDelegate {
+// `nonisolated` again on the extension: the class being nonisolated does not
+// carry over, and AVFoundation calls these back on the loader queue, never on
+// the main actor.
+nonisolated extension StreamAssetLoader: AVAssetResourceLoaderDelegate {
     func resourceLoader(
         _ resourceLoader: AVAssetResourceLoader,
         shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest

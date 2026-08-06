@@ -20,7 +20,12 @@ final class AppModel {
     let offline: OfflineStore
     let player: PlayerModel
 
-    private lazy var coordinator = PairingCoordinator(client: client, tokenStore: tokenStore)
+    // Not `lazy`: `@Observable` turns stored properties into computed ones
+    // with init accessors, which `lazy` cannot coexist with. Rebuilding a
+    // struct that holds two references is free.
+    private var coordinator: PairingCoordinator {
+        PairingCoordinator(client: client, tokenStore: tokenStore)
+    }
 
     init(tokenStore: TokenStore = KeychainTokenStore()) {
         self.tokenStore = tokenStore

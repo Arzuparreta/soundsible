@@ -20,6 +20,9 @@ final class DualDeckPlayer {
     var onPlaybackEnded: (() -> Void)?
     /// Position moved. Fires a few times a second while playing.
     var onProgress: ((_ positionSec: Double) -> Void)?
+    /// The current track could not be played to the end — the server went
+    /// away mid-song, or the file is not what it claimed to be.
+    var onPlaybackFailed: ((Error?) -> Void)?
     /// The crossfade reached the point where the incoming track is the one that
     /// should be named on the lock screen and in the car.
     var onCrossfadeHandover: (() -> Void)?
@@ -193,6 +196,23 @@ final class DualDeckPlayer {
             }
         }
         observerTasks.append(task)
+
+        let failures = Task { [weak self] in
+            let failed = NotificationCenter.default.notifications(
+                named: AVPlayerItem.failedToPlayToEndTimeNotification
+            )
+            for await notification in failed {
+                guard let self else { return }
+                guard let item = notification.object as? AVPlayerItem,
+                      item === self.active.currentItem
+                else { continue }
+                let error = notification.userInfo?[
+                    AVPlayerItemFailedToPlayToEndTimeErrorKey
+                ] as? Error
+                self.onPlaybackFailed?(error)
+            }
+        }
+        observerTasks.append(failures)
     }
 
     private func observeTime() {

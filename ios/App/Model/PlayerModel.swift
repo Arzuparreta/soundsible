@@ -286,8 +286,9 @@ final class PlayerModel {
             self.publishNowPlaying(for: item)
             self.refreshCommandAvailability()
         }
-        decks.onFailure = { [weak self] error in
-            self?.log.error("Playback failed: \(error.localizedDescription)")
+        decks.onPlaybackFailed = { [weak self] error in
+            let detail = error?.localizedDescription ?? "no reason given"
+            self?.log.error("Playback failed: \(detail)")
             self?.pause()
         }
     }
