@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Export options for the build that goes to App Store Connect.
+
+  Counter-intuitively, an app destined for an EU marketplace is uploaded the
+  same way an App Store build is: the difference is not in the export, it is
+  that the version's review type is set to Notarization in App Store Connect.
+  Apple then generates the Alternative Distribution Package itself.
+
+  There is no `alternative-distribution` export method to pass here — the ADP is
+  produced on Apple's side, after review, and collected afterwards.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>app-store-connect</string>
+    <key>destination</key>
+    <string>export</string>
+    <key>teamID</key>
+    <string>$(APPLE_TEAM_ID)</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>uploadSymbols</key>
+    <true/>
+    <key>manageAppVersionAndBuildNumber</key>
+    <false/>
+</dict>
+</plist>

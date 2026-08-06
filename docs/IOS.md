@@ -19,7 +19,9 @@ You need an iPhone or iPad on **iOS 26 or newer** and a sideloading app.
 **[SideStore](https://sidestore.io)** is the recommended one: after a one-time
 setup it re-signs your apps on the phone itself, with no computer.
 
-1. Install SideStore following its own instructions.
+1. Install SideStore following its own instructions. This is the only step
+   that needs a computer: SideStore is set up once from a desktop, and after
+   that it re-signs your apps on the phone itself.
 2. Add the Soundsible source:
 
    ```text
@@ -31,6 +33,12 @@ setup it re-signs your apps on the phone itself, with no computer.
 
 3. Install Soundsible from that source.
 4. Open it and pair with your server (below).
+
+> **Not published yet.** The source above goes live with the first release that
+> carries the app. Until then the `.ipa` exists only as an artefact of the
+> [iOS workflow](https://github.com/Arzuparreta/soundsible/actions/workflows/ios-build.yml);
+> check [Releases](https://github.com/Arzuparreta/soundsible/releases) to see
+> whether it has shipped.
 
 > **The seven-day thing.** A free Apple ID can sign at most **3** sideloaded
 > apps, and the signature lasts **7 days**. SideStore renews it in the
@@ -115,10 +123,90 @@ The trade is honest and worth stating plainly:
 | Install | One tap | SideStore, and a 7-day renewal |
 | CarPlay browse screen | Possible | No |
 
-If that ever changes, **AltStore PAL** is the upgrade path: it needs the 99 €
-membership, but Apple's Notarization for EU marketplaces checks security and
-integrity rather than content, installs are permanent with no renewal, and the
-app would not have to be cut down. It is limited to the EU, Japan and Brazil.
+The bottom row is not the whole story: **AltStore PAL** buys back most of what
+sideloading costs, without cutting anything out of the app. It is prepared and
+waiting — see below.
+
+## The paid upgrade: AltStore PAL
+
+Everything for this is already in the repository, dormant. It is written down
+here so the day it gets paid for is an afternoon and not a research project.
+
+### What it buys
+
+| | Sideloading (today) | AltStore PAL |
+|---|---|---|
+| Cost to the developer | nothing | 99 €/year |
+| Computer needed to install | once, to set up SideStore | **never** — the marketplace installs from Safari |
+| Signature | expires every 7 days | permanent |
+| Three-app cap | yes | no |
+| Where it works | everywhere | EU, Japan, Brazil |
+| Does the app have to be cut down? | no | no — Notarization reviews security, not content |
+
+The app is free and does not monetise, so nothing beyond the membership is
+owed: Apple's Core Technology Fee only starts above a million first annual
+installs.
+
+### Where you are
+
+```bash
+python3 scripts/altstore_pal_preflight.py
+```
+
+It prints the whole checklist with what is done and what is next. Steps that
+happen in a browser leave nothing to detect, so record those by hand:
+
+```bash
+python3 scripts/altstore_pal_preflight.py --confirm membership
+```
+
+### The order
+
+1. **Join the Apple Developer Program** as an individual — no D-U-N-S, verified
+   in a day or two. Under the EU's Digital Services Act your name, address,
+   phone and email are published on your listing, and a PO box is accepted for
+   the address.
+2. **Request the Alternative Terms Addendum for Apps in the EU** in the
+   developer portal. Without it there is no alternative distribution at all.
+3. **Register your Developer ID with AltStore PAL** through
+   [their REST API](https://faq.altstore.io/developers/distribute-with-altstore-pal).
+   It answers with a security token.
+4. **App Store Connect → Users and Access → Integrations → Marketplace → +**,
+   and paste that token. Then pick Soundsible as an app to distribute.
+5. **Store the credentials** the workflow needs — the preflight names all six
+   secrets and three variables, with what each one is.
+6. **Run the `iOS AltStore PAL` workflow.** It builds a signed archive and
+   uploads it to App Store Connect.
+7. **App Store Connect → the version → App Review Information → Review Type →
+   Notarization.** Save, *Add for Review*, *Submit to App Review*. This is the
+   step that matters: reviewed against the Notarization Review Guidelines, the
+   app is judged on security and integrity, not on where its music comes from.
+8. **On acceptance Apple generates the Alternative Distribution Package** by
+   itself.
+9. **Collect the ADP** through AltStore PAL's REST API and host it with its
+   directory structure and file hashes intact. A GitHub release asset cannot do
+   that — it is a flat file. GitHub Pages on `soundsible.github.io` can.
+10. **Generate the PAL source** and publish it alongside the sideloading one:
+
+    ```bash
+    python3 scripts/altstore_source.py \
+      --ipa <the signed ipa> \
+      --marketplace-id "$SOUNDSIBLE_MARKETPLACE_ID" \
+      --download-url "$SOUNDSIBLE_ADP_BASE_URL" \
+      --out apps-pal.json
+    ```
+
+Both sources keep the same bundle identifier, so PAL upgrades an existing
+sideloaded install rather than putting a second copy beside it.
+
+### What is not verified
+
+`.github/workflows/ios-altstore-pal.yml` has never run against a real Apple
+account, because there is no account. It is written from Apple's and AltStore's
+documentation and it fails early and loudly on anything missing, but expect the
+first run to need corrections — most likely around signing identities and the
+exact `altool` invocation. The parts that *are* verified are the source
+generator and the preflight, both of which have tests.
 
 ---
 

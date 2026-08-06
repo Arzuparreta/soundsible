@@ -1,0 +1,199 @@
+name: iOS AltStore PAL
+
+# The paid route, prepared in advance and dormant until it is paid for.
+#
+# The free route — an unsigned IPA re-signed on the device by SideStore — is
+# what `ios-build.yml` produces and what ships today. It costs nothing and works
+# everywhere, at the price of a seven-day re-signature and a three-app cap.
+#
+# AltStore PAL removes both, and removes the computer the person installing
+# needs: in the EU the marketplace installs from Safari. What it costs is an
+# Apple Developer Program membership, and Apple's Notarization for EU
+# marketplaces reviews security rather than content, so nothing has to be cut
+# out of the app to pass it.
+#
+# Manual dispatch only. With no credentials configured this workflow never runs
+# on its own and cannot affect anything else.
+#
+# NOT VERIFIED END TO END. Every step below is written from Apple's and
+# AltStore's documentation, but no one has run it against a real account,
+# because there is no account. Expect the first run to need corrections, and
+# treat the numbers and names here as a starting point rather than gospel.
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Upload to App Store Connect after building"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: signed build
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fail here, cheaply and with the whole list, rather than forty minutes
+      # later on a signing error that names one missing file.
+      - name: Check the credentials are all present
+        env:
+          CERT: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_P12 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$CERT" ]          || missing+=("secret APPLE_DISTRIBUTION_CERTIFICATE_P12")
+          [ -n "$CERT_PASSWORD" ] || missing+=("secret APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD")
+          [ -n "$PROFILE" ]       || missing+=("secret APPLE_PROVISIONING_PROFILE")
+          [ -n "$KEY_ID" ]        || missing+=("secret APP_STORE_CONNECT_KEY_ID")
+          [ -n "$ISSUER_ID" ]     || missing+=("secret APP_STORE_CONNECT_ISSUER_ID")
+          [ -n "$PRIVATE_KEY" ]   || missing+=("secret APP_STORE_CONNECT_PRIVATE_KEY")
+          [ -n "$TEAM_ID" ]       || missing+=("variable APPLE_TEAM_ID")
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::AltStore PAL is not set up yet. Missing:"
+            printf '::error::  - %s\n' "${missing[@]}"
+            echo "Run scripts/altstore_pal_preflight.py for the whole checklist."
+            exit 1
+          fi
+          echo "All credentials present."
+
+      # A throwaway keychain rather than the runner's login one: it is deleted
+      # with the runner, and nothing else on the machine can be signed with it.
+      - name: Import the signing certificate
+        env:
+          CERT: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_P12 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+
+          echo "$CERT" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain"
+          security list-keychain -d user -s "$keychain" login.keychain-db
+          rm -f "$RUNNER_TEMP/certificate.p12"
+
+          profiles=~/Library/MobileDevice/Provisioning\ Profiles
+          mkdir -p "$profiles"
+          echo "$PROFILE" | base64 --decode > "$profiles/soundsible.mobileprovision"
+
+      - name: Install build tools
+        run: brew install xcodegen xcbeautify
+
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: xcodegen generate --spec project.yml
+
+      # Signing is turned back on here rather than in project.yml. The default
+      # build is unsigned on purpose — that is what sideloading needs — and the
+      # override lives with the one workflow that has a certificate.
+      - name: Build the signed archive
+        working-directory: ios
+        env:
+          TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project Soundsible.xcodeproj \
+            -scheme Soundsible \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Soundsible.xcarchive \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            | xcbeautify --renderer github-actions
+
+      - name: Export for App Store Connect
+        working-directory: ios
+        env:
+          TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          # The plist carries $(APPLE_TEAM_ID) as a placeholder so the file can
+          # live in the repository without naming the team.
+          sed "s|\$(APPLE_TEAM_ID)|$TEAM_ID|" \
+            exportOptions/app-store-connect.plist > "$RUNNER_TEMP/export.plist"
+
+          xcodebuild -exportArchive \
+            -archivePath build/Soundsible.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
+            -exportPath build/export \
+            | xcbeautify --renderer github-actions
+          ls -lh build/export
+
+      - name: Upload to App Store Connect
+        if: inputs.upload
+        working-directory: ios
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          # `altool` looks for the key by name in this exact directory; there is
+          # no flag to point it somewhere else.
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$PRIVATE_KEY" | base64 --decode \
+            > ~/".appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8"
+
+          ipa="$(find build/export -name '*.ipa' -maxdepth 1 | head -1)"
+          test -n "$ipa" || { echo "::error::No IPA was exported"; exit 1; }
+
+          xcrun altool --upload-app -f "$ipa" -t ios \
+            --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+
+          rm -f ~/".appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soundsible-ios-signed
+          path: ios/build/export/*.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: What happens next
+        run: |
+          cat <<'EOF'
+          The build is signed and, if you asked for it, uploaded. The rest is
+          Apple's and cannot be scripted:
+
+            1. App Store Connect > your app > the version > App Review
+               Information > Review Type > Notarization. Save.
+            2. Add for Review, then Submit to App Review.
+            3. On acceptance Apple generates the Alternative Distribution
+               Package on its own.
+            4. Collect the ADP through AltStore PAL's REST API and host it with
+               its directory structure and file hashes intact — a flat release
+               asset will not do; GitHub Pages will.
+            5. Regenerate the PAL source:
+
+               python3 scripts/altstore_source.py \
+                 --ipa <the signed ipa> \
+                 --marketplace-id "$SOUNDSIBLE_MARKETPLACE_ID" \
+                 --download-url "$SOUNDSIBLE_ADP_BASE_URL" \
+                 --out apps-pal.json
+
+          docs/IOS.md has the whole runbook.
+          EOF
