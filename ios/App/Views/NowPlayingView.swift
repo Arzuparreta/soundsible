@@ -1,5 +1,23 @@
+import AVKit
 import SoundsibleKit
 import SwiftUI
+
+/// The system output picker — AirPlay 2 speakers, the car, headphones.
+///
+/// It is `AVRoutePickerView` and nothing else: routing is the system's to
+/// decide, and an app that builds its own list gets one that is wrong the moment
+/// a speaker appears.
+struct RoutePickerButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.prioritizesVideoDevices = false
+        picker.tintColor = .secondaryLabel
+        picker.activeTintColor = .tintColor
+        return picker
+    }
+
+    func updateUIView(_ view: AVRoutePickerView, context: Context) {}
+}
 
 struct NowPlayingView: View {
     @EnvironmentObject private var player: PlayerModel
@@ -54,6 +72,9 @@ struct NowPlayingView: View {
                     Image(systemName: player.repeatMode == .one ? "repeat.1" : "repeat")
                         .foregroundStyle(player.repeatMode == .off ? .secondary : Color.accentColor)
                 }
+                RoutePickerButton()
+                    .frame(width: 28, height: 28)
+                    .accessibilityLabel("Choose where to play")
             }
             .buttonStyle(.plain)
             .font(.title3)
