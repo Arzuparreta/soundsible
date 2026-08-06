@@ -144,7 +144,10 @@ struct QRScannerView: UIViewControllerRepresentable {
 
     final class ScannerController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
         var onScan: ((String) -> Void)?
-        private let session = AVCaptureSession()
+        private nonisolated(unsafe) let session = AVCaptureSession()
+        /// Serialises start and stop. `startRunning` blocks for long enough
+        /// to trip the watchdog if it is called on the main thread.
+        private let sessionQueue = DispatchQueue(label: "com.soundsible.player.capture")
         private var preview: AVCaptureVideoPreviewLayer?
         private var hasReported = false
 
@@ -170,9 +173,7 @@ struct QRScannerView: UIViewControllerRepresentable {
             view.layer.addSublayer(layer)
             preview = layer
 
-            // Starting a capture session blocks; doing it on the main thread is
-            // a watchdog kill waiting to happen.
-            Task.detached { [session] in
+            sessionQueue.async { [session] in
                 session.startRunning()
             }
         }
@@ -184,8 +185,9 @@ struct QRScannerView: UIViewControllerRepresentable {
 
         override func viewDidDisappear(_ animated: Bool) {
             super.viewDidDisappear(animated)
-            let session = self.session
-            Task.detached { session.stopRunning() }
+            sessionQueue.async { [session] in
+                session.stopRunning()
+            }
         }
 
         func metadataOutput(

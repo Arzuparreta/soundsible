@@ -29,7 +29,9 @@ final class DualDeckPlayer {
 
     private let players: [AVPlayer]
     private var activeIndex = 0
-    private var timeObservers: [Any?] = [nil, nil]
+    // Opaque tokens from AVFoundation, removed in `deinit` — which runs only
+    // once nothing else can reach this object, so there is nothing to race.
+    private nonisolated(unsafe) var timeObservers: [Any?] = [nil, nil]
     private var observerTasks: [Task<Void, Never>] = []
     private var fade: Task<Void, Never>?
     private let log = Logger(subsystem: "com.soundsible.player", category: "decks")
