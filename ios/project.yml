@@ -1,0 +1,106 @@
+# The Xcode project is generated, never committed.
+#
+# Nobody on this project owns a Mac, so an `.xcodeproj` — a binary-ish blob that
+# only Xcode edits comfortably — would be a file no one could change. XcodeGen
+# turns this YAML into one on the macOS runner at build time, which keeps the
+# whole app editable from Linux.
+name: Soundsible
+
+options:
+  bundleIdPrefix: com.soundsible
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  # The generated project is a build artefact; nothing should ever diff it.
+  generateEmptyDirectories: false
+
+packages:
+  SoundsibleKit:
+    path: SoundsibleKit
+
+targets:
+  Soundsible:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: SoundsibleKit
+        product: SoundsibleKit
+    # Declared so XcodeGen writes a *shared* scheme. `xcodebuild -scheme` on the
+    # runner needs one to exist, and an unshared scheme lives in a user data
+    # directory that generation never creates.
+    scheme:
+      testTargets: []
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Soundsible
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+
+        # The whole point of the app: keep sounding once the screen locks.
+        UIBackgroundModes:
+          - audio
+
+        # A Soundsible normally lives on the same LAN, and iOS will not let an
+        # app touch a local address without saying why.
+        NSLocalNetworkUsageDescription: >-
+          Soundsible connects to the music server running on your own network.
+        NSBonjourServices:
+          - _soundsible._tcp
+        NSCameraUsageDescription: >-
+          Scanning the pairing QR code your Soundsible shows.
+
+        # A self-hosted engine on a LAN is plain HTTP and has no certificate any
+        # public authority would sign. `NSAllowsLocalNetworking` permits exactly
+        # that and nothing else: arbitrary cleartext to the open internet stays
+        # blocked, and a server reached over Tailscale or a funnel is HTTPS
+        # anyway.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+
+        ITSAppUsesNonExemptEncryption: false
+
+        # Deliberately absent: UIDesignRequiresCompatibility. Built against the
+        # iOS 26 SDK the app picks up Liquid Glass, which is what it should look
+        # like on the OS it targets. Apple removes that opt-out in Xcode 27
+        # anyway.
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.soundsible.player
+        # Kept in step with shared/version.py by scripts/version_sync.py.
+        MARKETING_VERSION: "0.2.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # iPhone and iPad.
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+        SWIFT_VERSION: "6.0"
+        # Xcode 26's defaults for a new project, and they earn their place here.
+        # Isolating the app target to the main actor is what a UI target
+        # actually is, and it turns "why is this not Sendable" into a question
+        # that only comes up at the boundaries that genuinely leave the main
+        # thread — the stream loader, the artwork cache, the API actor.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        SWIFT_STRICT_CONCURRENCY: complete
+
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        # This app is distributed unsigned and re-signed on the device by
+        # AltStore or SideStore with the installing person's own Apple ID.
+        # There is no certificate on the build machine and there must not be.
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGN_ENTITLEMENTS: ""

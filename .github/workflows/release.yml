@@ -40,8 +40,47 @@ jobs:
       attestations: write
     uses: ./.github/workflows/desktop-build.yml
 
+  # The iPhone app is not on the App Store — guideline 5.2.3 forbids downloading
+  # media from YouTube — so a release *is* its distribution channel. The IPA and
+  # the AltStore source that points at it ship with every tag.
+  ios:
+    needs: verify
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ios-build.yml
+
+  altstore_source:
+    needs: ios
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: soundsible-ios-ipa
+          path: ios-artifact
+
+      # `releases/latest/download/apps.json` is a stable URL that always points
+      # at the newest release, which is exactly what an AltStore source has to
+      # be. Publishing it here rather than in the website repo keeps one number
+      # in one place.
+      - name: Build the AltStore source
+        run: |
+          set -euo pipefail
+          python3 scripts/altstore_source.py \
+            --ipa ios-artifact/Soundsible.ipa \
+            --version "${GITHUB_REF_NAME#v}" \
+            --out apps.json
+          cat apps.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soundsible-altstore-source
+          path: apps.json
+          if-no-files-found: error
+
   publish:
-    needs: installers
+    needs: [installers, altstore_source]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -91,6 +130,17 @@ jobs:
 
             **Desktop app (beta)** — one machine, no terminal. Installers for
             Linux and Windows are attached below.
+
+            **iPhone and iPad** — `Soundsible.ipa` is attached. Soundsible is
+            not on the App Store, so it installs through
+            [SideStore](https://sidestore.io) or AltStore. Add this source:
+
+            ```
+            https://github.com/${{ github.repository }}/releases/latest/download/apps.json
+            ```
+
+            Pairing, offline downloads and what works in the car:
+            [iOS](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/IOS.md).
 
             ---
         env:

@@ -77,6 +77,13 @@ TARGETS: tuple[Target, ...] = (
             r'(?m)^(name = "soundsible-desktop"\nversion = ")([^"]+)(")',
         ),
     ),
+    # The iOS bundle's CFBundleShortVersionString. Xcode resolves it from
+    # MARKETING_VERSION at build time and cannot read Python either, so it is
+    # copied here for the same reason the desktop manifests are.
+    Target(
+        REPO_ROOT / "ios" / "project.yml",
+        re.compile(r'^(        MARKETING_VERSION: ")([^"]+)(")', re.MULTILINE),
+    ),
 )
 
 

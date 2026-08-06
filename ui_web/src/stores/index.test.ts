@@ -242,12 +242,21 @@ async function loadStore(
     coverUrl: (id: string) => `/cover/${id}`,
     bustCovers: vi.fn(),
   }));
+  // Held in the closure rather than built inside the factory, because the
+  // factory runs again for every module-registry generation. A test that
+  // re-imports `../lib/toast` to assert on it can otherwise get a *different*
+  // `vi.fn()` from the one the store captured, and then a toast that was raised
+  // looks like a toast that never happened. `toastAction` was always done this
+  // way; the rest now match.
   const toastAction = vi.fn();
+  const toastError = vi.fn();
+  const toastSuccess = vi.fn();
+  const toastInfo = vi.fn();
   vi.doMock('../lib/toast', () => ({
     toast: {
-      success: vi.fn(),
-      error: vi.fn(),
-      info: vi.fn(),
+      success: toastSuccess,
+      error: toastError,
+      info: toastInfo,
       loading: vi.fn(() => ({ update: vi.fn(), dismiss: vi.fn() })),
       action: toastAction,
     },
@@ -275,7 +284,19 @@ async function loadStore(
     positionSec: 0,
     ...failure,
   });
-  return { ...store, api, audioService, deck, fireDeckEvent, fireSocketEvent, fireGraphFailure, toastAction };
+  return {
+    ...store,
+    api,
+    audioService,
+    deck,
+    fireDeckEvent,
+    fireSocketEvent,
+    fireGraphFailure,
+    toastAction,
+    toastError,
+    toastSuccess,
+    toastInfo,
+  };
 }
 
 beforeEach(() => {
@@ -329,7 +350,7 @@ describe('Solid store library and playback resume', () => {
   });
 
   it('does not report a failed same-device preload as a playback failure on boot', async () => {
-    const { initStore, state, deck, fireDeckEvent, audioService } = await loadStore({
+    const { initStore, state, deck, fireDeckEvent, audioService, toastError } = await loadStore({
       getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
       getPlaybackState: vi.fn().mockResolvedValue({
         device_id: 'dev1',
@@ -341,7 +362,6 @@ describe('Solid store library and playback resume', () => {
         updated_at: Date.now() / 1000,
       }),
     });
-    const { toast } = await import('../lib/toast');
 
     initStore();
     await flush();
@@ -352,7 +372,7 @@ describe('Solid store library and playback resume', () => {
 
     expect(state.playback.phase).toBe('paused');
     expect(state.playback.loadError).toBe(false);
-    expect(toast.error).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it('leaves a restored session alone when the mixing graph is rebuilt under it', async () => {
@@ -362,7 +382,7 @@ describe('Solid store library and playback resume', () => {
     // so there is nothing to offer to carry on with. Saying otherwise invents an
     // interruption, and the offer is taken up by the next tap anywhere on the
     // page: a paused song that starts on its own.
-    const { initStore, state, audioService, fireGraphFailure } = await loadStore({
+    const { initStore, state, audioService, fireGraphFailure, toastError } = await loadStore({
       getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
       getPlaybackState: vi.fn().mockResolvedValue({
         device_id: 'dev1',
@@ -374,7 +394,6 @@ describe('Solid store library and playback resume', () => {
         updated_at: Date.now() / 1000,
       }),
     });
-    const { toast } = await import('../lib/toast');
 
     initStore();
     await flush();
@@ -383,7 +402,7 @@ describe('Solid store library and playback resume', () => {
     fireGraphFailure({ reason: 'context_stalled', wasPlaying: false, resumed: false });
 
     expect(state.playback.needsGesture).toBe(false);
-    expect(toast.error).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
 
     window.dispatchEvent(new Event('pointerdown'));
     expect(audioService.resume).not.toHaveBeenCalled();
@@ -391,7 +410,7 @@ describe('Solid store library and playback resume', () => {
   });
 
   it('offers to carry on when music that was sounding lost its graph', async () => {
-    const { initStore, state, audioService, fireGraphFailure } = await loadStore({
+    const { initStore, state, audioService, fireGraphFailure, toastError } = await loadStore({
       getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
       getPlaybackState: vi.fn().mockResolvedValue({
         device_id: 'dev1',
@@ -403,7 +422,6 @@ describe('Solid store library and playback resume', () => {
         updated_at: Date.now() / 1000,
       }),
     });
-    const { toast } = await import('../lib/toast');
 
     initStore();
     await flush();
@@ -411,7 +429,7 @@ describe('Solid store library and playback resume', () => {
     fireGraphFailure({ reason: 'silent_output', wasPlaying: true, resumed: false });
 
     expect(state.playback.needsGesture).toBe(true);
-    expect(toast.error).toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalled();
 
     // Any gesture is the one the platform was waiting for.
     window.dispatchEvent(new Event('pointerdown'));
