@@ -21,3 +21,14 @@
   from the boot sequence and on every page render, so the running engine is
   already serving the current sources. Local checks are `npm test`; CI's
   `ui_build` job covers the bundle.
+- **The AltStore PAL path has never been executed.** `.github/workflows/ios-altstore-pal.yml`,
+  `ios/exportOptions/app-store-connect.plist` and the `--marketplace-id` half of
+  `scripts/altstore_source.py` were written from documentation, not from a
+  working run: distributing through an EU marketplace needs a paid Apple
+  Developer account and there is no account. Passing CI proves nothing about
+  them — nothing in CI can run them. Do not describe that path as working, do
+  not build on it as though its details were confirmed, and keep the "not
+  verified" notices in place until somebody has actually shipped through it.
+  `docs/IOS.md` records which line came from which document, and which ones are
+  outright guesses. The sideloading path (`ios-build.yml`) *is* verified: it
+  builds a real IPA on every run.

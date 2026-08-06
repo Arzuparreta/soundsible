@@ -9,6 +9,14 @@ subscribes to; it lists the app and every version it can install.
 The source is published as a release asset rather than a page in the website
 repo, because ``releases/latest/download/apps.json`` is already a stable URL that
 always points at the newest release. One less repository to keep in step.
+
+The sideloading half of this is exercised on every release. The AltStore PAL
+half — anything reached through ``--marketplace-id`` — has never produced a
+source that a real client installed from, because that needs a paid Apple
+Developer account and there is no account. Its field names come from AltStore's
+schema documentation read on 2026-08-06
+(https://faq.altstore.io/developers/make-a-source); see
+``.github/workflows/ios-altstore-pal.yml`` for the rest of the provenance.
 """
 
 from __future__ import annotations
@@ -41,11 +49,33 @@ service.\
 """
 
 
-def build_source(*, version: str, ipa_bytes: int, released_on: str) -> dict:
-    """Return the source document for one released version."""
-    download_url = (
-        f"https://github.com/{REPOSITORY}/releases/download/v{version}/Soundsible.ipa"
-    )
+def build_source(
+    *,
+    version: str,
+    ipa_bytes: int,
+    released_on: str,
+    marketplace_id: str | None = None,
+    download_url: str | None = None,
+) -> dict:
+    """Return the source document for one released version.
+
+    Two shapes come out of here, and the difference is one field.
+
+    Without ``marketplace_id`` this is the free sideloading source: the download
+    is the unsigned IPA from the GitHub release, and SideStore or AltStore
+    Classic re-signs it on the device with the installing person's own Apple ID.
+
+    With ``marketplace_id`` it is the AltStore PAL source. PAL installs through
+    MarketplaceKit, which needs the identifier Apple assigns once the app is
+    registered for alternative distribution, and the download is the notarized
+    Alternative Distribution Package rather than an IPA. The two are separate
+    documents on purpose: a sideloading client has no use for a marketplace id,
+    and PAL cannot install an unsigned IPA.
+    """
+    if download_url is None:
+        download_url = (
+            f"https://github.com/{REPOSITORY}/releases/download/v{version}/Soundsible.ipa"
+        )
     raw = f"https://raw.githubusercontent.com/{REPOSITORY}/main"
 
     return {
@@ -62,6 +92,9 @@ def build_source(*, version: str, ipa_bytes: int, released_on: str) -> dict:
             {
                 "name": "Soundsible",
                 "bundleIdentifier": BUNDLE_ID,
+                # Required by AltStore PAL for a notarized app, and meaningless
+                # to a sideloading client, so it only appears when there is one.
+                **({"marketplaceID": marketplace_id} if marketplace_id else {}),
                 "developerName": "Arzuparreta",
                 "subtitle": "Play your own music library anywhere.",
                 "localizedDescription": DESCRIPTION,
@@ -126,8 +159,30 @@ def main() -> int:
         dest="released_on",
         help="Release date as YYYY-MM-DD. Defaults to today.",
     )
+    parser.add_argument(
+        "--marketplace-id",
+        help=(
+            "Apple's marketplace identifier for the app. Supplying it switches "
+            "the output to the AltStore PAL source; leave it off for the free "
+            "sideloading source."
+        ),
+    )
+    parser.add_argument(
+        "--download-url",
+        help=(
+            "Override the download location. Needed for AltStore PAL, whose "
+            "Alternative Distribution Package is hosted as a directory tree "
+            "rather than as a release asset."
+        ),
+    )
     parser.add_argument("--out", type=Path, required=True, help="Where to write apps.json.")
     args = parser.parse_args()
+
+    if args.download_url and not args.marketplace_id:
+        raise SystemExit(
+            "--download-url is only meaningful with --marketplace-id. The "
+            "sideloading source always points at the release asset."
+        )
 
     if not args.ipa.is_file():
         raise SystemExit(f"{args.ipa}: no such file. Build the app first.")
@@ -143,9 +198,15 @@ def main() -> int:
         version=version,
         ipa_bytes=args.ipa.stat().st_size,
         released_on=args.released_on or date.today().isoformat(),
+        marketplace_id=args.marketplace_id,
+        download_url=args.download_url,
     )
     args.out.write_text(json.dumps(source, indent=2) + "\n", encoding="utf-8")
-    print(f"{args.out}: Soundsible {version} ({source['apps'][0]['versions'][0]['size']} bytes)")
+    variant = "AltStore PAL" if args.marketplace_id else "sideloading"
+    print(
+        f"{args.out}: Soundsible {version} "
+        f"({source['apps'][0]['versions'][0]['size']} bytes, {variant})"
+    )
     return 0
 
 

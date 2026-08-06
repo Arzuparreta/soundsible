@@ -94,3 +94,43 @@ def test_source_is_json_serialisable():
     # It is written with json.dumps; anything unserialisable fails at release
     # time, which is the worst moment to find out.
     assert json.loads(json.dumps(_source()))["apps"][0]["name"] == "Soundsible"
+
+
+def test_sideloading_source_carries_no_marketplace_id():
+    # A sideloading client re-signs on the device and has no marketplace to
+    # install through. The field would be noise at best.
+    assert "marketplaceID" not in _source()["apps"][0]
+
+
+def test_pal_source_carries_the_marketplace_id():
+    source = build_source(
+        version="0.2.0",
+        ipa_bytes=1,
+        released_on="2026-08-06",
+        marketplace_id="6741234567",
+    )
+    assert source["apps"][0]["marketplaceID"] == "6741234567"
+
+
+def test_pal_source_can_point_at_the_hosted_package():
+    # AltStore PAL installs an Alternative Distribution Package, which is a
+    # directory tree on a host of our own, not a release asset.
+    source = build_source(
+        version="0.2.0",
+        ipa_bytes=1,
+        released_on="2026-08-06",
+        marketplace_id="6741234567",
+        download_url="https://arzuparreta.github.io/soundsible.github.io/ios/pal/",
+    )
+    entry = source["apps"][0]["versions"][0]
+    assert entry["downloadURL"] == "https://arzuparreta.github.io/soundsible.github.io/ios/pal/"
+
+
+def test_bundle_identifier_is_the_same_on_both_routes():
+    # Same app, two ways in. A different bundle id would make PAL install a
+    # second copy alongside the sideloaded one.
+    sideload = _source()["apps"][0]
+    pal = build_source(
+        version="0.2.0", ipa_bytes=1, released_on="2026-08-06", marketplace_id="674"
+    )["apps"][0]
+    assert sideload["bundleIdentifier"] == pal["bundleIdentifier"] == BUNDLE_ID
