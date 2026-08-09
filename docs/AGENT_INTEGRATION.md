@@ -283,6 +283,8 @@ Useful library routes:
 |---|---|---|
 | `GET` | `/api/library` | Full library metadata |
 | `GET` | `/api/library/search?q=...` | Search local library |
+| `POST` | `/api/library/scan` | Start an asynchronous scan of configured music roots; optional body `{"path":"..."}` must stay inside one |
+| `GET` | `/api/library/scan` | Current or last scan state and counters |
 | `GET` | `/api/library/favourites` | Favorite track IDs (only the ones you own a file for) |
 | `GET` | `/api/library/favourites/entries` | All saved songs, downloaded or not: `{"version":2,"favourites":[{"keys":[...],"title","artist",...}]}` |
 | `POST` | `/api/library/favourites/toggle` | Toggle favorite, body `{"track_id":"..."}` or `{"favourite":{"keys":["yt:<video_id>"],"title":"...","artist":"..."}}` |
@@ -291,6 +293,12 @@ Useful library routes:
 | `DELETE` | `/api/library/playlists/<name>/tracks/<track_id>` | Remove track from playlist |
 
 Mutation routes may require admin authorization or trusted LAN/Tailscale access.
+
+Folder scans require `library:write`. A successful start returns HTTP `202`;
+poll the `GET` route until `state` is `completed` or `failed`. Repeating the
+start during `queued` or `scanning` returns the same `scan_id`. Scans are
+additive: use the separate purge route when missing source files should be
+removed from the catalog.
 
 ## Playback Queue
 

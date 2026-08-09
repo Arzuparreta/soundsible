@@ -1,13 +1,60 @@
 """
-Resolve local file path for a track at read time from current OUTPUT_DIR (Settings).
-No storage path is persisted; resolution uses only track identity (id, file_hash, format)
-and the configured output directory. Architecturally aligned with preview stream
-(resolve at read via yt-dlp): single source of truth at request time.
+Resolve managed and approved scan-backed local audio paths at read time.
 """
 
 import os
+import threading
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, Iterable
+
+
+_registered_scan_roots: set[Path] = set()
+_scan_roots_lock = threading.RLock()
+
+
+def register_scan_roots(roots: Iterable[str | Path]) -> None:
+    """Remember configured roots for safe scan-backed playback in this process."""
+    resolved: set[Path] = set()
+    for root in roots:
+        try:
+            resolved.add(Path(root).expanduser().resolve())
+        except (OSError, RuntimeError):
+            continue
+    with _scan_roots_lock:
+        _registered_scan_roots.clear()
+        _registered_scan_roots.update(resolved)
+
+
+def configured_scan_roots(config: Any = None) -> list[Path]:
+    """Return the current runtime root plus configured watcher roots."""
+    from shared.runtime import get_music_dir
+
+    with _scan_roots_lock:
+        roots = set(_registered_scan_roots)
+    try:
+        roots.add(Path(get_music_dir()).expanduser().resolve())
+    except (OSError, RuntimeError):
+        pass
+    for raw in getattr(config, "watch_folders", None) or []:
+        try:
+            roots.add(Path(raw).expanduser().resolve())
+        except (OSError, RuntimeError):
+            continue
+    return sorted(roots, key=str)
+
+
+def path_within_roots(path: str | Path, roots: Iterable[str | Path]) -> bool:
+    try:
+        candidate = Path(path).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    for root in roots:
+        try:
+            candidate.relative_to(Path(root).expanduser().resolve(strict=True))
+            return True
+        except (OSError, RuntimeError, ValueError):
+            continue
+    return False
 
 
 def track_storage_key(track: Any) -> str:
@@ -19,8 +66,8 @@ def track_storage_key(track: Any) -> str:
 
 def resolve_local_track_path(track: Any) -> Optional[str]:
     """
-    Resolve a local audio file path for a track using current OUTPUT_DIR only.
-    Does not use track.local_path or any stored path.
+    Resolve the managed content-addressed path first, then an approved scanned
+    source path stored only in this machine's SQLite database.
     Returns the first path that exists, or None.
     """
     from shared.app_config import get_output_dir
@@ -49,4 +96,17 @@ def resolve_local_track_path(track: Any) -> Optional[str]:
                 return candidate
         except OSError:
             continue
+    scanned = getattr(track, "local_path", None)
+    if scanned and path_within_roots(scanned, configured_scan_roots()):
+        return str(Path(scanned).expanduser().resolve())
     return None
+
+
+def is_scanned_track_path(track: Any, resolved_path: str | Path) -> bool:
+    scanned = getattr(track, "local_path", None)
+    if not scanned:
+        return False
+    try:
+        return Path(scanned).expanduser().resolve() == Path(resolved_path).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return False

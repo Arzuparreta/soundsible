@@ -30,7 +30,7 @@ from typing import Any, Callable, Optional
 from flask import Blueprint, Response, request, send_file, stream_with_context
 
 from shared.hardening import rate_limit_allows
-from shared.path_resolver import resolve_local_track_path
+from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
 from shared.range_stream import bound_open_range
 from shared.security import is_safe_path
 from shared.subsonic import serialize, transcode
@@ -360,14 +360,32 @@ def get_user():
 
 @_endpoint("getScanStatus")
 def get_scan_status():
-    return {"scanStatus": {"scanning": False, "count": len(getattr(_library().metadata, "tracks", []) or [])}}
+    from shared.api.library_scan import library_scan_service
+    from shared.user_context import require_user_id
+
+    status = library_scan_service.status(require_user_id())
+    active = status["state"] in {"queued", "scanning"}
+    count = status["processed"] if active else len(getattr(_library().metadata, "tracks", []) or [])
+    return {"scanStatus": {"scanning": active, "count": count}}
 
 
 @_endpoint("startScan")
 def start_scan():
+    from shared.api.library_scan import library_scan_service
+    from shared.user_context import require_user_id
+
     lib = _library()
-    lib.sync_library()
-    return {"scanStatus": {"scanning": False, "count": len(getattr(lib.metadata, "tracks", []) or [])}}
+    try:
+        roots = library_scan_service.resolve_roots(lib)
+    except ValueError as exc:
+        raise SubsonicError(ERR_GENERIC, str(exc)) from exc
+    status = library_scan_service.start(require_user_id(), roots)
+    return {
+        "scanStatus": {
+            "scanning": status["state"] in {"queued", "scanning"},
+            "count": status["processed"],
+        }
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -624,7 +642,11 @@ def _send_original(track, path: str) -> Response:
         duration_sec=getattr(track, "duration", None),
     )
     response = send_file(path, mimetype=mimetype, conditional=True)
-    response.headers["Cache-Control"] = "private, max-age=86400"
+    response.headers["Cache-Control"] = (
+        "private, no-cache"
+        if is_scanned_track_path(track, path)
+        else "private, max-age=86400"
+    )
     return response
 
 
@@ -671,7 +693,11 @@ def download():
     track = _track_or_404(_required("id"))
     path = _playable_path(track)
     response = send_file(path, mimetype="application/octet-stream", conditional=True, as_attachment=True)
-    response.headers["Cache-Control"] = "private, max-age=86400"
+    response.headers["Cache-Control"] = (
+        "private, no-cache"
+        if is_scanned_track_path(track, path)
+        else "private, max-age=86400"
+    )
     return response
 
 

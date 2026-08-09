@@ -24,6 +24,20 @@ export interface SubsonicAccess {
   last_client: string | null;
 }
 
+export interface LibraryScanStatus {
+  scan_id: string | null;
+  state: 'idle' | 'queued' | 'scanning' | 'completed' | 'failed';
+  discovered: number;
+  processed: number;
+  added: number;
+  updated: number;
+  unchanged: number;
+  failed: number;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+}
+
 export interface DownloadItem {
   source_type: string;
   song_str: string;
@@ -665,9 +679,15 @@ export const api = {
       method: 'POST',
       body: { favourite },
     }),
-  /** Trigger a server-side rescan of the library files. */
-  rescanLibrary: () =>
-    request<{ status?: string }>('/api/library/sync', { method: 'POST', timeoutMs: 60000 }),
+  /** Start and observe a real server-side scan of the configured music roots. */
+  startLibraryScan: (path?: string) =>
+    request<LibraryScanStatus>('/api/library/scan', {
+      method: 'POST',
+      body: path ? { path } : {},
+      timeoutMs: 15000,
+    }),
+  getLibraryScan: () =>
+    request<LibraryScanStatus>(`/api/library/scan?t=${Date.now()}`, { timeoutMs: 15000 }),
   /** Delete a track from the library (and its file on disk). */
   deleteTrack: (id: string) =>
     request<{ status?: string }>(`/api/library/tracks/${encodeURIComponent(id)}`, {

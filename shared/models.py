@@ -76,6 +76,9 @@ class Track:
     is_compilation: bool = False
     is_local: bool = False
     local_path: Optional[str] = None
+    # Machine-local fingerprint for incremental folder scans. Like local_path,
+    # this is canonical only in SQLite and never belongs in portable exports.
+    local_mtime_ns: Optional[int] = None
     musicbrainz_id: Optional[str] = None
     isrc: Optional[str] = None
     cover_source: Optional[str] = None
@@ -307,10 +310,18 @@ class LibraryMetadata:
         Returns:
             JSON string representation
         """
-        # Note: Omit local_path when persisting; path is resolved at read from output_dir.
+        # Machine-local scan locations/fingerprints must never travel to another
+        # installation through library.json.
         data = {
             "version": self.version,
-            "tracks": [{k: v for k, v in track.to_dict().items() if k != "local_path"} for track in self.tracks],
+            "tracks": [
+                {
+                    k: v
+                    for k, v in track.to_dict().items()
+                    if k not in {"local_path", "local_mtime_ns"}
+                }
+                for track in self.tracks
+            ],
             "playlists": self.playlists,
             "settings": self.settings,
             "last_updated": self.last_updated,
@@ -323,9 +334,12 @@ class LibraryMetadata:
     def from_dict(cls, data: Dict[str, Any]) -> 'LibraryMetadata':
         """
         Deserialize library metadata from dictionary.
-        Ignore stored local_path; path is resolved at read from OUTPUT_DIR.
+        Ignore machine-local scan fields in portable metadata.
         """
-        tracks = [Track.from_dict({**t, "local_path": None}) for t in data.get("tracks", [])]
+        tracks = [
+            Track.from_dict({**t, "local_path": None, "local_mtime_ns": None})
+            for t in data.get("tracks", [])
+        ]
         
         # Note: Handle migration from library_version (str) to version (int)
         raw_version = data.get("version")

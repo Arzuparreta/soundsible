@@ -1767,21 +1767,20 @@ def start_api(
                 admin_core = get_core()
                 if admin_core.library.config and admin_core.library.config.watch_folders:
                     from setup_tool.watcher import LibraryWatcher
+                    from shared.api.library_scan import library_scan_service
 
-                    def _load_canonical_library():
-                        admin_core.library.refresh_if_stale()
-                        if admin_core.library.metadata is None:
-                            admin_core.library.sync_library(silent=True)
-                        return admin_core.library.metadata
-
-                    def _save_canonical_library(metadata):
-                        admin_core.library.metadata = metadata
-                        return admin_core.library._save_metadata()
+                    def _scan_watched_path(_path):
+                        try:
+                            # Scan every configured root so events coalesced while
+                            # one job is active cannot strand a second folder.
+                            roots = library_scan_service.resolve_roots(admin_core.library)
+                            library_scan_service.start(_admin["id"], roots)
+                        except ValueError as exc:
+                            logger.warning("API: watcher ignored unsafe scan path: %s", exc)
 
                     api_observer = LibraryWatcher(
                         admin_core.library.config,
-                        library_loader=_load_canonical_library,
-                        library_saver=_save_canonical_library,
+                        scan_callback=_scan_watched_path,
                     )
                     api_observer.start()
                     logger.info("API: Music folder watcher started for the admin library.")

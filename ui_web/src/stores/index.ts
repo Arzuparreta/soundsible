@@ -6,6 +6,7 @@ import {
   type DjProfile,
   type DjRouteKind,
   type ListeningPlanItem,
+  type LibraryScanStatus,
   type RemotePlaybackState,
 } from '../lib/api';
 import {
@@ -3072,13 +3073,17 @@ export const actions = {
     api.clearDownloads().catch(() => setState('downloads', 'queue', prev));
   },
 
-  async rescanLibrary(): Promise<void> {
-    try {
-      await api.rescanLibrary();
-    } catch {
-      // Rescan may be unauthorized off trusted networks; fall through to a plain reload.
+  async rescanLibrary(): Promise<LibraryScanStatus> {
+    let status = await api.startLibraryScan();
+    while (status.state === 'queued' || status.state === 'scanning') {
+      await new Promise((resolve) => window.setTimeout(resolve, 750));
+      status = await api.getLibraryScan();
+    }
+    if (status.state === 'failed') {
+      throw new Error(status.error || 'Library scan failed');
     }
     await actions.syncLibrary();
+    return status;
   },
 
   // ── Playlists ──

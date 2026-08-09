@@ -7,12 +7,11 @@ import threading
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from setup_tool.scanner import LibraryScanner
 from shared.models import PlayerConfig
 
 class MusicFolderHandler(FileSystemEventHandler):
-    def __init__(self, scanner: LibraryScanner):
-        self.scanner = scanner
+    def __init__(self, scan_callback):
+        self.scan_callback = scan_callback
         self.debounce_timer = None
         self.debounce_delay = 5.0 # Note: Seconds to wait after last event before scanning
 
@@ -34,25 +33,23 @@ class MusicFolderHandler(FileSystemEventHandler):
             self.debounce_timer.cancel()
         
         def run_scan():
-            self.scanner.scan(str(path))
+            self.scan_callback(str(path))
             
         self.debounce_timer = threading.Timer(self.debounce_delay, run_scan)
         self.debounce_timer.start()
 
 class LibraryWatcher:
-    def __init__(self, config: PlayerConfig, *, library_loader=None, library_saver=None):
+    def __init__(self, config: PlayerConfig, *, scan_callback):
         self.config = config
-        self.scanner = LibraryScanner(
-            config,
-            library_loader=library_loader,
-            library_saver=library_saver,
-        )
         self.observer = Observer()
-        self.handler = MusicFolderHandler(self.scanner)
+        self.handler = MusicFolderHandler(scan_callback)
         self.started = False
 
     def start(self):
         """Start monitoring all configured folders."""
+        from shared.path_resolver import register_scan_roots
+
+        register_scan_roots(self.config.watch_folders)
         watched_count = 0
         for folder in self.config.watch_folders:
             path = Path(folder).expanduser().resolve()
