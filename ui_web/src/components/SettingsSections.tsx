@@ -16,6 +16,7 @@ import { PairedDevicesPanel } from './PairDevice';
 import { DisplayPreferences } from './DisplayPreferences';
 import { LosslessUpgrades } from './LosslessUpgrades';
 import { UsersPanel } from './UsersPanel';
+import { SubsonicAccessPanel } from './SubsonicAccessPanel';
 import {
   ActionRow,
   InputRow,
@@ -820,6 +821,31 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     content: () => <CommunitySection />,
   },
   {
+    id: 'subsonic',
+    title: () => t('subsonic.title'),
+    blurb: () => t('settings.blurb.subsonic'),
+    tone: 'info',
+    icon: () =>
+      svg(
+        <>
+          <path d="M4 12a8 8 0 0 1 8-8M4 12a8 8 0 0 0 8 8" />
+          <path d="M9 9.5v5M12 7.5v9M15 10.5v3M18 9v6" />
+        </>,
+      ),
+    keywords: () => [
+      t('subsonic.server'),
+      t('subsonic.username'),
+      t('subsonic.password'),
+      'Subsonic',
+      'OpenSubsonic',
+      'Symfonium',
+      'Amperfy',
+      'Feishin',
+      'DSub',
+    ],
+    content: () => <SubsonicAccessPanel />,
+  },
+  {
     id: 'about',
     title: () => t('settings.about'),
     blurb: () => t('settings.blurb.about'),
@@ -842,7 +868,7 @@ export const SETTINGS_GROUPS: { label: () => string; ids: string[] }[] = [
   { label: () => t('settings.group.preferences'), ids: ['appearance', 'accessibility', 'playback'] },
   {
     label: () => t('settings.group.system'),
-    ids: ['library', 'users', 'downloads', 'devices', 'community', 'about'],
+    ids: ['library', 'users', 'downloads', 'devices', 'subsonic', 'community', 'about'],
   },
 ];
 

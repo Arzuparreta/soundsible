@@ -50,7 +50,7 @@ JSON.
       unfindable. The providers that could settle it — Deezer, MusicBrainz —
       are already wired in for search, and `shared/resolution_confidence.py`
       already scores a pair.
-- [ ] OpenSubsonic API with on-the-fly transcoding
+- [x] OpenSubsonic API with on-the-fly transcoding — see [OpenSubsonic](OPENSUBSONIC.md)
 - [ ] Album, genre and year browsing in the player
 
 ### Join the open music web

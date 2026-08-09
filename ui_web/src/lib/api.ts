@@ -16,6 +16,14 @@ import type { PodcastSubscription, PodcastEpisode, PodcastSearchResult } from '.
 import type { DownloadQueueItem } from '../types/download';
 import type { PlaybackSessionSnapshot } from './playbackSession';
 
+export interface SubsonicAccess {
+  username: string;
+  configured: boolean;
+  created_at: string | null;
+  last_used_at: string | null;
+  last_client: string | null;
+}
+
 export interface DownloadItem {
   source_type: string;
   song_str: string;
@@ -1160,6 +1168,13 @@ export const api = {
       method: 'PATCH',
       body: { autoplay_enabled: enabled },
     }),
+  /** Whether this account can be reached by a Subsonic client, and when it last was. */
+  getSubsonicAccess: () => request<SubsonicAccess>('/api/auth/subsonic'),
+  /** Mint a credential. The password is in this response and nowhere else after it. */
+  createSubsonicAccess: () =>
+    request<SubsonicAccess & { password: string }>('/api/auth/subsonic', { method: 'POST' }),
+  revokeSubsonicAccess: () => request<SubsonicAccess>('/api/auth/subsonic', { method: 'DELETE' }),
+
   getDownloaderConfig: () =>
     request<{
       output_dir?: string;

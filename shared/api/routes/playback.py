@@ -10,7 +10,6 @@ from flask import Blueprint, request, jsonify, send_file, Response, stream_with_
 
 from shared import preview_cache
 from shared.api.memo import Memo
-from shared.constants import DEFAULT_CACHE_DIR
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import resolve_local_track_path
 from shared.range_stream import bound_open_range, requested_start
@@ -691,22 +690,11 @@ def get_track_cover(track_id):
     if not track:
         return jsonify({"error": "Track not found"}), 404
     path = lib.get_cover_url(track)
-    local_track_path = resolve_local_track_path(track) if not path else None
     if not path:
         try:
-            from setup_tool.audio import AudioProcessor
-            covers_dir = os.path.join(os.path.expanduser(DEFAULT_CACHE_DIR), "covers")
-            os.makedirs(covers_dir, exist_ok=True)
-            cover_path = os.path.join(covers_dir, f"{track.id}.jpg")
-            if not os.path.exists(cover_path):
-                cover_data = None
-                if local_track_path and not str(local_track_path).startswith("http"):
-                    cover_data = AudioProcessor.extract_cover_art(local_track_path)
-                if cover_data:
-                    with open(cover_path, "wb") as f:
-                        f.write(cover_data)
-            if os.path.exists(cover_path):
-                path = cover_path
+            from player.cover_manager import CoverFetchManager
+
+            path = CoverFetchManager.get_instance().extract_now(track, resolve_local_track_path(track))
         except Exception as e:
             logger.warning("[Cover] Failed for %s: %s", track_id, e)
     if path and os.path.exists(path):

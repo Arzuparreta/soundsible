@@ -77,3 +77,15 @@
   color: var(--ink-tertiary);
   font-variant-numeric: tabular-nums;
 }
+
+/* A credential shown once: readable enough to type off the screen, and
+   selectable so it can be copied by hand when the clipboard is unavailable. */
+.secret {
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  color: var(--ink-primary);
+  user-select: all;
+  word-break: break-all;
+}

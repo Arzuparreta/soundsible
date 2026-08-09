@@ -33,6 +33,16 @@ def restore_api_modules():
         for name in [m for m in list(sys.modules) if m.startswith("shared.api")]:
             del sys.modules[name]
         sys.modules.update(saved)
+        # `sys.modules` is not the only place a module lives. `import shared.api`
+        # reads the `api` attribute off the `shared` package, and the reload set
+        # that to the fresh object. Restoring only `sys.modules` leaves the two
+        # disagreeing: `monkeypatch.setattr("shared.api.x", …)` patches the entry
+        # in `sys.modules`, while `from shared.api import x` inside the code under
+        # test reads the attribute — and gets the unpatched one.
+        for name, module in saved.items():
+            parent, _, child = name.rpartition(".")
+            if parent in sys.modules:
+                setattr(sys.modules[parent], child, module)
 
 
 def _reload_api(monkeypatch, **env):
