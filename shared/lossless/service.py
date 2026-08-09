@@ -752,8 +752,8 @@ class LosslessUpgradeService:
                 try:
                     with user_context(user_id):
                         lib = get_user_core(user_id).library
-                        if not lib.metadata and lib.manifest_path.exists():
-                            lib._load_from_cache(lib.manifest_path)
+                        if not lib.metadata:
+                            lib.sync_library(silent=True)
                         target = lib.metadata.get_track_by_id(old_track.id) if lib.metadata else None
                         if not target:
                             continue
@@ -828,8 +828,8 @@ class LosslessUpgradeService:
         for account in list_users():
             with user_context(account["id"]):
                 lib = get_user_core(account["id"]).library
-                if not lib.metadata and lib.manifest_path.exists():
-                    lib._load_from_cache(lib.manifest_path)
+                if not lib.metadata:
+                    lib.sync_library(silent=True)
                 for track in list(lib.metadata.tracks if lib.metadata else []):
                     if track.id in seen:
                         continue

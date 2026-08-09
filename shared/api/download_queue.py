@@ -1,5 +1,5 @@
 """
-Download queue manager and library file watcher for the Station Engine.
+Download queue manager for the Station Engine.
 """
 
 import json
@@ -12,9 +12,7 @@ from pathlib import Path
 
 from shared.time_utils import utc_now_iso_z
 
-from watchdog.events import FileSystemEventHandler
-
-from shared.constants import DEFAULT_CONFIG_DIR, LIBRARY_METADATA_FILENAME, SourceType
+from shared.constants import DEFAULT_CONFIG_DIR, SourceType
 from shared.text_utils import sanitize_cli_message
 from shared.url_utils import normalize_youtube_url, extract_youtube_video_id
 from shared.user_context import current_user_id as _current_user_id
@@ -262,48 +260,6 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
         }, None
 
     return None, "Missing source_type/song_str"
-
-
-class LibraryFileWatcher(FileSystemEventHandler):
-    """Watches every user's library.json and pushes a refresh to its owner.
-
-    Manifests now live in per-account directories, so the watcher runs
-    recursively over the users root and maps the changed path back to whoever
-    owns it — an external edit to one library must not refresh anybody else's.
-    """
-
-    def __init__(self, socketio=None, on_user_library_changed=None):
-        self.socketio = socketio
-        self._on_user_library_changed = on_user_library_changed
-        self._last_sync: dict[str, float] = {}
-
-    def on_modified(self, event):
-        if not str(event.src_path).endswith(LIBRARY_METADATA_FILENAME):
-            return
-
-        from shared.user_context import user_id_from_path
-
-        user_id = user_id_from_path(Path(event.src_path))
-        if not user_id:
-            return
-
-        now = time.time()
-        if now - self._last_sync.get(user_id, 0) < 2:
-            return
-        self._last_sync[user_id] = now
-
-        logger.info(
-            "API: Detected external change to %s for user %s. Refreshing...",
-            LIBRARY_METADATA_FILENAME,
-            user_id,
-        )
-        if self._on_user_library_changed:
-            try:
-                self._on_user_library_changed(user_id)
-            except Exception as e:
-                logger.warning("API: library refresh for %s failed: %s", user_id, e)
-        if self.socketio:
-            self.socketio.emit("library_updated", room=_user_room(user_id))
 
 
 class DownloadQueueManager:

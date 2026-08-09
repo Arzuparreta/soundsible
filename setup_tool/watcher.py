@@ -40,11 +40,16 @@ class MusicFolderHandler(FileSystemEventHandler):
         self.debounce_timer.start()
 
 class LibraryWatcher:
-    def __init__(self, config: PlayerConfig):
+    def __init__(self, config: PlayerConfig, *, library_loader=None, library_saver=None):
         self.config = config
-        self.scanner = LibraryScanner(config)
+        self.scanner = LibraryScanner(
+            config,
+            library_loader=library_loader,
+            library_saver=library_saver,
+        )
         self.observer = Observer()
         self.handler = MusicFolderHandler(self.scanner)
+        self.started = False
 
     def start(self):
         """Start monitoring all configured folders."""
@@ -57,9 +62,12 @@ class LibraryWatcher:
         
         if watched_count > 0:
             self.observer.start()
+            self.started = True
         else:
             pass
 
     def stop(self):
-        self.observer.stop()
-        self.observer.join()
+        if self.started:
+            self.observer.stop()
+            self.observer.join()
+            self.started = False

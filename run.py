@@ -402,7 +402,6 @@ class SoundsibleLauncher:
         self.sync_status = "Idle"
         self._load_stats()
         self.watcher = None
-        self._start_watcher()
         
     def cleanup(self):
         """Force kill all child processes and clean up resources on exit."""
@@ -445,24 +444,6 @@ class SoundsibleLauncher:
             _kill_station_process(STATION_PORT)
         except Exception:
             pass
-
-    def _start_watcher(self):
-        """Initialize and start the background file watcher."""
-        if not _config_path().exists():
-            return
-        
-        def _run():
-            try:
-                from player.library import LibraryManager
-                from setup_tool.watcher import LibraryWatcher
-                lib = LibraryManager(silent=True)
-                if lib.config and lib.config.watch_folders:
-                    self.watcher = LibraryWatcher(lib.config)
-                    self.watcher.start()
-            except Exception:
-                pass
-
-        threading.Thread(target=_run, daemon=True).start()
 
     def _load_stats(self):
         """Load library stats from SQLite database."""
@@ -657,7 +638,6 @@ class SoundsibleLauncher:
             return
         
         self.start_background_sync()
-        self._start_watcher()
         
         if args.daemon:
             runtime = _build_runtime_config(args, desktop_defaults=False)

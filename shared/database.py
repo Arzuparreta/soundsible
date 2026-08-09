@@ -1,6 +1,6 @@
 """
 SQLite Database Manager for Soundsible.
-Handles local metadata storage, rapid searching, and manifest synchronization.
+Handles canonical library storage, rapid searching, and derived catalog data.
 """
 
 import sqlite3
@@ -75,6 +75,10 @@ _TRACKS_COLUMNS = {
     # projection forgot which was which, and a show came back out of the
     # database indistinguishable from an album.
     "media_kind": "TEXT",
+    "podcast_feed_id": "TEXT",
+    "podcast_episode_guid": "TEXT",
+    "podcast_rss_url": "TEXT",
+    "artists_json": "TEXT",
 }
 
 _YT_CACHE_COLUMNS = {
@@ -179,6 +183,10 @@ class DatabaseManager:
                 is_compilation BOOLEAN NOT NULL DEFAULT 0,
                 album_id TEXT,
                 media_kind TEXT,
+                podcast_feed_id TEXT,
+                podcast_episode_guid TEXT,
+                podcast_rss_url TEXT,
+                artists_json TEXT,
                 is_local BOOLEAN,
                 local_path TEXT,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -202,6 +210,44 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS library_info (
                 key TEXT PRIMARY KEY,
                 value TEXT
+            )
+        """)
+
+    @staticmethod
+    def _create_library_state_tables(conn):
+        """Persist the complete per-user library, not only its track index."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS library_state (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                canonical INTEGER NOT NULL DEFAULT 0,
+                revision INTEGER NOT NULL DEFAULT 0,
+                version INTEGER NOT NULL DEFAULT 1,
+                last_updated TEXT NOT NULL,
+                settings_json TEXT NOT NULL DEFAULT '{}',
+                podcast_subscriptions_json TEXT NOT NULL DEFAULT '[]',
+                podcast_episode_cache_json TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS playlists (
+                name TEXT PRIMARY KEY,
+                position INTEGER NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS library_tracks (
+                track_id TEXT PRIMARY KEY,
+                position INTEGER NOT NULL,
+                FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS playlist_tracks (
+                playlist_name TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                track_id TEXT NOT NULL,
+                PRIMARY KEY (playlist_name, position),
+                FOREIGN KEY (playlist_name) REFERENCES playlists(name) ON DELETE CASCADE
             )
         """)
 
@@ -476,9 +522,8 @@ class DatabaseManager:
 
     @staticmethod
     def _create_lyrics_table(conn):
-        """Lyrics cache keyed by track id. Kept separate from `tracks` because
-        that table is rebuilt from the library.json manifest on every sync;
-        lyrics are local-only and must survive re-syncs."""
+        """Lyrics cache keyed by track id. Kept separate from the canonical
+        library snapshot because lyrics are local-only and survive replaces."""
         conn.execute("""
             CREATE TABLE IF NOT EXISTS track_lyrics (
                 track_id TEXT PRIMARY KEY,
@@ -592,9 +637,14 @@ class DatabaseManager:
         data = dict(row) if isinstance(row, sqlite3.Row) else dict(zip(columns or [], row))
         data.pop("last_updated", None)
         data.pop("album_id", None)
+        stored_artists = data.pop("artists_json", None)
         data["local_path"] = None
+        data["compressed"] = bool(data.get("compressed"))
+        data["is_local"] = bool(data.get("is_local"))
+        data["metadata_modified_by_user"] = bool(data.get("metadata_modified_by_user"))
         data["audio_identity_verified"] = bool(data.get("audio_identity_verified"))
         data["is_compilation"] = bool(data.get("is_compilation"))
+        data["artists"] = json.loads(stored_artists) if stored_artists else None
         return Track.from_dict(data)
 
     @staticmethod
@@ -723,6 +773,7 @@ class DatabaseManager:
             conn.execute("BEGIN IMMEDIATE")
             self._create_tracks_table(conn)
             self._create_library_info_table(conn)
+            self._create_library_state_tables(conn)
             self._create_fts5_triggers(conn)
             self._migrate_tracks_columns(conn)
             self._create_youtube_cache_table(conn)
@@ -743,11 +794,8 @@ class DatabaseManager:
             conn.execute("ROLLBACK")
             raise e
 
-    def sync_from_metadata(self, metadata: LibraryMetadata):
-        """
-        Merge a LibraryMetadata object (from library.json) into the local DB.
-        Uses an atomic transaction for safety.
-        """
+    def replace_library(self, metadata: LibraryMetadata) -> int:
+        """Atomically replace the canonical library and return its revision."""
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -773,11 +821,12 @@ class DatabaseManager:
                             original_filename, compressed, file_size, bitrate, 
                             format, cover_art_key, year, genre, track_number, 
                             disc_number, disc_total, is_compilation, media_kind,
+                            podcast_feed_id, podcast_episode_guid, podcast_rss_url, artists_json,
                             is_local, local_path, musicbrainz_id, isrc, album_artist,
                             cover_source, metadata_modified_by_user, youtube_id,
                             audio_quality, audio_source, audio_source_url,
                             audio_license_url, audio_identity_verified
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -797,25 +846,31 @@ class DatabaseManager:
                             disc_total=excluded.disc_total,
                             is_compilation=excluded.is_compilation,
                             media_kind=excluded.media_kind,
-                            is_local=CASE WHEN excluded.is_local THEN 1 ELSE tracks.is_local END,
+                            podcast_feed_id=excluded.podcast_feed_id,
+                            podcast_episode_guid=excluded.podcast_episode_guid,
+                            podcast_rss_url=excluded.podcast_rss_url,
+                            artists_json=excluded.artists_json,
+                            is_local=excluded.is_local,
                             local_path=excluded.local_path,
-                            musicbrainz_id=COALESCE(excluded.musicbrainz_id, tracks.musicbrainz_id),
-                            isrc=COALESCE(excluded.isrc, tracks.isrc),
+                            musicbrainz_id=excluded.musicbrainz_id,
+                            isrc=excluded.isrc,
                             album_artist=excluded.album_artist,
-                            cover_source=COALESCE(excluded.cover_source, tracks.cover_source),
-                            metadata_modified_by_user=CASE WHEN excluded.metadata_modified_by_user THEN 1 ELSE tracks.metadata_modified_by_user END,
-                            youtube_id=COALESCE(excluded.youtube_id, tracks.youtube_id),
-                            audio_quality=COALESCE(excluded.audio_quality, tracks.audio_quality),
-                            audio_source=COALESCE(excluded.audio_source, tracks.audio_source),
-                            audio_source_url=COALESCE(excluded.audio_source_url, tracks.audio_source_url),
-                            audio_license_url=COALESCE(excluded.audio_license_url, tracks.audio_license_url),
-                            audio_identity_verified=CASE WHEN excluded.audio_identity_verified THEN 1 ELSE tracks.audio_identity_verified END
+                            cover_source=excluded.cover_source,
+                            metadata_modified_by_user=excluded.metadata_modified_by_user,
+                            youtube_id=excluded.youtube_id,
+                            audio_quality=excluded.audio_quality,
+                            audio_source=excluded.audio_source,
+                            audio_source_url=excluded.audio_source_url,
+                            audio_license_url=excluded.audio_license_url,
+                            audio_identity_verified=excluded.audio_identity_verified
                     """, (
                         track.id, track.title, track.artist, track.album,
                         track.duration, track.file_hash, track.original_filename, 
                         track.compressed, track.file_size, track.bitrate, track.format, 
                         track.cover_art_key, track.year, track.genre, track.track_number, 
                         track.disc_number, track.disc_total, track.is_compilation, track.media_kind,
+                        track.podcast_feed_id, track.podcast_episode_guid, track.podcast_rss_url,
+                        json.dumps(track.artists, ensure_ascii=False) if track.artists is not None else None,
                         track.is_local, None,
                         track.musicbrainz_id, track.isrc, track.album_artist,
                         track.cover_source, track.metadata_modified_by_user, track.youtube_id,
@@ -823,10 +878,110 @@ class DatabaseManager:
                         track.audio_license_url, track.audio_identity_verified
                     ))
                 self._replace_catalog_projection(conn, metadata.tracks)
+
+                conn.execute("DELETE FROM library_tracks")
+                conn.executemany(
+                    "INSERT INTO library_tracks (track_id, position) VALUES (?, ?)",
+                    ((track.id, position) for position, track in enumerate(metadata.tracks)),
+                )
+
+                conn.execute("DELETE FROM playlist_tracks")
+                conn.execute("DELETE FROM playlists")
+                playlist_map = metadata.playlists if isinstance(metadata.playlists, dict) else {}
+                for playlist_position, (name, track_ids) in enumerate(playlist_map.items()):
+                    conn.execute(
+                        "INSERT INTO playlists (name, position) VALUES (?, ?)",
+                        (name, playlist_position),
+                    )
+                    conn.executemany(
+                        "INSERT INTO playlist_tracks (playlist_name, position, track_id) VALUES (?, ?, ?)",
+                        ((name, position, track_id) for position, track_id in enumerate(track_ids)),
+                    )
+
+                previous = conn.execute(
+                    "SELECT revision FROM library_state WHERE singleton = 1"
+                ).fetchone()
+                revision = (int(previous[0]) if previous else 0) + 1
+                conn.execute("""
+                    INSERT INTO library_state (
+                        singleton, canonical, revision, version, last_updated,
+                        settings_json, podcast_subscriptions_json,
+                        podcast_episode_cache_json
+                    ) VALUES (1, 1, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(singleton) DO UPDATE SET
+                        canonical=1,
+                        revision=excluded.revision,
+                        version=excluded.version,
+                        last_updated=excluded.last_updated,
+                        settings_json=excluded.settings_json,
+                        podcast_subscriptions_json=excluded.podcast_subscriptions_json,
+                        podcast_episode_cache_json=excluded.podcast_episode_cache_json
+                """, (
+                    revision,
+                    int(metadata.version),
+                    metadata.last_updated,
+                    json.dumps(metadata.settings, ensure_ascii=False),
+                    json.dumps(metadata.podcast_subscriptions, ensure_ascii=False),
+                    json.dumps(metadata.podcast_episode_cache, ensure_ascii=False),
+                ))
                 conn.execute("COMMIT")
+                return revision
             except Exception as e:
                 conn.execute("ROLLBACK")
                 raise e
+
+    def sync_from_metadata(self, metadata: LibraryMetadata):
+        """Compatibility name for callers migrating a complete manifest."""
+        return self.replace_library(metadata)
+
+    def has_canonical_library(self) -> bool:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT canonical FROM library_state WHERE singleton = 1"
+            ).fetchone()
+            return bool(row and row[0])
+
+    def get_library_revision(self) -> int:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT revision FROM library_state WHERE singleton = 1 AND canonical = 1"
+            ).fetchone()
+            return int(row[0]) if row else 0
+
+    def load_library_metadata(self) -> Optional[LibraryMetadata]:
+        """Load the complete canonical snapshot, preserving playlist order."""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            state = conn.execute(
+                "SELECT * FROM library_state WHERE singleton = 1 AND canonical = 1"
+            ).fetchone()
+            if state is None:
+                return None
+            tracks = self._rows_to_tracks(conn, conn.execute("""
+                SELECT t.* FROM tracks t
+                JOIN library_tracks lt ON lt.track_id = t.id
+                ORDER BY lt.position
+            """).fetchall())
+            playlist_rows = conn.execute("""
+                SELECT p.name, pt.track_id
+                FROM playlists p
+                LEFT JOIN playlist_tracks pt ON pt.playlist_name = p.name
+                ORDER BY p.position, pt.position
+            """).fetchall()
+            playlists: Dict[str, List[str]] = {}
+            for row in playlist_rows:
+                playlists.setdefault(str(row["name"]), [])
+                if row["track_id"] is not None:
+                    playlists[str(row["name"])].append(str(row["track_id"]))
+            return LibraryMetadata(
+                version=int(state["version"]),
+                tracks=tracks,
+                playlists=playlists,
+                settings=json.loads(state["settings_json"]),
+                last_updated=str(state["last_updated"]),
+                podcast_subscriptions=json.loads(state["podcast_subscriptions_json"]),
+                podcast_episode_cache=json.loads(state["podcast_episode_cache_json"]),
+            )
 
     def get_all_tracks(self) -> List[Track]:
         """Fetch all tracks as Track objects."""
@@ -1357,10 +1512,14 @@ class DatabaseManager:
         data = dict(row)
         data.pop("last_updated", None)
         data.pop("album_id", None)
+        stored_artists = data.pop("artists_json", None)
         data["local_path"] = None
+        data["compressed"] = bool(data.get("compressed"))
+        data["is_local"] = bool(data.get("is_local"))
+        data["metadata_modified_by_user"] = bool(data.get("metadata_modified_by_user"))
         data["audio_identity_verified"] = bool(data.get("audio_identity_verified"))
         data["is_compilation"] = bool(data.get("is_compilation"))
-        data["artists"] = artists or None
+        data["artists"] = artists or (json.loads(stored_artists) if stored_artists else None)
         return Track.from_dict(data)
 
     def get_track_user_state(self, track_id: str) -> Optional[Dict[str, Any]]:
@@ -1471,6 +1630,10 @@ class DatabaseManager:
                 conn.execute("DELETE FROM albums")
                 conn.execute("DELETE FROM artists")
                 conn.execute("DELETE FROM library_info")
+                conn.execute("DELETE FROM library_tracks")
+                conn.execute("DELETE FROM playlist_tracks")
+                conn.execute("DELETE FROM playlists")
+                conn.execute("DELETE FROM library_state")
                 # Note: FTS5 table cleanup
                 try:
                     conn.execute("DELETE FROM tracks_fts")

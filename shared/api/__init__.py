@@ -52,7 +52,6 @@ from player.queue_manager import QueueManager
 from player.favourites_manager import FavouritesManager
 from odst_tool.odst_downloader import ODSTDownloader
 from odst_tool.optimize_library import optimize_library
-from watchdog.observers import Observer
 
 import socket
 import requests
@@ -67,7 +66,7 @@ from shared.hardening import SCOPE_PLAYBACK_CONTROL, apply_security_headers, get
 from shared.telemetry import init_telemetry
 from shared.database import DatabaseManager
 
-from .download_queue import DownloadQueueManager, LibraryFileWatcher, parse_intake_item  # noqa: F401  # re-export
+from .download_queue import DownloadQueueManager, parse_intake_item  # noqa: F401  # re-export
 from .errors import register_error_handlers
 from .orchestrator import orchestrator
 
@@ -583,21 +582,10 @@ _user_cores_lock = threading.RLock()
 def _build_user_core(user_id: str) -> _UserCore:
     logger.info("API: Initializing core services for user %s...", user_id)
     library = LibraryManager()
-    # Note: Ensure we have metadata loaded from local cache at minimum
-    if not library.metadata:
-        logger.info("API: No metadata in memory, checking cache...")
-        library._load_from_cache(library.manifest_path)
-        # Note: If cache looks like it's from a different path (e.g. old install), don't use it
-        if library.metadata and library._is_cache_likely_stale():
-            logger.info("API: Cached library does not match current music path; starting fresh.")
-            library.metadata = None
-
-    if not library.metadata:
-        # A new account has no manifest yet. Write an empty one now so its
-        # library reads as "empty", not "not loaded" — otherwise the first
-        # playlist or favourite would come back 404.
-        library.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-        library._save_metadata()
+    # This loads SQLite when canonical, or performs the one-time manifest
+    # migration for an existing account. A fresh account becomes an empty
+    # canonical library here as well.
+    library.sync_library(silent=True)
 
     # Note: API server runs headless; web player uses browser for playback. skip MPV to avoid blocking on display/audio.
     return _UserCore(library, QueueManager(), FavouritesManager())
@@ -1275,8 +1263,8 @@ def _warm_downloader():
 def _loaded_user_library():
     """Current user's library manager with metadata guaranteed to be present."""
     lib, _, _ = get_core()
-    if not lib.metadata and lib.manifest_path.exists():
-        lib._load_from_cache(lib.manifest_path)
+    if not lib.metadata:
+        lib.sync_library(silent=True)
     if not lib.metadata:
         lib.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
     return lib
@@ -1391,7 +1379,7 @@ def remap_track_ids_for_all_users(id_map: dict) -> dict:
                 core = get_user_core(user_id)
                 lib = core.library
                 if not lib.metadata:
-                    lib._load_from_cache(lib.manifest_path)
+                    lib.sync_library(silent=True)
                 if not lib.metadata:
                     continue
 
@@ -1674,9 +1662,8 @@ def stop_api() -> None:
     if observer is not None:
         try:
             observer.stop()
-            observer.join(timeout=2)
         except Exception:
-            logger.exception("API: Error stopping library file watcher")
+            logger.exception("API: Error stopping music folder watcher")
 
     try:
         from shared.lossless import stop_lossless_service_if_started
@@ -1777,7 +1764,27 @@ def start_api(
         _admin = get_admin_user()
         if _admin:
             with user_context(_admin["id"]):
-                get_core()
+                admin_core = get_core()
+                if admin_core.library.config and admin_core.library.config.watch_folders:
+                    from setup_tool.watcher import LibraryWatcher
+
+                    def _load_canonical_library():
+                        admin_core.library.refresh_if_stale()
+                        if admin_core.library.metadata is None:
+                            admin_core.library.sync_library(silent=True)
+                        return admin_core.library.metadata
+
+                    def _save_canonical_library(metadata):
+                        admin_core.library.metadata = metadata
+                        return admin_core.library._save_metadata()
+
+                    api_observer = LibraryWatcher(
+                        admin_core.library.config,
+                        library_loader=_load_canonical_library,
+                        library_saver=_save_canonical_library,
+                    )
+                    api_observer.start()
+                    logger.info("API: Music folder watcher started for the admin library.")
         logger.info("API: Core services initialized successfully.")
 
         # Keep the network-facing download tools current when their respective
@@ -1827,24 +1834,6 @@ def start_api(
                 logger.info("API: Runtime auto-update disabled. Skipping update attempt.")
         except Exception:
             logger.debug("API: Runtime auto-update setup skipped due to error", exc_info=True)
-
-        # Note: Start library file watcher. Manifests live one directory per
-        # account, so watch the users root recursively and let the handler map
-        # each changed path back to its owner.
-        from shared.user_context import users_config_root
-
-        users_root = users_config_root()
-        users_root.mkdir(parents=True, exist_ok=True)
-
-        def _refresh_user_library(user_id: str) -> None:
-            with user_context(user_id):
-                get_user_core(user_id).library.refresh_if_stale()
-
-        event_handler = LibraryFileWatcher(socketio, on_user_library_changed=_refresh_user_library)
-        api_observer = Observer()
-        api_observer.schedule(event_handler, str(users_root), recursive=True)
-        api_observer.start()
-        logger.info("API: Library File Watcher started on %s", users_root)
 
         # Note: Auto-start the downloader pump so queued items begin processing
         # immediately without waiting for a manual trigger from the frontend.

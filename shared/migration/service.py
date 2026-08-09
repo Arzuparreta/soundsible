@@ -106,7 +106,7 @@ class MigrationRunner:
         core = get_user_core(self.user_id)
         lib = core.library
         if not lib.metadata:
-            lib._load_from_cache(lib.manifest_path)
+            lib.sync_library(silent=True)
         return lib
 
     def _ensure_target_playlists(self, job: dict[str, Any]) -> None:
@@ -323,4 +323,3 @@ class MigrationRunner:
             self.store.set_job_state(self.job_id, "partial")
         else:
             self.store.set_job_state(self.job_id, "completed")
-
