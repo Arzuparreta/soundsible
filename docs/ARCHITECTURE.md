@@ -98,7 +98,9 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 
 **Download path**: queued items are processed in the background; completed tracks are merged into the main library metadata (`_sync_odst_to_main_core` and related helpers). FFmpeg and yt-dlp are used via `odst_tool/`.
 
-**Library path**: `player/library.py` loads **`library.json`** (see `LIBRARY_METADATA_FILENAME`) and **`~/.config/soundsible/config.json`** for `PlayerConfig`, talks to **SQLite** (`shared/database.py`) for fast search and manifest sync, and can use **storage providers** from `setup_tool/` for cloud-backed libraries. The per-account database projects the flat manifest into first-class `artists`, `albums`, ordered `track_artists`, and `track_user_state` tables. Entity IDs are deterministic and albums include their album artist, so unrelated records with the same title do not collapse. This projection is a migration-safe foundation for OpenSubsonic; **`library.json` is still authoritative** until the separate SQLite-canonical roadmap item lands.
+**Library path**: `player/library.py` loads each account's canonical **`library.db`** and **`~/.config/soundsible/config.json`** for `PlayerConfig`; it can also use storage providers from `setup_tool/` for cloud-backed exports. One SQLite transaction stores the complete library snapshot: ordered tracks and playlists, settings, podcast state, normalized `artists`/`albums`/`track_artists`, and `track_user_state`. Entity IDs are deterministic and albums include their album artist, so unrelated records with the same title do not collapse. After that transaction commits, Soundsible atomically refreshes `library.json` as a portable export; an export failure does not roll back the library.
+
+An account without a canonical marker is migrated once using the previous manifest precedence. Its config-dir manifest is preserved as `library.json.pre-sqlite.bak`; fresh accounts receive an empty canonical database. After migration, JSON edits and mtimes are ignored: other writers are observed through the SQLite revision, and `/api/library/sync` reloads SQLite and regenerates the exports.
 
 **OpenSubsonic path**: `shared/api/routes/subsonic.py` serves `/rest`, reading that same catalog and serving bytes through the path `/api/static/stream` uses. `shared/subsonic/` holds what the views decide with: the XML/JSON/JSONP envelope, the per-account credential (encrypted, because the protocol's `md5(password + salt)` handshake cannot be checked against a hash), the `Child`/`AlbumID3`/`ArtistID3` serializers, and the ffmpeg transcode. This surface is **outside `/api`**, so the `before_request` hook leaves it anonymous and it authenticates itself — with no trusted-network shortcut, since it can be reached through a funnel. See [OpenSubsonic](OPENSUBSONIC.md).
 
@@ -254,8 +256,8 @@ machine, and what belongs to a person.
 
 | File | Purpose |
 |------|---------|
-| `library.json` | *Your* library: which tracks you own, plus any metadata you edited on them. |
-| `library.db` | SQLite index and normalized artist/album catalog projected from that manifest; also owns per-track play count, rating and last-played state. |
+| `library.db` | Canonical library: ordered tracks and playlists, settings, podcast state, normalized artist/album catalog, and per-track play count, rating and last-played state. |
+| `library.json` | Portable export of your canonical library for recovery and cloud interoperability. The first migration also keeps `library.json.pre-sqlite.bak`. |
 | `favourites.json`, `playback_state.json`, `discovery_settings.json` | Saved songs, cross-device resume, discovery opt-in. |
 | `queue_state.json` *(data dir)* | Playback queue. |
 | `telemetry/listening-events.jsonl`, `telemetry/play-timing.jsonl` *(data dir)* | Listening history — the input to *your* recommendations. |

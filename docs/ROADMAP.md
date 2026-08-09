@@ -39,7 +39,7 @@ last-played. And SQLite as the source of truth rather than an index rebuilt from
 JSON.
 
 - [x] Library schema: albums, artists, disc numbers, compilations, play counts, ratings
-- [ ] SQLite canonical; `library.json` becomes an export format
+- [x] SQLite canonical; `library.json` becomes an export format
 - [ ] `POST /api/library/scan` — point Soundsible at a folder you already have
 - [ ] Read ReplayGain / R128 tags when a file carries them
 - [ ] Write MusicBrainz IDs on acquisition

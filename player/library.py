@@ -1,6 +1,6 @@
 """
 Core library management for the player.
-Handles loading library.json, resolving URLs, and basic playlist management.
+Handles canonical SQLite state, portable exports, URLs, and playlists.
 """
 
 import json
@@ -37,17 +37,6 @@ def _output_dir_for_library() -> Optional[Path]:
                 return Path(raw).expanduser().resolve()
     except Exception:
         pass
-    try:
-        from dotenv import dotenv_values
-        _repo = Path(__file__).resolve().parent.parent
-        _env = _repo / "odst_tool" / ".env"
-        if _env.exists():
-            vals = dotenv_values(_env)
-            out = (vals or {}).get("OUTPUT_DIR")
-            if out:
-                return Path(out).expanduser().resolve()
-    except Exception:
-        pass
     return None
 
 
@@ -76,7 +65,7 @@ class LibraryManager:
 
     The audio files themselves are shared: they live in a content-addressed
     pool under the instance's output directory, so two people who own the same
-    track point at the same file. What is private is this manifest — which
+    track point at the same file. What is private is this library — which
     tracks are in *your* library, and the metadata you edited on them.
     """
 
@@ -91,22 +80,31 @@ class LibraryManager:
         self.user_config_dir = user_config_dir()
         self.manifest_path = self.user_config_dir / LIBRARY_METADATA_FILENAME
         self.db = DatabaseManager(str(self.user_config_dir / USER_DB_FILENAME))
-        self._manifest_mtime = 0
+        self._library_revision = self.db.get_library_revision()
         self._lock = threading.Lock()
         # Paths whose write failed once (e.g. read-only music mount). Logged once,
         # then skipped, so a read-only output dir doesn't spam every save.
         self._unwritable_paths: set[str] = set()
         
-        # Note: Initialize cache
-        try:
-             from .cache import CacheManager
-             self.cache = CacheManager()
-        except ImportError:
-             self.cache = None
+        # Media cache is opened only by playback/update paths. Library reads do
+        # not need a third SQLite connection merely to construct this manager.
+        self._cache = None
+        self._cache_unavailable = False
         
         self._load_config()
         if self.config:
             self._init_network()
+
+    @property
+    def cache(self):
+        if self._cache is None and not self._cache_unavailable:
+            try:
+                from .cache import CacheManager
+
+                self._cache = CacheManager()
+            except ImportError:
+                self._cache_unavailable = True
+        return self._cache
 
     def _log(self, msg: str):
         if not self.silent:
@@ -177,12 +175,49 @@ class LibraryManager:
                 except Exception:
                     pass
 
+    @staticmethod
+    def _atomic_write(path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        except Exception:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+
+    def _export_metadata(self, json_str: str) -> None:
+        """Best-effort portable exports after SQLite has committed."""
+        destinations = [self.manifest_path]
+        out_dir = None if _music_dir_manifest_is_shared() else _output_dir_for_library()
+        if out_dir:
+            destinations.append(Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME)
+
+        for path in destinations:
+            key = str(path)
+            if key in self._unwritable_paths:
+                continue
+            try:
+                self._atomic_write(path, json_str)
+            except OSError as exc:
+                self._unwritable_paths.add(key)
+                self._log(f"Library export not writable, skipping {path}: {exc}")
+
+        if self.provider:
+            try:
+                self.provider.save_library(self.metadata)
+            except Exception as exc:
+                self._log(f"Remote library export failed: {exc}")
+
     def _save_metadata(self) -> bool:
         """
-        Consistently save current metadata to:
-        1. Local library.json (cache)
-        2. Remote storage provider (cloud)
-        3. Local SQLite database (for fast search)
+        Commit the canonical SQLite snapshot, then refresh portable exports.
         """
         if not self.metadata:
             return False
@@ -190,40 +225,8 @@ class LibraryManager:
         with self._lock:
             try:
                 json_str = self.metadata.to_json()
-                
-                # Note: 1. Local cache file
-                cache_path = self.manifest_path
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                cache_path.write_text(json_str)
-                try:
-                    self._manifest_mtime = cache_path.stat().st_mtime
-                except OSError:
-                    pass
-
-                # Note: 1b. Music output dir (same manifest as cache; ODST/downloader also use this path).
-                # With several accounts that file is the instance catalog of everything
-                # on disk, so mirroring one person's manifest over it would erase the rest.
-                out_dir = None if _music_dir_manifest_is_shared() else _output_dir_for_library()
-                if out_dir:
-                    music_lib = Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME
-                    music_key = str(music_lib)
-                    if music_key not in self._unwritable_paths:
-                        try:
-                            music_lib.parent.mkdir(parents=True, exist_ok=True)
-                            music_lib.write_text(json_str, encoding="utf-8")
-                        except OSError as e:
-                            # Read-only mount (or similar): note it once, then stop
-                            # retrying so saves don't spam the console every time.
-                            self._unwritable_paths.add(music_key)
-                            self._log(f"Music path not writable, skipping library.json mirror to {music_lib}: {e}")
-                
-                # Note: 2. Remote cloud storage
-                if self.provider:
-                    self.provider.save_library(self.metadata)
-                    
-                # Note: 3. Local sqlite DB
-                self.db.sync_from_metadata(self.metadata)
-                
+                self._library_revision = self.db.replace_library(self.metadata)
+                self._export_metadata(json_str)
                 return True
             except Exception as e:
                 self._log(f"Error saving metadata: {e}")
@@ -242,6 +245,15 @@ class LibraryManager:
             if not is_silent: print(msg)
 
         cache_path = self.manifest_path
+
+        # Once migrated, SQLite is authoritative. Sync reloads that snapshot and
+        # regenerates portable exports; stale or hand-edited JSON cannot mutate it.
+        canonical = self.db.load_library_metadata()
+        if canonical is not None:
+            self.metadata = canonical
+            self._library_revision = self.db.get_library_revision()
+            self._export_metadata(canonical.to_json())
+            return True
 
         # Note: Always prefer the path set in settings (output_dir) if it has library.JSON, use it first.
         # Note: This makes the webapp/player "music path" the single source of truth when that path has a library.
@@ -263,6 +275,7 @@ class LibraryManager:
                                 lib.playlists = merge_playlist_maps(lib.playlists, cached.playlists)
                             except Exception as e:
                                 _log_local(f"Warning: Could not merge playlists from cache: {e}")
+                        self._backup_legacy_manifest(cache_path)
                         self.metadata = lib
                         self._save_metadata()
                         return True
@@ -272,12 +285,14 @@ class LibraryManager:
         if not self.provider:
             _log_local("No storage provider configured. Using local cache only.")
             ok = self._load_from_cache(cache_path)
-            if ok and self.metadata and self._is_cache_likely_stale():
-                _log_local("Cached library does not match current music path; starting fresh.")
-                self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-                self._save_metadata()
-                return True
-            return ok
+            if ok:
+                self._backup_legacy_manifest(cache_path)
+                if self.metadata and self._is_cache_likely_stale():
+                    _log_local("Cached library does not match current music path; starting fresh.")
+                    self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+                return self._save_metadata()
+            self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+            return self._save_metadata()
 
         try:
             _log_local("Syncing library (Universal 3-way merge)...")
@@ -372,6 +387,7 @@ class LibraryManager:
                 self.metadata = remote_lib
 
             # Note: 4. Save back using unified method
+            self._backup_legacy_manifest(cache_path)
             success = self._save_metadata()
             if success:
                 _log_local(f"✓ Sync complete: {len(self.metadata.tracks)} tracks unified.")
@@ -382,7 +398,19 @@ class LibraryManager:
                 self._log(f"Sync failed: {e}")
                 import traceback
                 traceback.print_exc()
-            return self._load_from_cache(cache_path)
+            if self._load_from_cache(cache_path):
+                self._backup_legacy_manifest(cache_path)
+                return self._save_metadata()
+            return False
+
+    def _backup_legacy_manifest(self, cache_path: Path) -> None:
+        """Keep exactly one pre-SQLite recovery copy during migration."""
+        backup = cache_path.with_name(f"{cache_path.name}.pre-sqlite.bak")
+        if cache_path.exists() and not backup.exists():
+            try:
+                shutil.copy2(cache_path, backup)
+            except OSError as exc:
+                self._log(f"Could not back up legacy library manifest: {exc}")
     
     def get_track_url(self, track: Track) -> Optional[str]:
         """
@@ -433,13 +461,13 @@ class LibraryManager:
         return None
 
     def refresh_if_stale(self):
-        """Reload metadata from disk if the file has changed."""
-        cache_path = self.manifest_path
-        if cache_path.exists():
-            mtime = cache_path.stat().st_mtime
-            if mtime > self._manifest_mtime:
-                self._log("Library manifest changed on disk. Reloading...")
-                self._load_from_cache(cache_path)
+        """Reload metadata when another writer commits a SQLite revision."""
+        revision = self.db.get_library_revision()
+        if revision != self._library_revision:
+            metadata = self.db.load_library_metadata()
+            if metadata is not None:
+                self.metadata = metadata
+                self._library_revision = revision
                 return True
         return False
 
@@ -490,7 +518,6 @@ class LibraryManager:
             if cache_path.exists():
                 json_str = cache_path.read_text()
                 self.metadata = LibraryMetadata.from_json(json_str)
-                self._manifest_mtime = cache_path.stat().st_mtime
                 self._log(f"✓ Loaded library from cache (offline mode) - {len(self.metadata.tracks)} tracks")
                 return True
             else:

@@ -4,7 +4,7 @@ Per-user request context and user-scoped app directories.
 One engine process serves several people. Instance-level state — storage
 backend, music folder, shared caches, the physical track pool — keeps living
 under the runtime directories from :mod:`shared.runtime`. Everything that
-belongs to a person (library manifest, favourites, queue, playback state,
+belongs to a person (canonical library, favourites, queue, playback state,
 listening history, preferences) lives under ``<base>/users/<user_id>/``.
 
 The active user is bound per request by the ``before_request`` hook in
@@ -124,8 +124,8 @@ def user_data_dir(user_id: Optional[str] = None, *, create: bool = True) -> Path
 def user_id_from_path(path: Path) -> Optional[str]:
     """Recover the user id from a path under ``users_config_root()``, if it is one.
 
-    Used by the library file watcher, which sees absolute paths and has to map
-    them back to whoever owns the manifest that changed.
+    Kept for per-user filesystem integrations that need to map an absolute path
+    back to its owner.
     """
     try:
         relative = Path(path).resolve().relative_to(users_config_root().resolve())

@@ -1,13 +1,13 @@
 """
 Deep Scanner for Local Music Library.
-Recursively scans directories, extracts metadata, and adds tracks to library.json
-WITHOUT moving or uploading them.
+Recursively scans directories, extracts metadata, and adds tracks through the
+canonical library seam without moving or uploading them.
 """
 
 import os
 import concurrent.futures
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
 from rich.console import Console
 
@@ -19,15 +19,25 @@ from setup_tool.provider_factory import StorageProviderFactory
 console = Console()
 
 class LibraryScanner:
-    def __init__(self, config: Optional[PlayerConfig] = None):
+    def __init__(
+        self,
+        config: Optional[PlayerConfig] = None,
+        *,
+        library_loader: Optional[Callable[[], LibraryMetadata]] = None,
+        library_saver: Optional[Callable[[LibraryMetadata], bool]] = None,
+    ):
         self.config = config
+        self.library_loader = library_loader
+        self.library_saver = library_saver
         self._load_config_if_needed()
         
         # Note: We need A storage provider to save the library.JSON
         # Note: Even if we are just scanning local files, the manifest might live in the cloud (for hybrid setup)
         # Note: OR it might live locally if using localstorageprovider.
-        self.storage = StorageProviderFactory.create(self.config.provider)
-        self._authenticate_storage()
+        self.storage = None
+        if not (self.library_loader and self.library_saver):
+            self.storage = StorageProviderFactory.create(self.config.provider)
+            self._authenticate_storage()
 
     def _load_config_if_needed(self):
         if not self.config:
@@ -74,9 +84,9 @@ class LibraryScanner:
             return
 
         # Note: 1. Fetch existing library to avoid duplicates
-        console.print("[cyan]Fetching existing library manifest...[/cyan]")
+        console.print("[cyan]Fetching existing library...[/cyan]")
         try:
-            library = self.storage.get_library()
+            library = self.library_loader() if self.library_loader else self.storage.get_library()
         except Exception:
             console.print("[yellow]Could not fetch library. Starting fresh.[/yellow]")
             library = LibraryMetadata(1, [], {}, {})
@@ -155,8 +165,9 @@ class LibraryScanner:
         library.tracks = final_tracks
         library.version += 1
         
-        console.print("[cyan]Saving updated library manifest...[/cyan]")
-        if self.storage.save_library(library):
+        console.print("[cyan]Saving updated library...[/cyan]")
+        saved = self.library_saver(library) if self.library_saver else self.storage.save_library(library)
+        if saved:
             console.print("[bold green]Library updated successfully![/bold green]")
         else:
             console.print("[bold red]Failed to save library![/bold red]")

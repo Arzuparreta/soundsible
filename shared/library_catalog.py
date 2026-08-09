@@ -1,7 +1,7 @@
 """Deterministic artist and album entities derived from library tracks.
 
-``library.json`` is still the authority today.  This module gives its flat
-track rows a normalized SQLite projection without teaching the database to
+The per-account SQLite library is authoritative. This module gives its track
+rows a normalized catalog projection without teaching the database to
 guess structure that the source did not provide.  In particular, a legacy
 ``artist`` display string is one artist; only ``Track.artists`` can describe
 several performers.

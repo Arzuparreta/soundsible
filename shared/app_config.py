@@ -10,11 +10,13 @@ from typing import Optional, Union
 from shared.runtime import get_config_dir
 
 _output_dir: Optional[Path] = None
+_output_dir_config_dir: Optional[Path] = None
 
 
 def set_output_dir(path: Optional[Union[str, Path]]) -> None:
     """Set the output directory (e.g. library/tracks root). Normalized and expanded."""
-    global _output_dir
+    global _output_dir, _output_dir_config_dir
+    _output_dir_config_dir = get_config_dir()
     if path is None:
         _output_dir = None
         return
@@ -25,16 +27,21 @@ def get_output_dir() -> Optional[Path]:
     """Return the configured output directory, or None if not set.
     When not set in memory, reads from the active config dir output_dir file, then env.
     """
-    global _output_dir
+    global _output_dir, _output_dir_config_dir
+    config_dir = get_config_dir()
+    if _output_dir_config_dir is not None and _output_dir_config_dir != config_dir:
+        _output_dir = None
+        _output_dir_config_dir = None
     if _output_dir is not None:
         return _output_dir
     try:
-        cfg = get_config_dir()
+        cfg = config_dir
         out_file = cfg / "output_dir"
         if out_file.exists():
             raw = out_file.read_text().strip()
             if raw:
                 _output_dir = Path(raw).expanduser().resolve()
+                _output_dir_config_dir = config_dir
                 return _output_dir
     except Exception:
         pass

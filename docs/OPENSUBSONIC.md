@@ -89,13 +89,13 @@ rather than "wrong password".
 | `userRating`, `playCount`, `played` | `track_user_state` |
 | `scrobble` | a play recorded against that same table |
 | `replayGain` | the EBU R128 measurements the engine takes for volume levelling |
-| Playlists | the playlists in `library.json` |
+| Playlists | the ordered playlists in the account's canonical `library.db` |
 | Cover art | the same artwork the player shows, embedded art extracted on demand |
 
 A song's `path` is built from its metadata (`Artist/Album/01 - Title.mp3`), not
 read off the disk: the server's directory layout is not the client's business.
 
-Podcast episodes live in the same manifest as songs and are excluded from all
+Podcast episodes live in the same canonical library as songs and are excluded from all
 of it. A show is not an album.
 
 ## Transcoding
