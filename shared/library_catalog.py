@@ -93,6 +93,27 @@ class CatalogSnapshot:
     tracks: tuple[TrackCatalogLink, ...]
 
 
+def album_identity(track: Track, performers: list[str] | None = None) -> tuple[str | None, str, str]:
+    """``(album id, album title, album artist)`` for one track.
+
+    The single definition of which release a track belongs to. Callers that
+    only need to *name* the album a track is on — a serializer, an API
+    response — ask here instead of re-deriving the rule and drifting from the
+    projection that actually built the row.
+    """
+    title = _clean(track.album)
+    if not title:
+        return None, "", ""
+    if track.is_compilation and not _clean(track.album_artist):
+        album_artist = _VARIOUS_ARTISTS
+    else:
+        names = performers if performers is not None else track_artists(track)
+        album_artist = _clean(track.album_artist) or (names[0] if names else _clean(track.artist))
+    if not album_artist:
+        return None, "", ""
+    return album_id(title, album_artist), title, album_artist
+
+
 def _prefer_display(current: str, candidate: str) -> str:
     """Choose deterministically when equivalent spellings differ only in case."""
     if not current:
@@ -107,6 +128,14 @@ def build_catalog_snapshot(tracks: Iterable[Track]) -> CatalogSnapshot:
     links: list[TrackCatalogLink] = []
 
     for track in tracks:
+        # A podcast episode shares the manifest with songs but is not one. Left
+        # in, a show becomes an album and its host becomes an artist — wrong in
+        # the player and wrong for every client that browses this catalog. The
+        # link is still emitted so a track that changes kind loses its old one.
+        if getattr(track, "media_kind", None) == "podcast_episode":
+            links.append(TrackCatalogLink(track_id=track.id, album_id=None, artist_ids=()))
+            continue
+
         performers = track_artists(track)
         performer_ids: list[str] = []
         for name in performers:
@@ -114,43 +143,36 @@ def build_catalog_snapshot(tracks: Iterable[Track]) -> CatalogSnapshot:
             artist_names[identifier] = _prefer_display(artist_names.get(identifier, ""), name)
             performer_ids.append(identifier)
 
-        title = _clean(track.album)
-        resolved_album_id: str | None = None
-        if title:
-            if track.is_compilation and not _clean(track.album_artist):
-                album_artist = _VARIOUS_ARTISTS
+        resolved_album_id, title, album_artist = album_identity(track, performers)
+        if resolved_album_id:
+            album_artist_identifier = artist_id(album_artist)
+            artist_names[album_artist_identifier] = _prefer_display(
+                artist_names.get(album_artist_identifier, ""), album_artist
+            )
+            candidate = AlbumEntity(
+                id=resolved_album_id,
+                title=title,
+                title_key=entity_key(title),
+                album_artist_id=album_artist_identifier,
+                album_artist=album_artist,
+                year=int(track.year) if track.year else None,
+                genre=_clean(track.genre) or None,
+                is_compilation=bool(track.is_compilation),
+            )
+            existing = albums.get(resolved_album_id)
+            if existing is None:
+                albums[resolved_album_id] = candidate
             else:
-                album_artist = _clean(track.album_artist) or (performers[0] if performers else _clean(track.artist))
-            if album_artist:
-                album_artist_identifier = artist_id(album_artist)
-                artist_names[album_artist_identifier] = _prefer_display(
-                    artist_names.get(album_artist_identifier, ""), album_artist
+                albums[resolved_album_id] = AlbumEntity(
+                    id=existing.id,
+                    title=_prefer_display(existing.title, candidate.title),
+                    title_key=existing.title_key,
+                    album_artist_id=existing.album_artist_id,
+                    album_artist=_prefer_display(existing.album_artist, candidate.album_artist),
+                    year=existing.year if existing.year is not None else candidate.year,
+                    genre=existing.genre if existing.genre is not None else candidate.genre,
+                    is_compilation=existing.is_compilation or candidate.is_compilation,
                 )
-                resolved_album_id = album_id(title, album_artist)
-                candidate = AlbumEntity(
-                    id=resolved_album_id,
-                    title=title,
-                    title_key=entity_key(title),
-                    album_artist_id=album_artist_identifier,
-                    album_artist=album_artist,
-                    year=int(track.year) if track.year else None,
-                    genre=_clean(track.genre) or None,
-                    is_compilation=bool(track.is_compilation),
-                )
-                existing = albums.get(resolved_album_id)
-                if existing is None:
-                    albums[resolved_album_id] = candidate
-                else:
-                    albums[resolved_album_id] = AlbumEntity(
-                        id=existing.id,
-                        title=_prefer_display(existing.title, candidate.title),
-                        title_key=existing.title_key,
-                        album_artist_id=existing.album_artist_id,
-                        album_artist=_prefer_display(existing.album_artist, candidate.album_artist),
-                        year=existing.year if existing.year is not None else candidate.year,
-                        genre=existing.genre if existing.genre is not None else candidate.genre,
-                        is_compilation=existing.is_compilation or candidate.is_compilation,
-                    )
 
         links.append(
             TrackCatalogLink(

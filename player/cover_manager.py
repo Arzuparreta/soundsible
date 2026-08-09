@@ -103,4 +103,27 @@ class CoverFetchManager:
             except Exception:
                 pass
 
+    def extract_now(self, track, source_path) -> str | None:
+        """Pull the embedded artwork out of a file, synchronously, and cache it.
+
+        `request_cover` is the asynchronous path the UI uses: it returns
+        immediately and fills the cache behind the listener. A route serving
+        one cover cannot return "later", so it comes through here instead —
+        same directory, same filename, so whichever runs first serves both.
+        """
+        if not source_path or str(source_path).startswith("http"):
+            return None
+        dest_path = os.path.join(self.covers_dir, f"{track.id}.jpg")
+        if os.path.exists(dest_path):
+            return dest_path
+        try:
+            cover_data = AudioProcessor.extract_cover_art(str(source_path))
+            if not cover_data:
+                return None
+            with open(dest_path, "wb") as handle:
+                handle.write(cover_data)
+            return dest_path
+        except Exception:
+            return None
+
 

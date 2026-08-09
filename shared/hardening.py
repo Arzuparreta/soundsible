@@ -414,6 +414,24 @@ class _WindowRateLimiter:
 _rate_limiter = _WindowRateLimiter()
 
 
+def _reset_rate_limits_for_tests() -> None:
+    """Forget every recorded hit. The limiter is process-global, and one test
+    spending a budget must not decide the outcome of the next."""
+    with _rate_limiter._lock:
+        _rate_limiter._events.clear()
+
+
+def rate_limit_allows(action: str, *, limit: int, window_sec: int) -> bool:
+    """The limiter without the response.
+
+    `rate_limit` answers a refusal in the JSON shape `/api/` speaks. Surfaces
+    with their own error document — the Subsonic one — ask this instead and
+    write the refusal themselves.
+    """
+    ip = request.remote_addr or "unknown"
+    return _rate_limiter.allow(f"{action}:{ip}", limit, window_sec)
+
+
 def rate_limit(action: str, *, limit: int, window_sec: int):
     def decorator(fn):
         @wraps(fn)

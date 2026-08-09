@@ -1523,6 +1523,7 @@ from shared.api.routes.auth import auth_bp
 from shared.api.routes.lossless import lossless_bp
 from shared.api.routes.loudness import loudness_bp
 from shared.api.routes.community import community_bp
+from shared.api.routes.subsonic import subsonic_bp
 app.register_blueprint(library_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
@@ -1539,6 +1540,10 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(lossless_bp)
 app.register_blueprint(loudness_bp)
 app.register_blueprint(community_bp)
+# `/rest` is not under `/api`, so `_bind_request_user` leaves it anonymous
+# on purpose: the Subsonic surface carries its own credentials and binds
+# the account itself.
+app.register_blueprint(subsonic_bp)
 
 
 @app.route('/api/health')

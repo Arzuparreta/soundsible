@@ -190,6 +190,65 @@ def auth_change_password():
 
 
 # ---------------------------------------------------------------------------
+# Subsonic access
+# ---------------------------------------------------------------------------
+
+
+def _subsonic_payload(user_id: str) -> dict:
+    from shared.subsonic.credentials import credential_status
+
+    me = get_user(user_id) or {}
+    status = credential_status(user_id)
+    return {
+        "username": me.get("username"),
+        "configured": status is not None,
+        "created_at": (status or {}).get("created_at"),
+        "last_used_at": (status or {}).get("last_used_at"),
+        "last_client": (status or {}).get("last_client"),
+    }
+
+
+@auth_bp.route("/api/auth/subsonic", methods=["GET"])
+@rate_limit("subsonic_credential_read", limit=60, window_sec=60)
+def subsonic_access_state():
+    """Whether this account can be reached by a Subsonic client, and when it last was."""
+    user_id = current_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    return jsonify(_subsonic_payload(user_id))
+
+
+@auth_bp.route("/api/auth/subsonic", methods=["POST"])
+@rate_limit("subsonic_credential_create", limit=10, window_sec=60)
+def subsonic_access_create():
+    """Mint a Subsonic credential, replacing any earlier one.
+
+    The plaintext is in this response and nowhere else afterwards, so the
+    player shows it once and any client still holding the old one stops
+    working the moment this is called.
+    """
+    from shared.subsonic.credentials import create_credential
+
+    user_id = current_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    secret = create_credential(user_id)
+    return jsonify({**_subsonic_payload(user_id), "password": secret})
+
+
+@auth_bp.route("/api/auth/subsonic", methods=["DELETE"])
+@rate_limit("subsonic_credential_revoke", limit=10, window_sec=60)
+def subsonic_access_revoke():
+    from shared.subsonic.credentials import revoke_credential
+
+    user_id = current_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    revoke_credential(user_id)
+    return jsonify(_subsonic_payload(user_id))
+
+
+# ---------------------------------------------------------------------------
 # Account management (admin only)
 # ---------------------------------------------------------------------------
 

@@ -46,6 +46,7 @@ INSTANCE_TABLES = (
     "invites",
     "auth_tokens",
     "agent_tokens",
+    "subsonic_credentials",
     "pairing_sessions",
     "youtube_resolution_cache",
     "related_mix_cache",
@@ -70,6 +71,10 @@ _TRACKS_COLUMNS = {
     "disc_total": "INTEGER",
     "is_compilation": "BOOLEAN NOT NULL DEFAULT 0",
     "album_id": "TEXT",
+    # Podcast episodes live in the same manifest as songs. Without this the
+    # projection forgot which was which, and a show came back out of the
+    # database indistinguishable from an album.
+    "media_kind": "TEXT",
 }
 
 _YT_CACHE_COLUMNS = {
@@ -91,6 +96,11 @@ _PAIRING_COLUMNS = {
 _AUTH_TOKEN_COLUMNS = {
     "user_id": "TEXT",
 }
+
+# Podcast episodes share the tracks table with songs. Queries that describe a
+# *music* library say so with this, rather than each one inventing its own idea
+# of what counts.
+_MUSIC_ONLY = "(t.media_kind IS NULL OR t.media_kind != 'podcast_episode')"
 
 
 class DatabaseManager:
@@ -168,6 +178,7 @@ class DatabaseManager:
                 disc_total INTEGER,
                 is_compilation BOOLEAN NOT NULL DEFAULT 0,
                 album_id TEXT,
+                media_kind TEXT,
                 is_local BOOLEAN,
                 local_path TEXT,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -408,6 +419,27 @@ class DatabaseManager:
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_auth_tokens_user
             ON auth_tokens (user_id)
+        """)
+
+    @staticmethod
+    def _create_subsonic_credentials_table(conn):
+        """One Subsonic credential per account, stored so it can be read back.
+
+        Every other secret in this file lives as a hash, and this one cannot:
+        the Subsonic handshake sends ``md5(password + salt)``, which the server
+        can only check by computing the same thing. The ciphertext here is
+        useless without the key file the config directory holds, and the
+        credential is never the account password — it is minted for this
+        protocol alone and revoked on its own.
+        """
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS subsonic_credentials (
+                user_id TEXT PRIMARY KEY,
+                secret_enc TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TIMESTAMP,
+                last_client TEXT
+            )
         """)
 
     @staticmethod
@@ -699,6 +731,7 @@ class DatabaseManager:
             self._create_users_table(conn)
             self._create_invites_table(conn)
             self._create_auth_tables(conn)
+            self._create_subsonic_credentials_table(conn)
             self._create_pairing_table(conn)
             self._create_lyrics_table(conn)
             self._create_discovery_tables(conn)
@@ -739,12 +772,12 @@ class DatabaseManager:
                             id, title, artist, album, duration, file_hash, 
                             original_filename, compressed, file_size, bitrate, 
                             format, cover_art_key, year, genre, track_number, 
-                            disc_number, disc_total, is_compilation,
+                            disc_number, disc_total, is_compilation, media_kind,
                             is_local, local_path, musicbrainz_id, isrc, album_artist,
                             cover_source, metadata_modified_by_user, youtube_id,
                             audio_quality, audio_source, audio_source_url,
                             audio_license_url, audio_identity_verified
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -763,6 +796,7 @@ class DatabaseManager:
                             disc_number=excluded.disc_number,
                             disc_total=excluded.disc_total,
                             is_compilation=excluded.is_compilation,
+                            media_kind=excluded.media_kind,
                             is_local=CASE WHEN excluded.is_local THEN 1 ELSE tracks.is_local END,
                             local_path=excluded.local_path,
                             musicbrainz_id=COALESCE(excluded.musicbrainz_id, tracks.musicbrainz_id),
@@ -781,7 +815,7 @@ class DatabaseManager:
                         track.duration, track.file_hash, track.original_filename, 
                         track.compressed, track.file_size, track.bitrate, track.format, 
                         track.cover_art_key, track.year, track.genre, track.track_number, 
-                        track.disc_number, track.disc_total, track.is_compilation,
+                        track.disc_number, track.disc_total, track.is_compilation, track.media_kind,
                         track.is_local, None,
                         track.musicbrainz_id, track.isrc, track.album_artist,
                         track.cover_source, track.metadata_modified_by_user, track.youtube_id,
@@ -1009,31 +1043,128 @@ class DatabaseManager:
 
     def get_albums(self) -> List[Dict[str, Any]]:
         """Fetch first-class albums without merging homonymous releases."""
+        return self._albums_query("GROUP BY a.id ORDER BY a.album_artist, a.title")
+
+    def get_album(self, catalog_album_id: str) -> Optional[Dict[str, Any]]:
+        rows = self._albums_query("WHERE a.id = ? GROUP BY a.id", (catalog_album_id,))
+        return rows[0] if rows else None
+
+    def _albums_query(self, tail: str, params: tuple = ()) -> List[Dict[str, Any]]:
+        """One album projection, reused by every ordering the clients ask for.
+
+        `track_user_state` is keyed by track id, so the left join adds no rows
+        and the aggregates below stay honest.
+        """
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("""
+            rows = conn.execute(f"""
                 SELECT a.id,
                        a.title,
                        a.title AS album,
                        a.album_artist,
                        a.album_artist AS artist,
+                       a.album_artist_id,
                        a.year,
                        a.genre,
                        a.is_compilation,
                        MIN(t.id) AS first_track_id,
-                       COUNT(t.id) AS track_count
+                       COUNT(t.id) AS track_count,
+                       COALESCE(SUM(t.duration), 0) AS duration,
+                       COALESCE(SUM(s.play_count), 0) AS play_count,
+                       MAX(s.last_played_at) AS last_played_at,
+                       MAX(t.last_updated) AS added_at,
+                       AVG(s.rating) AS average_rating
                 FROM albums a
                 JOIN tracks t ON t.album_id = a.id
-                GROUP BY a.id
-                ORDER BY a.album_artist, a.title
-            """)
-            return [dict(row) for row in cursor.fetchall()]
+                LEFT JOIN track_user_state s ON s.track_id = t.id
+                {tail}
+            """, params).fetchall()
+            return [dict(row) for row in rows]
+
+    #: The orderings ``getAlbumList2`` understands, mapped to SQL. ``starred``
+    #: is missing on purpose: favourites are not in this database.
+    _ALBUM_ORDERINGS = {
+        "newest": "MAX(t.last_updated) DESC, a.title",
+        "alphabeticalByName": "a.title_key, a.album_artist",
+        "alphabeticalByArtist": "a.album_artist, a.title_key",
+        "byYear": "a.year, a.title_key",
+        "byGenre": "a.album_artist, a.title_key",
+        "random": "RANDOM()",
+        "frequent": "COALESCE(SUM(s.play_count), 0) DESC, a.title_key",
+        "recent": "MAX(s.last_played_at) DESC, a.title_key",
+        "highest": "AVG(s.rating) DESC, a.title_key",
+    }
+
+    def get_albums_page(
+        self,
+        list_type: str = "alphabeticalByName",
+        *,
+        size: int = 10,
+        offset: int = 0,
+        genre: Optional[str] = None,
+        from_year: Optional[int] = None,
+        to_year: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """One page of albums in the order a Subsonic client asked for."""
+        order = self._ALBUM_ORDERINGS.get(list_type)
+        if order is None:
+            return []
+
+        filters: List[str] = []
+        params: List[Any] = []
+        having = ""
+
+        if list_type == "byGenre":
+            if not genre:
+                return []
+            filters.append("a.genre = ? COLLATE NOCASE")
+            params.append(genre)
+        elif list_type == "byYear":
+            low, high = from_year, to_year
+            if low is None or high is None:
+                return []
+            # `fromYear > toYear` is how the protocol asks for descending order.
+            descending = low > high
+            if descending:
+                low, high = high, low
+                order = "a.year DESC, a.title_key"
+            filters.append("a.year IS NOT NULL AND a.year BETWEEN ? AND ?")
+            params.extend([low, high])
+        elif list_type == "recent":
+            having = "HAVING MAX(s.last_played_at) IS NOT NULL"
+        elif list_type == "frequent":
+            having = "HAVING COALESCE(SUM(s.play_count), 0) > 0"
+        elif list_type == "highest":
+            having = "HAVING AVG(s.rating) IS NOT NULL"
+
+        where = f"WHERE {' AND '.join(filters)}" if filters else ""
+        params.extend([max(0, int(size)), max(0, int(offset))])
+        return self._albums_query(
+            f"{where} GROUP BY a.id {having} ORDER BY {order} LIMIT ? OFFSET ?",
+            tuple(params),
+        )
+
+    def get_albums_by_ids(self, album_ids: List[str]) -> List[Dict[str, Any]]:
+        if not album_ids:
+            return []
+        placeholders = ",".join("?" for _ in album_ids)
+        return self._albums_query(
+            f"WHERE a.id IN ({placeholders}) GROUP BY a.id ORDER BY a.album_artist, a.title",
+            tuple(album_ids),
+        )
 
     def get_artists(self) -> List[Dict[str, Any]]:
         """Fetch first-class artists with album and track counts."""
+        return self._artists_query("GROUP BY ar.id ORDER BY ar.name")
+
+    def get_artist(self, catalog_artist_id: str) -> Optional[Dict[str, Any]]:
+        rows = self._artists_query("WHERE ar.id = ? GROUP BY ar.id", (catalog_artist_id,))
+        return rows[0] if rows else None
+
+    def _artists_query(self, tail: str, params: tuple = ()) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute("""
+            rows = conn.execute(f"""
                 SELECT ar.id,
                        ar.name,
                        COUNT(DISTINCT ta.track_id) AS track_count,
@@ -1041,10 +1172,121 @@ class DatabaseManager:
                 FROM artists ar
                 LEFT JOIN track_artists ta ON ta.artist_id = ar.id
                 LEFT JOIN albums al ON al.album_artist_id = ar.id
-                GROUP BY ar.id
-                ORDER BY ar.name
+                {tail}
+            """, params).fetchall()
+            return [dict(row) for row in rows]
+
+    def get_albums_by_artist_id(self, catalog_artist_id: str) -> List[Dict[str, Any]]:
+        """The releases credited to this artist, newest year first."""
+        return self._albums_query(
+            "WHERE a.album_artist_id = ? GROUP BY a.id ORDER BY a.year, a.title_key",
+            (catalog_artist_id,),
+        )
+
+    def search_albums(self, query: str, *, count: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
+        """Albums matching a query, compared on the folded keys the catalog stores."""
+        from shared.library_catalog import entity_key
+
+        like = f"%{entity_key(query)}%"
+        return self._albums_query(
+            "WHERE a.title_key LIKE ? OR LOWER(a.album_artist) LIKE ? "
+            "GROUP BY a.id ORDER BY a.album_artist, a.title LIMIT ? OFFSET ?",
+            (like, like, max(0, int(count)), max(0, int(offset))),
+        )
+
+    def search_artists(self, query: str, *, count: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
+        from shared.library_catalog import entity_key
+
+        like = f"%{entity_key(query)}%"
+        return self._artists_query(
+            "WHERE ar.name_key LIKE ? GROUP BY ar.id ORDER BY ar.name LIMIT ? OFFSET ?",
+            (like, max(0, int(count)), max(0, int(offset))),
+        )
+
+    def get_genres(self) -> List[Dict[str, Any]]:
+        """Genres present in the library, with what carries each one."""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(f"""
+                SELECT TRIM(t.genre) AS name,
+                       COUNT(*) AS song_count,
+                       COUNT(DISTINCT t.album_id) AS album_count
+                FROM tracks t
+                WHERE t.genre IS NOT NULL AND TRIM(t.genre) != '' AND {_MUSIC_ONLY}
+                GROUP BY TRIM(t.genre) COLLATE NOCASE
+                ORDER BY name COLLATE NOCASE
             """).fetchall()
             return [dict(row) for row in rows]
+
+    def get_tracks_by_genre(self, genre: str, *, count: int = 10, offset: int = 0) -> List[Track]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(f"""
+                SELECT t.* FROM tracks t
+                WHERE t.genre = ? COLLATE NOCASE AND {_MUSIC_ONLY}
+                ORDER BY t.artist, t.album, COALESCE(t.disc_number, 1), COALESCE(t.track_number, 0)
+                LIMIT ? OFFSET ?
+            """, (genre, max(0, int(count)), max(0, int(offset)))).fetchall()
+            return self._rows_to_tracks(conn, rows)
+
+    def get_random_tracks(
+        self,
+        *,
+        size: int = 10,
+        genre: Optional[str] = None,
+        from_year: Optional[int] = None,
+        to_year: Optional[int] = None,
+    ) -> List[Track]:
+        filters = [_MUSIC_ONLY]
+        params: List[Any] = []
+        if genre:
+            filters.append("t.genre = ? COLLATE NOCASE")
+            params.append(genre)
+        if from_year is not None:
+            filters.append("t.year >= ?")
+            params.append(int(from_year))
+        if to_year is not None:
+            filters.append("t.year <= ?")
+            params.append(int(to_year))
+        params.append(max(0, int(size)))
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(f"""
+                SELECT t.* FROM tracks t
+                WHERE {' AND '.join(filters)}
+                ORDER BY RANDOM() LIMIT ?
+            """, tuple(params)).fetchall()
+            return self._rows_to_tracks(conn, rows)
+
+    def count_tracks_per_album(self, track_ids: List[str]) -> Dict[str, int]:
+        """How many of these tracks each album holds, as ``album_id -> count``.
+
+        One query so a caller deciding "is this whole album starred?" over a
+        page of fifty albums does not ask fifty times.
+        """
+        if not track_ids:
+            return {}
+        placeholders = ",".join("?" for _ in track_ids)
+        with self._get_connection() as conn:
+            rows = conn.execute(f"""
+                SELECT album_id, COUNT(*) FROM tracks
+                WHERE id IN ({placeholders}) AND album_id IS NOT NULL
+                GROUP BY album_id
+            """, tuple(track_ids)).fetchall()
+            return {str(row[0]): int(row[1]) for row in rows}
+
+    def get_tracks_by_ids(self, track_ids: List[str]) -> List[Track]:
+        """Tracks for a list of ids, in the order the caller gave them."""
+        if not track_ids:
+            return []
+        placeholders = ",".join("?" for _ in track_ids)
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"SELECT * FROM tracks WHERE id IN ({placeholders})", tuple(track_ids)
+            ).fetchall()
+            by_id = {track.id: track for track in self._rows_to_tracks(conn, rows)}
+            return [by_id[track_id] for track_id in track_ids if track_id in by_id]
 
     def get_tracks_by_album(self, album_name: str, artist_name: str = None) -> List[Track]:
         """
@@ -1132,6 +1374,41 @@ class DatabaseManager:
                 FROM track_user_state WHERE track_id = ?
             """, (track_id,)).fetchone()
             return dict(row) if row else {"play_count": 0, "rating": None, "last_played_at": None}
+
+    def get_track_user_states(self, track_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Play count, rating and last-played for a whole list, in one query.
+
+        Serializing a page of songs asks for this per track; one round trip per
+        row is what turns a fifty-song album into fifty queries.
+        """
+        if not track_ids:
+            return {}
+        placeholders = ",".join("?" for _ in track_ids)
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(f"""
+                SELECT track_id, play_count, rating, last_played_at
+                FROM track_user_state WHERE track_id IN ({placeholders})
+            """, tuple(track_ids)).fetchall()
+            found = {str(row["track_id"]): dict(row) for row in rows}
+        return {
+            track_id: found.get(track_id, {"play_count": 0, "rating": None, "last_played_at": None})
+            for track_id in track_ids
+        }
+
+    def search_music_tracks(self, query: str, *, count: int = 20, offset: int = 0) -> List[Track]:
+        """Track search restricted to music, paged the way clients page it."""
+        like = f"%{query}%"
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(f"""
+                SELECT t.* FROM tracks t
+                WHERE {_MUSIC_ONLY}
+                  AND (t.title LIKE ? OR t.artist LIKE ? OR t.album LIKE ?)
+                ORDER BY t.artist, t.album, COALESCE(t.disc_number, 1), COALESCE(t.track_number, 0), t.title
+                LIMIT ? OFFSET ?
+            """, (like, like, like, max(0, int(count)), max(0, int(offset)))).fetchall()
+            return self._rows_to_tracks(conn, rows)
 
     def set_track_rating(self, track_id: str, rating: Optional[int]) -> bool:
         if rating is not None and (not isinstance(rating, int) or isinstance(rating, bool) or not 1 <= rating <= 5):
@@ -1638,6 +1915,50 @@ class DatabaseManager:
             record = dict(row)
             record["scopes"] = self._decode_scopes(record.get("scopes"))
             return record
+
+    # Note: Subsonic credentials (instance database)
+
+    def set_subsonic_credential(self, user_id: str, secret_enc: str) -> Dict[str, Any]:
+        """Store (or replace) one account's Subsonic credential."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO subsonic_credentials (user_id, secret_enc)
+                VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    secret_enc=excluded.secret_enc,
+                    created_at=CURRENT_TIMESTAMP,
+                    last_used_at=NULL,
+                    last_client=NULL
+            """, (user_id, secret_enc))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT user_id, created_at, last_used_at, last_client FROM subsonic_credentials WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+            return dict(row)
+
+    def get_subsonic_credential(self, user_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT user_id, secret_enc, created_at, last_used_at, last_client
+                FROM subsonic_credentials WHERE user_id = ?
+            """, (user_id,)).fetchone()
+            return dict(row) if row else None
+
+    def touch_subsonic_credential(self, user_id: str, client: Optional[str] = None) -> None:
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE subsonic_credentials
+                SET last_used_at = CURRENT_TIMESTAMP,
+                    last_client = COALESCE(?, last_client)
+                WHERE user_id = ?
+            """, (client or None, user_id))
+
+    def delete_subsonic_credential(self, user_id: str) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM subsonic_credentials WHERE user_id = ?", (user_id,))
+            return bool(cursor.rowcount)
 
     def _decode_pairing_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
         record["requested_scopes"] = self._decode_scopes(record.get("requested_scopes"))

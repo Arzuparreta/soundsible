@@ -217,6 +217,11 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
   broadcasting from remote browsers. Already publishing something else from that
   machine? Pick another port — see
   [sharing the node](docs/INSTALL.md#sharing-the-node-with-other-services).
+- **In any Subsonic app** — Soundsible speaks the OpenSubsonic API, so
+  Symfonium, Amperfy, Feishin, DSub, Tempo and play:Sub play your library as
+  it is, offline copies and car screens included. Generate a password in
+  *Settings → Other clients* and point the app at your server. See
+  [OpenSubsonic](docs/OPENSUBSONIC.md).
 - **Servers, reverse proxies, security** — see the [Install & Deployment guide](docs/INSTALL.md).
 
 > 🖥️ **Desktop app (beta)** — a one-click Tauri app with no terminal is available for early testers. Install from [GitHub Releases](https://github.com/Arzuparreta/soundsible/releases) — every release carries the installers alongside the server images — or build locally — see [docs/DESKTOP_BETA.md](docs/DESKTOP_BETA.md).
@@ -233,6 +238,7 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 | [Configuration](docs/CONFIGURATION.md) | Settings, environment variables, downloads, cookies |
 | [Architecture](docs/ARCHITECTURE.md) | How Soundsible works, and how data flows |
 | [Live](docs/LIVE.md) | Broadcasting your station, sharing a room, and checking that it sounds |
+| [OpenSubsonic](docs/OPENSUBSONIC.md) | Playing your library in Symfonium, Amperfy, Feishin and the rest |
 | [Legal & Acceptable Use](docs/LEGAL.md) | Disclaimer and your responsibilities |
 | [Contributing](CONTRIBUTING.md) | Dev setup and pull-request workflow |
 | [Versioning & releases](docs/RELEASING.md) | What a version number promises, and how one is cut |

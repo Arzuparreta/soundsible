@@ -399,5 +399,30 @@ def poll_lyrics(
     return _LOOKUPS.poll_or_start(key, partial(fetch_lyrics, artist, title, album, duration))
 
 
+_LRC_TIMESTAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")
+
+
+def parse_lrc(text: str) -> list[tuple[int, str]]:
+    """LRC text as ``(offset in milliseconds, line)``, in time order.
+
+    The player parses this in the browser; a client that speaks a protocol with
+    timed lyrics needs the same reading server-side. One line may carry several
+    stamps — that is how an LRC file writes a repeated chorus — so each becomes
+    its own entry.
+    """
+    lines: list[tuple[int, str]] = []
+    for raw in str(text or "").splitlines():
+        stamps = list(_LRC_TIMESTAMP.finditer(raw))
+        if not stamps:
+            continue
+        content = raw[stamps[-1].end():].strip()
+        for stamp in stamps:
+            minutes, seconds, fraction = stamp.groups()
+            # Two digits after the separator are hundredths, three are millis.
+            millis = int((fraction or "0").ljust(3, "0")[:3]) if fraction else 0
+            lines.append((int(minutes) * 60_000 + int(seconds) * 1000 + millis, content))
+    return sorted(lines, key=lambda entry: entry[0])
+
+
 def _reset_lyrics_jobs_for_tests() -> None:
     _LOOKUPS.clear_for_tests()
