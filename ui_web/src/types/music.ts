@@ -2,8 +2,13 @@ export interface Track {
   id: string;
   title: string;
   artist: string;
+  /** Ordered performers when the source provided real structured credits. */
+  artists?: string[] | null;
   album?: string;
   album_artist?: string | null;
+  disc_number?: number | null;
+  disc_total?: number | null;
+  is_compilation?: boolean;
   duration?: number;
   youtube_id?: string | null;
   /** Graph node that discovered this song. Playback may use a better upload. */

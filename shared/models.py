@@ -67,6 +67,13 @@ class Track:
     year: Optional[int] = None
     genre: Optional[str] = None
     track_number: Optional[int] = None
+    # Ordered performer names when the source provides real structure.  The
+    # legacy ``artist`` display string remains the compatibility field; callers
+    # must not try to recover this list by splitting punctuation in it.
+    artists: Optional[List[str]] = None
+    disc_number: Optional[int] = None
+    disc_total: Optional[int] = None
+    is_compilation: bool = False
     is_local: bool = False
     local_path: Optional[str] = None
     musicbrainz_id: Optional[str] = None

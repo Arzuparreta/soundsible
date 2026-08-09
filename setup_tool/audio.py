@@ -21,6 +21,22 @@ from shared.constants import (
 )
 
 
+def _number_pair(value: object) -> Tuple[Optional[int], Optional[int]]:
+    text = str(value or "").strip()
+    if not text:
+        return None, None
+    first, _, second = text.partition("/")
+    number = int(first) if first.strip().isdigit() else None
+    total = int(second) if second.strip().isdigit() else None
+    return number, total
+
+
+def _tag_bool(value: object) -> bool:
+    if isinstance(value, (list, tuple)):
+        value = value[0] if value else None
+    return str(value or "").strip().casefold() in {"1", "true", "yes"}
+
+
 class AudioProcessor:
     """Handler for audio file operations."""
     
@@ -101,6 +117,10 @@ class AudioProcessor:
                 'year': None,
                 'genre': None,
                 'track_number': None,
+                'artists': None,
+                'disc_number': None,
+                'disc_total': None,
+                'is_compilation': False,
                 'cover_art': False
             }
             
@@ -109,7 +129,10 @@ class AudioProcessor:
                 tags = audio.tags
                 if tags:
                     metadata['title'] = str(tags.get('TIT2', 'Unknown Title'))
-                    metadata['artist'] = str(tags.get('TPE1', 'Unknown Artist'))
+                    artist_frame = tags.get('TPE1')
+                    artists = [str(value).strip() for value in getattr(artist_frame, 'text', []) if str(value).strip()]
+                    metadata['artists'] = artists or None
+                    metadata['artist'] = ' & '.join(artists) if artists else 'Unknown Artist'
                     metadata['album'] = str(tags.get('TALB', 'Unknown Album'))
                     
                     # Note: Album artist
@@ -128,6 +151,12 @@ class AudioProcessor:
                     if 'TRCK' in tags:
                         track_str = str(tags['TRCK'])
                         metadata['track_number'] = int(track_str.split('/')[0])
+
+                    if 'TPOS' in tags:
+                        metadata['disc_number'], metadata['disc_total'] = _number_pair(tags['TPOS'])
+
+                    if 'TCMP' in tags:
+                        metadata['is_compilation'] = _tag_bool(tags['TCMP'])
                     
                     # Note: Cover art
                     if any(frame.startswith('APIC:') for frame in tags.keys()):
@@ -137,7 +166,9 @@ class AudioProcessor:
             elif isinstance(audio, FLAC):
                 if audio.tags:
                     metadata['title'] = audio.tags.get('title', ['Unknown Title'])[0]
-                    metadata['artist'] = audio.tags.get('artist', ['Unknown Artist'])[0]
+                    artists = [str(value).strip() for value in audio.tags.get('artist', []) if str(value).strip()]
+                    metadata['artists'] = artists or None
+                    metadata['artist'] = ' & '.join(artists) if artists else 'Unknown Artist'
                     metadata['album'] = audio.tags.get('album', ['Unknown Album'])[0]
                     
                     # Note: Album artist
@@ -155,6 +186,15 @@ class AudioProcessor:
                     if 'tracknumber' in audio.tags:
                         track_str = audio.tags['tracknumber'][0]
                         metadata['track_number'] = int(track_str.split('/')[0])
+
+                    if 'discnumber' in audio.tags:
+                        metadata['disc_number'], embedded_total = _number_pair(audio.tags['discnumber'][0])
+                        metadata['disc_total'] = embedded_total
+                    total_discs = audio.tags.get('disctotal') or audio.tags.get('totaldiscs')
+                    if total_discs:
+                        _, metadata['disc_total'] = _number_pair(f"0/{total_discs[0]}")
+                    if 'compilation' in audio.tags:
+                        metadata['is_compilation'] = _tag_bool(audio.tags['compilation'])
                 
                 # Note: Check for cover art
                 if audio.pictures:
@@ -164,7 +204,9 @@ class AudioProcessor:
             elif isinstance(audio, OggVorbis):
                 if audio.tags:
                     metadata['title'] = audio.tags.get('title', ['Unknown Title'])[0]
-                    metadata['artist'] = audio.tags.get('artist', ['Unknown Artist'])[0]
+                    artists = [str(value).strip() for value in audio.tags.get('artist', []) if str(value).strip()]
+                    metadata['artists'] = artists or None
+                    metadata['artist'] = ' & '.join(artists) if artists else 'Unknown Artist'
                     metadata['album'] = audio.tags.get('album', ['Unknown Album'])[0]
                     
                     if 'albumartist' in audio.tags:
@@ -178,12 +220,22 @@ class AudioProcessor:
                     
                     if 'tracknumber' in audio.tags:
                         metadata['track_number'] = int(audio.tags['tracknumber'][0])
+                    if 'discnumber' in audio.tags:
+                        metadata['disc_number'], embedded_total = _number_pair(audio.tags['discnumber'][0])
+                        metadata['disc_total'] = embedded_total
+                    total_discs = audio.tags.get('disctotal') or audio.tags.get('totaldiscs')
+                    if total_discs:
+                        _, metadata['disc_total'] = _number_pair(f"0/{total_discs[0]}")
+                    if 'compilation' in audio.tags:
+                        metadata['is_compilation'] = _tag_bool(audio.tags['compilation'])
             
             # Note: M4A (MP4/AAC) files
             elif isinstance(audio, MP4):
                 if audio.tags:
                     metadata['title'] = audio.tags.get('\xa9nam', ['Unknown Title'])[0]
-                    metadata['artist'] = audio.tags.get('\xa9ART', ['Unknown Artist'])[0]
+                    artists = [str(value).strip() for value in audio.tags.get('\xa9ART', []) if str(value).strip()]
+                    metadata['artists'] = artists or None
+                    metadata['artist'] = ' & '.join(artists) if artists else 'Unknown Artist'
                     metadata['album'] = audio.tags.get('\xa9alb', ['Unknown Album'])[0]
                     
                     if 'aART' in audio.tags:
@@ -197,6 +249,11 @@ class AudioProcessor:
                     
                     if 'trkn' in audio.tags:
                         metadata['track_number'] = audio.tags['trkn'][0][0]
+                    if 'disk' in audio.tags:
+                        metadata['disc_number'] = audio.tags['disk'][0][0] or None
+                        metadata['disc_total'] = audio.tags['disk'][0][1] or None
+                    if 'cpil' in audio.tags:
+                        metadata['is_compilation'] = bool(audio.tags['cpil'][0])
                     
                     # Note: Check for cover art
                     if 'covr' in audio.tags:
@@ -221,6 +278,10 @@ class AudioProcessor:
                 'year': None,
                 'genre': None,
                 'track_number': None,
+                'artists': None,
+                'disc_number': None,
+                'disc_total': None,
+                'is_compilation': False,
                 'cover_art': False
             }
     

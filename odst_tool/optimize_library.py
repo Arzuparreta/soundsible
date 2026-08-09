@@ -126,6 +126,10 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
                             year=track.year,
                             genre=track.genre,
                             track_number=track.track_number,
+                            artists=track.artists,
+                            disc_number=track.disc_number,
+                            disc_total=track.disc_total,
+                            is_compilation=track.is_compilation,
                             cover_art_key=track.cover_art_key
                         )
                         

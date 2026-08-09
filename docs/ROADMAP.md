@@ -38,12 +38,12 @@ disc numbers, compilations, multiple artists per track, play counts, ratings and
 last-played. And SQLite as the source of truth rather than an index rebuilt from
 JSON.
 
-- [ ] Library schema: albums, artists, disc numbers, compilations, play counts, ratings
+- [x] Library schema: albums, artists, disc numbers, compilations, play counts, ratings
 - [ ] SQLite canonical; `library.json` becomes an export format
 - [ ] `POST /api/library/scan` — point Soundsible at a folder you already have
 - [ ] Read ReplayGain / R128 tags when a file carries them
 - [ ] Write MusicBrainz IDs on acquisition
-- [ ] Decide artist/title orientation by lookup, not by position. A YouTube
+- [x] Decide artist/title orientation by lookup, not by position. A YouTube
       title is split on the first separator and the left side is taken as the
       artist, unverified. Uploads titled "Song - Artist" therefore land
       reversed, which files the track under the wrong name and makes it

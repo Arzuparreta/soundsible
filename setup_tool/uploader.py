@@ -296,6 +296,13 @@ class UploadEngine:
                 original_filename=orig_name,
                 compressed=is_compressed_copy,
                 cover_art_key=None,
+                year=metadata.get('year'),
+                genre=metadata.get('genre'),
+                track_number=metadata.get('track_number'),
+                artists=metadata.get('artists'),
+                disc_number=metadata.get('disc_number'),
+                disc_total=metadata.get('disc_total'),
+                is_compilation=bool(metadata.get('is_compilation')),
                 is_local=(self.config.provider.value == 'local'),
                 local_path=final_local_path
             )
