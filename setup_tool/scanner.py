@@ -191,6 +191,10 @@ class LibraryScanner:
                 year=meta.get('year'),
                 genre=meta.get('genre'),
                 track_number=meta.get('track_number'),
+                artists=meta.get('artists'),
+                disc_number=meta.get('disc_number'),
+                disc_total=meta.get('disc_total'),
+                is_compilation=bool(meta.get('is_compilation')),
                 is_local=True,
                 local_path=str(file_path.absolute())
             )

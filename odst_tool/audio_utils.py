@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import requests
 import mutagen
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, APIC
+from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, APIC, TPOS, TCMP
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC, Picture
 
@@ -73,7 +73,10 @@ class AudioProcessor:
             # Note: Basic tags
             if metadata.get('title'):
                 audio['title'] = metadata['title']
-            if metadata.get('artist'):
+            artists = metadata.get('artists')
+            if isinstance(artists, list) and artists:
+                audio['artist'] = [str(value) for value in artists if str(value).strip()]
+            elif metadata.get('artist'):
                 audio['artist'] = metadata['artist']
             if metadata.get('album'):
                 audio['album'] = metadata['album']
@@ -86,6 +89,13 @@ class AudioProcessor:
                 
             if metadata.get('track_number'):
                 audio['tracknumber'] = str(metadata['track_number'])
+            if metadata.get('disc_number'):
+                disc = str(metadata['disc_number'])
+                if metadata.get('disc_total'):
+                    disc += f"/{metadata['disc_total']}"
+                audio['discnumber'] = disc
+            if metadata.get('is_compilation'):
+                audio['compilation'] = '1'
             
             if metadata.get('isrc'):
                 audio['isrc'] = metadata['isrc']
@@ -120,7 +130,10 @@ class AudioProcessor:
             audio.tags.add(TIT2(encoding=3, text=metadata['title']))
         
         # Note: Artist details
-        if metadata.get('artist'):
+        artists = metadata.get('artists')
+        if isinstance(artists, list) and artists:
+            audio.tags.add(TPE1(encoding=3, text=[str(value) for value in artists if str(value).strip()]))
+        elif metadata.get('artist'):
             audio.tags.add(TPE1(encoding=3, text=metadata['artist']))
             
         # Note: Album details
@@ -141,6 +154,13 @@ class AudioProcessor:
         if metadata.get('track_number'):
             from mutagen.id3 import TRCK
             audio.tags.add(TRCK(encoding=3, text=str(metadata['track_number'])))
+        if metadata.get('disc_number'):
+            disc = str(metadata['disc_number'])
+            if metadata.get('disc_total'):
+                disc += f"/{metadata['disc_total']}"
+            audio.tags.add(TPOS(encoding=3, text=disc))
+        if metadata.get('is_compilation'):
+            audio.tags.add(TCMP(encoding=3, text='1'))
             
         # Note: ISRC details
         if metadata.get('isrc'):
@@ -194,18 +214,32 @@ class AudioProcessor:
     def get_metadata_from_file(file_path: str) -> Dict[str, Any]:
         """Read embedded metadata from an audio file (MP3 or FLAC). Returns dict with title, artist, album, etc."""
         path = Path(file_path)
-        out = {'title': '', 'artist': '', 'album': '', 'album_artist': None, 'year': None, 'track_number': None}
+        out = {
+            'title': '', 'artist': '', 'artists': None, 'album': '', 'album_artist': None,
+            'year': None, 'track_number': None, 'disc_number': None, 'disc_total': None,
+            'is_compilation': False,
+        }
         try:
             if path.suffix.lower() == '.flac':
                 audio = FLAC(file_path)
                 out['title'] = (audio.get('title') or [''])[0]
-                out['artist'] = (audio.get('artist') or [''])[0]
+                artists = [str(value).strip() for value in (audio.get('artist') or []) if str(value).strip()]
+                out['artists'] = artists or None
+                out['artist'] = ' & '.join(artists)
                 out['album'] = (audio.get('album') or [''])[0]
                 out['album_artist'] = (audio.get('albumartist') or [None])[0]
                 date = (audio.get('date') or [''])[0]
                 out['year'] = int(date[:4]) if date and date[:4].isdigit() else None
                 tn = (audio.get('tracknumber') or [''])[0]
                 out['track_number'] = int(tn) if tn and str(tn).isdigit() else None
+                disc = str((audio.get('discnumber') or [''])[0])
+                if disc:
+                    number, _, total = disc.partition('/')
+                    out['disc_number'] = int(number) if number.strip().isdigit() else None
+                    out['disc_total'] = int(total) if total.strip().isdigit() else None
+                out['is_compilation'] = str((audio.get('compilation') or [''])[0]).strip().casefold() in {
+                    '1', 'true', 'yes'
+                }
             elif path.suffix.lower() == '.mp3':
                 audio = MP3(file_path)
                 if audio.tags:
@@ -214,7 +248,10 @@ class AudioProcessor:
                     def _txt_opt(f):
                         return f.text[0] if f and getattr(f, 'text', None) else None
                     out['title'] = _txt(audio.tags.get('TIT2')) or ''
-                    out['artist'] = _txt(audio.tags.get('TPE1')) or ''
+                    artist_frame = audio.tags.get('TPE1')
+                    artists = [str(value).strip() for value in getattr(artist_frame, 'text', []) if str(value).strip()]
+                    out['artists'] = artists or None
+                    out['artist'] = ' & '.join(artists)
                     out['album'] = _txt(audio.tags.get('TALB')) or ''
                     out['album_artist'] = _txt_opt(audio.tags.get('TPE2'))
                     tdrc = audio.tags.get('TDRC')
@@ -225,6 +262,14 @@ class AudioProcessor:
                     if trck and getattr(trck, 'text', None):
                         tn = str(trck.text[0]).split('/')[0].strip()
                         out['track_number'] = int(tn) if tn.isdigit() else None
+                    tpos = audio.tags.get('TPOS')
+                    if tpos and getattr(tpos, 'text', None):
+                        number, _, total = str(tpos.text[0]).partition('/')
+                        out['disc_number'] = int(number) if number.strip().isdigit() else None
+                        out['disc_total'] = int(total) if total.strip().isdigit() else None
+                    tcmp = audio.tags.get('TCMP')
+                    if tcmp and getattr(tcmp, 'text', None):
+                        out['is_compilation'] = str(tcmp.text[0]).strip().casefold() in {'1', 'true', 'yes'}
         except Exception as e:
             print(f"Error reading metadata from file: {e}")
         return out

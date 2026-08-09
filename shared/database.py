@@ -66,6 +66,10 @@ _TRACKS_COLUMNS = {
     "audio_source_url": "TEXT",
     "audio_license_url": "TEXT",
     "audio_identity_verified": "BOOLEAN DEFAULT 0",
+    "disc_number": "INTEGER",
+    "disc_total": "INTEGER",
+    "is_compilation": "BOOLEAN NOT NULL DEFAULT 0",
+    "album_id": "TEXT",
 }
 
 _YT_CACHE_COLUMNS = {
@@ -133,6 +137,7 @@ class DatabaseManager:
             # has already set it.
             logger.debug("Could not set WAL on %s; already set by another connection", self.db_path)
         conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA foreign_keys=ON")
         self._connections.conn = conn
         return conn
 
@@ -159,6 +164,10 @@ class DatabaseManager:
                 year INTEGER,
                 genre TEXT,
                 track_number INTEGER,
+                disc_number INTEGER,
+                disc_total INTEGER,
+                is_compilation BOOLEAN NOT NULL DEFAULT 0,
+                album_id TEXT,
                 is_local BOOLEAN,
                 local_path TEXT,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -489,6 +498,166 @@ class DatabaseManager:
             ON tracks (album, album_artist, artist, track_number)
         """)
 
+    @staticmethod
+    def _create_catalog_tables(conn):
+        """Normalized per-account catalog plus user-owned track state."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS artists (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                name_key TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS albums (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                title_key TEXT NOT NULL,
+                album_artist_id TEXT NOT NULL,
+                album_artist TEXT NOT NULL,
+                year INTEGER,
+                genre TEXT,
+                is_compilation INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (album_artist_id) REFERENCES artists(id)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_albums_artist_title
+            ON albums (album_artist_id, title_key)
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS track_artists (
+                track_id TEXT NOT NULL,
+                artist_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY (track_id, position),
+                UNIQUE (track_id, artist_id),
+                FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE,
+                FOREIGN KEY (artist_id) REFERENCES artists(id)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_track_artists_artist
+            ON track_artists (artist_id, track_id)
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS track_user_state (
+                track_id TEXT PRIMARY KEY,
+                play_count INTEGER NOT NULL DEFAULT 0 CHECK (play_count >= 0),
+                rating INTEGER CHECK (rating IS NULL OR rating BETWEEN 1 AND 5),
+                last_played_at INTEGER,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
+            )
+        """)
+
+    @staticmethod
+    def _flat_track_from_row(row: sqlite3.Row | tuple, columns: list[str] | None = None) -> Track:
+        data = dict(row) if isinstance(row, sqlite3.Row) else dict(zip(columns or [], row))
+        data.pop("last_updated", None)
+        data.pop("album_id", None)
+        data["local_path"] = None
+        data["audio_identity_verified"] = bool(data.get("audio_identity_verified"))
+        data["is_compilation"] = bool(data.get("is_compilation"))
+        return Track.from_dict(data)
+
+    @staticmethod
+    def _replace_catalog_projection(conn, tracks: Iterable[Track]) -> None:
+        """Replace derived entities/links while preserving surviving user state."""
+        from shared.library_catalog import build_catalog_snapshot
+
+        track_list = list(tracks)
+        snapshot = build_catalog_snapshot(track_list)
+
+        conn.executemany(
+            """
+            INSERT INTO artists (id, name, name_key)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                name_key=excluded.name_key,
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            ((artist.id, artist.name, artist.name_key) for artist in snapshot.artists),
+        )
+        conn.executemany(
+            """
+            INSERT INTO albums (
+                id, title, title_key, album_artist_id, album_artist,
+                year, genre, is_compilation
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title=excluded.title,
+                title_key=excluded.title_key,
+                album_artist_id=excluded.album_artist_id,
+                album_artist=excluded.album_artist,
+                year=excluded.year,
+                genre=excluded.genre,
+                is_compilation=excluded.is_compilation,
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (
+                (
+                    album.id,
+                    album.title,
+                    album.title_key,
+                    album.album_artist_id,
+                    album.album_artist,
+                    album.year,
+                    album.genre,
+                    int(album.is_compilation),
+                )
+                for album in snapshot.albums
+            ),
+        )
+
+        conn.execute("DELETE FROM track_artists")
+        conn.executemany(
+            "INSERT INTO track_artists (track_id, artist_id, position) VALUES (?, ?, ?)",
+            (
+                (link.track_id, identifier, position)
+                for link in snapshot.tracks
+                for position, identifier in enumerate(link.artist_ids)
+            ),
+        )
+        conn.executemany(
+            "UPDATE tracks SET album_id = ? WHERE id = ?",
+            ((link.album_id, link.track_id) for link in snapshot.tracks),
+        )
+
+        incoming_ids = [track.id for track in track_list]
+        if incoming_ids:
+            placeholders = ",".join("?" for _ in incoming_ids)
+            conn.execute(
+                f"DELETE FROM track_user_state WHERE track_id NOT IN ({placeholders})",
+                incoming_ids,
+            )
+        else:
+            conn.execute("DELETE FROM track_user_state")
+
+        conn.execute("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE album_id IS NOT NULL)")
+        conn.execute("""
+            DELETE FROM artists
+            WHERE id NOT IN (SELECT artist_id FROM track_artists)
+              AND id NOT IN (SELECT album_artist_id FROM albums)
+        """)
+
+    @classmethod
+    def _backfill_catalog_tables(cls, conn) -> None:
+        """Populate new catalog tables once when upgrading a flat legacy DB."""
+        has_tracks = conn.execute("SELECT 1 FROM tracks LIMIT 1").fetchone() is not None
+        has_links = conn.execute("SELECT 1 FROM track_artists LIMIT 1").fetchone() is not None
+        if not has_tracks or has_links:
+            return
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM tracks").fetchall()
+        tracks = [cls._flat_track_from_row(row) for row in rows]
+        cls._replace_catalog_projection(conn, tracks)
+
     def _init_db(self):
         """Initialize the database schema.
 
@@ -533,7 +702,9 @@ class DatabaseManager:
             self._create_pairing_table(conn)
             self._create_lyrics_table(conn)
             self._create_discovery_tables(conn)
+            self._create_catalog_tables(conn)
             self._create_performance_indexes(conn)
+            self._backfill_catalog_tables(conn)
             conn.execute("COMMIT")
         except Exception as e:
             conn.execute("ROLLBACK")
@@ -568,11 +739,12 @@ class DatabaseManager:
                             id, title, artist, album, duration, file_hash, 
                             original_filename, compressed, file_size, bitrate, 
                             format, cover_art_key, year, genre, track_number, 
+                            disc_number, disc_total, is_compilation,
                             is_local, local_path, musicbrainz_id, isrc, album_artist,
                             cover_source, metadata_modified_by_user, youtube_id,
                             audio_quality, audio_source, audio_source_url,
                             audio_license_url, audio_identity_verified
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -588,6 +760,9 @@ class DatabaseManager:
                             year=excluded.year,
                             genre=excluded.genre,
                             track_number=excluded.track_number,
+                            disc_number=excluded.disc_number,
+                            disc_total=excluded.disc_total,
+                            is_compilation=excluded.is_compilation,
                             is_local=CASE WHEN excluded.is_local THEN 1 ELSE tracks.is_local END,
                             local_path=excluded.local_path,
                             musicbrainz_id=COALESCE(excluded.musicbrainz_id, tracks.musicbrainz_id),
@@ -606,12 +781,14 @@ class DatabaseManager:
                         track.duration, track.file_hash, track.original_filename, 
                         track.compressed, track.file_size, track.bitrate, track.format, 
                         track.cover_art_key, track.year, track.genre, track.track_number, 
+                        track.disc_number, track.disc_total, track.is_compilation,
                         track.is_local, None,
                         track.musicbrainz_id, track.isrc, track.album_artist,
                         track.cover_source, track.metadata_modified_by_user, track.youtube_id,
                         track.audio_quality, track.audio_source, track.audio_source_url,
                         track.audio_license_url, track.audio_identity_verified
                     ))
+                self._replace_catalog_projection(conn, metadata.tracks)
                 conn.execute("COMMIT")
             except Exception as e:
                 conn.execute("ROLLBACK")
@@ -622,7 +799,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute("SELECT * FROM tracks ORDER BY artist, album, track_number")
-            return [self._row_to_track(row) for row in cursor.fetchall()]
+            return self._rows_to_tracks(conn, cursor.fetchall())
 
     def record_discovery_signal(
         self,
@@ -814,7 +991,7 @@ class DatabaseManager:
                     WHERE tracks_fts MATCH ?
                     ORDER BY rank
                 """, (f"{query}*",))
-                return [self._row_to_track(row) for row in cursor.fetchall()]
+                return self._rows_to_tracks(conn, cursor.fetchall())
             except sqlite3.OperationalError:
                 # Note: Fallback to LIKE
                 cursor = conn.execute("""
@@ -822,35 +999,52 @@ class DatabaseManager:
                     WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?
                     ORDER BY artist, title
                 """, (f"%{query}%", f"%{query}%", f"%{query}%"))
-                return [self._row_to_track(row) for row in cursor.fetchall()]
+                return self._rows_to_tracks(conn, cursor.fetchall())
 
     def get_track(self, track_id: str) -> Optional[Track]:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
-            return self._row_to_track(row) if row else None
+            return self._rows_to_tracks(conn, [row])[0] if row else None
 
     def get_albums(self) -> List[Dict[str, Any]]:
-        """
-        Fetch unique albums with metadata.
-        Groups strictly by album name to prevent splitting when multiple artists are involved.
-        Picks the most representative artist (Album Artist if available).
-        """
+        """Fetch first-class albums without merging homonymous releases."""
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
-            # Note: Use MAX(album_artist) or fallback to artist if NO track in the album has album_artist
             cursor = conn.execute("""
-                SELECT 
-                    album, 
-                    COALESCE(MAX(album_artist), artist) as artist, 
-                    MIN(id) as first_track_id, 
-                    COUNT(*) as track_count, 
-                    year
-                FROM tracks 
-                GROUP BY album
-                ORDER BY artist, album
+                SELECT a.id,
+                       a.title,
+                       a.title AS album,
+                       a.album_artist,
+                       a.album_artist AS artist,
+                       a.year,
+                       a.genre,
+                       a.is_compilation,
+                       MIN(t.id) AS first_track_id,
+                       COUNT(t.id) AS track_count
+                FROM albums a
+                JOIN tracks t ON t.album_id = a.id
+                GROUP BY a.id
+                ORDER BY a.album_artist, a.title
             """)
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_artists(self) -> List[Dict[str, Any]]:
+        """Fetch first-class artists with album and track counts."""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT ar.id,
+                       ar.name,
+                       COUNT(DISTINCT ta.track_id) AS track_count,
+                       COUNT(DISTINCT al.id) AS album_count
+                FROM artists ar
+                LEFT JOIN track_artists ta ON ta.artist_id = ar.id
+                LEFT JOIN albums al ON al.album_artist_id = ar.id
+                GROUP BY ar.id
+                ORDER BY ar.name
+            """).fetchall()
+            return [dict(row) for row in rows]
 
     def get_tracks_by_album(self, album_name: str, artist_name: str = None) -> List[Track]:
         """
@@ -871,16 +1065,104 @@ class DatabaseManager:
                     WHERE album = ?
                     ORDER BY track_number
                 """, (album_name,))
-            return [self._row_to_track(row) for row in cursor.fetchall()]
+            return self._rows_to_tracks(conn, cursor.fetchall())
 
-    def _row_to_track(self, row: sqlite3.Row) -> Track:
+    def get_tracks_by_album_id(self, catalog_album_id: str) -> List[Track]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT * FROM tracks
+                WHERE album_id = ?
+                ORDER BY COALESCE(disc_number, 1), COALESCE(track_number, 0), title
+            """, (catalog_album_id,)).fetchall()
+            return self._rows_to_tracks(conn, rows)
+
+    def get_tracks_by_artist_id(self, catalog_artist_id: str) -> List[Track]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT t.*
+                FROM tracks t
+                JOIN track_artists ta ON ta.track_id = t.id
+                WHERE ta.artist_id = ?
+                ORDER BY t.album, COALESCE(t.disc_number, 1), COALESCE(t.track_number, 0), t.title
+            """, (catalog_artist_id,)).fetchall()
+            return self._rows_to_tracks(conn, rows)
+
+    @staticmethod
+    def _artist_names_by_track(conn, track_ids: list[str]) -> Dict[str, List[str]]:
+        if not track_ids:
+            return {}
+        placeholders = ",".join("?" for _ in track_ids)
+        rows = conn.execute(f"""
+            SELECT ta.track_id, ar.name
+            FROM track_artists ta
+            JOIN artists ar ON ar.id = ta.artist_id
+            WHERE ta.track_id IN ({placeholders})
+            ORDER BY ta.track_id, ta.position
+        """, track_ids).fetchall()
+        result: Dict[str, List[str]] = {}
+        for row in rows:
+            result.setdefault(str(row["track_id"]), []).append(str(row["name"]))
+        return result
+
+    def _rows_to_tracks(self, conn, rows: list[sqlite3.Row]) -> List[Track]:
+        artists = self._artist_names_by_track(conn, [str(row["id"]) for row in rows])
+        return [self._row_to_track(row, artists.get(str(row["id"]))) for row in rows]
+
+    def _row_to_track(self, row: sqlite3.Row, artists: Optional[List[str]] = None) -> Track:
         # Note: Map row to track object; ignore stored local_path (resolve at read from output_dir).
         data = dict(row)
-        if "last_updated" in data:
-            del data["last_updated"]
+        data.pop("last_updated", None)
+        data.pop("album_id", None)
         data["local_path"] = None
         data["audio_identity_verified"] = bool(data.get("audio_identity_verified"))
+        data["is_compilation"] = bool(data.get("is_compilation"))
+        data["artists"] = artists or None
         return Track.from_dict(data)
+
+    def get_track_user_state(self, track_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            exists = conn.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone()
+            if exists is None:
+                return None
+            row = conn.execute("""
+                SELECT play_count, rating, last_played_at
+                FROM track_user_state WHERE track_id = ?
+            """, (track_id,)).fetchone()
+            return dict(row) if row else {"play_count": 0, "rating": None, "last_played_at": None}
+
+    def set_track_rating(self, track_id: str, rating: Optional[int]) -> bool:
+        if rating is not None and (not isinstance(rating, int) or isinstance(rating, bool) or not 1 <= rating <= 5):
+            raise ValueError("rating must be null or an integer from 1 to 5")
+        with self._get_connection() as conn:
+            if conn.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone() is None:
+                return False
+            conn.execute("""
+                INSERT INTO track_user_state (track_id, rating)
+                VALUES (?, ?)
+                ON CONFLICT(track_id) DO UPDATE SET
+                    rating=excluded.rating,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (track_id, rating))
+            return True
+
+    def record_track_play(self, track_id: str, played_at: int) -> bool:
+        if not isinstance(played_at, int) or isinstance(played_at, bool) or played_at < 0:
+            raise ValueError("played_at must be a non-negative Unix timestamp")
+        with self._get_connection() as conn:
+            if conn.execute("SELECT 1 FROM tracks WHERE id = ?", (track_id,)).fetchone() is None:
+                return False
+            conn.execute("""
+                INSERT INTO track_user_state (track_id, play_count, last_played_at)
+                VALUES (?, 1, ?)
+                ON CONFLICT(track_id) DO UPDATE SET
+                    play_count=track_user_state.play_count + 1,
+                    last_played_at=MAX(COALESCE(track_user_state.last_played_at, 0), excluded.last_played_at),
+                    updated_at=CURRENT_TIMESTAMP
+            """, (track_id, played_at))
+            return True
 
     def get_stats(self) -> Dict[str, int]:
         """Track counts in one pass.
@@ -906,7 +1188,11 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
+                conn.execute("DELETE FROM track_artists")
+                conn.execute("DELETE FROM track_user_state")
                 conn.execute("DELETE FROM tracks")
+                conn.execute("DELETE FROM albums")
+                conn.execute("DELETE FROM artists")
                 conn.execute("DELETE FROM library_info")
                 # Note: FTS5 table cleanup
                 try:
