@@ -1709,6 +1709,41 @@ def _register_api_shutdown_handlers() -> None:
         signal.signal(signal.SIGTERM, _stop_wsgi_from_signal)
 
 
+def _initialize_admin_core() -> Optional[_UserCore]:
+    """Warm the admin library and start its watcher before serving requests."""
+    global api_observer
+
+    from shared.user_context import user_context
+    from shared.users import get_admin_user
+
+    admin = get_admin_user()
+    if not admin:
+        return None
+
+    with user_context(admin["id"]):
+        admin_core = get_user_core(admin["id"])
+        if admin_core.library.config and admin_core.library.config.watch_folders:
+            from setup_tool.watcher import LibraryWatcher
+            from shared.api.library_scan import library_scan_service
+
+            def _scan_watched_path(_path):
+                try:
+                    # Scan every configured root so events coalesced while
+                    # one job is active cannot strand a second folder.
+                    roots = library_scan_service.resolve_roots(admin_core.library)
+                    library_scan_service.start(admin["id"], roots)
+                except ValueError as exc:
+                    logger.warning("API: watcher ignored unsafe scan path: %s", exc)
+
+            api_observer = LibraryWatcher(
+                admin_core.library.config,
+                scan_callback=_scan_watched_path,
+            )
+            api_observer.start()
+            logger.info("API: Music folder watcher started for the admin library.")
+    return admin_core
+
+
 def start_api(
     port=STATION_PORT,
     *,
@@ -1760,32 +1795,7 @@ def start_api(
     try:
         # Warm the admin's core so the first request is not the one that pays
         # for loading a manifest. Everyone else's is built on demand.
-        from shared.user_context import user_context
-        from shared.users import get_admin_user
-
-        _admin = get_admin_user()
-        if _admin:
-            with user_context(_admin["id"]):
-                admin_core = get_core()
-                if admin_core.library.config and admin_core.library.config.watch_folders:
-                    from setup_tool.watcher import LibraryWatcher
-                    from shared.api.library_scan import library_scan_service
-
-                    def _scan_watched_path(_path):
-                        try:
-                            # Scan every configured root so events coalesced while
-                            # one job is active cannot strand a second folder.
-                            roots = library_scan_service.resolve_roots(admin_core.library)
-                            library_scan_service.start(_admin["id"], roots)
-                        except ValueError as exc:
-                            logger.warning("API: watcher ignored unsafe scan path: %s", exc)
-
-                    api_observer = LibraryWatcher(
-                        admin_core.library.config,
-                        scan_callback=_scan_watched_path,
-                    )
-                    api_observer.start()
-                    logger.info("API: Music folder watcher started for the admin library.")
+        _initialize_admin_core()
         logger.info("API: Core services initialized successfully.")
 
         # Keep the network-facing download tools current when their respective
@@ -1889,6 +1899,7 @@ def start_api(
 
     except Exception as e:
         logger.exception("FATAL: Core initialization failed: %s", e)
+        raise RuntimeError("Core initialization failed; API server was not started") from e
 
     # Note: Access summary
     logger.info("\n" + "="*40)
