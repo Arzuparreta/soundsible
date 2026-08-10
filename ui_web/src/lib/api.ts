@@ -1,8 +1,12 @@
 import { apiOrigin, ownerToken } from './config';
 import type {
+  CatalogAlbum,
+  CatalogArtist,
+  CatalogGenre,
   CatalogResolveResponse,
   CatalogSaveResponse,
   CatalogSearchResponse,
+  CatalogYear,
   SavedEntry,
   Track,
   PlaylistMap,
@@ -561,6 +565,28 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   }
 }
 
+/** How the album grid asks for its rows. `sort` is one of the engine's own
+ * orderings; a genre or a year narrows the grid without changing what "sorted"
+ * means, and the engine reconciles the two. */
+export interface AlbumBrowseQuery {
+  sort?: string;
+  genre?: string;
+  year?: number;
+  limit?: number;
+  offset?: number;
+}
+
+function albumQuery(params?: AlbumBrowseQuery): string {
+  const search = new URLSearchParams();
+  if (params?.sort) search.set('sort', params.sort);
+  if (params?.genre) search.set('genre', params.genre);
+  if (params?.year !== undefined) search.set('year', String(params.year));
+  if (params?.limit !== undefined) search.set('limit', String(params.limit));
+  if (params?.offset) search.set('offset', String(params.offset));
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
+}
+
 /** Endpoint methods over the engine REST contract. */
 export const api = {
   health: () => request<{ status?: string }>('/api/health'),
@@ -679,6 +705,36 @@ export const api = {
       method: 'POST',
       body: { favourite },
     }),
+  // ── Browsing the normalized catalog ──
+  // The engine decides which record a track belongs to and who performs on it
+  // (`shared/library_catalog.py`); these read that decision rather than
+  // re-deriving it here from the flat list. Entities come back with track ids,
+  // which the store already resolves into playable tracks.
+  /** Albums, in one of the orderings the engine also serves over Subsonic. */
+  getLibraryAlbums: (params?: AlbumBrowseQuery) =>
+    request<{ albums?: CatalogAlbum[]; sort?: string }>(
+      `/api/library/albums${albumQuery(params)}`,
+      { timeoutMs: 15000 },
+    ).then((res) => res.albums ?? []),
+  /** One album and its tracks, in disc and track order. */
+  getLibraryAlbum: (albumId: string) =>
+    request<{ album: CatalogAlbum; track_ids?: string[] }>(
+      `/api/library/albums/${encodeURIComponent(albumId)}`,
+    ),
+  /** Every artist with a track to their name. */
+  getLibraryArtists: () =>
+    request<{ artists?: CatalogArtist[] }>('/api/library/artists', { timeoutMs: 15000 })
+      .then((res) => res.artists ?? []),
+  /** One artist: what they perform on, and the records they are credited with. */
+  getLibraryArtist: (artistId: string) =>
+    request<{ artist: CatalogArtist; albums?: CatalogAlbum[]; track_ids?: string[] }>(
+      `/api/library/artists/${encodeURIComponent(artistId)}`,
+    ),
+  getLibraryGenres: () =>
+    request<{ genres?: CatalogGenre[] }>('/api/library/genres').then((res) => res.genres ?? []),
+  getLibraryYears: () =>
+    request<{ years?: CatalogYear[] }>('/api/library/years').then((res) => res.years ?? []),
+
   /** Start and observe a real server-side scan of the configured music roots. */
   startLibraryScan: (path?: string) =>
     request<LibraryScanStatus>('/api/library/scan', {

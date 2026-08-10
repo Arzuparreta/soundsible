@@ -286,7 +286,20 @@ export const fr: Dict = {
     podcasts: 'Podcasts',
     downloads: 'Téléchargements',
     songs: 'Titres',
+    albums: 'Albums',
     artists: 'Artistes',
+    albumSortTitle: 'Trier les albums',
+    albumSort: {
+      newest: 'Ajoutés récemment',
+      alphabeticalByName: 'A–Z',
+      alphabeticalByArtist: 'Par artiste',
+      byYear: 'Par année',
+      frequent: 'Les plus écoutés',
+    },
+    albumFilterTitle: 'Afficher seulement',
+    albumFilterAll: 'Tous les albums',
+    albumFilterByGenre: 'Genre',
+    albumFilterByYear: 'Année',
     sortRecent: 'Récents',
     sortAZ: 'A–Z',
     sortFavFirst: 'Favoris en premier',
@@ -301,6 +314,8 @@ export const fr: Dict = {
     openArtist: 'Ouvrir {artist}',
     artistTrackCount: '{count} titres',
     emptyArtists: 'Aucun artiste pour le moment.',
+    emptyAlbums: "Aucun album pour le moment. Un titre en rejoint un dès qu'il arrive avec son disque dans ses tags.",
+    emptyAlbumFilter: 'Aucun album ne correspond à ce filtre.',
     emptyLibrary:
       'Votre bibliothèque est vide. Téléchargez quelque chose depuis Rechercher.',
     unreachable:
@@ -743,6 +758,11 @@ export const fr: Dict = {
     play: 'Lire',
     shuffle: 'Lecture aléatoire',
     goToArtist: "Aller à l'artiste",
+  },
+  albumActions: {
+    play: 'Lire',
+    shuffle: 'Lecture aléatoire',
+    goToAlbum: "Aller à l'album",
   },
   playlistActions: {
     play: 'Lire',

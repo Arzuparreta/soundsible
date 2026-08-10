@@ -24,6 +24,9 @@ import type { AutoModeState, AutoProfile } from '../lib/generatedQueue';
 import type { PlaybackQueueEntry } from '../lib/playbackQueue';
 import { loadVisualPreferences, type InterfaceSize } from '../lib/visualPreferences';
 import type {
+  CatalogArtist,
+  CatalogGenre,
+  CatalogYear,
   LibrarySettings,
   PlaylistMap,
   SavedEntry,
@@ -105,6 +108,21 @@ export interface PlaybackState {
   volumeLeveling: boolean;
 }
 
+export interface CatalogState {
+  artists: CatalogArtist[];
+  genres: CatalogGenre[];
+  years: CatalogYear[];
+  /** A catalog fetch has settled at least once. Same role as `libraryReady`:
+   * an empty grid before this is an unanswered question, not an empty shelf. */
+  ready: boolean;
+  loading: boolean;
+  /** Bumped whenever the catalog is refetched. The album grid asks the engine
+   * for its own page — ordering and filtering are questions only the engine can
+   * answer across the whole library — so it needs a signal saying "the shelf
+   * moved, ask again" rather than a copy of the albums to diff against. */
+  revision: number;
+}
+
 export interface AppState {
   online: boolean;
   device: DeviceRegistration;
@@ -131,6 +149,11 @@ export interface AppState {
   playlists: PlaylistMap;
   librarySettings: LibrarySettings;
   podcastSubscriptions: PodcastSubscription[];
+  /** The library's structure as the engine resolved it — the same records and
+   * credits any Subsonic client browses. Kept apart from `library` because it
+   * answers a different question: `library` is every track, this is what those
+   * tracks add up to. */
+  catalog: CatalogState;
   playback: PlaybackState;
   autoMode: AutoModeState;
   downloads: DownloadsState;
@@ -220,6 +243,14 @@ const [state, setState] = createStore<AppState>({
   playlists: {},
   librarySettings: {},
   podcastSubscriptions: [],
+  catalog: {
+    artists: [],
+    genres: [],
+    years: [],
+    ready: false,
+    loading: false,
+    revision: 0,
+  },
   playback: {
     currentTrack: null,
     isPlaying: false,

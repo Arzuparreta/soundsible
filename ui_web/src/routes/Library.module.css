@@ -221,6 +221,55 @@
   stroke-linecap: round;
 }
 
+.albumControls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.filterChips {
+  display: flex;
+  gap: var(--space-2xs);
+  padding: 0 var(--gutter) var(--space-xs);
+}
+
+/* The chip is the control that removes itself: tapping it clears the filter,
+   so the label and the ✕ are one target rather than a label with a hit area
+   glued on. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.chip svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* The filter button is icon-only past the narrowest breakpoint's sibling: two
+   labelled pills plus three tabs do not fit a 360px row. */
+@media (max-width: 480px) {
+  .albumControls .sortButton span {
+    display: none;
+  }
+}
+
 :global(html[data-interface-size='normal']) .headerAction {
   width: 48px;
   height: 48px;

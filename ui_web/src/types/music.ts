@@ -9,6 +9,8 @@ export interface Track {
   disc_number?: number | null;
   disc_total?: number | null;
   is_compilation?: boolean;
+  year?: number | null;
+  genre?: string | null;
   duration?: number;
   youtube_id?: string | null;
   /** Graph node that discovered this song. Playback may use a better upload. */
@@ -215,6 +217,50 @@ export interface ArtistProfile {
   partial_failures?: Array<{ source: string; error: string }>;
   cached: boolean;
   generated_at?: number;
+}
+
+/**
+ * An entity from the engine's normalized catalog (`/api/library/albums`,
+ * `/api/library/artists`).
+ *
+ * Not to be confused with `AlbumSummary` / `ArtistSummary`, which describe
+ * something on Deezer that may not exist here. These are records this library
+ * actually holds, identified the way the engine identifies them — so two
+ * records sharing a title are two ids, and a compilation is credited to Various
+ * Artists rather than to whoever happened to be its first guest.
+ */
+export interface CatalogAlbum {
+  id: string;
+  title: string;
+  album_artist: string;
+  album_artist_id?: string | null;
+  year?: number | null;
+  genre?: string | null;
+  is_compilation: boolean;
+  track_count: number;
+  duration: number;
+  /** The album's opening track — the same artwork `/rest` serves for it. */
+  cover_track_id?: string | null;
+}
+
+export interface CatalogArtist {
+  id: string;
+  name: string;
+  track_count: number;
+  album_count: number;
+  cover_track_id?: string | null;
+}
+
+export interface CatalogGenre {
+  name: string;
+  song_count: number;
+  album_count: number;
+}
+
+export interface CatalogYear {
+  year: number;
+  album_count: number;
+  track_count: number;
 }
 
 export interface AlbumProfile {

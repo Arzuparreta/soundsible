@@ -7,6 +7,7 @@
  */
 
 import { api } from '../lib/api';
+import { invalidateCatalogSync, syncCatalog } from './catalog';
 import { setState, state } from './core';
 
 let inFlight = false;
@@ -32,6 +33,9 @@ const COALESCE_MS = 1500;
  */
 export function invalidateLibrarySync(): void {
   version += 1;
+  // The catalog is a projection of the same manifest, so a reply that is wrong
+  // for one is wrong for the other.
+  invalidateCatalogSync();
 }
 
 export async function syncLibrary(): Promise<void> {
@@ -56,6 +60,10 @@ export async function syncLibrary(): Promise<void> {
       saved,
       libraryError: false,
     });
+    // Artists, genres and years describe this same payload. Not awaited:
+    // callers that await a sync are waiting to act on tracks, and the grids
+    // they are not looking at must not hold that up.
+    void syncCatalog();
   } catch {
     // Offline or engine down — keep whatever we have, but stop claiming it is
     // the whole story. An empty list after a failed fetch is not an empty

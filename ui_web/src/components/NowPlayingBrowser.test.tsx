@@ -27,6 +27,15 @@ const storeMock = vi.hoisted(() => {
       favorites: [] as string[],
       playlists: { Favourites: ['local-1'] } as Record<string, string[]>,
       librarySettings: {},
+      // Artists come from the engine's catalog, not from grouping the flat list.
+      catalog: {
+        artists: [{ id: 'ar-local', name: 'Local Artist', track_count: 1, album_count: 1, cover_track_id: 'local-1' }],
+        genres: [],
+        years: [],
+        ready: true,
+        loading: false,
+        revision: 1,
+      },
       playback: {
         currentTrack: local as Track | null,
         queue: [] as Track[],

@@ -51,7 +51,7 @@ JSON.
       are already wired in for search, and `shared/resolution_confidence.py`
       already scores a pair.
 - [x] OpenSubsonic API with on-the-fly transcoding — see [OpenSubsonic](OPENSUBSONIC.md)
-- [ ] Album, genre and year browsing in the player
+- [x] Album, genre and year browsing in the player
 
 ### Join the open music web
 

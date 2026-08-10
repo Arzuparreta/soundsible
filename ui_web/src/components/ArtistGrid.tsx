@@ -20,7 +20,7 @@ export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
     <div class={styles.grid}>
       <For each={props.artists}>
         {(a) => {
-          const href = artistPath(a.name, { view: 'library' });
+          const href = artistPath(a.name, { view: 'library', artistId: a.id });
           const tap = createResponsiveTap({
             onTap: (event) => {
               event.preventDefault();

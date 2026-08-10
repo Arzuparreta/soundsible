@@ -1,0 +1,62 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-lg);
+  padding: var(--space-sm) var(--gutter) var(--space-2xl);
+}
+
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+
+/* Square, not round: a record has edges and an artist does not. The corner
+   radius is the sleeve's, so the two grids read as the same family. */
+.cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-1);
+  transition: box-shadow var(--dur-short) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .card:hover .cover {
+    box-shadow: var(--shadow-2);
+  }
+}
+
+.title {
+  margin-top: var(--space-xs);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.artist {
+  font-size: var(--text-caption);
+  color: var(--ink-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.count {
+  font-size: var(--text-caption);
+  color: var(--ink-tertiary);
+}

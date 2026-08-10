@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { sortTracks, buildArtists, buildAlbums } from './libraryView';
-import type { Track } from '../types/music';
+import { sortTracks, catalogArtists } from './libraryView';
+import type { CatalogArtist, Track } from '../types/music';
 
 const t = (id: string, over: Partial<Track> = {}): Track => ({
   id,
@@ -29,50 +29,38 @@ describe('sortTracks', () => {
   });
 });
 
-describe('buildArtists', () => {
-  it('counts tracks per artist and sorts alphabetically', () => {
-    const out = buildArtists([
-      t('1', { artist: 'Zappa' }),
-      t('2', { artist: 'ABBA' }),
-      t('3', { artist: 'Zappa' }),
-    ]);
-    expect(out.map((a) => [a.name, a.count])).toEqual([
-      ['ABBA', 1],
-      ['Zappa', 2],
-    ]);
+describe('catalogArtists', () => {
+  const row = (over: Partial<CatalogArtist> = {}): CatalogArtist => ({
+    id: 'ar-1',
+    name: 'Artist',
+    track_count: 1,
+    album_count: 1,
+    cover_track_id: 't1',
+    ...over,
   });
 
-  it('merges case/whitespace variants of the same artist into one entry', () => {
-    const out = buildArtists([t('1', { artist: 'Extremoduro' }), t('2', { artist: '  extremoduro ' })]);
-    expect(out).toHaveLength(1);
-    expect(out[0].count).toBe(2);
+  it('carries the engine id through, so a card can ask whose songs these are', () => {
+    const [entry] = catalogArtists([row({ id: 'ar-bjork', name: 'Björk', track_count: 4 })]);
+    expect(entry).toEqual({ id: 'ar-bjork', name: 'Björk', count: 4, coverId: 't1' });
   });
 
-  it('falls back to album_artist, then to the localised "unknown" label', () => {
-    const out = buildArtists([
-      t('1', { artist: '', album_artist: 'VA' }),
-      t('2', { artist: '', album_artist: null }),
+  it('sorts in the reader’s alphabet, not by code point', () => {
+    // SQLite's own ORDER BY files "Ángeles" after "Zappa"; nobody reads that way.
+    const out = catalogArtists([
+      row({ id: 'z', name: 'Zappa' }),
+      row({ id: 'a', name: 'Ángeles del Infierno' }),
+      row({ id: 'b', name: 'ABBA' }),
     ]);
-    const names = out.map((a) => a.name).sort();
-    expect(names).toEqual(['Unknown', 'VA']);
-  });
-});
-
-describe('buildAlbums', () => {
-  it('groups by album in first-seen order and keeps track membership', () => {
-    const out = buildAlbums([
-      t('1', { album: 'II' }),
-      t('2', { album: 'I' }),
-      t('3', { album: 'II' }),
-    ]);
-    expect(out.map((al) => al.name)).toEqual(['II', 'I']); // first-seen, not sorted
-    expect(out[0].tracks.map((x) => x.id)).toEqual(['1', '3']);
+    expect(out.map((a) => a.name)).toEqual(['ABBA', 'Ángeles del Infierno', 'Zappa']);
   });
 
-  it('groups tracks with no album under the localised "no album" label', () => {
-    const out = buildAlbums([t('1', { album: undefined }), t('2', { album: undefined })]);
-    expect(out).toHaveLength(1);
-    expect(out[0].name).toBe('No album');
-    expect(out[0].tracks).toHaveLength(2);
+  it('names an artist the engine could not name', () => {
+    const [entry] = catalogArtists([row({ name: '' })]);
+    expect(entry.name).toBe('Unknown');
+  });
+
+  it('leaves the cover empty rather than inventing one', () => {
+    const [entry] = catalogArtists([row({ cover_track_id: null })]);
+    expect(entry.coverId).toBe('');
   });
 });
