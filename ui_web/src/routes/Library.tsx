@@ -226,53 +226,57 @@ export default function Library() {
     return '';
   };
 
-  /** The album grid's ordering. The choices are the engine's own, so this menu
-   * and a Subsonic client's sort menu offer the same list. */
-  const sortAlbums = () =>
-    openActionMenu({
-      title: t('library.albumSortTitle'),
-      actions: ALBUM_SORTS.map((sort) => ({
-        label: `${albumSort() === sort ? '✓  ' : ''}${sortLabel(sort)}`,
-        onSelect: () => setAlbumSort(sort),
-      })),
-    });
-
-  /** Narrowing the grid: by genre, or by year. One axis at a time — a shelf,
-   * not a query builder. Each entry opens the list of values it has, so the
-   * choice is always over what the library actually contains. */
-  const filterAlbums = () => {
+  /** Ordering and narrowing from one control, the way the songs tab already
+   * does it. Two buttons beside a three-tab pill do not fit a phone, and the
+   * second one was never a different kind of decision.
+   *
+   * The orderings are the engine's own, so this menu and a Subsonic client's
+   * offer the same list. The filter is one axis at a time — a shelf, not a
+   * query builder — and each entry opens the values the library actually has. */
+  const browseAlbums = () => {
     const active = albumFilter();
     const tick = (on: boolean) => (on ? '✓  ' : '');
     openActionMenu({
-      title: t('library.albumFilterTitle'),
-      actions: [
+      sections: [
         {
-          label: `${tick(active.kind === 'none')}${t('library.albumFilterAll')}`,
-          onSelect: () => setAlbumFilter(NO_ALBUM_FILTER),
+          label: t('library.albumSortTitle'),
+          actions: ALBUM_SORTS.map((sort) => ({
+            label: `${tick(albumSort() === sort)}${sortLabel(sort)}`,
+            onSelect: () => setAlbumSort(sort),
+          })),
         },
         {
-          label: t('library.albumFilterByGenre'),
-          disabled: state.catalog.genres.length === 0,
-          onSelect: () =>
-            openActionMenu({
-              title: t('library.albumFilterByGenre'),
-              actions: state.catalog.genres.map((genre) => ({
-                label: `${tick(active.kind === 'genre' && active.value === genre.name)}${genre.name}`,
-                onSelect: () => setAlbumFilter({ kind: 'genre', value: genre.name }),
-              })),
-            }),
-        },
-        {
-          label: t('library.albumFilterByYear'),
-          disabled: state.catalog.years.length === 0,
-          onSelect: () =>
-            openActionMenu({
-              title: t('library.albumFilterByYear'),
-              actions: state.catalog.years.map((year) => ({
-                label: `${tick(active.kind === 'year' && active.value === year.year)}${year.year}`,
-                onSelect: () => setAlbumFilter({ kind: 'year', value: year.year }),
-              })),
-            }),
+          label: t('library.albumFilterTitle'),
+          actions: [
+            {
+              label: `${tick(active.kind === 'none')}${t('library.albumFilterAll')}`,
+              onSelect: () => setAlbumFilter(NO_ALBUM_FILTER),
+            },
+            {
+              label: t('library.albumFilterByGenre'),
+              disabled: state.catalog.genres.length === 0,
+              onSelect: () =>
+                openActionMenu({
+                  title: t('library.albumFilterByGenre'),
+                  actions: state.catalog.genres.map((genre) => ({
+                    label: `${tick(active.kind === 'genre' && active.value === genre.name)}${genre.name}`,
+                    onSelect: () => setAlbumFilter({ kind: 'genre', value: genre.name }),
+                  })),
+                }),
+            },
+            {
+              label: t('library.albumFilterByYear'),
+              disabled: state.catalog.years.length === 0,
+              onSelect: () =>
+                openActionMenu({
+                  title: t('library.albumFilterByYear'),
+                  actions: state.catalog.years.map((year) => ({
+                    label: `${tick(active.kind === 'year' && active.value === year.year)}${year.year}`,
+                    onSelect: () => setAlbumFilter({ kind: 'year', value: year.year }),
+                  })),
+                }),
+            },
+          ],
         },
       ],
     });
@@ -384,31 +388,18 @@ export default function Library() {
             </button>
           </Show>
           <Show when={libraryTab() === 'albums'}>
-            <div class={styles.albumControls}>
-              <button
-                class={styles.sortButton}
-                type="button"
-                onClick={sortAlbums}
-                aria-label={t('library.albumSortTitle')}
-                data-pressable
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M3 6h18M6 12h12M10 18h4" />
-                </svg>
-                <span>{sortLabel(albumSort())}</span>
-              </button>
-              <button
-                class={styles.sortButton}
-                type="button"
-                onClick={filterAlbums}
-                aria-label={t('library.albumFilterTitle')}
-                data-pressable
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 5h16l-6 7v6l-4 2v-8Z" />
-                </svg>
-              </button>
-            </div>
+            <button
+              class={styles.sortButton}
+              type="button"
+              onClick={browseAlbums}
+              aria-label={t('library.albumSortTitle')}
+              data-pressable
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h18M6 12h12M10 18h4" />
+              </svg>
+              <span>{sortLabel(albumSort())}</span>
+            </button>
           </Show>
         </div>
       </Show>
