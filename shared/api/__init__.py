@@ -562,6 +562,12 @@ queue_manager_dl = DownloadQueueManager(socketio=socketio)
 api_observer = None  # Note: Store observer reference for cleanup in daemon mode
 _api_shutdown_lock = threading.Lock()
 _api_shutdown_done = False
+#: Why this instance came up wrong, or None when it came up whole. Startup
+#: refuses to let a failure it survived pass for a healthy server: it still
+#: serves — a broken library is exactly when you need the UI that fixes it —
+#: but `/api/health` says so, and that is the difference between a bad
+#: afternoon and a week of not knowing the watcher was dead.
+_startup_degraded_reason: Optional[str] = None
 
 
 class _UserCore:
@@ -1553,11 +1559,16 @@ def health_check():
     runtime = get_runtime_config()
     ffmpeg = ffmpeg_status()
     payload = {
-        "status": "healthy",
+        "status": "degraded" if _startup_degraded_reason else "healthy",
         "version": resolve_version(),
         "ffmpeg": {"available": bool(ffmpeg.get("available"))},
         "uptime_seconds": round(time.time() - API_STARTED_AT, 3),
     }
+    if _startup_degraded_reason:
+        # Anonymous callers learn *that* the instance came up wrong, never how:
+        # the exception text carries file paths and class names, and this route
+        # answers before anyone has proved who they are.
+        payload["degraded_reason"] = "core initialization failed"
 
     # Your own library counts, once we know who you are.
     try:
@@ -1587,6 +1598,9 @@ def health_check():
     payload.update(
         {
             "ffmpeg": ffmpeg,
+            # The watcher is the one startup service whose absence is silent:
+            # folders simply stop noticing new files. Nothing else reports it.
+            "watcher_active": api_observer is not None,
             "pid": os.getpid(),
             "base_url": f"http://{runtime.host}:{runtime.port}",
             "host": runtime.host,
@@ -1610,6 +1624,8 @@ def health_check():
             },
         }
     )
+    if _startup_degraded_reason:
+        payload["degraded_detail"] = _startup_degraded_reason
     return jsonify(payload)
 
 @app.route('/')
@@ -1723,24 +1739,36 @@ def _initialize_admin_core() -> Optional[_UserCore]:
     with user_context(admin["id"]):
         admin_core = get_user_core(admin["id"])
         if admin_core.library.config and admin_core.library.config.watch_folders:
-            from setup_tool.watcher import LibraryWatcher
-            from shared.api.library_scan import library_scan_service
+            # A watcher that will not start is a folder that stops scanning
+            # itself, not an instance that cannot serve music. Inotify limits
+            # and unreadable roots are the usual causes, and neither is a reason
+            # to refuse every request. `watcher_active` in /api/health is what
+            # keeps this from going unnoticed.
+            try:
+                from setup_tool.watcher import LibraryWatcher
+                from shared.api.library_scan import library_scan_service
 
-            def _scan_watched_path(_path):
-                try:
-                    # Scan every configured root so events coalesced while
-                    # one job is active cannot strand a second folder.
-                    roots = library_scan_service.resolve_roots(admin_core.library)
-                    library_scan_service.start(admin["id"], roots)
-                except ValueError as exc:
-                    logger.warning("API: watcher ignored unsafe scan path: %s", exc)
+                def _scan_watched_path(_path):
+                    try:
+                        # Scan every configured root so events coalesced while
+                        # one job is active cannot strand a second folder.
+                        roots = library_scan_service.resolve_roots(admin_core.library)
+                        library_scan_service.start(admin["id"], roots)
+                    except ValueError as exc:
+                        logger.warning("API: watcher ignored unsafe scan path: %s", exc)
 
-            api_observer = LibraryWatcher(
-                admin_core.library.config,
-                scan_callback=_scan_watched_path,
-            )
-            api_observer.start()
-            logger.info("API: Music folder watcher started for the admin library.")
+                observer = LibraryWatcher(
+                    admin_core.library.config,
+                    scan_callback=_scan_watched_path,
+                )
+                observer.start()
+                api_observer = observer
+                logger.info("API: Music folder watcher started for the admin library.")
+            except Exception:
+                logger.warning(
+                    "API: Music folder watcher could not start; folders will not scan themselves.",
+                    exc_info=True,
+                )
     return admin_core
 
 
@@ -1752,7 +1780,8 @@ def start_api(
     runtime_config: Optional[RuntimeConfig] = None,
     on_ready: Optional[Any] = None,
 ):
-    global api_observer
+    global api_observer, _startup_degraded_reason
+    _startup_degraded_reason = None
     runtime = runtime_config or get_runtime_config()
     runtime = runtime_with_overrides(base=runtime, host=host, port=port)
     configure_runtime(runtime)
@@ -1899,7 +1928,7 @@ def start_api(
 
     except Exception as e:
         logger.exception("FATAL: Core initialization failed: %s", e)
-        raise RuntimeError("Core initialization failed; API server was not started") from e
+        _startup_degraded_reason = f"{type(e).__name__}: {e}"
 
     # Note: Access summary
     logger.info("\n" + "="*40)

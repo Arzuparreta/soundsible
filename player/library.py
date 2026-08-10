@@ -255,24 +255,27 @@ class LibraryManager:
             self._export_metadata(canonical.to_json())
             return True
 
-        # A per-user manifest is the authoritative legacy source. The portable
-        # OUTPUT_DIR copy is only a fallback: it may be shared, stale, or have
-        # been produced by another process (including a test run).
-        if cache_path.exists():
-            try:
-                local_content = cache_path.read_text().strip()
-                if local_content:
-                    self.metadata = LibraryMetadata.from_json(local_content)
-                    _log_local(
-                        f"Loaded per-user library manifest: {len(self.metadata.tracks)} tracks."
-                    )
-                    self._backup_legacy_manifest(cache_path)
-                    return self._save_metadata()
-            except Exception as e:
-                _log_local(f"Could not load per-user library manifest: {e}")
+        # A per-user manifest is the authoritative legacy source: it names this
+        # account's tracks and nobody else's. The portable OUTPUT_DIR copy may be
+        # shared between accounts, left behind by another machine, or written by
+        # a process that is not this library at all — including a test run.
+        #
+        # Authoritative, but only while it has something to say. An empty or
+        # stale manifest adopted here becomes the canonical library, and the
+        # export below then writes that emptiness over the portable copy — the
+        # loss this ordering exists to prevent, in the other direction. When it
+        # cannot answer, the portable manifest gets its turn.
+        if self._load_from_cache(cache_path) and self.metadata and self.metadata.tracks:
+            if self._is_cache_likely_stale():
+                _log_local("Per-user library manifest does not match the current music path.")
+            else:
+                _log_local(f"Loaded per-user library manifest: {len(self.metadata.tracks)} tracks.")
+                self._backup_legacy_manifest(cache_path)
+                return self._save_metadata()
 
-        # A portable manifest can bootstrap an account that has no readable
-        # per-user manifest, but must never overwrite one during migration.
+        # A portable manifest bootstraps an account whose own manifest is
+        # missing, empty or from somewhere else. It never overwrites one that
+        # still describes this music path.
         out_dir = None if _music_dir_manifest_is_shared() else _output_dir_for_library()
         if out_dir:
             path_at_music = Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME
@@ -282,6 +285,13 @@ class LibraryManager:
                     lib = LibraryMetadata.from_json(json_str)
                     if lib.tracks:
                         _log_local(f"Loaded library from music path ({path_at_music.parent}): {len(lib.tracks)} tracks.")
+                        # Note: Downloader/ODST may ship a library.json without playlists; config cache can be newer.
+                        if cache_path.exists():
+                            try:
+                                cached = LibraryMetadata.from_json(cache_path.read_text())
+                                lib.playlists = merge_playlist_maps(lib.playlists, cached.playlists)
+                            except Exception as e:
+                                _log_local(f"Warning: Could not merge playlists from cache: {e}")
                         self._backup_legacy_manifest(cache_path)
                         self.metadata = lib
                         self._save_metadata()
