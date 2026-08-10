@@ -1,217 +1,134 @@
-"""
-Deep Scanner for Local Music Library.
-Recursively scans directories, extracts metadata, and adds tracks through the
-canonical library seam without moving or uploading them.
+"""Deterministic, structured scanner for existing music folders.
+
+The scanner only reads files. Merging and persistence are deliberately owned by
+the API scan service so a long scan can never overwrite a newer library snapshot.
 """
 
-import os
-import concurrent.futures
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional, Tuple
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
-from rich.console import Console
+from typing import Callable, Iterable, Optional
 
-from shared.models import LibraryMetadata, Track, PlayerConfig
-from shared.constants import DEFAULT_CONFIG_DIR
 from setup_tool.audio import AudioProcessor
-from setup_tool.provider_factory import StorageProviderFactory
+from shared.models import Track
+from shared.path_resolver import path_within_roots
 
-console = Console()
+
+@dataclass
+class ScannedFile:
+    path: str
+    track: Track
+    unchanged: bool = False
+
+
+@dataclass
+class ScanResult:
+    discovered: int = 0
+    processed: int = 0
+    files: list[ScannedFile] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+
+ProgressCallback = Callable[[ScanResult], None]
+
 
 class LibraryScanner:
-    def __init__(
+    """Read metadata and content hashes from approved local roots."""
+
+    def discover(self, roots: Iterable[str | Path]) -> list[Path]:
+        approved = [Path(root).expanduser().resolve(strict=True) for root in roots]
+        found: list[Path] = []
+        seen: set[str] = set()
+        for root in approved:
+            if not root.is_dir():
+                continue
+            for candidate in root.rglob("*"):
+                # Never follow a symlinked file or directory into another tree.
+                if candidate.is_symlink() or not candidate.is_file():
+                    continue
+                if not path_within_roots(candidate, approved):
+                    continue
+                if not AudioProcessor.is_supported_format(str(candidate)):
+                    continue
+                key = str(candidate.resolve())
+                if key not in seen:
+                    seen.add(key)
+                    found.append(candidate.resolve())
+        return sorted(found, key=lambda path: str(path).casefold())
+
+    def scan_paths(
         self,
-        config: Optional[PlayerConfig] = None,
+        roots: Iterable[str | Path],
+        existing_tracks: Iterable[Track],
         *,
-        library_loader: Optional[Callable[[], LibraryMetadata]] = None,
-        library_saver: Optional[Callable[[LibraryMetadata], bool]] = None,
-    ):
-        self.config = config
-        self.library_loader = library_loader
-        self.library_saver = library_saver
-        self._load_config_if_needed()
-        
-        # Note: We need A storage provider to save the library.JSON
-        # Note: Even if we are just scanning local files, the manifest might live in the cloud (for hybrid setup)
-        # Note: OR it might live locally if using localstorageprovider.
-        self.storage = None
-        if not (self.library_loader and self.library_saver):
-            self.storage = StorageProviderFactory.create(self.config.provider)
-            self._authenticate_storage()
+        progress: Optional[ProgressCallback] = None,
+    ) -> ScanResult:
+        roots = list(roots)
+        result = ScanResult()
+        files = self.discover(roots)
+        result.discovered = len(files)
+        if progress:
+            progress(result)
 
-    def _load_config_if_needed(self):
-        if not self.config:
+        by_path: dict[str, Track] = {}
+        for track in existing_tracks:
+            if track.local_path:
+                try:
+                    by_path[str(Path(track.local_path).expanduser().resolve())] = track
+                except (OSError, RuntimeError):
+                    continue
+
+        for file_path in files:
             try:
-                config_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "config.json"
-                if config_path.exists():
-                    with open(config_path, 'r') as f:
-                        import json
-                        self.config = PlayerConfig.from_dict(json.load(f))
+                stat = file_path.stat()
+                existing = by_path.get(str(file_path))
+                if (
+                    existing is not None
+                    and existing.file_size == stat.st_size
+                    and existing.local_mtime_ns == stat.st_mtime_ns
+                ):
+                    result.files.append(ScannedFile(str(file_path), existing, unchanged=True))
                 else:
-                    raise ValueError("Config not found. Please run setup first.")
-            except Exception as e:
-                console.print(f"[red]Error loading config: {e}[/red]")
-                raise
+                    result.files.append(
+                        ScannedFile(
+                            str(file_path),
+                            self._process_file(file_path, stat.st_size, stat.st_mtime_ns),
+                        )
+                    )
+            except Exception as exc:
+                # Do not leak absolute server paths through the public status.
+                result.errors.append(f"{file_path.name}: {type(exc).__name__}")
+            result.processed += 1
+            if progress:
+                progress(result)
+        return result
 
-    def _authenticate_storage(self):
-        creds = {
-            'access_key_id': self.config.access_key_id,
-            'secret_access_key': self.config.secret_access_key,
-            'region': self.config.region,
-            'endpoint': self.config.endpoint,
-             # Note: B2 compatibility mappings
-            'application_key_id': self.config.access_key_id, 
-            'application_key': self.config.secret_access_key
-        }
-        
-        # Note: R2 specific
-        if self.config.provider.name == 'CLOUDFLARE_R2' and self.config.endpoint:
-             try:
-                creds['account_id'] = self.config.endpoint.split('//')[1].split('.')[0]
-             except Exception:
-                 pass
-             
-        self.storage.authenticate(creds)
-        self.storage.bucket_name = self.config.bucket
-
-    def scan(self, scan_path: str, parallel: int = 4):
-        """
-        Main entry point for scanning a directory.
-        """
-        root_path = Path(scan_path).expanduser().resolve()
-        if not root_path.exists():
-            console.print(f"[red]Directory not found: {root_path}[/red]")
-            return
-
-        # Note: 1. Fetch existing library to avoid duplicates
-        console.print("[cyan]Fetching existing library...[/cyan]")
-        try:
-            library = self.library_loader() if self.library_loader else self.storage.get_library()
-        except Exception:
-            console.print("[yellow]Could not fetch library. Starting fresh.[/yellow]")
-            library = LibraryMetadata(1, [], {}, {})
-
-        existing_tracks = {t.file_hash: t for t in library.tracks}
-
-        # Note: 2. Find all audio files
-        audio_files = []
-        with console.status(f"[bold green]Scanning {root_path}...[/bold green]"):
-            for root, _, filenames in os.walk(root_path):
-                for filename in filenames:
-                    file_path = Path(root) / filename
-                    if AudioProcessor.is_supported_format(str(file_path)):
-                        audio_files.append(file_path)
-
-        if not audio_files:
-            console.print("[yellow]No audio files found.[/yellow]")
-            return
-
-        console.print(f"[green]Found {len(audio_files)} audio files.[/green]")
-
-        # Note: 3. Process files
-        new_tracks = []
-        updated_tracks = []
-        skipped = 0
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
-            console=console
-        ) as progress:
-            task = progress.add_task("[cyan]Processing tracks...", total=len(audio_files))
-            
-            with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
-                future_to_file = {
-                    executor.submit(self._process_file, f): f 
-                    for f in audio_files
-                }
-                
-                for future in concurrent.futures.as_completed(future_to_file):
-                    f_path = future_to_file[future]
-                    try:
-                        track, is_new = future.result()
-                        if track:
-                            # Note: Check if hash already exists
-                            if track.file_hash in existing_tracks:
-                                # Note: Track exists, but maybe local path is new/changed?
-                                existing = existing_tracks[track.file_hash]
-                                if existing.local_path != track.local_path:
-                                    existing.local_path = track.local_path
-                                    existing.is_local = True
-                                    updated_tracks.append(existing)
-                                else:
-                                    skipped += 1
-                            else:
-                                new_tracks.append(track)
-                    except Exception as e:
-                        console.print(f"[red]Error processing {f_path.name}: {e}[/red]")
-                    
-                    progress.advance(task)
-
-        # Note: 4. Merge and save
-        if not new_tracks and not updated_tracks:
-            console.print("[yellow]No changes to library.[/yellow]")
-            return
-
-        console.print(f"[green]Adding {len(new_tracks)} new tracks, Updating {len(updated_tracks)} existing paths.[/green]")
-        
-        # Note: Merge logic
-        final_tracks = list(existing_tracks.values())
-        final_tracks.extend(new_tracks)
-        
-        library.tracks = final_tracks
-        library.version += 1
-        
-        console.print("[cyan]Saving updated library...[/cyan]")
-        saved = self.library_saver(library) if self.library_saver else self.storage.save_library(library)
-        if saved:
-            console.print("[bold green]Library updated successfully![/bold green]")
-        else:
-            console.print("[bold red]Failed to save library![/bold red]")
-
-    def _process_file(self, file_path: Path) -> Tuple[Optional[Track], bool]:
-        """
-        Process a single file: Hash -> Extract Metadata -> Create Track
-        Returns (Track, is_new_object)
-        """
-        try:
-            # Note: Hash details
-            file_hash = AudioProcessor.calculate_hash(str(file_path))
-            
-            # Note: Metadata details
-            meta = AudioProcessor.extract_metadata(str(file_path))
-            
-            # Note: Create track
-            track = Track(
-                id=file_hash, # Note: Use hash as ID for local files
-                title=meta.get('title', 'Unknown'),
-                artist=meta.get('artist', 'Unknown'),
-                album=meta.get('album', 'Unknown'),
-                album_artist=meta.get('album_artist'),
-                duration=meta.get('duration', 0),
-                file_hash=file_hash,
-                original_filename=file_path.name,
-                compressed=False, # Note: We assume local files are "source" quality or explicitly kept
-                file_size=file_path.stat().st_size,
-                bitrate=meta.get('bitrate', 0),
-                format=meta.get('format', 'mp3'),
-                cover_art_key=None, # Note: We don't upload cover art for local-only scan yet
-                year=meta.get('year'),
-                genre=meta.get('genre'),
-                track_number=meta.get('track_number'),
-                artists=meta.get('artists'),
-                disc_number=meta.get('disc_number'),
-                disc_total=meta.get('disc_total'),
-                is_compilation=bool(meta.get('is_compilation')),
-                is_local=True,
-                local_path=str(file_path.absolute())
-            )
-            
-            return track, True
-            
-        except Exception:
-            # Note: Console.print(f"error in worker {E}")
-            return None, False
+    @staticmethod
+    def _process_file(file_path: Path, size: int, mtime_ns: int) -> Track:
+        file_hash = AudioProcessor.calculate_hash(str(file_path))
+        meta = AudioProcessor.extract_metadata(str(file_path))
+        return Track(
+            id=file_hash,
+            title=meta.get("title", "Unknown"),
+            artist=meta.get("artist", "Unknown"),
+            album=meta.get("album", "Unknown"),
+            album_artist=meta.get("album_artist"),
+            duration=meta.get("duration", 0),
+            file_hash=file_hash,
+            original_filename=file_path.name,
+            compressed=False,
+            file_size=size,
+            bitrate=meta.get("bitrate", 0),
+            format=meta.get("format", file_path.suffix.lstrip(".").lower() or "mp3"),
+            year=meta.get("year"),
+            genre=meta.get("genre"),
+            track_number=meta.get("track_number"),
+            artists=meta.get("artists"),
+            disc_number=meta.get("disc_number"),
+            disc_total=meta.get("disc_total"),
+            is_compilation=bool(meta.get("is_compilation")),
+            is_local=True,
+            local_path=str(file_path),
+            local_mtime_ns=mtime_ns,
+        )

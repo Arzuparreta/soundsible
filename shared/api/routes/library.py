@@ -10,6 +10,7 @@ from urllib.parse import unquote
 
 from flask import Blueprint, request, jsonify
 from shared.hardening import SCOPE_ADMIN_DANGEROUS, SCOPE_LIBRARY_WRITE, rate_limit, require_scope
+from shared.user_context import require_user_id
 
 from shared.loudness import annotate_tracks
 from shared.path_resolver import resolve_local_track_path
@@ -124,6 +125,36 @@ def sync_library():
     if success:
         api["emit_to_user"]("library_updated")
     return jsonify({"status": "success" if success else "failed"})
+
+
+@library_bp.route("/api/library/scan", methods=["GET"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_scan_status", limit=120, window_sec=60)
+def library_scan_status():
+    from shared.api.library_scan import library_scan_service
+
+    return jsonify(library_scan_service.status(require_user_id()))
+
+
+@library_bp.route("/api/library/scan", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_scan_start", limit=20, window_sec=60)
+def start_library_scan():
+    from shared.api.library_scan import library_scan_service
+
+    api = _get_api()
+    library, _, _ = api["get_core"]()
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be an object", "code": "invalid_scan_path"}), 400
+    requested_path = data.get("path")
+    if requested_path is not None and not isinstance(requested_path, str):
+        return jsonify({"error": "path must be a string", "code": "invalid_scan_path"}), 400
+    try:
+        roots = library_scan_service.resolve_roots(library, requested_path)
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "code": "invalid_scan_path"}), 400
+    return jsonify(library_scan_service.start(require_user_id(), roots)), 202
 
 
 @library_bp.route("/api/library/tracks/<track_id>", methods=["DELETE"])

@@ -79,6 +79,12 @@ work. Failures travel with HTTP 200 and the protocol's own error code inside
 the document, because a client that sees a 4xx reports "server unreachable"
 rather than "wrong password".
 
+`startScan` starts the same asynchronous configured-folder scan as Settings.
+`getScanStatus` reports it as scanning while it is queued or reading files and
+uses `count` for processed files during the run. Once idle, `count` returns to
+the number of tracks in the account's library. Starting it again while a scan
+is active joins the existing run instead of launching competing disk work.
+
 ## How it maps onto Soundsible
 
 | Subsonic | Soundsible |
@@ -91,6 +97,7 @@ rather than "wrong password".
 | `replayGain` | the EBU R128 measurements the engine takes for volume levelling |
 | Playlists | the ordered playlists in the account's canonical `library.db` |
 | Cover art | the same artwork the player shows, embedded art extracted on demand |
+| `startScan`, `getScanStatus` | the account's real configured-folder scan and live progress |
 
 A song's `path` is built from its metadata (`Artist/Album/01 - Title.mp3`), not
 read off the disk: the server's directory layout is not the client's business.

@@ -335,8 +335,22 @@ function LibrarySection() {
 
   const rescan = async () => {
     setBusy(true);
-    await actions.rescanLibrary();
-    setBusy(false);
+    const h = toast.loading(t('settings.toast.scanning'));
+    try {
+      const result = await actions.rescanLibrary();
+      h.update(
+        result.failed > 0 ? 'error' : 'success',
+        t('settings.toast.scanned', {
+          added: result.added,
+          updated: result.updated,
+          failed: result.failed,
+        }),
+      );
+    } catch {
+      h.update('error', t('settings.toast.scanFailed'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const optimize = async () => {

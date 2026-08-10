@@ -11,7 +11,7 @@ from flask import Blueprint, request, jsonify, send_file, Response, stream_with_
 from shared import preview_cache
 from shared.api.memo import Memo
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
-from shared.path_resolver import resolve_local_track_path
+from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
 from shared.range_stream import bound_open_range, requested_start
 from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.url_utils import validate_youtube_video_id
@@ -320,7 +320,11 @@ def stream_local_track(track_id):
         # which sends the player back over the network for a file it already has
         # every single time it is played. On a LAN that is free; from outside it
         # is several round trips in front of a song that is sitting on disk.
-        response.headers["Cache-Control"] = "private, max-age=86400"
+        response.headers["Cache-Control"] = (
+            "private, no-cache"
+            if is_scanned_track_path(track, path)
+            else "private, max-age=86400"
+        )
         response.headers.add("Access-Control-Allow-Origin", "*")
         response.headers.add("Access-Control-Allow-Methods", "GET, OPTIONS")
         response.headers.add("Access-Control-Allow-Headers", "Range")

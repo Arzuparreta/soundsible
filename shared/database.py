@@ -56,6 +56,7 @@ INSTANCE_TABLES = (
 
 # Note: Migration definitions for schema evolution
 _TRACKS_COLUMNS = {
+    "local_mtime_ns": "INTEGER",
     "youtube_id": "TEXT",
     "musicbrainz_id": "TEXT",
     "isrc": "TEXT",
@@ -189,6 +190,7 @@ class DatabaseManager:
                 artists_json TEXT,
                 is_local BOOLEAN,
                 local_path TEXT,
+                local_mtime_ns INTEGER,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 musicbrainz_id TEXT,
                 isrc TEXT,
@@ -638,7 +640,6 @@ class DatabaseManager:
         data.pop("last_updated", None)
         data.pop("album_id", None)
         stored_artists = data.pop("artists_json", None)
-        data["local_path"] = None
         data["compressed"] = bool(data.get("compressed"))
         data["is_local"] = bool(data.get("is_local"))
         data["metadata_modified_by_user"] = bool(data.get("metadata_modified_by_user"))
@@ -794,11 +795,26 @@ class DatabaseManager:
             conn.execute("ROLLBACK")
             raise e
 
-    def replace_library(self, metadata: LibraryMetadata) -> int:
+    def replace_library(
+        self,
+        metadata: LibraryMetadata,
+        *,
+        id_replacements: Optional[Dict[str, str]] = None,
+    ) -> int:
         """Atomically replace the canonical library and return its revision."""
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
+                replacement_state: Dict[str, sqlite3.Row] = {}
+                conn.row_factory = sqlite3.Row
+                for old_id, new_id in (id_replacements or {}).items():
+                    if old_id == new_id:
+                        continue
+                    row = conn.execute(
+                        "SELECT * FROM track_user_state WHERE track_id = ?", (old_id,)
+                    ).fetchone()
+                    if row is not None:
+                        replacement_state[new_id] = row
                 # Note: Update version
                 conn.execute("INSERT OR REPLACE INTO library_info (key, value) VALUES ('version', ?)", (str(metadata.version),))
                 
@@ -822,11 +838,11 @@ class DatabaseManager:
                             format, cover_art_key, year, genre, track_number, 
                             disc_number, disc_total, is_compilation, media_kind,
                             podcast_feed_id, podcast_episode_guid, podcast_rss_url, artists_json,
-                            is_local, local_path, musicbrainz_id, isrc, album_artist,
+                            is_local, local_path, local_mtime_ns, musicbrainz_id, isrc, album_artist,
                             cover_source, metadata_modified_by_user, youtube_id,
                             audio_quality, audio_source, audio_source_url,
                             audio_license_url, audio_identity_verified
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -852,6 +868,7 @@ class DatabaseManager:
                             artists_json=excluded.artists_json,
                             is_local=excluded.is_local,
                             local_path=excluded.local_path,
+                            local_mtime_ns=excluded.local_mtime_ns,
                             musicbrainz_id=excluded.musicbrainz_id,
                             isrc=excluded.isrc,
                             album_artist=excluded.album_artist,
@@ -871,12 +888,37 @@ class DatabaseManager:
                         track.disc_number, track.disc_total, track.is_compilation, track.media_kind,
                         track.podcast_feed_id, track.podcast_episode_guid, track.podcast_rss_url,
                         json.dumps(track.artists, ensure_ascii=False) if track.artists is not None else None,
-                        track.is_local, None,
+                        track.is_local, track.local_path, track.local_mtime_ns,
                         track.musicbrainz_id, track.isrc, track.album_artist,
                         track.cover_source, track.metadata_modified_by_user, track.youtube_id,
                         track.audio_quality, track.audio_source, track.audio_source_url,
                         track.audio_license_url, track.audio_identity_verified
                     ))
+
+                for new_id, state in replacement_state.items():
+                    conn.execute(
+                        """
+                        INSERT INTO track_user_state (
+                            track_id, play_count, rating, last_played_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(track_id) DO UPDATE SET
+                            play_count=MAX(track_user_state.play_count, excluded.play_count),
+                            rating=COALESCE(excluded.rating, track_user_state.rating),
+                            last_played_at=CASE
+                                WHEN track_user_state.last_played_at IS NULL THEN excluded.last_played_at
+                                WHEN excluded.last_played_at IS NULL THEN track_user_state.last_played_at
+                                ELSE MAX(track_user_state.last_played_at, excluded.last_played_at)
+                            END,
+                            updated_at=MAX(track_user_state.updated_at, excluded.updated_at)
+                        """,
+                        (
+                            new_id,
+                            state["play_count"],
+                            state["rating"],
+                            state["last_played_at"],
+                            state["updated_at"],
+                        ),
+                    )
                 self._replace_catalog_projection(conn, metadata.tracks)
 
                 conn.execute("DELETE FROM library_tracks")
@@ -1508,12 +1550,11 @@ class DatabaseManager:
         return [self._row_to_track(row, artists.get(str(row["id"]))) for row in rows]
 
     def _row_to_track(self, row: sqlite3.Row, artists: Optional[List[str]] = None) -> Track:
-        # Note: Map row to track object; ignore stored local_path (resolve at read from output_dir).
+        # Machine-local scan fields live only in SQLite and are restored here.
         data = dict(row)
         data.pop("last_updated", None)
         data.pop("album_id", None)
         stored_artists = data.pop("artists_json", None)
-        data["local_path"] = None
         data["compressed"] = bool(data.get("compressed"))
         data["is_local"] = bool(data.get("is_local"))
         data["metadata_modified_by_user"] = bool(data.get("metadata_modified_by_user"))

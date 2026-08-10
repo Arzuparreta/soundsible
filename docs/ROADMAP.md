@@ -40,7 +40,7 @@ JSON.
 
 - [x] Library schema: albums, artists, disc numbers, compilations, play counts, ratings
 - [x] SQLite canonical; `library.json` becomes an export format
-- [ ] `POST /api/library/scan` — point Soundsible at a folder you already have
+- [x] `POST /api/library/scan` — point Soundsible at a folder you already have
 - [ ] Read ReplayGain / R128 tags when a file carries them
 - [ ] Write MusicBrainz IDs on acquisition
 - [x] Decide artist/title orientation by lookup, not by position. A YouTube

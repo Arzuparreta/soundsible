@@ -100,6 +100,15 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 
 **Library path**: `player/library.py` loads each account's canonical **`library.db`** and **`~/.config/soundsible/config.json`** for `PlayerConfig`; it can also use storage providers from `setup_tool/` for cloud-backed exports. One SQLite transaction stores the complete library snapshot: ordered tracks and playlists, settings, podcast state, normalized `artists`/`albums`/`track_artists`, and `track_user_state`. Entity IDs are deterministic and albums include their album artist, so unrelated records with the same title do not collapse. After that transaction commits, Soundsible atomically refreshes `library.json` as a portable export; an export failure does not roll back the library.
 
+`POST /api/library/scan` queues an account-scoped scan on the orchestrator's
+disk-limited background lane. It reads the configured music roots in place and
+merges its delta against the newest SQLite revision under the serialized
+metadata lock, so a scan cannot overwrite a concurrent download. Absolute
+paths and file mtimes remain machine-local SQLite fields and are excluded from
+`library.json`. Playback accepts them only while their resolved targets remain
+inside a currently configured root. Rescans add or re-key files but never purge
+missing ones; removal remains an explicit maintenance action.
+
 An account without a canonical marker is migrated once using the previous manifest precedence. Its config-dir manifest is preserved as `library.json.pre-sqlite.bak`; fresh accounts receive an empty canonical database. After migration, JSON edits and mtimes are ignored: other writers are observed through the SQLite revision, and `/api/library/sync` reloads SQLite and regenerates the exports.
 
 **OpenSubsonic path**: `shared/api/routes/subsonic.py` serves `/rest`, reading that same catalog and serving bytes through the path `/api/static/stream` uses. `shared/subsonic/` holds what the views decide with: the XML/JSON/JSONP envelope, the per-account credential (encrypted, because the protocol's `md5(password + salt)` handshake cannot be checked against a hash), the `Child`/`AlbumID3`/`ArtistID3` serializers, and the ffmpeg transcode. This surface is **outside `/api`**, so the `before_request` hook leaves it anonymous and it authenticates itself — with no trusted-network shortcut, since it can be reached through a funnel. See [OpenSubsonic](OPENSUBSONIC.md).
@@ -256,7 +265,7 @@ machine, and what belongs to a person.
 
 | File | Purpose |
 |------|---------|
-| `library.db` | Canonical library: ordered tracks and playlists, settings, podcast state, normalized artist/album catalog, and per-track play count, rating and last-played state. |
+| `library.db` | Canonical library: ordered tracks and playlists, settings, podcast state, normalized artist/album catalog, per-track state, and machine-local scan paths/fingerprints. |
 | `library.json` | Portable export of your canonical library for recovery and cloud interoperability. The first migration also keeps `library.json.pre-sqlite.bak`. |
 | `favourites.json`, `playback_state.json`, `discovery_settings.json` | Saved songs, cross-device resume, discovery opt-in. |
 | `queue_state.json` *(data dir)* | Playback queue. |

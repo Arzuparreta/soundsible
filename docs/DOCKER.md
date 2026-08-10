@@ -85,7 +85,8 @@ sudo chown -R 1000:1000 /srv/music
 
 If the directory must remain read-only, mount it as `/music:ro`; playback and
 scanning work, but downloads and library modifications that write audio will
-not.
+not. Open **Settings → Library → Rescan files** after mounting it. Soundsible
+indexes supported files in place; it does not copy or rename the originals.
 
 ## Configuration and security
 

@@ -83,6 +83,12 @@ async function loadStore(
     getPlaybackState: vi.fn().mockResolvedValue(undefined),
     putPlaybackState: vi.fn().mockResolvedValue({ status: 'ok' }),
     deleteTrack: vi.fn().mockResolvedValue({ status: 'ok' }),
+    startLibraryScan: vi.fn().mockResolvedValue({
+      scan_id: 'scan', state: 'completed', discovered: 0, processed: 0,
+      added: 0, updated: 0, unchanged: 0, failed: 0,
+      started_at: null, finished_at: null, error: null,
+    }),
+    getLibraryScan: vi.fn(),
     searchYouTube: vi.fn(),
     relatedYouTube,
     emitDiscoveryEvent: vi.fn().mockResolvedValue(undefined),
@@ -2082,6 +2088,45 @@ describe('library refresh coalescing', () => {
     await actions.syncLibrary();
 
     expect(api.getLibrary.mock.calls.length).toBe(before + 1);
+  });
+});
+
+describe('library folder scan', () => {
+  it('polls until completion and then reloads the canonical library', async () => {
+    vi.useFakeTimers();
+    try {
+      const running = {
+        scan_id: 'scan', state: 'scanning', discovered: 2, processed: 1,
+        added: 0, updated: 0, unchanged: 0, failed: 0,
+        started_at: null, finished_at: null, error: null,
+      };
+      const completed = { ...running, state: 'completed', processed: 2, added: 1, unchanged: 1 };
+      const { actions, api } = await loadStore({
+        startLibraryScan: vi.fn().mockResolvedValue(running),
+        getLibraryScan: vi.fn().mockResolvedValue(completed),
+      });
+
+      const pending = actions.rescanLibrary();
+      await vi.advanceTimersByTimeAsync(750);
+      await expect(pending).resolves.toEqual(completed);
+
+      expect(api.getLibraryScan).toHaveBeenCalledOnce();
+      expect(api.getLibrary).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('surfaces a failed scan without pretending a reload succeeded', async () => {
+    const failed = {
+      scan_id: 'scan', state: 'failed', discovered: 1, processed: 1,
+      added: 0, updated: 0, unchanged: 0, failed: 1,
+      started_at: null, finished_at: null, error: 'Scan failed',
+    };
+    const { actions, api } = await loadStore({ startLibraryScan: vi.fn().mockResolvedValue(failed) });
+
+    await expect(actions.rescanLibrary()).rejects.toThrow('Scan failed');
+    expect(api.getLibrary).not.toHaveBeenCalled();
   });
 });
 

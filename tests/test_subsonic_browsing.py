@@ -338,3 +338,22 @@ def test_get_user_describes_the_caller_only(tmp_path, monkeypatch):
 def test_scan_status_reports_the_library_size(tmp_path, monkeypatch):
     harness = build(tmp_path, monkeypatch, _library())
     assert harness.ok("getScanStatus")["scanStatus"]["count"] == 4
+
+
+def test_scan_status_and_start_scan_use_the_real_scan_service(tmp_path, monkeypatch):
+    harness = build(tmp_path, monkeypatch, _library())
+    service = __import__("shared.api.library_scan", fromlist=["library_scan_service"]).library_scan_service
+    monkeypatch.setattr(
+        service,
+        "status",
+        lambda _user_id: {"state": "scanning", "processed": 3},
+    )
+    monkeypatch.setattr(service, "resolve_roots", lambda _library: [tmp_path])
+    monkeypatch.setattr(
+        service,
+        "start",
+        lambda _user_id, _roots: {"state": "queued", "processed": 0},
+    )
+
+    assert harness.ok("getScanStatus")["scanStatus"] == {"scanning": True, "count": 3}
+    assert harness.ok("startScan")["scanStatus"] == {"scanning": True, "count": 0}
