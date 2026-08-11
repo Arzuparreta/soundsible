@@ -131,4 +131,5 @@ class LibraryScanner:
             is_local=True,
             local_path=str(file_path),
             local_mtime_ns=mtime_ns,
+            musicbrainz_id=meta.get("musicbrainz_id"),
         )

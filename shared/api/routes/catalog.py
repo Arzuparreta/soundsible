@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
 from shared import request_scope
 from shared.api.memo import Memo
 from shared.database import instance_db
+from shared.musicbrainz import normalize_recording_mbid
 from shared.providers import deezer
 from shared.hardening import rate_limit
 from shared.resolution_confidence import best_candidate, classify_confidence
@@ -634,6 +635,26 @@ def _merge_action_state(winner: dict[str, Any], group: list[dict[str, Any]]) -> 
     winner["action_state"] = state
     winner["alternates"] = [row["id"] for row in group if row["id"] != winner["id"]]
 
+    # The winning presentation row is often Deezer or the local library even
+    # when the matching MusicBrainz row supplied the strongest portable
+    # identity. Keep one unambiguous Recording MBID across that collapse. If
+    # MusicBrainz returned distinct recordings with the same visible shape,
+    # attaching either one would be worse than attaching none.
+    recording_mbids = {
+        mbid
+        for row in group
+        if (
+            mbid := normalize_recording_mbid(
+                (row.get("external_ids") or {}).get("musicbrainz_id")
+            )
+        )
+    }
+    external_ids = dict(winner.get("external_ids") or {})
+    external_ids.pop("musicbrainz_id", None)
+    if len(recording_mbids) == 1:
+        external_ids["musicbrainz_id"] = recording_mbids.pop()
+    winner["external_ids"] = external_ids
+
 
 def _same_recording(left: dict[str, Any], right: dict[str, Any]) -> bool:
     """Guard against merging two different cuts that share a title and artist.
@@ -869,7 +890,7 @@ def _musicbrainz_search(query: str, limit: int) -> list[dict[str, Any]]:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        mbid = _clean(row.get("id"), 80)
+        mbid = normalize_recording_mbid(_clean(row.get("id"), 80))
         title = _clean(row.get("title"))
         credits = row.get("artist-credit") if isinstance(row.get("artist-credit"), list) else []
         credit = credits[0] if credits and isinstance(credits[0], dict) else {}
@@ -1254,7 +1275,25 @@ def catalog_save():
             })
         video_id = best.get("id")
 
+    external_ids = dict(data.get("external_ids")) if isinstance(data.get("external_ids"), dict) else {}
+    musicbrainz_id = normalize_recording_mbid(external_ids.get("musicbrainz_id"))
+    external_ids.pop("musicbrainz_id", None)
+    if musicbrainz_id:
+        external_ids["musicbrainz_id"] = musicbrainz_id
+
     api = _get_api()
+    metadata_evidence = {
+        "title": title,
+        "artist": artist,
+        "catalog_item_id": data.get("catalog_item_id"),
+        "source": data.get("source"),
+        "external_ids": external_ids,
+    }
+    if musicbrainz_id:
+        # Flatten the identity at the acquisition boundary so every downstream
+        # path can consume the same trusted scalar without understanding a
+        # catalog response's nested shape.
+        metadata_evidence["musicbrainz_id"] = musicbrainz_id
     item = {
         "source_type": "ytmusic_search",
         "video_id": video_id,
@@ -1262,13 +1301,7 @@ def catalog_save():
         "display_artist": artist,
         "thumbnail_url": data.get("cover") or f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
         "duration_sec": duration_s,
-        "metadata_evidence": {
-            "title": title,
-            "artist": artist,
-            "catalog_item_id": data.get("catalog_item_id"),
-            "source": data.get("source"),
-            "external_ids": data.get("external_ids") if isinstance(data.get("external_ids"), dict) else {},
-        },
+        "metadata_evidence": metadata_evidence,
     }
     parsed, err = api["parse_intake_item"](item)
     if err:
