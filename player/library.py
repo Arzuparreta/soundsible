@@ -255,10 +255,27 @@ class LibraryManager:
             self._export_metadata(canonical.to_json())
             return True
 
-        # Note: Always prefer the path set in settings (output_dir) if it has library.JSON, use it first.
-        # Note: This makes the webapp/player "music path" the single source of truth when that path has a library.
-        # With several accounts that manifest lists everyone's downloads, so adopting it
-        # wholesale would pull other people's tracks into this library.
+        # A per-user manifest is the authoritative legacy source: it names this
+        # account's tracks and nobody else's. The portable OUTPUT_DIR copy may be
+        # shared between accounts, left behind by another machine, or written by
+        # a process that is not this library at all — including a test run.
+        #
+        # Authoritative, but only while it has something to say. An empty or
+        # stale manifest adopted here becomes the canonical library, and the
+        # export below then writes that emptiness over the portable copy — the
+        # loss this ordering exists to prevent, in the other direction. When it
+        # cannot answer, the portable manifest gets its turn.
+        if self._load_from_cache(cache_path) and self.metadata and self.metadata.tracks:
+            if self._is_cache_likely_stale():
+                _log_local("Per-user library manifest does not match the current music path.")
+            else:
+                _log_local(f"Loaded per-user library manifest: {len(self.metadata.tracks)} tracks.")
+                self._backup_legacy_manifest(cache_path)
+                return self._save_metadata()
+
+        # A portable manifest bootstraps an account whose own manifest is
+        # missing, empty or from somewhere else. It never overwrites one that
+        # still describes this music path.
         out_dir = None if _music_dir_manifest_is_shared() else _output_dir_for_library()
         if out_dir:
             path_at_music = Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME

@@ -10,6 +10,7 @@ writes into the developer's real `~/.config/soundsible`.
 
 import pytest
 
+from shared.app_config import set_output_dir
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.user_context import bind_user, unbind_user
 
@@ -17,7 +18,7 @@ TEST_USER_ID = "testuser"
 
 
 @pytest.fixture(autouse=True)
-def isolated_runtime(tmp_path_factory):
+def isolated_runtime(tmp_path_factory, monkeypatch):
     """Point the runtime at a per-test directory and bind a user to the context."""
     root = tmp_path_factory.mktemp("soundsible")
     runtime = RuntimeConfig(
@@ -33,9 +34,19 @@ def isolated_runtime(tmp_path_factory):
         lan_enabled=False,
         advanced_mode=True,
     )
+    for name, path in {
+        "SOUNDSIBLE_CONFIG_DIR": runtime.config_dir,
+        "SOUNDSIBLE_DATA_DIR": runtime.data_dir,
+        "SOUNDSIBLE_CACHE_DIR": runtime.cache_dir,
+        "SOUNDSIBLE_LOG_DIR": runtime.log_dir,
+        "SOUNDSIBLE_MUSIC_DIR": runtime.music_dir,
+        "OUTPUT_DIR": runtime.music_dir,
+    }.items():
+        monkeypatch.setenv(name, str(path))
     configure_runtime(runtime)
     for path in (runtime.config_dir, runtime.data_dir, runtime.cache_dir, runtime.log_dir, runtime.music_dir):
         path.mkdir(parents=True, exist_ok=True)
+    set_output_dir(runtime.music_dir)
 
     token = bind_user(TEST_USER_ID)
     try:
@@ -62,4 +73,5 @@ def isolated_runtime(tmp_path_factory):
             reset_database_managers()
         except Exception:
             pass
+        set_output_dir(None)
         reset_runtime()

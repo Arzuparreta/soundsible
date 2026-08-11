@@ -98,6 +98,91 @@ def test_legacy_manifest_migrates_once_and_sqlite_wins_afterwards(monkeypatch):
     assert json.loads(backup.read_text())["tracks"][0]["id"] == "legacy"
 
 
+def test_per_user_manifest_wins_over_portable_manifest_during_migration(monkeypatch, tmp_path):
+    manager = LibraryManager(silent=True)
+    user_library = _library(_track("real-song"))
+    portable_library = _library(_track("track-1"), _track("track-2"))
+    portable_dir = tmp_path / "portable"
+    portable_dir.mkdir()
+    (portable_dir / "library.json").write_text(portable_library.to_json(), encoding="utf-8")
+    manager.manifest_path.write_text(user_library.to_json(), encoding="utf-8")
+    monkeypatch.setattr("player.library._output_dir_for_library", lambda: portable_dir)
+
+    assert manager.sync_library() is True
+
+    canonical = manager.db.load_library_metadata()
+    assert canonical is not None
+    assert [track.id for track in canonical.tracks] == ["real-song"]
+    backup = manager.manifest_path.with_name("library.json.pre-sqlite.bak")
+    assert json.loads(backup.read_text())["tracks"][0]["id"] == "real-song"
+
+
+def test_an_empty_per_user_manifest_does_not_erase_the_portable_one(monkeypatch, tmp_path):
+    """Authoritative only while it has something to say.
+
+    Adopting an empty manifest would make emptiness canonical, and the export
+    that follows writes it straight over the library in the music folder — the
+    loss the per-user preference exists to prevent, running the other way.
+    """
+    manager = LibraryManager(silent=True)
+    portable_library = _library(_track("track-1"), _track("track-2"))
+    portable_dir = tmp_path / "portable"
+    portable_dir.mkdir()
+    portable_manifest = portable_dir / "library.json"
+    portable_manifest.write_text(portable_library.to_json(), encoding="utf-8")
+    empty = LibraryMetadata(version=1, tracks=[], playlists={"Kept": []}, settings={})
+    manager.manifest_path.write_text(empty.to_json(), encoding="utf-8")
+    monkeypatch.setattr("player.library._output_dir_for_library", lambda: portable_dir)
+
+    assert manager.sync_library() is True
+
+    canonical = manager.db.load_library_metadata()
+    assert canonical is not None
+    assert [track.id for track in canonical.tracks] == ["track-1", "track-2"]
+    assert [t["id"] for t in json.loads(portable_manifest.read_text())["tracks"]] == [
+        "track-1",
+        "track-2",
+    ]
+    # The music folder's manifest may ship without playlists; the per-user one
+    # is where they were. Adopting the first must not drop the second's.
+    assert "Kept" in canonical.playlists
+
+
+def test_a_manifest_from_another_machine_does_not_become_canonical(monkeypatch, tmp_path):
+    """Its tracks resolve to nothing here, and nothing is what it would play."""
+    manager = LibraryManager(silent=True)
+    elsewhere = _library(*[_track(f"gone-{i}") for i in range(6)])
+    manager.manifest_path.write_text(elsewhere.to_json(), encoding="utf-8")
+    portable_library = _library(_track("present"))
+    portable_dir = tmp_path / "portable"
+    portable_dir.mkdir()
+    (portable_dir / "library.json").write_text(portable_library.to_json(), encoding="utf-8")
+    monkeypatch.setattr("player.library._output_dir_for_library", lambda: portable_dir)
+
+    assert manager.sync_library() is True
+
+    canonical = manager.db.load_library_metadata()
+    assert canonical is not None
+    assert [track.id for track in canonical.tracks] == ["present"]
+
+
+def test_test_runtime_output_dir_cannot_escape_to_environment(monkeypatch, tmp_path, isolated_runtime):
+    external_dir = tmp_path / "external-music"
+    external_dir.mkdir()
+    external_manifest = external_dir / "library.json"
+    sentinel = '{"do_not_touch": true}'
+    external_manifest.write_text(sentinel, encoding="utf-8")
+    monkeypatch.setenv("OUTPUT_DIR", str(external_dir))
+
+    manager = LibraryManager(silent=True)
+    manager.metadata = _library(_track("isolated"))
+    assert manager._save_metadata() is True
+
+    assert external_manifest.read_text() == sentinel
+    exported = isolated_runtime.music_dir / "library.json"
+    assert json.loads(exported.read_text())["tracks"][0]["id"] == "isolated"
+
+
 @pytest.mark.parametrize("legacy_content", [None, "{not-json"])
 def test_fresh_or_corrupt_legacy_install_becomes_empty_canonical_library(legacy_content, monkeypatch):
     monkeypatch.setattr("player.library._output_dir_for_library", lambda: None)
