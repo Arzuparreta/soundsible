@@ -154,26 +154,43 @@
   }
 }
 
+/* Wraps because the row's width is not ours to predict: three tabs, a sort
+   button and a filter button, in four languages, at three interface scales.
+   Without this the last control is pushed off the right edge instead of onto a
+   second line — which is how a third tab took "Ordenar biblioteca" out of the
+   viewport in large mode. */
 .toolbar {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md);
+  gap: var(--space-2xs) var(--space-md);
   min-height: 44px;
   padding: 0 var(--gutter) var(--space-sm);
 }
 
+/* The pill is the one item that must never be what overflows: it is the whole
+   navigation of this view. It scrolls within itself rather than widening the
+   line, and its tabs keep their own width instead of compressing into slivers. */
 .tabs {
   display: inline-flex;
   gap: var(--space-2xs);
   padding: var(--space-2xs);
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
   background: var(--bg-raised);
   border-radius: var(--radius-full);
 }
 
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
 .tab {
   position: relative;
+  flex: none;
   min-height: var(--segment-h);
   padding: 0 var(--space-md);
   font-size: var(--text-caption);
@@ -221,6 +238,51 @@
   stroke-linecap: round;
 }
 
+.filterChips {
+  display: flex;
+  gap: var(--space-2xs);
+  padding: 0 var(--gutter) var(--space-xs);
+}
+
+/* The chip is the control that removes itself: tapping it clears the filter,
+   so the label and the ✕ are one target rather than a label with a hit area
+   glued on. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.chip svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* Icon-only on a phone. Three tabs and a labelled control do not share a 390px
+   row, and the label is the part that can go: the icon and the `aria-label`
+   still say what the button does, and tapping it shows the current choice
+   ticked. The label comes back as soon as there is room for it. */
+@media (max-width: 480px) {
+  .sortButton span {
+    display: none;
+  }
+}
+
 :global(html[data-interface-size='normal']) .headerAction {
   width: 48px;
   height: 48px;
@@ -260,12 +322,6 @@
     position: absolute;
     inset: -4px 0;
     content: '';
-  }
-}
-
-@media (max-width: 360px) {
-  .sortButton span {
-    display: none;
   }
 }
 

@@ -283,6 +283,12 @@ Useful library routes:
 |---|---|---|
 | `GET` | `/api/library` | Full library metadata |
 | `GET` | `/api/library/search?q=...` | Search local library |
+| `GET` | `/api/library/albums?sort=&genre=&year=` | Albums from the normalized catalog. `sort` is one of `newest`, `alphabeticalByName`, `alphabeticalByArtist`, `byYear`, `byGenre`, `random`, `frequent`, `recent`, `highest`; an unknown one is a 400 |
+| `GET` | `/api/library/albums/<album_id>` | One record and its track ids, in disc and track order |
+| `GET` | `/api/library/artists` | Artists with a track to their name, from `track_artists` |
+| `GET` | `/api/library/artists/<artist_id>` | One artist: the tracks they perform on, and the records they are credited with |
+| `GET` | `/api/library/genres` | Genres present, with song and album counts |
+| `GET` | `/api/library/years` | Release years present, with album and track counts |
 | `POST` | `/api/library/scan` | Start an asynchronous scan of configured music roots; optional body `{"path":"..."}` must stay inside one |
 | `GET` | `/api/library/scan` | Current or last scan state and counters |
 | `GET` | `/api/library/favourites` | Favorite track IDs (only the ones you own a file for) |
@@ -763,6 +769,12 @@ GET  /api/agent/debug/socketio agent token
 
 GET  /api/library
 GET  /api/library/search?q=
+GET  /api/library/albums
+GET  /api/library/albums/<album_id>
+GET  /api/library/artists
+GET  /api/library/artists/<artist_id>
+GET  /api/library/genres
+GET  /api/library/years
 GET  /api/library/favourites
 GET  /api/library/favourites/entries
 POST /api/library/favourites/toggle

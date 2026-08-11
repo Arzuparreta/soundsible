@@ -30,7 +30,7 @@ import { coverUrl } from '../lib/media';
 import { coverStyle } from '../lib/cover';
 import { parseYouTubeInput } from '../lib/youtube';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
-import { buildArtists, librarySort, libraryTab, setLibrarySort, setLibraryTab, sortTracks } from '../lib/libraryView';
+import { catalogArtists, librarySort, libraryTab, setLibrarySort, setLibraryTab, sortTracks } from '../lib/libraryView';
 import { artistKey } from '../lib/artistRoute';
 import { searchLibrary, type LibrarySearchResult } from '../lib/librarySearch';
 import { catalogPreviewId, itemArtist, itemToTrack, playCatalogItem } from '../lib/catalogItem';
@@ -185,7 +185,7 @@ export function NowPlayingBrowser(props: {
     sortTracks(musicLibrary(), librarySort(), new Set(favouriteLibraryIds())),
   );
   const favourites = createMemo(() => favouriteTracks().filter((track) => !isPodcastTrack(track)));
-  const libraryArtists = createMemo(() => buildArtists(musicLibrary()));
+  const libraryArtists = createMemo(() => catalogArtists(state.catalog.artists));
   const localResults = createMemo(() =>
     scope() === 'library' ? searchLibrary(libraryTracks(), libraryArtists(), query()) : [],
   );
@@ -746,7 +746,7 @@ function RootView(props: {
 
 function LibraryView(props: {
   tracks: Track[];
-  artists: ReturnType<typeof buildArtists>;
+  artists: ReturnType<typeof catalogArtists>;
   onBack: () => void;
   onSearch: () => void;
   onArtist: (name: string) => void;

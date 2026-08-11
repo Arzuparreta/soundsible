@@ -8,8 +8,8 @@ const tracks: Track[] = [
   { id: '3', title: 'Tu calorro', artist: 'Estopa', album: 'Estopa' },
 ];
 const artists = [
-  { name: 'Alejandro Sanz', count: 1, coverId: '1' },
-  { name: 'Estopa', count: 1, coverId: '3' },
+  { id: 'ar-1', name: 'Alejandro Sanz', count: 1, coverId: '1' },
+  { id: 'ar-3', name: 'Estopa', count: 1, coverId: '3' },
 ];
 
 describe('library search', () => {

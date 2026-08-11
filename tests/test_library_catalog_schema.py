@@ -80,6 +80,32 @@ def test_sync_builds_first_class_albums_and_ordered_artists(tmp_path):
     assert artist_rows["Various Artists"]["album_count"] == 1
 
 
+def test_an_album_page_without_a_size_is_the_whole_list(tmp_path):
+    """Subsonic always names a page; the player's grid renders the lot at once."""
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    db.sync_from_metadata(
+        _metadata(*[_track(f"t{i}", artist=f"Artist {i}", album=f"Album {i}") for i in range(12)])
+    )
+
+    assert len(db.get_albums_page("alphabeticalByName", size=5)) == 5
+    assert len(db.get_albums_page("alphabeticalByName", size=None)) == 12
+
+
+def test_release_years_are_counted_per_record_not_per_track(tmp_path):
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    long_player = [_track(f"l{i}", album="Long Player") for i in range(4)]
+    single = _track("s", artist="Other", album="Single")
+    for track in [*long_player, single]:
+        track.year = 1999 if track.album == "Long Player" else 2004
+
+    db.sync_from_metadata(_metadata(*long_player, single))
+
+    assert db.get_years() == [
+        {"year": 2004, "album_count": 1, "track_count": 1},
+        {"year": 1999, "album_count": 1, "track_count": 4},
+    ]
+
+
 def test_legacy_artist_display_is_never_split_heuristically(tmp_path):
     db = DatabaseManager(str(tmp_path / "library.db"))
     db.sync_from_metadata(_metadata(_track("funk", artist="Earth, Wind & Fire")))

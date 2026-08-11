@@ -1496,6 +1496,7 @@ def _run_sync_task_bound():
 
 # Note: Blueprints details
 from shared.api.routes.library import library_bp
+from shared.api.routes.library_catalog import library_catalog_bp
 from shared.api.routes.playback import playback_bp
 from shared.api.routes.downloader import downloader_bp
 from shared.api.routes.config import config_bp
@@ -1513,6 +1514,7 @@ from shared.api.routes.loudness import loudness_bp
 from shared.api.routes.community import community_bp
 from shared.api.routes.subsonic import subsonic_bp
 app.register_blueprint(library_bp)
+app.register_blueprint(library_catalog_bp)
 app.register_blueprint(playback_bp)
 app.register_blueprint(downloader_bp)
 app.register_blueprint(config_bp)

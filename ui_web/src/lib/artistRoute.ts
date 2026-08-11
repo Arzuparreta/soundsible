@@ -4,25 +4,51 @@
  * Artist names are display values rather than URL-safe IDs, so every path
  * segment must be encoded on navigation and decoded exactly once on arrival.
  */
-export function artistPath(name: string, opts?: { view?: 'discover' | 'library'; deezerId?: string }): string {
+/**
+ * `catalogId` is the engine's id for this artist or record, carried when the
+ * link was built from the catalog. It is what lets the page ask the engine
+ * which songs these are instead of matching names, so two records sharing a
+ * title stay two records. Links from a song row or a Deezer result have no such
+ * id, and the pages fall back to matching by name — see `Artist.tsx`.
+ */
+export function artistPath(
+  name: string,
+  opts?: { view?: 'discover' | 'library'; deezerId?: string; artistId?: string },
+): string {
   const params = new URLSearchParams();
   if (opts?.view) params.set('view', opts.view);
   if (opts?.deezerId) params.set('deezer_id', opts.deezerId);
+  if (opts?.artistId) params.set('artist_id', opts.artistId);
   const qs = params.toString();
   return `/artist/${encodeURIComponent(name.normalize('NFC'))}${qs ? `?${qs}` : ''}`;
 }
 
-export function albumPath(name: string, artist: string, opts?: { view?: 'discover' | 'library'; deezerId?: string }): string {
+export function albumPath(
+  name: string,
+  artist: string,
+  opts?: { view?: 'discover' | 'library'; deezerId?: string; albumId?: string },
+): string {
   const params = new URLSearchParams({ artist });
   if (opts?.view) params.set('view', opts.view);
   if (opts?.deezerId) params.set('deezer_id', opts.deezerId);
+  if (opts?.albumId) params.set('album_id', opts.albumId);
   return `/album/${encodeURIComponent(name.normalize('NFC'))}?${params.toString()}`;
 }
 
-export function parseViewParams(query: Record<string, string | undefined>): { view: 'discover' | 'library'; deezerId?: string } {
+export function parseViewParams(query: Record<string, string | undefined>): {
+  view: 'discover' | 'library';
+  deezerId?: string;
+  albumId?: string;
+  artistId?: string;
+} {
   return {
     view: query.view === 'library' ? 'library' : 'discover',
     deezerId: query.deezer_id || undefined,
+    // Kept apart rather than folded into one "catalog id": an album id and an
+    // artist id are both opaque uuids, and a page that accepted either would
+    // happily fetch the wrong entity from a hand-edited URL.
+    albumId: query.album_id || undefined,
+    artistId: query.artist_id || undefined,
   };
 }
 

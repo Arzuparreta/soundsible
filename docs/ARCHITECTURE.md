@@ -109,6 +109,17 @@ paths and file mtimes remain machine-local SQLite fields and are excluded from
 inside a currently configured root. Rescans add or re-key files but never purge
 missing ones; removal remains an explicit maintenance action.
 
+**Catalog browsing**: `shared/api/routes/library_catalog.py` serves
+`/api/library/albums`, `/api/library/artists`, `/api/library/genres` and
+`/api/library/years` from that same normalized projection, so the player browses
+the records and credits `/rest` browses rather than regrouping the flat manifest
+in the browser — which made a display string into a performer and merged two
+records that share a title. Album orderings are validated against
+`DatabaseManager.ALBUM_ORDERINGS`, the table `getAlbumList2` orders by, so the
+two surfaces cannot disagree about what "by year" means. Entities answer with
+track ids: the player already holds every track it can play, keyed by id, with
+its favourite mark and loudness reading attached.
+
 An account without a canonical marker is migrated once using the previous manifest precedence. Its config-dir manifest is preserved as `library.json.pre-sqlite.bak`; fresh accounts receive an empty canonical database. After migration, JSON edits and mtimes are ignored: other writers are observed through the SQLite revision, and `/api/library/sync` reloads SQLite and regenerates the exports.
 
 **OpenSubsonic path**: `shared/api/routes/subsonic.py` serves `/rest`, reading that same catalog and serving bytes through the path `/api/static/stream` uses. `shared/subsonic/` holds what the views decide with: the XML/JSON/JSONP envelope, the per-account credential (encrypted, because the protocol's `md5(password + salt)` handshake cannot be checked against a hash), the `Child`/`AlbumID3`/`ArtistID3` serializers, and the ffmpeg transcode. This surface is **outside `/api`**, so the `before_request` hook leaves it anonymous and it authenticates itself — with no trusted-network shortcut, since it can be reached through a funnel. See [OpenSubsonic](OPENSUBSONIC.md).

@@ -1,11 +1,14 @@
-import { createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { createMemo, createResource, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
 import { state, actions, downloadCounts, favouriteRows, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
+import AlbumGrid from '../components/AlbumGrid';
 import LibrarySearchResults from '../components/LibrarySearchResults';
 import { openActionMenu } from '../components/ActionMenu';
+import { api } from '../lib/api';
+import type { CatalogAlbum } from '../types/music';
 import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
 import {
@@ -17,8 +20,19 @@ import {
   setLibraryTab,
   sortTracks,
   filterTracks,
-  buildArtists,
+  catalogArtists,
+  albumSort,
+  setAlbumSort,
+  albumFilter,
+  setAlbumFilter,
 } from '../lib/libraryView';
+import {
+  albumBrowseQuery,
+  collateAlbums,
+  NO_ALBUM_FILTER,
+  ALBUM_SORTS,
+  type AlbumSort,
+} from '../lib/albumBrowse';
 import { searchLibrary } from '../lib/librarySearch';
 import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Library.module.css';
@@ -35,7 +49,22 @@ export default function Library() {
   const favSet = createMemo(() => new Set(favouriteRows().map((row) => row.track.id)));
   const songs = createMemo(() => filterTracks(musicLibrary(), libraryFilter()));
   const sorted = createMemo(() => sortTracks(songs(), librarySort(), favSet()));
-  const artists = createMemo(() => buildArtists(songs()));
+  const artists = createMemo(() => catalogArtists(state.catalog.artists));
+
+  // The grid re-fetches whenever the ordering, the filter or the catalog itself
+  // changes. Ordering and filtering are the engine's job — it is the only party
+  // that knows what "most played" or "1994" means across the whole library, and
+  // paging a filtered list in the browser would mean filtering it there first.
+  const [albums] = createResource(
+    () =>
+      libraryTab() === 'albums'
+        ? { ...albumBrowseQuery(albumSort(), albumFilter()), revision: state.catalog.revision }
+        : // Not on screen, not fetched. Switching to the tab later asks once,
+          // against a catalog revision that has already settled.
+          null,
+    (query) => api.getLibraryAlbums(query).catch(() => [] as CatalogAlbum[]),
+  );
+  const albumRows = createMemo(() => collateAlbums(albums() ?? [], albumSort()));
   const [query, setQuerySignal] = createSignal(
     typeof searchParams.q === 'string' ? searchParams.q : '',
   );
@@ -188,6 +217,71 @@ export default function Library() {
     </div>
   );
 
+  const sortLabel = (sort: AlbumSort) => t(`library.albumSort.${sort}`);
+
+  const activeFilterLabel = () => {
+    const active = albumFilter();
+    if (active.kind === 'genre') return active.value;
+    if (active.kind === 'year') return String(active.value);
+    return '';
+  };
+
+  /** Ordering and narrowing from one control, the way the songs tab already
+   * does it. Two buttons beside a three-tab pill do not fit a phone, and the
+   * second one was never a different kind of decision.
+   *
+   * The orderings are the engine's own, so this menu and a Subsonic client's
+   * offer the same list. The filter is one axis at a time — a shelf, not a
+   * query builder — and each entry opens the values the library actually has. */
+  const browseAlbums = () => {
+    const active = albumFilter();
+    const tick = (on: boolean) => (on ? '✓  ' : '');
+    openActionMenu({
+      sections: [
+        {
+          label: t('library.albumSortTitle'),
+          actions: ALBUM_SORTS.map((sort) => ({
+            label: `${tick(albumSort() === sort)}${sortLabel(sort)}`,
+            onSelect: () => setAlbumSort(sort),
+          })),
+        },
+        {
+          label: t('library.albumFilterTitle'),
+          actions: [
+            {
+              label: `${tick(active.kind === 'none')}${t('library.albumFilterAll')}`,
+              onSelect: () => setAlbumFilter(NO_ALBUM_FILTER),
+            },
+            {
+              label: t('library.albumFilterByGenre'),
+              disabled: state.catalog.genres.length === 0,
+              onSelect: () =>
+                openActionMenu({
+                  title: t('library.albumFilterByGenre'),
+                  actions: state.catalog.genres.map((genre) => ({
+                    label: `${tick(active.kind === 'genre' && active.value === genre.name)}${genre.name}`,
+                    onSelect: () => setAlbumFilter({ kind: 'genre', value: genre.name }),
+                  })),
+                }),
+            },
+            {
+              label: t('library.albumFilterByYear'),
+              disabled: state.catalog.years.length === 0,
+              onSelect: () =>
+                openActionMenu({
+                  title: t('library.albumFilterByYear'),
+                  actions: state.catalog.years.map((year) => ({
+                    label: `${tick(active.kind === 'year' && active.value === year.year)}${year.year}`,
+                    onSelect: () => setAlbumFilter({ kind: 'year', value: year.year }),
+                  })),
+                }),
+            },
+          ],
+        },
+      ],
+    });
+  };
+
   const sortLibrary = () =>
     openActionMenu({
       sections: [
@@ -270,6 +364,14 @@ export default function Library() {
             </button>
             <button
               class={styles.tab}
+              classList={{ [styles.tabActive]: libraryTab() === 'albums' }}
+              type="button"
+              onClick={() => setLibraryTab('albums')}
+            >
+              {t('library.albums')}
+            </button>
+            <button
+              class={styles.tab}
               classList={{ [styles.tabActive]: libraryTab() === 'artists' }}
               type="button"
               onClick={() => setLibraryTab('artists')}
@@ -285,6 +387,38 @@ export default function Library() {
               <span>{librarySort() === 'az' ? t('library.sortAZ') : librarySort() === 'fav' ? t('library.sortFavFirst') : t('library.sortRecent')}</span>
             </button>
           </Show>
+          <Show when={libraryTab() === 'albums'}>
+            <button
+              class={styles.sortButton}
+              type="button"
+              onClick={browseAlbums}
+              aria-label={t('library.albumSortTitle')}
+              data-pressable
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h18M6 12h12M10 18h4" />
+              </svg>
+              <span>{sortLabel(albumSort())}</span>
+            </button>
+          </Show>
+        </div>
+      </Show>
+
+      {/* The narrowing stays visible and stays undoable: a grid that silently
+          holds a filter from a previous session reads as a shrunken library. */}
+      <Show when={!searching() && libraryTab() === 'albums' && albumFilter().kind !== 'none'}>
+        <div class={styles.filterChips}>
+          <button
+            class={styles.chip}
+            type="button"
+            onClick={() => setAlbumFilter(NO_ALBUM_FILTER)}
+            data-pressable
+          >
+            <span>{activeFilterLabel()}</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m7 7 10 10M17 7 7 17" />
+            </svg>
+          </button>
         </div>
       </Show>
 
@@ -294,9 +428,25 @@ export default function Library() {
       </Show>
 
       <Show when={searching()} fallback={
-        <Show
-          when={libraryTab() === 'songs'}
-          fallback={
+        <Switch>
+          <Match when={libraryTab() === 'albums'}>
+            <Show
+              when={albumRows().length > 0}
+              fallback={emptyState(
+                albumFilter().kind === 'none' ? t('library.emptyAlbums') : t('library.emptyAlbumFilter'),
+              )}
+            >
+              <div
+                ref={(element) => registerPrimaryScroll(element)}
+                class={styles.artistsScroll}
+                data-library-scroll
+                data-primary-scroll
+              >
+                <AlbumGrid albums={albumRows()} />
+              </div>
+            </Show>
+          </Match>
+          <Match when={libraryTab() === 'artists'}>
             <Show when={artists().length > 0} fallback={emptyState(t('library.emptyArtists'))}>
               <div
                 ref={(element) => registerPrimaryScroll(element)}
@@ -307,16 +457,17 @@ export default function Library() {
                 <ArtistGrid artists={artists()} />
               </div>
             </Show>
-          }
-        >
-          <TrackList
-            tracks={sorted()}
-            context={{ id: 'library', kind: 'library', label: t('library.title') }}
-            loading={state.loading}
-            empty={emptyState(t('library.emptyLibrary'))}
-            linkArtist={!isMobile()}
-          />
-        </Show>
+          </Match>
+          <Match when={true}>
+            <TrackList
+              tracks={sorted()}
+              context={{ id: 'library', kind: 'library', label: t('library.title') }}
+              loading={state.loading}
+              empty={emptyState(t('library.emptyLibrary'))}
+              linkArtist={!isMobile()}
+            />
+          </Match>
+        </Switch>
       }>
         <LibrarySearchResults results={searchResults()} />
       </Show>

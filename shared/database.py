@@ -1251,6 +1251,12 @@ class DatabaseManager:
 
         `track_user_state` is keyed by track id, so the left join adds no rows
         and the aggregates below stay honest.
+
+        `cover_track_id` is the album's opening track, ordered the way the disc
+        is — the same row `getCoverArt` reaches through
+        ``get_tracks_by_album_id(...)[0]``. Picking it here rather than letting
+        each caller pick its own is what keeps the artwork on a grid identical
+        to the artwork a Subsonic client fetches for that album.
         """
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
@@ -1264,7 +1270,10 @@ class DatabaseManager:
                        a.year,
                        a.genre,
                        a.is_compilation,
-                       MIN(t.id) AS first_track_id,
+                       (SELECT t2.id FROM tracks t2
+                         WHERE t2.album_id = a.id
+                         ORDER BY COALESCE(t2.disc_number, 1), COALESCE(t2.track_number, 0), t2.title
+                         LIMIT 1) AS cover_track_id,
                        COUNT(t.id) AS track_count,
                        COALESCE(SUM(t.duration), 0) AS duration,
                        COALESCE(SUM(s.play_count), 0) AS play_count,
@@ -1278,9 +1287,12 @@ class DatabaseManager:
             """, params).fetchall()
             return [dict(row) for row in rows]
 
-    #: The orderings ``getAlbumList2`` understands, mapped to SQL. ``starred``
-    #: is missing on purpose: favourites are not in this database.
-    _ALBUM_ORDERINGS = {
+    #: The orderings ``getAlbumList2`` understands, mapped to SQL. Public
+    #: because it is the shared contract: the player's album grid offers these
+    #: and nothing else, so the two surfaces cannot drift into disagreeing
+    #: about what "by year" means. ``starred`` is missing on purpose:
+    #: favourites are not in this database.
+    ALBUM_ORDERINGS = {
         "newest": "MAX(t.last_updated) DESC, a.title",
         "alphabeticalByName": "a.title_key, a.album_artist",
         "alphabeticalByArtist": "a.album_artist, a.title_key",
@@ -1296,14 +1308,20 @@ class DatabaseManager:
         self,
         list_type: str = "alphabeticalByName",
         *,
-        size: int = 10,
+        size: Optional[int] = 10,
         offset: int = 0,
         genre: Optional[str] = None,
         from_year: Optional[int] = None,
         to_year: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """One page of albums in the order a Subsonic client asked for."""
-        order = self._ALBUM_ORDERINGS.get(list_type)
+        """Albums in the order a client asked for, one page at a time.
+
+        ``size=None`` means every match. Subsonic always names a page size, so
+        that path is unchanged; the player's grid scrolls the whole library at
+        once and would otherwise have to page a list it is about to render in
+        full anyway.
+        """
+        order = self.ALBUM_ORDERINGS.get(list_type)
         if order is None:
             return []
 
@@ -1335,9 +1353,12 @@ class DatabaseManager:
             having = "HAVING AVG(s.rating) IS NOT NULL"
 
         where = f"WHERE {' AND '.join(filters)}" if filters else ""
-        params.extend([max(0, int(size)), max(0, int(offset))])
+        limit = ""
+        if size is not None:
+            limit = " LIMIT ? OFFSET ?"
+            params.extend([max(0, int(size)), max(0, int(offset))])
         return self._albums_query(
-            f"{where} GROUP BY a.id {having} ORDER BY {order} LIMIT ? OFFSET ?",
+            f"{where} GROUP BY a.id {having} ORDER BY {order}{limit}",
             tuple(params),
         )
 
@@ -1359,13 +1380,22 @@ class DatabaseManager:
         return rows[0] if rows else None
 
     def _artists_query(self, tail: str, params: tuple = ()) -> List[Dict[str, Any]]:
+        """One artist projection. `cover_track_id` matches `getCoverArt`'s pick
+        for an artist — the first track they perform on — so the player's grid
+        and a Subsonic client draw the same face."""
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(f"""
                 SELECT ar.id,
                        ar.name,
                        COUNT(DISTINCT ta.track_id) AS track_count,
-                       COUNT(DISTINCT al.id) AS album_count
+                       COUNT(DISTINCT al.id) AS album_count,
+                       (SELECT t2.id FROM tracks t2
+                         JOIN track_artists ta2 ON ta2.track_id = t2.id
+                         WHERE ta2.artist_id = ar.id
+                         ORDER BY t2.album, COALESCE(t2.disc_number, 1),
+                                  COALESCE(t2.track_number, 0), t2.title
+                         LIMIT 1) AS cover_track_id
                 FROM artists ar
                 LEFT JOIN track_artists ta ON ta.artist_id = ar.id
                 LEFT JOIN albums al ON al.album_artist_id = ar.id
@@ -1412,6 +1442,27 @@ class DatabaseManager:
                 WHERE t.genre IS NOT NULL AND TRIM(t.genre) != '' AND {_MUSIC_ONLY}
                 GROUP BY TRIM(t.genre) COLLATE NOCASE
                 ORDER BY name COLLATE NOCASE
+            """).fetchall()
+            return [dict(row) for row in rows]
+
+    def get_years(self) -> List[Dict[str, Any]]:
+        """Release years present in the catalog, newest first.
+
+        Read off `albums` rather than `tracks`: the year of a release belongs to
+        the release, and counting it per track would rank a long album above a
+        year that holds several short ones.
+        """
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT a.year AS year,
+                       COUNT(DISTINCT a.id) AS album_count,
+                       COUNT(t.id) AS track_count
+                FROM albums a
+                JOIN tracks t ON t.album_id = a.id
+                WHERE a.year IS NOT NULL
+                GROUP BY a.year
+                ORDER BY a.year DESC
             """).fetchall()
             return [dict(row) for row in rows]
 

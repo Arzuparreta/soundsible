@@ -9,6 +9,7 @@ import { artistKey, artistPath, albumPath, decodeArtistName, parseViewParams, re
 import { t } from '../lib/i18n';
 import type { ArtistProfile, CatalogItem, Track } from '../types/music';
 import { itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import { coverGradient, coverStyle } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
@@ -61,7 +62,20 @@ export default function Artist() {
     cancelCatalogResolve();
   });
 
+  // Who performs on what is the engine's answer (`track_artists`), and when the
+  // link carried a catalog id we take it: matching the display string here made
+  // "Björk & Rosalía" a third artist and hid the duet from both of them.
+  //
+  // The fallback is not debt. An artist name is also reachable from a song row
+  // and from a Deezer result, neither of which has an id to carry, so the old
+  // comparison stays as the answer for names that arrived without one.
+  const [catalogTracks] = createResource(
+    () => viewParams().artistId,
+    (artistId) => api.getLibraryArtist(artistId).then((res) => res.track_ids ?? []).catch(() => []),
+  );
+
   const libraryTrackList = createMemo<Track[]>(() => {
+    if (viewParams().artistId) return tracksByIds(catalogTracks() ?? []);
     const n = artistKey(name());
     if (!n) return [];
     return musicLibrary().filter(

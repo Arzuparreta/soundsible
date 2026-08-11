@@ -10,6 +10,7 @@ import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMo
 import { t } from '../lib/i18n';
 import type { AlbumProfile, CatalogItem, Track } from '../types/music';
 import { itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Album.module.css';
 import { coverGradient } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
@@ -55,7 +56,20 @@ export default function Album() {
     cancelCatalogResolve();
   });
 
+  // Which songs are on a record is the engine's answer, and a catalog id in the
+  // link is what lets us ask for it. Matching on the title is how two different
+  // records called "Greatest Hits" used to play as one, and how a compilation
+  // lost the tracks whose credits did not repeat the album artist.
+  //
+  // The fallback stays for links that carry no id — a Deezer result, an album
+  // named in search — where a name is genuinely all there is.
+  const [catalogTracks] = createResource(
+    () => viewParams().albumId,
+    (albumId) => api.getLibraryAlbum(albumId).then((res) => res.track_ids ?? []).catch(() => []),
+  );
+
   const libraryTrackList = createMemo<Track[]>(() => {
+    if (viewParams().albumId) return tracksByIds(catalogTracks() ?? []);
     // artistKey folds the same Unicode/casing differences on both sides; the
     // album title is matched with it too so the two comparisons stay consistent.
     const tKey = artistKey(title());
