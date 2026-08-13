@@ -303,24 +303,89 @@ describe('two-deck mixer', () => {
     expect(outgoing.src).toBe('');
   });
 
-  it('freezes the blend while playback is paused', async () => {
-    const { audioEl, audioService, outgoing, incoming } = await armed();
+  it('closes an interrupted blend on its current owner', async () => {
+    const { audioEl, audioService, outgoing, incoming, handlers } = await armed();
     await play(outgoing, 108.5);
     incoming.currentTime = 2;
     await play(outgoing, 110);
     await play(incoming, 3);
-    const held = incoming.volume;
-    expect(held).toBeGreaterThan(0);
+    expect(audioService.mixPhase()).toBe('crossfading');
+    expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
 
     audioService.pause();
+    expect(audioService.mixPhase()).toBe('idle');
     expect(outgoing.paused).toBe(true);
     expect(incoming.paused).toBe(true);
-    // The crossfade advances on the media clock, so a pause holds it exactly
-    // where it stood instead of running away on wall time — which is what used
-    // to leave the incoming deck playing alone over a paused player.
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(incoming.volume).toBe(held);
+    expect(incoming.src).toBe('');
+    expect(handlers.onCancel).toHaveBeenCalledWith('transport_pause');
     expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+
+    const incomingStarts = incoming.play.mock.calls.length;
+    await audioService.resume();
+    expect(outgoing.paused).toBe(false);
+    expect(incoming.play).toHaveBeenCalledTimes(incomingStarts);
+  });
+
+  it('keeps a handoff prepared when only the outgoing deck has started', async () => {
+    const { audioService, outgoing, incoming, handlers } = await armed();
+
+    audioService.pause('media_session');
+    expect(audioService.mixPhase()).toBe('armed');
+    expect(outgoing.paused).toBe(true);
+    expect(incoming.src).toBe('/next');
+    expect(incoming.play).not.toHaveBeenCalled();
+    expect(handlers.onCancel).not.toHaveBeenCalled();
+
+    await audioService.resume('media_session');
+    expect(outgoing.paused).toBe(false);
+    expect(audioService.mixPhase()).toBe('armed');
+  });
+
+  it('pauses on the incoming deck after dominance and never revives the old song', async () => {
+    const { audioEl, audioService, outgoing, incoming } = await armed();
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    await play(incoming, 4);
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+
+    audioService.pause('media_session');
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+    expect(outgoing.src).toBe('');
+    expect(incoming.paused).toBe(true);
+
+    const outgoingStarts = outgoing.play.mock.calls.length;
+    await audioService.resume('media_session');
+    expect(incoming.paused).toBe(false);
+    expect(outgoing.play).toHaveBeenCalledTimes(outgoingStarts);
+  });
+
+  it('stops a non-active deck that WebKit revives after the handoff', async () => {
+    const reports: Array<{ kind: string; deck0Playing: boolean; deck1Playing: boolean }> = [];
+    const { audioService, outgoing, incoming, setProgramTransportReporter } = await armed();
+    setProgramTransportReporter((event) => reports.push(event));
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    await play(incoming, 4);
+    audioService.pause('media_session');
+    await audioService.resume('media_session');
+
+    // Model iOS selecting the old element as its media session and issuing a
+    // native play even though Soundsible's programme already belongs to B.
+    outgoing.src = '/old';
+    outgoing.currentSrc = '/old';
+    await outgoing.play();
+
+    expect(outgoing.paused).toBe(true);
+    expect(outgoing.src).toBe('');
+    expect(incoming.paused).toBe(false);
+    expect(reports.at(-1)).toEqual(expect.objectContaining({
+      kind: 'inactive_deck_play',
+      deck0Playing: false,
+      deck1Playing: true,
+    }));
   });
 
   it('watches the armed runway coarsely and tightens up before the cue', async () => {

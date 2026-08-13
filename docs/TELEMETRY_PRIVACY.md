@@ -77,7 +77,12 @@ opaque `attempt_id`. They may include:
   it was narrowed to a chunk and why not when it was not, and the container
   extension. All of it describes the transfer, none of it the audio;
 - once per audible play (`ui_play_delivery`): how long it sounded, and how often
-  and for how long it stopped after starting.
+  and for how long it stopped after starting;
+- whole-program pause/resume and rejected inactive-deck playback
+  (`ui_program_transport`, `ui_inactive_deck_play`): whether the command came
+  from the UI or Media Session, the mix phase, visibility, dominant deck and a
+  boolean playing state for each deck. These fields diagnose Bluetooth and
+  lock-screen handoffs; they contain no audio, titles or control identifiers.
 
 Buffering before the first sound and buffering after it are recorded as separate
 fields. They used to be one counter emitted at the moment of first sound, where
