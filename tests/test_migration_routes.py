@@ -335,6 +335,9 @@ def test_play_timing_keeps_audio_context_dimensions(tmp_path, monkeypatch):
             "failure_reason": "silent_output",
             "context_state": "interrupted",
             "display_mode": "standalone",
+            "transport_action": "inactive_deck_play",
+            "transport_origin": "media_session",
+            "mix_phase": "idle",
             "segments": {"position_sec": 96, "resumed": True},
         },
         headers={"Authorization": f"Bearer {play_tok}"},
@@ -346,6 +349,9 @@ def test_play_timing_keeps_audio_context_dimensions(tmp_path, monkeypatch):
     assert row["phase"] == "ui_graph_state"
     assert row["context_state"] == "interrupted"
     assert row["display_mode"] == "standalone"
+    assert row["transport_action"] == "inactive_deck_play"
+    assert row["transport_origin"] == "media_session"
+    assert row["mix_phase"] == "idle"
     # Seconds, not milliseconds: an `_ms` key over five minutes is dropped, and
     # a podcast duration passes that comfortably.
     assert row["segments"] == {"position_sec": 96, "resumed": True}

@@ -629,6 +629,9 @@ export const api = {
     /** `standalone` for an installed PWA, `browser` for a tab — the two behave
      * differently enough around audio that an event is ambiguous without it. */
     display_mode?: string;
+    transport_action?: string;
+    transport_origin?: string;
+    mix_phase?: string;
     segments?: Record<string, number | boolean | string>;
   }) => request<{ status?: string }>('/api/playback/play-timing', { method: 'POST', body, timeoutMs: 5000 }),
 
