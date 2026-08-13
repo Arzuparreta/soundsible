@@ -106,18 +106,27 @@ export function edgeScrollDelta(
 }
 
 /** Read the rows a container is currently showing, in its own coordinate
- * space, from elements marked with `data-drag-row`. */
+ * space, from elements marked with `data-drag-row`.
+ *
+ * Only the rows actually on screen: each lane scrolls inside the container, so
+ * a row scrolled out of its lane still reports a real rect somewhere above or
+ * below the container. Left in, those rows offer seams nobody can see, and
+ * `nearestSlot` would happily commit the drop to one of them. */
 export function readDragRows(container: HTMLElement): DragRow[] {
-  const origin = container.getBoundingClientRect().top - container.scrollTop;
-  return [...container.querySelectorAll<HTMLElement>('[data-drag-row]')].map((element) => {
+  const bounds = container.getBoundingClientRect();
+  const origin = bounds.top - container.scrollTop;
+  const rows: DragRow[] = [];
+  for (const element of container.querySelectorAll<HTMLElement>('[data-drag-row]')) {
     const rect = element.getBoundingClientRect();
-    return {
+    if (rect.bottom <= bounds.top || rect.top >= bounds.bottom) continue;
+    rows.push({
       id: element.dataset.dragRow ?? '',
       top: rect.top - origin,
       height: rect.height,
       fixed: element.dataset.dragFixed !== undefined,
-    };
-  });
+    });
+  }
+  return rows;
 }
 
 /** Convert a viewport pointer position into the container's coordinate space. */

@@ -16,7 +16,6 @@ import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import {
   PlayerTrackList,
-  PlayerTrackListMore,
   type PlayerTrackListEntry,
   type PlayerTrackListSection,
 } from './PlayerTrackList';
@@ -37,8 +36,6 @@ export function NowPlaying(props: {
   const [desktopLayout, setDesktopLayout] = createSignal(
     parseNowPlayingLayout(localStorage.getItem(NOW_PLAYING_LAYOUT_KEY), localStorage.getItem('np:panelSide')),
   );
-  const [contextExpanded, setContextExpanded] = createSignal(false);
-  const [generatedExpanded, setGeneratedExpanded] = createSignal(false);
   const [browserView, setBrowserView] = createSignal<'browser' | 'chat'>('browser');
   let desktopQueueEl: HTMLDivElement | undefined;
   let dragFrom: number | null = null;
@@ -53,8 +50,6 @@ export function NowPlaying(props: {
   const generatedQueue = createMemo(() =>
     state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'generated'),
   );
-  const visibleContextQueue = createMemo(() => contextExpanded() ? contextQueue() : contextQueue().slice(0, 5));
-  const visibleGeneratedQueue = createMemo(() => generatedExpanded() ? generatedQueue() : generatedQueue().slice(0, 3));
   const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 240, stage: 360, queue: 240 };
 
   createEffect(() => {
@@ -65,8 +60,14 @@ export function NowPlaying(props: {
     }
   });
 
+  // Each lane keeps its own scroll offset, so rewinding the outer box alone
+  // would reopen the queue part-way down whichever lane was left scrolled.
   createEffect(() => {
-    if (props.surfaceOpen && desktopQueueEl) desktopQueueEl.scrollTop = 0;
+    if (!props.surfaceOpen || !desktopQueueEl) return;
+    desktopQueueEl.scrollTop = 0;
+    for (const lane of desktopQueueEl.querySelectorAll<HTMLElement>('[data-section-rows]')) {
+      lane.scrollTop = 0;
+    }
   });
 
   const applyLayoutPreset = (preset: NowPlayingLayoutPresetId) =>
@@ -144,25 +145,13 @@ export function NowPlaying(props: {
       id: 'context',
       label: contextQueue()[0]?.queueContext?.label || t('nowPlaying.contextQueue'),
       count: contextQueue().length,
-      entries: visibleContextQueue().map((entry, index) => queueRow(entry, index + 1)),
-      footer: contextQueue().length > 5 || contextExpanded()
-        ? <PlayerTrackListMore
-            label={contextExpanded() ? t('nowPlaying.showLess') : t('nowPlaying.showAll', { count: contextQueue().length })}
-            onClick={() => setContextExpanded((value) => !value)}
-          />
-        : undefined,
+      entries: contextQueue().map((entry, index) => queueRow(entry, index + 1)),
     });
     sections.push({
       id: 'generated',
       label: state.playback.radioMode ? t('nowPlaying.radioQueue') : t('nowPlaying.autoplayQueue'),
       count: generatedQueue().length,
-      entries: visibleGeneratedQueue().map((entry, index) => queueRow(entry, index + 1)),
-      footer: generatedQueue().length > 3 || generatedExpanded()
-        ? <PlayerTrackListMore
-            label={generatedExpanded() ? t('nowPlaying.showLess') : t('nowPlaying.showAll', { count: generatedQueue().length })}
-            onClick={() => setGeneratedExpanded((value) => !value)}
-          />
-        : undefined,
+      entries: generatedQueue().map((entry, index) => queueRow(entry, index + 1)),
     });
     return sections;
   });

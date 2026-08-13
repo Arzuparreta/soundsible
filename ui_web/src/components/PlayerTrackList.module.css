@@ -83,29 +83,69 @@
   gap: 2px;
 }
 
+/* Every lane shares this box, so a long one used to bury the ones below it —
+ * which is what the old "show all 298" button was papering over. The lanes are
+ * flex items instead, and `flex-shrink` divides the shortfall in proportion to
+ * how tall each one wants to be: a two-row lane beside a 298-row lane gives up
+ * a fraction of a pixel, the long one gives up the rest and scrolls itself.
+ * Nothing here needs measuring, so resizing the panel re-fits it live. This
+ * scroller only takes over when the `data-long` floors below stop the shrink. */
 .rows {
+  display: flex;
   min-height: 0;
   flex: 1;
+  flex-direction: column;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 8px 8px max(24px, var(--player-mobile-footer-clearance, 24px));
 }
 
 .section {
+  display: flex;
+  min-height: 0;
+  flex: 0 1 auto;
+  flex-direction: column;
   margin-bottom: 14px;
 }
 
+/* Left alone, a lane may shrink to nothing when several are long at once. This
+ * floor is only on the lanes with rows to spare, so a two-row lane still sizes
+ * to its two rows instead of being padded out to three. */
+.section[data-long] {
+  min-height: calc(26px + 3 * max(var(--row-h), 48px));
+}
+
+.sectionRows {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Sticky for the fallback above, where `.rows` is the one scrolling and a lane
+ * label would otherwise leave with its rows. The negative margin spans the
+ * padding `.rows` sets, so nothing scrolls past the label at its edges — and
+ * stopping exactly at the padding box is what keeps it from overflowing
+ * sideways. */
 .sectionHead {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 26px;
-  padding: 0 6px;
+  flex: 0 0 auto;
+  margin: 0 -8px;
+  padding: 0 14px;
   color: var(--ink-tertiary);
   font-size: var(--text-caption);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.07em;
   text-transform: uppercase;
+  background: var(--stage-sheet);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .sectionCount {
@@ -265,20 +305,6 @@
   height: 17px;
 }
 
-.more {
-  width: 100%;
-  min-height: 34px;
-  margin-top: 4px;
-  color: var(--accent-ink);
-  font: inherit;
-  font-size: var(--text-caption);
-  font-weight: var(--fw-semibold);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
 .empty {
   display: grid;
   min-height: 180px;
@@ -314,8 +340,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .row:not([data-current], [data-locked]):hover,
-  .headAction:not(:disabled):hover,
-  .more:hover {
+  .headAction:not(:disabled):hover {
     background: var(--stage-row-hover);
   }
 

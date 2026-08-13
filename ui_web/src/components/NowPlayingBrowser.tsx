@@ -718,8 +718,8 @@ function RootView(props: {
             <RefreshIcon spinning={nodeLoading()} />
           </button>
         </div>
-        <Show when={!nodeLoading() || nodeFeed().length > 0} fallback={<SkeletonRows count={4} />}>
-          <For each={nodeFeed().slice(0, 4)}>
+        <Show when={!nodeLoading() || nodeFeed().length > 0} fallback={<SkeletonRows count={6} />}>
+          <For each={nodeFeed()}>
             {(result) => {
               const track = resultTrack(result);
               return (

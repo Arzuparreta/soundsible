@@ -137,8 +137,6 @@ export const fr: Dict = {
     autoplayQueue: 'Lecture automatique',
     radioQueue: 'Radio',
     autoQueue: 'Mode Auto',
-    showAll: 'Tout afficher ({count})',
-    showLess: 'Afficher moins',
     queueEmpty: 'Rien d’autre n’est prévu.',
     radioActiveAria: 'Radio active. Cliquez pour arrêter la radio.',
     stopRadioTitle: 'Arrêter la radio ?',
