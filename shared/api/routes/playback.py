@@ -958,6 +958,12 @@ def playback_play_timing():
             # fact instead of being guessed at.
             "context_state": 32,
             "display_mode": 32,
+            # Whole-program transport around a two-deck handoff. These make a
+            # Bluetooth command distinguishable from an in-app tap without
+            # recording any media or user content.
+            "transport_action": 32,
+            "transport_origin": 32,
+            "mix_phase": 32,
         }
         for key, max_len in string_fields.items():
             value = data.get(key)

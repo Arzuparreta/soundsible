@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GraphFailure } from '../lib/audio';
+import type { GraphFailure, ProgramTransportEvent } from '../lib/audio';
 import type { Track } from '../types/music';
 
 const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
@@ -220,6 +220,7 @@ async function loadStore(
   /** The store's verdict on a mixing graph that had to be abandoned, so a test
    * can hand it one the way the audio service would. */
   let graphReporter: ((failure: GraphFailure) => void) | null = null;
+  let programTransportReporter: ((event: ProgramTransportEvent) => void) | null = null;
   vi.doMock('../lib/audio', () => ({
     audioEl: vi.fn(() => deck),
     onDeckEvent: vi.fn((type: string, handler: (event: Event) => void) => {
@@ -229,6 +230,9 @@ async function loadStore(
     }),
     isActiveDeck: vi.fn(() => true),
     setGraphReporter: vi.fn((fn: (failure: GraphFailure) => void) => { graphReporter = fn; }),
+    setProgramTransportReporter: vi.fn((fn: (event: ProgramTransportEvent) => void) => {
+      programTransportReporter = fn;
+    }),
     audioService,
     storedVolume: () => 1,
     isCurrentLoad: () => true,
@@ -290,6 +294,17 @@ async function loadStore(
     positionSec: 0,
     ...failure,
   });
+  const fireProgramTransport = (event: Partial<ProgramTransportEvent>) => programTransportReporter?.({
+    kind: 'pause',
+    origin: 'ui',
+    mixPhase: 'idle',
+    dominant: false,
+    activeIndex: 0,
+    hidden: false,
+    deck0Playing: false,
+    deck1Playing: false,
+    ...event,
+  });
   return {
     ...store,
     api,
@@ -298,6 +313,7 @@ async function loadStore(
     fireDeckEvent,
     fireSocketEvent,
     fireGraphFailure,
+    fireProgramTransport,
     toastAction,
     toastError,
     toastSuccess,
@@ -2007,8 +2023,44 @@ describe('the end of a track', () => {
     state.playback.isPlaying = true;
 
     controls.press('play');
-    expect(audioService.resume).toHaveBeenCalled();
+    expect(audioService.resume).toHaveBeenCalledWith('media_session');
     expect(audioService.pause).not.toHaveBeenCalledTimes(2);
+  });
+
+  it('marks car controls as whole-program transport and republishes after an orphaned deck', async () => {
+    const controls = stubMediaSession();
+    const { actions, api, audioService, fireDeckEvent, fireProgramTransport, initStore } = await loadStore();
+    initStore();
+    actions.playFrom([t1, t2], 0);
+    fireDeckEvent('playing');
+    audioService.pause.mockClear();
+    api.sendPlayTiming.mockClear();
+
+    controls.press('pause');
+    expect(audioService.pause).toHaveBeenCalledWith('media_session');
+
+    fireProgramTransport({
+      kind: 'inactive_deck_play',
+      origin: 'media_session',
+      mixPhase: 'idle',
+      activeIndex: 1,
+      deck0Playing: false,
+      deck1Playing: true,
+    });
+
+    expect(api.sendPlayTiming).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'ui_inactive_deck_play',
+      transport_action: 'inactive_deck_play',
+      transport_origin: 'media_session',
+      mix_phase: 'idle',
+      segments: expect.objectContaining({
+        active_deck: 1,
+        deck_0_playing: false,
+        deck_1_playing: true,
+      }),
+    }));
+    expect((controls.mediaSession.metadata as unknown as { title: string }).title).toBe('One');
+    expect(controls.mediaSession.playbackState).toBe('playing');
   });
 
   it('recovers a stream that was cut instead of skipping the rest of the song', async () => {

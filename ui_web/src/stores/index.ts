@@ -15,7 +15,9 @@ import {
   isActiveDeck,
   onDeckEvent,
   setGraphReporter,
+  setProgramTransportReporter,
   type LiveTransitionPlan,
+  type ProgramTransportOrigin,
 } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import { prefetchPreviews, upcomingPreviewIds } from '../lib/prefetch';
@@ -300,7 +302,14 @@ function emitAttempt(
 function emitPlaybackEvent(
   phase: string,
   extra: Record<string, number | boolean> = {},
-  strings: { failure_reason?: string; context_state?: string; display_mode?: string } = {},
+  strings: {
+    failure_reason?: string;
+    context_state?: string;
+    display_mode?: string;
+    transport_action?: string;
+    transport_origin?: string;
+    mix_phase?: string;
+  } = {},
 ): void {
   void api
     .sendPlayTiming({
@@ -1242,6 +1251,11 @@ function commitTransition(
       committedTransition = null;
       setState('playback', { currentTime: position, duration: playingDuration() });
       setState('autoMode', 'transition', IDLE_TRANSITION);
+      // `releaseDeck` paused the outgoing element immediately before this
+      // callback. On iOS that element may still be the OS's chosen media
+      // session, so re-assert B only after A is definitely out of the programme.
+      publishPlaybackState();
+      updatePositionState();
       if (state.autoMode.active) void generatedQueue?.ensureRunway();
     },
     onCancel: () => {
@@ -2357,7 +2371,7 @@ export const actions = {
    * what a page that has been frozen in a pocket has — pauses the music the
    * listener just asked to hear.
    */
-  resumePlayback(): void {
+  resumePlayback(origin: ProgramTransportOrigin = 'ui'): void {
     const pb = state.playback;
     if (!pb.currentTrack) return;
     userPlaybackStartedThisSession = true;
@@ -2389,11 +2403,11 @@ export const actions = {
     const generation = beginLoad();
     const attempt = createPlaybackAttempt(pb.currentTrack, generation, 'resume');
     setState('playback', { isLoading: true, phase: 'loading' });
-    void audioService.resume().catch(() => onPlaybackFailed(attempt.generation, 'load'));
+    void audioService.resume(origin).catch(() => onPlaybackFailed(attempt.generation, 'load'));
   },
 
   /** Stop, and mean it. The other half of the pair above. */
-  pausePlayback(): void {
+  pausePlayback(origin: ProgramTransportOrigin = 'ui'): void {
     const pb = state.playback;
     if (!pb.currentTrack) return;
     vibrate();
@@ -2402,7 +2416,7 @@ export const actions = {
       cancelActiveAttempt('user_pause');
       setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
     }
-    audioService.pause();
+    audioService.pause(origin);
   },
 
   /** Re-request the current entry after a failure (transport retry button). */
@@ -3627,6 +3641,29 @@ export function initStore(): void {
     setState('playback', { isPlaying: false, needsGesture: true });
     toast.error(tr('toast.audioNeedsGesture'));
   });
+  setProgramTransportReporter((event) => {
+    emitPlaybackEvent(
+      event.kind === 'inactive_deck_play' ? 'ui_inactive_deck_play' : 'ui_program_transport',
+      {
+        active_deck: event.activeIndex,
+        dominant: event.dominant,
+        hidden: event.hidden,
+        deck_0_playing: event.deck0Playing,
+        deck_1_playing: event.deck1Playing,
+      },
+      {
+        transport_action: event.kind,
+        transport_origin: event.origin,
+        mix_phase: event.mixPhase,
+        display_mode: displayMode(),
+      },
+    );
+    // A stale element just tried to reclaim the platform session. Publish the
+    // canonical programme again after the audio layer has stopped it.
+    if (event.kind === 'inactive_deck_play' && state.playback.currentTrack) {
+      updateMediaSession(state.playback.currentTrack);
+    }
+  });
 
   applyVisualPreferences({
     interfaceSize: state.interfaceSize,
@@ -3834,8 +3871,8 @@ export function initStore(): void {
     // Explicitly, never a toggle. The OS says which one it wants, and a phone
     // that has been locked in a pocket is exactly where our own `isPlaying` is
     // most likely to be stale — answering `play` with a toggle there pauses.
-    ms.setActionHandler('play', () => actions.resumePlayback());
-    ms.setActionHandler('pause', () => actions.pausePlayback());
+    ms.setActionHandler('play', () => actions.resumePlayback('media_session'));
+    ms.setActionHandler('pause', () => actions.pausePlayback('media_session'));
     ms.setActionHandler('nexttrack', () => {
       if (state.autoMode.active) void actions.autoSkip();
       else actions.next();

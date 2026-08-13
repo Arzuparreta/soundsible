@@ -984,7 +984,47 @@ export interface LiveTransitionPlan {
 }
 
 export type MixPhase = 'idle' | 'armed' | 'prerolling' | 'crossfading';
-export type MixCancelReason = 'superseded' | 'load' | 'seek' | 'stop' | 'exit' | 'failed';
+export type MixCancelReason = 'superseded' | 'load' | 'seek' | 'stop' | 'exit' | 'failed' | 'transport_pause';
+export type ProgramTransportOrigin = 'ui' | 'media_session';
+
+export interface ProgramTransportEvent {
+  kind: 'pause' | 'resume' | 'inactive_deck_play';
+  origin: ProgramTransportOrigin;
+  mixPhase: MixPhase;
+  dominant: boolean;
+  activeIndex: number;
+  hidden: boolean;
+  deck0Playing: boolean;
+  deck1Playing: boolean;
+}
+
+let programTransportReporter: ((event: ProgramTransportEvent) => void) | null = null;
+
+/** Let the store publish local-only evidence about whole-program transport. */
+export function setProgramTransportReporter(
+  reporter: ((event: ProgramTransportEvent) => void) | null,
+): void {
+  programTransportReporter = reporter;
+}
+
+function reportProgramTransport(
+  kind: ProgramTransportEvent['kind'],
+  origin: ProgramTransportOrigin,
+  phase: MixPhase,
+  dominant: boolean,
+): void {
+  const list = decks();
+  programTransportReporter?.({
+    kind,
+    origin,
+    mixPhase: phase,
+    dominant,
+    activeIndex,
+    hidden: pageHidden(),
+    deck0Playing: deckIsPlaying(list[0]),
+    deck1Playing: deckIsPlaying(list[1]),
+  });
+}
 
 export interface MixCallbacks {
   /** The incoming deck is loaded and cued; the handoff is now committed. */
@@ -1266,6 +1306,21 @@ function bindLifecycle(): void {
   onDeckEvent('ended', () => {
     if (mix) tick();
   });
+  const rejectOrphanedDeck = (event: Event) => {
+    const deck = event.currentTarget as HTMLAudioElement | null;
+    if (!deck || holdsUnlockSample(deck) || isActiveDeck(deck) || !deckIsPlaying(deck)) return;
+    // Both decks are legitimate programme sources only while one live mix owns
+    // them. Outside it, a non-active play is WebKit reviving an old media
+    // session (most often after a Bluetooth/lock-screen command), never music
+    // Soundsible asked to start.
+    if (mix && (deck === decks()[mix.fromIndex] || deck === decks()[mix.toIndex])) return;
+    const index = decks().indexOf(deck);
+    if (index < 0) return;
+    releaseDeck(index);
+    reportProgramTransport('inactive_deck_play', 'media_session', 'idle', false);
+  };
+  onDeckEvent('play', rejectOrphanedDeck);
+  onDeckEvent('playing', rejectOrphanedDeck);
 }
 
 /**
@@ -1519,22 +1574,27 @@ export const audioService = {
     if (a.readyState >= 1) applyPosition();
     else a.addEventListener('loadedmetadata', applyPosition, { once: true });
   },
-  /** Resume playback. A frozen blend resumes on both decks together. */
-  resume(): Promise<void> {
+  /** Resume the one deck that owns the programme. */
+  resume(origin: ProgramTransportOrigin = 'ui'): Promise<void> {
     // Once the decks are routed through the graph, their output only exists
     // inside it. Resuming here costs nothing and means any play gesture can
     // recover a context the browser suspended behind our back.
     if (audioContext?.state === 'suspended') void audioContext.resume().catch(() => {});
     const current = mix;
-    if (current && current.phase !== 'armed') {
-      const partner = decks()[current.dominant ? current.fromIndex : current.toIndex];
-      void partner.play().catch(() => {});
-    }
-    return audioEl().play();
+    const phase = current?.phase ?? 'idle';
+    const dominant = current?.dominant ?? false;
+    const started = audioEl().play();
+    reportProgramTransport('resume', origin, phase, dominant);
+    return started;
   },
   /**
-   * Pause playback. During a blend both decks stop together and the crossfade
-   * freezes where it stands, because it advances on the media clock.
+   * Pause the whole programme, not whichever media element the platform happens
+   * to consider its Now Playing session.
+   *
+   * An armed handoff has only one sounding deck and remains prepared. Once the
+   * incoming deck has started, pausing closes the overlap on the deck that owns
+   * playback at that instant. A later play therefore has exactly one possible
+   * source; it can never revive the outgoing song underneath the current one.
    *
    * The context is deliberately left running. Suspending it costs nothing to
    * resume from a page gesture but a great deal from anywhere else, and the
@@ -1542,12 +1602,13 @@ export const audioService = {
    * lock-screen or steering-wheel button, not a tap on the page. A suspended
    * context that will not come back is silence; an idle one is a rounding error.
    */
-  pause(): void {
-    if (mix) {
-      for (const deck of decks()) deck.pause();
-      return;
-    }
+  pause(origin: ProgramTransportOrigin = 'ui'): void {
+    const current = mix;
+    const phase = current?.phase ?? 'idle';
+    const dominant = current?.dominant ?? false;
+    if (current && current.phase !== 'armed') cancelMix('transport_pause');
     audioEl().pause();
+    reportProgramTransport('pause', origin, phase, dominant);
   },
   /** Stop and release the stream — for teardown (track deleted, queue emptied),
    * not for pausing. */
