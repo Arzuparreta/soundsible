@@ -19,6 +19,13 @@ from shared.constants import (
     DEFAULT_MP3_BITRATE,
     DEFAULT_OGG_QUALITY
 )
+from shared.musicbrainz import (
+    MUSICBRAINZ_MP4_RECORDING_TAG,
+    MUSICBRAINZ_UFID_OWNER,
+    MUSICBRAINZ_VORBIS_RECORDING_TAG,
+    first_recording_mbid,
+    normalize_recording_mbid,
+)
 
 
 def _number_pair(value: object) -> Tuple[Optional[int], Optional[int]]:
@@ -121,6 +128,7 @@ class AudioProcessor:
                 'disc_number': None,
                 'disc_total': None,
                 'is_compilation': False,
+                'musicbrainz_id': None,
                 'cover_art': False
             }
             
@@ -157,6 +165,11 @@ class AudioProcessor:
 
                     if 'TCMP' in tags:
                         metadata['is_compilation'] = _tag_bool(tags['TCMP'])
+
+                    ufid = tags.get(f'UFID:{MUSICBRAINZ_UFID_OWNER}')
+                    metadata['musicbrainz_id'] = normalize_recording_mbid(
+                        getattr(ufid, 'data', None)
+                    )
                     
                     # Note: Cover art
                     if any(frame.startswith('APIC:') for frame in tags.keys()):
@@ -195,6 +208,9 @@ class AudioProcessor:
                         _, metadata['disc_total'] = _number_pair(f"0/{total_discs[0]}")
                     if 'compilation' in audio.tags:
                         metadata['is_compilation'] = _tag_bool(audio.tags['compilation'])
+                    metadata['musicbrainz_id'] = first_recording_mbid(
+                        audio.tags.get(MUSICBRAINZ_VORBIS_RECORDING_TAG)
+                    )
                 
                 # Note: Check for cover art
                 if audio.pictures:
@@ -228,6 +244,9 @@ class AudioProcessor:
                         _, metadata['disc_total'] = _number_pair(f"0/{total_discs[0]}")
                     if 'compilation' in audio.tags:
                         metadata['is_compilation'] = _tag_bool(audio.tags['compilation'])
+                    metadata['musicbrainz_id'] = first_recording_mbid(
+                        audio.tags.get(MUSICBRAINZ_VORBIS_RECORDING_TAG)
+                    )
             
             # Note: M4A (MP4/AAC) files
             elif isinstance(audio, MP4):
@@ -254,6 +273,9 @@ class AudioProcessor:
                         metadata['disc_total'] = audio.tags['disk'][0][1] or None
                     if 'cpil' in audio.tags:
                         metadata['is_compilation'] = bool(audio.tags['cpil'][0])
+                    metadata['musicbrainz_id'] = first_recording_mbid(
+                        audio.tags.get(MUSICBRAINZ_MP4_RECORDING_TAG)
+                    )
                     
                     # Note: Check for cover art
                     if 'covr' in audio.tags:
@@ -282,6 +304,7 @@ class AudioProcessor:
                 'disc_number': None,
                 'disc_total': None,
                 'is_compilation': False,
+                'musicbrainz_id': None,
                 'cover_art': False
             }
     

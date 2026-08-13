@@ -9,6 +9,8 @@ from shared.database import DatabaseManager
 from shared.models import LibraryMetadata, Track
 from shared.path_resolver import path_within_roots, register_scan_roots, resolve_local_track_path
 
+RECORDING_MBID = "b1a9c0e9-d987-4042-ae91-78d6a3267d69"
+
 
 def _track(track_id: str, path: Path, *, mtime: int = 1, size: int = 10) -> Track:
     return Track(
@@ -68,6 +70,34 @@ def test_local_scan_fields_round_trip_only_through_sqlite(tmp_path):
     assert restored.local_mtime_ns == song.stat().st_mtime_ns
     assert "local_path" not in portable
     assert "local_mtime_ns" not in portable
+
+
+def test_scan_preserves_an_embedded_recording_mbid(tmp_path, monkeypatch):
+    song = tmp_path / "song.flac"
+    song.write_bytes(b"audio")
+    monkeypatch.setattr("setup_tool.scanner.AudioProcessor.calculate_hash", lambda _path: "hash")
+    monkeypatch.setattr(
+        "setup_tool.scanner.AudioProcessor.extract_metadata",
+        lambda _path: {
+            "title": "A Song",
+            "artist": "An Artist",
+            "album": "An Album",
+            "duration": 180,
+            "bitrate": 900,
+            "format": "flac",
+            "musicbrainz_id": RECORDING_MBID,
+        },
+    )
+
+    track = LibraryScanner._process_file(song, song.stat().st_size, song.stat().st_mtime_ns)
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    db.replace_library(LibraryMetadata(1, [track], {}, {}))
+
+    assert track.musicbrainz_id == RECORDING_MBID
+    assert db.load_library_metadata().tracks[0].musicbrainz_id == RECORDING_MBID
+    assert json.loads(LibraryMetadata(1, [track], {}, {}).to_json())["tracks"][0][
+        "musicbrainz_id"
+    ] == RECORDING_MBID
 
 
 def test_changed_file_rekeys_references_and_user_state(tmp_path):

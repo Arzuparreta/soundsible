@@ -4,9 +4,16 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import requests
 import mutagen
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, APIC, TPOS, TCMP
+from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, APIC, TPOS, TCMP, UFID
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC, Picture
+
+from shared.musicbrainz import (
+    MUSICBRAINZ_UFID_OWNER,
+    MUSICBRAINZ_VORBIS_RECORDING_TAG,
+    first_recording_mbid,
+    normalize_recording_mbid,
+)
 
 _session = requests.Session()
 _YT_IMAGE_USER_AGENT = (
@@ -99,6 +106,9 @@ class AudioProcessor:
             
             if metadata.get('isrc'):
                 audio['isrc'] = metadata['isrc']
+            musicbrainz_id = normalize_recording_mbid(metadata.get('musicbrainz_id'))
+            if musicbrainz_id:
+                audio[MUSICBRAINZ_VORBIS_RECORDING_TAG] = musicbrainz_id
 
             # Note: Cover art
             if cover_data:
@@ -167,6 +177,12 @@ class AudioProcessor:
             from mutagen.id3 import TXXX
             audio.tags.add(TXXX(encoding=3, desc='ISRC', text=metadata['isrc']))
 
+        musicbrainz_id = normalize_recording_mbid(metadata.get('musicbrainz_id'))
+        if musicbrainz_id:
+            audio.tags.add(
+                UFID(owner=MUSICBRAINZ_UFID_OWNER, data=musicbrainz_id.encode('ascii'))
+            )
+
         # Note: Cover art
         if cover_data:
             try:
@@ -217,7 +233,7 @@ class AudioProcessor:
         out = {
             'title': '', 'artist': '', 'artists': None, 'album': '', 'album_artist': None,
             'year': None, 'track_number': None, 'disc_number': None, 'disc_total': None,
-            'is_compilation': False,
+            'is_compilation': False, 'musicbrainz_id': None,
         }
         try:
             if path.suffix.lower() == '.flac':
@@ -240,6 +256,9 @@ class AudioProcessor:
                 out['is_compilation'] = str((audio.get('compilation') or [''])[0]).strip().casefold() in {
                     '1', 'true', 'yes'
                 }
+                out['musicbrainz_id'] = first_recording_mbid(
+                    audio.get(MUSICBRAINZ_VORBIS_RECORDING_TAG)
+                )
             elif path.suffix.lower() == '.mp3':
                 audio = MP3(file_path)
                 if audio.tags:
@@ -270,6 +289,10 @@ class AudioProcessor:
                     tcmp = audio.tags.get('TCMP')
                     if tcmp and getattr(tcmp, 'text', None):
                         out['is_compilation'] = str(tcmp.text[0]).strip().casefold() in {'1', 'true', 'yes'}
+                    ufid = audio.tags.get(f'UFID:{MUSICBRAINZ_UFID_OWNER}')
+                    out['musicbrainz_id'] = normalize_recording_mbid(
+                        getattr(ufid, 'data', None)
+                    )
         except Exception as e:
             print(f"Error reading metadata from file: {e}")
         return out

@@ -26,6 +26,7 @@ from .config import (
 import difflib
 from .audio_utils import AudioProcessor
 from .models import Track
+from shared.musicbrainz import normalize_recording_mbid
 from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.venv_utils import get_subprocess_python
 
@@ -35,6 +36,18 @@ _FALSE_ENV_VALUES = {"0", "false", "no", "off"}
 _YTDLP_SOCKET_TIMEOUT_DEFAULT = "30"
 _YTDLP_HTTP_CHUNK_SIZE_DEFAULT = "10M"
 _YTDLP_RETRY_SLEEP_DEFAULT = "exp=1:20"
+
+
+def _recording_mbid_from_metadata(metadata: Any) -> str | None:
+    if not isinstance(metadata, dict):
+        return None
+    direct = normalize_recording_mbid(metadata.get("musicbrainz_id"))
+    if direct:
+        return direct
+    external_ids = metadata.get("external_ids")
+    if isinstance(external_ids, dict):
+        return normalize_recording_mbid(external_ids.get("musicbrainz_id"))
+    return None
 
 
 def _yt_dlp_force_ipv4() -> bool:
@@ -402,6 +415,10 @@ class YouTubeDownloader:
         metadata.setdefault("title", "Unknown Title")
         metadata.setdefault("artist", "Unknown Artist")
         metadata.setdefault("album", "")
+        musicbrainz_id = _recording_mbid_from_metadata(metadata)
+        metadata.pop("musicbrainz_id", None)
+        if musicbrainz_id:
+            metadata["musicbrainz_id"] = musicbrainz_id
         clean_metadata = metadata
 
         # Note: Search for video
@@ -576,6 +593,13 @@ class YouTubeDownloader:
                 if metadata_hint.get("album") is not None:
                     alb = _strip_hint_str(metadata_hint.get("album"))
                     clean_meta["album"] = alb
+                musicbrainz_id = _recording_mbid_from_metadata(metadata_hint)
+                if musicbrainz_id:
+                    clean_meta["musicbrainz_id"] = musicbrainz_id
+            embedded_musicbrainz_id = _recording_mbid_from_metadata(clean_meta)
+            clean_meta.pop("musicbrainz_id", None)
+            if embedded_musicbrainz_id:
+                clean_meta["musicbrainz_id"] = embedded_musicbrainz_id
             if _is_garbage_embedded_title(clean_meta.get("title")) or _is_garbage_embedded_title(
                 clean_meta.get("artist")
             ):
@@ -643,7 +667,7 @@ class YouTubeDownloader:
                 is_compilation=bool(clean_meta.get('is_compilation')),
                 is_local=True,
                 local_path=None,
-                musicbrainz_id=None,
+                musicbrainz_id=clean_meta.get("musicbrainz_id"),
                 isrc=None,
                 cover_source="youtube",
                 metadata_modified_by_user=False,
@@ -676,6 +700,10 @@ class YouTubeDownloader:
         clean_meta.setdefault("album", "")
         clean_meta.setdefault("duration_sec", 0)
         clean_meta.setdefault("track_number", 1)
+        musicbrainz_id = _recording_mbid_from_metadata(clean_meta)
+        clean_meta.pop("musicbrainz_id", None)
+        if musicbrainz_id:
+            clean_meta["musicbrainz_id"] = musicbrainz_id
         try:
             duration, bitrate, size = AudioProcessor.get_audio_details(str(temp_file))
             try:
@@ -718,7 +746,7 @@ class YouTubeDownloader:
                 is_compilation=bool(clean_meta.get("is_compilation")),
                 is_local=True,
                 local_path=None,
-                musicbrainz_id=None,
+                musicbrainz_id=clean_meta.get("musicbrainz_id"),
                 isrc=None,
                 cover_source=cover_source,
                 metadata_modified_by_user=False,

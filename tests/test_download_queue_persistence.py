@@ -19,6 +19,23 @@ def test_download_queue_no_unlink_preserves_pending(tmp_path):
     assert mgr.queue[1]["status"] == "completed"
 
 
+def test_download_queue_preserves_recording_identity_evidence(tmp_path):
+    path = tmp_path / "download_queue.json"
+    recording_mbid = "b1a9c0e9-d987-4042-ae91-78d6a3267d69"
+    manager = DownloadQueueManager(storage_path=path, socketio=None)
+    item = manager.add(
+        {
+            "song_str": "https://www.youtube.com/watch?v=abcdefghijk",
+            "metadata_evidence": {"musicbrainz_id": recording_mbid},
+        }
+    )
+
+    restored = DownloadQueueManager(storage_path=path, socketio=None)
+
+    assert restored.queue[0]["id"] == item["id"]
+    assert restored.queue[0]["metadata_evidence"]["musicbrainz_id"] == recording_mbid
+
+
 def test_download_queue_inflight_marked_interrupted_on_restart(tmp_path):
     path = tmp_path / "download_queue.json"
     path.write_text(
@@ -145,4 +162,3 @@ def test_clear_failed_returns_count_and_removes(tmp_path):
 
     statuses = sorted(i["status"] for i in mgr.queue)
     assert statuses == ["pending"]
-

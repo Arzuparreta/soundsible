@@ -42,7 +42,7 @@ JSON.
 - [x] SQLite canonical; `library.json` becomes an export format
 - [x] `POST /api/library/scan` — point Soundsible at a folder you already have
 - [ ] Read ReplayGain / R128 tags when a file carries them
-- [ ] Write MusicBrainz IDs on acquisition
+- [x] Write MusicBrainz IDs on acquisition
 - [x] Decide artist/title orientation by lookup, not by position. A YouTube
       title is split on the first separator and the left side is taken as the
       artist, unverified. Uploads titled "Song - Artist" therefore land

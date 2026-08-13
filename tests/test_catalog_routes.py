@@ -18,6 +18,7 @@ catalog_routes = importlib.util.module_from_spec(_SPEC)
 sys.modules["catalog_routes_under_test"] = catalog_routes
 _SPEC.loader.exec_module(catalog_routes)
 catalog_bp = catalog_routes.catalog_bp
+RECORDING_MBID = "b1a9c0e9-d987-4042-ae91-78d6a3267d69"
 
 
 def _make_runtime(tmp_path) -> RuntimeConfig:
@@ -554,6 +555,101 @@ def test_catalog_save_confirmed_video_queues_download(monkeypatch):
     assert body["video_id"] == "abcdefghijk"
     fake_api["queue_manager_dl"].add.assert_called_once()
     fake_api["start_downloader_pump"].assert_called_once()
+
+
+def test_catalog_dedupe_keeps_one_unambiguous_recording_mbid():
+    winner = catalog_routes._catalog_item(
+        item_id="deezer:track:1",
+        item_type="track",
+        source="deezer",
+        title="A Song",
+        artist="An Artist",
+        external_ids={"deezer_id": "1"},
+    )
+    musicbrainz = catalog_routes._catalog_item(
+        item_id=f"musicbrainz:track:{RECORDING_MBID}",
+        item_type="track",
+        source="musicbrainz",
+        title="A Song",
+        artist="An Artist",
+        external_ids={"musicbrainz_id": RECORDING_MBID.upper()},
+    )
+
+    catalog_routes._merge_action_state(winner, [winner, musicbrainz])
+
+    assert winner["external_ids"] == {
+        "deezer_id": "1",
+        "musicbrainz_id": RECORDING_MBID,
+    }
+
+
+def test_catalog_dedupe_drops_conflicting_recording_mbids():
+    other_mbid = "ebf79ba5-085e-48d2-9eb8-2d992fbf0f6d"
+    winner = catalog_routes._catalog_item(
+        item_id=f"musicbrainz:track:{RECORDING_MBID}",
+        item_type="track",
+        source="musicbrainz",
+        title="A Song",
+        artist="An Artist",
+        external_ids={"musicbrainz_id": RECORDING_MBID},
+    )
+    conflicting = catalog_routes._catalog_item(
+        item_id=f"musicbrainz:track:{other_mbid}",
+        item_type="track",
+        source="musicbrainz",
+        title="A Song",
+        artist="An Artist",
+        external_ids={"musicbrainz_id": other_mbid},
+    )
+
+    catalog_routes._merge_action_state(winner, [winner, conflicting])
+
+    assert "musicbrainz_id" not in winner["external_ids"]
+
+
+def test_catalog_save_carries_a_normalized_recording_mbid_to_the_queue(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fake_api = _fake_api(metadata)
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+
+    response = _make_app().test_client().post(
+        "/api/catalog/save",
+        json={
+            "artist": "Queen",
+            "title": "Bohemian Rhapsody",
+            "confirm_video_id": "abcdefghijk",
+            "catalog_item_id": f"musicbrainz:track:{RECORDING_MBID}",
+            "source": "musicbrainz",
+            "external_ids": {"musicbrainz_id": RECORDING_MBID.upper()},
+        },
+    )
+
+    assert response.status_code == 200
+    queued = fake_api["queue_manager_dl"].add.call_args.args[0]
+    evidence = queued["metadata_evidence"]
+    assert evidence["musicbrainz_id"] == RECORDING_MBID
+    assert evidence["external_ids"]["musicbrainz_id"] == RECORDING_MBID
+
+
+def test_catalog_save_ignores_an_invalid_recording_mbid(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fake_api = _fake_api(metadata)
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+
+    response = _make_app().test_client().post(
+        "/api/catalog/save",
+        json={
+            "artist": "Queen",
+            "title": "Bohemian Rhapsody",
+            "confirm_video_id": "abcdefghijk",
+            "external_ids": {"musicbrainz_id": "not-an-mbid"},
+        },
+    )
+
+    assert response.status_code == 200
+    evidence = fake_api["queue_manager_dl"].add.call_args.args[0]["metadata_evidence"]
+    assert "musicbrainz_id" not in evidence
+    assert "musicbrainz_id" not in evidence["external_ids"]
 
 
 def test_resolve_candidates_warms_preview_stream_cache_for_best_id(monkeypatch, tmp_path):

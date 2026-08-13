@@ -304,7 +304,8 @@ class UploadEngine:
                 disc_total=metadata.get('disc_total'),
                 is_compilation=bool(metadata.get('is_compilation')),
                 is_local=(self.config.provider.value == 'local'),
-                local_path=final_local_path
+                local_path=final_local_path,
+                musicbrainz_id=metadata.get('musicbrainz_id'),
             )
             
             return track, True

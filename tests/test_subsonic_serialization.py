@@ -86,6 +86,14 @@ def test_prefixes_round_trip():
     assert serialize.parse_id(serialize.track_id("x")) == ("track", "x")
 
 
+def test_a_recording_mbid_is_exposed_to_opensubsonic_clients():
+    recording_mbid = "b1a9c0e9-d987-4042-ae91-78d6a3267d69"
+    entry = track("t1")
+    entry.musicbrainz_id = recording_mbid
+
+    assert serialize.song(entry)["musicBrainzId"] == recording_mbid
+
+
 # ---------------------------------------------------------------------------
 # Names and paths
 # ---------------------------------------------------------------------------
