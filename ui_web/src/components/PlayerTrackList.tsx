@@ -39,8 +39,11 @@ export interface PlayerTrackListSection {
   label?: string;
   count?: number;
   entries: PlayerTrackListEntry[];
-  footer?: JSX.Element;
 }
+
+/** Above this many rows a lane is given a floor to shrink to, so several long
+ * lanes at once cannot squeeze each other down to a sliver. */
+const LANE_FLOOR_ROWS = 3;
 
 export interface PlayerTrackListHeadAction {
   label: string;
@@ -80,16 +83,20 @@ export function PlayerTrackList(props: {
   let depth = 0;
   let scrollFrame: number | undefined;
   let scrollSpeed = 0;
+  // Each lane scrolls itself now, so the element to nudge is whichever one the
+  // drag is over — the outer box usually has nothing left to scroll.
+  let scrollEl: HTMLElement | undefined;
 
   const stopEdgeScroll = () => {
     if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
     scrollFrame = undefined;
     scrollSpeed = 0;
+    scrollEl = undefined;
   };
   const runEdgeScroll = () => {
     scrollFrame = undefined;
-    if (!rowsEl || !scrollSpeed) return;
-    rowsEl.scrollTop += scrollSpeed;
+    if (!scrollEl || !scrollSpeed) return;
+    scrollEl.scrollTop += scrollSpeed;
     scrollFrame = requestAnimationFrame(runEdgeScroll);
   };
   const endDrag = () => {
@@ -109,7 +116,10 @@ export function PlayerTrackList(props: {
       setSlot(next);
       vibrate(6);
     }
-    const bounds = rowsEl.getBoundingClientRect();
+    const lane = (event.target as Element | null)?.closest<HTMLElement>('[data-section-rows]');
+    const target = lane ?? rowsEl;
+    const bounds = target.getBoundingClientRect();
+    scrollEl = target;
     scrollSpeed = edgeScrollDelta(event.clientY, { top: bounds.top, bottom: bounds.bottom });
     if (scrollSpeed && scrollFrame === undefined) scrollFrame = requestAnimationFrame(runEdgeScroll);
     if (!scrollSpeed) stopEdgeScroll();
@@ -175,7 +185,10 @@ export function PlayerTrackList(props: {
           <For each={props.sections}>
             {(section) => (
               <Show when={section.entries.length > 0}>
-                <section class={styles.section}>
+                <section
+                  class={styles.section}
+                  data-long={section.entries.length > LANE_FLOOR_ROWS ? '' : undefined}
+                >
                   <Show when={section.label}>
                     <div class={styles.sectionHead}>
                       <span>{section.label}</span>
@@ -184,18 +197,19 @@ export function PlayerTrackList(props: {
                       </Show>
                     </div>
                   </Show>
-                  <For each={section.entries}>
-                    {(entry, index) => (
-                      <>
-                        {entry.before}
-                        <PlayerTrackListRow entry={entry} seam={slot()?.index === index()} />
-                      </>
-                    )}
-                  </For>
-                  <Show when={slot() && slot()!.index === section.entries.length}>
-                    <div class={styles.seamTail} aria-hidden="true" />
-                  </Show>
-                  {section.footer}
+                  <div class={styles.sectionRows} data-section-rows>
+                    <For each={section.entries}>
+                      {(entry, index) => (
+                        <>
+                          {entry.before}
+                          <PlayerTrackListRow entry={entry} seam={slot()?.index === index()} />
+                        </>
+                      )}
+                    </For>
+                    <Show when={slot() && slot()!.index === section.entries.length}>
+                      <div class={styles.seamTail} aria-hidden="true" />
+                    </Show>
+                  </div>
                 </section>
               </Show>
             )}
@@ -281,8 +295,4 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry; seam?: boolean
       </Show>
     </div>
   );
-}
-
-export function PlayerTrackListMore(props: { label: string; onClick: () => void }) {
-  return <button class={styles.more} type="button" onClick={props.onClick}>{props.label}</button>;
 }

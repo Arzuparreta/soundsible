@@ -4,8 +4,15 @@ import {
   edgeScrollDelta,
   isNoopMove,
   nearestSlot,
+  readDragRows,
   type DragRow,
 } from './dragReorder';
+
+/** jsdom lays nothing out, so every rect this file needs is stated outright. */
+function stubRect(element: HTMLElement, top: number, height: number) {
+  element.getBoundingClientRect = () =>
+    ({ top, height, bottom: top + height, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+}
 
 const rows: DragRow[] = [
   { id: 'a', top: 0, height: 50 },
@@ -81,5 +88,48 @@ describe('dragReorder', () => {
 
   it('does not scroll a list too short to have edges', () => {
     expect(edgeScrollDelta(10, { top: 10, bottom: 10 })).toBe(0);
+  });
+
+  it('reads only the rows on screen, in the container’s own space', () => {
+    // Each lane scrolls inside the container, so rows scrolled out of a lane
+    // still report rects — above or below the container's own band.
+    const container = document.createElement('div');
+    stubRect(container, 100, 200);
+    const placed: Record<string, HTMLElement> = {};
+    for (const [id, top, height] of [
+      ['above', 0, 50],
+      ['first', 120, 50],
+      ['fixed', 170, 50],
+      ['last', 250, 50],
+      ['below', 320, 50],
+    ] as const) {
+      const row = document.createElement('div');
+      row.dataset.dragRow = id;
+      stubRect(row, top, height);
+      container.append(row);
+      placed[id] = row;
+    }
+    placed.fixed.dataset.dragFixed = '';
+
+    const read = readDragRows(container);
+    expect(read.map((row) => row.id)).toEqual(['first', 'fixed', 'last']);
+    // Offsets are relative to the container, and `last` straddles its bottom
+    // edge — half on screen is still aimable.
+    expect(read.map((row) => row.top)).toEqual([20, 70, 150]);
+    expect(read.map((row) => row.fixed)).toEqual([false, true, false]);
+    // No seam is offered for a row nobody can see.
+    expect(buildDropSlots(read).map((slot) => slot.beforeId)).toEqual(['first', 'last', undefined]);
+  });
+
+  it('measures rows against a scrolled container', () => {
+    const container = document.createElement('div');
+    stubRect(container, 100, 200);
+    container.scrollTop = 40;
+    const row = document.createElement('div');
+    row.dataset.dragRow = 'a';
+    stubRect(row, 120, 50);
+    container.append(row);
+    // 20px below the container's top edge, 40px of which is already scrolled past.
+    expect(readDragRows(container)).toEqual([{ id: 'a', top: 60, height: 50, fixed: false }]);
   });
 });

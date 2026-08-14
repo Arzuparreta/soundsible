@@ -137,8 +137,6 @@ export const zh: Dict = {
     autoplayQueue: '自动播放',
     radioQueue: '电台',
     autoQueue: '自动模式',
-    showAll: '显示全部 {count} 首',
-    showLess: '收起',
     queueEmpty: '没有更多待播内容。',
     radioActiveAria: '电台运行中。点击停止电台。',
     stopRadioTitle: '停止电台？',

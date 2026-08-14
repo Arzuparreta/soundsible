@@ -136,8 +136,6 @@ export const en = {
     autoplayQueue: 'Autoplay',
     radioQueue: 'Radio',
     autoQueue: 'Auto Mode',
-    showAll: 'Show all {count}',
-    showLess: 'Show less',
     queueEmpty: 'Nothing else is lined up.',
     radioActiveAria: 'Radio is active. Click to stop the radio.',
     stopRadioTitle: 'Stop radio?',
