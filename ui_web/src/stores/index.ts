@@ -821,7 +821,14 @@ function onPlaybackFailed(generation: number, reason = 'media_error'): void {
   }
   setState('playback', { isPlaying: false, isLoading: false, loadError: true, phase: 'failed' });
   if (state.autoMode.active) {
-    void actions.autoSkip();
+    // Once a handoff has made this the current track, a delivery failure is no
+    // longer a failed *candidate*. Advancing here turned one station-wide 503
+    // into a self-driving cascade: each new deck hit the same cooldown, failed
+    // in a few hundred milliseconds, and recursively selected another song.
+    // Keep the exact current occurrence stopped on Retry. A pre-handoff failure
+    // is handled separately by `commitTransition.onError`, while an intentional
+    // listener skip still goes through `autoSkip`.
+    toast.error(tr('toast.trackUnavailable'));
     return;
   }
   consecutiveLoadFailures += 1;

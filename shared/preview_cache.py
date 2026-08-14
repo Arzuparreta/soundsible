@@ -2,13 +2,13 @@
 Disk cache + background prefetch for preview audio streams.
 
 Previews (tracks played before they are downloaded into the library) are
-proxied from the YouTube CDN by `/api/preview/stream/<video_id>`. Two pieces
-live here to make that path fast:
+acquired from the YouTube CDN by `/api/preview/stream/<video_id>`. Two pieces
+live here to make that path fast and deterministic:
 
-- Tee-through cache: while the proxy streams bytes to a client, the same
-  bytes are written to ``<cache>/previews/<video_id>.part``. Once the full
-  file is received it is committed and the next request is served straight
-  from disk (instant start, cheap seeks).
+- Single-flight acquisition: every caller for one video id joins one complete
+  upstream download. Playback starts from the committed local file, so a media
+  element can seek and request as many ranges as it wants without turning one
+  song into repeated CDN requests.
 - Prefetch worker: a single background thread that resolves stream URLs
   (and optionally downloads the whole file into the cache) for tracks the
   user is *about* to play — next in queue, top search results — so a click
@@ -47,6 +47,30 @@ STALE_PART_SEC = 3600
 
 _writers_lock = threading.Lock()
 _active_writers: set[str] = set()
+
+
+class PreviewUpstreamRejected(Exception):
+    """The CDN refused a signed preview URL and it must be re-resolved."""
+
+    def __init__(self, status_code: int):
+        super().__init__(f"preview upstream returned HTTP {status_code}")
+        self.status_code = status_code
+
+
+class _FillState:
+    """One in-flight whole-file acquisition shared by all callers for an id."""
+
+    def __init__(self):
+        self.done = threading.Event()
+        self.error: BaseException | None = None
+
+
+_fills_lock = threading.Lock()
+_fills: dict[str, _FillState] = {}
+# The CDN sees one whole-file transfer from this station at a time. Per-id
+# single-flight prevents duplicates of the same song; this lock also prevents
+# an active deck from overlapping a speculative fill for a different song.
+_upstream_download_lock = threading.Lock()
 
 # ── Upstream connection reuse ────────────────────────────────────────────────
 # A browser plays audio by asking for ranges, not by asking for the file: one
@@ -310,8 +334,8 @@ def enforce_cache_limit() -> None:
 
 # ── Prefetch worker ──────────────────────────────────────────────────────────
 # Separate bounded lanes keep URL warming from waiting behind a full download.
-# Active playback never enters either lane; it resolves synchronously through
-# the single-flight cache and therefore always has priority.
+# Active playback never enters either queue; it resolves synchronously and
+# joins the same single-flight transfer if prefetch already owns the track.
 
 _QUEUE_MAX = 32
 ResolutionValue = Union[ResolvedStream, str, None]
@@ -336,38 +360,102 @@ def _coerce_resolution(value: ResolutionValue) -> Optional[ResolvedStream]:
     return None
 
 
-def _download_to_cache(video_id: str, stream: Union[ResolvedStream, str]) -> None:
-    if get_cached(video_id):
-        return
-    if upstream_backoff_remaining():
-        return
+def _download_once(
+    video_id: str,
+    stream: Union[ResolvedStream, str],
+) -> Optional[tuple[Path, str]]:
+    """Download one complete preview; the caller owns the per-id fill slot."""
+    cached = get_cached(video_id)
+    if cached:
+        return cached
     resolved = _coerce_resolution(stream)
     if resolved is None:
-        return
-    # bytes=0- matters: googlevideo throttles DASH URLs fetched without a
-    # Range header to roughly realtime; an open-ended range runs at full speed.
-    with upstream_session().get(
-        resolved.url,
-        stream=True,
-        timeout=(5, 90),
-        proxies=resolved.requests_proxies(),
-        headers={"Range": "bytes=0-"},
-    ) as resp:
-        resp.raise_for_status()
-        raw_len = resp.headers.get("Content-Length")
-        expected = int(raw_len) if raw_len and raw_len.isdigit() else None
-        content_type = resp.headers.get("Content-Type") or "audio/mpeg"
-        writer = open_writer(video_id, content_type, expected)
-        if writer is None:
-            return
-        try:
-            for chunk in resp.iter_content(chunk_size=65536):
-                if chunk:
-                    writer.write(chunk)
-            writer.commit()
-        except BaseException:
-            writer.abandon()
-            raise
+        return None
+    with _upstream_download_lock:
+        # A different fill may have completed while this one waited for the
+        # station-wide slot. Re-check both durable state and refusal state before
+        # touching the network.
+        cached = get_cached(video_id)
+        if cached:
+            return cached
+        if upstream_backoff_remaining():
+            return None
+        # bytes=0- matters: googlevideo throttles DASH URLs fetched without a
+        # Range header to roughly realtime; an open-ended range runs at full speed.
+        with upstream_session().get(
+            resolved.url,
+            stream=True,
+            timeout=(5, 90),
+            proxies=resolved.requests_proxies(),
+            headers={"Range": "bytes=0-"},
+        ) as resp:
+            if resp.status_code in (403, 410):
+                raise PreviewUpstreamRejected(resp.status_code)
+            resp.raise_for_status()
+            raw_len = resp.headers.get("Content-Length")
+            expected = int(raw_len) if raw_len and raw_len.isdigit() else None
+            content_type = resp.headers.get("Content-Type") or "audio/mpeg"
+            writer = open_writer(video_id, content_type, expected)
+            if writer is None:
+                return get_cached(video_id)
+            try:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        writer.write(chunk)
+                if not writer.commit():
+                    return None
+            except BaseException:
+                writer.abandon()
+                raise
+    return get_cached(video_id)
+
+
+def ensure_cached(
+    video_id: str,
+    stream: Union[ResolvedStream, str],
+    *,
+    wait_timeout: float = 95,
+) -> Optional[tuple[Path, str]]:
+    """Return a complete local preview, joining an existing fill when needed.
+
+    Browser range requests, the incoming DJ deck and background prefetch can
+    arrive together. They must never become separate googlevideo transfers:
+    the first caller owns the download and every other caller waits for that
+    exact result.
+    """
+    cached = get_cached(video_id)
+    if cached or cache_limit_bytes() <= 0:
+        return cached
+
+    with _fills_lock:
+        state = _fills.get(video_id)
+        owner = state is None
+        if state is None:
+            state = _FillState()
+            _fills[video_id] = state
+
+    if not owner:
+        if not state.done.wait(wait_timeout):
+            raise TimeoutError(f"preview cache fill timed out for {video_id}")
+        if state.error is not None:
+            raise state.error
+        return get_cached(video_id)
+
+    try:
+        return _download_once(video_id, stream)
+    except BaseException as exc:
+        state.error = exc
+        raise
+    finally:
+        state.done.set()
+        with _fills_lock:
+            if _fills.get(video_id) is state:
+                _fills.pop(video_id, None)
+
+
+def _download_to_cache(video_id: str, stream: Union[ResolvedStream, str]) -> None:
+    """Compatibility wrapper used by the background download lane."""
+    ensure_cached(video_id, stream)
 
 
 def _worker_loop(jobs: "queue.Queue[tuple[str, Resolver]]", *, download: bool) -> None:

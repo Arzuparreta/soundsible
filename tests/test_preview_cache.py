@@ -170,6 +170,95 @@ def test_download_to_cache_respects_upstream_backoff(runtime, monkeypatch):
     preview_cache._download_to_cache(VID, "http://example.invalid/stream")
 
 
+def test_concurrent_playback_and_prefetch_share_one_whole_file_download(runtime, monkeypatch):
+    """A deck and prefetch racing for one id must produce one CDN request."""
+    data = b"single-flight" * 1024
+    entered = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    class _BlockingResponse(_FakeResponse):
+        def iter_content(self, chunk_size):
+            entered.set()
+            release.wait(timeout=5)
+            yield data
+
+    def fake_get(url, **kwargs):
+        calls.append((url, kwargs["headers"]))
+        return _BlockingResponse(data)
+
+    _patch_upstream(monkeypatch, fake_get)
+    results = []
+
+    def acquire():
+        results.append(preview_cache.ensure_cached(VID, "http://example.invalid/stream"))
+
+    first = threading.Thread(target=acquire)
+    second = threading.Thread(target=acquire)
+    first.start()
+    assert entered.wait(timeout=5)
+    second.start()
+    release.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert calls == [("http://example.invalid/stream", {"Range": "bytes=0-"})]
+    assert len(results) == 2
+    assert all(result is not None and result[0].read_bytes() == data for result in results)
+
+
+def test_different_preview_ids_never_download_from_upstream_in_parallel(runtime, monkeypatch):
+    """Speculative work must yield the CDN lane before another song can fetch."""
+    first_id = "aaaaaaaaaa1"
+    second_id = "bbbbbbbbbb2"
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    calls = []
+
+    class _SerialResponse(_FakeResponse):
+        def __init__(self, video_id: str):
+            super().__init__(video_id.encode() * 100)
+            self.video_id = video_id
+
+        def iter_content(self, chunk_size):
+            if self.video_id == first_id:
+                first_entered.set()
+                release_first.wait(timeout=5)
+            yield self._data
+
+    def fake_get(url, **kwargs):
+        video_id = url.rsplit("/", 1)[-1]
+        calls.append(video_id)
+        return _SerialResponse(video_id)
+
+    _patch_upstream(monkeypatch, fake_get)
+    first = threading.Thread(
+        target=preview_cache.ensure_cached,
+        args=(first_id, f"http://example.invalid/{first_id}"),
+    )
+    second = threading.Thread(
+        target=preview_cache.ensure_cached,
+        args=(second_id, f"http://example.invalid/{second_id}"),
+    )
+    first.start()
+    assert first_entered.wait(timeout=5)
+    second.start()
+
+    # The second caller is alive but has not reached the CDN while the first
+    # complete-file transfer owns the station-wide slot.
+    time.sleep(0.05)
+    assert calls == [first_id]
+    release_first.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert calls == [first_id, second_id]
+    assert preview_cache.get_cached(first_id) is not None
+    assert preview_cache.get_cached(second_id) is not None
+
+
 def test_request_prefetch_dedupes_and_downloads(runtime, monkeypatch):
     data = b"q" * 2048
     _patch_upstream(monkeypatch, lambda url, **kw: _FakeResponse(data))

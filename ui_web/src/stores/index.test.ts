@@ -846,6 +846,39 @@ describe('Playback load coalescing', () => {
     expect(audioService.load).toHaveBeenCalledTimes(1);
     expect(toastError).toHaveBeenCalled();
   });
+
+  it('stops on the exact Auto track that failed after handoff instead of cascading', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan([
+      'route-00001', 'route-00002', 'route-00003', 'route-00004',
+      'route-00005', 'route-00006', 'route-00007', 'route-00008',
+    ]));
+    const recover = vi.fn().mockRejectedValue(new Error('503'));
+    const { actions, state, audioService, deck, initStore, fireDeckEvent } = await loadStore(
+      { planDjQueue },
+      { recover },
+    );
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', duration: 180 };
+    initStore();
+    actions.playFrom([current], 0);
+    fireDeckEvent('playing');
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    (deck as unknown as { currentSrc: string }).currentSrc = '/preview/current';
+    fireDeckEvent('error');
+    await flush();
+
+    expect(recover).toHaveBeenCalledOnce();
+    expect(state.playback.currentTrack?.id).toBe('current');
+    expect(state.playback.index).toBe(0);
+    expect(state.playback.loadError).toBe(true);
+    expect(state.playback.isPlaying).toBe(false);
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+
+    actions.retryCurrent();
+    expect(state.playback.currentTrack?.id).toBe('current');
+    expect(audioService.load).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('Playback queue lanes', () => {
