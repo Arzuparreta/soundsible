@@ -84,6 +84,42 @@ def upstream_session() -> requests.Session:
     return _session
 
 
+def retire_upstream_session(video_id: str) -> None:
+    """Drop the pooled session after a 403/410 from googlevideo.
+
+    Such a rejection is not always about the signed URL: the abuse system can
+    also flag the *session*, and its answers plant the marker back into this
+    session's cookie jar. From then on every request — fresh URL or not —
+    identifies itself as flagged, and the station stays locked out of preview
+    audio until the whole process restarts. Retiring the session costs one
+    fresh handshake and gives the next attempt a clean jar and clean
+    connections. In-flight streams hold their own connection references, so
+    closing the pool here does not cut them. (Observed 2026-08-14: a station
+    403'd every fetch for half an hour after the IP-level flag had lifted,
+    while the very same URLs answered 206 from any fresh client on the same
+    host; retiring the process was the only cure.)
+    """
+    global _session
+    with _session_lock:
+        old = _session
+        _session = None
+    if old is None:
+        return
+    try:
+        held = sorted(old.cookies.keys())
+    except Exception:  # pragma: no cover — diagnostics must never break this
+        held = []
+    logger.info(
+        "[PreviewCache] Upstream rejected %s; retired pooled session (cookies held: %s)",
+        video_id,
+        ", ".join(held) if held else "none",
+    )
+    try:
+        old.close()
+    except Exception:  # pragma: no cover — closing a session must never break this
+        logger.debug("[PreviewCache] Closing retired upstream session failed", exc_info=True)
+
+
 def cache_limit_bytes() -> int:
     raw = os.getenv("SOUNDSIBLE_PREVIEW_CACHE_MB", "")
     try:
@@ -312,6 +348,8 @@ def _download_to_cache(video_id: str, stream: Union[ResolvedStream, str]) -> Non
         proxies=resolved.requests_proxies(),
         headers={"Range": "bytes=0-"},
     ) as resp:
+        if resp.status_code in (403, 410):
+            retire_upstream_session(video_id)
         resp.raise_for_status()
         raw_len = resp.headers.get("Content-Length")
         expected = int(raw_len) if raw_len and raw_len.isdigit() else None

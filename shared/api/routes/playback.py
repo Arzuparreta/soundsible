@@ -421,7 +421,14 @@ def _emit_stream_timing(
 
 
 def _preview_upstream(api, video_id: str, headers: dict[str, str]):
-    """Resolve and open upstream, refreshing one stale signed URL."""
+    """Resolve and open upstream, refreshing one stale signed URL.
+
+    A 403/410 can indict the signed URL or the *session* carrying it (the CDN
+    flags sessions too, and plants the marker in the session's cookie jar), so
+    every rejection retires the pooled session along with the URL — otherwise
+    the retry below re-fetches through the same flagged session and the
+    station stays locked out until a restart, whatever the URL.
+    """
     cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
     for attempt in range(2):
         resolve_started = time.monotonic()
@@ -440,6 +447,8 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
             proxies=stream.requests_proxies(),
         )
         ttfb_ms = round((time.monotonic() - upstream_started) * 1000)
+        if response.status_code in {403, 410}:
+            preview_cache.retire_upstream_session(video_id)
         if response.status_code not in {403, 410} or attempt == 1:
             return (
                 response,
