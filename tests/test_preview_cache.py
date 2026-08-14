@@ -15,7 +15,6 @@ import time
 from types import SimpleNamespace
 
 import pytest
-import requests
 
 from shared import preview_cache
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
@@ -160,34 +159,15 @@ def test_download_to_cache_lands_complete_file(runtime, monkeypatch):
     assert path.read_bytes() == data
 
 
-def test_download_to_cache_403_retires_session(runtime, monkeypatch):
-    """A rejection on the background fill retires the pooled session too.
+def test_download_to_cache_respects_upstream_backoff(runtime, monkeypatch):
+    """Speculative fills must not keep hammering a refused upstream."""
+    monkeypatch.setattr(preview_cache, "upstream_backoff_remaining", lambda: 12)
+    _patch_upstream(
+        monkeypatch,
+        lambda url, **kwargs: pytest.fail("backoff must skip the upstream request"),
+    )
 
-    The fill lane shares the one upstream session with live playback, so a
-    flagged session discovered here must be dropped here — leaving it for the
-    stream route would keep every prefetch 403ing until then.
-    """
-
-    class _Rejected:
-        status_code = 403
-        headers = {}
-
-        def raise_for_status(self):
-            raise requests.HTTPError("403 Client Error: Forbidden")
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-    sentinel = preview_cache.upstream_session()  # the session the rejection must retire
-    assert preview_cache._session is sentinel
-    _patch_upstream(monkeypatch, lambda url, **kwargs: _Rejected())
-
-    with pytest.raises(requests.HTTPError):
-        preview_cache._download_to_cache(VID, "http://example.invalid/stream")
-    assert preview_cache._session is None
+    preview_cache._download_to_cache(VID, "http://example.invalid/stream")
 
 
 def test_request_prefetch_dedupes_and_downloads(runtime, monkeypatch):

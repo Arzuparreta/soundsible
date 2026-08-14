@@ -12,7 +12,14 @@ from shared import preview_cache
 from shared.api.memo import Memo
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
-from shared.range_stream import bound_open_range, requested_start
+from shared.range_stream import (
+    KIND_OPEN,
+    bound_open_range,
+    chunk_bytes,
+    classify_range,
+    is_enabled as bounded_ranges_enabled,
+    requested_start,
+)
 from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.url_utils import validate_youtube_video_id
 
@@ -421,14 +428,7 @@ def _emit_stream_timing(
 
 
 def _preview_upstream(api, video_id: str, headers: dict[str, str]):
-    """Resolve and open upstream, refreshing one stale signed URL.
-
-    A 403/410 can indict the signed URL or the *session* carrying it (the CDN
-    flags sessions too, and plants the marker in the session's cookie jar), so
-    every rejection retires the pooled session along with the URL — otherwise
-    the retry below re-fetches through the same flagged session and the
-    station stays locked out until a restart, whatever the URL.
-    """
+    """Resolve and open upstream, refreshing one stale signed URL."""
     cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
     for attempt in range(2):
         resolve_started = time.monotonic()
@@ -447,9 +447,11 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
             proxies=stream.requests_proxies(),
         )
         ttfb_ms = round((time.monotonic() - upstream_started) * 1000)
-        if response.status_code in {403, 410}:
-            preview_cache.retire_upstream_session(video_id)
         if response.status_code not in {403, 410} or attempt == 1:
+            if response.status_code in {403, 410}:
+                preview_cache.open_upstream_backoff(video_id, response.status_code)
+            else:
+                preview_cache.clear_upstream_backoff()
             return (
                 response,
                 stream,
@@ -461,6 +463,29 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
         _invalidate_stream(video_id)
         cache_was_warm = False
     return None, None, "unavailable", 0, 0
+
+
+def _preview_range_header(range_header: str | None) -> str:
+    """Cap a media element's open range before forwarding it upstream.
+
+    Local and cached tracks already turn ``bytes=N-`` into bounded chunks. A
+    cold preview used to be the exception: the browser stream, a background
+    fill and the incoming Auto deck could all pull a whole file concurrently.
+    The CDN tells us the true total in Content-Range, so an end beyond EOF is
+    safe and the browser naturally asks for the following slice.
+
+    A client with no Range still gets the old full response; translating a
+    partial 206 into its requested 200 would make the first chunk look like the
+    whole file.
+    """
+    if range_header is None:
+        return "bytes=0-"
+    kind, _ = classify_range(range_header)
+    if kind != KIND_OPEN or not bounded_ranges_enabled():
+        return range_header
+    start = requested_start(range_header)
+    size = chunk_bytes(total_bytes=0, duration_sec=None, is_first=start == 0)
+    return f"bytes={start}-{start + size - 1}"
 
 
 def _request_cache_fill(api, video_id: str) -> None:
@@ -540,6 +565,13 @@ def preview_stream_proxy(video_id):
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
 
+    retry_after = preview_cache.upstream_backoff_remaining()
+    if retry_after:
+        response = jsonify({"error": "Preview upstream temporarily unavailable"})
+        response.status_code = 503
+        response.headers["Retry-After"] = str(retry_after)
+        return response
+
     # Not cached yet: start filling the disk cache in the background, now.
     #
     # The tee below only commits when one request happens to carry the whole
@@ -560,7 +592,7 @@ def preview_stream_proxy(video_id):
         # roughly realtime; an open-ended bytes=0- is served at full speed.
         # Browsers always send a Range, but direct/no-Range clients would
         # crawl — so inject one and translate the upstream 206 back to a 200.
-        req_headers = {"Range": range_header or "bytes=0-"}
+        req_headers = {"Range": _preview_range_header(range_header)}
         resp, stream, cache_state, resolve_ms, upstream_ttfb_ms = _preview_upstream(
             api,
             video_id,
@@ -568,6 +600,13 @@ def preview_stream_proxy(video_id):
         )
         if resp is None or stream is None:
             return jsonify({"error": "Preview unavailable"}), 502
+        if resp.status_code in {403, 410}:
+            resp.close()
+            retry_after = preview_cache.upstream_backoff_remaining() or 1
+            response = jsonify({"error": "Preview upstream temporarily unavailable"})
+            response.status_code = 503
+            response.headers["Retry-After"] = str(retry_after)
+            return response
         resp.raise_for_status()
         content_length = resp.headers.get("Content-Length")
         content_range = resp.headers.get("Content-Range")
@@ -590,9 +629,10 @@ def preview_stream_proxy(video_id):
             response_headers["Content-Length"] = content_length
 
         # Tee the bytes to the disk cache when this response covers the whole
-        # file from byte 0 (no Range, or an open-ended bytes=0- request).
+        # file from byte 0 (a no-Range request). Explicit open ranges are
+        # bounded above and therefore cannot populate a complete cache entry.
         writer = None
-        covers_whole_file = range_header is None or range_header.strip() == "bytes=0-"
+        covers_whole_file = range_header is None
         if covers_whole_file:
             expected = int(content_length) if content_length and content_length.isdigit() else None
             writer = preview_cache.open_writer(video_id, content_type, expected)

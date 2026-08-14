@@ -1265,11 +1265,16 @@ function commitTransition(
     },
     onError: () => {
       if (!owns()) return;
-      const index = state.playback.queue.findIndex((entry) => entry.queueId === next.queueId);
       committedTransition = null;
       setState('autoMode', 'transition', IDLE_TRANSITION);
-      // The route stays intact; plain playback is the safe fallback.
-      if (index > 0) loadIndex(index, { trigger: 'next' });
+      // `audio.ts` has deliberately kept the outgoing deck alive. Loading the
+      // URL that just failed here used to throw that protection away, replace
+      // the audible deck, and make Auto skip through several broken tracks in
+      // silence. Drop the failed handoff and let the DJ refill the runway while
+      // the current song keeps playing.
+      if (dropAutoRouteOccurrence(next.queueId)) {
+        toast.error(tr('toast.trackUnavailableSkipping'));
+      }
     },
   }, { manual, level: levelFor(next) });
 }

@@ -810,6 +810,42 @@ describe('Playback load coalescing', () => {
     expect(audioService.load).toHaveBeenCalledTimes(2);
     expect(state.playback.loadError).toBe(false);
   });
+
+  it('keeps the outgoing Auto track alive when the incoming deck fails', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan([
+      'route-00001', 'route-00002', 'route-00003', 'route-00004',
+      'route-00005', 'route-00006', 'route-00007', 'route-00008',
+    ]));
+    let mixCallbacks: { onError: () => void } | null = null;
+    const armTransition = vi.fn((
+      _url: string,
+      _plan: unknown,
+      callbacks: { onError: () => void },
+    ) => {
+      mixCallbacks = callbacks;
+    });
+    const { actions, state, audioService, toastError } = await loadStore(
+      { planDjQueue },
+      { armTransition },
+    );
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', duration: 180 };
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+    const failed = state.playback.queue[1];
+
+    await actions.autoSkip();
+    expect(armTransition).toHaveBeenCalledOnce();
+    expect(mixCallbacks).not.toBeNull();
+    mixCallbacks!.onError();
+
+    expect(state.playback.currentTrack?.id).toBe('current');
+    expect(state.playback.isPlaying).toBe(true);
+    expect(state.playback.loadError).toBe(false);
+    expect(state.playback.queue.some((entry) => entry.queueId === failed.queueId)).toBe(false);
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+    expect(toastError).toHaveBeenCalled();
+  });
 });
 
 describe('Playback queue lanes', () => {
