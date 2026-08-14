@@ -1048,6 +1048,57 @@ describe('Auto Mode store contract', () => {
     expect(state.autoMode.heard.at(-1)).toMatchObject(now);
   });
 
+  /**
+   * Entering is what starts the session, whatever the transport is doing.
+   *
+   * `isPlaying` used to be half of that decision, and it is false in more places
+   * than "the listener pressed pause" — a page thawed after a spell frozen in a
+   * pocket is the one that produced the report. Auto opened onto an empty route
+   * that nothing but a play press would fill.
+   */
+  it('starts the session on entry, not on the next press of play', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1']));
+    const { actions, state, audioService, initStore, fireDeckEvent } = await loadStore({ planDjQueue });
+    initStore();
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' };
+    actions.playFrom([current], 0);
+    fireDeckEvent('play');
+    fireDeckEvent('playing');
+    await flush();
+    fireDeckEvent('pause');
+    expect(state.playback.isPlaying).toBe(false);
+    audioService.resume.mockClear();
+
+    actions.enterAutoMode();
+
+    await vi.waitFor(() => expect(state.playback.queue.map((entry) => entry.id))
+      .toEqual(['current', 'route-0', 'route-1']));
+    expect(state.autoMode.phase).toBe('ready');
+    expect(state.autoMode.heard).toEqual([expect.objectContaining({ id: 'current' })]);
+    // A planned route is not a play request.
+    expect(audioService.resume).not.toHaveBeenCalled();
+    expect(state.playback.isPlaying).toBe(false);
+  });
+
+  it('takes direction from a source while the transport sits still', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(Array.from({ length: 8 }, (_, i) => `route-${i}`)));
+    const { actions, state, initStore, fireDeckEvent } = await loadStore({ planDjQueue });
+    initStore();
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'Artist', youtube_id: 'yt-current' }], 0);
+    fireDeckEvent('play');
+    fireDeckEvent('playing');
+    await flush();
+    fireDeckEvent('pause');
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(planDjQueue).toHaveBeenCalledTimes(1));
+
+    actions.addAutoSource([{ id: 'steer', title: 'Steer', artist: 'Someone' }], 'Steer');
+
+    expect(state.autoMode.pendingDirection).toBe(true);
+    await vi.waitFor(() => expect(planDjQueue).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    expect(state.playback.isPlaying).toBe(false);
+  });
+
   it('can enter empty and a source never implies playback', async () => {
     const { actions, state } = await loadStore();
     actions.enterAutoMode();
