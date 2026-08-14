@@ -12,14 +12,7 @@ from shared import preview_cache
 from shared.api.memo import Memo
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
-from shared.range_stream import (
-    KIND_OPEN,
-    bound_open_range,
-    chunk_bytes,
-    classify_range,
-    is_enabled as bounded_ranges_enabled,
-    requested_start,
-)
+from shared.range_stream import bound_open_range, requested_start
 from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.url_utils import validate_youtube_video_id
 
@@ -428,7 +421,7 @@ def _emit_stream_timing(
 
 
 def _preview_upstream(api, video_id: str, headers: dict[str, str]):
-    """Resolve and open upstream, refreshing one stale signed URL."""
+    """Open a direct fallback stream when persistent caching is disabled."""
     cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
     for attempt in range(2):
         resolve_started = time.monotonic()
@@ -465,46 +458,91 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
     return None, None, "unavailable", 0, 0
 
 
-def _preview_range_header(range_header: str | None) -> str:
-    """Cap a media element's open range before forwarding it upstream.
+def _acquire_preview(api, video_id: str):
+    """Acquire one complete file, refreshing one rejected signed URL.
 
-    Local and cached tracks already turn ``bytes=N-`` into bounded chunks. A
-    cold preview used to be the exception: the browser stream, a background
-    fill and the incoming Auto deck could all pull a whole file concurrently.
-    The CDN tells us the true total in Content-Range, so an end beyond EOF is
-    safe and the browser naturally asks for the following slice.
-
-    A client with no Range still gets the old full response; translating a
-    partial 206 into its requested 200 would make the first chunk look like the
-    whole file.
+    `preview_cache.ensure_cached` is the concurrency boundary: a staged deck,
+    an active request and background prefetch all join the same transfer.
     """
-    if range_header is None:
-        return "bytes=0-"
-    kind, _ = classify_range(range_header)
-    if kind != KIND_OPEN or not bounded_ranges_enabled():
-        return range_header
-    start = requested_start(range_header)
-    size = chunk_bytes(total_bytes=0, duration_sec=None, is_first=start == 0)
-    return f"bytes={start}-{start + size - 1}"
-
-
-def _request_cache_fill(api, video_id: str) -> None:
-    """Queue one background download of the whole preview into the disk cache.
-
-    Best-effort and deduplicated by `request_prefetch`: repeat range requests
-    for the same track queue nothing extra, and a track already on disk is
-    skipped before it reaches the lane.
-    """
-    if preview_cache.cache_limit_bytes() <= 0:
-        return
-    try:
-        preview_cache.request_prefetch(
-            [video_id],
-            download=True,
-            resolver=lambda vid: _get_preview_stream_cached(api, vid),
+    cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
+    for attempt in range(2):
+        resolve_started = time.monotonic()
+        stream = _get_preview_stream_cached(api, video_id)
+        resolve_ms = round((time.monotonic() - resolve_started) * 1000)
+        if not stream:
+            return None, None, "unavailable", resolve_ms, 0
+        download_started = time.monotonic()
+        try:
+            cached = preview_cache.ensure_cached(video_id, stream)
+        except preview_cache.PreviewUpstreamRejected as exc:
+            if attempt == 0:
+                _invalidate_stream(video_id)
+                cache_was_warm = False
+                continue
+            preview_cache.open_upstream_backoff(video_id, exc.status_code)
+            return (
+                None,
+                stream,
+                "cold",
+                resolve_ms,
+                round((time.monotonic() - download_started) * 1000),
+            )
+        download_ms = round((time.monotonic() - download_started) * 1000)
+        if cached:
+            preview_cache.clear_upstream_backoff()
+        return (
+            cached,
+            stream,
+            "url_warm" if cache_was_warm and attempt == 0 else "cold",
+            resolve_ms,
+            download_ms,
         )
-    except Exception as exc:  # pragma: no cover — never block playback on this
-        logger.debug("API: [Preview] could not queue cache fill for %s: %s", video_id, exc)
+    return None, None, "unavailable", 0, 0
+
+
+def _serve_cached_preview(
+    video_id: str,
+    cached,
+    *,
+    cache_state: str = "disk",
+    egress: str = "direct",
+    server_ready_ms: int = 0,
+):
+    """Serve one committed preview with local, bounded range semantics."""
+    path, content_type = cached
+    cached_bytes = 0
+    decision = None
+    try:
+        cached_bytes = os.path.getsize(path)
+        decision = bound_open_range(request.environ, total_bytes=cached_bytes)
+    except OSError:
+        pass
+    response = send_file(str(path), mimetype=content_type, conditional=True)
+    response.headers["Cache-Control"] = "private, max-age=86400"
+    response.headers["X-Soundsible-Playback-Source"] = "preview"
+    response.headers["X-Soundsible-Playback-Cache"] = cache_state
+    response.headers["X-Soundsible-Playback-Egress"] = egress
+    _emit_stream_timing(
+        attempt_id=_clean_attempt_id(),
+        track_id=video_id,
+        cache_state=cache_state,
+        egress=egress,
+        segments={
+            "server_ready_ms": server_ready_ms,
+            "content_length": int(response.headers.get("Content-Length") or 0),
+            "file_bytes": cached_bytes,
+            "range_start": requested_start(request.headers.get("Range")),
+            "bounded": bool(decision and decision.bounded),
+            "range_kind": decision.kind if decision else "unknown",
+            "bound_outcome": decision.outcome if decision else "unknown",
+            "range_span": (
+                None if decision is None or decision.span_ratio is None else round(decision.span_ratio, 3)
+            ),
+            "format": os.path.splitext(path)[1].lower().replace(".", "") or "unknown",
+            "at_ms": round(time.time() * 1000),
+        },
+    )
+    return response
 
 
 @playback_bp.route("/api/preview/stream/<video_id>", methods=["GET"])
@@ -518,49 +556,7 @@ def preview_stream_proxy(video_id):
     # replaying a cached preview must never be what trips the ceiling.
     cached = preview_cache.get_cached(video_id)
     if cached:
-        path, content_type = cached
-        # Same reshaping as a downloaded track: a cached preview is a file on
-        # disk, and answering `bytes=0-` with all of it has the same failure mode.
-        # No duration to size the chunks by here — the route is keyed by video id,
-        # not by a library row — so this falls back to the byte-sized defaults.
-        cached_bytes = 0
-        decision = None
-        try:
-            cached_bytes = os.path.getsize(path)
-            decision = bound_open_range(request.environ, total_bytes=cached_bytes)
-        except OSError:
-            pass
-        response = send_file(str(path), mimetype=content_type, conditional=True)
-        # The bytes are content-addressed by video id and never change, so let
-        # the browser skip us entirely when the listener replays the track.
-        response.headers["Cache-Control"] = "private, max-age=86400"
-        response.headers["X-Soundsible-Playback-Source"] = "preview"
-        response.headers["X-Soundsible-Playback-Cache"] = "disk"
-        response.headers["X-Soundsible-Playback-Egress"] = "direct"
-        # A cached preview is reshaped by the same policy as a downloaded track and
-        # used to report none of it, so half the traffic the change touches was
-        # invisible to the report that exists to judge the change.
-        _emit_stream_timing(
-            attempt_id=_clean_attempt_id(),
-            track_id=video_id,
-            cache_state="disk",
-            egress="direct",
-            segments={
-                "server_ready_ms": 0,
-                "content_length": int(response.headers.get("Content-Length") or 0),
-                "file_bytes": cached_bytes,
-                "range_start": requested_start(request.headers.get("Range")),
-                "bounded": bool(decision and decision.bounded),
-                "range_kind": decision.kind if decision else "unknown",
-                "bound_outcome": decision.outcome if decision else "unknown",
-                "range_span": (
-                    None if decision is None or decision.span_ratio is None else round(decision.span_ratio, 3)
-                ),
-                "format": os.path.splitext(path)[1].lower().replace(".", "") or "unknown",
-                "at_ms": round(time.time() * 1000),
-            },
-        )
-        return response
+        return _serve_cached_preview(video_id, cached)
 
     if not _preview_stream_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "Too many requests"}), 429
@@ -572,27 +568,44 @@ def preview_stream_proxy(video_id):
         response.headers["Retry-After"] = str(retry_after)
         return response
 
-    # Not cached yet: start filling the disk cache in the background, now.
-    #
-    # The tee below only commits when one request happens to carry the whole
-    # file from byte 0 to the end — which is exactly what a media element never
-    # does. It asks for ranges, and it abandons the first request as soon as it
-    # has buffered enough, so the tee is thrown away and the next play pays the
-    # network again. A station that had been streaming for months held 28 files
-    # in a 2 GB cache for that reason.
-    #
-    # One sequential background fetch is a second of relay time and turns every
-    # later request for this track — the ranges still to come in this very
-    # playback, the replay tomorrow — into a local `send_file`.
-    _request_cache_fill(api, video_id)
+    # Acquire the complete track before exposing any of it to a media element.
+    # This is deliberately synchronous for a cold miss: one upstream transfer
+    # costs about a second, while sending the first 512 KiB immediately made the
+    # browser ask googlevideo again mid-song. The incident captured on
+    # 2026-08-15 was exact: the first slice sounded for 1.96 s, the next slice
+    # was rejected, and Auto treated every 503 in the cooldown as another dead
+    # song. A staged deck, active playback and prefetch now share this one fill.
+    if preview_cache.cache_limit_bytes() > 0:
+        try:
+            acquired, stream, cache_state, resolve_ms, download_ms = _acquire_preview(api, video_id)
+        except Exception as exc:
+            logger.warning("API: [Preview acquisition] Error for %s: %s", video_id, exc)
+            return jsonify({"error": "Preview unavailable"}), 502
+        if acquired and stream:
+            return _serve_cached_preview(
+                video_id,
+                acquired,
+                cache_state=cache_state,
+                egress=stream.egress,
+                server_ready_ms=resolve_ms + download_ms,
+            )
+        retry_after = preview_cache.upstream_backoff_remaining()
+        if retry_after:
+            response = jsonify({"error": "Preview upstream temporarily unavailable"})
+            response.status_code = 503
+            response.headers["Retry-After"] = str(retry_after)
+            return response
 
+    # Explicitly disabling the disk cache keeps a compatibility path. It uses
+    # one open-ended upstream response for normal playback; never split a cold
+    # song into CDN ranges again.
     try:
         range_header = request.headers.get("Range")
         # googlevideo throttles DASH URLs fetched *without* a Range header to
         # roughly realtime; an open-ended bytes=0- is served at full speed.
         # Browsers always send a Range, but direct/no-Range clients would
         # crawl — so inject one and translate the upstream 206 back to a 200.
-        req_headers = {"Range": _preview_range_header(range_header)}
+        req_headers = {"Range": range_header or "bytes=0-"}
         resp, stream, cache_state, resolve_ms, upstream_ttfb_ms = _preview_upstream(
             api,
             video_id,
@@ -628,15 +641,6 @@ def preview_stream_proxy(video_id):
         if content_length:
             response_headers["Content-Length"] = content_length
 
-        # Tee the bytes to the disk cache when this response covers the whole
-        # file from byte 0 (a no-Range request). Explicit open ranges are
-        # bounded above and therefore cannot populate a complete cache entry.
-        writer = None
-        covers_whole_file = range_header is None
-        if covers_whole_file:
-            expected = int(content_length) if content_length and content_length.isdigit() else None
-            writer = preview_cache.open_writer(video_id, content_type, expected)
-
         _emit_stream_timing(
             attempt_id=_clean_attempt_id(),
             track_id=video_id,
@@ -652,18 +656,7 @@ def preview_stream_proxy(video_id):
             try:
                 for chunk in resp.iter_content(chunk_size=65536):
                     if chunk:
-                        if writer:
-                            writer.write(chunk)
                         yield chunk
-            except BaseException:
-                # Client dropped (GeneratorExit) or upstream failed: the tee
-                # is incomplete, throw it away.
-                if writer:
-                    writer.abandon()
-                raise
-            else:
-                if writer:
-                    writer.commit()
             finally:
                 # A media element abandons ranges constantly. Closing here is
                 # what returns the connection to the pool instead of stranding

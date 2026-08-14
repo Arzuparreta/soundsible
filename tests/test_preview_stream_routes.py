@@ -29,16 +29,6 @@ def _patch_upstream(monkeypatch, fake_get):
     monkeypatch.setattr(preview_cache, "upstream_session", lambda: SimpleNamespace(get=fake_get))
 
 
-def _no_cache_fill(monkeypatch):
-    """Isolate the proxy from the background lane that fills the disk cache.
-
-    Serving a request and warming the cache are separate jobs; a test about
-    what the proxy returns should not race a worker thread resolving the same
-    id. `test_preview_stream_queues_cache_fill` covers the queuing itself.
-    """
-    monkeypatch.setattr(playback_routes, "_request_cache_fill", lambda api, vid: None)
-
-
 def _make_runtime(tmp_path):
     preview_cache.clear_upstream_backoff()
     runtime = RuntimeConfig(
@@ -96,6 +86,12 @@ class _FakeUpstream:
     def close(self):
         return None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
 
 def _seed_cache(data: bytes, content_type: str) -> None:
     writer = preview_cache.open_writer(VID, content_type, len(data))
@@ -133,7 +129,7 @@ def test_preview_stream_cached_file_supports_range(tmp_path, monkeypatch):
     assert response.data == data[100:200]
 
 
-def test_preview_stream_proxy_passes_content_type_and_tees_to_cache(tmp_path, monkeypatch):
+def test_cold_preview_is_acquired_once_then_served_from_disk(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
@@ -151,13 +147,12 @@ def test_preview_stream_proxy_passes_content_type_and_tees_to_cache(tmp_path, mo
         return _FakeUpstream(data, "audio/webm", status_code=206, content_range=f"bytes 0-{len(data) - 1}/{len(data)}")
 
     _patch_upstream(monkeypatch, fake_get)
-    _no_cache_fill(monkeypatch)
 
     client = _make_app().test_client()
     response = client.get(f"/api/preview/stream/{VID}")
 
-    # No client Range → bytes=0- injected upstream (throttle bypass), and the
-    # upstream 206 is translated back to a plain 200 without Content-Range.
+    # Acquisition is one complete upstream request. The client never receives
+    # an upstream response that it would have to continue with another request.
     assert seen["headers"].get("Range") == "bytes=0-"
     assert response.status_code == 200
     assert "Content-Range" not in response.headers
@@ -165,7 +160,7 @@ def test_preview_stream_proxy_passes_content_type_and_tees_to_cache(tmp_path, mo
     assert response.headers["Content-Type"].startswith("audio/webm")
     assert response.headers.get("Accept-Ranges") == "bytes"
 
-    # The full stream got teed into the disk cache…
+    # The complete file was committed before the response was served…
     cached = preview_cache.get_cached(VID)
     assert cached is not None
     assert cached[0].read_bytes() == data
@@ -182,25 +177,25 @@ def test_preview_stream_proxy_passes_content_type_and_tees_to_cache(tmp_path, mo
     assert replay.data == data
 
 
-def test_preview_stream_proxy_does_not_tee_partial_ranges(tmp_path, monkeypatch):
+def test_cold_preview_client_range_is_served_from_complete_local_file(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
-    data = b"tail-bytes"
+    data = bytes(range(256)) * 8
     monkeypatch.setattr(
         playback_routes,
         "_get_preview_stream_cached",
         lambda api, vid: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
     _patch_upstream(monkeypatch, lambda url, **kwargs: _FakeUpstream(data, "audio/webm"))
-    _no_cache_fill(monkeypatch)
 
     response = _make_app().test_client().get(
         f"/api/preview/stream/{VID}", headers={"Range": "bytes=500-"}
     )
 
-    assert response.status_code == 200  # fake upstream ignores ranges; passthrough
-    assert preview_cache.get_cached(VID) is None  # partial body never cached
+    assert response.status_code == 206
+    assert response.data == data[500:]
+    assert preview_cache.get_cached(VID) is not None
 
 
 def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):
@@ -224,7 +219,6 @@ def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):
         return _FakeUpstream(b"fresh", "audio/mp4", status_code=206, content_range="bytes 0-4/5")
 
     _patch_upstream(monkeypatch, fake_get)
-    _no_cache_fill(monkeypatch)
     response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
 
     assert response.status_code == 200
@@ -254,7 +248,6 @@ def test_fresh_url_rejection_opens_station_backoff(tmp_path, monkeypatch):
         return _FakeUpstream(b"", "audio/mp4", status_code=403)
 
     _patch_upstream(monkeypatch, fake_get)
-    _no_cache_fill(monkeypatch)
 
     response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
 
@@ -268,7 +261,7 @@ def test_fresh_url_rejection_opens_station_backoff(tmp_path, monkeypatch):
     assert calls == []
 
 
-def test_preview_open_range_is_bounded_upstream(tmp_path, monkeypatch):
+def test_preview_open_range_downloads_whole_file_once_then_bounds_locally(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
@@ -289,24 +282,18 @@ def test_preview_open_range_is_bounded_upstream(tmp_path, monkeypatch):
         )
 
     _patch_upstream(monkeypatch, fake_get)
-    _no_cache_fill(monkeypatch)
 
     response = _make_app().test_client().get(
         f"/api/preview/stream/{VID}", headers={"Range": "bytes=0-"}
     )
 
     assert response.status_code == 206
-    assert seen_headers == [{"Range": "bytes=0-524287"}]
+    assert seen_headers == [{"Range": "bytes=0-"}]
+    assert preview_cache.get_cached(VID) is not None
 
 
-def test_preview_stream_queues_cache_fill(tmp_path, monkeypatch):
-    """A range request must still put the whole track on disk.
-
-    Media elements ask for ranges and abandon them, so the inline tee almost
-    never commits — which is how a long-running station ends up streaming the
-    same track from the network forever. The proxy asks the background lane for
-    a full copy instead, and asks for it on a partial range too.
-    """
+def test_followup_browser_range_never_returns_to_upstream(tmp_path, monkeypatch):
+    """The exact regression: continuing one song must not become a second CDN GET."""
     reset_runtime()
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
@@ -315,21 +302,28 @@ def test_preview_stream_queues_cache_fill(tmp_path, monkeypatch):
         "_get_preview_stream_cached",
         lambda api, vid: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
-    _patch_upstream(monkeypatch, lambda url, **kwargs: _FakeUpstream(b"partial", "audio/webm"))
-    queued = []
+    data = b"a" * (1024 * 1024)
+    upstream_calls = []
 
-    def fake_request_prefetch(video_ids, *, download, resolver):
-        queued.append((list(video_ids), download))
-        return list(video_ids)
+    def fake_get(url, **kwargs):
+        upstream_calls.append(kwargs["headers"])
+        return _FakeUpstream(data, "audio/webm", status_code=206)
 
-    monkeypatch.setattr(playback_routes.preview_cache, "request_prefetch", fake_request_prefetch)
+    _patch_upstream(monkeypatch, fake_get)
+    client = _make_app().test_client()
 
-    response = _make_app().test_client().get(
-        f"/api/preview/stream/{VID}", headers={"Range": "bytes=500-"}
+    first = client.get(
+        f"/api/preview/stream/{VID}", headers={"Range": "bytes=0-"}
+    )
+    second = client.get(
+        f"/api/preview/stream/{VID}", headers={"Range": "bytes=524288-"}
     )
 
-    assert response.status_code == 200
-    assert queued == [([VID], True)]
+    assert first.status_code == 206
+    assert len(first.data) == 512 * 1024
+    assert second.status_code == 206
+    assert second.data == data[512 * 1024 :]
+    assert upstream_calls == [{"Range": "bytes=0-"}]
 
 
 def test_preview_stream_cache_hit_skips_cache_fill(tmp_path, monkeypatch):
