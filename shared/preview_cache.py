@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import queue
 import threading
@@ -62,6 +63,13 @@ _session: Optional[requests.Session] = None
 #: Enough for several listeners plus prefetch without evicting live playback.
 _POOL_MAXSIZE = 32
 
+# A rejection of a freshly resolved URL is not a stale-signature problem.  It
+# is a station-wide upstream refusal, and immediately asking for the same bytes
+# through every queued preview only turns one outage into a request storm.
+_UPSTREAM_BACKOFF_SEC = 30
+_upstream_backoff_lock = threading.Lock()
+_upstream_blocked_until = 0.0
+
 
 def upstream_session() -> requests.Session:
     """The shared session every preview fetch goes through."""
@@ -82,6 +90,37 @@ def upstream_session() -> requests.Session:
             session.mount("http://", adapter)
             _session = session
     return _session
+
+
+def upstream_backoff_remaining(*, now: Optional[float] = None) -> int:
+    """Whole seconds before another googlevideo request is allowed."""
+    current = time.monotonic() if now is None else now
+    with _upstream_backoff_lock:
+        remaining = _upstream_blocked_until - current
+    return max(0, math.ceil(remaining))
+
+
+def open_upstream_backoff(video_id: str, status_code: int) -> int:
+    """Stop all preview lanes briefly after a freshly resolved URL is refused."""
+    global _upstream_blocked_until
+    now = time.monotonic()
+    with _upstream_backoff_lock:
+        _upstream_blocked_until = max(_upstream_blocked_until, now + _UPSTREAM_BACKOFF_SEC)
+    remaining = upstream_backoff_remaining(now=now)
+    logger.warning(
+        "[PreviewCache] Fresh upstream URL rejected for %s (HTTP %s); pausing preview fetches for %ss",
+        video_id,
+        status_code,
+        remaining,
+    )
+    return remaining
+
+
+def clear_upstream_backoff() -> None:
+    """A successful upstream response proves the station may fetch again."""
+    global _upstream_blocked_until
+    with _upstream_backoff_lock:
+        _upstream_blocked_until = 0.0
 
 
 def cache_limit_bytes() -> int:
@@ -300,6 +339,8 @@ def _coerce_resolution(value: ResolutionValue) -> Optional[ResolvedStream]:
 def _download_to_cache(video_id: str, stream: Union[ResolvedStream, str]) -> None:
     if get_cached(video_id):
         return
+    if upstream_backoff_remaining():
+        return
     resolved = _coerce_resolution(stream)
     if resolved is None:
         return
@@ -344,10 +385,11 @@ def _worker_loop(jobs: "queue.Queue[tuple[str, Resolver]]", *, download: bool) -
             jobs.task_done()
 
 
-#: Workers per lane. One download worker meant the track a listener just started
-#: waited behind whatever the queue had warmed first — and a whole track now
-#: arrives in about a second, so two in flight cost little and hide the wait.
-_LANE_WORKERS = 2
+# URL resolution is latency, so two may overlap. Full-file fills are bandwidth:
+# serialising them keeps the current song, its incoming deck, and speculative
+# cache work from all pulling complete files from googlevideo at once.
+_RESOLVE_LANE_WORKERS = 2
+_DOWNLOAD_LANE_WORKERS = 1
 
 
 def _ensure_worker() -> None:
@@ -356,7 +398,7 @@ def _ensure_worker() -> None:
     with _pending_lock:
         if _worker_started.is_set():
             return
-        for index in range(_LANE_WORKERS):
+        for index in range(_RESOLVE_LANE_WORKERS):
             threading.Thread(
                 target=_worker_loop,
                 args=(_resolve_queue,),
@@ -364,6 +406,7 @@ def _ensure_worker() -> None:
                 name=f"preview-resolve-{index}",
                 daemon=True,
             ).start()
+        for index in range(_DOWNLOAD_LANE_WORKERS):
             threading.Thread(
                 target=_worker_loop,
                 args=(_download_queue,),

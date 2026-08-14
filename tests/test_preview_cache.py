@@ -159,6 +159,17 @@ def test_download_to_cache_lands_complete_file(runtime, monkeypatch):
     assert path.read_bytes() == data
 
 
+def test_download_to_cache_respects_upstream_backoff(runtime, monkeypatch):
+    """Speculative fills must not keep hammering a refused upstream."""
+    monkeypatch.setattr(preview_cache, "upstream_backoff_remaining", lambda: 12)
+    _patch_upstream(
+        monkeypatch,
+        lambda url, **kwargs: pytest.fail("backoff must skip the upstream request"),
+    )
+
+    preview_cache._download_to_cache(VID, "http://example.invalid/stream")
+
+
 def test_request_prefetch_dedupes_and_downloads(runtime, monkeypatch):
     data = b"q" * 2048
     _patch_upstream(monkeypatch, lambda url, **kw: _FakeResponse(data))

@@ -40,6 +40,7 @@ def _no_cache_fill(monkeypatch):
 
 
 def _make_runtime(tmp_path):
+    preview_cache.clear_upstream_backoff()
     runtime = RuntimeConfig(
         host="127.0.0.1",
         port=5005,
@@ -232,6 +233,70 @@ def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):
         ("http://upstream.invalid/fresh", None),
     ]
     assert response.headers["X-Soundsible-Playback-Egress"] == "direct"
+
+
+def test_fresh_url_rejection_opens_station_backoff(tmp_path, monkeypatch):
+    """A fresh signed URL failing too is a station outage, not another stale URL."""
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    resolutions = iter(
+        [
+            resolved_stream("http://upstream.invalid/stale", egress="direct"),
+            resolved_stream("http://upstream.invalid/fresh", egress="direct"),
+        ]
+    )
+    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", lambda api, vid: next(resolutions))
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return _FakeUpstream(b"", "audio/mp4", status_code=403)
+
+    _patch_upstream(monkeypatch, fake_get)
+    _no_cache_fill(monkeypatch)
+
+    response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
+
+    assert response.status_code == 503
+    assert int(response.headers["Retry-After"]) > 0
+    assert calls == ["http://upstream.invalid/stale", "http://upstream.invalid/fresh"]
+
+    calls.clear()
+    response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
+    assert response.status_code == 503
+    assert calls == []
+
+
+def test_preview_open_range_is_bounded_upstream(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    monkeypatch.setattr(
+        playback_routes,
+        "_get_preview_stream_cached",
+        lambda api, vid: resolved_stream("http://upstream.invalid/audio", egress="direct"),
+    )
+    seen_headers = []
+
+    def fake_get(url, **kwargs):
+        seen_headers.append(kwargs["headers"])
+        return _FakeUpstream(
+            b"chunk",
+            "audio/mp4",
+            status_code=206,
+            content_range="bytes 0-4/1000000",
+        )
+
+    _patch_upstream(monkeypatch, fake_get)
+    _no_cache_fill(monkeypatch)
+
+    response = _make_app().test_client().get(
+        f"/api/preview/stream/{VID}", headers={"Range": "bytes=0-"}
+    )
+
+    assert response.status_code == 206
+    assert seen_headers == [{"Range": "bytes=0-524287"}]
 
 
 def test_preview_stream_queues_cache_fill(tmp_path, monkeypatch):
