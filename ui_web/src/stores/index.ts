@@ -1763,22 +1763,30 @@ export const actions = {
     });
     setState('autoMode', {
       active: true,
-      phase: current && state.playback.isPlaying ? 'planning' : 'idle',
+      phase: current ? 'planning' : 'idle',
       activity: null,
       plan: {},
       sources: [],
-      heard: current && state.playback.isPlaying ? [current] : [],
+      heard: current ? [current] : [],
       avoidedIdentities: [],
       transition: { status: 'idle' },
       pendingDirection: false,
       repairing: false,
       staleSeams: [],
     });
-    // Normally a no-op — the graph was built at the session's first touch — but
-    // it also covers a listener who reached Auto Mode without one (a keyboard
-    // shortcut, a restored session) and resumes a context that was interrupted
-    // while the app sat in the background.
-    if (current && state.playback.isPlaying) {
+    // Entering the workspace is what starts the session. What decides that is
+    // whether there is a song to plan *from* — never what the transport is
+    // doing. The two used to be one condition, and `isPlaying` is false in far
+    // more places than "the listener pressed pause": a page thawed after a
+    // spell frozen in a pocket, a `pause` delivered from a deck, a session put
+    // back on boot. In every one of them Auto opened with an empty route that
+    // only a play press would fill — the transport driving the mode instead of
+    // the other way round.
+    if (current) {
+      // Normally a no-op — the graph was built at the session's first touch —
+      // but it also covers a listener who reached Auto Mode without one (a
+      // keyboard shortcut, a restored session) and resumes a context that was
+      // interrupted while the app sat in the background.
       audioService.unlockAudio();
       void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);
     }
@@ -1827,10 +1835,10 @@ export const actions = {
       activation: Math.max(0, ...state.autoMode.sources.map((item) => item.activation)) + 1,
     };
     setState('autoMode', 'sources', (sources) => [...sources, source]);
-    // A source is direction, never an implied playback request.
-    if (state.playback.currentTrack && state.playback.isPlaying) {
-      scheduleRunwayReplan(tr('autoMode.note.direction'));
-    }
+    // A source is direction, never an implied playback request — and rewriting
+    // the runway is not one, so a session waiting on a red light takes the
+    // steer exactly like a sounding one. `removeAutoSource` always did.
+    if (state.playback.currentTrack) scheduleRunwayReplan(tr('autoMode.note.direction'));
   },
 
   /** Steer the session from one song.
