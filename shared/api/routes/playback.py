@@ -20,10 +20,13 @@ logger = logging.getLogger(__name__)
 
 playback_bp = Blueprint("playback", __name__, url_prefix="")
 
-#: How long a browser may reuse cover art without asking again. Long enough that
-#: scrolling a large library is free, short enough that artwork edited on
-#: another device shows up while the listener is still looking for it.
-COVER_CACHE_SEC = 900  # 15 minutes
+#: How long a browser may reuse cover art without asking again. Artwork edited
+#: on another device no longer relies on this expiring to show up — the editing
+#: device's `library_updated` emit now carries `cover_changed`, and every other
+#: connected tab busts its own cache-buster on receipt (see `stores/index.ts`).
+#: This window only bounds staleness for a client that missed that event
+#: (offline, reconnect race), so it can stay long.
+COVER_CACHE_SEC = 604800  # 7 days
 
 # Note: A preview *session* is one click, but a browser opens several requests
 # for it (the initial fetch plus range requests for seeks), and browsing
@@ -737,14 +740,24 @@ def get_track_cover(track_id):
     track = api["get_track_by_id"](lib, track_id)
     if not track:
         return jsonify({"error": "Track not found"}), 404
+    from player.cover_manager import CoverFetchManager
+
+    manager = CoverFetchManager.get_instance()
     path = lib.get_cover_url(track)
     if not path:
         try:
-            from player.cover_manager import CoverFetchManager
-
-            path = CoverFetchManager.get_instance().extract_now(track, resolve_local_track_path(track))
+            path = manager.extract_now(track, resolve_local_track_path(track))
         except Exception as e:
             logger.warning("[Cover] Failed for %s: %s", track_id, e)
+    # List/grid rows ask for the resized variant instead of the (often
+    # multi-MB) embedded original. Generated alongside the original whenever
+    # it's freshly extracted; for a cover cached before thumbnails existed,
+    # this backfills it once from the already-cached original — no re-parse
+    # of the audio file, same lazy pattern as the fallback above.
+    if request.args.get("size") == "thumb" and path and os.path.exists(path):
+        thumb_path = manager.get_cached_thumb_path(track_id) or manager.extract_thumb_now(track_id, path)
+        if thumb_path:
+            path = thumb_path
     if path and os.path.exists(path):
         is_trusted = api["is_trusted_network"](request.remote_addr)
         if not api["is_safe_path"](path, is_trusted=is_trusted):
@@ -756,11 +769,12 @@ def get_track_cover(track_id):
         # a revalidation round trip — cheap on localhost, painful on a phone
         # over Tailscale, where six-connection limits turn it into a stall.
         #
-        # The window is short because artwork is editable and the edit may
-        # happen on another device. The editing device doesn't wait for it:
-        # the player appends a cache-busting version to `coverUrl` the moment a
-        # cover changes. Everyone else picks it up within the window, and the
-        # ETag from `conditional` keeps the recheck a 304.
+        # The window can stay long because artwork edits no longer rely on it
+        # expiring: the editing device bumps its own cache-buster immediately,
+        # and every other connected device gets a `library_updated` socket
+        # event carrying `cover_changed`, busting theirs too (see
+        # `_mark_track_metadata_updated` and `stores/index.ts`'s listener). This
+        # header only bounds staleness for a client that missed that event.
         response.headers["Cache-Control"] = f"private, max-age={COVER_CACHE_SEC}"
         return response
     placeholder = os.path.join(api["WEB_UI_PATH"], "assets/icons/icon-192.png")

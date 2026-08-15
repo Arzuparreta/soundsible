@@ -3940,7 +3940,12 @@ export function initStore(): void {
     actions.syncLibrarySoon();
   });
 
-  socket.on('library_updated', () => {
+  socket.on('library_updated', (payload?: { cover_changed?: boolean }) => {
+    // Cover edits on another device only reach this tab through this event —
+    // bust the local cache-buster so the new art is fetched instead of the
+    // long-lived cached image. Gated on the flag so unrelated library changes
+    // (scans, renames, deletes) don't force every visible cover to refetch.
+    if (payload?.cover_changed) bustCovers();
     // Shares the coalescing window with download completions, which arrive for
     // the same writes moments earlier.
     actions.syncLibrarySoon();

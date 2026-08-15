@@ -23,7 +23,7 @@ export default function Playlists() {
 
   const coverBg = (name: string, ids: string[]): JSX.CSSProperties => {
     const id = pickPlaylistCoverId(name, ids, byId() as Map<string, Track>, state.librarySettings);
-    return neutralCoverStyle(id ? coverUrl(id) : null);
+    return neutralCoverStyle(id ? coverUrl(id, 'thumb') : null);
   };
 
   const createNew = async () => {

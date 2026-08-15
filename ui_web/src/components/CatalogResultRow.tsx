@@ -31,7 +31,7 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
   const artwork = (): JSX.CSSProperties =>
     coverStyle(
       props.item.id,
-      props.item.cover || (props.item.track_id ? coverUrl(props.item.track_id) : null),
+      props.item.cover || (props.item.track_id ? coverUrl(props.item.track_id, 'thumb') : null),
     );
 
   return (

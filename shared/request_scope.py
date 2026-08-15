@@ -22,14 +22,43 @@ T = TypeVar("T")
 
 _scope: ContextVar[Optional[dict[str, Any]]] = ContextVar("soundsible_request_scope", default=None)
 
+#: Reserved key under which `on_end` queues callbacks, in the same dict
+#: `scoped` uses for memos — one context payload, not two ContextVars to keep
+#: in sync.
+_CLEANUPS_KEY = "__cleanups__"
+
 
 def begin() -> object:
     """Open a scope. Returns a token to hand to :func:`end`."""
     return _scope.set({})
 
 
+def on_end(callback: Callable[[], None]) -> None:
+    """Run ``callback`` once, when the current scope closes.
+
+    A no-op outside a scope — background workers and CLI paths that never
+    call :func:`begin` own their own resource lifetimes already.
+    """
+    cache = _scope.get()
+    if cache is None:
+        return
+    cache.setdefault(_CLEANUPS_KEY, []).append(callback)
+
+
 def end(token: object) -> None:
-    """Close the scope opened by ``token``."""
+    """Close the scope opened by ``token``, running any registered cleanups.
+
+    A cleanup that raises is logged and does not stop the rest from running —
+    one connection failing to close must not leak the others.
+    """
+    cache = _scope.get()
+    for callback in (cache or {}).get(_CLEANUPS_KEY, []):
+        try:
+            callback()
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("request_scope: cleanup failed")
     try:
         _scope.reset(token)  # type: ignore[arg-type]
     except ValueError:
@@ -73,7 +102,13 @@ def invalidate(prefix: str = "") -> None:
     if not cache:
         return
     if not prefix:
+        # Memos are invalidated, but cleanups already registered for scope end
+        # (closing a connection opened this request, say) still must run —
+        # this clears what a factory would recompute, not what end() owes.
+        cleanups = cache.get(_CLEANUPS_KEY)
         cache.clear()
+        if cleanups:
+            cache[_CLEANUPS_KEY] = cleanups
         return
     for key in [k for k in cache if k.startswith(prefix)]:
         cache.pop(key, None)

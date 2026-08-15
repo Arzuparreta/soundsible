@@ -361,7 +361,7 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
           <SongRow
             track={track}
             index={i() + 1}
-            cover={track.source === 'preview' ? track.cover : coverUrl(track.id)}
+            cover={track.source === 'preview' ? track.cover : coverUrl(track.id, 'thumb')}
             onPlay={() => actions.playFrom(props.tracks, i(), {
               context: { id: `artist:${props.contextLabel}`, kind: 'artist', label: props.contextLabel },
             })}

@@ -14,10 +14,14 @@ export const bustCovers = (): void => {
 };
 
 /** Cover art for a library track (same-origin engine endpoint). Reads the
- * cover-version signal so thumbnails refresh reactively after a cover change. */
-export const coverUrl = (id: string): string => {
+ * cover-version signal so thumbnails refresh reactively after a cover change.
+ * Pass `size: 'thumb'` from list/grid rows to get a small resized JPEG instead
+ * of the (often multi-MB) embedded original — full size stays the default for
+ * now-playing/edit views. */
+export const coverUrl = (id: string, size?: 'thumb'): string => {
   const v = coverVersion();
-  return `${apiOrigin()}/api/static/cover/${encodeURIComponent(id)}${v ? `?v=${v}` : ''}`;
+  const params = [size ? `size=${size}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&');
+  return `${apiOrigin()}/api/static/cover/${encodeURIComponent(id)}${params ? `?${params}` : ''}`;
 };
 
 /**

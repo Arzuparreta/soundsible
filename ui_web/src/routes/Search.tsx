@@ -535,7 +535,7 @@ export default function Search() {
   };
 
   const itemCoverStyle = (item: CatalogItem, round = false): JSX.CSSProperties => ({
-    ...coverStyle(item.id, item.cover || (item.track_id ? coverUrl(item.track_id) : null)),
+    ...coverStyle(item.id, item.cover || (item.track_id ? coverUrl(item.track_id, 'thumb') : null)),
     'border-radius': round ? 'var(--radius-full)' : undefined,
   });
 

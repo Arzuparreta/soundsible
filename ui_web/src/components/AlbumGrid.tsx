@@ -18,7 +18,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 export default function AlbumGrid(props: { albums: CatalogAlbum[] }) {
   const navigate = useNavigate();
   const cover = (album: CatalogAlbum) =>
-    coverStyle(album.title, album.cover_track_id ? coverUrl(album.cover_track_id) : undefined);
+    coverStyle(album.title, album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined);
   return (
     <div class={styles.grid}>
       <For each={props.albums}>

@@ -20,7 +20,7 @@ import { registerPrimaryScroll } from '../lib/scrollHistory';
 /** Artwork for a row: the engine's file cover, or the snapshot's thumbnail for
  * a song we hold no file for. */
 function trackCover(track: { id: string; cover?: string; source?: 'preview' }): string | undefined {
-  return track.source === 'preview' ? track.cover : coverUrl(track.id);
+  return track.source === 'preview' ? track.cover : coverUrl(track.id, 'thumb');
 }
 
 function readRowHeight(): number {
@@ -46,7 +46,7 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
     >
       <div
         class={styles.avatar}
-        style={{ background: coverBackground(props.result.artist.name, coverUrl(props.result.artist.coverId)) }}
+        style={{ background: coverBackground(props.result.artist.name, coverUrl(props.result.artist.coverId, 'thumb')) }}
       />
       <div class={styles.artistMeta}>
         <span class={styles.artistName}>{props.result.artist.name}</span>

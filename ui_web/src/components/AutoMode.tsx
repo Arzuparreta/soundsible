@@ -131,7 +131,7 @@ export function AutoMode(props: {
       id: track.queueId,
       title: track.title,
       artist: track.artist,
-      cover: track.cover ?? coverUrl(track.id),
+      cover: track.cover ?? coverUrl(track.id, 'thumb'),
       position: index + 1,
       locked: committed,
       // A committed handoff is loaded and cued: whatever the route did around

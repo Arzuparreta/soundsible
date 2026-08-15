@@ -6,6 +6,7 @@ Handles canonical library storage, rapid searching, and derived catalog data.
 import sqlite3
 import json
 import logging
+import queue
 import threading
 import time
 from pathlib import Path
@@ -108,6 +109,67 @@ _AUTH_TOKEN_COLUMNS = {
 _MUSIC_ONLY = "(t.media_kind IS NULL OR t.media_kind != 'podcast_episode')"
 
 
+#: Hard ceiling on live connections per `DatabaseManager` (there are only two
+#: files: instance.db and one library.db per user). Not a concurrency target —
+#: this app serves a handful of people at once — it exists so a burst of
+#: requests recycles a bounded set of warm connections instead of growing one
+#: forever, which is the failure this pool replaces (see `ConnectionPool`).
+_POOL_MAX_SIZE = 16
+#: If every pooled connection is checked out this long, fail loudly rather
+#: than hang — the same instinct as the SQLite `busy_timeout` above, applied
+#: to the pool itself so an exhausted pool cannot reproduce the "buffering
+#: forever" symptom it exists to prevent.
+_POOL_ACQUIRE_TIMEOUT_SEC = BUSY_TIMEOUT_MS / 1000
+
+
+class ConnectionPool:
+    """A small, hard-capped pool of interchangeable SQLite connections.
+
+    Replaces caching one connection per calling thread forever. Under gevent
+    the WSGI server spawns a fresh greenlet per request rather than reusing a
+    bounded pool of them, so "per thread" quietly became "per request": every
+    request that touched the database left one open connection and file
+    descriptor behind, for the life of the process. Over enough hours that
+    stopped being cosmetic — the pile of open handles started starving actual
+    reads and writes on the same file, which is what the "buffering forever"
+    incident this pool was built for actually was.
+
+    A connection is borrowed for the life of one request (see
+    `DatabaseManager._get_connection`, released via `request_scope.on_end`)
+    and returned to the pool rather than closed, so steady-state traffic still
+    reuses a warm, already-PRAGMA'd connection — opening one is not free, and
+    that cost is exactly what the budget in `tests/test_request_db_budget.py`
+    guards. What changes is the ceiling: no matter how many requests a
+    long-running process serves, live connections never exceed `max_size`.
+    """
+
+    def __init__(self, factory, max_size: int):
+        self._factory = factory
+        self._max_size = max_size
+        self._idle: "queue.Queue" = queue.Queue()
+        self._created = 0
+        self._create_lock = threading.Lock()
+
+    def acquire(self):
+        try:
+            return self._idle.get_nowait()
+        except queue.Empty:
+            pass
+        with self._create_lock:
+            if self._created < self._max_size:
+                self._created += 1
+                return self._factory()
+        try:
+            return self._idle.get(timeout=_POOL_ACQUIRE_TIMEOUT_SEC)
+        except queue.Empty:
+            raise TimeoutError(
+                f"Database connection pool exhausted ({self._max_size} in use)"
+            ) from None
+
+    def release(self, conn) -> None:
+        self._idle.put(conn)
+
+
 class DatabaseManager:
     def __init__(self, db_path: Optional[str] = None):
         """Open a database. With no path this is the bound user's library index;
@@ -119,27 +181,18 @@ class DatabaseManager:
         else:
             self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        # One connection per thread, reused. Opening a connection is not free —
-        # it costs a file open plus three PRAGMA round trips — and resolving who
-        # is calling a request touches this class several times before any
-        # handler runs. Thread-local rather than shared because a sqlite3
-        # connection may only be used from the thread that created it.
+        # Borrowed from `_pool` for the life of one request/thread and given
+        # back rather than kept forever — see `ConnectionPool` and
+        # `_get_connection`. Thread-local because a sqlite3 connection may
+        # only be used from the OS thread that created it; under gevent that
+        # is one specific greenlet at a time, never two concurrently.
         self._connections = threading.local()
+        self._pool = ConnectionPool(self._open_connection, _POOL_MAX_SIZE)
 
         self._init_db()
 
-    def _get_connection(self):
-        """This thread's connection to the database.
-
-        Returned rather than newly opened, so `with db._get_connection() as
-        conn:` keeps its existing meaning — sqlite3 connections commit on a
-        clean exit and roll back on an exception, and neither closes them.
-        """
-        existing = getattr(self._connections, "conn", None)
-        if existing is not None:
-            return existing
-
-        conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_MS / 1000)
+    def _open_connection(self):
+        conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_MS / 1000, check_same_thread=False)
         # busy_timeout first: it is per-connection and always succeeds, and
         # switching journal mode needs a lock. Without the timeout in place that
         # switch fails immediately instead of waiting for a concurrent reader.
@@ -153,8 +206,40 @@ class DatabaseManager:
             logger.debug("Could not set WAL on %s; already set by another connection", self.db_path)
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA foreign_keys=ON")
-        self._connections.conn = conn
         return conn
+
+    def _get_connection(self):
+        """This thread's connection to the database, borrowed from the pool.
+
+        Returned rather than newly opened, so `with db._get_connection() as
+        conn:` keeps its existing meaning — sqlite3 connections commit on a
+        clean exit and roll back on an exception, and neither closes them.
+        Repeat calls within the same request return the identical connection;
+        `request_scope.on_end` returns it to `_pool` when the request ends, so
+        the next caller — same thread or not — gets a warm connection instead
+        of paying to open one. Outside a request (background jobs, the CLI)
+        nothing returns it: it stays pinned to that thread for the thread's
+        life, same as before this pool existed, which is correct for the
+        small, bounded thread pools those callers run on.
+        """
+        existing = getattr(self._connections, "conn", None)
+        if existing is not None:
+            return existing
+
+        conn = self._pool.acquire()
+        self._connections.conn = conn
+        self._release_at_request_end(conn)
+        return conn
+
+    def _release_at_request_end(self, conn) -> None:
+        from shared import request_scope
+
+        def _release() -> None:
+            if getattr(self._connections, "conn", None) is conn:
+                del self._connections.conn
+            self._pool.release(conn)
+
+        request_scope.on_end(_release)
 
     # ------------------------------------------------------------------
     # Schema setup helpers (static to keep _init_db readable)

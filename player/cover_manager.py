@@ -1,9 +1,15 @@
 import concurrent.futures
+import io
 import os
 import threading
 
 from shared.constants import DEFAULT_CACHE_DIR
 from setup_tool.audio import AudioProcessor
+
+#: Longest edge for the list/grid thumbnail variant. One size covers both a
+#: retina row (44-60px) and a grid tile (120-300px) without adding more tiers.
+THUMB_EDGE = 320
+
 
 class CoverFetchManager:
     _instance = None
@@ -31,7 +37,46 @@ class CoverFetchManager:
             return path
         return None
 
-    def request_cover(self, track, embedded_cache_info=None, callback=None, size=64):
+    def get_cached_thumb_path(self, track_id):
+        path = os.path.join(self.covers_dir, f"{track_id}_thumb.jpg")
+        if os.path.exists(path):
+            return path
+        return None
+
+    def _write_thumbnail(self, cover_data, thumb_path):
+        """Resize embedded art down to THUMB_EDGE and cache it as a JPEG.
+
+        Best-effort: a thumbnail that fails to generate just means callers
+        keep serving the full-size original, never a broken response.
+        """
+        try:
+            from PIL import Image
+
+            img = Image.open(io.BytesIO(cover_data))
+            if img.mode in ("RGBA", "P", "LA"):
+                img = img.convert("RGB")
+            img.thumbnail((THUMB_EDGE, THUMB_EDGE), Image.LANCZOS)
+            img.save(thumb_path, "JPEG", quality=82, optimize=True)
+        except Exception:
+            pass
+
+    def extract_thumb_now(self, track_id, original_path):
+        """Generate the thumbnail for a cover cached before thumbnails existed.
+
+        Reads the already-cached original off disk — no audio re-parse.
+        """
+        thumb_path = os.path.join(self.covers_dir, f"{track_id}_thumb.jpg")
+        if os.path.exists(thumb_path):
+            return thumb_path
+        try:
+            with open(original_path, "rb") as handle:
+                cover_data = handle.read()
+        except OSError:
+            return None
+        self._write_thumbnail(cover_data, thumb_path)
+        return thumb_path if os.path.exists(thumb_path) else None
+
+    def request_cover(self, track, embedded_cache_info=None, callback=None):
         """
         Request a cover for a track.
         Callback receives: (cover_path)
@@ -78,6 +123,7 @@ class CoverFetchManager:
                     if cover_data:
                         with open(dest_path, 'wb') as f:
                             f.write(cover_data)
+                        self._write_thumbnail(cover_data, os.path.join(self.covers_dir, f"{track.id}_thumb.jpg"))
                         found = True
                 except Exception:
                     pass
@@ -122,6 +168,7 @@ class CoverFetchManager:
                 return None
             with open(dest_path, "wb") as handle:
                 handle.write(cover_data)
+            self._write_thumbnail(cover_data, os.path.join(self.covers_dir, f"{track.id}_thumb.jpg"))
             return dest_path
         except Exception:
             return None

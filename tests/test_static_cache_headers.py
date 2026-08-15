@@ -59,9 +59,11 @@ def test_cover_is_cacheable_and_revalidates(client, tmp_path):
     assert f"max-age={COVER_CACHE_SEC}" in cache_control
     # Artwork belongs to one person's library: shared caches must not hold it.
     assert "private" in cache_control
-    # The window is short on purpose — a cover edited on another device has to
-    # show up while the listener is still looking for it.
-    assert COVER_CACHE_SEC <= 3600
+    # The window can be long: a cover edited on another device no longer
+    # relies on it expiring to show up elsewhere — `library_updated`'s
+    # `cover_changed` flag busts every other connected client immediately.
+    # This just bounds staleness for a client that missed that event.
+    assert COVER_CACHE_SEC >= 3600
     # `conditional=True` is what keeps the eventual recheck a cheap 304.
     assert response.headers.get("ETag")
 

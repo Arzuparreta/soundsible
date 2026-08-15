@@ -155,7 +155,7 @@ export default function TrackList(props: {
                           // A preview's artwork is the thumbnail it carries;
                           // asking the engine for a cover it has no file for
                           // just 404s into the placeholder gradient.
-                          cover={t().source === 'preview' ? t().cover : coverUrl(t().id)}
+                          cover={t().source === 'preview' ? t().cover : coverUrl(t().id, 'thumb')}
                           favouritable={!isPodcastTrack(t())}
                           active={isPlayingTrack(t())}
                           onPlay={() =>

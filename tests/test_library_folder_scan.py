@@ -125,13 +125,14 @@ def test_changed_file_rekeys_references_and_user_state(tmp_path):
         favourites=SimpleNamespace(remap_library_id=lambda old_id, new_id: remapped.append((old_id, new_id))),
     )
 
-    summary = LibraryScanService._merge_result(
+    summary, prewarm = LibraryScanService._merge_result(
         core,
         ScanResult(discovered=1, processed=1, files=[ScannedFile(str(song.resolve()), new)]),
     )
     restored = db.load_library_metadata()
 
     assert summary == {"added": 0, "updated": 1, "unchanged": 0}
+    assert [track.id for track in prewarm] == ["new"]
     assert [track.id for track in restored.tracks] == ["new"]
     assert restored.playlists == {"Mix": ["new"]}
     assert restored.settings["playlist_covers"] == {"Mix": "new"}

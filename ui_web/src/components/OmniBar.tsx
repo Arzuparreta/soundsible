@@ -32,7 +32,7 @@ export function OmniBar() {
   const coverBg = (): JSX.CSSProperties | undefined => {
     const c = current();
     if (!c) return undefined;
-    const url = c.cover ?? coverUrl(c.id);
+    const url = c.cover ?? coverUrl(c.id, 'thumb');
     return { background: `url("${url}") center / cover no-repeat, var(--bg-raised)` };
   };
 

@@ -131,7 +131,7 @@ class LibraryScanService:
                     )
 
                 result = scanner.scan_paths(roots, snapshot, progress=progress)
-                summary = orchestrator.run_serialized(
+                summary, prewarm_tracks = orchestrator.run_serialized(
                     self._merge_result, core, result
                 )
                 self._update(
@@ -144,6 +144,13 @@ class LibraryScanService:
                 )
                 if summary["added"] or summary["updated"]:
                     emit_to_user("library_updated", user_id=user_id)
+                    # Fire-and-forget: extract covers for what just landed so
+                    # they're already cached by the time the library is opened,
+                    # instead of the first row's own request paying for it.
+                    # Reuses CoverFetchManager's existing bounded thread pool —
+                    # no new concurrency, and a per-track failure here can't
+                    # affect the scan result already recorded above.
+                    self._prewarm_covers(library, prewarm_tracks)
         except Exception as exc:
             logger.exception("Library scan failed for user %s", user_id)
             self._update(
@@ -153,6 +160,21 @@ class LibraryScanService:
                 finished_at=_now(),
                 error=f"Scan failed: {type(exc).__name__}",
             )
+
+    @staticmethod
+    def _prewarm_covers(library: Any, tracks: list[Track]) -> None:
+        from player.cover_manager import CoverFetchManager
+
+        manager = CoverFetchManager.get_instance()
+        for track in tracks:
+            try:
+                path = library.get_track_url(track)
+                if path and not str(path).startswith("http"):
+                    manager.request_cover(track, embedded_cache_info=path)
+                else:
+                    manager.request_cover(track)
+            except Exception:
+                continue
 
     @staticmethod
     def _preserve_user_metadata(old: Track, new: Track) -> None:
@@ -167,7 +189,7 @@ class LibraryScanService:
         new.metadata_modified_by_user = True
 
     @classmethod
-    def _merge_result(cls, core: Any, result: ScanResult) -> dict[str, int]:
+    def _merge_result(cls, core: Any, result: ScanResult) -> tuple[dict[str, int], list[Track]]:
         library = core.library
         latest = library.db.load_library_metadata()
         if latest is None:
@@ -178,6 +200,7 @@ class LibraryScanService:
         by_path = {track.local_path: track for track in tracks if track.local_path}
         added = updated = unchanged = 0
         replacements: dict[str, str] = {}
+        prewarm: list[Track] = []
 
         for scanned in result.files:
             incoming = scanned.track
@@ -205,6 +228,7 @@ class LibraryScanService:
                 current.is_local = True
                 if changed:
                     updated += 1
+                    prewarm.append(current)
                 else:
                     unchanged += 1
                 by_path[scanned.path] = current
@@ -219,12 +243,14 @@ class LibraryScanService:
                 by_id[incoming.id] = incoming
                 by_path[scanned.path] = incoming
                 updated += 1
+                prewarm.append(incoming)
                 continue
 
             tracks.append(incoming)
             by_id[incoming.id] = incoming
             by_path[scanned.path] = incoming
             added += 1
+            prewarm.append(incoming)
 
         if replacements:
             for name, ids in list(latest.playlists.items()):
@@ -245,7 +271,7 @@ class LibraryScanService:
             for old_id, new_id in replacements.items():
                 core.favourites.remap_library_id(old_id, new_id)
 
-        return {"added": added, "updated": updated, "unchanged": unchanged}
+        return {"added": added, "updated": updated, "unchanged": unchanged}, prewarm
 
 
 library_scan_service = LibraryScanService()

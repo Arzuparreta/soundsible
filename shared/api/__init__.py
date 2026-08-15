@@ -64,7 +64,6 @@ from shared.url_utils import normalize_youtube_url
 from shared.security import is_trusted_network, is_safe_path  # noqa: F401
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, apply_security_headers, get_request_auth_context
 from shared.telemetry import init_telemetry
-from shared.database import DatabaseManager
 
 from .download_queue import DownloadQueueManager, parse_intake_item  # noqa: F401  # re-export
 from .errors import register_error_handlers
@@ -1236,7 +1235,7 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
     track.metadata_modified_by_user = True
     lib._save_metadata()
     _mirror_track_into_odst_downloader(track)
-    emit_to_user('library_updated')
+    emit_to_user('library_updated', payload={'cover_changed': cover_source is not None})
     return True
 
 
@@ -1572,10 +1571,11 @@ def health_check():
 
     # Your own library counts, once we know who you are.
     try:
+        from shared.database import user_db
         from shared.user_context import current_user_id
 
         if current_user_id():
-            payload["library"] = DatabaseManager().get_stats()
+            payload["library"] = user_db().get_stats()
     except Exception:
         logger.debug("Health: failed to collect library stats", exc_info=True)
 
