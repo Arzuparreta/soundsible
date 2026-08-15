@@ -51,10 +51,10 @@ def runtime(tmp_path):
 
 
 class _FakeResponse:
-    def __init__(self, data: bytes, content_type: str = "audio/webm"):
+    def __init__(self, data: bytes, content_type: str = "audio/webm", status_code: int = 200):
         self._data = data
         self.headers = {"Content-Length": str(len(data)), "Content-Type": content_type}
-        self.status_code = 200
+        self.status_code = status_code
 
     def raise_for_status(self):
         return None
@@ -168,6 +168,26 @@ def test_download_to_cache_respects_upstream_backoff(runtime, monkeypatch):
     )
 
     preview_cache._download_to_cache(VID, "http://example.invalid/stream")
+
+
+def test_retire_upstream_session_forces_a_new_session(runtime):
+    """A retired session must never be handed out again."""
+    first = preview_cache.upstream_session()
+    preview_cache.retire_upstream_session()
+    second = preview_cache.upstream_session()
+    assert second is not first
+
+
+def test_download_once_retires_the_session_on_403(runtime, monkeypatch):
+    """A 403 must poison neither the URL nor the pooled session forever."""
+    retired = []
+    monkeypatch.setattr(preview_cache, "retire_upstream_session", lambda: retired.append(True))
+    _patch_upstream(monkeypatch, lambda url, **kwargs: _FakeResponse(b"", status_code=403))
+
+    with pytest.raises(preview_cache.PreviewUpstreamRejected):
+        preview_cache._download_once(VID, "http://example.invalid/stream")
+
+    assert retired == [True]
 
 
 def test_concurrent_playback_and_prefetch_share_one_whole_file_download(runtime, monkeypatch):

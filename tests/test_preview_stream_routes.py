@@ -248,12 +248,17 @@ def test_fresh_url_rejection_opens_station_backoff(tmp_path, monkeypatch):
         return _FakeUpstream(b"", "audio/mp4", status_code=403)
 
     _patch_upstream(monkeypatch, fake_get)
+    retired = []
+    monkeypatch.setattr(preview_cache, "retire_upstream_session", lambda: retired.append(True))
 
     response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
 
     assert response.status_code == 503
     assert int(response.headers["Retry-After"]) > 0
     assert calls == ["http://upstream.invalid/stale", "http://upstream.invalid/fresh"]
+    # Every 403, not just the terminal one, must retire the pooled session —
+    # otherwise a flagged session keeps failing forever, backoff or not.
+    assert retired == [True, True]
 
     calls.clear()
     response = _make_app().test_client().get(f"/api/preview/stream/{VID}")

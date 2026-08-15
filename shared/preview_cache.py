@@ -116,6 +116,28 @@ def upstream_session() -> requests.Session:
     return _session
 
 
+def retire_upstream_session() -> None:
+    """Drop the pooled session so the next fetch rides a clean jar.
+
+    googlevideo's abuse system flags sessions, not just URLs: a 403/410
+    plants a marker back into the session's cookie jar, so every later
+    request on that same pooled session identifies itself as flagged no
+    matter how fresh the signed URL is. Re-resolving the URL alone can never
+    win that fight — only a new session does.
+    """
+    global _session
+    with _session_lock:
+        stale = _session
+        _session = None
+    if stale is not None:
+        cookie_names = sorted(stale.cookies.keys())
+        stale.close()
+        logger.warning(
+            "[PreviewCache] Retired upstream session after rejection (cookies: %s)",
+            ", ".join(cookie_names) or "none",
+        )
+
+
 def upstream_backoff_remaining(*, now: Optional[float] = None) -> int:
     """Whole seconds before another googlevideo request is allowed."""
     current = time.monotonic() if now is None else now
@@ -390,6 +412,7 @@ def _download_once(
             headers={"Range": "bytes=0-"},
         ) as resp:
             if resp.status_code in (403, 410):
+                retire_upstream_session()
                 raise PreviewUpstreamRejected(resp.status_code)
             resp.raise_for_status()
             raw_len = resp.headers.get("Content-Length")
