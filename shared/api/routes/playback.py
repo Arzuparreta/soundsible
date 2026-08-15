@@ -440,6 +440,8 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
             proxies=stream.requests_proxies(),
         )
         ttfb_ms = round((time.monotonic() - upstream_started) * 1000)
+        if response.status_code in {403, 410}:
+            preview_cache.retire_upstream_session()
         if response.status_code not in {403, 410} or attempt == 1:
             if response.status_code in {403, 410}:
                 preview_cache.open_upstream_backoff(video_id, response.status_code)
