@@ -27,7 +27,7 @@ ARG SOUNDSIBLE_VERSION=
 ARG VCS_REF=unknown
 
 LABEL org.opencontainers.image.title="Soundsible" \
-      org.opencontainers.image.description="Private, self-hosted music streaming server" \
+      org.opencontainers.image.description="Self-hosted music service with catalog search, acquisition, local discovery, and Auto DJ mixing" \
       org.opencontainers.image.source="https://github.com/Arzuparreta/soundsible" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.version="${SOUNDSIBLE_VERSION}" \

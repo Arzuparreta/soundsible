@@ -9,9 +9,9 @@ below, because each one depends on the one before it.
 ## What Soundsible is
 
 Most self-hosted music tools solved *serving* music and never solved *getting*
-it. Navidrome plays a library you already have. Lidarr fetches whole albums when
-people listen to songs. Between "I heard this track" and "it is in my library,
-tagged, on every device" there is a gap that everyone crosses by hand.
+it. Navidrome is excellent at playing a library you already have. Lidarr fetches
+whole albums. Between "I heard this track" and "it is in my library, tagged, on
+every device" there is a gap that people still cross with several tools.
 
 Soundsible closes that gap:
 
@@ -20,18 +20,17 @@ Soundsible closes that gap:
 
 Search reaches your library, Deezer, MusicBrainz and YouTube at once and returns
 one ranked list. Saving something resolves it, scores the match, downloads it,
-tags it and adds it. Auto Mode then plays it as a mixed set rather than a
-shuffled queue.
+tags it and adds it. [Auto Mode](AUTO_MODE.md) then plays it as an editable,
+analysis-driven DJ set rather than a shuffled queue.
 
 ## Where it is going
 
 ### Serve any client, not just ours
 
-Soundsible has exactly one client today: its own player. Speaking the
-**OpenSubsonic API** makes it work with the clients that already exist —
-Symfonium, Feishin, DSub, Amperfy, Tempo, play:Sub and the rest — which is also
-how it gets offline mobile playback, Android Auto and a watch app without
-writing any of them.
+Soundsible has its own responsive player, desktop beta, and native iOS client.
+It also speaks the **OpenSubsonic API**, so Symfonium, Feishin, DSub, Amperfy,
+Tempo, play:Sub and the rest can use the same library — including their offline,
+Android Auto, CarPlay, and watch surfaces where supported.
 
 That needs a real library schema first: first-class album and artist tables,
 disc numbers, compilations, multiple artists per track, play counts, ratings and
@@ -71,7 +70,8 @@ The catalog depends on yt-dlp working against YouTube, and YouTube changes.
 
 ### Sharpen what is already unique
 
-- [ ] Auto Mode out of beta, and documented properly
+- [x] Auto Mode documented as the product's two-deck, editable DJ workflow
+- [ ] Auto Mode out of beta
 - [ ] Live becomes explicitly opt-in, with self-hosting the relay documented
 - [ ] Federated Live relays
 
