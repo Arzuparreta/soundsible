@@ -14,7 +14,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
   const navigate = useNavigate();
   const bg = (a: ArtistEntry): JSX.CSSProperties => ({
-    background: coverBackground(a.name, coverUrl(a.coverId)),
+    background: coverBackground(a.name, coverUrl(a.coverId, 'thumb')),
   });
   return (
     <div class={styles.grid}>

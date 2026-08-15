@@ -69,3 +69,20 @@ def test_library_request_does_not_rebuild_managers(client, db_budget):
     assert db_budget["connect"] <= 2, (
         f"one request opened {db_budget['connect']} connections"
     )
+
+
+def test_many_requests_do_not_grow_connections_unboundedly(client, db_budget):
+    """The incident this budget was widened for: a connection cached per
+    calling thread forever is, under gevent's per-request greenlet, a
+    connection leaked per request. 25 sequential requests should settle into
+    reusing a small, bounded set of pooled connections — not open a new one
+    each time. See `shared.database.ConnectionPool`."""
+    for _ in range(25):
+        response = client.get("/api/health")
+        assert response.status_code == 200
+
+    # Generous ceiling: what matters is "bounded", not a specific small
+    # number — 25 requests must not have opened 25 connections.
+    assert db_budget["connect"] <= 4, (
+        f"25 requests opened {db_budget['connect']} connections"
+    )

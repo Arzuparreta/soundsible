@@ -799,7 +799,7 @@ function LibraryView(props: {
                 <NavigationRow
                   title={row.name}
                   subtitle={t('library.artistTrackCount', { count: row.count })}
-                  cover={coverUrl(row.coverId)}
+                  cover={coverUrl(row.coverId, 'thumb')}
                   round
                   onClick={() => props.onArtist(row.name)}
                 />
@@ -878,7 +878,7 @@ function LocalSearchView(props: {
       </ViewHeader>
       <For each={props.results}>
         {(result) => result.kind === 'artist'
-          ? <NavigationRow title={result.artist.name} subtitle={t('library.artistTrackCount', { count: result.artist.count })} cover={coverUrl(result.artist.coverId)} round onClick={() => props.onArtist(result.artist.name)} />
+          ? <NavigationRow title={result.artist.name} subtitle={t('library.artistTrackCount', { count: result.artist.count })} cover={coverUrl(result.artist.coverId, 'thumb')} round onClick={() => props.onArtist(result.artist.name)} />
           : props.renderTrack(result.track, () => actions.playFrom(
               tracks(),
               Math.max(0, tracks().findIndex((track) => track.id === result.track.id)),
@@ -908,7 +908,7 @@ function PlaylistsView(props: {
         {(name) => {
           const ids = () => state.playlists[name] ?? [];
           const coverId = () => pickPlaylistCoverId(name, ids(), props.byId, state.librarySettings);
-          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={coverId() ? coverUrl(coverId()!) : undefined} onClick={() => props.onOpen(name)} />;
+          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={coverId() ? coverUrl(coverId()!, 'thumb') : undefined} onClick={() => props.onOpen(name)} />;
         }}
       </For>
     </div>
@@ -1005,7 +1005,7 @@ function GlobalSearchView(props: {
       <BrowserTrackRow
         title={item.title}
         subtitle={item.subtitle || itemArtist(item)}
-        cover={item.cover || (item.track_id ? coverUrl(item.track_id) : undefined)}
+        cover={item.cover || (item.track_id ? coverUrl(item.track_id, 'thumb') : undefined)}
         seed={item.id}
         active={isPlayingItem(item)}
         queued={isQueuedItem(item)}
