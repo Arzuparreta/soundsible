@@ -169,6 +169,16 @@ class ConnectionPool:
     def release(self, conn) -> None:
         self._idle.put(conn)
 
+    def stats(self) -> dict:
+        """Point-in-time view for `/api/health`: how close this pool is to
+        exhaustion. `created == max_size and idle == 0` means the next
+        `acquire()` blocks for `_POOL_ACQUIRE_TIMEOUT_SEC` and then raises."""
+        return {
+            "created": self._created,
+            "idle": self._idle.qsize(),
+            "max_size": self._max_size,
+        }
+
 
 class DatabaseManager:
     def __init__(self, db_path: Optional[str] = None):
@@ -207,6 +217,11 @@ class DatabaseManager:
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
+
+    def pool_stats(self) -> dict:
+        """See `ConnectionPool.stats` — used by `/api/health` to detect a
+        connection leak before it hits every request as a `TimeoutError`."""
+        return self._pool.stats()
 
     def _get_connection(self):
         """This thread's connection to the database, borrowed from the pool.

@@ -241,3 +241,31 @@ def test_runner_auto_downloads_only_high_confidence_and_stops_for_review(tmp_pat
     assert by_key["apple_music:a"]["state"] == "completed"
     assert by_key["apple_music:b"]["state"] == "needs_review"
     runner._download.assert_called_once()
+
+
+def test_store_closes_every_connection_it_opens(tmp_path):
+    """`with sqlite3.connect(...) as conn:` only commits or rolls back — it
+    never closes. Same bug class as `LosslessStore`; fixed the same way."""
+    import sqlite3
+
+    store = MigrationStore(tmp_path / "migration.sqlite3")
+    opened = []
+    real_connect = sqlite3.connect
+
+    def tracking_connect(*args, **kwargs):
+        conn = real_connect(*args, **kwargs)
+        opened.append(conn)
+        return conn
+
+    with patch("shared.migration.store.sqlite3.connect", side_effect=tracking_connect):
+        store.list_jobs()
+
+    assert opened, "test didn't actually exercise sqlite3.connect"
+    still_open = []
+    for conn in opened:
+        try:
+            conn.execute("SELECT 1")
+            still_open.append(conn)
+        except Exception:
+            pass
+    assert not still_open, f"{len(still_open)} of {len(opened)} connections were never closed"

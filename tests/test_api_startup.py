@@ -119,3 +119,26 @@ def test_a_clean_start_reports_healthy(started_api):
     body = api_app.test_client().get("/api/health").get_json()
     assert body["status"] == "healthy"
     assert "degraded_reason" not in body
+
+
+def test_health_reports_degraded_once_the_db_pool_is_actually_exhausted(isolated_runtime):
+    """Before this, `/api/health` only reflected a boot-time flag: a pool
+    silently drained by a connection leak (the incident this guards against)
+    still reported "healthy" for as long as the process stayed up, which is
+    exactly why the leak went unnoticed for days."""
+    from shared.database import instance_db
+
+    pool = instance_db()._pool
+    # Building the manager itself already pins one connection to this thread
+    # (see DatabaseManager._get_connection) — top the rest of the way up.
+    remaining = pool._max_size - pool.stats()["created"]
+    held = [pool.acquire() for _ in range(remaining)]
+    try:
+        body = api_app.test_client().get("/api/health").get_json()
+        assert body["status"] == "degraded"
+        assert body["degraded_reason"] == "database connection pool exhausted"
+        assert body["db_pool"]["created"] == pool._max_size
+        assert body["db_pool"]["idle"] == 0
+    finally:
+        for conn in held:
+            pool.release(conn)

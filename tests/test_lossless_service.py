@@ -78,6 +78,50 @@ def test_store_persists_queue_cache_and_daily_budget(tmp_path):
     }
 
 
+def test_store_closes_every_connection_it_opens(tmp_path, monkeypatch):
+    """`with sqlite3.connect(...) as conn:` only commits or rolls back — it
+    never closes. Every LosslessStore method used to leak one open connection
+    per call, forever, driven by the always-on idle-scheduler thread and by
+    `/api/lossless/status` polling. Each call here must close what it opens."""
+    import sqlite3
+
+    store = LosslessStore(tmp_path / "instance.db")
+    opened = []
+    real_connect = sqlite3.connect
+
+    def tracking_connect(*args, **kwargs):
+        conn = real_connect(*args, **kwargs)
+        opened.append(conn)
+        return conn
+
+    monkeypatch.setattr("shared.lossless.store.sqlite3.connect", tracking_connect)
+
+    store.enqueue("a", "youtube")
+    store.next_ready()
+    store.ready_count()
+    store.update("a", "pending", attempts=1)
+    store.get("a")
+    store.cache_put("a", "jamendo", [1], 60)
+    store.cache_get("a", "jamendo")
+    store.budget("2026-07-30")
+    store.add_budget("2026-07-30", tracks=1)
+    store.summary()
+    store.requeue_all()
+    store.recover_interrupted()
+
+    assert opened, "test didn't actually exercise sqlite3.connect"
+    still_open = [c for c in opened if not _sqlite_conn_is_closed(c)]
+    assert not still_open, f"{len(still_open)} of {len(opened)} connections were never closed"
+
+
+def _sqlite_conn_is_closed(conn) -> bool:
+    try:
+        conn.execute("SELECT 1")
+        return False
+    except Exception:
+        return True
+
+
 def test_worker_never_contacts_provider_while_foreground_is_busy(tmp_path, monkeypatch):
     monkeypatch.setenv("SOUNDSIBLE_LOSSLESS_UPGRADES", "true")
     audio = tmp_path / "song.m4a"

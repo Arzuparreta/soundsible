@@ -371,26 +371,31 @@ def _join_user_room_for_socket() -> None:
 def on_socket_connect(auth=None):
     from shared.users import instance_requires_login
 
-    runtime = get_runtime_config()
-    remote_addr = request.remote_addr or ""
-    context = get_request_auth_context(allow_trusted_network=True)
+    # Socket.IO events never pass through Flask's before_request/teardown_request,
+    # so without an explicit scope any DB connection acquired below (auth context,
+    # instance_requires_login) would never be returned to the pool — see
+    # request_scope.on_end.
+    with request_scope.request_scope():
+        runtime = get_runtime_config()
+        remote_addr = request.remote_addr or ""
+        context = get_request_auth_context(allow_trusted_network=True)
 
-    if context and (context.get("kind") == "owner" or SCOPE_PLAYBACK_CONTROL in set(context.get("scopes") or [])):
-        _join_user_room_for_socket()
-        return True
-
-    # Once the instance has accounts, a local or LAN address proves nothing
-    # about who is connecting — the socket carries library events.
-    if not instance_requires_login():
-        if runtime.advanced_mode:
-            _join_user_room_for_socket()
-            return True
-        if remote_addr in {"127.0.0.1", "::1"} and not runtime.lan_enabled:
+        if context and (context.get("kind") == "owner" or SCOPE_PLAYBACK_CONTROL in set(context.get("scopes") or [])):
             _join_user_room_for_socket()
             return True
 
-    logger.warning("Socket.IO connect denied for remote=%s origin=%s", remote_addr, request.headers.get("Origin"))
-    return False
+        # Once the instance has accounts, a local or LAN address proves nothing
+        # about who is connecting — the socket carries library events.
+        if not instance_requires_login():
+            if runtime.advanced_mode:
+                _join_user_room_for_socket()
+                return True
+            if remote_addr in {"127.0.0.1", "::1"} and not runtime.lan_enabled:
+                _join_user_room_for_socket()
+                return True
+
+        logger.warning("Socket.IO connect denied for remote=%s origin=%s", remote_addr, request.headers.get("Origin"))
+        return False
 
 
 @socketio.on("disconnect")
@@ -1568,6 +1573,22 @@ def health_check():
         # the exception text carries file paths and class names, and this route
         # answers before anyone has proved who they are.
         payload["degraded_reason"] = "core initialization failed"
+
+    # The instance DB pool is shared by every request (auth runs before all of
+    # them) — a leak elsewhere silently drains it over hours until it's flagged
+    # here, instead of this endpoint reporting "healthy" the whole time while
+    # every request stalls 10s and then fails. No server paths or account data
+    # in these numbers, so this is safe in the anonymous payload too.
+    try:
+        from shared.database import instance_db
+
+        pool = instance_db().pool_stats()
+        payload["db_pool"] = pool
+        if pool["created"] >= pool["max_size"] and pool["idle"] == 0:
+            payload["status"] = "degraded"
+            payload.setdefault("degraded_reason", "database connection pool exhausted")
+    except Exception:
+        logger.debug("Health: failed to collect db pool stats", exc_info=True)
 
     # Your own library counts, once we know who you are.
     try:

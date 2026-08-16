@@ -6,6 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, Future
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
+from shared import request_scope
+
 logger = logging.getLogger(__name__)
 
 
@@ -219,7 +221,11 @@ class JobOrchestrator:
                 self.commit_timer.cancel()
 
             def _do_commit():
-                with self.commit_lock:
+                # Fires from a bare threading.Timer thread, outside any Flask
+                # request — without an explicit scope, any DB connection
+                # commit_func() acquires would never be returned to the pool
+                # (see request_scope.on_end).
+                with request_scope.request_scope(), self.commit_lock:
                     logger.info("Orchestrator: Executing coalesced metadata commit...")
                     try:
                         commit_func()
