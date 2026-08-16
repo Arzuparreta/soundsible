@@ -6,8 +6,9 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 from shared.migration.models import MigrationManifest
 from shared.user_context import user_data_dir
@@ -52,12 +53,25 @@ class MigrationStore:
         self._lock = threading.RLock()
         self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        # A raw sqlite3.Connection's own __enter__/__exit__ only commits or
+        # rolls back — it never closes. Every call site does
+        # `with self._connect() as db:`, so without this wrapper each call
+        # leaked one open connection/fd forever; this replicates the
+        # commit/rollback behavior and then closes.
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA foreign_keys=ON")
-        return connection
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def _init_schema(self) -> None:
         with self._lock, self._connect() as db:

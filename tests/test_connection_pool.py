@@ -81,6 +81,24 @@ def test_exhausted_pool_raises_instead_of_hanging_forever():
         pool.release(held)
 
 
+def test_stats_reports_created_idle_and_max_size():
+    """`/api/health` reads this to flag a drained pool before every request
+    starts stalling on it — see the `db_pool` block in `health_check`."""
+    factory, _ = _counting_factory()
+    pool = ConnectionPool(factory, max_size=3)
+
+    assert pool.stats() == {"created": 0, "idle": 0, "max_size": 3}
+
+    a = pool.acquire()
+    b = pool.acquire()
+    assert pool.stats() == {"created": 2, "idle": 0, "max_size": 3}
+
+    pool.release(a)
+    assert pool.stats() == {"created": 2, "idle": 1, "max_size": 3}
+
+    pool.release(b)
+
+
 def test_released_connection_is_available_to_a_different_thread():
     """Connections move between callers via the pool now, not just within one
     thread's cache — this is what `check_same_thread=False` exists for."""

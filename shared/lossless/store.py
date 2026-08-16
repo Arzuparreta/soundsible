@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from shared.database import BUSY_TIMEOUT_MS, INSTANCE_DB_FILENAME
 from shared.runtime import get_config_dir
@@ -16,13 +17,26 @@ class LosslessStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
-    def _connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        # A raw sqlite3.Connection's own __enter__/__exit__ only commits or
+        # rolls back the transaction — it never closes the connection. Every
+        # call site here does `with self._connection() as conn:`, so without
+        # this wrapper each call leaked one open connection/fd forever; this
+        # replicates that same commit/rollback behavior and then closes.
         conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_MS / 1000)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
-        return conn
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init(self) -> None:
         with self._connection() as conn:
