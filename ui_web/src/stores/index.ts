@@ -142,6 +142,9 @@ interface PlaybackAttempt {
    */
   seekRebufferCount: number;
   seekPending: boolean;
+  /** Times this attempt's stall timer found the deck still fetching and waited
+   * again instead of reloading it. See `scheduleStallRecovery`. */
+  stallReprieves: number;
   recoveryCount: number;
   reportedRecoveryCount: number;
   concluded: boolean;
@@ -150,8 +153,14 @@ interface PlaybackAttempt {
 
 const STALL_RECOVERY_MS = 3000;
 const STARTUP_RECOVERY_MS = 12000;
+/** How many times a startup that is still fetching may be given another
+ * interval before it is treated as dead anyway. Bounded so a link slow enough
+ * to never finish still fails visibly rather than spinning forever. */
+const MAX_PROGRESS_REPRIEVES = 3;
 let activeAttempt: PlaybackAttempt | null = null;
 let stallRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+/** What the deck had buffered when the current stall timer was armed. */
+let stallBufferedEnd = 0;
 
 function playbackSourceKind(track: Track): PlaybackSourceKind {
   if (isPodcastTrack(track)) return 'podcast';
@@ -395,6 +404,7 @@ function createPlaybackAttempt(
     rebufferMs: 0,
     seekRebufferCount: 0,
     seekPending: false,
+    stallReprieves: 0,
     recoveryCount: 0,
     reportedRecoveryCount: 0,
     concluded: false,
@@ -783,9 +793,22 @@ function scheduleStallRecovery(delayMs = STALL_RECOVERY_MS): void {
   // stalled is a phone in a pocket, and recovery is the only way the music comes
   // back on its own — refusing to try there is what ended drives in silence.
   if (document.visibilityState === 'hidden' && attempt.audibleAt == null) return;
+  const bufferedAtArm = audioService.bufferedEnd();
+  stallBufferedEnd = bufferedAtArm;
   stallRecoveryTimer = setTimeout(() => {
     stallRecoveryTimer = null;
     if (activeAttempt !== attempt || state.playback.phase !== 'buffering') return;
+    // Recovery reloads the element, which drops every byte it has fetched and
+    // starts the track again from nothing. Worth it for a load that has died;
+    // ruinous for one that is merely slow — on a phone reaching the station
+    // over a relay, a reload at twelve seconds was what turned a long start
+    // into a much longer one. So: if the deck has buffered anything at all
+    // since this timer was armed, it is working, and it is given more time.
+    if (audioService.bufferedEnd() > stallBufferedEnd && attempt.stallReprieves < MAX_PROGRESS_REPRIEVES) {
+      attempt.stallReprieves += 1;
+      scheduleStallRecovery(delayMs);
+      return;
+    }
     if (!recoverCurrent('stall')) onPlaybackFailed(attempt.generation, 'stall');
   }, delayMs);
 }

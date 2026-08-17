@@ -1306,6 +1306,9 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
         track_dict = track.to_dict()
         track_dict.pop("local_path", None)
         stored = Track.from_dict(track_dict)
+        # A song already saved as a stream entered the library the day it was
+        # saved; the download only gave it a file. `add_track` stamps the rest.
+        stored.added_at = stored.added_at or _saved_added_at(stored, user_id=target)
         lib.metadata.add_track(stored)
         newly_added.append(stored)
         added += 1
@@ -1320,6 +1323,28 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
                     emit_to_user('favourites_updated', user_id=target)
         orchestrator.schedule_metadata_commit(lib._save_metadata, _emit_updated)
     return added
+
+
+def _saved_added_at(track, *, user_id: str) -> Optional[str]:
+    """The date this song was saved, if it was saved before it was downloaded.
+
+    Matched on the identities a not-yet-downloaded song can have: the video it
+    streams from, and — for a re-download of a track that was in the library
+    once — its library id.
+    """
+    from player.favourites_manager import library_key
+
+    keys = [library_key(track.id)] if track.id else []
+    video_id = getattr(track, "youtube_id", None)
+    if video_id:
+        keys.append(f"yt:{video_id}")
+    if not keys:
+        return None
+    try:
+        return get_favourites_manager(user_id).added_at_for_keys(keys)
+    except Exception as exc:  # pragma: no cover — favourites are never load-bearing
+        logger.debug("API: could not read the saved date for %s: %s", track.id, exc)
+        return None
 
 
 def _promote_favourites_to_library(tracks, *, user_id: str) -> int:

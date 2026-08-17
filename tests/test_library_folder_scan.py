@@ -1,4 +1,5 @@
 import json
+import os
 import wave
 from pathlib import Path
 from types import SimpleNamespace
@@ -104,6 +105,7 @@ def test_changed_file_rekeys_references_and_user_state(tmp_path):
     song = tmp_path / "song.mp3"
     song.write_bytes(b"new bytes")
     old = _track("old", song, mtime=1, size=3)
+    old.added_at = "2026-01-04T09:00:00"
     new = _track("new", song, mtime=song.stat().st_mtime_ns, size=song.stat().st_size)
     metadata = LibraryMetadata(
         1,
@@ -138,6 +140,35 @@ def test_changed_file_rekeys_references_and_user_state(tmp_path):
     assert restored.settings["playlist_covers"] == {"Mix": "new"}
     assert db.get_track_user_state("new")["rating"] == 5
     assert remapped == [("old", "new")]
+    # Re-keyed, not re-acquired: a rescan must not float a song you have owned
+    # for months to the top of "recently added".
+    assert restored.tracks[0].added_at == "2026-01-04T09:00:00"
+
+
+def test_a_scanned_collection_is_dated_from_its_own_files(tmp_path):
+    """A folder you already own is not music acquired the instant you point
+    Soundsible at it. Dating the whole scan "now" would flatten a collection
+    built over years into one afternoon."""
+    song = tmp_path / "old-song.mp3"
+    song.write_bytes(b"bytes")
+    when = 1751450527  # 2025-07-02
+    os.utime(song, (when, when))
+    scanned = _track("scanned", song, mtime=song.stat().st_mtime_ns, size=song.stat().st_size)
+    metadata = LibraryMetadata(1, [], {}, {})
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    db.replace_library(metadata)
+    core = SimpleNamespace(
+        library=SimpleNamespace(
+            db=db, metadata=metadata, _library_revision=1, _export_metadata=lambda _payload: None
+        ),
+        favourites=SimpleNamespace(remap_library_id=lambda old_id, new_id: None),
+    )
+
+    LibraryScanService._merge_result(
+        core, ScanResult(discovered=1, processed=1, files=[ScannedFile(str(song.resolve()), scanned)])
+    )
+
+    assert db.load_library_metadata().tracks[0].added_at.startswith("2025-07-02")
 
 
 def test_scanned_path_must_stay_inside_registered_root(tmp_path, monkeypatch):

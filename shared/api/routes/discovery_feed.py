@@ -331,6 +331,11 @@ def _cached_related_feed_candidates(
         for track in tracks
         if getattr(track, "youtube_id", None)
     }
+    # Newest first: a seed is a guess at what the listener is into now, and the
+    # songs they added most recently are the best one the library holds. Ordered
+    # by the day each joined rather than by manifest position, which a rescan or
+    # a re-keyed id can move.
+    newest_first = sorted(tracks, key=lambda track: track.added_at or "", reverse=True)
     seeds: list = []
     seen_seed_ids: set[str] = set()
 
@@ -346,11 +351,11 @@ def _cached_related_feed_candidates(
         if track:
             add_seed(track)
     for artist in rollup.recent_artists:
-        for track in reversed(tracks):
+        for track in newest_first:
             if str(track.artist or track.album_artist or "").strip().casefold() == artist:
                 add_seed(track)
                 break
-    for track in reversed(tracks):
+    for track in newest_first:
         add_seed(track)
         if len(seeds) >= 8:
             break

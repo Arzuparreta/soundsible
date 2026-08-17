@@ -80,6 +80,15 @@ class LibraryManager:
         self.user_config_dir = user_config_dir()
         self.manifest_path = self.user_config_dir / LIBRARY_METADATA_FILENAME
         self.db = DatabaseManager(str(self.user_config_dir / USER_DB_FILENAME))
+        # Before anything reads or writes this library. A track that predates
+        # `added_at` is dated from its own audio file here; let one save run
+        # first and every one of those rows would be stamped with the instant of
+        # that save instead, and the library would read as if it had been
+        # acquired in a single afternoon.
+        try:
+            self.db.backfill_added_at()
+        except Exception as exc:  # never block a library on a dating pass
+            self._log(f"Could not date pre-existing tracks: {exc}")
         self._library_revision = self.db.get_library_revision()
         self._lock = threading.Lock()
         # Paths whose write failed once (e.g. read-only music mount). Logged once,

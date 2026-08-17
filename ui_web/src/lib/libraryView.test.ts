@@ -12,10 +12,22 @@ const t = (id: string, over: Partial<Track> = {}): Track => ({
 describe('sortTracks', () => {
   const tracks = [t('1', { title: 'Banana' }), t('2', { title: 'apple' }), t('3', { title: 'Cherry' })];
 
-  it("'recent' reverses engine order (newest first) without mutating input", () => {
+  it("'recent' keeps the order the library was merged in, without mutating input", () => {
+    // `musicLibrary()` has already interleaved files and saved songs by date;
+    // re-deciding it here would be a second answer to the same question.
     const out = sortTracks(tracks, 'recent', new Set());
-    expect(out.map((x) => x.id)).toEqual(['3', '2', '1']);
-    expect(tracks.map((x) => x.id)).toEqual(['1', '2', '3']); // original untouched
+    expect(out.map((x) => x.id)).toEqual(['1', '2', '3']);
+    expect(out).not.toBe(tracks); // a copy, so callers can sort it further
+  });
+
+  it("'az' and 'fav' fall back to recency, not to some other order", () => {
+    const dated = [
+      t('older', { title: 'Same', added_at: '2026-07-01T00:00:00' }),
+      t('newer', { title: 'Same', added_at: '2026-08-01T00:00:00' }),
+    ];
+    // Already newest-first when it arrives; a stable sort keeps it that way.
+    const recent = sortTracks(dated.slice().reverse(), 'az', new Set());
+    expect(recent.map((x) => x.id)).toEqual(['newer', 'older']);
   });
 
   it("'az' sorts by title, case-insensitively", () => {

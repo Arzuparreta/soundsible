@@ -180,6 +180,9 @@ async function loadStore(
     stop: vi.fn(),
     resume: vi.fn().mockResolvedValue(undefined),
     seek: vi.fn(),
+    // A deck holding nothing: the default is a load that is not progressing, so
+    // stall recovery behaves as it did before it learned to wait for one.
+    bufferedEnd: vi.fn(() => 0),
     setVolume: vi.fn(),
     setMuted: vi.fn(),
     getVolume: vi.fn(() => 1),
@@ -1959,35 +1962,35 @@ describe('Solid store favourites', () => {
     });
 
     await actions.syncLibrary();
-    // Browsable exactly like a file, which is the point of saving it. Files
-    // last, because `sortTracks` reverses this list for "recent" and a reversed
-    // concatenation swaps the blocks — see the memo's own note.
-    expect(musicLibrary().map((t) => t.id)).toEqual(['dQw4w9WgXcQ', 't1']);
+    // Browsable exactly like a file, which is the point of saving it. Undated
+    // on both sides here, so the list keeps the order it was built in: files
+    // newest-first, then the songs that only stream.
+    expect(musicLibrary().map((t) => t.id)).toEqual(['t1', 'dQw4w9WgXcQ']);
 
     // The download lands: the same song, now as its file — listed once, not
-    // twice. No streaming rows left, so the files keep the engine's order.
+    // twice.
     await actions.syncLibrary();
-    expect(musicLibrary().map((t) => t.id)).toEqual(['t1', 'hash9f2a']);
+    expect(musicLibrary().map((t) => t.id)).toEqual(['hash9f2a', 't1']);
   });
 
-  it('puts a finished download at the top of "recent", not under every old save', async () => {
-    // The bug this pins: with the blocks the other way round, every song ever
-    // saved and never downloaded sat above every file. In the library it was
-    // found in that was 72 saves, so a track downloaded a minute earlier opened
-    // at position 73 and read as missing.
-    const older = { id: 'old-file', title: 'Downloaded days ago', artist: 'A' };
-    const justDownloaded = { id: 'new-file', title: 'Downloaded a minute ago', artist: 'B' };
+  it('orders "recent" by the day each song joined, file or stream', async () => {
+    // The bug this pins: with no dates, the library could only be ordered by
+    // which list a song was in, so every file outranked every save. The station
+    // this was found on had its newest download on 5 August and 137 songs saved
+    // after it, and the songs tab opened on that download for twelve days.
+    const older = { id: 'old-file', title: 'Downloaded in July', artist: 'A', added_at: '2026-07-02T10:00:00' };
+    const newer = { id: 'new-file', title: 'Downloaded in August', artist: 'B', added_at: '2026-08-05T00:52:05' };
     const { actions, musicLibrary } = await loadStore({
       getLibrary: vi.fn().mockResolvedValue({
         // The engine appends, so the newest file is last.
-        tracks: [older, justDownloaded],
+        tracks: [older, newer],
         playlists: {},
         settings: {},
         podcast_subscriptions: [],
       }),
       getSaved: vi.fn().mockResolvedValue([
-        { keys: ['yt:aaaaaaaaaaa'], title: 'Saved weeks ago', artist: 'C' },
-        { keys: ['yt:bbbbbbbbbbb'], title: 'Saved weeks ago too', artist: 'D' },
+        { keys: ['yt:aaaaaaaaaaa'], title: 'Saved today', artist: 'C', added_at: '2026-08-17T10:06:52' },
+        { keys: ['yt:bbbbbbbbbbb'], title: 'Saved in June', artist: 'D', added_at: '2026-06-01T09:00:00' },
       ]),
     });
 
@@ -1996,8 +1999,9 @@ describe('Solid store favourites', () => {
     const { sortTracks } = await import('../lib/libraryView');
     const shown = sortTracks(musicLibrary(), 'recent', new Set()).map((t) => t.id);
 
-    expect(shown[0]).toBe('new-file');
-    expect(shown.slice(0, 2)).toEqual(['new-file', 'old-file']);
+    // A song saved today opens the library; a song saved in June sits below a
+    // file downloaded in July. Neither could happen before.
+    expect(shown).toEqual(['aaaaaaaaaaa', 'new-file', 'old-file', 'bbbbbbbbbbb']);
   });
 
   it('reverts the optimistic save when the engine rejects it', async () => {
@@ -2641,6 +2645,33 @@ describe('playback delivery telemetry', () => {
     const [delivery] = rowsFor(api, 'ui_play_delivery');
     expect(delivery.segments.rebuffer_count).toBe(0);
     expect(delivery.segments.seek_rebuffer_count).toBe(1);
+  });
+
+  it('waits on a cold start that is still fetching instead of reloading it', async () => {
+    // Recovery reloads the element, which drops everything it has fetched. On a
+    // phone reaching the station over a relay, a start that needed twenty
+    // seconds was reloaded at twelve and had to begin again — the reload was
+    // most of the wait it was meant to cure.
+    vi.useFakeTimers();
+    try {
+      let buffered = 0;
+      const { actions, audioService, initStore, fireDeckEvent } = await loadStore({}, {
+        bufferedEnd: vi.fn(() => buffered),
+      });
+      initStore();
+
+      actions.playFrom([t1, t2], 0);
+      fireDeckEvent('waiting');
+      buffered = 3; // the deck is filling, just slowly
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(audioService.recover).not.toHaveBeenCalled();
+
+      // Still nothing new by the next deadline: the load really is dead.
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(audioService.recover).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reports a play that never made a sound as an attempt, not as a delivery', async () => {

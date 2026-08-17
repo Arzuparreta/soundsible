@@ -633,9 +633,10 @@ def _playable_path(track) -> str:
 def _send_original(track, path: str) -> Response:
     suffix = os.path.splitext(path)[1].lower().lstrip(".")
     mimetype = _AUDIO_MIMETYPES.get(suffix) or _mimetypes.guess_type(path)[0] or "audio/mpeg"
-    # The same narrowing `/api/static/stream` applies: a client opening with
-    # `bytes=0-` gets a chunk and a real Content-Range, not the whole file in
-    # one response.
+    # The same narrowing `/api/static/stream` applies: a client asking for
+    # everything from an offset — open-ended or closed to the end of the file,
+    # which is how WebKit asks — gets a chunk and a real Content-Range, not the
+    # whole file in one response.
     bound_open_range(
         request.environ,
         total_bytes=os.path.getsize(path),

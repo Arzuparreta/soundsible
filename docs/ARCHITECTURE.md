@@ -100,6 +100,8 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 
 **Library path**: `player/library.py` loads each account's canonical **`library.db`** and **`~/.config/soundsible/config.json`** for `PlayerConfig`; it can also use storage providers from `setup_tool/` for cloud-backed exports. One SQLite transaction stores the complete library snapshot: ordered tracks and playlists, settings, podcast state, normalized `artists`/`albums`/`track_artists`, and `track_user_state`. Entity IDs are deterministic and albums include their album artist, so unrelated records with the same title do not collapse. After that transaction commits, Soundsible atomically refreshes `library.json` as a portable export; an export failure does not roll back the library.
 
+Each track carries **`added_at`**, the day the song joined *this* library — set by every acquisition path, carried across a re-keyed id, and never rewritten once stored. It is what "recently added" means in the player, in `getAlbumList2`'s `newest`, and in a Subsonic album's `created`. A library from before the column existed is dated once, on open, from each file's own mtime, falling back to its position in the manifest for a file that cannot be reached; `last_updated` is deliberately not used, because every row carries the instant of the last rewrite. The player merges files with saved-but-not-downloaded songs on this one field, which is the only way a library that holds both can be ordered by anything but which list a song happens to be in.
+
 `POST /api/library/scan` queues an account-scoped scan on the orchestrator's
 disk-limited background lane. It reads the configured music roots in place and
 merges its delta against the newest SQLite revision under the serialized

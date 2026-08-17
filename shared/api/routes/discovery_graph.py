@@ -305,8 +305,10 @@ def _top_warm_seed_ids(limit: int = _WARM_TOP_N) -> list[str]:
     # taste signal; recent additions are the most likely current picks.
     fav_tracks = [t for t in tracks if t.id in fav_ids]
     non_fav = [t for t in tracks if t.id not in fav_ids]
-    # Note: metadata.tracks is oldest → newest; reverse for recency.
-    non_fav.reverse()
+    # Newest first by the date each song joined the library. The manifest is
+    # stored oldest → newest, but a rescan or a re-keyed id can move a row
+    # within it, and `added_at` is the field that actually answers "recent".
+    non_fav.sort(key=lambda t: t.added_at or "", reverse=True)
     picked: list[str] = []
     seen: set[str] = set()
     for t in fav_tracks:

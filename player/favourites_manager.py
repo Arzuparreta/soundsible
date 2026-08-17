@@ -180,6 +180,19 @@ class FavouritesManager:
                 if entry is not None
             )
 
+    def added_at_for_keys(self, keys: Iterable[str]) -> Optional[str]:
+        """When the song behind these identities was saved, if it was.
+
+        Downloading a song you saved weeks ago gives it a file, not a place in
+        the library — it has had one all along. The library track adopts this
+        date so a download does not shuffle it back to the top of "recently
+        added", which is the same promise `savedToTrack` keeps on the client:
+        the entry is resolved at read time and no order is disturbed.
+        """
+        with self._lock:
+            entry = self._find(keys)
+            return (entry or {}).get("added_at")
+
     def update_keys(self, match_keys: Iterable[str], new_keys: Iterable[str]) -> bool:
         """
         Widen an existing entry with identities learned later — the video a

@@ -94,6 +94,13 @@ class Track:
     audio_source_url: Optional[str] = None
     audio_license_url: Optional[str] = None
     audio_identity_verified: bool = False
+    # When this song entered the library, as naive UTC ISO-8601. Not when the
+    # file was made, tagged or last touched: "recently added" is a question
+    # about the library, and every other timestamp on a track answers a
+    # different one. Optional because a library written before this field
+    # existed has none; the engine backfills those once, from the audio file's
+    # own mtime, rather than stamping them all with the moment of the upgrade.
+    added_at: Optional[str] = None
 
     @staticmethod
     def generate_id() -> str:
@@ -419,7 +426,16 @@ class LibraryMetadata:
         return self._lookup("file_hash", file_hash)
 
     def add_track(self, track: Track) -> None:
-        """Add a track to the library."""
+        """Add a track to the library, dating it if the caller has not.
+
+        Every way of acquiring music arrives here — a download, a migration
+        import, a shared track, the ODST tool — so this is where a song learns
+        when it joined. A caller that already knows better (a folder scan
+        reading a file's mtime, a download promoting a song saved weeks ago)
+        sets `added_at` first and is left alone.
+        """
+        if not track.added_at:
+            track.added_at = utc_now_iso_naive()
         self.tracks.append(track)
         self._indexes = None
         self.last_updated = utc_now_iso_naive()

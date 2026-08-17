@@ -23,6 +23,7 @@ import {
   trackKeys,
   withLinkedKeys,
 } from '../lib/playbackIdentity';
+import { byRecency } from '../lib/libraryOrder';
 import { savedToTrack } from '../lib/saved';
 import { isMusicTrack } from '../lib/track';
 import { futureEntries } from '../lib/playbackQueue';
@@ -108,35 +109,32 @@ export const identity = createRoot(() => {
   );
   const favouriteRows = createMemo(() => savedRows().filter((row) => row.entry.favourite));
   /**
-   * The library as the user thinks of it: everything they have claimed.
+   * The library as the user thinks of it: everything they have claimed, newest
+   * first.
    *
-   * The songs with no file come first, then the files in the engine's own
-   * order. A saved song that has since been downloaded resolves to its library
-   * track and is dropped here rather than listed twice.
+   * A saved song that has since been downloaded resolves to its library track
+   * and appears once, as the file. Everything else — file or stream — is
+   * ordered by the day it joined, through the one comparator in
+   * `lib/libraryOrder.ts`.
    *
-   * The order matters because `sortTracks` reverses this whole list for
-   * "recent", and reversing a concatenation swaps the blocks:
-   * `reverse(a ++ b)` is `reverse(b) ++ reverse(a)`. Files last here means
-   * files first there, which is what "recent" has to mean the moment a
-   * download finishes — putting the streaming block first put every song the
-   * user had ever saved and not downloaded above every file, forever. With 72
-   * such saves a track downloaded a minute ago opened at position 73, below
-   * songs from weeks earlier, and read as missing.
+   * This used to be a concatenation whose block order was chosen so that
+   * reversing it in `sortTracks` put files first, because nothing but list
+   * position was known about when a song arrived. That meant every file
+   * outranked every save forever: a library whose newest download was a week
+   * old opened on that download and could not move, however much had been
+   * saved since. Both halves carry `added_at` now, so the question is answered
+   * rather than approximated.
    *
-   * This still is not a true recency order: a song saved just now sorts below
-   * every file. Merging the two properly needs a `date_added` on tracks —
-   * 150 of 197 files in the library this was found in carry no timestamp of
-   * any kind. That column is the first item of the library-schema work in
-   * docs/ROADMAP.md, and this ordering is what should be replaced once it
-   * exists.
+   * Each half is handed over newest-first so that a library the engine has not
+   * dated yet still comes out in the order it always did.
    */
   const libraryTracks = createMemo(() => {
-    const files = state.library.filter(isMusicTrack);
+    // The manifest is stored oldest → newest.
+    const files = state.library.filter(isMusicTrack).reverse();
     const streaming = savedRows()
       .filter((row) => row.track.source === 'preview' && isMusicTrack(row.track))
-      .map((row) => row.track)
-      .reverse();
-    return streaming.length === 0 ? files : [...streaming, ...files];
+      .map((row) => row.track);
+    return byRecency(streaming.length === 0 ? files : [...files, ...streaming]);
   });
   // The marked subset that lives on disk, by library id — what the surfaces
   // that only speak library ids (sort, radio seeds, Auto Mode) already expect.

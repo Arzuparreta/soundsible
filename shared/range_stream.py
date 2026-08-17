@@ -16,9 +16,23 @@ the next one. A dropped connection then costs one chunk instead of one song.
 The bytes are untouched. This is a slicing policy, not a transcoder — the same
 file is served, and walking the chunks back-to-back reassembles it byte for byte.
 
-Only *open-ended* ranges (`bytes=N-`) are bounded. An explicit `bytes=100-200` or
-a suffix `bytes=-1024` is answered exactly as asked: those are how an MP4 demuxer
-hunts for a `moov` atom at the end of the file, and shrinking one breaks playback.
+A request is narrowed when it asks for *everything from here on*, however it spells
+that: `bytes=N-`, or a closed `bytes=N-<end of file>`. The second spelling is not a
+detail. Every request in the captured iPhone sessions was the closed one — WebKit
+asks for everything from an offset to the last byte, and never `bytes=N-` — so for
+those listeners this module used to do nothing at all. Measured on one station's
+log: 1459 such requests promising 9.3 GB, not one of them reached. What that costs
+is visible in a single startup, an 11 MB track over a relayed link: 24 requests in
+28 seconds, each promising ten megabytes, each abandoned after a few tens of
+kilobytes, and because an abandoned response cannot be kept alive, each paying for
+a fresh connection. Bounded, the same track is six complete responses.
+
+A *small* closed range is still answered exactly as asked: those are how an MP4
+demuxer hunts for a `moov` atom, and shrinking one breaks playback. The line between
+the two is `WHOLE_FILE_SPAN_RATIO` plus the size of the chunk we would serve — a
+request has to want essentially all of what is left *and* comfortably more than one
+chunk of it before anything is narrowed. A suffix `bytes=-1024` is never touched: it
+is measured from the end of the file, so a shorter answer would be a different one.
 A request with no `Range` at all still gets the complete file under a 200, because
 an unsolicited 206 violates RFC 7233 and would break plain downloads.
 
@@ -86,10 +100,13 @@ _SUFFIX_RANGE_RE = re.compile(r"^\s*bytes\s*=\s*-\s*(\d+)\s*$")
 #: A closed range asking for at least this much of what is left of the file is a
 #: whole-file request wearing a different header, whatever the client believes it
 #: is doing. Below it, the request is a demuxer reading a specific structure and
-#: the size it asked for is the size it needs. The line is drawn for reporting
-#: only — nothing is narrowed on the strength of it — but it is the number that
-#: says how much of the traffic the current policy cannot reach.
+#: the size it asked for is the size it needs.
 WHOLE_FILE_SPAN_RATIO = 0.95
+
+#: How many chunks a closed range must be worth before it is narrowed. A request
+#: that already fits in about one chunk is answered as asked: shortening it would
+#: buy nothing and would turn one response into two.
+CLOSED_RANGE_CHUNK_MARGIN = 2
 
 #: What kind of `Range` header arrived. Recorded for every request.
 KIND_NONE = "none"
@@ -102,6 +119,10 @@ KIND_OTHER = "other"
 #: every `passthrough_*` answers the request exactly as it arrived, and they are
 #: kept apart because they are not one finding.
 OUTCOME_BOUNDED = "bounded"
+#: The same narrowing, applied to a closed range that wanted the whole remainder.
+#: Kept apart from `bounded` so the report can still tell what a client asked for
+#: — the two shapes come from different media stacks and fail differently.
+OUTCOME_BOUNDED_CLOSED = "bounded_closed"
 OUTCOME_DISABLED = "passthrough_disabled"
 OUTCOME_NO_RANGE = "passthrough_no_range"
 OUTCOME_CLOSED = "passthrough_closed"
@@ -243,40 +264,47 @@ def bound_open_range(
     total_bytes: int,
     duration_sec: float | None = None,
 ) -> RangeDecision:
-    """Narrow an open-ended `Range` in `environ`, in place.
+    """Narrow a `Range` that asks for the whole remainder, in `environ`, in place.
 
     Always returns a decision; `decision.applied` is the slice that was written, or
-    None when the request was left exactly as it arrived. What is left alone has not
-    changed: a disabled kill switch, a missing or closed or suffix or multi range, a
-    start past the end of the file (Werkzeug owns that 416), and the last chunk of a
-    file, where what remains already fits. Only the reporting around it is new.
+    None when the request was left exactly as it arrived. What is left alone: a
+    disabled kill switch, a missing or suffix or multi range, a closed range that
+    wants a specific part rather than the rest, a start past the end of the file
+    (Werkzeug owns that 416), and the last chunk of a file, where what remains
+    already fits.
     """
-    kind, span = classify_range(environ.get("HTTP_RANGE"), total_bytes=total_bytes)
+    raw = environ.get("HTTP_RANGE")
+    kind, span = classify_range(raw, total_bytes=total_bytes)
     if total_bytes <= 0:
         return RangeDecision(kind, OUTCOME_EMPTY, span_ratio=span)
     if not is_enabled():
         return RangeDecision(kind, OUTCOME_DISABLED, span_ratio=span)
-    if kind != KIND_OPEN:
-        outcome = {
-            KIND_NONE: OUTCOME_NO_RANGE,
-            KIND_CLOSED: OUTCOME_CLOSED,
-            KIND_SUFFIX: OUTCOME_SUFFIX,
-        }.get(kind, OUTCOME_OTHER)
+    if kind not in {KIND_OPEN, KIND_CLOSED}:
+        outcome = {KIND_NONE: OUTCOME_NO_RANGE, KIND_SUFFIX: OUTCOME_SUFFIX}.get(kind, OUTCOME_OTHER)
         return RangeDecision(kind, outcome, span_ratio=span)
-    start = int(_OPEN_RANGE_RE.match(environ["HTTP_RANGE"]).group(1))
+
+    start = requested_start(raw)
     if start >= total_bytes:
         return RangeDecision(kind, OUTCOME_PAST_END, span_ratio=span)
     size = chunk_bytes(total_bytes=total_bytes, duration_sec=duration_sec, is_first=start == 0)
+
+    if kind == KIND_CLOSED:
+        closed = _CLOSED_RANGE_RE.match(raw)
+        requested = int(closed.group(2)) - start + 1
+        # Everything from here on, and enough of it to be worth splitting. Below
+        # either line this is a demuxer reading a structure it named exactly.
+        if span is None or span < WHOLE_FILE_SPAN_RATIO or requested <= size * CLOSED_RANGE_CHUNK_MARGIN:
+            return RangeDecision(kind, OUTCOME_CLOSED, span_ratio=span)
+
     end = start + size - 1
     if end >= total_bytes - 1:
-        # The tail already fits in one chunk. Rewriting `bytes=N-` into an explicit
-        # range that means the same thing would only cost the reader a header it
-        # cannot act on.
+        # The tail already fits in one chunk. Rewriting the header into a range
+        # that means the same thing would only cost the reader one it cannot act on.
         return RangeDecision(kind, OUTCOME_TAIL_FITS, span_ratio=span)
     environ["HTTP_RANGE"] = f"bytes={start}-{end}"
     return RangeDecision(
         kind,
-        OUTCOME_BOUNDED,
+        OUTCOME_BOUNDED if kind == KIND_OPEN else OUTCOME_BOUNDED_CLOSED,
         applied=BoundedRange(start=start, end=end, total_bytes=total_bytes),
         span_ratio=span,
     )

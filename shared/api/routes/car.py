@@ -171,7 +171,14 @@ def get_car_items(item_id: str):
     if not metadata:
         return jsonify({"items": [], "status": "library_not_loaded"}), 404
 
-    tracks = list(getattr(metadata, "tracks", []) or [])
+    # Newest first. Both lists below are cut to `MAX_CAR_ITEMS`, and the
+    # manifest is stored oldest first, so an unsorted cut showed a head unit the
+    # two hundred oldest songs in the library and never the ones just added.
+    tracks = sorted(
+        getattr(metadata, "tracks", []) or [],
+        key=lambda track: track.added_at or "",
+        reverse=True,
+    )
     by_id = _tracks_by_id(metadata)
     item_id = str(item_id or "")
 
