@@ -158,7 +158,7 @@ def test_a_later_open_range_is_bounded_too(client, big_track):
 
 
 def test_an_explicit_range_is_answered_exactly_as_asked(client, big_track):
-    """A caller that named both ends gets both ends. Never widened, never cut."""
+    """A caller reading a specific part gets that part. Never widened, never cut."""
     track_id, payload = big_track
 
     response = client.get(
@@ -168,6 +168,60 @@ def test_an_explicit_range_is_answered_exactly_as_asked(client, big_track):
     assert response.status_code == 206
     assert _content_range(response)[:2] == (100, 200)
     assert response.get_data() == payload[100:201]
+
+
+def test_a_closed_range_to_the_end_of_the_file_comes_back_as_a_chunk(client, big_track):
+    """How WebKit asks for audio, and until now the shape nothing reshaped.
+
+    Safari on iOS opens a track with a two-byte probe and then asks for
+    everything from an offset to the last byte of the file — a closed range that
+    means what `bytes=N-` means. Answered whole, the response promises the rest
+    of the track, the media stack abandons it after a few tens of kilobytes, and
+    the connection dies with it: 24 requests and 28 seconds before an 11 MB
+    track made a sound on a phone, against instant on the same library over
+    loopback.
+    """
+    track_id, payload = big_track
+
+    probe = client.get(f"/api/static/stream/{track_id}", headers={"Range": "bytes=0-1"})
+    assert probe.status_code == 206
+    assert probe.get_data() == payload[:2], "the opening probe must stay two bytes"
+
+    response = client.get(
+        f"/api/static/stream/{track_id}",
+        headers={"Range": f"bytes=0-{len(payload) - 1}"},
+    )
+
+    assert response.status_code == 206
+    start, end, total = _content_range(response)
+    assert (start, total) == (0, len(payload))
+    assert end < total - 1
+    assert int(response.headers["Content-Length"]) == end - start + 1
+    assert response.get_data() == payload[start : end + 1]
+
+
+def test_a_closed_chunk_walk_reassembles_the_file_exactly(client, big_track):
+    """The same guarantee as the open-ended walk, for the clients that spell it
+    the other way: a player that keeps asking gets every byte, in order, once."""
+    track_id, payload = big_track
+
+    received = bytearray()
+    requests = 0
+    while len(received) < len(payload):
+        response = client.get(
+            f"/api/static/stream/{track_id}",
+            headers={"Range": f"bytes={len(received)}-{len(payload) - 1}"},
+        )
+        assert response.status_code == 206
+        start, end, total = _content_range(response)
+        assert (start, total) == (len(received), len(payload))
+        received += response.get_data()
+        assert len(received) == end + 1
+        requests += 1
+        assert requests < 200, "chunking made no progress"
+
+    assert hashlib.sha256(received).hexdigest() == hashlib.sha256(payload).hexdigest()
+    assert requests > 1
 
 
 def test_a_suffix_range_is_answered_exactly_as_asked(client, big_track):

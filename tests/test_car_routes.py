@@ -157,3 +157,21 @@ def test_car_favourites_and_recently_played_use_existing_state(tmp_path, monkeyp
     recent_body = recent.get_json()
     assert recent_body["items"][0]["track_id"] == "t1"
     assert recent_body["playback_state"]["position_sec"] == 42
+
+
+def test_a_head_unit_browses_the_newest_songs_first(tmp_path, monkeypatch):
+    """`all-tracks` is cut to `MAX_CAR_ITEMS`. Cut straight from the manifest,
+    which is stored oldest first, that list could never contain the song added
+    this morning — the one most likely to be reached for from a car."""
+    reset_runtime()
+    _make_runtime(tmp_path)
+    old = _track("t1", "Added in January")
+    old.added_at = "2026-01-04T09:00:00"
+    new = _track("t2", "Added today")
+    new.added_at = "2026-08-17T10:06:52"
+    metadata = LibraryMetadata(version=1, tracks=[old, new], playlists={}, settings={})
+    _patch_api(monkeypatch, metadata)
+
+    response = _make_app().test_client().get("/api/car/items/all-tracks")
+
+    assert [item["track_id"] for item in response.get_json()["items"]] == ["t2", "t1"]

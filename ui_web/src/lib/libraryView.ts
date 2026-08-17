@@ -43,14 +43,21 @@ export const albumFilter = (): AlbumFilter => decodeAlbumFilter(storedAlbumFilte
 export const setAlbumFilter = (next: AlbumFilter): void =>
   setStoredAlbumFilter(encodeAlbumFilter(next));
 
-/** Sort a track list by the chosen mode. 'recent' keeps the engine's order. */
+/**
+ * Sort a track list by the chosen mode.
+ *
+ * 'recent' is the order the list already arrives in: `musicLibrary()` merges
+ * files and saved songs by the day each joined the library (see
+ * `lib/libraryOrder.ts`), and re-deciding that here would mean two answers to
+ * one question. The other two modes are stable, so a shared title or an unmarked
+ * song still falls back to recency.
+ */
 export function sortTracks(tracks: Track[], mode: string, favSet: Set<string>): Track[] {
   if (mode === 'az') return [...tracks].sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''));
   if (mode === 'fav') {
     return [...tracks].sort((a, b) => (favSet.has(b.id) ? 1 : 0) - (favSet.has(a.id) ? 1 : 0));
   }
-  // 'recent' — newest first (backend sends oldest → newest)
-  return [...tracks].reverse();
+  return [...tracks];
 }
 
 /** Narrow a track list to what the chosen filter allows. 'downloaded' keeps

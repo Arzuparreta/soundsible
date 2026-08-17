@@ -23,6 +23,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _earliest(*dates: Optional[str]) -> Optional[str]:
+    """The oldest library date among these, ignoring the ones that are missing."""
+    known = [date for date in dates if date]
+    return min(known) if known else None
+
+
+def _file_instant(track: Track, path: str) -> Optional[str]:
+    """A scanned file's mtime as a library date, or None when it has none."""
+    nanos = getattr(track, "local_mtime_ns", None)
+    try:
+        seconds = nanos / 1_000_000_000 if nanos else Path(path).stat().st_mtime
+    except OSError:
+        return None
+    return datetime.fromtimestamp(seconds, timezone.utc).replace(tzinfo=None).isoformat()
+
+
 def _blank_status(state: str = "idle") -> dict[str, Any]:
     return {
         "scan_id": None,
@@ -214,6 +230,9 @@ class LibraryScanService:
             if current is not None:
                 if same_path is not None and same_path.id != current.id:
                     cls._preserve_user_metadata(same_path, current)
+                    # Two rows, one song: it has been in the library since the
+                    # earlier of them, whichever row survives.
+                    current.added_at = _earliest(current.added_at, same_path.added_at)
                     tracks.remove(same_path)
                     replacements[same_path.id] = current.id
                     by_id.pop(same_path.id, None)
@@ -236,6 +255,9 @@ class LibraryScanService:
 
             if same_path is not None and same_path.id != incoming.id:
                 cls._preserve_user_metadata(same_path, incoming)
+                # Re-keyed, not re-acquired: the file at this path was already
+                # yours, and the new id inherits the day it became so.
+                incoming.added_at = same_path.added_at or _file_instant(incoming, scanned.path)
                 position = tracks.index(same_path)
                 tracks[position] = incoming
                 replacements[same_path.id] = incoming.id
@@ -246,6 +268,11 @@ class LibraryScanService:
                 prewarm.append(incoming)
                 continue
 
+            # A folder you already own is not music you acquired just now. The
+            # file's own mtime is the closest thing to when each song joined
+            # you, and it keeps a scanned collection in a believable order
+            # instead of landing 5,000 songs on one instant.
+            incoming.added_at = incoming.added_at or _file_instant(incoming, scanned.path)
             tracks.append(incoming)
             by_id[incoming.id] = incoming
             by_path[scanned.path] = incoming

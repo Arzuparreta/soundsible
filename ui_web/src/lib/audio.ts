@@ -1624,6 +1624,24 @@ export const audioService = {
     const a = audioEl();
     if (Number.isFinite(t)) a.currentTime = Math.max(0, t);
   },
+  /**
+   * How far the active deck has buffered, in seconds — the furthest edge it
+   * holds, not the range around the playhead.
+   *
+   * Read as a progress signal, never as a readiness gate: a load that is slow
+   * but advancing is a slow link, and reloading it throws away everything it
+   * has fetched. Returns 0 when the deck holds nothing, which is what a load
+   * that is genuinely stuck looks like.
+   */
+  bufferedEnd(): number {
+    const buffered = audioEl().buffered;
+    let furthest = 0;
+    for (let i = 0; i < buffered.length; i += 1) {
+      const end = buffered.end(i);
+      if (Number.isFinite(end) && end > furthest) furthest = end;
+    }
+    return furthest;
+  },
   /** 0..1 — persisted so volume survives reloads. */
   setVolume(v: number): void {
     const clamped = Math.min(1, Math.max(0, v));

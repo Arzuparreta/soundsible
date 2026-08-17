@@ -114,6 +114,9 @@ export function savedToTrack(
     album: entry.album,
     duration: entry.duration,
     cover: entry.thumbnail,
+    // The day you claimed the song, carried onto the track so a save and a
+    // download can be ordered against each other at all.
+    added_at: entry.added_at ?? null,
     source: 'preview',
     // Carry the saved identity, so the Deezer/search row this came from still
     // recognises itself as playing once the preview starts.

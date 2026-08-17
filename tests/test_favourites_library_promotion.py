@@ -62,6 +62,30 @@ def test_downloading_a_hearted_song_gives_its_entry_the_library_key(api):
     assert entries[0]["title"] == "I Follow Rivers", "the snapshot survives promotion"
 
 
+def test_downloading_a_saved_song_keeps_the_day_it_was_saved(api):
+    """Downloading gives a song a file, not a place in the library — it has had
+    one since it was saved. Dating it "now" would push a song you have owned for
+    weeks to the top of "recently added", and would do it again for every song
+    you ever get round to downloading."""
+    manager = api.get_favourites_manager(TEST_USER_ID)
+    manager.toggle_saved(
+        {"keys": ["yt:K3JGxj2rvAs"], "title": "I Follow Rivers", "added_at": "2026-07-02T10:00:00"}
+    )
+
+    api.add_tracks_to_user_library([_track("hash-6", "K3JGxj2rvAs")])
+
+    library = api.get_user_core(TEST_USER_ID).library
+    stored = library.metadata.get_track_by_id("hash-6")
+    assert stored.added_at == "2026-07-02T10:00:00"
+
+
+def test_a_song_downloaded_without_ever_being_saved_is_dated_now(api):
+    api.add_tracks_to_user_library([_track("hash-7", "K3JGxj2rvAs")])
+
+    library = api.get_user_core(TEST_USER_ID).library
+    assert library.metadata.get_track_by_id("hash-7").added_at
+
+
 def test_promotion_leaves_unrelated_favourites_alone(api):
     manager = api.get_favourites_manager(TEST_USER_ID)
     manager.set_favourite({"keys": ["yt:other-video"], "title": "Something else"})

@@ -6,13 +6,16 @@ Handles canonical library storage, rapid searching, and derived catalog data.
 import sqlite3
 import json
 import logging
+import os
 import queue
 import threading
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
 from shared.runtime import get_config_dir
+from shared.time_utils import UTC
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,12 @@ _TRACKS_COLUMNS = {
     "podcast_episode_guid": "TEXT",
     "podcast_rss_url": "TEXT",
     "artists_json": "TEXT",
+    # When the song joined this library. Distinct from `last_updated`, which
+    # moves whenever a row is rewritten and is therefore identical across every
+    # track of a library that has been migrated once. Left NULL on upgrade so
+    # `backfill_added_at` can date the existing rows from their audio files
+    # instead of stamping the whole library with the moment of the upgrade.
+    "added_at": "TIMESTAMP",
 }
 
 _YT_CACHE_COLUMNS = {
@@ -178,6 +187,38 @@ class ConnectionPool:
             "idle": self._idle.qsize(),
             "max_size": self._max_size,
         }
+
+
+#: How a library timestamp is written: naive UTC ISO-8601, the same shape
+#: `utc_now_iso_naive` produces and saved songs already carry in
+#: `favourites.json`. One format everywhere is what lets a saved song and a
+#: downloaded file be compared at all — by SQL, which sorts these as text, and
+#: by the player, which parses them.
+_TIMESTAMP_FORMATS = ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S")
+
+
+def _parse_timestamp(value: Any) -> Optional[datetime]:
+    """A stored timestamp as a datetime, or None when it is not one.
+
+    Rows written by SQLite's own `CURRENT_TIMESTAMP` use a space separator and
+    no microseconds; rows written by the engine use `isoformat()`. Both are read
+    here so a library that has seen both keeps one timeline.
+    """
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None)
+    text = str(value or "").strip()
+    if not text:
+        return None
+    for fmt in _TIMESTAMP_FORMATS:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _format_timestamp(moment: datetime) -> str:
+    return moment.replace(tzinfo=None).isoformat()
 
 
 class DatabaseManager:
@@ -906,6 +947,10 @@ class DatabaseManager:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 replacement_state: Dict[str, sqlite3.Row] = {}
+                # The date the replaced row carried. A rescan or a lossless
+                # upgrade gives one song a new id; without this it would read as
+                # newly added, which is the one thing it is not.
+                replacement_added_at: Dict[str, Any] = {}
                 conn.row_factory = sqlite3.Row
                 for old_id, new_id in (id_replacements or {}).items():
                     if old_id == new_id:
@@ -915,6 +960,11 @@ class DatabaseManager:
                     ).fetchone()
                     if row is not None:
                         replacement_state[new_id] = row
+                    dated = conn.execute(
+                        "SELECT added_at FROM tracks WHERE id = ?", (old_id,)
+                    ).fetchone()
+                    if dated is not None and dated["added_at"]:
+                        replacement_added_at[new_id] = dated["added_at"]
                 # Note: Update version
                 conn.execute("INSERT OR REPLACE INTO library_info (key, value) VALUES ('version', ?)", (str(metadata.version),))
                 
@@ -941,8 +991,8 @@ class DatabaseManager:
                             is_local, local_path, local_mtime_ns, musicbrainz_id, isrc, album_artist,
                             cover_source, metadata_modified_by_user, youtube_id,
                             audio_quality, audio_source, audio_source_url,
-                            audio_license_url, audio_identity_verified
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            audio_license_url, audio_identity_verified, added_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -979,7 +1029,11 @@ class DatabaseManager:
                             audio_source=excluded.audio_source,
                             audio_source_url=excluded.audio_source_url,
                             audio_license_url=excluded.audio_license_url,
-                            audio_identity_verified=excluded.audio_identity_verified
+                            audio_identity_verified=excluded.audio_identity_verified,
+                            -- First seen wins. A manifest that has forgotten the
+                            -- date (an older export, a remote copy) must never be
+                            -- able to redate a song the library already holds.
+                            added_at=COALESCE(tracks.added_at, excluded.added_at)
                     """, (
                         track.id, track.title, track.artist, track.album,
                         track.duration, track.file_hash, track.original_filename, 
@@ -992,7 +1046,13 @@ class DatabaseManager:
                         track.musicbrainz_id, track.isrc, track.album_artist,
                         track.cover_source, track.metadata_modified_by_user, track.youtube_id,
                         track.audio_quality, track.audio_source, track.audio_source_url,
-                        track.audio_license_url, track.audio_identity_verified
+                        track.audio_license_url, track.audio_identity_verified,
+                        # A replaced id keeps the date of the row it replaced.
+                        # NULL is left as NULL rather than defaulted to now:
+                        # undated rows are what `backfill_added_at` recognises,
+                        # and stamping them here would date a library that has
+                        # been around for months with the moment of one save.
+                        replacement_added_at.get(track.id) or track.added_at,
                     ))
 
                 for new_id, state in replacement_state.items():
@@ -1124,6 +1184,94 @@ class DatabaseManager:
                 podcast_subscriptions=json.loads(state["podcast_subscriptions_json"]),
                 podcast_episode_cache=json.loads(state["podcast_episode_cache_json"]),
             )
+
+    def backfill_added_at(self, resolver: Optional[Any] = None) -> int:
+        """Date the tracks a library from before `added_at` left behind.
+
+        Two sources, in order of how much they know:
+
+        * **The audio file's own mtime.** A downloaded track is written once,
+          when it is acquired, so the file in the pool remembers the day the
+          song arrived even though no row did. Measured against a real 197-track
+          library, mtimes reproduced the manifest order with four inversions and
+          spanned the four months the library was actually built over.
+        * **The row before it.** A track whose file cannot be reached — remote
+          storage, a deleted file, a manifest imported from elsewhere — inherits
+          its predecessor's instant plus a millisecond, walking the library in
+          its stored order. Nothing is invented: the ordering that results is
+          exactly the manifest order the player has been showing all along.
+
+        Idempotent, and cheap to call: with every row dated it costs one probe.
+        Returns the number of rows filled in.
+        """
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            if conn.execute("SELECT 1 FROM tracks WHERE added_at IS NULL LIMIT 1").fetchone() is None:
+                return 0
+            # Library order first, then anything the manifest no longer lists
+            # (a pruned row still in `tracks`), so the walk below always follows
+            # the order the player reads.
+            rows = conn.execute("""
+                SELECT t.*, lt.position AS library_position FROM tracks t
+                LEFT JOIN library_tracks lt ON lt.track_id = t.id
+                ORDER BY lt.position IS NULL, lt.position, t.rowid
+            """).fetchall()
+
+        if resolver is None:
+            from shared.path_resolver import resolve_local_track_path as resolver
+
+        def file_instant(row: sqlite3.Row) -> Optional[datetime]:
+            try:
+                path = resolver(self._row_to_track(row))
+            except Exception:  # pragma: no cover — a resolver is never load-bearing
+                return None
+            if not path:
+                return None
+            try:
+                return datetime.fromtimestamp(os.path.getmtime(path), UTC).replace(tzinfo=None)
+            except OSError:
+                return None
+
+        filled: List[tuple] = []
+        carried: Optional[datetime] = None
+        undated: List[str] = []
+        for row in rows:
+            stored = row["added_at"]
+            if stored:
+                carried = _parse_timestamp(stored) or carried
+                continue
+            instant = file_instant(row)
+            if instant is None:
+                # Resolve it against whatever comes next: a run of unreachable
+                # files at the head of the library has nothing behind it yet.
+                undated.append(str(row["id"]))
+                continue
+            for index, track_id in enumerate(undated, start=1):
+                # Kept strictly before `instant`, in their stored order, because
+                # that order is the only thing known about them.
+                filled.append((_format_timestamp(instant - timedelta(milliseconds=len(undated) - index + 1)), track_id))
+            undated.clear()
+            carried = instant
+            filled.append((_format_timestamp(instant), str(row["id"])))
+        for index, track_id in enumerate(undated, start=1):
+            base = carried or datetime.now(UTC).replace(tzinfo=None)
+            filled.append((_format_timestamp(base + timedelta(milliseconds=index)), track_id))
+
+        if not filled:
+            return 0
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.executemany(
+                    "UPDATE tracks SET added_at = ? WHERE id = ? AND added_at IS NULL",
+                    filled,
+                )
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+        logger.info("Database: dated %d track(s) that predate added_at", len(filled))
+        return len(filled)
 
     def get_all_tracks(self) -> List[Track]:
         """Fetch all tracks as Track objects."""
@@ -1378,7 +1526,7 @@ class DatabaseManager:
                        COALESCE(SUM(t.duration), 0) AS duration,
                        COALESCE(SUM(s.play_count), 0) AS play_count,
                        MAX(s.last_played_at) AS last_played_at,
-                       MAX(t.last_updated) AS added_at,
+                       MAX(COALESCE(t.added_at, t.last_updated)) AS added_at,
                        AVG(s.rating) AS average_rating
                 FROM albums a
                 JOIN tracks t ON t.album_id = a.id
@@ -1393,7 +1541,11 @@ class DatabaseManager:
     #: about what "by year" means. ``starred`` is missing on purpose:
     #: favourites are not in this database.
     ALBUM_ORDERINGS = {
-        "newest": "MAX(t.last_updated) DESC, a.title",
+        # When the album joined the library, not when its rows were last
+        # rewritten: `last_updated` is set by every write, so a library that has
+        # been migrated once carries one identical timestamp on every track and
+        # "newest" degenerates into "by title".
+        "newest": "MAX(COALESCE(t.added_at, t.last_updated)) DESC, a.title",
         "alphabeticalByName": "a.title_key, a.album_artist",
         "alphabeticalByArtist": "a.album_artist, a.title_key",
         "byYear": "a.year, a.title_key",

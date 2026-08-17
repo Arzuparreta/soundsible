@@ -31,6 +31,10 @@ export interface Track {
   audio_source_url?: string | null;
   audio_license_url?: string | null;
   audio_identity_verified?: boolean;
+  /** When this song joined the library, naive UTC ISO-8601 — from the engine
+   * for a file, from the saved entry for a song that streams. The one field
+   * "recently added" is allowed to be built on; see `lib/libraryOrder.ts`. */
+  added_at?: string | null;
   /** EBU R128 integrated loudness, measured once by the engine. Absent until
    * the file has been measured, which is what keeps an unmeasured track at
    * unity gain instead of guessing. */

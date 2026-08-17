@@ -18,6 +18,7 @@ from shared.range_stream import (
     KIND_OPEN,
     KIND_SUFFIX,
     OUTCOME_BOUNDED,
+    OUTCOME_BOUNDED_CLOSED,
     OUTCOME_CLOSED,
     OUTCOME_DISABLED,
     OUTCOME_PAST_END,
@@ -96,14 +97,15 @@ def test_a_track_without_a_usable_duration_falls_back_to_byte_sizes(duration):
     [
         None,
         "",
-        "bytes=100-200",  # explicit: the caller named both ends
+        "bytes=100-200",  # a part, named exactly: a demuxer reading a structure
+        "bytes=0-1",  # WebKit's opening probe, which must stay two bytes
         "bytes=-1024",  # suffix: an MP4 demuxer hunting for `moov`
         "bytes=0-1,8-9",  # multi-range: Werkzeug answers this multipart
         "chunks=0-",  # not a byte range at all
         "garbage",
     ],
 )
-def test_only_open_ended_byte_ranges_are_narrowed(header):
+def test_a_request_for_a_specific_part_is_answered_exactly(header):
     environ = {"HTTP_RANGE": header} if header is not None else {}
     before = dict(environ)
 
@@ -112,6 +114,53 @@ def test_only_open_ended_byte_ranges_are_narrowed(header):
     assert not decision.bounded
     assert decision.applied is None
     assert environ == before
+
+
+def test_a_closed_range_for_the_whole_remainder_is_narrowed_like_an_open_one():
+    """The half of the audience this policy used to miss entirely.
+
+    WebKit never sends `bytes=N-`; it asks for everything from here to the end
+    of the file, closed. Left whole, each of those responses promises tens of
+    megabytes, gets abandoned after a few tens of kilobytes, and cannot be kept
+    alive — measured at 24 requests and 28 seconds before an 11 MB track made a
+    sound on a phone.
+    """
+    total = 40 * 1024 * 1024
+    environ = {"HTTP_RANGE": f"bytes=0-{total - 1}"}
+
+    decision = bound_open_range(environ, total_bytes=total, duration_sec=240)
+
+    assert decision.bounded
+    assert decision.kind == KIND_CLOSED
+    assert decision.outcome == OUTCOME_BOUNDED_CLOSED
+    assert decision.applied.start == 0
+    assert environ["HTTP_RANGE"] == f"bytes=0-{decision.applied.end}"
+
+
+def test_a_closed_range_worth_about_one_chunk_is_left_whole():
+    """Splitting it would turn one response into two and save nothing."""
+    total = 40 * 1024 * 1024
+    start = total - 3 * 1024 * 1024
+    environ = {"HTTP_RANGE": f"bytes={start}-{total - 1}"}
+
+    decision = bound_open_range(environ, total_bytes=total, duration_sec=240)
+
+    assert not decision.bounded
+    assert decision.outcome == OUTCOME_CLOSED
+    assert decision.wants_whole_remainder
+    assert environ["HTTP_RANGE"] == f"bytes={start}-{total - 1}"
+
+
+def test_the_kill_switch_stops_a_closed_rewrite_too(monkeypatch):
+    monkeypatch.setenv("SOUNDSIBLE_STREAM_BOUNDED", "0")
+    total = 40 * 1024 * 1024
+    environ = {"HTTP_RANGE": f"bytes=0-{total - 1}"}
+
+    decision = bound_open_range(environ, total_bytes=total, duration_sec=240)
+
+    assert not decision.bounded
+    assert decision.outcome == OUTCOME_DISABLED
+    assert environ["HTTP_RANGE"] == f"bytes=0-{total - 1}"
 
 
 def test_an_open_range_rewrites_the_environ_in_place():
@@ -166,7 +215,7 @@ def test_a_passthrough_says_which_kind_of_passthrough_it_was():
     an afternoon of raw rows. It is one field now."""
     total = 40 * 1024 * 1024
 
-    closed = bound_open_range({"HTTP_RANGE": "bytes=0-41943039"}, total_bytes=total)
+    closed = bound_open_range({"HTTP_RANGE": "bytes=16375-65535"}, total_bytes=total)
     suffix = bound_open_range({"HTTP_RANGE": "bytes=-1024"}, total_bytes=total)
     absent = bound_open_range({}, total_bytes=total)
 
