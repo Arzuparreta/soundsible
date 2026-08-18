@@ -135,7 +135,9 @@ def _invalidate_stream(video_id: str) -> None:
         logger.debug("API: [Preview] durable stream cache invalidate failed for %s: %s", video_id, exc)
 
 
-def _get_preview_stream_cached(api, video_id: str) -> ResolvedStream | None:
+def _get_preview_stream_cached(
+    api, video_id: str, *, skip_fast_path: bool = False
+) -> ResolvedStream | None:
     """Resolve a preview stream URL, at most once per video id at a time.
 
     Three layers, cheapest first: the in-process memo, the durable SQLite cache
@@ -144,6 +146,11 @@ def _get_preview_stream_cached(api, video_id: str) -> ResolvedStream | None:
     — repeated taps, a range request landing while the first fetch is still
     resolving, a prefetch racing a click — share one extraction rather than each
     paying for their own.
+
+    `skip_fast_path` is for a retry right after the CDN rejected a URL the
+    fast path just produced — see `get_resolved_stream`. The caller is
+    expected to have already invalidated the rejected URL from both cache
+    layers, so `durable` below will not just hand the same dead URL back.
     """
 
     def resolve() -> ResolvedStream | str:
@@ -153,7 +160,7 @@ def _get_preview_stream_cached(api, video_id: str) -> ResolvedStream | None:
         dl = api["get_downloader"](open_browser=False)
         resolver = getattr(dl.downloader, "get_resolved_stream", None)
         if callable(resolver):
-            stream = resolver(video_id) or ""
+            stream = resolver(video_id, skip_fast_path=skip_fast_path) or ""
         else:
             url = dl.downloader.get_stream_url(video_id) or ""
             if not url:
@@ -502,9 +509,10 @@ def _emit_stream_timing(
 def _preview_upstream(api, video_id: str, headers: dict[str, str]):
     """Open a direct fallback stream when persistent caching is disabled."""
     cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
+    skip_fast_path = False
     for attempt in range(2):
         resolve_started = time.monotonic()
-        stream = _get_preview_stream_cached(api, video_id)
+        stream = _get_preview_stream_cached(api, video_id, skip_fast_path=skip_fast_path)
         resolve_ms = round((time.monotonic() - resolve_started) * 1000)
         if not stream:
             return None, None, "unavailable", resolve_ms, 0
@@ -536,6 +544,11 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
         response.close()
         _invalidate_stream(video_id)
         cache_was_warm = False
+        # The rejection almost certainly came from the fast path (it hands
+        # back a signed URL for a PO-token-gated format with no PO token);
+        # retrying it would just fail the same way. Force the retry to the
+        # slower fallback clients instead.
+        skip_fast_path = True
     return None, None, "unavailable", 0, 0
 
 
@@ -546,9 +559,10 @@ def _acquire_preview(api, video_id: str):
     an active request and background prefetch all join the same transfer.
     """
     cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
+    skip_fast_path = False
     for attempt in range(2):
         resolve_started = time.monotonic()
-        stream = _get_preview_stream_cached(api, video_id)
+        stream = _get_preview_stream_cached(api, video_id, skip_fast_path=skip_fast_path)
         resolve_ms = round((time.monotonic() - resolve_started) * 1000)
         if not stream:
             return None, None, "unavailable", resolve_ms, 0
@@ -559,6 +573,9 @@ def _acquire_preview(api, video_id: str):
             if attempt == 0:
                 _invalidate_stream(video_id)
                 cache_was_warm = False
+                # See the matching comment in `_preview_upstream`: a fast-path
+                # URL is what almost certainly just got rejected.
+                skip_fast_path = True
                 continue
             preview_cache.open_upstream_backoff(video_id, exc.status_code)
             return (

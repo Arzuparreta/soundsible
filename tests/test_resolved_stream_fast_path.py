@@ -127,6 +127,21 @@ def test_a_rejected_identifier_falls_back_and_is_dropped(downloader, monkeypatch
     assert yd._visitor_data_cache["value"] is None, "a rejected identifier must not be kept"
 
 
+def test_skip_fast_path_goes_straight_to_the_fallback(downloader, monkeypatch):
+    """The CDN, not extraction, is what rejects a PO-token-gated `android_vr`
+    URL — the caller retrying after that rejection has to say so explicitly,
+    because a fresh visitor identifier would otherwise look just as usable as
+    the one that was rejected and send the retry right back into the wall."""
+    monkeypatch.setattr(yd, "_youtube_visitor_data", lambda: "CgtWaXNpdG9yRGF0YQ")
+
+    resolved = downloader.get_resolved_stream(VID, skip_fast_path=True)
+
+    assert resolved is not None, "the fallback path must still answer"
+    assert resolved.url == STREAM_URL
+    assert len(_RecordingYDL.instances) == 1, "no attempt spent on the client that was just rejected"
+    assert _clients(_RecordingYDL.instances[0]) == ["default", "android", "ios"]
+
+
 def test_relay_egress_is_carried_by_the_cheap_path(downloader, monkeypatch):
     """The CDN signs the resolving address into the URL, so the egress that
     resolved has to travel with the result."""
