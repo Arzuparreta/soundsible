@@ -359,3 +359,48 @@ def test_a_passthrough_records_why_it_was_not_reshaped(client, big_track, emitte
     assert everything["range_span"] == 1.0
     assert an_atom["range_span"] < 0.05
     assert walk["format"] == "flac"
+
+
+def test_a_response_reports_what_reached_the_listener(client, big_track, emitted):
+    """The half of the story the engine never told.
+
+    `content_length` is a promise. A media element abandons responses constantly,
+    so the wait a listener feels is explained by what arrived and how long it
+    took — the two numbers that used to be missing from every row.
+    """
+    track_id, _ = big_track
+
+    response = client.get(f"/api/static/stream/{track_id}", headers={"Range": "bytes=0-"})
+    body = response.get_data()
+
+    row = [r for r in emitted if r.get("phase") == "server_stream_ready"][-1]
+    segments = row["segments"]
+    assert segments["delivered_bytes"] == len(body)
+    assert segments["complete"] is True
+    assert segments["write_ms"] >= 0
+    # The open-time fields are still on the same row rather than on a second one.
+    assert segments["bound_outcome"] and "range_kind" in segments
+
+
+def test_delivery_feeds_the_reading_the_player_shows(client, big_track):
+    """What the engine measures here is what `/api/playback/link` reports."""
+    import shared.link_quality as link_quality
+
+    link_quality.reset()
+    track_id, _ = big_track
+
+    client.get(f"/api/static/stream/{track_id}", headers={"Range": "bytes=0-"}).get_data()
+
+    reading = link_quality.snapshot(TEST_USER_ID)
+    assert reading["samples"] >= 1
+    assert reading["scope"] == "local", "a test client speaks from loopback"
+def test_a_range_past_the_end_is_refused_not_a_server_error(client, big_track):
+    """416 says "not that range". 500 says "this track is broken", and a media
+    element believes it — it stops asking rather than asking for a range that
+    exists. The route caught every exception, including the one Werkzeug raises
+    to build the 416."""
+    track_id, payload = big_track
+    response = client.get(
+        f"/api/static/stream/{track_id}", headers={"Range": f"bytes={len(payload) + 10}-"}
+    )
+    assert response.status_code == 416

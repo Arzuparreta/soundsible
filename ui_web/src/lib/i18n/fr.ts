@@ -94,6 +94,7 @@ export const fr: Dict = {
     volume: 'Volume',
     loading: 'Chargement…',
     buffering: 'Mise en mémoire tampon…',
+    bufferingSlow: 'Mise en mémoire tampon — {link} Mbps, ce morceau demande {needed}',
     reconnecting: 'Reconnexion…',
     findingMore: 'Recherche d’autres morceaux…',
     needsGesture: 'Appuyez sur lecture pour reprendre',
@@ -235,6 +236,7 @@ export const fr: Dict = {
       closePanel: 'Fermer le panneau du mode Auto',
     },
     note: {
+      connection: 'Mesuré à partir de la musique déjà livrée, sans trafic de test. Un morceau demande environ 1,5 fois son propre débit pour jouer sans interruption.',
       quoted: '« {text} »',
       direction: 'un nouveau cap',
       added: '« {title} » dans le set',
@@ -387,6 +389,22 @@ export const fr: Dict = {
     sharedLink: 'Titre partagé',
   },
   settings: {
+    repair: 'Réparer les fichiers',
+    repairTitle: 'Réparer les fichiers de la bibliothèque',
+    repairMsg: 'Les fichiers contenant une piste vidéo ou une pochette démesurée seront réécrits sans toucher à l’audio. Leurs identifiants changent, et les playlists et favoris suivent automatiquement.',
+    repairConfirm: 'Réparer',
+    link: {
+      label: 'Livraison',
+      measured: '{where} · {mbps} Mbps mesurés',
+      notMeasured: '{where} · pas encore mesuré',
+      scopeUnknown: 'Réseau inconnu',
+      scope: {
+        local: 'Cette machine',
+        lan: 'Réseau local',
+        tailnet: 'Tailnet',
+        remote: 'À distance',
+      },
+    },
     title: 'Réglages',
     searchPlaceholder: 'Rechercher dans les réglages',
     searchNoResults: 'Aucun résultat pour « {query} »',
@@ -422,6 +440,7 @@ export const fr: Dict = {
       subsonic: 'Écoutez votre bibliothèque dans Symfonium, Amperfy, Feishin et les autres',
     },
     group: {
+      connection: 'Connexion',
       you: 'Votre compte',
       preferences: 'Préférences',
       system: 'Bibliothèque et système',
@@ -550,6 +569,11 @@ export const fr: Dict = {
     emptyLibraryCountLabel:
       'Saisissez le nombre de titres de votre bibliothèque pour confirmer',
     toast: {
+      repairScanning: 'Analyse du contenu des fichiers…',
+      repairScanned: 'Rapport écrit dans le journal des téléchargements',
+      repairing: 'Réparation des fichiers…',
+      repaired: 'Fichiers réparés',
+      repairFailed: 'Échec de la réparation',
       notSaved: "Impossible d'enregistrer",
       qualityUpdated: 'Qualité mise à jour',
       optimizing: 'Optimisation…',

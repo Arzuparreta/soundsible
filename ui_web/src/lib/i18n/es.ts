@@ -94,6 +94,7 @@ export const es: Dict = {
     volume: 'Volumen',
     loading: 'Cargando…',
     buffering: 'Almacenando en búfer…',
+    bufferingSlow: 'En búfer — {link} Mbps, esta pista pide {needed}',
     reconnecting: 'Reconectando…',
     findingMore: 'Buscando más música…',
     needsGesture: 'Toca play para reanudar',
@@ -235,6 +236,7 @@ export const es: Dict = {
       closePanel: 'Cerrar panel de modo Auto',
     },
     note: {
+      connection: 'Medido con la música ya servida, sin tráfico de prueba. Una pista necesita alrededor de 1,5 veces su propio bitrate para sonar del tirón.',
       quoted: '«{text}»',
       direction: 'un rumbo nuevo',
       added: '«{title}» al set',
@@ -383,6 +385,22 @@ export const es: Dict = {
     sharedLink: 'Canción compartida',
   },
   settings: {
+    repair: 'Reparar ficheros',
+    repairTitle: 'Reparar los ficheros de la biblioteca',
+    repairMsg: 'Los ficheros con vídeo dentro o con una portada enorme se reescriben sin tocar el audio. Eso cambia sus ids, y las playlists y favoritos van detrás automáticamente.',
+    repairConfirm: 'Reparar',
+    link: {
+      label: 'Entrega',
+      measured: '{where} · {mbps} Mbps medidos',
+      notMeasured: '{where} · sin medir todavía',
+      scopeUnknown: 'Red desconocida',
+      scope: {
+        local: 'Esta máquina',
+        lan: 'Red local',
+        tailnet: 'Tailnet',
+        remote: 'Remoto',
+      },
+    },
     title: 'Ajustes',
     searchPlaceholder: 'Buscar en ajustes',
     searchNoResults: 'Nada coincide con «{query}»',
@@ -418,6 +436,7 @@ export const es: Dict = {
       subsonic: 'Escucha tu biblioteca en Symfonium, Amperfy, Feishin y compañía',
     },
     group: {
+      connection: 'Conexión',
       you: 'Tu cuenta',
       preferences: 'Preferencias',
       system: 'Biblioteca y sistema',
@@ -544,6 +563,11 @@ export const es: Dict = {
     emptyLibraryCountMsg: 'Tienes {count} en tu biblioteca.',
     emptyLibraryCountLabel: 'Introduce el número de canciones de tu biblioteca para confirmar',
     toast: {
+      repairScanning: 'Comprobando qué llevan los ficheros…',
+      repairScanned: 'Informe escrito en el registro de descargas',
+      repairing: 'Reparando ficheros…',
+      repaired: 'Ficheros reparados',
+      repairFailed: 'La reparación falló',
       notSaved: 'No se pudo guardar',
       qualityUpdated: 'Calidad actualizada',
       optimizing: 'Optimizando…',

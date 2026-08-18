@@ -324,6 +324,31 @@ YDL_FORMAT_AUDIO_PREVIEW = (
     "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/worst[acodec!=none]"
 )
 
+def _audio_only(path: Path) -> Path:
+    """Strip anything that is not the music before this file becomes a track.
+
+    `YDL_FORMAT_AUDIO` ends in `worst[acodec!=none]`, which is the right last
+    resort for availability — a song that only exists inside a progressive
+    upload is still a song — but what it hands back is a 360p video with the
+    audio muxed in. Stored as-is it costs the listener four times the bytes of
+    the music, and `--embed-thumbnail`'s 1280x720 PNG then sits in the header,
+    where a decoder must read all of it before the first sample. One library
+    reached 95 of 95 MP4s like that.
+
+    The clean-up is a remux, so the audio is untouched, and it runs before the
+    hash is taken: the file that enters the library is the file it is named
+    after, and no track id has to be remapped.
+    """
+    try:
+        from shared.library_repair import repair_file
+
+        result = repair_file(path)
+        return Path(result.path) if result else path
+    except Exception as exc:  # never let tidying cost a completed download
+        logger.debug("Could not strip non-audio streams from %s: %s", path, exc)
+        return path
+
+
 _YTDLP_PROGRESS_LINE = re.compile(
     r"\[download\]\s+(?P<pct>\d+\.?\d*)%\s+of\s+(?:~\s*)?(?P<total>[\d.]+)(?P<tunit>[KMGT]?i?B)"
     r"(?:\s+at\s+(?P<speed>\S+))?(?:\s+ETA\s+(?P<eta>\S+))?",
@@ -965,19 +990,19 @@ class YouTubeDownloader:
         if returncode == 0:
             ext = None
             for f in self.temp_dir.glob(f"{temp_filename}.*"):
-                return f
+                return _audio_only(f)
             # yt-dlp sometimes names with a different extension; try common ones
             for ext in ("m4a", "webm", "opus", "mp3", "ogg", "aac"):
                 p = self.temp_dir / f"{temp_filename}.{ext}"
                 if p.exists():
-                    return p
+                    return _audio_only(p)
 
         # — Attempt 2: cookies (native) —
         if returncode != 0 and cookie_args and _should_retry_download_with_cookies(combined_output):
             returncode, combined_output = _run_stream(_with_cookie_args(native_args))
             if returncode == 0:
                 for f in self.temp_dir.glob(f"{temp_filename}.*"):
-                    return f
+                    return _audio_only(f)
 
         # — Attempt 3: re-encode (with -x, cookies if available) —
         encode_args = _build_args(native=False) + [url]
@@ -985,7 +1010,7 @@ class YouTubeDownloader:
         returncode, combined_output = _run_stream(final_args)
         if returncode == 0:
             for f in self.temp_dir.glob(f"{temp_filename}.*"):
-                return f
+                return _audio_only(f)
 
         # — All attempts exhausted —
         raise Exception(combined_output or f"yt-dlp exited {returncode}")

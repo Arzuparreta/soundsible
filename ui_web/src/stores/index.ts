@@ -73,6 +73,7 @@ import { invalidateLibrarySync, syncLibrary, syncLibrarySoon } from './library';
 export { addRecentCompleted, applyDownloadEvent, downloadCounts } from './downloads';
 import { applyDownloadEvent } from './downloads';
 import { levelFor as levelForTrack } from '../lib/loudness';
+import { refreshLinkReading } from '../lib/linkQuality';
 export * from './identity';
 import {
   isFavouriteKeys,
@@ -3799,6 +3800,9 @@ export function initStore(): void {
       }
     }
     setState('playback', { isLoading: true, phase: 'buffering' });
+    // A wait long enough to notice is a wait worth explaining. The reading is
+    // throttled inside, so a track that stalls repeatedly asks once.
+    void refreshLinkReading();
     scheduleStallRecovery(attempt?.audibleAt == null ? STARTUP_RECOVERY_MS : STALL_RECOVERY_MS);
   });
   a.addEventListener('canplay', () => {

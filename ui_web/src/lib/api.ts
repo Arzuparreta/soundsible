@@ -714,6 +714,15 @@ export const api = {
   // re-deriving it here from the flat list. Entities come back with track ids,
   // which the store already resolves into playable tracks.
   /** Albums, in one of the orderings the engine also serves over Subsonic. */
+  /** How fast the engine is actually delivering audio to this client, and from
+   * where it sees it. Read from real playback, so it costs no extra bytes. */
+  getLinkQuality: () =>
+    request<{
+      scope: 'local' | 'lan' | 'tailnet' | 'remote' | null;
+      kbps: number | null;
+      samples: number;
+      measured_at: number | null;
+    }>('/api/playback/link', { timeoutMs: 8000 }),
   getLibraryAlbums: (params?: AlbumBrowseQuery) =>
     request<{ albums?: CatalogAlbum[]; sort?: string }>(
       `/api/library/albums${albumQuery(params)}`,
@@ -1292,6 +1301,15 @@ export const api = {
   pauseLossless: () => request<LosslessStatus>('/api/lossless/pause', { method: 'POST' }),
   resumeLossless: () => request<LosslessStatus>('/api/lossless/resume', { method: 'POST' }),
   cancelLossless: () => request<LosslessStatus>('/api/lossless/cancel', { method: 'POST' }),
+  /** Drop video streams and cap artwork on the files this library holds.
+   * `dry_run` reports without touching anything, which is how it should be read
+   * first: the pass rewrites files and re-keys track ids. */
+  repairLibrary: (dryRun = true) =>
+    request<{ status?: string; dry_run?: boolean }>('/api/library/repair', {
+      method: 'POST',
+      body: { dry_run: dryRun },
+      timeoutMs: 60000,
+    }),
   optimizeLibrary: () =>
     request<{ status?: string }>('/api/downloader/optimize', { method: 'POST', timeoutMs: 60000 }),
   cloudSync: () => request<{ status?: string }>('/api/downloader/sync', { method: 'POST', timeoutMs: 60000 }),
