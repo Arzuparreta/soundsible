@@ -1017,6 +1017,7 @@ export const en = {
     playlistCoverFailed: 'Could not change the cover',
     trackUnavailable: 'This track could not be played',
     trackUnavailableSkipping: 'Track unavailable — skipping',
+    autoModeHandoffPaused: 'Previews unavailable right now — Auto Mode will try again shortly',
     audioNeedsGesture: 'Audio was interrupted — tap play to resume',
   },
   password: {

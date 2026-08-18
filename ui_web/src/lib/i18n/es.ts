@@ -1021,6 +1021,7 @@ export const es: Dict = {
     playlistCoverFailed: 'No se pudo cambiar la portada',
     trackUnavailable: 'No se pudo reproducir esta canción',
     trackUnavailableSkipping: 'Canción no disponible — pasando a la siguiente',
+    autoModeHandoffPaused: 'Las vistas previas no están disponibles ahora — el Modo Auto lo volverá a intentar en breve',
     audioNeedsGesture: 'El audio se interrumpió — toca play para reanudar',
   },
   password: {

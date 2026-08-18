@@ -1029,6 +1029,7 @@ export const fr: Dict = {
     playlistCoverFailed: 'Impossible de changer la pochette',
     trackUnavailable: 'Impossible de lire ce morceau',
     trackUnavailableSkipping: 'Morceau indisponible — on passe au suivant',
+    autoModeHandoffPaused: 'Aperçus indisponibles pour le moment — le Mode Auto réessaiera bientôt',
     audioNeedsGesture: 'Audio interrompu — appuyez sur lecture pour reprendre',
   },
   password: {
