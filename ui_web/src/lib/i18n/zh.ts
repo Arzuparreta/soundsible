@@ -1006,6 +1006,7 @@ export const zh: Dict = {
     playlistCoverFailed: '无法更换封面',
     trackUnavailable: '无法播放这首歌曲',
     trackUnavailableSkipping: '歌曲不可用 — 跳到下一首',
+    autoModeHandoffPaused: '预览暂时不可用 — 自动模式稍后会重试',
     audioNeedsGesture: '音频被中断 — 点按播放以继续',
   },
   password: {

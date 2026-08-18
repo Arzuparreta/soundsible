@@ -1168,6 +1168,27 @@ const IDLE_TRANSITION = {
   at: undefined,
 } as const;
 
+/**
+ * Automatic handoffs that fail back to back, so a station-wide upstream
+ * outage cannot burn through the whole route in an instant.
+ *
+ * A dead candidate is dropped and the next one tried immediately — that is
+ * the point of the runway. But `evaluateDjRunway` re-fires on every
+ * `timeupdate`, several times a second, and nothing before this stopped it
+ * re-arming the very next candidate the moment one failed. An upstream outage
+ * fails every candidate the same way, so that loop cleared an entire
+ * pre-planned route — eight songs, none of which ever sounded — before the
+ * listener could react. After `MAX_CONSECUTIVE_AUTO_HANDOFF_FAILURES` in a
+ * row, automatic attempts pause for `AUTO_HANDOFF_COOLDOWN_MS` (the backend's
+ * own upstream backoff window) while the current track keeps playing
+ * undisturbed; a listener-requested skip (`autoSkip`) is never gated by this
+ * — only the automatic path is.
+ */
+const MAX_CONSECUTIVE_AUTO_HANDOFF_FAILURES = 2;
+const AUTO_HANDOFF_COOLDOWN_MS = 30_000;
+let autoHandoffFailures = 0;
+let autoHandoffCooldownUntil = 0;
+
 interface CommittedTransition {
   queueId: string;
   fromKey: string;
@@ -1253,6 +1274,7 @@ function commitTransition(
   audioService.armTransition(trackUrl(next), plan, {
     onDominant: () => {
       if (!owns()) return;
+      autoHandoffFailures = 0;
       if (!manual) listeningLearning.complete(outgoing, outgoingDuration);
       const queue = state.playback.queue;
       const index = queue.findIndex((entry) => entry.queueId === next.queueId);
@@ -1304,7 +1326,19 @@ function commitTransition(
       // the audible deck, and make Auto skip through several broken tracks in
       // silence. Drop the failed handoff and let the DJ refill the runway while
       // the current song keeps playing.
-      if (dropAutoRouteOccurrence(next.queueId)) {
+      if (!dropAutoRouteOccurrence(next.queueId)) return;
+      // A listener-requested skip is always worth attempting and always worth
+      // reporting on its own — it does not retry unattended, so it cannot
+      // spiral, and it does not count toward or trip the breaker below.
+      if (manual) {
+        toast.error(tr('toast.trackUnavailableSkipping'));
+        return;
+      }
+      autoHandoffFailures += 1;
+      if (autoHandoffFailures >= MAX_CONSECUTIVE_AUTO_HANDOFF_FAILURES) {
+        autoHandoffCooldownUntil = performance.now() + AUTO_HANDOFF_COOLDOWN_MS;
+        toast.error(tr('toast.autoModeHandoffPaused'));
+      } else {
         toast.error(tr('toast.trackUnavailableSkipping'));
       }
     },
@@ -1371,6 +1405,7 @@ function maybeRefineTransition(current: Track, next: PlaybackQueueEntry, fromKey
 /** Watch the runway from `timeupdate` and commit when the moment arrives. */
 function evaluateDjRunway(): void {
   if (!state.autoMode.active || committedTransition || audioService.mixPhase() !== 'idle') return;
+  if (performance.now() < autoHandoffCooldownUntil) return;
   const pb = state.playback;
   const current = pb.currentTrack;
   const next = pb.queue[pb.index + 1];
@@ -1781,6 +1816,8 @@ export const actions = {
     const current = state.playback.currentTrack;
     if (state.autoMode.active || (current && isPodcastTrack(current))) return;
     autoSessionEpoch += 1;
+    autoHandoffFailures = 0;
+    autoHandoffCooldownUntil = 0;
     autoPlaybackPrefs = {
       shuffle: state.playback.shuffle,
       repeat: state.playback.repeat,

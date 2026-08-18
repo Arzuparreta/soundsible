@@ -885,6 +885,90 @@ describe('Playback load coalescing', () => {
     expect(state.playback.currentTrack?.id).toBe('current');
     expect(audioService.load).toHaveBeenCalledTimes(2);
   });
+
+  it('pauses automatic handoffs after repeated failures instead of burning the whole route', async () => {
+    // The incident this pins: a station-wide upstream outage failed every
+    // candidate the same way, and nothing stopped the runway from re-arming
+    // the next one on the very next `timeupdate` — clearing an entire
+    // eight-song route in an instant, none of it ever heard.
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan([
+      'route-00001', 'route-00002', 'route-00003', 'route-00004',
+      'route-00005', 'route-00006', 'route-00007', 'route-00008',
+    ]));
+    let mixCallbacks: { onError: () => void } | null = null;
+    const armTransition = vi.fn((
+      _url: string,
+      _plan: unknown,
+      callbacks: { onError: () => void },
+    ) => {
+      mixCallbacks = callbacks;
+    });
+    const { actions, state, initStore, fireDeckEvent, deck, toastError } = await loadStore(
+      {
+        planDjQueue,
+        // Within the refine window too; the conservative fallback plan is fine.
+        refineDjTransition: vi.fn().mockResolvedValue({ measured: false }),
+      },
+      { armTransition },
+    );
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', duration: 180 };
+    initStore();
+    actions.playFrom([current], 0);
+    fireDeckEvent('playing');
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    // Within COMMIT_LEAD_SECONDS of the (untrusted, fallback) out-cue: every
+    // `timeupdate` from here re-satisfies the automatic commit condition.
+    (deck as unknown as { currentTime: number }).currentTime = 150;
+
+    fireDeckEvent('timeupdate');
+    expect(armTransition).toHaveBeenCalledTimes(1);
+    mixCallbacks!.onError();
+    expect(toastError).toHaveBeenLastCalledWith('Track unavailable — skipping');
+
+    fireDeckEvent('timeupdate');
+    expect(armTransition).toHaveBeenCalledTimes(2);
+    mixCallbacks!.onError();
+    expect(toastError).toHaveBeenLastCalledWith(
+      'Previews unavailable right now — Auto Mode will try again shortly',
+    );
+
+    // The breaker is open: a third automatic candidate is never even tried,
+    // and the original track — never interrupted through any of this — is
+    // still what is playing.
+    const routeLength = state.playback.queue.length;
+    fireDeckEvent('timeupdate');
+    expect(armTransition).toHaveBeenCalledTimes(2);
+    expect(state.playback.queue.length).toBe(routeLength);
+    expect(state.playback.currentTrack?.id).toBe('current');
+  });
+
+  it('does not gate a listener-requested skip behind the automatic breaker', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan([
+      'route-00001', 'route-00002', 'route-00003', 'route-00004',
+      'route-00005', 'route-00006', 'route-00007', 'route-00008',
+    ]));
+    const armTransition = vi.fn();
+    const { actions, state, initStore, fireDeckEvent } = await loadStore(
+      { planDjQueue },
+      { armTransition },
+    );
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', duration: 180 };
+    initStore();
+    actions.playFrom([current], 0);
+    fireDeckEvent('playing');
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    await actions.autoSkip();
+    await actions.autoSkip();
+    await actions.autoSkip();
+
+    // Three listener-requested skips, none of them counted toward the
+    // automatic breaker — every one reached `armTransition`.
+    expect(armTransition).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe('Playback queue lanes', () => {
