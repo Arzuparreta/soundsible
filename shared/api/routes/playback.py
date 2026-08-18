@@ -7,6 +7,7 @@ import os
 import time
 
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
+from werkzeug.exceptions import HTTPException
 
 from shared import preview_cache
 from shared.api.memo import Memo
@@ -338,12 +339,12 @@ def stream_local_track(track_id):
         # track read back as a client-side number with no server half to compare
         # it against — which is exactly the shape of "it takes seconds to start"
         # that cannot be attributed to anything.
-        _emit_stream_timing(
-            attempt_id=_clean_attempt_id(),
+        return _measure_delivery(
+            response,
             track_id=track_id,
+            source_kind="local",
             cache_state="disk",
             egress="direct",
-            source_kind="local",
             segments={
                 "open_ms": round((time.perf_counter() - started) * 1000, 1),
                 "ranged": bool(request.headers.get("Range")),
@@ -379,9 +380,84 @@ def stream_local_track(track_id):
                 "at_ms": round(time.time() * 1000),
             },
         )
-        return response
+    except HTTPException:
+        # A range past the end of the file is a 416, and Werkzeug already built
+        # it. Swallowing it into a 500 told the player the track was broken
+        # rather than that the ask was, and a media element believes that.
+        raise
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _measure_delivery(
+    response,
+    *,
+    track_id: str,
+    source_kind: str,
+    cache_state: str,
+    egress: str,
+    segments: dict,
+):
+    """Report this response once it has actually been sent, not once it was opened.
+
+    `Content-Length` says what was promised; a media element abandons responses
+    constantly, so the promise and the delivery are different numbers and only
+    the second explains a wait. Wrapping the body is what makes the second
+    knowable — it costs the WSGI file-wrapper fast path, which on a response
+    already sliced into chunks is not where the time goes.
+
+    Everything the report needs is captured *here*, in the request, because the
+    body is iterated by the server after the request context is gone: reading
+    `request` from inside the generator raises, and would have raised in
+    production on every stream.
+    """
+    from shared.link_quality import classify_scope, record
+    from shared.user_context import current_user_id
+
+    original = response.response
+    promised = int(response.headers.get("Content-Length") or 0)
+    scope = classify_scope(request.remote_addr)
+    user_id = current_user_id()
+    attempt_id = _clean_attempt_id()
+    started = time.perf_counter()
+    delivered = 0
+
+    def measured():
+        nonlocal delivered
+        try:
+            for chunk in original:
+                delivered += len(chunk)
+                yield chunk
+        finally:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            complete = promised > 0 and delivered >= promised
+            record(
+                user_id,
+                scope=scope,
+                delivered_bytes=delivered,
+                elapsed_ms=elapsed_ms,
+                complete=complete,
+            )
+            _emit_stream_timing(
+                attempt_id=attempt_id,
+                track_id=track_id,
+                cache_state=cache_state,
+                egress=egress,
+                source_kind=source_kind,
+                segments={
+                    **segments,
+                    "delivered_bytes": delivered,
+                    "write_ms": round(elapsed_ms, 1),
+                    "complete": complete,
+                    "scope": scope,
+                },
+            )
+            closer = getattr(original, "close", None)
+            if callable(closer):
+                closer()
+
+    response.response = measured()
+    return response
 
 
 def _clean_attempt_id() -> str | None:
@@ -527,9 +603,10 @@ def _serve_cached_preview(
     response.headers["X-Soundsible-Playback-Source"] = "preview"
     response.headers["X-Soundsible-Playback-Cache"] = cache_state
     response.headers["X-Soundsible-Playback-Egress"] = egress
-    _emit_stream_timing(
-        attempt_id=_clean_attempt_id(),
+    return _measure_delivery(
+        response,
         track_id=video_id,
+        source_kind="preview",
         cache_state=cache_state,
         egress=egress,
         segments={
@@ -547,7 +624,6 @@ def _serve_cached_preview(
             "at_ms": round(time.time() * 1000),
         },
     )
-    return response
 
 
 @playback_bp.route("/api/preview/stream/<video_id>", methods=["GET"])
@@ -1225,3 +1301,18 @@ def playback_remote_command():
     if warning:
         response["warning"] = warning
     return jsonify(response)
+
+
+@playback_bp.route("/api/playback/link", methods=["GET"])
+@rate_limit("playback_link", limit=120, window_sec=60)
+def playback_link_quality():
+    """How fast the music is reaching this listener, and from where.
+
+    Read from the audio already delivered — there is no probe traffic here. A
+    null `kbps` means nothing measurable has been served yet, which the player
+    must show as "not measured" rather than as zero.
+    """
+    from shared.link_quality import snapshot
+    from shared.user_context import current_user_id
+
+    return jsonify(snapshot(current_user_id()))

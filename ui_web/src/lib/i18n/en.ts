@@ -93,6 +93,7 @@ export const en = {
     volume: 'Volume',
     loading: 'Loading…',
     buffering: 'Buffering…',
+    bufferingSlow: 'Buffering — {link} Mbps, this track needs {needed}',
     reconnecting: 'Reconnecting…',
     findingMore: 'Finding more music…',
     needsGesture: 'Tap play to resume',
@@ -234,6 +235,7 @@ export const en = {
       closePanel: 'Close Auto Mode panel',
     },
     note: {
+      connection: 'Measured from the music already delivered — no test traffic. A track needs about 1.5x its own bitrate to play straight through.',
       quoted: '“{text}”',
       direction: 'a new heading',
       added: '“{title}” into the set',
@@ -382,6 +384,22 @@ export const en = {
     sharedLink: 'Shared song',
   },
   settings: {
+    repair: 'Repair files',
+    repairTitle: 'Repair library files',
+    repairMsg: 'Files that carry a video stream or an oversized cover will be rewritten with the audio untouched. This changes their ids, and playlists and favourites follow automatically.',
+    repairConfirm: 'Repair',
+    link: {
+      label: 'Delivery',
+      measured: '{where} · {mbps} Mbps measured',
+      notMeasured: '{where} · not measured yet',
+      scopeUnknown: 'Unknown network',
+      scope: {
+        local: 'This machine',
+        lan: 'Local network',
+        tailnet: 'Tailnet',
+        remote: 'Remote',
+      },
+    },
     title: 'Settings',
     searchPlaceholder: 'Search settings',
     searchNoResults: 'Nothing matches “{query}”',
@@ -419,6 +437,7 @@ export const en = {
     },
     /* Headers used by the index and inside the submenus. */
     group: {
+      connection: 'Connection',
       you: 'You',
       preferences: 'Preferences',
       system: 'Library and system',
@@ -544,6 +563,11 @@ export const en = {
     emptyLibraryCountMsg: 'You have {count} in your library.',
     emptyLibraryCountLabel: 'Enter the number of tracks in your library to confirm',
     toast: {
+      repairScanning: 'Checking what the files carry…',
+      repairScanned: 'Report written to the downloads log',
+      repairing: 'Repairing files…',
+      repaired: 'Files repaired',
+      repairFailed: 'Repair failed',
       notSaved: 'Could not save',
       qualityUpdated: 'Quality updated',
       optimizing: 'Optimising…',

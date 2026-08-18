@@ -2,6 +2,7 @@ import { createMemo, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
+import { linkFits, linkReading, mbps, trackKbps } from '../lib/linkQuality';
 import { RadioBadge } from './RadioBadge';
 import { Spinner } from './Spinner';
 import styles from './OmniBar.module.css';
@@ -18,10 +19,23 @@ export function OmniBar() {
     if (state.playback.needsGesture) return t('omnibar.needsGesture');
     if (state.playback.phase === 'starved') return t('omnibar.findingMore');
     if (state.playback.phase === 'recovering') return t('omnibar.reconnecting');
-    if (state.playback.phase === 'buffering') return t('omnibar.buffering');
+    if (state.playback.phase === 'buffering') return bufferingLine();
     if (loading()) return t('omnibar.loading');
     return current()?.artist ?? '';
   });
+  /** "Buffering…" is true and useless. When the engine has measured the link and
+   * the track plainly does not fit through it, say that instead: a listener who
+   * can see 0,7 Mbps against a track that needs 1,5 knows what to do, and a
+   * listener watching a spinner does not. Silent when nothing was measured —
+   * "not measured" and "slow" are different answers. */
+  const bufferingLine = () => {
+    const reading = linkReading();
+    const needed = trackKbps(current());
+    if (reading?.kbps && needed && linkFits(reading, current()) === false) {
+      return t('omnibar.bufferingSlow', { link: mbps(reading.kbps), needed: mbps(needed) });
+    }
+    return t('omnibar.buffering');
+  };
   const audibleVolume = createMemo(() => (state.playback.muted ? 0 : state.playback.volume));
   const volumePct = createMemo(() => Math.round(audibleVolume() * 100));
   const pct = createMemo(() => {

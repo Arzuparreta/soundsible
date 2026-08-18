@@ -75,6 +75,9 @@ async function loadStore(
   const api = {
     getLibrary: vi.fn().mockResolvedValue({ tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] }),
     getSaved: vi.fn().mockResolvedValue([]),
+    // Nothing measured yet: the screen must read the same as before the meter
+    // existed unless the engine has something to say.
+    getLinkQuality: vi.fn().mockResolvedValue({ scope: 'lan', kbps: null, samples: 0, measured_at: null }),
     toggleSaved: vi.fn().mockResolvedValue({ is_saved: true }),
     toggleFavourite: vi.fn().mockResolvedValue({ is_favourite: true }),
     resolveCatalogItem: vi.fn().mockResolvedValue({ video_id: null }),

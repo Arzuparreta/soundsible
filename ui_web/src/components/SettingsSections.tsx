@@ -2,6 +2,7 @@ import { createSignal, onMount, For, Show, type JSX } from 'solid-js';
 import { state, actions } from '../stores';
 import { api } from '../lib/api';
 import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
+import { linkReading, mbps, refreshLinkReading } from '../lib/linkQuality';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
 import { passwordDialog } from '../lib/passwordDialog';
@@ -247,6 +248,16 @@ function AccessibilitySection() {
 
 function PlaybackSection() {
   const [learning, setLearning] = createSignal(true);
+  // Read on open rather than polled: it is a diagnostic, not a dashboard, and
+  // the number that matters is the one from the last time music actually moved.
+  onMount(() => void refreshLinkReading(true));
+  /** What the engine has measured, in the words a listener can act on. */
+  const connection = () => {
+    const reading = linkReading();
+    const where = reading?.scope ? t(`settings.link.scope.${reading.scope}`) : t('settings.link.scopeUnknown');
+    if (!reading?.kbps) return t('settings.link.notMeasured', { where });
+    return t('settings.link.measured', { where, mbps: mbps(reading.kbps) });
+  };
   const [autoplay, setAutoplay] = createSignal(state.playback.autoplayEnabled);
   const [leveling, setLeveling] = createSignal(state.playback.volumeLeveling);
 
@@ -302,6 +313,10 @@ function PlaybackSection() {
 
   return (
     <>
+      <SettingsGroup label={t('settings.group.connection')} note={t('settings.note.connection')}>
+        <ValueRow label={t('settings.link.label')} value={connection()} />
+      </SettingsGroup>
+
       <SettingsGroup label={t('settings.playback')} note={t('settings.note.volumeLeveling')}>
         <SwitchRow
           label={t('settings.volumeLeveling')}
@@ -350,6 +365,33 @@ function LibrarySection() {
       h.update('error', t('settings.toast.scanFailed'));
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Two taps on purpose. The first reports what carries video or a heavy
+   * cover; the second rewrites those files, which changes their ids. Nobody
+   * should discover that from a single unlabelled button. */
+  const repair = async () => {
+    const h = toast.loading(t('settings.toast.repairScanning'));
+    try {
+      await api.repairLibrary(true);
+      h.update('success', t('settings.toast.repairScanned'));
+    } catch {
+      h.update('error', t('settings.toast.repairFailed'));
+      return;
+    }
+    const ok = await confirmDialog({
+      title: t('settings.repairTitle'),
+      message: t('settings.repairMsg'),
+      confirmLabel: t('settings.repairConfirm'),
+    });
+    if (!ok) return;
+    const run = toast.loading(t('settings.toast.repairing'));
+    try {
+      await api.repairLibrary(false);
+      run.update('success', t('settings.toast.repaired'));
+    } catch {
+      run.update('error', t('settings.toast.repairFailed'));
     }
   };
 
@@ -438,6 +480,7 @@ function LibrarySection() {
       </SettingsGroup>
 
       <SettingsGroup label={t('settings.group.maintenance')} note={t('settings.note.maintenance')}>
+        <ActionRow label={t('settings.repair')} onClick={repair} />
         <Show when={isAdmin()}>
           <ActionRow label={t('settings.optimize')} onClick={optimize} />
         </Show>

@@ -1481,6 +1481,73 @@ def run_optimization_task(dry_run):
     orchestrator.submit_task("optimization", _task)
 
 
+def run_library_repair_task(dry_run: bool = True, limit: int = 0):
+    """Strip video streams and cap artwork on the files this account holds.
+
+    Acquisition kept whatever yt-dlp handed over, and when YouTube offered no
+    audio-only stream that was a progressive 360p video with the music muxed in.
+    The repair is a remux — the audio is moved, never re-encoded — but it does
+    change the bytes, and the hash of those bytes is the track id, so the id map
+    it returns has to reach every place that names a track: the manifests, the
+    playlists (through `replace_library`) and the favourites.
+    """
+    from shared.user_context import current_user_id, user_context
+
+    requester_id = current_user_id()
+
+    def _task():
+        with user_context(requester_id):
+            try:
+                from shared.library_repair import repair_library
+
+                core = get_user_core(requester_id)
+                library = core.library
+                if not library.metadata:
+                    _loaded_user_library()
+                mode = "DRY RUN" if dry_run else "LIVE"
+                queue_manager_dl.add_log(f"--- Starting library repair ({mode}) ---")
+
+                summary = repair_library(
+                    list(library.metadata.tracks),
+                    get_output_dir_for_repair(),
+                    dry_run=dry_run,
+                    limit=limit,
+                    progress=lambda message: queue_manager_dl.add_log(f"🔧 {message}"),
+                )
+
+                if not dry_run and summary["id_map"]:
+                    library.metadata.tracks = summary["tracks"]
+                    library.metadata.version += 1
+                    library._library_revision = library.db.replace_library(
+                        library.metadata, id_replacements=summary["id_map"]
+                    )
+                    library._export_metadata(library.metadata.to_json())
+                    for old_id, new_id in summary["id_map"].items():
+                        core.favourites.remap_library_id(old_id, new_id)
+                    remap_track_ids_for_all_users(summary["id_map"])
+                    with app.app_context():
+                        emit_to_user("library_updated", user_id=requester_id)
+                        emit_to_user("favourites_updated", user_id=requester_id)
+
+                saved = summary["saved_bytes"] / 1024 / 1024
+                queue_manager_dl.add_log(
+                    f"--- Library repair finished: {summary['repaired']} file(s), "
+                    f"{saved:.0f} MB {'recoverable' if dry_run else 'saved'} ---"
+                )
+            except Exception as exc:
+                queue_manager_dl.add_log(f"❌ Library repair error: {exc}")
+
+    orchestrator.submit_task("library_repair", _task)
+
+
+def get_output_dir_for_repair() -> Path:
+    """The content-addressed pool a repaired file goes back into."""
+    from odst_tool.config import TRACKS_DIR
+    from shared.app_config import get_output_dir
+
+    return Path(get_output_dir()) / TRACKS_DIR
+
+
 def run_sync_task():
     # Cloud sync is an instance-level action and runs on a background thread, so
     # capture who asked for it while we still have a request context. The tracks

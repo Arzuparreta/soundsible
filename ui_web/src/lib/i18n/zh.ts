@@ -94,6 +94,7 @@ export const zh: Dict = {
     volume: '音量',
     loading: '加载中…',
     buffering: '缓冲中…',
+    bufferingSlow: '缓冲中 — {link} Mbps，这首曲目需要 {needed}',
     reconnecting: '正在重新连接…',
     findingMore: '正在寻找更多音乐…',
     needsGesture: '点按播放以继续',
@@ -235,6 +236,7 @@ export const zh: Dict = {
       closePanel: '关闭自动模式面板',
     },
     note: {
+      connection: '根据已经传输的音乐测得，不产生测试流量。一首曲目需要约 1.5 倍自身码率才能顺畅播放。',
       quoted: '「{text}」',
       direction: '新的方向',
       added: '把《{title}》排进来',
@@ -383,6 +385,22 @@ export const zh: Dict = {
     sharedLink: '共享歌曲',
   },
   settings: {
+    repair: '修复文件',
+    repairTitle: '修复音乐库文件',
+    repairMsg: '含有视频流或超大封面的文件将被重写，音频本身不变。这会改变它们的 id，播放列表和收藏会自动跟随。',
+    repairConfirm: '修复',
+    link: {
+      label: '传输',
+      measured: '{where} · 实测 {mbps} Mbps',
+      notMeasured: '{where} · 尚未测量',
+      scopeUnknown: '未知网络',
+      scope: {
+        local: '本机',
+        lan: '局域网',
+        tailnet: 'Tailnet',
+        remote: '远程',
+      },
+    },
     title: '设置',
     searchPlaceholder: '搜索设置',
     searchNoResults: '没有匹配“{query}”的结果',
@@ -418,6 +436,7 @@ export const zh: Dict = {
       subsonic: '在 Symfonium、Amperfy、Feishin 等客户端中收听你的音乐库',
     },
     group: {
+      connection: '连接',
       you: '你的账户',
       preferences: '偏好设置',
       system: '音乐库与系统',
@@ -539,6 +558,11 @@ export const zh: Dict = {
     emptyLibraryCountMsg: '资料库中有 {count}。',
     emptyLibraryCountLabel: '输入资料库中的曲目数量以确认',
     toast: {
+      repairScanning: '正在检查文件内容…',
+      repairScanned: '报告已写入下载日志',
+      repairing: '正在修复文件…',
+      repaired: '文件已修复',
+      repairFailed: '修复失败',
       notSaved: '保存失败',
       qualityUpdated: '音质已更新',
       optimizing: '优化中…',

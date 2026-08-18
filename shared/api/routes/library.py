@@ -737,3 +737,25 @@ def delete_playlist(name):
     lib._save_metadata()
     api["emit_to_user"]("library_updated")
     return _playlist_mutation_response(metadata)
+
+
+@library_bp.route("/api/library/repair", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_repair", limit=6, window_sec=300)
+def repair_library_files():
+    """Drop video streams and cap artwork on the files this library holds.
+
+    `dry_run` defaults to true: the pass rewrites files and re-keys track ids,
+    and both of those are worth reading a report about first. Progress goes to
+    the downloader log, which is where the other maintenance passes report.
+    """
+    from shared.api import run_library_repair_task
+
+    data = request.json or {}
+    dry_run = data.get("dry_run", True)
+    try:
+        limit = max(0, int(data.get("limit") or 0))
+    except (TypeError, ValueError):
+        limit = 0
+    run_library_repair_task(bool(dry_run), limit)
+    return jsonify({"status": "started", "dry_run": bool(dry_run), "limit": limit})

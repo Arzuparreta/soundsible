@@ -31,6 +31,11 @@ export interface Track {
   audio_source_url?: string | null;
   audio_license_url?: string | null;
   audio_identity_verified?: boolean;
+  /** Bytes on disk, and the bitrate the encoder was asked for. What has to
+   * cross the network is the first one — on a 24-bit FLAC they differ by a lot,
+   * which is exactly when it matters. See `lib/linkQuality.ts`. */
+  file_size?: number;
+  bitrate?: number;
   /** When this song joined the library, naive UTC ISO-8601 — from the engine
    * for a file, from the saved entry for a song that streams. The one field
    * "recently added" is allowed to be built on; see `lib/libraryOrder.ts`. */
