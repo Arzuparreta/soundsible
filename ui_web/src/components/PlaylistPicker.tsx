@@ -21,12 +21,12 @@ export function openPlaylistPicker(track: Track): void {
       if (!name) return;
       const ok = await actions.createPlaylist(name);
       if (ok) {
-        await actions.addToPlaylist(name, track.id);
+        await actions.addToPlaylist(name, track);
         close();
       }
     };
     const addTo = (name: string) => {
-      void actions.addToPlaylist(name, track.id);
+      void actions.addToPlaylist(name, track);
       close();
     };
     const newTap = createResponsiveTap({ onTap: () => void createNew() });

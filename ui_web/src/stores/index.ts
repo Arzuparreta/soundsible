@@ -26,6 +26,7 @@ import { vibrate } from '../lib/haptics';
 import { isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
 import { queueIdentity, queueIndexOf } from '../lib/queueDiscovery';
 import { savedFromTrack, savedVideoId } from '../lib/saved';
+import { trackKeys } from '../lib/playbackIdentity';
 import {
   GeneratedQueueController,
   type AutoActivity,
@@ -3198,26 +3199,27 @@ export const actions = {
     }
   },
 
-  async addToPlaylist(name: string, trackId: string): Promise<void> {
-    if ((state.playlists[name] ?? []).includes(trackId)) {
+  async addToPlaylist(name: string, track: Track): Promise<void> {
+    if ((state.playlists[name] ?? []).includes(track.id)) {
       toast.info(tr('toast.alreadyInPlaylist'));
       return;
     }
     try {
-      applyPlaylistMutation(await api.addTrackToPlaylist(name, trackId));
-      const track = state.library.find((item) => item.id === trackId);
-      if (track) {
-        void api.emitDiscoveryEvent('music_added_to_playlist', {
-          media_type: 'music_track',
-          track_id: track.id,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          youtube_id: track.youtube_id,
-          playlist_name: name,
-          source: 'library',
-        }).catch(() => {});
-      }
+      applyPlaylistMutation(await api.addTrackToPlaylist(name, track.id));
+      // A playlist membership is a durable claim on the song, same as a
+      // favourite — a track played from Auto Mode/DJ or a search result has
+      // no other way to stay resolvable once the session that played it ends.
+      if (!isSavedKeys(trackKeys(track))) actions.toggleSaved(savedFromTrack(track));
+      void api.emitDiscoveryEvent('music_added_to_playlist', {
+        media_type: 'music_track',
+        track_id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        youtube_id: track.youtube_id,
+        playlist_name: name,
+        source: track.source === 'preview' ? 'preview' : 'library',
+      }).catch(() => {});
       toast.success(tr('toast.addedToPlaylist', { name }));
     } catch {
       toast.error(tr('toast.addToPlaylistFailed'));

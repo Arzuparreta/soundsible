@@ -2061,6 +2061,66 @@ function state_favourite_after_delete() {
   ];
 }
 
+describe('Solid store playlists', () => {
+  const preview = {
+    id: 'dQw4w9WgXcQ',
+    title: 'Weightless',
+    artist: 'Marconi Union',
+    duration: 490,
+    source: 'preview' as const,
+  };
+
+  /** A fake engine that actually remembers what was created/added, mirroring
+   * the real `_playlist_mutation_response` shape (the full map, every call). */
+  function playlistApi() {
+    const playlists: Record<string, string[]> = {};
+    return {
+      playlists,
+      createPlaylist: vi.fn(async (name: string) => {
+        playlists[name] = [];
+        return { playlists: { ...playlists }, settings: {} };
+      }),
+      addTrackToPlaylist: vi.fn(async (name: string, trackId: string) => {
+        playlists[name] = [...(playlists[name] ?? []), trackId];
+        return { playlists: { ...playlists }, settings: {} };
+      }),
+    };
+  }
+
+  it('saves a track that is only a preview when it becomes a playlist member, so the playlist can render it', async () => {
+    const { createPlaylist, addTrackToPlaylist } = playlistApi();
+    const { actions, state, musicLibrary, api } = await loadStore({ createPlaylist, addTrackToPlaylist });
+
+    await actions.createPlaylist('Arma Reforger');
+    await actions.addToPlaylist('Arma Reforger', preview);
+
+    // The backend association exists...
+    expect(state.playlists['Arma Reforger']).toEqual([preview.id]);
+    // ...and, unlike before, so does something that can resolve it: the track
+    // was captured into the saved collection, exactly as favouriting would.
+    expect(api.toggleSaved).toHaveBeenCalledWith(
+      expect.objectContaining({ keys: ['yt:dQw4w9WgXcQ'], title: 'Weightless' }),
+    );
+    expect(musicLibrary().map((t) => t.id)).toContain(preview.id);
+  });
+
+  it('does not re-save a track that is already owned when adding it to a playlist', async () => {
+    const owned = { id: 'hash9f2a', title: 'Weightless', artist: 'Marconi Union', youtube_id: 'dQw4w9WgXcQ' };
+    const { createPlaylist, addTrackToPlaylist } = playlistApi();
+    const { actions, api } = await loadStore({
+      createPlaylist,
+      addTrackToPlaylist,
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [owned], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+    });
+
+    await actions.syncLibrary();
+    await actions.createPlaylist('Favs');
+    await actions.addToPlaylist('Favs', owned);
+
+    expect(api.toggleSaved).not.toHaveBeenCalled();
+  });
+});
+
 describe('the end of a track', () => {
   /** A store with the media listeners bound, one track playing, and the deck
    * reporting whatever the test needs it to. */

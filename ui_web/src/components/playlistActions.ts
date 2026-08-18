@@ -1,7 +1,7 @@
 import { type ActionMenuOptions } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import { openPlaylistCoverPicker } from './CoverPicker';
-import { actions, state } from '../stores';
+import { actions, state, musicLibrary } from '../stores';
 import { promptDialog } from '../lib/prompt';
 import { confirmDialog } from '../lib/confirm';
 import type { Track } from '../types/music';
@@ -17,7 +17,7 @@ export interface PlaylistMenuHooks {
 /** Resolve a playlist's track ids to library tracks (in order). */
 function playlistTracks(name: string): Track[] {
   const ids = state.playlists[name] ?? [];
-  const byId = new Map(state.library.map((t) => [t.id, t] as const));
+  const byId = new Map(musicLibrary().map((t) => [t.id, t] as const));
   return ids.map((id) => byId.get(id)).filter((t): t is Track => !!t);
 }
 
