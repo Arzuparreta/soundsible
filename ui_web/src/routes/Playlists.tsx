@@ -1,6 +1,6 @@
 import { createMemo, For, Show, type JSX } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
-import { state, actions } from '../stores';
+import { state, actions, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import { coverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
@@ -18,7 +18,7 @@ import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 export default function Playlists() {
   const navigate = useNavigate();
-  const byId = createMemo(() => new Map(state.library.map((t) => [t.id, t] as const)));
+  const byId = createMemo(() => new Map(musicLibrary().map((t) => [t.id, t] as const)));
   const names = createMemo(() => Object.keys(state.playlists));
 
   const coverBg = (name: string, ids: string[]): JSX.CSSProperties => {

@@ -1,6 +1,6 @@
 import { For, Show, createMemo, type JSX } from 'solid-js';
 import { openOverlay } from '../lib/overlay';
-import { state, actions } from '../stores';
+import { state, actions, musicLibrary } from '../stores';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
@@ -16,7 +16,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 export function openPlaylistCoverPicker(name: string): void {
   openOverlay((close) => {
     const tracks = createMemo<Track[]>(() => {
-      const byId = new Map(state.library.map((t) => [t.id, t] as const));
+      const byId = new Map(musicLibrary().map((t) => [t.id, t] as const));
       return (state.playlists[name] ?? []).map((id) => byId.get(id)).filter((t): t is Track => !!t);
     });
     const current = () => state.librarySettings.playlist_covers?.[name];

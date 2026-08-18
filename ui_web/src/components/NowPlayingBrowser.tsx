@@ -210,7 +210,7 @@ export function NowPlayingBrowser(props: {
       .filter((section) => section.items.length > 0);
   });
   const playlistNames = createMemo(() => Object.keys(state.playlists));
-  const byId = createMemo(() => new Map(state.library.map((track) => [track.id, track] as const)));
+  const byId = createMemo(() => new Map(musicLibrary().map((track) => [track.id, track] as const)));
   const currentMusic = createMemo(() => {
     const current = state.playback.currentTrack;
     return current && !isPodcastTrack(current) ? current : null;

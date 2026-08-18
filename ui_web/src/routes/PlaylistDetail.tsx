@@ -1,6 +1,6 @@
 import { createMemo } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
-import { state, actions } from '../stores';
+import { state, actions, musicLibrary } from '../stores';
 import TrackList from '../components/TrackList';
 import Button from '../components/Button';
 import { openPlaylistMenu } from '../components/playlistActions';
@@ -20,7 +20,7 @@ export default function PlaylistDetail() {
   const name = createMemo(() => decodeURIComponent(params.name ?? ''));
   const trackIds = createMemo<string[]>(() => state.playlists[name()] ?? []);
   const tracks = createMemo<Track[]>(() => {
-    const byId = new Map(state.library.map((t) => [t.id, t] as const));
+    const byId = new Map(musicLibrary().map((t) => [t.id, t] as const));
     return trackIds()
       .map((id) => byId.get(id))
       .filter((t): t is Track => !!t);
@@ -50,7 +50,7 @@ export default function PlaylistDetail() {
         </button>
         <div class={styles.titleWrap}>
           <h1 class={styles.title}>{name()}</h1>
-          <span class={styles.count}>{trackCount(tracks().length)}</span>
+          <span class={styles.count}>{trackCount(trackIds().length)}</span>
         </div>
         <Button onClick={playAll} disabled={tracks().length === 0}>
           {t('playlistDetail.play')}
