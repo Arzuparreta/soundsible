@@ -38,6 +38,7 @@ import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Library.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
+import { reselectPrimaryTab } from '../lib/tabNavigation';
 
 /** Library view: songs (sortable, virtualized) or artists browser. */
 export default function Library() {
@@ -312,6 +313,7 @@ export default function Library() {
     <div ref={viewRef} class="view">
       <ViewHeader
         title={t('library.title')}
+        onTitleTap={() => reselectPrimaryTab('/')}
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
         actions={
           <>
