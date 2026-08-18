@@ -138,7 +138,7 @@ def test_cold_preview_is_acquired_once_then_served_from_disk(tmp_path, monkeypat
     monkeypatch.setattr(
         playback_routes,
         "_get_preview_stream_cached",
-        lambda api, vid: resolved_stream("http://upstream.invalid/a", egress="direct"),
+        lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
 
     def fake_get(url, **kwargs):
@@ -185,7 +185,7 @@ def test_cold_preview_client_range_is_served_from_complete_local_file(tmp_path, 
     monkeypatch.setattr(
         playback_routes,
         "_get_preview_stream_cached",
-        lambda api, vid: resolved_stream("http://upstream.invalid/a", egress="direct"),
+        lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
     _patch_upstream(monkeypatch, lambda url, **kwargs: _FakeUpstream(data, "audio/webm"))
 
@@ -209,7 +209,7 @@ def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):
             resolved_stream("http://upstream.invalid/fresh", egress="direct"),
         ]
     )
-    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", lambda api, vid: next(resolutions))
+    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", lambda api, vid, **_kw: next(resolutions))
     calls = []
 
     def fake_get(url, **kwargs):
@@ -240,7 +240,7 @@ def test_fresh_url_rejection_opens_station_backoff(tmp_path, monkeypatch):
             resolved_stream("http://upstream.invalid/fresh", egress="direct"),
         ]
     )
-    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", lambda api, vid: next(resolutions))
+    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", lambda api, vid, **_kw: next(resolutions))
     calls = []
 
     def fake_get(url, **kwargs):
@@ -266,6 +266,42 @@ def test_fresh_url_rejection_opens_station_backoff(tmp_path, monkeypatch):
     assert calls == []
 
 
+def test_rejection_retry_skips_the_fast_path(tmp_path, monkeypatch):
+    """A CDN rejection almost certainly came from the `android_vr` fast path
+    (a signed URL for a format it has no PO token for) — the retry has to ask
+    the resolver to skip straight to the fallback clients instead of handing
+    back an equally doomed fast-path URL for the same rejection."""
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    resolutions = iter(
+        [
+            resolved_stream("http://upstream.invalid/rejected", egress="direct"),
+            resolved_stream("http://upstream.invalid/fallback", egress="direct"),
+        ]
+    )
+    seen_skip_fast_path = []
+
+    def fake_resolver(api, vid, *, skip_fast_path=False):
+        seen_skip_fast_path.append(skip_fast_path)
+        return next(resolutions)
+
+    monkeypatch.setattr(playback_routes, "_get_preview_stream_cached", fake_resolver)
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/rejected"):
+            return _FakeUpstream(b"", "audio/mp4", status_code=403)
+        return _FakeUpstream(b"fresh", "audio/mp4", status_code=206, content_range="bytes 0-4/5")
+
+    _patch_upstream(monkeypatch, fake_get)
+
+    response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
+
+    assert response.status_code == 200
+    assert response.data == b"fresh"
+    assert seen_skip_fast_path == [False, True]
+
+
 def test_preview_open_range_downloads_whole_file_once_then_bounds_locally(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
@@ -273,7 +309,7 @@ def test_preview_open_range_downloads_whole_file_once_then_bounds_locally(tmp_pa
     monkeypatch.setattr(
         playback_routes,
         "_get_preview_stream_cached",
-        lambda api, vid: resolved_stream("http://upstream.invalid/audio", egress="direct"),
+        lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/audio", egress="direct"),
     )
     seen_headers = []
 
@@ -305,7 +341,7 @@ def test_followup_browser_range_never_returns_to_upstream(tmp_path, monkeypatch)
     monkeypatch.setattr(
         playback_routes,
         "_get_preview_stream_cached",
-        lambda api, vid: resolved_stream("http://upstream.invalid/a", egress="direct"),
+        lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
     )
     data = b"a" * (1024 * 1024)
     upstream_calls = []

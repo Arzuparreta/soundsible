@@ -1389,8 +1389,20 @@ class YouTubeDownloader:
 
         return []
 
-    def get_resolved_stream(self, video_id: str) -> Optional[ResolvedStream]:
-        """Resolve audio together with the network path that owns the URL."""
+    def get_resolved_stream(
+        self, video_id: str, *, skip_fast_path: bool = False
+    ) -> Optional[ResolvedStream]:
+        """Resolve audio together with the network path that owns the URL.
+
+        `skip_fast_path` is for a caller retrying after the CDN itself
+        rejected a URL the fast path produced: extraction succeeds and hands
+        back a signed URL, but googlevideo 403s the audio-only formats this
+        station asks for when the player client behind them has no PO token
+        (`android_vr` does not, for anything but 360p muxed). That rejection
+        never reaches `_try`'s except clause — it happens later, when the
+        caller actually fetches bytes — so re-resolving without this flag
+        would just ask the same client again and fail the same way.
+        """
         if not video_id or not str(video_id).strip():
             return None
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
@@ -1460,7 +1472,7 @@ class YouTubeDownloader:
         #
         # Everything below stays as the fallback: this path leans on a session
         # identifier and a single client, and both are YouTube's to break.
-        visitor = _youtube_visitor_data()
+        visitor = _youtube_visitor_data() if not skip_fast_path else None
         if visitor:
             fast_opts: Dict[str, Any] = {
                 **base_opts,
