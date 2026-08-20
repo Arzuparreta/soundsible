@@ -83,9 +83,8 @@ def _regime(row: dict) -> str:
 
 
 #: A closed range asking for this much of what is left of the file is a whole-file
-#: request spelled differently. Mirrors `shared.range_stream.WHOLE_FILE_SPAN_RATIO`;
-#: duplicated rather than imported so the report stays a standalone script that
-#: reads a log file.
+#: request spelled differently. Retained solely for historical rows emitted by
+#: the removed range-rewriting policy.
 WHOLE_FILE_SPAN_RATIO = 0.95
 
 
@@ -339,7 +338,7 @@ def main() -> int:
         )
 
     if report["delivery"]:
-        print("\nDelivery of local files — whole_file is the regime before bounded ranges")
+        print("\nDelivery of local files — whole_file is the standard HTTP range regime")
         for regime, values in report["delivery"].items():
             coverage = "-" if values["coverage"] is None else f"{values['coverage']:.0%}"
             print(
