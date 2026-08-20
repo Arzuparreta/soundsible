@@ -1409,7 +1409,13 @@ function tick(): void {
     const due = from.ended || from.currentTime >= current.outCue - current.preroll;
     if (!due) return;
     // Invariant: nothing fades until the incoming deck can actually sound.
-    if (to.readyState < 3 && !from.ended) return;
+    if (to.readyState < 3) {
+      // If the outgoing song has ended, waiting no longer protects continuity:
+      // it is silence. Fail the committed handoff while ownership still belongs
+      // to the outgoing deck so the store can promote a verified fallback.
+      if (from.ended) failMix(new Error('incoming deck was not ready at boundary'));
+      return;
+    }
     current.phase = 'prerolling';
     void to.play().catch((error) => failMix(error));
     // A requested skip has no head start to wait out: fall straight through.

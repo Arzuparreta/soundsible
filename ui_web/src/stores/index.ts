@@ -1330,12 +1330,26 @@ function commitTransition(
       if (!owns()) return;
       committedTransition = null;
       setState('autoMode', 'transition', IDLE_TRANSITION);
+      const outgoingEnded = audioEl().ended;
       // `audio.ts` has deliberately kept the outgoing deck alive. Loading the
       // URL that just failed here used to throw that protection away, replace
       // the audible deck, and make Auto skip through several broken tracks in
       // silence. Drop the failed handoff and let the DJ refill the runway while
       // the current song keeps playing.
       if (!dropAutoRouteOccurrence(next.queueId)) return;
+      if (outgoingEnded) {
+        // `ended` deliberately left the committed handoff in charge. If its
+        // incoming deck never became playable, ownership is still on the song
+        // that just finished; promote another verified runway entry rather than
+        // exposing the failed URL as the current 0:00 Retry track.
+        const endedQueueId = state.playback.queue[state.playback.index]?.queueId ?? '';
+        if (promotePreparedAutoSuccessor()) actions.next('ended');
+        else {
+          enterStarved();
+          resumeWhenAutoSuccessorPrepared(endedQueueId);
+        }
+        return;
+      }
       // A listener-requested skip is always worth attempting and always worth
       // reporting on its own — it does not retry unattended, so it cannot
       // spiral, and it does not count toward or trip the breaker below.

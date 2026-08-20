@@ -226,6 +226,24 @@ def test_a_repaired_track_keeps_everything_that_was_not_its_bytes(tmp_path, pool
     assert not path.exists(), "the oversized original is not left behind"
 
 
+def test_repair_copies_a_scanned_external_file_without_mutating_it(tmp_path, pool_paths):
+    external = tmp_path / "external"
+    external.mkdir()
+    pool = tmp_path / "managed" / "tracks"
+    pool.mkdir(parents=True)
+    path = _music_video(external)
+    before = path.read_bytes()
+    track = _track("external-1", path)
+
+    summary = repair_library([track], pool, dry_run=False)
+
+    repaired = summary["tracks"][0]
+    assert path.read_bytes() == before
+    assert repaired.local_path is None
+    assert (pool / f"{repaired.id}.{repaired.format}").is_file()
+    assert _decoded_audio_md5(pool / f"{repaired.id}.{repaired.format}") == _decoded_audio_md5(path)
+
+
 def test_shrinking_refuses_to_invent_a_cover(tmp_path):
     assert shrink_cover(b"") is None
     assert shrink_cover(b"not an image") is None

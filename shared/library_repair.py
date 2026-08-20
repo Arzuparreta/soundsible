@@ -292,12 +292,21 @@ def repair_file(
             embed_cover(temp_path, cover)
 
         repaired_size = temp_path.stat().st_size
-        target = Path(destination) if destination else source.with_suffix(suffix)
+        copying = destination is not None
+        target = Path(destination) if copying else source.with_suffix(suffix)
+        target.parent.mkdir(parents=True, exist_ok=True)
         if repaired_size >= shape.size_bytes and target == source:
             # Nothing gained. Not an error, just not worth rewriting a file for.
             return None
-        os.replace(temp_path, target)
-        if target != source and source.exists():
+        # A scanned external library is borrowed, never owned. Its repaired copy
+        # may cross filesystems into Soundsible's pool, so use shutil there and
+        # deliberately preserve the source. Managed files remain an atomic local
+        # replace and discard only their obsolete container sibling.
+        if copying:
+            shutil.move(str(temp_path), str(target))
+        else:
+            os.replace(temp_path, target)
+        if not copying and target != source and source.exists():
             source.unlink()
         return RepairResult(
             path=str(target),
@@ -373,8 +382,19 @@ def repair_library(
             updated.append(track)
             continue
 
+        source = Path(path).resolve()
+        managed = source.is_relative_to(pool.resolve())
+        external_destination = None
+        if not managed:
+            suffix = REMUXABLE.get(source.suffix.lower())
+            if suffix is None:
+                updated.append(track)
+                continue
+            external_destination = pool / f".external-repair-{track.id}{suffix}"
+
         result = repair_file(
-            path,
+            source,
+            destination=external_destination,
             cover_max_edge=cover_max_edge,
             cover_max_bytes=cover_max_bytes,
         )

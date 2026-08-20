@@ -303,6 +303,21 @@ describe('two-deck mixer', () => {
     expect(outgoing.src).toBe('');
   });
 
+  it('rejects an unready incoming deck at the boundary without giving it ownership', async () => {
+    const { audioEl, audioService, outgoing, incoming, handlers } = await armed();
+    incoming.readyState = 1;
+    outgoing.currentTime = outgoing.duration;
+    outgoing.ended = true;
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(handlers.onError).toHaveBeenCalledOnce();
+    expect(handlers.onDominant).not.toHaveBeenCalled();
+    expect(incoming.play).not.toHaveBeenCalled();
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+  });
+
   it('closes an interrupted blend on its current owner', async () => {
     const { audioEl, audioService, outgoing, incoming, handlers } = await armed();
     await play(outgoing, 108.5);
