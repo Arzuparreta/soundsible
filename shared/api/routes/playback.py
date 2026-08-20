@@ -709,7 +709,8 @@ def preview_prefetch():
     Body: {"video_ids": [...], "download": bool}. Resolution (yt-dlp) always
     runs in the background worker; with download=true the audio itself is
     also fetched into the disk cache (used for the next track in the queue).
-    Returns immediately — prefetch is best-effort.
+    Returns immediately, but includes the current preparation state so callers
+    never have to confuse accepted work with playable bytes.
     """
     api = _get_api()
     data = request.get_json(silent=True) or {}
@@ -718,14 +719,36 @@ def preview_prefetch():
         return jsonify({"error": "video_ids must be a list"}), 400
     video_ids = [str(v) for v in raw_ids if validate_youtube_video_id(str(v))][:8]
     if not video_ids:
-        return jsonify({"status": "queued", "queued": []})
+        return jsonify({"status": "queued", "queued": [], "preparation": {}})
     download = bool(data.get("download"))
 
     def resolver(vid: str) -> ResolvedStream | None:
         return _get_preview_stream_cached(api, vid)
 
     queued = preview_cache.request_prefetch(video_ids, download=download, resolver=resolver)
-    return jsonify({"status": "queued", "queued": queued})
+    preparation = {
+        video_id: preview_cache.preparation_status(video_id).as_dict()
+        for video_id in video_ids
+    }
+    return jsonify({"status": "queued", "queued": queued, "preparation": preparation})
+
+
+@playback_bp.route("/api/preview/status", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+@rate_limit("preview_status", limit=120, window_sec=60)
+def preview_status():
+    """Report whether complete preview files are actually playable from disk."""
+    data = request.get_json(silent=True) or {}
+    raw_ids = data.get("video_ids")
+    if not isinstance(raw_ids, list):
+        return jsonify({"error": "video_ids must be a list"}), 400
+    video_ids = [str(v) for v in raw_ids if validate_youtube_video_id(str(v))][:8]
+    return jsonify({
+        "preparation": {
+            video_id: preview_cache.preparation_status(video_id).as_dict()
+            for video_id in video_ids
+        }
+    })
 
 
 @playback_bp.route("/api/preview/stream-url/<video_id>", methods=["GET"])

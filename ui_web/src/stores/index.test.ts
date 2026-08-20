@@ -258,6 +258,26 @@ async function loadStore(
     coverUrl: (id: string) => `/cover/${id}`,
     bustCovers: vi.fn(),
   }));
+  const previewPreparationState = (
+    apiOverrides.__previewPreparationState as ((id: string) => 'cold' | 'pending' | 'ready' | 'unavailable') | undefined
+  ) ?? (() => 'ready' as const);
+  vi.doMock('../lib/prefetch', () => ({
+    prefetchPreviews: vi.fn(),
+    previewPreparationState,
+    upcomingPreviewIds: (queue: Track[], index: number, repeatAll: boolean, count = 2) => {
+      const ids: string[] = [];
+      for (let step = 1; step < queue.length && ids.length < count; step += 1) {
+        let next = index + step;
+        if (next >= queue.length) {
+          if (!repeatAll) break;
+          next %= queue.length;
+        }
+        const track = queue[next];
+        if (track?.source === 'preview' && !track.podcast_episode_guid) ids.push(track.id);
+      }
+      return ids;
+    },
+  }));
   // Held in the closure rather than built inside the factory, because the
   // factory runs again for every module-registry generation. A test that
   // re-imports `../lib/toast` to assert on it can otherwise get a *different*
@@ -851,6 +871,41 @@ describe('Playback load coalescing', () => {
     expect(state.playback.queue.some((entry) => entry.queueId === failed.queueId)).toBe(false);
     expect(audioService.load).toHaveBeenCalledTimes(1);
     expect(toastError).toHaveBeenCalled();
+  });
+
+  it('arms Auto only with server-confirmed bytes and promotes a prepared fallback', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan([
+      'route-00001', 'route-00002', 'route-00003', 'route-00004',
+      'route-00005', 'route-00006', 'route-00007', 'route-00008',
+    ]));
+    const armTransition = vi.fn();
+    const readiness: Record<string, 'pending' | 'ready'> = {
+      'route-00001': 'pending',
+      'route-00002': 'ready',
+    };
+    const { actions, state, initStore, fireDeckEvent, deck } = await loadStore(
+      {
+        planDjQueue,
+        refineDjTransition: vi.fn().mockResolvedValue({ measured: false }),
+        __previewPreparationState: (id: string) => readiness[id] ?? 'pending',
+      },
+      { armTransition },
+    );
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', duration: 180 };
+    initStore();
+    actions.playFrom([current], 0);
+    fireDeckEvent('playing');
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    (deck as unknown as { currentTime: number }).currentTime = 150;
+    fireDeckEvent('timeupdate');
+    expect(armTransition).not.toHaveBeenCalled();
+    expect(state.playback.queue[1].id).toBe('route-00002');
+
+    fireDeckEvent('timeupdate');
+    expect(armTransition).toHaveBeenCalledOnce();
+    expect(armTransition.mock.calls[0][0]).toBe('/preview/route-00002');
   });
 
   it('stops on the exact Auto track that failed after handoff instead of cascading', async () => {

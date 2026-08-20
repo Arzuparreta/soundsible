@@ -20,7 +20,7 @@ import {
   type ProgramTransportOrigin,
 } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers, playbackYoutubeId } from '../lib/media';
-import { prefetchPreviews, upcomingPreviewIds } from '../lib/prefetch';
+import { prefetchPreviews, previewPreparationState, upcomingPreviewIds } from '../lib/prefetch';
 import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
 import { isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
@@ -177,6 +177,14 @@ function trackUrl(track: Track): string {
   return track.source === 'preview' && previewId
     ? previewUrl(previewId)
     : streamUrl(track.id);
+}
+
+/** A local file is already station-owned. An internet preview is viable for an
+ * unattended boundary only after the engine confirms a complete disk copy. */
+function trackPrepared(track: Track): boolean {
+  if (track.source !== 'preview' || isPodcastTrack(track)) return true;
+  const videoId = playbackYoutubeId(track);
+  return !!videoId && previewPreparationState?.(videoId) === 'ready';
 }
 
 /**
@@ -441,12 +449,13 @@ function prefetchUpcoming(): void {
   // inside the last minute, where there is time to spare and nobody waiting.
   if (pb.shuffle) return;
   const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5);
-  // Only one full download here: the track immediately after this one is held
-  // open on the idle deck by `stageNext`, and fetching it twice is the engine
-  // resolving and proxying the same stream for nobody.
-  const downloads = ids.slice(0, 1);
+  // Auto needs alternatives, not one optimistic URL. The download lane is
+  // serial, so this does not compete three transfers against current playback;
+  // it builds a small verified runway in order.
+  const downloadCount = state.autoMode.active ? 3 : 1;
+  const downloads = ids.slice(0, downloadCount);
   if (downloads.length > 0) prefetchPreviews(downloads, { download: true });
-  const warmOnly = ids.slice(2);
+  const warmOnly = ids.slice(downloadCount);
   if (warmOnly.length > 0) prefetchPreviews(warmOnly);
 }
 
@@ -1410,6 +1419,12 @@ function evaluateDjRunway(): void {
   const current = pb.currentTrack;
   const next = pb.queue[pb.index + 1];
   if (!current || !next || pb.loadError) return;
+  if (!trackPrepared(next)) {
+    const videoId = playbackYoutubeId(next);
+    if (videoId) prefetchPreviews([videoId], { download: true });
+    promotePreparedAutoSuccessor();
+    return;
+  }
   const fromKey = queueIdentity(current);
   const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[next.queueId]);
   if (!plan) return;
@@ -1651,6 +1666,50 @@ function boundaryFacts(): Record<string, boolean> {
   };
 }
 
+/** Move a verified generated fallback to the next slot without jumping over a
+ * listener request. Returns true when the immediate successor can play without
+ * first acquiring internet bytes. */
+function promotePreparedAutoSuccessor(): boolean {
+  const pb = state.playback;
+  const immediate = pb.queue[pb.index + 1];
+  if (!immediate) return false;
+  if (trackPrepared(immediate)) return true;
+  if (immediate.queueLane !== 'generated') return false;
+  let readyIndex = -1;
+  for (let index = pb.index + 2; index < pb.queue.length; index += 1) {
+    const candidate = pb.queue[index];
+    if (candidate.queueLane !== 'generated') break;
+    if (trackPrepared(candidate)) {
+      readyIndex = index;
+      break;
+    }
+  }
+  if (readyIndex === -1) return false;
+  setState('playback', 'queue', (queue) => {
+    const copy = queue.slice();
+    const [ready] = copy.splice(readyIndex, 1);
+    copy.splice(pb.index + 1, 0, ready);
+    return copy;
+  });
+  return true;
+}
+
+function resumeWhenAutoSuccessorPrepared(endedQueueId: string): void {
+  const deadline = Date.now() + 95_000;
+  const check = (): void => {
+    const pb = state.playback;
+    if (!state.autoMode.active || pb.phase !== 'starved') return;
+    if (pb.queue[pb.index]?.queueId !== endedQueueId) return;
+    prefetchUpcoming();
+    if (promotePreparedAutoSuccessor()) {
+      resumeFromStarved();
+      return;
+    }
+    if (Date.now() < deadline) setTimeout(check, 1000);
+  };
+  setTimeout(check, 250);
+}
+
 function onEnded(): void {
   // The track played to its end either way, so its delivery is reportable before
   // anything is decided about what follows.
@@ -1693,6 +1752,12 @@ function onEnded(): void {
   if (duration > 0) setState('playback', 'currentTime', duration);
   listeningLearning.complete(pb.currentTrack, duration);
   if (pb.index < pb.queue.length - 1 || pb.repeat === 'all') {
+    if (state.autoMode.active && !promotePreparedAutoSuccessor()) {
+      const endedQueueId = pb.queue[pb.index]?.queueId ?? '';
+      enterStarved();
+      resumeWhenAutoSuccessorPrepared(endedQueueId);
+      return;
+    }
     actions.next('ended');
     return;
   }

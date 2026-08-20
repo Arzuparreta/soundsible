@@ -403,6 +403,11 @@ def test_preview_prefetch_queues_valid_ids(tmp_path, monkeypatch):
         return list(video_ids)
 
     monkeypatch.setattr(playback_routes.preview_cache, "request_prefetch", fake_request_prefetch)
+    monkeypatch.setattr(
+        playback_routes.preview_cache,
+        "preparation_status",
+        lambda video_id: preview_cache.PreparationStatus("pending"),
+    )
 
     response = _make_app().test_client().post(
         "/api/preview/prefetch",
@@ -413,6 +418,7 @@ def test_preview_prefetch_queues_valid_ids(tmp_path, monkeypatch):
     body = response.get_json()
     assert body["status"] == "queued"
     assert body["queued"] == [VID]
+    assert body["preparation"] == {VID: {"state": "pending"}}
     assert calls == {"ids": [VID], "download": True}
 
 
@@ -424,6 +430,35 @@ def test_preview_prefetch_rejects_non_list_body(tmp_path, monkeypatch):
     response = _make_app().test_client().post("/api/preview/prefetch", json={"video_ids": "abc"})
 
     assert response.status_code == 400
+
+
+def test_preview_status_reports_truthful_batch_state(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    monkeypatch.setattr(
+        playback_routes.preview_cache,
+        "preparation_status",
+        lambda video_id: preview_cache.PreparationStatus(
+            "unavailable", "upstream_backoff", 12
+        ),
+    )
+
+    response = _make_app().test_client().post(
+        "/api/preview/status",
+        json={"video_ids": [VID, "invalid"]},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "preparation": {
+            VID: {
+                "state": "unavailable",
+                "reason": "upstream_backoff",
+                "retry_after": 12,
+            }
+        }
+    }
 
 
 def test_warm_preview_stream_cache_fills_ttl_entry():

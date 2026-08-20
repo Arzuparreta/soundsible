@@ -42,6 +42,12 @@ export interface LibraryScanStatus {
   error: string | null;
 }
 
+export interface PreviewPreparation {
+  state: 'cold' | 'pending' | 'ready' | 'unavailable';
+  reason?: string;
+  retry_after?: number;
+}
+
 export interface DownloadItem {
   source_type: string;
   song_str: string;
@@ -605,9 +611,19 @@ export const api = {
    * stream URLs in the background and, with `download`, also caches the audio
    * on disk. Best-effort — errors are the caller's to swallow. */
   prefetchPreviews: (videoIds: string[], download = false) =>
-    request<{ status?: string; queued?: string[] }>('/api/preview/prefetch', {
+    request<{
+      status?: string;
+      queued?: string[];
+      preparation?: Record<string, PreviewPreparation>;
+    }>('/api/preview/prefetch', {
       method: 'POST',
       body: { video_ids: videoIds, download },
+      timeoutMs: 5000,
+    }),
+  previewStatuses: (videoIds: string[]) =>
+    request<{ preparation?: Record<string, PreviewPreparation> }>('/api/preview/status', {
+      method: 'POST',
+      body: { video_ids: videoIds },
       timeoutMs: 5000,
     }),
   /** Local-only playback latency telemetry (see docs/TELEMETRY_PRIVACY.md). */

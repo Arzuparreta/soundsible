@@ -28,6 +28,7 @@ import os
 import queue
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Union
 
@@ -369,6 +370,72 @@ _pending: set[tuple[str, bool]] = set()
 _worker_started = threading.Event()
 
 
+@dataclass(frozen=True)
+class PreparationStatus:
+    state: str
+    reason: str | None = None
+    retry_after: int = 0
+
+    def as_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {"state": self.state}
+        if self.reason:
+            result["reason"] = self.reason
+        if self.retry_after > 0:
+            result["retry_after"] = self.retry_after
+        return result
+
+
+_preparation_lock = threading.Lock()
+# Failures are short-lived routing facts, not a permanent blacklist. A fresh
+# prefetch after the retry window gets a clean attempt.
+_preparation_failures: dict[str, tuple[float, str, int]] = {}
+_PREPARATION_FAILURE_TTL_SEC = 300
+_PREPARATION_FAILURE_MAX = 128
+
+
+def _record_preparation_failure(video_id: str, reason: str, retry_after: int = 0) -> None:
+    now = time.monotonic()
+    with _preparation_lock:
+        _preparation_failures[video_id] = (now, reason, max(0, retry_after))
+        if len(_preparation_failures) > _PREPARATION_FAILURE_MAX:
+            oldest = min(_preparation_failures, key=lambda item: _preparation_failures[item][0])
+            _preparation_failures.pop(oldest, None)
+
+
+def _clear_preparation_failure(video_id: str) -> None:
+    with _preparation_lock:
+        _preparation_failures.pop(video_id, None)
+
+
+def preparation_status(video_id: str) -> PreparationStatus:
+    """Return the truthful disk-readiness state for one preview.
+
+    ``queued`` was previously the only observable answer and clients treated it
+    as if bytes were ready. This deliberately distinguishes work accepted from
+    a complete, range-seekable file.
+    """
+    if _audio_path(video_id).is_file():
+        return PreparationStatus("ready")
+    with _pending_lock:
+        pending = (video_id, True) in _pending
+    if not pending:
+        with _fills_lock:
+            pending = video_id in _fills
+    if pending:
+        return PreparationStatus("pending")
+    now = time.monotonic()
+    with _preparation_lock:
+        failed = _preparation_failures.get(video_id)
+        if failed and now - failed[0] > _PREPARATION_FAILURE_TTL_SEC:
+            _preparation_failures.pop(video_id, None)
+            failed = None
+    if failed:
+        recorded_at, reason, original_retry = failed
+        retry_after = max(0, math.ceil(original_retry - (now - recorded_at)))
+        return PreparationStatus("unavailable", reason, retry_after)
+    return PreparationStatus("cold")
+
+
 def _coerce_resolution(value: ResolutionValue) -> Optional[ResolvedStream]:
     if isinstance(value, ResolvedStream):
         return value
@@ -486,9 +553,37 @@ def _worker_loop(jobs: "queue.Queue[tuple[str, Resolver]]", *, download: bool) -
         video_id, resolver = jobs.get()
         try:
             stream = _coerce_resolution(resolver(video_id))
-            if stream and download and cache_limit_bytes() > 0:
-                _download_to_cache(video_id, stream)
+            if download:
+                if cache_limit_bytes() <= 0:
+                    _record_preparation_failure(video_id, "cache_disabled")
+                elif stream is None:
+                    retry = upstream_backoff_remaining()
+                    _record_preparation_failure(
+                        video_id,
+                        "upstream_backoff" if retry else "resolution_failed",
+                        retry,
+                    )
+                else:
+                    _download_to_cache(video_id, stream)
+                    if _audio_path(video_id).is_file():
+                        _clear_preparation_failure(video_id)
+                    else:
+                        retry = upstream_backoff_remaining()
+                        _record_preparation_failure(
+                            video_id,
+                            "upstream_backoff" if retry else "download_failed",
+                            retry,
+                        )
+        except PreviewUpstreamRejected as e:
+            _record_preparation_failure(
+                video_id,
+                "upstream_rejected",
+                upstream_backoff_remaining() or _UPSTREAM_BACKOFF_SEC,
+            )
+            logger.info("[PreviewCache] Prefetch rejected for %s: %s", video_id, e)
         except Exception as e:
+            if download:
+                _record_preparation_failure(video_id, "download_failed")
             logger.info("[PreviewCache] Prefetch failed for %s: %s", video_id, e)
         finally:
             with _pending_lock:
@@ -551,11 +646,15 @@ def request_prefetch(
             if pending_key in _pending:
                 continue
             _pending.add(pending_key)
+        if download:
+            _clear_preparation_failure(video_id)
         try:
             jobs.put_nowait((video_id, resolver))
             queued.append(video_id)
         except queue.Full:
             with _pending_lock:
                 _pending.discard(pending_key)
+            if download:
+                _record_preparation_failure(video_id, "queue_full", 2)
             break
     return queued
