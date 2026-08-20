@@ -13,7 +13,6 @@ from shared import preview_cache
 from shared.api.memo import Memo
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
-from shared.range_stream import bound_open_range, requested_start
 from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.url_utils import validate_youtube_video_id
 
@@ -315,15 +314,13 @@ def stream_local_track(track_id):
     mimetypes = {"mp3": "audio/mpeg", "m4a": "audio/mp4", "flac": "audio/flac", "ogg": "audio/ogg", "wav": "audio/wav"}
     try:
         file_bytes = os.path.getsize(path)
-        # A player opens a track with `bytes=0-`, and answering that literally
-        # means one response carrying tens or hundreds of megabytes. Narrow it to
-        # a chunk here and `send_file` below still does the rest: same 206, same
-        # `Content-Range` against the real total, same validators, same bytes.
-        decision = bound_open_range(
-            request.environ,
-            total_bytes=file_bytes,
-            duration_sec=getattr(track, "duration", None),
-        )
+        # The media client owns range selection.  Rewriting an open-ended range
+        # into application-sized slices made every proxy round trip part of the
+        # decoder's critical path and, for files with large embedded artwork,
+        # routinely ended the first response before the first audio frame.  A
+        # normal conditional send is already progressive streaming: Werkzeug
+        # answers the exact byte range requested and the client may abandon or
+        # resume it whenever it needs to.
         response = send_file(path, mimetype=mimetypes.get(ext, "audio/mpeg"), conditional=True)
         # A downloaded track is content-addressed — the file on disk is named
         # after its own hash — so the bytes behind one id never change, exactly
@@ -346,7 +343,7 @@ def stream_local_track(track_id):
         # track read back as a client-side number with no server half to compare
         # it against — which is exactly the shape of "it takes seconds to start"
         # that cannot be attributed to anything.
-        return _measure_delivery(
+        return _report_stream_response(
             response,
             track_id=track_id,
             source_kind="local",
@@ -360,27 +357,6 @@ def stream_local_track(track_id):
                 # for what it is so it is not read as bytes on the wire.
                 "content_length": int(response.headers.get("Content-Length") or 0),
                 "file_bytes": file_bytes,
-                # Where in the file this request started, and whether this
-                # response was narrowed to a chunk (the last chunk of a track is
-                # not: what remained already fitted). Rows written before bounded
-                # ranges existed carry neither key at all, and that absence is
-                # what lets the report separate the two regimes without needing a
-                # separate experiment flag.
-                "range_start": requested_start(request.headers.get("Range")),
-                "bounded": decision.bounded,
-                # `bounded: false` covered several unrelated situations and reading
-                # them apart took an afternoon of raw rows. `range_kind` is what the
-                # client asked for and `bound_outcome` is what happened to it, so a
-                # demuxer that never reaches the policy is one `group by` away
-                # instead of an afternoon. `range_span` is the share of the
-                # remaining file the request wanted: near 1.0 on a closed range is a
-                # whole-file fetch spelled differently, and small is a `moov` hunt
-                # doing exactly what it should.
-                "range_kind": decision.kind,
-                "bound_outcome": decision.outcome,
-                "range_span": None if decision.span_ratio is None else round(decision.span_ratio, 3),
-                # Which half of the library this is. The chunk walk engages on FLAC
-                # and not on MP4, and that split is invisible without the container.
                 "format": ext or "unknown",
                 # A whole-second `ts` cannot show the gap between the requests a
                 # player makes for one track, which is the interesting part.
@@ -396,7 +372,7 @@ def stream_local_track(track_id):
         return jsonify({"error": str(e)}), 500
 
 
-def _measure_delivery(
+def _report_stream_response(
     response,
     *,
     track_id: str,
@@ -405,65 +381,24 @@ def _measure_delivery(
     egress: str,
     segments: dict,
 ):
-    """Report this response once it has actually been sent, not once it was opened.
+    """Report response metadata without wrapping the file iterable.
 
-    `Content-Length` says what was promised; a media element abandons responses
-    constantly, so the promise and the delivery are different numbers and only
-    the second explains a wait. Wrapping the body is what makes the second
-    knowable — it costs the WSGI file-wrapper fast path, which on a response
-    already sliced into chunks is not where the time goes.
-
-    Everything the report needs is captured *here*, in the request, because the
-    body is iterated by the server after the request context is gone: reading
-    `request` from inside the generator raises, and would have raised in
-    production on every stream.
+    Counting body chunks disabled the WSGI file-wrapper fast path and put Python
+    in the hot path of every audio byte.  The browser already reports audible
+    starts, stalls and failures; this server event is deliberately limited to
+    facts known before delivery begins.
     """
-    from shared.link_quality import classify_scope, record
-    from shared.user_context import current_user_id
+    from shared.link_quality import classify_scope
 
-    original = response.response
-    promised = int(response.headers.get("Content-Length") or 0)
     scope = classify_scope(request.remote_addr)
-    user_id = current_user_id()
-    attempt_id = _clean_attempt_id()
-    started = time.perf_counter()
-    delivered = 0
-
-    def measured():
-        nonlocal delivered
-        try:
-            for chunk in original:
-                delivered += len(chunk)
-                yield chunk
-        finally:
-            elapsed_ms = (time.perf_counter() - started) * 1000
-            complete = promised > 0 and delivered >= promised
-            record(
-                user_id,
-                scope=scope,
-                delivered_bytes=delivered,
-                elapsed_ms=elapsed_ms,
-                complete=complete,
-            )
-            _emit_stream_timing(
-                attempt_id=attempt_id,
-                track_id=track_id,
-                cache_state=cache_state,
-                egress=egress,
-                source_kind=source_kind,
-                segments={
-                    **segments,
-                    "delivered_bytes": delivered,
-                    "write_ms": round(elapsed_ms, 1),
-                    "complete": complete,
-                    "scope": scope,
-                },
-            )
-            closer = getattr(original, "close", None)
-            if callable(closer):
-                closer()
-
-    response.response = measured()
+    _emit_stream_timing(
+        attempt_id=_clean_attempt_id(),
+        track_id=track_id,
+        cache_state=cache_state,
+        egress=egress,
+        source_kind=source_kind,
+        segments={**segments, "scope": scope},
+    )
     return response
 
 
@@ -606,13 +541,11 @@ def _serve_cached_preview(
     egress: str = "direct",
     server_ready_ms: int = 0,
 ):
-    """Serve one committed preview with local, bounded range semantics."""
+    """Serve one committed preview with the client's exact range semantics."""
     path, content_type = cached
     cached_bytes = 0
-    decision = None
     try:
         cached_bytes = os.path.getsize(path)
-        decision = bound_open_range(request.environ, total_bytes=cached_bytes)
     except OSError:
         pass
     response = send_file(str(path), mimetype=content_type, conditional=True)
@@ -620,7 +553,7 @@ def _serve_cached_preview(
     response.headers["X-Soundsible-Playback-Source"] = "preview"
     response.headers["X-Soundsible-Playback-Cache"] = cache_state
     response.headers["X-Soundsible-Playback-Egress"] = egress
-    return _measure_delivery(
+    return _report_stream_response(
         response,
         track_id=video_id,
         source_kind="preview",
@@ -630,13 +563,6 @@ def _serve_cached_preview(
             "server_ready_ms": server_ready_ms,
             "content_length": int(response.headers.get("Content-Length") or 0),
             "file_bytes": cached_bytes,
-            "range_start": requested_start(request.headers.get("Range")),
-            "bounded": bool(decision and decision.bounded),
-            "range_kind": decision.kind if decision else "unknown",
-            "bound_outcome": decision.outcome if decision else "unknown",
-            "range_span": (
-                None if decision is None or decision.span_ratio is None else round(decision.span_ratio, 3)
-            ),
             "format": os.path.splitext(path)[1].lower().replace(".", "") or "unknown",
             "at_ms": round(time.time() * 1000),
         },

@@ -302,7 +302,7 @@ def test_rejection_retry_skips_the_fast_path(tmp_path, monkeypatch):
     assert seen_skip_fast_path == [False, True]
 
 
-def test_preview_open_range_downloads_whole_file_once_then_bounds_locally(tmp_path, monkeypatch):
+def test_preview_open_range_downloads_once_then_serves_exact_local_range(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
@@ -361,7 +361,7 @@ def test_followup_browser_range_never_returns_to_upstream(tmp_path, monkeypatch)
     )
 
     assert first.status_code == 206
-    assert len(first.data) == 512 * 1024
+    assert first.data == data
     assert second.status_code == 206
     assert second.data == data[512 * 1024 :]
     assert upstream_calls == [{"Range": "bytes=0-"}]

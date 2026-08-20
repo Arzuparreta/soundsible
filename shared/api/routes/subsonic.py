@@ -31,7 +31,6 @@ from flask import Blueprint, Response, request, send_file, stream_with_context
 
 from shared.hardening import rate_limit_allows
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
-from shared.range_stream import bound_open_range
 from shared.security import is_safe_path
 from shared.subsonic import serialize, transcode
 from shared.subsonic.credentials import authenticate as authenticate_credential
@@ -633,15 +632,6 @@ def _playable_path(track) -> str:
 def _send_original(track, path: str) -> Response:
     suffix = os.path.splitext(path)[1].lower().lstrip(".")
     mimetype = _AUDIO_MIMETYPES.get(suffix) or _mimetypes.guess_type(path)[0] or "audio/mpeg"
-    # The same narrowing `/api/static/stream` applies: a client asking for
-    # everything from an offset — open-ended or closed to the end of the file,
-    # which is how WebKit asks — gets a chunk and a real Content-Range, not the
-    # whole file in one response.
-    bound_open_range(
-        request.environ,
-        total_bytes=os.path.getsize(path),
-        duration_sec=getattr(track, "duration", None),
-    )
     response = send_file(path, mimetype=mimetype, conditional=True)
     response.headers["Cache-Control"] = (
         "private, no-cache"
