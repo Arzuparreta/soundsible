@@ -125,31 +125,45 @@ export function NowPlaying(props: {
     };
   };
 
+  // Whatever the context lane was filled from — an album, a playlist, the
+  // library. Bare, it reads as a place rather than as the rest of what is
+  // playing, so the label puts it after a preposition.
+  const contextSource = () => contextQueue()[0]?.queueContext?.label;
+
   const queueSections = createMemo<PlayerTrackListSection[]>(() => {
     const sections: PlayerTrackListSection[] = [];
     const current = currentQueueEntry();
+    const source = contextSource();
     if (current) {
       sections.push({
         id: 'current',
         label: t('nowPlaying.nowPlayingSection'),
+        hint: t('nowPlaying.laneHintCurrent'),
         entries: [queueRow(current, undefined, true)],
       });
     }
     sections.push({
       id: 'manual',
       label: t('nowPlaying.manualQueue'),
+      hint: t('nowPlaying.laneHintManual'),
       count: manualQueue().length,
       entries: manualQueue().map((entry, index) => queueRow(entry, index + 1)),
     });
     sections.push({
       id: 'context',
-      label: contextQueue()[0]?.queueContext?.label || t('nowPlaying.contextQueue'),
+      label: source ? t('nowPlaying.contextQueueFrom', { source }) : t('nowPlaying.contextQueue'),
+      hint: source
+        ? t('nowPlaying.laneHintContext', { source })
+        : t('nowPlaying.laneHintContextPlain'),
       count: contextQueue().length,
       entries: contextQueue().map((entry, index) => queueRow(entry, index + 1)),
     });
     sections.push({
       id: 'generated',
       label: state.playback.radioMode ? t('nowPlaying.radioQueue') : t('nowPlaying.autoplayQueue'),
+      hint: state.playback.radioMode
+        ? t('nowPlaying.laneHintRadio')
+        : t('nowPlaying.laneHintGenerated'),
       count: generatedQueue().length,
       entries: generatedQueue().map((entry, index) => queueRow(entry, index + 1)),
     });
