@@ -46,6 +46,8 @@ final class PlayerModel {
     /// actually stopped.
     private var pausedByInterruption = false
     private var statePublishTask: Task<Void, Never>?
+    private var pendingCrossfade: CarItem?
+    private var crossfadeOutgoingEnded = false
 
     init(offline: OfflineStore) {
         self.offline = offline
@@ -118,6 +120,9 @@ final class PlayerModel {
 
     func stop() {
         decks.stop()
+        pendingCrossfade = nil
+        isCrossfading = false
+        crossfadeOutgoingEnded = false
         isPlaying = false
         current = nil
         positionSec = 0
@@ -173,6 +178,9 @@ final class PlayerModel {
         if fade, crossfadeSeconds > 0 {
             decks.crossfade(to: asset, duration: crossfadeSeconds)
         } else {
+            pendingCrossfade = nil
+            isCrossfading = false
+            crossfadeOutgoingEnded = false
             decks.play(asset: asset)
             publishNowPlaying(for: item)
         }
@@ -273,6 +281,12 @@ final class PlayerModel {
         }
         decks.onPlaybackEnded = { [weak self] in
             guard let self else { return }
+            if self.isCrossfading, self.pendingCrossfade != nil {
+                // The incoming deck is already being prepared. Advancing here
+                // would rename the queue before that deck has produced audio.
+                self.crossfadeOutgoingEnded = true
+                return
+            }
             guard self.queue.advanceAfterPlaybackEnded() != nil else {
                 self.pause()
                 return
@@ -280,11 +294,38 @@ final class PlayerModel {
             self.startCurrent(fade: false)
         }
         decks.onCrossfadeHandover = { [weak self] in
-            guard let self, let item = self.queue.current else { return }
+            guard let self, let pending = self.pendingCrossfade else { return }
+            guard let item = self.queue.skipForward(), item.id == pending.id else {
+                self.pendingCrossfade = nil
+                self.isCrossfading = false
+                return
+            }
+            self.pendingCrossfade = nil
+            self.crossfadeOutgoingEnded = false
+            self.isCrossfading = false
             self.current = item
             self.durationSec = self.decks.durationSec ?? item.durationSec.map(Double.init)
             self.publishNowPlaying(for: item)
             self.refreshCommandAvailability()
+            if let trackID = item.trackID { self.offline.markPlayed(trackID) }
+            self.preloadUpNext()
+        }
+        decks.onCrossfadeFailed = { [weak self] error in
+            guard let self else { return }
+            let detail = error?.localizedDescription ?? "incoming deck did not become playable"
+            self.log.error("Crossfade preparation failed: \(detail)")
+            self.pendingCrossfade = nil
+            self.isCrossfading = false
+            if self.crossfadeOutgoingEnded {
+                self.crossfadeOutgoingEnded = false
+                guard self.queue.skipForward() != nil else {
+                    self.pause()
+                    return
+                }
+                // The outgoing item is over; retry the same successor as an
+                // ordinary load without ever publishing it before play starts.
+                self.startCurrent(fade: false)
+            }
         }
         decks.onPlaybackFailed = { [weak self] error in
             let detail = error?.localizedDescription ?? "no reason given"
@@ -300,14 +341,9 @@ final class PlayerModel {
             return
         }
         isCrossfading = true
-        queue.skipForward()
+        pendingCrossfade = upNext
+        crossfadeOutgoingEnded = false
         decks.crossfade(to: asset, duration: crossfadeSeconds)
-        if let trackID = upNext.trackID { offline.markPlayed(trackID) }
-        preloadUpNext()
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(self?.crossfadeSeconds ?? 0))
-            self?.isCrossfading = false
-        }
     }
 
     private func wireSession() {

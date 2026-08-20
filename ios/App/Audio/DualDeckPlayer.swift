@@ -26,6 +26,9 @@ final class DualDeckPlayer {
     /// The crossfade reached the point where the incoming track is the one that
     /// should be named on the lock screen and in the car.
     var onCrossfadeHandover: (() -> Void)?
+    /// The incoming deck could not become audible. The outgoing deck still owns
+    /// playback unless it had already reached its natural end.
+    var onCrossfadeFailed: ((Error?) -> Void)?
 
     private let players: [AVPlayer]
     private var activeIndex = 0
@@ -34,6 +37,7 @@ final class DualDeckPlayer {
     private nonisolated(unsafe) var timeObservers: [Any?] = [nil, nil]
     private var observerTasks: [Task<Void, Never>] = []
     private var fade: Task<Void, Never>?
+    private var fadeGeneration = 0
     private let log = Logger(subsystem: "com.soundsible.player", category: "decks")
 
     private var active: AVPlayer { players[activeIndex] }
@@ -99,11 +103,53 @@ final class DualDeckPlayer {
 
         let incoming = idle
         let outgoing = active
-        incoming.replaceCurrentItem(with: AVPlayerItem(asset: asset))
+        let item: AVPlayerItem
+        if let staged = incoming.currentItem, Self.sameAsset(staged.asset, asset) {
+            item = staged
+        } else {
+            item = AVPlayerItem(asset: asset)
+            incoming.replaceCurrentItem(with: item)
+        }
         incoming.volume = 0
-        incoming.play()
+        let generation = fadeGeneration
 
         fade = Task { [weak self] in
+            guard await Self.waitUntilReady(item), !Task.isCancelled else {
+                guard !Task.isCancelled, self?.fadeGeneration == generation else { return }
+                incoming.pause()
+                incoming.replaceCurrentItem(with: nil)
+                incoming.volume = 0
+                outgoing.volume = 1
+                self?.fade = nil
+                self?.onCrossfadeFailed?(item.error)
+                return
+            }
+            incoming.play()
+            guard await Self.waitUntilPlaying(incoming), !Task.isCancelled else {
+                guard !Task.isCancelled, self?.fadeGeneration == generation else { return }
+                incoming.pause()
+                incoming.replaceCurrentItem(with: nil)
+                incoming.volume = 0
+                outgoing.volume = 1
+                self?.fade = nil
+                self?.onCrossfadeFailed?(item.error)
+                return
+            }
+
+            // If preparation lost the whole remaining runway, fading up from an
+            // ended deck only prolongs silence. Hand over immediately now that
+            // the incoming player is proven audible.
+            if Self.hasEnded(outgoing) {
+                incoming.volume = 1
+                self?.swapDecks()
+                self?.onCrossfadeHandover?()
+                outgoing.pause()
+                outgoing.replaceCurrentItem(with: nil)
+                outgoing.volume = 0
+                self?.fade = nil
+                return
+            }
+
             let started = ContinuousClock.now
             var handedOver = false
             let step = Duration.milliseconds(16)
@@ -178,8 +224,51 @@ final class DualDeckPlayer {
     }
 
     private func cancelFade() {
+        fadeGeneration += 1
         fade?.cancel()
         fade = nil
+    }
+
+    private static func sameAsset(_ lhs: AVAsset, _ rhs: AVAsset) -> Bool {
+        guard let left = lhs as? AVURLAsset, let right = rhs as? AVURLAsset else {
+            return lhs === rhs
+        }
+        return left.url == right.url
+    }
+
+    private static func waitUntilReady(_ item: AVPlayerItem) async -> Bool {
+        let deadline = ContinuousClock.now + .seconds(8)
+        while !Task.isCancelled, ContinuousClock.now < deadline {
+            switch item.status {
+            case .readyToPlay:
+                return true
+            case .failed:
+                return false
+            case .unknown:
+                try? await Task.sleep(for: .milliseconds(50))
+            @unknown default:
+                return false
+            }
+        }
+        return false
+    }
+
+    private static func waitUntilPlaying(_ player: AVPlayer) async -> Bool {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !Task.isCancelled, ContinuousClock.now < deadline {
+            if player.timeControlStatus == .playing { return true }
+            if player.currentItem?.status == .failed { return false }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return false
+    }
+
+    private static func hasEnded(_ player: AVPlayer) -> Bool {
+        guard let item = player.currentItem,
+              item.duration.isNumeric,
+              item.currentTime().isNumeric
+        else { return false }
+        return item.currentTime().seconds >= item.duration.seconds - 0.05
     }
 
     private func observeEnds() {
