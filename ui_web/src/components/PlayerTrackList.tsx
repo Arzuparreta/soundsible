@@ -37,6 +37,9 @@ export interface PlayerTrackListEntry {
 export interface PlayerTrackListSection {
   id: string;
   label?: string;
+  /** What the label means, for the hover of anyone the label alone leaves
+   * guessing. */
+  hint?: string;
   count?: number;
   entries: PlayerTrackListEntry[];
 }
@@ -187,10 +190,11 @@ export function PlayerTrackList(props: {
               <Show when={section.entries.length > 0}>
                 <section
                   class={styles.section}
+                  data-head={section.label ? '' : undefined}
                   data-long={section.entries.length > LANE_FLOOR_ROWS ? '' : undefined}
                 >
                   <Show when={section.label}>
-                    <div class={styles.sectionHead}>
+                    <div class={styles.sectionHead} title={section.hint}>
                       <span>{section.label}</span>
                       <Show when={section.count !== undefined}>
                         <span class={styles.sectionCount}>{section.count}</span>
