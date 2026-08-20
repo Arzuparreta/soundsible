@@ -2,11 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Track } from '../types/music';
 
 const apiMock = vi.hoisted(() => ({
-  prefetchPreviews: vi.fn(() => Promise.resolve({ status: 'queued' })),
+  prefetchPreviews: vi.fn(() => Promise.resolve({
+    status: 'queued',
+    preparation: undefined as Record<string, { state: string }> | undefined,
+  })),
+  previewStatuses: vi.fn(() => Promise.resolve({ preparation: {} })),
 }));
 vi.mock('./api', () => ({ api: apiMock }));
 
-import { prefetchPreviews, upcomingPreviewIds } from './prefetch';
+import { prefetchPreviews, previewPreparationState, upcomingPreviewIds } from './prefetch';
 
 const preview = (id: string): Track => ({ id, title: id, artist: 'A', source: 'preview' });
 const local = (id: string): Track => ({ id, title: id, artist: 'A' });
@@ -38,6 +42,7 @@ describe('upcomingPreviewIds', () => {
 describe('prefetchPreviews', () => {
   beforeEach(() => {
     apiMock.prefetchPreviews.mockClear();
+    apiMock.previewStatuses.mockClear();
   });
 
   it('drops non-YouTube ids and dedupes recently warmed ids', () => {
@@ -67,8 +72,23 @@ describe('prefetchPreviews', () => {
 
     prefetchPreviews(['retry12-_AB']);
     await vi.waitFor(() => expect(apiMock.prefetchPreviews).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
 
     prefetchPreviews(['retry12-_AB']);
     expect(apiMock.prefetchPreviews).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not call accepted preparation ready until the engine confirms disk bytes', async () => {
+    apiMock.prefetchPreviews.mockResolvedValueOnce({
+      status: 'queued',
+      preparation: { 'pending1-_A': { state: 'pending' } },
+    });
+
+    prefetchPreviews(['pending1-_A'], { download: true });
+    await vi.waitFor(() => expect(previewPreparationState('pending1-_A')).toBe('pending'));
+    expect(previewPreparationState('pending1-_A')).not.toBe('ready');
+    apiMock.prefetchPreviews.mockClear();
+    prefetchPreviews(['pending1-_A'], { download: true });
+    expect(apiMock.prefetchPreviews).not.toHaveBeenCalled();
   });
 });

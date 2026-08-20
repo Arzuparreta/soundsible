@@ -30,6 +30,8 @@ def _patch_upstream(monkeypatch, fake_get):
 @pytest.fixture
 def runtime(tmp_path):
     reset_runtime()
+    with preview_cache._preparation_lock:
+        preview_cache._preparation_failures.clear()
     runtime = RuntimeConfig(
         host="127.0.0.1",
         port=5005,
@@ -47,6 +49,8 @@ def runtime(tmp_path):
     for path in (runtime.config_dir, runtime.data_dir, runtime.cache_dir, runtime.log_dir):
         path.mkdir(parents=True, exist_ok=True)
     yield runtime
+    with preview_cache._preparation_lock:
+        preview_cache._preparation_failures.clear()
     reset_runtime()
 
 
@@ -121,6 +125,31 @@ def test_oversized_file_is_not_cached(runtime, monkeypatch):
 def test_cache_disabled_via_env(runtime, monkeypatch):
     monkeypatch.setenv("SOUNDSIBLE_PREVIEW_CACHE_MB", "0")
     assert preview_cache.open_writer(VID, "audio/mp4", 10) is None
+
+
+def test_preparation_status_distinguishes_work_from_ready_bytes(runtime):
+    assert preview_cache.preparation_status(VID).state == "cold"
+    with preview_cache._pending_lock:
+        preview_cache._pending.add((VID, True))
+    try:
+        assert preview_cache.preparation_status(VID).state == "pending"
+    finally:
+        with preview_cache._pending_lock:
+            preview_cache._pending.discard((VID, True))
+
+    writer = preview_cache.open_writer(VID, "audio/mp4", 3)
+    assert writer is not None
+    writer.write(b"abc")
+    assert writer.commit()
+    assert preview_cache.preparation_status(VID).state == "ready"
+
+
+def test_preparation_failure_has_a_bounded_retry_window(runtime):
+    preview_cache._record_preparation_failure(VID, "upstream_rejected", 30)
+    status = preview_cache.preparation_status(VID)
+    assert status.state == "unavailable"
+    assert status.reason == "upstream_rejected"
+    assert 1 <= status.retry_after <= 30
 
 
 def test_lru_eviction_removes_oldest_first(runtime, monkeypatch):
@@ -292,6 +321,7 @@ def test_request_prefetch_dedupes_and_downloads(runtime, monkeypatch):
     second = preview_cache.request_prefetch([VID], download=True, resolver=resolver)
     assert first == [VID]
     assert second == []  # still queued/in flight → deduped
+    assert preview_cache.preparation_status(VID).state == "pending"
 
     release.set()
     deadline = time.time() + 5
@@ -300,6 +330,7 @@ def test_request_prefetch_dedupes_and_downloads(runtime, monkeypatch):
     cached = preview_cache.get_cached(VID)
     assert cached is not None
     assert cached[0].read_bytes() == data
+    assert preview_cache.preparation_status(VID).state == "ready"
 
     # Already cached → a new download request is a no-op.
     assert preview_cache.request_prefetch([VID], download=True, resolver=resolver) == []
