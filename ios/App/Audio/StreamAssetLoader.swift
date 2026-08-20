@@ -27,7 +27,11 @@ nonisolated final class StreamAssetLoader: NSObject, @unchecked Sendable {
 
     private let token: String
     private let configuration: URLSessionConfiguration
-    private lazy var session = URLSession(
+    // Swift 6 otherwise inherits the class-wide `nonisolated` annotation onto
+    // this lazy (therefore mutable) slot and rejects it. URLSession owns its
+    // delegate callbacks after first access; transfer maps remain guarded by
+    // `lock`, so the explicit unsafe isolation escape is narrow and deliberate.
+    nonisolated(unsafe) private lazy var session = URLSession(
         configuration: configuration,
         delegate: self,
         delegateQueue: nil
