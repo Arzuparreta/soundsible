@@ -100,19 +100,29 @@
   padding: 8px 8px max(24px, var(--player-mobile-footer-clearance, 24px));
 }
 
+/* Every lane keeps its label and at least one row. Shrinking proportionally
+ * from a `min-height: 0` floor let a one-row lane beside a 300-row one collapse
+ * to a few pixels — and since the label cannot shrink below its own 26px, it
+ * spilled out of the lane and landed on top of the next lane's label. */
 .section {
+  --lane-head: 0px;
+  --lane-rows: 1;
   display: flex;
-  min-height: 0;
+  min-height: calc(var(--lane-head) + var(--lane-rows) * max(var(--row-h), 48px));
   flex: 0 1 auto;
   flex-direction: column;
   margin-bottom: 14px;
 }
 
-/* Left alone, a lane may shrink to nothing when several are long at once. This
- * floor is only on the lanes with rows to spare, so a two-row lane still sizes
+/* A lane with no label — the Auto Mode route — reserves no band for one. */
+.section[data-head] {
+  --lane-head: 26px;
+}
+
+/* Lanes with rows to spare give up all but three, so a two-row lane still sizes
  * to its two rows instead of being padded out to three. */
 .section[data-long] {
-  min-height: calc(26px + 3 * max(var(--row-h), 48px));
+  --lane-rows: 3;
 }
 
 .sectionRows {
@@ -123,13 +133,14 @@
 }
 
 /* Sticky for the fallback above, where `.rows` is the one scrolling and a lane
- * label would otherwise leave with its rows. The negative margin spans the
+ * label would otherwise leave with its rows. The negative side margins span the
  * padding `.rows` sets, so nothing scrolls past the label at its edges — and
  * stopping exactly at the padding box is what keeps it from overflowing
- * sideways. */
+ * sideways. `top` stays at the scrollport edge: a negative one pinned the label
+ * above it and had the scroller clip its first pixels. */
 .sectionHead {
   position: sticky;
-  top: -8px;
+  top: 0;
   z-index: 1;
   display: flex;
   align-items: center;
@@ -148,7 +159,17 @@
   -webkit-backdrop-filter: blur(16px);
 }
 
+/* The label now carries the name of wherever the lane came from, which is as
+ * long as an album title gets. */
+.sectionHead > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sectionCount {
+  flex: 0 0 auto;
+  padding-left: 8px;
   font-variant-numeric: tabular-nums;
 }
 
