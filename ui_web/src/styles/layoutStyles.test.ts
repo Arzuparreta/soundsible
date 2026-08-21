@@ -88,14 +88,18 @@ describe('unified player geometry', () => {
   });
 
   it('never hides a rendered browser tile behind a second CSS visibility contract', () => {
-    const root = postcss.parse(fs.readFileSync(nowPlaying, 'utf8'), { from: nowPlaying });
+    // The tiles moved to PlayerWorkspace; NowPlaying is still checked because
+    // it is the file that grew the duplicate contract this guards against.
     const hiddenRules: string[] = [];
-    root.walkRules((rule) => {
-      if (!rule.selector.includes("[data-now-playing-tile='browser']")) return;
-      rule.walkDecls('display', (decl) => {
-        if (decl.value === 'none') hiddenRules.push(rule.selector);
+    for (const file of [workspace, nowPlaying]) {
+      const root = postcss.parse(fs.readFileSync(file, 'utf8'), { from: file });
+      root.walkRules((rule) => {
+        if (!/\[data-(player|now-playing)-tile='browser'\]/.test(rule.selector)) return;
+        rule.walkDecls('display', (decl) => {
+          if (decl.value === 'none') hiddenRules.push(`${path.basename(file)} — ${rule.selector}`);
+        });
       });
-    });
+    }
     expect(hiddenRules).toEqual([]);
   });
 
