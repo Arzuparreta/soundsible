@@ -479,10 +479,9 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
         response.close()
         _invalidate_stream(video_id)
         cache_was_warm = False
-        # The rejection almost certainly came from the fast path (it hands
-        # back a signed URL for a PO-token-gated format with no PO token);
-        # retrying it would just fail the same way. Force the retry to the
-        # slower fallback clients instead.
+        # Retry through the independent fallback resolver. In the captured
+        # incident that produced an audio-only format where the fast resolver
+        # had produced a muxed one; the 403 itself does not diagnose why.
         skip_fast_path = True
     return None, None, "unavailable", 0, 0
 
@@ -494,43 +493,33 @@ def _acquire_preview(api, video_id: str):
     an active request and background prefetch all join the same transfer.
     """
     cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
-    skip_fast_path = False
-    for attempt in range(2):
-        resolve_started = time.monotonic()
-        stream = _get_preview_stream_cached(api, video_id, skip_fast_path=skip_fast_path)
-        resolve_ms = round((time.monotonic() - resolve_started) * 1000)
-        if not stream:
-            return None, None, "unavailable", resolve_ms, 0
-        download_started = time.monotonic()
-        try:
-            cached = preview_cache.ensure_cached(video_id, stream)
-        except preview_cache.PreviewUpstreamRejected as exc:
-            if attempt == 0:
-                _invalidate_stream(video_id)
-                cache_was_warm = False
-                # See the matching comment in `_preview_upstream`: a fast-path
-                # URL is what almost certainly just got rejected.
-                skip_fast_path = True
-                continue
-            preview_cache.open_upstream_backoff(video_id, exc.status_code)
-            return (
-                None,
-                stream,
-                "cold",
-                resolve_ms,
-                round((time.monotonic() - download_started) * 1000),
-            )
-        download_ms = round((time.monotonic() - download_started) * 1000)
-        if cached:
-            preview_cache.clear_upstream_backoff()
-        return (
-            cached,
-            stream,
-            "url_warm" if cache_was_warm and attempt == 0 else "cold",
-            resolve_ms,
-            download_ms,
+    started = time.monotonic()
+
+    def resolve(vid: str):
+        return _get_preview_stream_cached(api, vid)
+
+    def refresh(vid: str):
+        nonlocal cache_was_warm
+        _invalidate_stream(vid)
+        cache_was_warm = False
+        return _get_preview_stream_cached(api, vid, skip_fast_path=True)
+
+    try:
+        cached, stream = preview_cache.acquire_cached(
+            video_id,
+            resolve,
+            refresh_resolver=refresh,
         )
-    return None, None, "unavailable", 0, 0
+    except preview_cache.PreviewUpstreamRejected:
+        cached, stream = None, None
+    elapsed_ms = round((time.monotonic() - started) * 1000)
+    return (
+        cached,
+        stream,
+        "url_warm" if cache_was_warm and cached else "cold",
+        0,
+        elapsed_ms,
+    )
 
 
 def _serve_cached_preview(
@@ -619,6 +608,11 @@ def preview_stream_proxy(video_id):
             response.status_code = 503
             response.headers["Retry-After"] = str(retry_after)
             return response
+        # Cache-enabled playback has one contract: a complete, decoder-checked
+        # file. Falling through to the compatibility proxy here would silently
+        # bypass that verdict and hand the media element the same unverified
+        # upstream resource the runway just rejected.
+        return jsonify({"error": "Preview unavailable"}), 502
 
     # Explicitly disabling the disk cache keeps a compatibility path. It uses
     # one open-ended upstream response for normal playback; never split a cold
@@ -725,7 +719,16 @@ def preview_prefetch():
     def resolver(vid: str) -> ResolvedStream | None:
         return _get_preview_stream_cached(api, vid)
 
-    queued = preview_cache.request_prefetch(video_ids, download=download, resolver=resolver)
+    def refresh_resolver(vid: str) -> ResolvedStream | None:
+        _invalidate_stream(vid)
+        return _get_preview_stream_cached(api, vid, skip_fast_path=True)
+
+    queued = preview_cache.request_prefetch(
+        video_ids,
+        download=download,
+        resolver=resolver,
+        refresh_resolver=refresh_resolver if download else None,
+    )
     preparation = {
         video_id: preview_cache.preparation_status(video_id).as_dict()
         for video_id in video_ids

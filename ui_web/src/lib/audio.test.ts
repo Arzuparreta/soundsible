@@ -581,6 +581,39 @@ describe('two-deck mixer', () => {
     expect(first.src).toBe('');
   });
 
+  it('recovers on the other deck and makes late errors from the failed deck stale', async () => {
+    const module = await import('./audio');
+    const failed = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/current', 1);
+    failed.currentTime = 42;
+    let activeErrors = 0;
+    module.onDeckEvent('error', (event) => {
+      if (module.isActiveDeck(event.currentTarget)) activeErrors += 1;
+    });
+
+    await module.audioService.recover('/current', 42, 1);
+    const replacement = module.audioEl() as unknown as FakeAudio;
+    expect(replacement).not.toBe(failed);
+    expect(replacement.src).toBe('/current');
+    expect(replacement.currentTime).toBe(42);
+
+    failed.dispatchEvent(new Event('error'));
+    expect(activeErrors).toBe(0);
+  });
+
+  it('rejects a recovery whose replacement deck never receives metadata', async () => {
+    const module = await import('./audio');
+    await module.audioService.load('/current', 1);
+    const active = module.audioEl() as unknown as FakeAudio;
+    const replacement = created.find((deck) => deck !== active)!;
+    replacement.readyState = 0;
+
+    const recovery = module.audioService.recover('/current', 20, 1);
+    const verdict = expect(recovery).rejects.toThrow('metadata timeout');
+    await vi.advanceTimersByTimeAsync(12_000);
+    await verdict;
+  });
+
   it('never rebuilds the decks while the page is hidden', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
@@ -648,6 +681,7 @@ describe('two-deck mixer', () => {
 
     const deck = module.audioEl() as unknown as FakeAudio;
     await module.audioService.load('/current', 1);
+    module.audioService.stage('/next', 0.8);
     deck.currentTime = 10;
     // Silence on the master bus while the media clock advances: the samples are
     // not reaching the speakers, whatever the element and the context claim.
@@ -664,6 +698,10 @@ describe('two-deck mixer', () => {
     expect(rebuilt).not.toBe(deck);
     expect(rebuilt.src).toBe('/current');
     expect(rebuilt.play).toHaveBeenCalled();
+    const restoredIdle = created.at(-1)!;
+    expect(restoredIdle).not.toBe(rebuilt);
+    expect(restoredIdle.src).toBe('/next');
+    expect(failures).toHaveLength(1);
   });
 
   it('moves Live to direct deck capture when the mixer takes its tap down', async () => {

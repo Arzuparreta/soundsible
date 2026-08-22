@@ -261,8 +261,12 @@ async function loadStore(
   const previewPreparationState = (
     apiOverrides.__previewPreparationState as ((id: string) => 'cold' | 'pending' | 'ready' | 'unavailable') | undefined
   ) ?? (() => 'ready' as const);
+  let previewStatusListener: ((id: string, status: { state: 'cold' | 'pending' | 'ready' | 'unavailable'; retry_after?: number }) => void) | null = null;
+  const prefetchPreviews = vi.fn((_ids: string[], opts?: { onStatus?: typeof previewStatusListener }) => {
+    if (opts?.onStatus) previewStatusListener = opts.onStatus;
+  });
   vi.doMock('../lib/prefetch', () => ({
-    prefetchPreviews: vi.fn(),
+    prefetchPreviews,
     previewPreparationState,
     upcomingPreviewIds: (queue: Track[], index: number, repeatAll: boolean, count = 2) => {
       const ids: string[] = [];
@@ -340,6 +344,8 @@ async function loadStore(
     fireSocketEvent,
     fireGraphFailure,
     fireProgramTransport,
+    firePreviewStatus: (id: string, status: { state: 'cold' | 'pending' | 'ready' | 'unavailable'; retry_after?: number }) => previewStatusListener?.(id, status),
+    prefetchPreviews,
     toastAction,
     toastError,
     toastSuccess,
@@ -690,7 +696,7 @@ describe('volume levelling', () => {
     expect(api.requestLoudness).toHaveBeenCalledTimes(1);
   });
 
-  it('never downloads the next track while the current one is still starting', async () => {
+  it('never stages the next track until the current one is sounding', async () => {
     // A staged deck pulls the whole of the next track. Starting that alongside
     // the song the listener just clicked puts two full files on the link at
     // once — measured on one session, eight clicks moved 171 MB and every
@@ -703,10 +709,11 @@ describe('volume levelling', () => {
     expect(audioService.stage).not.toHaveBeenCalled();
     expect(api.requestLoudness).not.toHaveBeenCalled();
 
-    // Still not when it starts sounding: there is a whole track to do it in.
+    // Once it sounds, a verified local successor can safely be cued without
+    // competing for upstream bytes.
     fireDeckEvent('playing');
     await flush();
-    expect(audioService.stage).not.toHaveBeenCalled();
+    expect(audioService.stage).toHaveBeenCalledWith('/stream/t2', expect.any(Number));
     expect(api.requestLoudness).toHaveBeenCalled();
 
     // Inside the last minute, where nothing is waiting on the link.
@@ -833,8 +840,51 @@ describe('Playback load coalescing', () => {
     expect(state.playback.loadError).toBe(true);
 
     actions.retryCurrent();
-    expect(audioService.load).toHaveBeenCalledTimes(2);
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+    expect(audioService.recover).toHaveBeenCalledTimes(2);
     expect(state.playback.loadError).toBe(false);
+  });
+
+  it('waits for a verified preview at ended and resumes from the readiness event', async () => {
+    const readiness: Record<string, 'pending' | 'ready'> = { 'next0000001': 'pending' };
+    const next: Track = { id: 'next0000001', title: 'Next', artist: 'Artist', source: 'preview' };
+    const { actions, state, audioService, deck, initStore, fireDeckEvent, firePreviewStatus } = await loadStore({
+      __previewPreparationState: (id: string) => readiness[id] ?? 'pending',
+    });
+    initStore();
+    actions.playFrom([t1, next], 0);
+    fireDeckEvent('playing');
+    (deck as unknown as { currentTime: number; duration: number }).currentTime = 180;
+    fireDeckEvent('ended');
+
+    expect(state.playback.phase).toBe('starved');
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+    readiness[next.id] = 'ready';
+    firePreviewStatus(next.id, { state: 'ready' });
+
+    expect(state.playback.currentTrack?.id).toBe(next.id);
+    expect(audioService.load).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops an unavailable context occurrence and stages the next track in that context', async () => {
+    const failed: Track = { id: 'fail0000001', title: 'Failed', artist: 'Artist', source: 'preview' };
+    const healthy: Track = { id: 'good0000001', title: 'Healthy', artist: 'Artist', source: 'preview' };
+    const readiness: Record<string, 'pending' | 'ready'> = {
+      [failed.id]: 'pending',
+      [healthy.id]: 'ready',
+    };
+    const { actions, state, audioService, initStore, fireDeckEvent, firePreviewStatus } = await loadStore({
+      __previewPreparationState: (id: string) => readiness[id] ?? 'pending',
+    });
+    initStore();
+    actions.playFrom([t1, failed, healthy], 0);
+    fireDeckEvent('playing');
+
+    firePreviewStatus(failed.id, { state: 'unavailable', retry_after: 30 });
+
+    expect(state.playback.queue.some((entry) => entry.id === failed.id)).toBe(false);
+    expect(state.playback.queue[1].id).toBe(healthy.id);
+    expect(audioService.stage).toHaveBeenLastCalledWith(`/preview/${healthy.id}`, expect.any(Number));
   });
 
   it('keeps the outgoing Auto track alive when the incoming deck fails', async () => {
@@ -938,7 +988,8 @@ describe('Playback load coalescing', () => {
 
     actions.retryCurrent();
     expect(state.playback.currentTrack?.id).toBe('current');
-    expect(audioService.load).toHaveBeenCalledTimes(2);
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+    expect(audioService.recover).toHaveBeenCalledTimes(2);
   });
 
   it('pauses automatic handoffs after repeated failures instead of burning the whole route', async () => {
@@ -2871,6 +2922,24 @@ describe('playback delivery telemetry', () => {
       // Still nothing new by the next deadline: the load really is dead.
       await vi.advanceTimersByTimeAsync(12_000);
       expect(audioService.recover).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recovers a load whose play promise never settles even without waiting events', async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<void>(() => {});
+      const { actions, audioService, initStore } = await loadStore({}, {
+        load: vi.fn(() => never),
+      });
+      initStore();
+
+      actions.playTrack(t1);
+      await vi.advanceTimersByTimeAsync(12_000);
+
+      expect(audioService.recover).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }

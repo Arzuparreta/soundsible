@@ -38,7 +38,7 @@ bandit[toml]>=1.7.5        # Security linter
 # CI job installed them for nothing. Re-add them with config if they get used.
 
 # ODST-Tool Dependencies (YouTube Downloader)
-yt-dlp==2026.7.4          # YouTube Downloader; startup auto-update is optional
+yt-dlp==2026.8.19         # YouTube Downloader; startup auto-update is optional
 curl-cffi==0.15.0         # Current browser impersonation for yt-dlp
 python-dotenv>=1.0.0       # Environment variables
 gevent>=24.2.0            # Async networking for SocketIO (concurrent requests)

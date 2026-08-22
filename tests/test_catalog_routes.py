@@ -678,7 +678,7 @@ def test_resolve_candidates_warms_preview_stream_cache_for_best_id(monkeypatch, 
 
     prefetched = []
 
-    def fake_request_prefetch(video_ids, *, download, resolver):
+    def fake_request_prefetch(video_ids, *, download, resolver, refresh_resolver=None):
         prefetched.append((list(video_ids), download))
         return list(video_ids)
 

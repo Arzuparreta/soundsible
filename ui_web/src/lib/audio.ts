@@ -27,6 +27,9 @@ const RATE_RETURN_MS = 8_000;
  * the constant is missing under jsdom, and a deck holding nothing is exactly
  * the case this has to recognise. */
 const NETWORK_NO_SOURCE = 3;
+/** A replacement deck that never receives metadata is a failed recovery, not a
+ * promise the transport is allowed to await forever. */
+const RECOVERY_METADATA_TIMEOUT_MS = 12_000;
 
 /** True while the page is in the background — a locked phone, another app, a
  * different tab. Everything that would reset a media element, rebuild the audio
@@ -693,6 +696,7 @@ function abandonGraph(reason: GraphFailure['reason']): void {
   }
   const contextState = audioContext?.state ?? 'closed';
   const previous = decks()[activeIndex];
+  const previousIdle = decks()[1 - activeIndex];
   // A deck holding the unlock sample is holding nothing: restoring it would hand
   // the replacement deck a silent WAV as the track it is meant to be playing,
   // and reporting it as music that failed to come back tells the listener their
@@ -705,6 +709,13 @@ function abandonGraph(reason: GraphFailure['reason']): void {
     rate: previous.playbackRate || 1,
     wasPlaying: !unlocking && !previous.paused && !previous.ended,
   };
+  const restoreStaged = stagedUrl
+    ? {
+        url: stagedUrl,
+        level: levelGains[1 - activeIndex],
+        ready: previousIdle.networkState !== NETWORK_NO_SOURCE,
+      }
+    : null;
   graphState = 'unavailable';
   cancelMix('failed');
   stopRateReturn();
@@ -721,7 +732,7 @@ function abandonGraph(reason: GraphFailure['reason']): void {
   mixGains[0] = 1;
   mixGains[1] = 0;
   levelGains[0] = restoredLevel;
-  levelGains[1] = 1;
+  levelGains[1] = restoreStaged?.level ?? 1;
   stagedUrl = '';
   applyDeckVolume();
   for (const deck of elements) deck.muted = allMuted;
@@ -742,31 +753,49 @@ function abandonGraph(reason: GraphFailure['reason']): void {
     if (deck.readyState >= 1) cue();
     else deck.addEventListener('loadedmetadata', cue, { once: true });
     if (restore.wasPlaying) {
-      resumed = true;
-      void deck.play().catch(() => {
-        // Some platforms want a fresh gesture for an element that has never
-        // played. The store turns this into a visible "tap to resume".
+      let reported = false;
+      const report = (resumed: boolean) => {
+        if (reported) return;
+        reported = true;
+        clearTimeout(reportTimeout);
         graphReporter?.({
           reason,
-          wasPlaying: restore.wasPlaying,
-          resumed: false,
+          wasPlaying: true,
+          resumed,
           contextState,
           positionSec: restore.position,
         });
-      });
+      };
+      const reportTimeout = setTimeout(() => report(false), RECOVERY_METADATA_TIMEOUT_MS);
+      void deck.play().then(
+        () => report(true),
+        () => {
+          // Some platforms want a fresh gesture for an element that has never
+          // played. The store turns this into a visible "tap to resume".
+          report(false);
+        },
+      );
     }
+  }
+  if (restoreStaged?.url && restoreStaged.ready && restoreStaged.url !== restore.url) {
+    const idle = elements[1];
+    stagedUrl = restoreStaged.url;
+    idle.src = restoreStaged.url;
+    idle.load();
   }
   // Whichever deck is still empty is locked again; unlock it now so the track
   // after this one can start without a gesture the listener will not be there
   // to give. Best effort — this does not run from one.
   unlockDecks();
-  graphReporter?.({
-    reason,
-    wasPlaying: restore.wasPlaying,
-    resumed,
-    contextState,
-    positionSec: restore.position,
-  });
+  if (!restore.wasPlaying) {
+    graphReporter?.({
+      reason,
+      wasPlaying: false,
+      resumed,
+      contextState,
+      positionSec: restore.position,
+    });
+  }
 }
 
 /** Whether the decks are routed through a graph that is believed to be sounding. */
@@ -1501,6 +1530,7 @@ export const audioService = {
     cancelMix('load');
     const a = audioEl();
     const token = ++loadSeq;
+    pendingDetach.delete(a);
     stopRateReturn();
     a.playbackRate = 1;
     // Before `src`, and required rather than defaulted: this deck is not
@@ -1520,10 +1550,23 @@ export const audioService = {
   /** Reload a stalled stream and resume from the last audible position. */
   recover(url: string, positionSec: number, level: number): Promise<void> {
     cancelMix('load');
-    const a = audioEl();
+    const fromIndex = activeIndex;
+    const toIndex = 1 - fromIndex;
+    const a = decks()[toIndex];
     const token = ++loadSeq;
-    setDeckLevel(activeIndex, level);
+    stagedUrl = '';
+    stopRateReturn();
+    pendingDetach.delete(a);
+    a.playbackRate = 1;
+    setDeckLevel(toIndex, level);
+    // Ownership moves before either deck can emit fallout from replacing or
+    // releasing its resource. Store listeners therefore ignore every late
+    // event belonging to the failed resource by construction.
+    activeIndex = toIndex;
+    setDeckGain(toIndex, 1);
+    setDeckGain(fromIndex, 0);
     a.src = url;
+    releaseDeck(fromIndex);
     const resumeAtPosition = async () => {
       if (token !== loadSeq) return;
       const position = Number.isFinite(positionSec) ? Math.max(0, positionSec) : 0;
@@ -1543,16 +1586,32 @@ export const audioService = {
     };
     if (a.readyState >= 1) return resumeAtPosition();
     return new Promise<void>((resolve, reject) => {
-      const onMetadata = () => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        timer = null;
+        a.removeEventListener('loadedmetadata', onMetadata);
         a.removeEventListener('error', onError);
+      };
+      const onMetadata = () => {
+        cleanup();
         void resumeAtPosition().then(resolve, reject);
       };
       const onError = () => {
-        a.removeEventListener('loadedmetadata', onMetadata);
+        cleanup();
         reject(new Error('media recovery failed'));
       };
       a.addEventListener('loadedmetadata', onMetadata, { once: true });
       a.addEventListener('error', onError, { once: true });
+      timer = setTimeout(() => {
+        if (token !== loadSeq) {
+          cleanup();
+          resolve();
+          return;
+        }
+        cleanup();
+        reject(new Error('media recovery metadata timeout'));
+      }, RECOVERY_METADATA_TIMEOUT_MS);
     });
   },
   /** Load without playing, optionally cued to `positionSec` (cross-device resume). */
@@ -1562,6 +1621,7 @@ export const audioService = {
     cancelMix('load');
     const a = audioEl();
     const token = ++loadSeq;
+    pendingDetach.delete(a);
     setDeckLevel(activeIndex, level);
     // Explicitly, before the stream is handed over. A deck that is mid-`play()`
     // from `unlockDecks` — the silent sample every gesture spends on an empty
@@ -1715,6 +1775,7 @@ export const audioService = {
     if (mix || !url) return;
     const index = 1 - activeIndex;
     const idle = decks()[index];
+    pendingDetach.delete(idle);
     // Above the early return on purpose: re-staging the same URL is how a
     // track that has only just been measured gets its level onto the silent
     // deck before it is promoted.
@@ -1745,6 +1806,7 @@ export const audioService = {
     if (mix || !url || stagedUrl !== url) return null;
     const toIndex = 1 - activeIndex;
     const to = decks()[toIndex];
+    pendingDetach.delete(to);
     // Deliberately not a `readyState` gate. Safari downgrades `preload="auto"`
     // to metadata-only — on cellular, and for a second media element, near
     // always — so an iPhone's staged deck sits at `HAVE_METADATA` however long
@@ -1829,6 +1891,7 @@ export const audioService = {
     const toIndex = 1 - activeIndex;
     const from = decks()[fromIndex];
     const to = decks()[toIndex];
+    pendingDetach.delete(to);
     const manual = options.manual === true;
     const rate = Math.min(1.06, Math.max(0.94, Number(plan.playback_rate) || 1));
     const overlap = manual

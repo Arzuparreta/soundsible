@@ -26,6 +26,8 @@ import logging
 import math
 import os
 import queue
+import re
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -118,13 +120,10 @@ def upstream_session() -> requests.Session:
 
 
 def retire_upstream_session() -> None:
-    """Drop the pooled session so the next fetch rides a clean jar.
+    """Drop pooled connection and cookie state before the independent retry.
 
-    googlevideo's abuse system flags sessions, not just URLs: a 403/410
-    plants a marker back into the session's cookie jar, so every later
-    request on that same pooled session identifies itself as flagged no
-    matter how fresh the signed URL is. Re-resolving the URL alone can never
-    win that fight — only a new session does.
+    This is isolation, not a diagnosis: a 403/410 does not by itself prove bot
+    detection, a poisoned cookie, or any other external cause.
     """
     global _session
     with _session_lock:
@@ -238,7 +237,7 @@ class CacheWriter:
         self._fh.write(chunk)
         self._bytes += len(chunk)
 
-    def commit(self) -> bool:
+    def commit(self, validator: Optional[Callable[[Path], bool]] = None) -> bool:
         if self._done:
             return False
         try:
@@ -251,6 +250,13 @@ class CacheWriter:
                 self._part.unlink(missing_ok=True)
                 return False
             if self._bytes == 0:
+                self._part.unlink(missing_ok=True)
+                return False
+            if validator is not None and not validator(self._part):
+                logger.warning(
+                    "[PreviewCache] %s is complete but not decodable; discarding",
+                    self.video_id,
+                )
                 self._part.unlink(missing_ok=True)
                 return False
             _meta_path(self.video_id).write_text(
@@ -363,8 +369,10 @@ def enforce_cache_limit() -> None:
 _QUEUE_MAX = 32
 ResolutionValue = Union[ResolvedStream, str, None]
 Resolver = Callable[[str], ResolutionValue]
-_resolve_queue: "queue.Queue[tuple[str, Resolver]]" = queue.Queue(maxsize=_QUEUE_MAX)
-_download_queue: "queue.Queue[tuple[str, Resolver]]" = queue.Queue(maxsize=_QUEUE_MAX)
+RefreshResolver = Callable[[str], ResolutionValue]
+PrefetchJob = tuple[str, Resolver, Optional[RefreshResolver]]
+_resolve_queue: "queue.Queue[PrefetchJob]" = queue.Queue(maxsize=_QUEUE_MAX)
+_download_queue: "queue.Queue[PrefetchJob]" = queue.Queue(maxsize=_QUEUE_MAX)
 _pending_lock = threading.Lock()
 _pending: set[tuple[str, bool]] = set()
 _worker_started = threading.Event()
@@ -449,6 +457,32 @@ def _coerce_resolution(value: ResolutionValue) -> Optional[ResolvedStream]:
     return None
 
 
+def _preview_is_decodable(path: Path) -> bool:
+    """Prove that a completed preview contains audio the bundled decoder reads."""
+    from shared.ffmpeg_runtime import ffmpeg_executable
+
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg_executable(),
+                "-v", "error",
+                "-i", str(path),
+                "-map", "0:a:0",
+                "-t", "1",
+                "-f", "null",
+                "-",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.warning("[PreviewCache] Could not validate %s: %s", path.name, exc)
+        return False
+    return result.returncode == 0
+
+
 def _download_once(
     video_id: str,
     stream: Union[ResolvedStream, str],
@@ -484,6 +518,14 @@ def _download_once(
             resp.raise_for_status()
             raw_len = resp.headers.get("Content-Length")
             expected = int(raw_len) if raw_len and raw_len.isdigit() else None
+            # For our open-ended `bytes=0-` request, Content-Range's total is
+            # the authoritative full-file size. Content-Length can describe
+            # only the returned slice; accepting that value committed a
+            # truncated prefix as a supposedly complete preview.
+            content_range = resp.headers.get("Content-Range") or ""
+            match = re.fullmatch(r"bytes\s+0-\d+/(\d+)", content_range.strip())
+            if match:
+                expected = int(match.group(1))
             content_type = resp.headers.get("Content-Type") or "audio/mpeg"
             writer = open_writer(video_id, content_type, expected)
             if writer is None:
@@ -492,12 +534,44 @@ def _download_once(
                 for chunk in resp.iter_content(chunk_size=65536):
                     if chunk:
                         writer.write(chunk)
-                if not writer.commit():
+                if not writer.commit(_preview_is_decodable):
                     return None
             except BaseException:
                 writer.abandon()
                 raise
     return get_cached(video_id)
+
+
+def acquire_cached(
+    video_id: str,
+    resolver: Resolver,
+    *,
+    refresh_resolver: Optional[RefreshResolver] = None,
+) -> tuple[Optional[tuple[Path, str]], Optional[ResolvedStream]]:
+    """Resolve and cache one preview, refreshing one CDN-rejected URL.
+
+    Active playback and speculative prefetch must use this exact contract. A
+    URL is only an acquisition hint; the committed, decoder-checked file is the
+    evidence that a candidate is playable.
+    """
+    stream = _coerce_resolution(resolver(video_id))
+    if stream is None:
+        return None, None
+    for attempt in range(2):
+        try:
+            cached = ensure_cached(video_id, stream)
+        except PreviewUpstreamRejected as exc:
+            if attempt == 0 and refresh_resolver is not None:
+                stream = _coerce_resolution(refresh_resolver(video_id))
+                if stream is None:
+                    return None, None
+                continue
+            open_upstream_backoff(video_id, exc.status_code)
+            raise
+        if cached:
+            clear_upstream_backoff()
+        return cached, stream
+    return None, stream
 
 
 def ensure_cached(
@@ -548,32 +622,32 @@ def _download_to_cache(video_id: str, stream: Union[ResolvedStream, str]) -> Non
     ensure_cached(video_id, stream)
 
 
-def _worker_loop(jobs: "queue.Queue[tuple[str, Resolver]]", *, download: bool) -> None:
+def _worker_loop(jobs: "queue.Queue[PrefetchJob]", *, download: bool) -> None:
     while True:
-        video_id, resolver = jobs.get()
+        video_id, resolver, refresh_resolver = jobs.get()
         try:
-            stream = _coerce_resolution(resolver(video_id))
             if download:
                 if cache_limit_bytes() <= 0:
                     _record_preparation_failure(video_id, "cache_disabled")
-                elif stream is None:
-                    retry = upstream_backoff_remaining()
-                    _record_preparation_failure(
-                        video_id,
-                        "upstream_backoff" if retry else "resolution_failed",
-                        retry,
-                    )
                 else:
-                    _download_to_cache(video_id, stream)
-                    if _audio_path(video_id).is_file():
+                    cached, stream = acquire_cached(
+                        video_id,
+                        resolver,
+                        refresh_resolver=refresh_resolver,
+                    )
+                    if cached:
                         _clear_preparation_failure(video_id)
                     else:
                         retry = upstream_backoff_remaining()
                         _record_preparation_failure(
                             video_id,
-                            "upstream_backoff" if retry else "download_failed",
+                            "upstream_backoff" if retry else (
+                                "resolution_failed" if stream is None else "download_failed"
+                            ),
                             retry,
                         )
+            else:
+                resolver(video_id)
         except PreviewUpstreamRejected as e:
             _record_preparation_failure(
                 video_id,
@@ -628,6 +702,7 @@ def request_prefetch(
     *,
     download: bool,
     resolver: Resolver,
+    refresh_resolver: Optional[RefreshResolver] = None,
 ) -> list[str]:
     """Queue background prefetch jobs; returns the ids actually queued.
 
@@ -649,7 +724,7 @@ def request_prefetch(
         if download:
             _clear_preparation_failure(video_id)
         try:
-            jobs.put_nowait((video_id, resolver))
+            jobs.put_nowait((video_id, resolver, refresh_resolver))
             queued.append(video_id)
         except queue.Full:
             with _pending_lock:

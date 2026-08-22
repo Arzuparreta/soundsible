@@ -25,11 +25,13 @@ VID = "dQw4w9WgXcQ"
 def _patch_upstream(monkeypatch, fake_get):
     """Stand in for the pooled upstream session preview fetches go through."""
     monkeypatch.setattr(preview_cache, "upstream_session", lambda: SimpleNamespace(get=fake_get))
+    monkeypatch.setattr(preview_cache, "_preview_is_decodable", lambda path: True)
 
 
 @pytest.fixture
 def runtime(tmp_path):
     reset_runtime()
+    preview_cache.clear_upstream_backoff()
     with preview_cache._preparation_lock:
         preview_cache._preparation_failures.clear()
     runtime = RuntimeConfig(
@@ -51,6 +53,7 @@ def runtime(tmp_path):
     yield runtime
     with preview_cache._preparation_lock:
         preview_cache._preparation_failures.clear()
+    preview_cache.clear_upstream_backoff()
     reset_runtime()
 
 
@@ -94,6 +97,15 @@ def test_incomplete_stream_is_discarded(runtime):
     assert writer.commit() is False
     assert preview_cache.get_cached(VID) is None
     assert not preview_cache._part_path(VID).exists()
+
+
+def test_completed_but_undecodable_stream_is_discarded(runtime):
+    writer = preview_cache.open_writer(VID, "audio/mp4", 3)
+    assert writer is not None
+    writer.write(b"bad")
+
+    assert writer.commit(lambda path: False) is False
+    assert preview_cache.get_cached(VID) is None
 
 
 def test_abandon_cleans_up_and_releases_the_writer_slot(runtime):
@@ -219,6 +231,34 @@ def test_download_once_retires_the_session_on_403(runtime, monkeypatch):
     assert retired == [True]
 
 
+def test_acquisition_refreshes_one_rejected_url_before_declaring_outage(runtime, monkeypatch):
+    calls = []
+    retired = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        if url.endswith("/rejected"):
+            return _FakeResponse(b"", status_code=403)
+        return _FakeResponse(b"fresh-audio")
+
+    _patch_upstream(monkeypatch, fake_get)
+    monkeypatch.setattr(preview_cache, "retire_upstream_session", lambda: retired.append(True))
+    refreshes = []
+
+    cached, stream = preview_cache.acquire_cached(
+        VID,
+        lambda _vid: "http://example.invalid/rejected",
+        refresh_resolver=lambda vid: refreshes.append(vid) or "http://example.invalid/fresh",
+    )
+
+    assert cached is not None
+    assert stream is not None and stream.url.endswith("/fresh")
+    assert calls == ["http://example.invalid/rejected", "http://example.invalid/fresh"]
+    assert refreshes == [VID]
+    assert retired == [True]
+    assert preview_cache.upstream_backoff_remaining() == 0
+
+
 def test_concurrent_playback_and_prefetch_share_one_whole_file_download(runtime, monkeypatch):
     """A deck and prefetch racing for one id must produce one CDN request."""
     data = b"single-flight" * 1024
@@ -334,3 +374,32 @@ def test_request_prefetch_dedupes_and_downloads(runtime, monkeypatch):
 
     # Already cached → a new download request is a no-op.
     assert preview_cache.request_prefetch([VID], download=True, resolver=resolver) == []
+
+
+def test_background_prefetch_uses_the_same_rejection_refresh_as_playback(runtime, monkeypatch):
+    video_id = "fallback001"
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        if url.endswith("/fast"):
+            return _FakeResponse(b"", status_code=403)
+        return _FakeResponse(b"verified-audio")
+
+    _patch_upstream(monkeypatch, fake_get)
+    refreshed = []
+    queued = preview_cache.request_prefetch(
+        [video_id],
+        download=True,
+        resolver=lambda _vid: "http://example.invalid/fast",
+        refresh_resolver=lambda vid: refreshed.append(vid) or "http://example.invalid/fallback",
+    )
+
+    assert queued == [video_id]
+    deadline = time.time() + 5
+    while time.time() < deadline and preview_cache.preparation_status(video_id).state == "pending":
+        time.sleep(0.05)
+
+    assert preview_cache.preparation_status(video_id).state == "ready"
+    assert calls == ["http://example.invalid/fast", "http://example.invalid/fallback"]
+    assert refreshed == [video_id]

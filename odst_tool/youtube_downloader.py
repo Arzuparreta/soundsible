@@ -1412,6 +1412,7 @@ class YouTubeDownloader:
             *,
             egress: str,
             proxy_url: Optional[str] = None,
+            require_audio_only: bool = False,
         ) -> tuple[Optional[ResolvedStream], bool]:
             started = time.monotonic()
             try:
@@ -1431,6 +1432,7 @@ class YouTubeDownloader:
                 return None, True
             if not isinstance(info, dict) or not info:
                 return None, False
+            selected = info
             url = info.get("url")
             if not isinstance(url, str) or not url:
                 for collection in (info.get("requested_formats") or [], info.get("formats") or []):
@@ -1438,10 +1440,18 @@ class YouTubeDownloader:
                         candidate = fmt.get("url") if isinstance(fmt, dict) else None
                         if isinstance(candidate, str) and candidate:
                             url = candidate
+                            selected = fmt
                             break
                     if isinstance(url, str) and url:
                         break
             if not isinstance(url, str) or not url:
+                return None, False
+            if require_audio_only and selected.get("vcodec") != "none":
+                logger.info(
+                    "[Preview] Fast path for %s degraded to muxed format %s; using fallback clients",
+                    video_id,
+                    selected.get("format_id") or info.get("format_id") or "unknown",
+                )
                 return None, False
             return (
                 resolved_stream(
@@ -1492,6 +1502,7 @@ class YouTubeDownloader:
                 fast_opts,
                 egress="relay" if yt_proxy else "direct",
                 proxy_url=yt_proxy or None,
+                require_audio_only=True,
             )
             if result:
                 return result
