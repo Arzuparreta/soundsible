@@ -7,6 +7,7 @@ import {
   type DjRouteKind,
   type ListeningPlanItem,
   type LibraryScanStatus,
+  type PreviewPreparation,
   type RemotePlaybackState,
 } from '../lib/api';
 import {
@@ -328,6 +329,9 @@ function emitPlaybackEvent(
     transport_action?: string;
     transport_origin?: string;
     mix_phase?: string;
+    video_id?: string;
+    queue_lane?: string;
+    queue_source?: string;
   } = {},
 ): void {
   void api
@@ -436,25 +440,20 @@ function repeatCycle(queue: PlaybackQueueEntry[]): PlaybackQueueEntry[] {
 }
 
 /** Warm the tracks `actions.next` would reach so track changes start instantly.
- * The preview prefetch is skipped in shuffle — it looks several entries ahead,
- * where a reshuffle would waste the work. Staging the *next* one is not: see
- * `stageNext`. */
+ * Shuffle writes its chosen order into the queue, so its successors are just as
+ * knowable — and just as important to prepare — as a linear context. */
 function prefetchUpcoming(): void {
   const pb = state.playback;
-  // Deliberately *not* staging here. A staged deck downloads the whole of the
-  // next track, and starting that in the same breath as the track the listener
-  // just asked for means two full files crossing the link at once: measured on
-  // one session, eight clicks pulled 171 MB and the song being waited on had to
-  // share the connection with the song after it. `watchRunway` cues it instead,
-  // inside the last minute, where there is time to spare and nobody waiting.
-  if (pb.shuffle) return;
+  // Acquisition may start here, but staging waits for the current track's
+  // `playing` event and for the engine's complete-file readiness verdict.
   const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5);
-  // Auto needs alternatives, not one optimistic URL. The download lane is
-  // serial, so this does not compete three transfers against current playback;
-  // it builds a small verified runway in order.
-  const downloadCount = state.autoMode.active ? 3 : 1;
+  // Every unattended context needs alternatives, not one optimistic URL. The
+  // download lane is serial, so this builds a small verified runway in order.
+  const downloadCount = 3;
   const downloads = ids.slice(0, downloadCount);
-  if (downloads.length > 0) prefetchPreviews(downloads, { download: true });
+  if (downloads.length > 0) {
+    prefetchPreviews(downloads, { download: true, onStatus: onPreviewPreparation });
+  }
   const warmOnly = ids.slice(downloadCount);
   if (warmOnly.length > 0) prefetchPreviews(warmOnly);
 }
@@ -497,6 +496,13 @@ function stageNext(): void {
   if (!next || isPodcastTrack(next)) {
     stagedEntry = null;
     audioService.clearStaged();
+    return;
+  }
+  if (!trackPrepared(next)) {
+    stagedEntry = null;
+    audioService.clearStaged();
+    const videoId = playbackYoutubeId(next);
+    if (videoId) prefetchPreviews([videoId], { download: true, onStatus: onPreviewPreparation });
     return;
   }
   if (stagedEntry?.queueId === next.queueId) return;
@@ -655,7 +661,10 @@ function osSeekStep(direction: 'forward' | 'backward'): number {
  * costs the engine a yt-dlp resolution and a proxied stream, and the first tap
  * has already paid for both. Pass `restart` for the deliberate replay.
  */
-function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigger } = {}): void {
+function loadIndex(
+  i: number,
+  opts: { restart?: boolean; trigger?: PlaybackTrigger; freshDeck?: boolean } = {},
+): void {
   const track = state.playback.queue[i];
   if (!track) return;
   const pb = state.playback;
@@ -700,8 +709,16 @@ function loadIndex(i: number, opts: { restart?: boolean; trigger?: PlaybackTrigg
     duration: staged ? audioEl().duration || 0 : 0,
   });
   updateMediaSession(track);
-  void (staged ?? audioService.load(trackUrl(track), level))
+  const start = staged
+    ?? (opts.freshDeck
+      ? audioService.recover(trackUrl(track), 0, level)
+      : audioService.load(trackUrl(track), level));
+  void Promise.resolve(start)
     .catch(() => onPlaybackFailed(generation, 'load'));
+  // `waiting` is not guaranteed for a media element whose play promise never
+  // settles. Arm startup supervision from the request itself so an infinite
+  // 0:00 spinner has a bounded recovery path.
+  scheduleStallRecovery(STARTUP_RECOVERY_MS);
   // Warming the next track is a second full-file GET and the loudness lookahead
   // is a POST that used to make the engine read the whole library. Firing them
   // in the tick of the click meant the song the listener is actually waiting for
@@ -792,6 +809,7 @@ function recoverCurrent(reason: 'load' | 'error' | 'stall'): boolean {
         })
     : audioService.recover(trackUrl(track), position, levelFor(track));
   void recovery.catch(() => onPlaybackFailed(generation, reason));
+  scheduleStallRecovery(STARTUP_RECOVERY_MS);
   return true;
 }
 
@@ -799,16 +817,14 @@ function scheduleStallRecovery(delayMs = STALL_RECOVERY_MS): void {
   clearStallTimer();
   const attempt = activeAttempt;
   if (!attempt) return;
-  // A hidden page that has never made a sound has nobody waiting on it, so
-  // recovering costs bandwidth for nothing. A hidden page whose music just
-  // stalled is a phone in a pocket, and recovery is the only way the music comes
-  // back on its own — refusing to try there is what ended drives in silence.
-  if (document.visibilityState === 'hidden' && attempt.audibleAt == null) return;
   const bufferedAtArm = audioService.bufferedEnd();
   stallBufferedEnd = bufferedAtArm;
   stallRecoveryTimer = setTimeout(() => {
     stallRecoveryTimer = null;
-    if (activeAttempt !== attempt || state.playback.phase !== 'buffering') return;
+    if (
+      activeAttempt !== attempt
+      || !['loading', 'recovering', 'buffering'].includes(state.playback.phase)
+    ) return;
     // Recovery reloads the element, which drops every byte it has fetched and
     // starts the track again from nothing. Worth it for a load that has died;
     // ruinous for one that is merely slow — on a phone reaching the station
@@ -826,7 +842,11 @@ function scheduleStallRecovery(delayMs = STALL_RECOVERY_MS): void {
 
 /** The current track cannot be played: surface it, then move on if that is the
  * sane thing to do. Silence with a dead play button was the old behaviour. */
-function onPlaybackFailed(generation: number, reason = 'media_error'): void {
+function onPlaybackFailed(
+  generation: number,
+  reason = 'media_error',
+  media: Record<string, number | boolean> = {},
+): void {
   if (generation !== loadGeneration) return; // a later attempt already took over
   if (recoverCurrent(reason === 'stall' ? 'stall' : reason === 'load' ? 'load' : 'error')) return;
   loadGeneration += 1; // retire this attempt: further reports for it are stale
@@ -844,6 +864,9 @@ function onPlaybackFailed(generation: number, reason = 'media_error'): void {
         rebuffer_count: attempt.rebufferCount,
         rebuffer_ms: Math.round(attempt.rebufferMs),
         recovery_count: attempt.recoveryCount,
+        resource_generation: generation,
+        runway_ready_depth: futureEntries(pb.queue, pb.index).slice(0, 3).filter(trackPrepared).length,
+        ...media,
       },
       reason,
     );
@@ -1342,11 +1365,10 @@ function commitTransition(
         // incoming deck never became playable, ownership is still on the song
         // that just finished; promote another verified runway entry rather than
         // exposing the failed URL as the current 0:00 Retry track.
-        const endedQueueId = state.playback.queue[state.playback.index]?.queueId ?? '';
         if (promotePreparedAutoSuccessor()) actions.next('ended');
         else {
+          prefetchUpcoming();
           enterStarved();
-          resumeWhenAutoSuccessorPrepared(endedQueueId);
         }
         return;
       }
@@ -1610,8 +1632,14 @@ function resumeFromStarved(): void {
     void generatedQueue?.refillNow();
     return;
   }
+  if (state.autoMode.active) promotePreparedAutoSuccessor();
+  const next = state.playback.queue[state.playback.index + 1];
+  if (!next || !trackPrepared(next)) {
+    prefetchUpcoming();
+    return;
+  }
   starvedQueueId = null;
-  loadIndex(pb.index + 1, { trigger: 'ended' });
+  loadIndex(state.playback.index + 1, { trigger: 'ended' });
 }
 
 /** Inside the last minute of a track, a thin lane is refilled without waiting
@@ -1708,20 +1736,46 @@ function promotePreparedAutoSuccessor(): boolean {
   return true;
 }
 
-function resumeWhenAutoSuccessorPrepared(endedQueueId: string): void {
-  const deadline = Date.now() + 95_000;
-  const check = (): void => {
-    const pb = state.playback;
-    if (!state.autoMode.active || pb.phase !== 'starved') return;
-    if (pb.queue[pb.index]?.queueId !== endedQueueId) return;
-    prefetchUpcoming();
-    if (promotePreparedAutoSuccessor()) {
-      resumeFromStarved();
-      return;
+/** React to the engine's acquisition verdict instead of guessing readiness
+ * from an accepted job. Terminal failures remove only future occurrences and
+ * preserve the lane/context ordering already encoded by the queue. */
+function onPreviewPreparation(videoId: string, status: PreviewPreparation): void {
+  const pb = state.playback;
+  const future = pb.queue.slice(Math.max(0, pb.index + 1));
+  const matching = future.filter((entry) => playbackYoutubeId(entry) === videoId);
+  if (status.state === 'unavailable' && matching.length > 0) {
+    const failedIds = new Set(matching.map((entry) => entry.queueId));
+    for (const entry of matching) generatedQueue?.exclude(entry);
+
+    if (state.autoMode.active) {
+      for (const entry of matching) {
+        if (entry.queueLane === 'generated') dropAutoRouteOccurrence(entry.queueId);
+      }
     }
-    if (Date.now() < deadline) setTimeout(check, 1000);
-  };
-  setTimeout(check, 250);
+    // Auto's route helper may already have removed generated entries and their
+    // bridges. This second pass owns manual/context and non-Auto generated
+    // lanes, and is intentionally occurrence-scoped.
+    setState('playback', 'queue', (queue) => queue.filter((entry) => !failedIds.has(entry.queueId)));
+    if (stagedEntry && failedIds.has(stagedEntry.queueId)) {
+      stagedEntry = null;
+      audioService.clearStaged();
+    }
+    emitPlaybackEvent('ui_preview_unavailable', {
+      occurrences: matching.length,
+      retry_after_sec: status.retry_after ?? 0,
+    }, {
+      video_id: videoId,
+      queue_lane: matching[0]?.queueLane,
+      queue_source: matching[0]?.queueSource,
+    });
+    if (matching.some((entry) => entry.queueLane === 'generated')) {
+      void generatedQueue?.refillNow();
+    }
+    prefetchUpcoming();
+  }
+  if (status.state === 'ready') promotePreparedAutoSuccessor();
+  stageNext();
+  resumeFromStarved();
 }
 
 function onEnded(): void {
@@ -1766,10 +1820,11 @@ function onEnded(): void {
   if (duration > 0) setState('playback', 'currentTime', duration);
   listeningLearning.complete(pb.currentTrack, duration);
   if (pb.index < pb.queue.length - 1 || pb.repeat === 'all') {
-    if (state.autoMode.active && !promotePreparedAutoSuccessor()) {
-      const endedQueueId = pb.queue[pb.index]?.queueId ?? '';
+    if (state.autoMode.active) promotePreparedAutoSuccessor();
+    const successor = nextEntry();
+    if (successor && !trackPrepared(successor)) {
+      prefetchUpcoming();
       enterStarved();
-      resumeWhenAutoSuccessorPrepared(endedQueueId);
       return;
     }
     actions.next('ended');
@@ -2585,7 +2640,7 @@ export const actions = {
     const pb = state.playback;
     if (!pb.currentTrack || pb.index < 0) return;
     consecutiveLoadFailures = 0;
-    loadIndex(pb.index, { restart: true, trigger: 'retry' });
+    loadIndex(pb.index, { restart: true, trigger: 'retry', freshDeck: true });
   },
 
   next(trigger: PlaybackTrigger = 'next'): void {
@@ -3897,7 +3952,11 @@ export function initStore(): void {
     // best-effort preload, but nobody asked Soundsible to play it. Only a real
     // playback attempt is allowed to fail visibly.
     if (!activeAttempt) return;
-    onPlaybackFailed(loadGeneration, 'media_error');
+    onPlaybackFailed(loadGeneration, 'media_error', {
+      media_error_code: deck.error?.code ?? 0,
+      network_state: deck.networkState,
+      ready_state: deck.readyState,
+    });
   });
   // A seek the listener asked for. Remembered so that the `waiting` it is about
   // to cause is not filed as a stream that died.
@@ -3933,6 +3992,9 @@ export function initStore(): void {
     setState('playback', { isLoading: false, loadError: false, phase: 'playing' });
     consecutiveLoadFailures = 0;
     flushWhenAudible();
+    // Only verified previews can reach this deck, so staging here reads the
+    // engine's disk cache instead of competing with the track that just began.
+    stageNext();
     const attempt = activeAttempt;
     if (!attempt || state.playback.currentTrack?.id !== attempt.trackId) return;
     const now = performance.now();

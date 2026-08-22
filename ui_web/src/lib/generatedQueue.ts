@@ -252,6 +252,16 @@ export class GeneratedQueueController {
     this.remember(this.deps.identity(current));
   }
 
+  /** Keep an acquisition-rejected candidate out of subsequent refills in this
+   * session. The route may replace it, but it must not immediately choose the
+   * same dead media identity again. */
+  exclude(track: Track): void {
+    this.remember(this.deps.identity(track));
+    if (track.recommendation?.identity) this.remember(track.recommendation.identity);
+    if (track.youtube_id) this.remember(track.youtube_id);
+    if (track.id) this.remember(track.id);
+  }
+
   async refillNow(): Promise<boolean> {
     this.rememberCurrent();
     return this.sync(true);

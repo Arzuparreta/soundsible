@@ -91,4 +91,38 @@ describe('prefetchPreviews', () => {
     prefetchPreviews(['pending1-_A'], { download: true });
     expect(apiMock.prefetchPreviews).not.toHaveBeenCalled();
   });
+
+  it('notifies the runway owner only when the engine reports a terminal verdict', async () => {
+    const onStatus = vi.fn();
+    apiMock.prefetchPreviews.mockResolvedValueOnce({
+      status: 'queued',
+      preparation: { 'status12-_A': { state: 'pending' } },
+    });
+    apiMock.previewStatuses.mockResolvedValueOnce({
+      preparation: { 'status12-_A': { state: 'ready', size: 1234 } },
+    });
+
+    prefetchPreviews(['status12-_A'], { download: true, onStatus });
+    await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith('status12-_A', { state: 'pending' }));
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith(
+      'status12-_A',
+      { state: 'ready', size: 1234 },
+    ));
+  });
+
+  it('re-submits an accepted download if the engine later reports it cold', async () => {
+    apiMock.prefetchPreviews.mockResolvedValue({
+      status: 'queued',
+      preparation: { 'restart1-_A': { state: 'pending' } },
+    });
+    apiMock.previewStatuses.mockResolvedValueOnce({
+      preparation: { 'restart1-_A': { state: 'cold' } },
+    });
+
+    prefetchPreviews(['restart1-_A'], { download: true });
+    await vi.waitFor(() => expect(apiMock.prefetchPreviews).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    await vi.waitFor(() => expect(apiMock.prefetchPreviews).toHaveBeenCalledTimes(2));
+  });
 });

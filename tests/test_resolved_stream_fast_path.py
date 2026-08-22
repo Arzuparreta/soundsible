@@ -57,7 +57,7 @@ class _RecordingYDL:
     def extract_info(self, url, download=False):
         index = len(type(self).instances) - 1
         responses = type(self).responses
-        answer = responses[index] if index < len(responses) else {"url": STREAM_URL}
+        answer = responses[index] if index < len(responses) else {"url": STREAM_URL, "vcodec": "none"}
         if isinstance(answer, Exception):
             raise answer
         return answer
@@ -140,6 +140,24 @@ def test_skip_fast_path_goes_straight_to_the_fallback(downloader, monkeypatch):
     assert resolved.url == STREAM_URL
     assert len(_RecordingYDL.instances) == 1, "no attempt spent on the client that was just rejected"
     assert _clients(_RecordingYDL.instances[0]) == ["default", "android", "ios"]
+
+
+def test_muxed_fast_path_is_rejected_before_it_can_poison_prefetch(downloader, monkeypatch):
+    """A degraded visitor session can expose only itag 18. Extraction succeeds,
+    but those URLs were the exact five durable entries rejected in the incident;
+    the fast path must fall through to an audio-only client result instead."""
+    monkeypatch.setattr(yd, "_youtube_visitor_data", lambda: "CgtEZWdyYWRlZA")
+    _RecordingYDL.responses = [
+        {"url": "https://cdn.invalid/itag18?expire=99999999999", "format_id": "18", "vcodec": "avc1.42001E"},
+        {"url": STREAM_URL, "format_id": "140", "vcodec": "none"},
+    ]
+
+    resolved = downloader.get_resolved_stream(VID)
+
+    assert resolved is not None and resolved.url == STREAM_URL
+    assert len(_RecordingYDL.instances) == 2
+    assert _clients(_RecordingYDL.instances[0]) == ["android_vr"]
+    assert _clients(_RecordingYDL.instances[1]) == ["default", "android", "ios"]
 
 
 def test_relay_egress_is_carried_by_the_cheap_path(downloader, monkeypatch):

@@ -13,6 +13,8 @@ const lastDownloadAttempt = new Map<string, number>();
 const DOWNLOAD_RETRY_MS = 2000;
 const preparation = new Map<string, PreviewPreparation>();
 const observed = new Set<string>();
+type PreparationListener = (videoId: string, status: PreviewPreparation) => void;
+const preparationListeners = new Map<string, Set<PreparationListener>>();
 let observationTimer: ReturnType<typeof setTimeout> | null = null;
 const STATUS_POLL_MS = 1000;
 
@@ -20,8 +22,11 @@ function applyPreparation(rows: Record<string, PreviewPreparation> | undefined):
   if (!rows) return;
   for (const [id, status] of Object.entries(rows)) {
     preparation.set(id, status);
-    if (status.state === 'ready' || status.state === 'unavailable') observed.delete(id);
+    const terminal = status.state === 'ready' || status.state === 'unavailable';
+    if (terminal) observed.delete(id);
     else observed.add(id);
+    for (const listener of preparationListeners.get(id) ?? []) listener(id, status);
+    if (terminal) preparationListeners.delete(id);
   }
 }
 
@@ -34,6 +39,16 @@ function scheduleObservation(): void {
     try {
       const result = await api.previewStatuses(ids);
       applyPreparation(result.preparation);
+      const lost = ids.filter((id) => result.preparation?.[id]?.state === 'cold');
+      if (lost.length > 0) {
+        // The engine restarted or lost an accepted worker job. Re-submit it;
+        // polling a permanently cold status is not persistence.
+        for (const id of lost) {
+          observed.delete(id);
+          lastDownloadAttempt.delete(id);
+        }
+        prefetchPreviews(lost, { download: true });
+      }
     } catch {
       // Connectivity loss is not evidence that a prepared file disappeared.
     }
@@ -53,11 +68,27 @@ export function previewPreparationState(videoId: string): PreviewPreparation['st
  * in its disk cache. Fire-and-forget — playback works the same without it,
  * just slower.
  */
-export function prefetchPreviews(videoIds: string[], opts: { download?: boolean } = {}): void {
+export function prefetchPreviews(
+  videoIds: string[],
+  opts: { download?: boolean; onStatus?: PreparationListener } = {},
+): void {
   const now = Date.now();
-  const ids = [...new Set(videoIds)]
+  const validIds = [...new Set(videoIds)].filter((id) => YT_ID_RE.test(id));
+  if (opts.onStatus) {
+    for (const id of validIds) {
+      const known = preparation.get(id);
+      if (known?.state === 'ready') continue;
+      if (known?.state === 'unavailable') {
+        opts.onStatus(id, known);
+        continue;
+      }
+      const listeners = preparationListeners.get(id) ?? new Set<PreparationListener>();
+      listeners.add(opts.onStatus);
+      preparationListeners.set(id, listeners);
+    }
+  }
+  const ids = validIds
     .filter((id) => {
-      if (!YT_ID_RE.test(id)) return false;
       if (!opts.download) return now - (lastWarm.get(id) ?? 0) > WARM_TTL_MS;
       const status = preparation.get(id);
       if (status?.state === 'ready' || status?.state === 'pending' || observed.has(id)) return false;
@@ -71,7 +102,12 @@ export function prefetchPreviews(videoIds: string[], opts: { download?: boolean 
   const releaseFailedWarm = (): void => {
     for (const id of ids) {
       if (lastWarm.get(id) === now) lastWarm.delete(id);
+      if (opts.download && lastDownloadAttempt.get(id) === now) {
+        lastDownloadAttempt.delete(id);
+        observed.add(id);
+      }
     }
+    if (opts.download) scheduleObservation();
   };
   try {
     void api.prefetchPreviews(ids, opts.download ?? false).then((result) => {

@@ -27,6 +27,7 @@ VID = "dQw4w9WgXcQ"
 def _patch_upstream(monkeypatch, fake_get):
     """Stand in for the pooled upstream session preview fetches go through."""
     monkeypatch.setattr(preview_cache, "upstream_session", lambda: SimpleNamespace(get=fake_get))
+    monkeypatch.setattr(preview_cache, "_preview_is_decodable", lambda path: True)
 
 
 def _make_runtime(tmp_path):
@@ -229,8 +230,8 @@ def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):
     assert response.headers["X-Soundsible-Playback-Egress"] == "direct"
 
 
-def test_fresh_url_rejection_opens_station_backoff(tmp_path, monkeypatch):
-    """A fresh signed URL failing too is a station outage, not another stale URL."""
+def test_fallback_url_rejection_opens_bounded_backoff(tmp_path, monkeypatch):
+    """Only rejection after the independent fallback opens global backoff."""
     reset_runtime()
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
@@ -256,8 +257,8 @@ def test_fresh_url_rejection_opens_station_backoff(tmp_path, monkeypatch):
     assert response.status_code == 503
     assert int(response.headers["Retry-After"]) > 0
     assert calls == ["http://upstream.invalid/stale", "http://upstream.invalid/fresh"]
-    # Every 403, not just the terminal one, must retire the pooled session —
-    # otherwise a flagged session keeps failing forever, backoff or not.
+    # Every retry gets fresh pooled connection/cookie state; this isolation is
+    # deliberately not evidence for any particular external rejection cause.
     assert retired == [True, True]
 
     calls.clear()
@@ -267,10 +268,7 @@ def test_fresh_url_rejection_opens_station_backoff(tmp_path, monkeypatch):
 
 
 def test_rejection_retry_skips_the_fast_path(tmp_path, monkeypatch):
-    """A CDN rejection almost certainly came from the `android_vr` fast path
-    (a signed URL for a format it has no PO token for) — the retry has to ask
-    the resolver to skip straight to the fallback clients instead of handing
-    back an equally doomed fast-path URL for the same rejection."""
+    """A rejection retries via the independent audio-only-capable resolver."""
     reset_runtime()
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
@@ -302,7 +300,7 @@ def test_rejection_retry_skips_the_fast_path(tmp_path, monkeypatch):
     assert seen_skip_fast_path == [False, True]
 
 
-def test_preview_open_range_downloads_once_then_serves_exact_local_range(tmp_path, monkeypatch):
+def test_preview_open_range_rejects_a_truncated_prefix(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)
     _patch_api(monkeypatch)
@@ -328,9 +326,9 @@ def test_preview_open_range_downloads_once_then_serves_exact_local_range(tmp_pat
         f"/api/preview/stream/{VID}", headers={"Range": "bytes=0-"}
     )
 
-    assert response.status_code == 206
+    assert response.status_code == 502
     assert seen_headers == [{"Range": "bytes=0-"}]
-    assert preview_cache.get_cached(VID) is not None
+    assert preview_cache.get_cached(VID) is None
 
 
 def test_followup_browser_range_never_returns_to_upstream(tmp_path, monkeypatch):
@@ -396,10 +394,11 @@ def test_preview_prefetch_queues_valid_ids(tmp_path, monkeypatch):
     _patch_api(monkeypatch)
     calls = {}
 
-    def fake_request_prefetch(video_ids, *, download, resolver):
+    def fake_request_prefetch(video_ids, *, download, resolver, refresh_resolver=None):
         calls["ids"] = list(video_ids)
         calls["download"] = download
         assert callable(resolver)
+        calls["refresh"] = callable(refresh_resolver)
         return list(video_ids)
 
     monkeypatch.setattr(playback_routes.preview_cache, "request_prefetch", fake_request_prefetch)
@@ -419,7 +418,7 @@ def test_preview_prefetch_queues_valid_ids(tmp_path, monkeypatch):
     assert body["status"] == "queued"
     assert body["queued"] == [VID]
     assert body["preparation"] == {VID: {"state": "pending"}}
-    assert calls == {"ids": [VID], "download": True}
+    assert calls == {"ids": [VID], "download": True, "refresh": True}
 
 
 def test_preview_prefetch_rejects_non_list_body(tmp_path, monkeypatch):
