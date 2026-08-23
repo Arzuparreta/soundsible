@@ -4,15 +4,6 @@ const VOLUME_KEY = 'volume';
 
 /** Media-clock supervision. Audio gain itself is sample-accurate automation. */
 const TICK_MS = 40;
-/** How often the output is checked for digital silence while a deck plays. */
-const AUDIBILITY_TICK_MS = 500;
-/** Silence this long, with the media clock advancing, means the graph is dead
- * rather than the music being quiet. */
-const DEAD_GRAPH_MS = 2_500;
-/** 8-bit samples centre on 128; anything this close to it is not sound. */
-const SILENCE_EPSILON = 2;
-/** How long the context clock is given to prove it is running. */
-const PROBE_MS = 300;
 /** Supervision rate during the long `armed` wait, where a tick only compares
  * the media clock against the preroll point. See `tickInterval`. */
 const ARMED_TICK_MS = 250;
@@ -89,8 +80,6 @@ let broadcastDestination: MediaStreamAudioDestinationNode | null = null;
 let broadcastCapture: BroadcastCapture | null = null;
 let broadcastElement: HTMLAudioElement | null = null;
 let broadcastCaptureCleanup: (() => void) | null = null;
-/** Master-bus tap used to tell "quiet music" from "no output at all". */
-let analyser: AnalyserNode | null = null;
 
 /**
  * Whether the decks are routed through the mixing graph.
@@ -103,24 +92,6 @@ let analyser: AnalyserNode | null = null;
  */
 type GraphState = 'untested' | 'ready' | 'unavailable';
 let graphState: GraphState = 'untested';
-
-export interface GraphFailure {
-  reason: 'context_stalled' | 'silent_output';
-  /** Whether the decks were sounding when the graph was taken down. A paused
-   * player has nothing to restore, so `resumed: false` there is the expected
-   * outcome rather than a failure anybody has to be told about. */
-  wasPlaying: boolean;
-  /** Whether playback was restored on the replacement decks by itself. */
-  resumed: boolean;
-  contextState: string;
-  positionSec: number;
-}
-let graphReporter: ((failure: GraphFailure) => void) | null = null;
-
-/** Register the store's handler for a mixing graph that had to be abandoned. */
-export function setGraphReporter(fn: (failure: GraphFailure) => void): void {
-  graphReporter = fn;
-}
 
 /**
  * Register the live bridge's handler for a tap that died with its graph.
@@ -161,14 +132,11 @@ export function storedVolume(): number {
 }
 
 /**
- * Deck-level listeners, kept so replacement decks inherit them.
+ * Deck-level listeners shared by the two long-lived mixer decks.
  *
- * The store binds playback events once, at startup. Recovering from a dead
- * mixing graph means throwing both elements away and building new ones (their
- * output only exists inside a graph that has stopped sounding), and listeners
- * bound directly to the old elements would not follow. Registering them here
- * makes deck replacement an operation the rest of the app never has to know
- * about.
+ * The store binds playback events once, at startup. Keeping those bindings here
+ * makes the two-deck transport lazy without making callers care when the decks
+ * are first created.
  */
 interface DeckBinding {
   type: string;
@@ -176,7 +144,7 @@ interface DeckBinding {
 }
 const deckBindings: DeckBinding[] = [];
 
-/** Bind `handler` to every deck, now and after any replacement. */
+/** Bind `handler` to both decks, now or when they are first created. */
 export function onDeckEvent(type: string, handler: (event: Event) => void): void {
   deckBindings.push({ type, handler });
   if (elements) for (const deck of elements) deck.addEventListener(type, handler);
@@ -287,10 +255,7 @@ function setDeckGain(index: number, value: number): void {
  * multiplying a second thing into an automated `AudioParam` is exactly what
  * used to make the mixer crackle when a timer arrived late.
  *
- * The floor is the important part. A gain of zero is silence, and silence on a
- * deck whose clock is advancing is what `checkAudible` reads as a dead graph —
- * it would tear the graph down and take the live tap with it. Clamping here
- * makes levelling-induced silence impossible by construction.
+ * The floor keeps an extreme levelling value from muting a deck by accident.
  */
 function setDeckLevel(index: number, linear: number, ramp = false): void {
   const safe = Number.isFinite(linear) ? Math.min(Math.max(linear, MIN_LEVEL), MAX_LEVEL) : 1;
@@ -343,8 +308,10 @@ function releaseDeck(index: number): void {
  * that are sounding at that instant — the punished sequence, arrived at from the
  * other side — so it happens once the decks are routed and still untouched.
  *
- * Idempotent and safe to call from anywhere. `probeContext` and the audibility
- * watch behind it are the proof that it worked; neither is trusted on faith.
+ * Idempotent and safe to call from anywhere. Once a media element has been
+ * routed through `createMediaElementSource`, the graph and both decks remain
+ * intact for the page lifetime: there is no browser API that can distinguish a
+ * deliberately silent passage from a graph that is not reaching the speaker.
  */
 export function unlockAudio(): boolean {
   if (graphState !== 'untested') {
@@ -389,12 +356,6 @@ export function unlockAudio(): boolean {
       programOutput = master;
     }
     monitor.connect(context.destination);
-    if (typeof context.createAnalyser === 'function') {
-      const tap = context.createAnalyser();
-      tap.fftSize = 256;
-      programOutput.connect(tap);
-      analyser = tap;
-    }
     const effects: DeckEffects[] = [];
     const levels: GainNode[] = [];
     const gains = list.map((deck, index) => {
@@ -434,13 +395,10 @@ export function unlockAudio(): boolean {
     masterGain = master;
     monitorGain = monitor;
     graphState = 'ready';
-    bindAudibilityTriggers();
     watchContextState(context);
     // Routed and never played: now the sample can be spent, still inside the
     // gesture that owes the decks their playback permission.
     unlockDecks();
-    probeContext(context);
-    if (deckIsPlaying(decks()[activeIndex])) startAudibilityWatch();
     return true;
   } catch {
     discardGraph();
@@ -528,37 +486,17 @@ function primeAudioSession(context: AudioContext): void {
   }
 }
 
-/** True once `resume()` has been asked for; the answer is the probe's job. */
+/** Ask an interrupted context to continue without rebuilding its graph. */
 function resumeContext(): void {
   if (audioContext && audioContext.state !== 'running') {
     void audioContext.resume?.().catch(() => {});
   }
 }
 
-/**
- * Confirm the context is really rendering.
- *
- * `state === 'running'` is a claim, not evidence: an interrupted iOS context can
- * report it while its clock stands still. A clock that advances is the only
- * proof that samples are being produced, and by the time this runs the decks are
- * already routed — so a failure here has to be recovered from, not just noted.
- */
-function probeContext(context: AudioContext): void {
-  const startedAt = context.currentTime;
-  setTimeout(() => {
-    if (audioContext !== context || graphState !== 'ready') return;
-    if (context.state === 'running' && context.currentTime > startedAt) return;
-    void context.resume?.().catch(() => {});
-    setTimeout(() => {
-      if (audioContext !== context || graphState !== 'ready') return;
-      if (context.state === 'running' && context.currentTime > startedAt) return;
-      abandonGraph('context_stalled');
-    }, PROBE_MS);
-  }, PROBE_MS);
-}
-
 /** A context can be interrupted behind our back — a call, Siri, a Bluetooth
- * route change on the way into a car. None of those resume on their own. */
+ * route change on the way into a car. Resume the same context and preserve the
+ * media-element sources: replacing either deck outside a gesture is not a safe
+ * recovery on iOS. */
 function watchContextState(context: AudioContext): void {
   if (typeof context.addEventListener !== 'function') return;
   context.addEventListener('statechange', () => {
@@ -567,94 +505,7 @@ function watchContextState(context: AudioContext): void {
   });
 }
 
-let audibilityTimer: ReturnType<typeof setInterval> | null = null;
-let silenceSince: number | null = null;
-let lastAudiblePosition = -1;
-let silenceProbe: Uint8Array<ArrayBuffer> | null = null;
-let audibilityBound = false;
-
-/** Watch only while something is playing: a paused player is silent on purpose,
- * and a timer that runs anyway is exactly the kind of idle wakeup the player
- * just finished getting rid of. */
-function bindAudibilityTriggers(): void {
-  if (audibilityBound) return;
-  audibilityBound = true;
-  onDeckEvent('play', (event) => {
-    if (isActiveDeck(event.currentTarget)) startAudibilityWatch();
-  });
-  onDeckEvent('pause', (event) => {
-    if (isActiveDeck(event.currentTarget)) stopAudibilityWatch();
-  });
-}
-
-function startAudibilityWatch(): void {
-  if (audibilityTimer || graphState !== 'ready' || !analyser) return;
-  silenceSince = null;
-  lastAudiblePosition = -1;
-  audibilityTimer = setInterval(checkAudible, AUDIBILITY_TICK_MS);
-}
-
-function stopAudibilityWatch(): void {
-  if (audibilityTimer) clearInterval(audibilityTimer);
-  audibilityTimer = null;
-  silenceSince = null;
-}
-
-/**
- * Catch a graph that has stopped sounding.
- *
- * Only a deck whose media clock is advancing can be judged: a buffering or
- * paused deck is legitimately silent. Against that, digital silence on the
- * master bus means the samples are not reaching the speakers, whatever the
- * element and the context claim.
- */
-function checkAudible(): void {
-  if (graphState !== 'ready' || !analyser) {
-    stopAudibilityWatch();
-    return;
-  }
-  // A backgrounded page cannot be judged. Its `setInterval` is throttled to
-  // whatever the platform feels like, so the elapsed time this verdict rests on
-  // is not the elapsed time it thinks it is — and the verdict tears down the
-  // audio graph. Reset the clock and wait until the page is real again.
-  if (pageHidden()) {
-    silenceSince = null;
-    lastAudiblePosition = -1;
-    return;
-  }
-  const deck = decks()[activeIndex];
-  if (deck.paused || deck.ended) {
-    silenceSince = null;
-    return;
-  }
-  const position = deck.currentTime || 0;
-  const advancing = position > lastAudiblePosition + 0.05;
-  lastAudiblePosition = position;
-  if (!advancing) {
-    // Buffering, not silence. The store's own stall recovery owns this case.
-    silenceSince = null;
-    return;
-  }
-  if (audioContext && audioContext.state !== 'running') void audioContext.resume?.().catch(() => {});
-  if (!silenceProbe || silenceProbe.length !== analyser.frequencyBinCount) {
-    silenceProbe = new Uint8Array(analyser.frequencyBinCount);
-  }
-  analyser.getByteTimeDomainData(silenceProbe);
-  let peak = 0;
-  for (const sample of silenceProbe) peak = Math.max(peak, Math.abs(sample - 128));
-  if (peak > SILENCE_EPSILON) {
-    silenceSince = null;
-    return;
-  }
-  if (silenceSince === null) {
-    silenceSince = Date.now();
-    return;
-  }
-  if (Date.now() - silenceSince >= DEAD_GRAPH_MS) abandonGraph('silent_output');
-}
-
 function discardGraph(): void {
-  stopAudibilityWatch();
   const context = audioContext;
   const lostBroadcast = broadcastCapture?.kind === 'program';
   releaseBroadcastCapture();
@@ -668,134 +519,8 @@ function discardGraph(): void {
   monitorGain = null;
   limiter = null;
   programOutput = null;
-  analyser = null;
-  silenceProbe = null;
   if (context && typeof context.close === 'function') void context.close().catch(() => {});
   if (lostBroadcast) broadcastLostReporter?.();
-}
-
-/**
- * Give up on a graph that is not sounding, without giving up on the music.
- *
- * There is no way to unroute an element, so the elements go too: new decks are
- * built, the listeners registered through `onDeckEvent` follow them, and what
- * was playing is restored where it left off. The mixer keeps working on element
- * volume for the rest of this page load, and the next one tries the real graph
- * again — a device is never written off.
- */
-function abandonGraph(reason: GraphFailure['reason']): void {
-  if (graphState !== 'ready') return;
-  // This replaces both media elements. In the background that is not a recovery
-  // but the failure itself: the elements that hold iOS's audio session are
-  // destroyed and the new ones cannot claim it back without a gesture, so a
-  // graph that was merely quiet becomes a drive that ends in silence. Whatever
-  // is wrong will still be wrong when the listener is looking.
-  if (pageHidden()) {
-    pendingAbandon = reason;
-    return;
-  }
-  const contextState = audioContext?.state ?? 'closed';
-  const previous = decks()[activeIndex];
-  const previousIdle = decks()[1 - activeIndex];
-  // A deck holding the unlock sample is holding nothing: restoring it would hand
-  // the replacement deck a silent WAV as the track it is meant to be playing,
-  // and reporting it as music that failed to come back tells the listener their
-  // audio was interrupted when the only thing that happened was a tap on a page
-  // with nothing playing.
-  const unlocking = holdsUnlockSample(previous);
-  const restore = {
-    url: unlocking ? '' : previous.currentSrc || previous.getAttribute('src') || '',
-    position: unlocking ? 0 : previous.currentTime || 0,
-    rate: previous.playbackRate || 1,
-    wasPlaying: !unlocking && !previous.paused && !previous.ended,
-  };
-  const restoreStaged = stagedUrl
-    ? {
-        url: stagedUrl,
-        level: levelGains[1 - activeIndex],
-        ready: previousIdle.networkState !== NETWORK_NO_SOURCE,
-      }
-    : null;
-  graphState = 'unavailable';
-  cancelMix('failed');
-  stopRateReturn();
-  for (const deck of decks()) deck.pause();
-  discardGraph();
-
-  loadSeq += 1;
-  elements = [createDeck(), createDeck()];
-  // The track being restored moves to deck 0, so its level moves with it.
-  // Without this a levelled track would come back at the wrong volume on top of
-  // whatever else just went wrong.
-  const restoredLevel = levelGains[activeIndex];
-  activeIndex = 0;
-  mixGains[0] = 1;
-  mixGains[1] = 0;
-  levelGains[0] = restoredLevel;
-  levelGains[1] = restoreStaged?.level ?? 1;
-  stagedUrl = '';
-  applyDeckVolume();
-  for (const deck of elements) deck.muted = allMuted;
-
-  let resumed = false;
-  if (restore.url) {
-    const deck = elements[0];
-    const token = loadSeq;
-    deck.src = restore.url;
-    deck.playbackRate = restore.rate;
-    const cue = () => {
-      if (token !== loadSeq) return;
-      const duration = deck.duration;
-      deck.currentTime = Number.isFinite(duration) && duration > 0
-        ? Math.min(restore.position, Math.max(0, duration - 0.05))
-        : restore.position;
-    };
-    if (deck.readyState >= 1) cue();
-    else deck.addEventListener('loadedmetadata', cue, { once: true });
-    if (restore.wasPlaying) {
-      let reported = false;
-      const report = (resumed: boolean) => {
-        if (reported) return;
-        reported = true;
-        clearTimeout(reportTimeout);
-        graphReporter?.({
-          reason,
-          wasPlaying: true,
-          resumed,
-          contextState,
-          positionSec: restore.position,
-        });
-      };
-      const reportTimeout = setTimeout(() => report(false), RECOVERY_METADATA_TIMEOUT_MS);
-      void deck.play().then(
-        () => report(true),
-        () => {
-          // Some platforms want a fresh gesture for an element that has never
-          // played. The store turns this into a visible "tap to resume".
-          report(false);
-        },
-      );
-    }
-  }
-  if (restoreStaged?.url && restoreStaged.ready && restoreStaged.url !== restore.url) {
-    const idle = elements[1];
-    stagedUrl = restoreStaged.url;
-    idle.src = restoreStaged.url;
-    idle.load();
-  }
-  // Whichever deck is still empty is locked again; unlock it now so the track
-  // after this one can start without a gesture the listener will not be there
-  // to give. Best effort — this does not run from one.
-  unlockDecks();
-  if (!restore.wasPlaying) {
-    graphReporter?.({
-      reason,
-      wasPlaying: false,
-      resumed,
-      contextState,
-      positionSec: restore.position,
-    });
-  }
 }
 
 /** Whether the decks are routed through a graph that is believed to be sounding. */
@@ -1291,8 +1016,6 @@ function detach(deck: HTMLAudioElement): void {
 
 /** Decks whose stream outlived their track because the page was hidden. */
 const pendingDetach = new Set<HTMLAudioElement>();
-/** A graph teardown the background refused to carry out. See `abandonGraph`. */
-let pendingAbandon: GraphFailure['reason'] | null = null;
 
 /** Finish what the background deferred, now that the page can afford it. */
 function flushDeferredWork(): void {
@@ -1305,9 +1028,6 @@ function flushDeferredWork(): void {
     }
   }
   pendingDetach.clear();
-  const reason = pendingAbandon;
-  pendingAbandon = null;
-  if (reason) abandonGraph(reason);
 }
 
 let lifecycleBound = false;

@@ -140,6 +140,10 @@ def test_stream_telemetry_does_not_wrap_or_claim_delivery(client, track, monkeyp
     assert response.get_data()
     segments = rows[-1]["segments"]
     assert segments["ranged"] is True
+    assert segments["range_kind"] == "closed"
+    assert segments["range_start"] == 0
+    assert segments["range_end"] == 1023
+    assert segments["range_requested_bytes"] == 1024
     assert segments["scope"] == "local"
     assert "delivered_bytes" not in segments
     assert "write_ms" not in segments

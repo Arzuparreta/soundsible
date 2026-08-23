@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GraphFailure, ProgramTransportEvent } from '../lib/audio';
+import type { ProgramTransportEvent } from '../lib/audio';
 import type { Track } from '../types/music';
 
 const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
@@ -213,6 +213,8 @@ async function loadStore(
     currentTime: 0,
     paused: false,
     ended: false,
+    readyState: 4,
+    networkState: 1,
     currentSrc: '',
     getAttribute: vi.fn((name: string) => name === 'src' ? deck.currentSrc : null),
   } as unknown as HTMLAudioElement;
@@ -223,9 +225,6 @@ async function loadStore(
       handler({ currentTarget: deck } as unknown as Event);
     }
   };
-  /** The store's verdict on a mixing graph that had to be abandoned, so a test
-   * can hand it one the way the audio service would. */
-  let graphReporter: ((failure: GraphFailure) => void) | null = null;
   let programTransportReporter: ((event: ProgramTransportEvent) => void) | null = null;
   vi.doMock('../lib/audio', () => ({
     audioEl: vi.fn(() => deck),
@@ -235,7 +234,6 @@ async function loadStore(
       deckHandlers.set(type, list);
     }),
     isActiveDeck: vi.fn(() => true),
-    setGraphReporter: vi.fn((fn: (failure: GraphFailure) => void) => { graphReporter = fn; }),
     setProgramTransportReporter: vi.fn((fn: (event: ProgramTransportEvent) => void) => {
       programTransportReporter = fn;
     }),
@@ -316,14 +314,6 @@ async function loadStore(
 
   const store = await import('./index');
   const fireSocketEvent = (event: string, data?: unknown) => socketHandlers.get(event)?.(data);
-  const fireGraphFailure = (failure: Partial<GraphFailure>) => graphReporter?.({
-    reason: 'context_stalled',
-    wasPlaying: false,
-    resumed: false,
-    contextState: 'suspended',
-    positionSec: 0,
-    ...failure,
-  });
   const fireProgramTransport = (event: Partial<ProgramTransportEvent>) => programTransportReporter?.({
     kind: 'pause',
     origin: 'ui',
@@ -342,7 +332,6 @@ async function loadStore(
     deck,
     fireDeckEvent,
     fireSocketEvent,
-    fireGraphFailure,
     fireProgramTransport,
     firePreviewStatus: (id: string, status: { state: 'cold' | 'pending' | 'ready' | 'unavailable'; retry_after?: number }) => previewStatusListener?.(id, status),
     prefetchPreviews,
@@ -427,68 +416,6 @@ describe('Solid store library and playback resume', () => {
     expect(state.playback.phase).toBe('paused');
     expect(state.playback.loadError).toBe(false);
     expect(toastError).not.toHaveBeenCalled();
-  });
-
-  it('leaves a restored session alone when the mixing graph is rebuilt under it', async () => {
-    // Closing the app and opening it again puts the session back, paused. If the
-    // graph is taken down and rebuilt in the meantime — an iOS audio session
-    // that was interrupted while the app was away — there was no music to lose,
-    // so there is nothing to offer to carry on with. Saying otherwise invents an
-    // interruption, and the offer is taken up by the next tap anywhere on the
-    // page: a paused song that starts on its own.
-    const { initStore, state, audioService, fireGraphFailure, toastError } = await loadStore({
-      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
-      getPlaybackState: vi.fn().mockResolvedValue({
-        device_id: 'dev1',
-        device_name: 'Soundsible Web',
-        track_id: 't1',
-        track: t1,
-        position_sec: 37,
-        is_playing: false,
-        updated_at: Date.now() / 1000,
-      }),
-    });
-
-    initStore();
-    await flush();
-    expect(state.playback.currentTrack?.id).toBe('t1');
-
-    fireGraphFailure({ reason: 'context_stalled', wasPlaying: false, resumed: false });
-
-    expect(state.playback.needsGesture).toBe(false);
-    expect(toastError).not.toHaveBeenCalled();
-
-    window.dispatchEvent(new Event('pointerdown'));
-    expect(audioService.resume).not.toHaveBeenCalled();
-    expect(state.playback.isPlaying).toBe(false);
-  });
-
-  it('offers to carry on when music that was sounding lost its graph', async () => {
-    const { initStore, state, audioService, fireGraphFailure, toastError } = await loadStore({
-      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
-      getPlaybackState: vi.fn().mockResolvedValue({
-        device_id: 'dev1',
-        device_name: 'Soundsible Web',
-        track_id: 't1',
-        track: t1,
-        position_sec: 37,
-        is_playing: false,
-        updated_at: Date.now() / 1000,
-      }),
-    });
-
-    initStore();
-    await flush();
-    // Playing, and cut off by a graph that could not be restarted on its own.
-    fireGraphFailure({ reason: 'silent_output', wasPlaying: true, resumed: false });
-
-    expect(state.playback.needsGesture).toBe(true);
-    expect(toastError).toHaveBeenCalled();
-
-    // Any gesture is the one the platform was waiting for.
-    window.dispatchEvent(new Event('pointerdown'));
-    expect(audioService.resume).toHaveBeenCalled();
-    expect(state.playback.needsGesture).toBe(false);
   });
 
   it('removes a deleted track from library-derived and playback state immediately', async () => {
@@ -2853,6 +2780,8 @@ describe('playback delivery telemetry', () => {
 
     actions.playFrom([t1, t2], 0);
     fireDeckEvent('waiting');
+    fireDeckEvent('loadedmetadata');
+    fireDeckEvent('canplay');
     fireDeckEvent('playing');
     await flush();
 
@@ -2860,6 +2789,11 @@ describe('playback delivery telemetry', () => {
     expect(start.segments.click_to_playing_ms).toBeGreaterThanOrEqual(0);
     expect(start.segments).not.toHaveProperty('stall_count');
     expect(start.segments).toHaveProperty('startup_stall_ms');
+    expect(start.segments).toHaveProperty('loadedmetadata_ms');
+    expect(start.segments).toHaveProperty('canplay_ms');
+    expect(start.segments.ready_state).toBe(4);
+    expect(start.segments.network_state).toBe(1);
+    expect(start.segments).toHaveProperty('buffered_ahead_ms');
   });
 
   it('counts audio that stopped after it started, once the play is over', async () => {

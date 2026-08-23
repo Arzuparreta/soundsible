@@ -45,11 +45,15 @@ DEFAULT_CACHE_LIMIT_MB = 2048
 AUDIO_SUFFIX = ".audio"
 META_SUFFIX = ".meta.json"
 PART_SUFFIX = ".part"
+FLAT_MP4_LAYOUT = "flat_mp4_v1"
+SOURCE_LAYOUT = "source_v1"
 # Abandoned .part files (crash, dropped client) older than this are swept.
 STALE_PART_SEC = 3600
 
 _writers_lock = threading.Lock()
 _active_writers: set[str] = set()
+_normalizers_lock = threading.Lock()
+_normalizers: dict[str, threading.Lock] = {}
 
 
 class PreviewUpstreamRejected(Exception):
@@ -194,6 +198,102 @@ def _part_path(video_id: str) -> Path:
     return preview_cache_dir() / f"{video_id}{PART_SUFFIX}"
 
 
+def _read_meta(video_id: str) -> dict:
+    try:
+        value = json.loads(_meta_path(video_id).read_text())
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_meta(video_id: str, value: dict) -> None:
+    """Publish cache metadata atomically beside the already-atomic audio file."""
+    path = _meta_path(video_id)
+    temporary = path.with_name(
+        f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+    )
+    try:
+        temporary.write_text(json.dumps(value, sort_keys=True))
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def cached_metadata(video_id: str) -> dict:
+    """Return observational metadata for a committed preview."""
+    return _read_meta(video_id)
+
+
+def _is_mp4(content_type: str) -> bool:
+    return content_type.partition(";")[0].strip().lower() in {"audio/mp4", "video/mp4"}
+
+
+def _normalizer_for(video_id: str) -> threading.Lock:
+    with _normalizers_lock:
+        return _normalizers.setdefault(video_id, threading.Lock())
+
+
+def _remux_flat_mp4(source: Path, video_id: str) -> Optional[Path]:
+    """Copy MP4 packets into one fast-start file without re-encoding audio."""
+    from shared.ffmpeg_runtime import ffmpeg_executable
+
+    output = source.with_name(
+        f".{video_id}.{os.getpid()}.{threading.get_ident()}.flat-mp4.tmp"
+    )
+    output.unlink(missing_ok=True)
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg_executable(),
+                "-y", "-v", "error",
+                "-i", str(source),
+                "-map", "0:a:0",
+                "-c", "copy",
+                "-movflags", "+faststart",
+                "-f", "mp4",
+                str(output),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        if result.returncode != 0 or not output.is_file() or output.stat().st_size == 0:
+            output.unlink(missing_ok=True)
+            return None
+        if not _preview_is_decodable(output):
+            output.unlink(missing_ok=True)
+            return None
+        return output
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.warning("[PreviewCache] Could not normalize %s: %s", video_id, exc)
+        output.unlink(missing_ok=True)
+        return None
+
+
+def _normalize_legacy_mp4(video_id: str, path: Path, content_type: str) -> dict:
+    """Normalize one old cache entry once; concurrent readers share the result."""
+    lock = _normalizer_for(video_id)
+    with lock:
+        meta = _read_meta(video_id)
+        if meta.get("layout") in {FLAT_MP4_LAYOUT, SOURCE_LAYOUT}:
+            return meta
+        if not path.is_file():
+            return meta
+        replacement = _remux_flat_mp4(path, video_id)
+        layout = SOURCE_LAYOUT
+        if replacement is not None:
+            os.replace(replacement, path)
+            layout = FLAT_MP4_LAYOUT
+        meta.update({
+            "content_type": content_type,
+            "size": path.stat().st_size,
+            "layout": layout,
+        })
+        _write_meta(video_id, meta)
+        return meta
+
+
 def get_cached(video_id: str) -> Optional[tuple[Path, str]]:
     """Return (path, content_type) for a fully cached preview, or None.
 
@@ -203,12 +303,17 @@ def get_cached(video_id: str) -> Optional[tuple[Path, str]]:
     if not path.is_file():
         return None
     content_type = "audio/mpeg"
-    try:
-        meta = json.loads(_meta_path(video_id).read_text())
-        if isinstance(meta.get("content_type"), str):
-            content_type = meta["content_type"]
-    except Exception:
-        pass
+    meta = _read_meta(video_id)
+    if isinstance(meta.get("content_type"), str):
+        content_type = meta["content_type"]
+    if _is_mp4(content_type) and meta.get("layout") not in {FLAT_MP4_LAYOUT, SOURCE_LAYOUT}:
+        try:
+            _normalize_legacy_mp4(video_id, path, content_type)
+        except OSError as exc:
+            # Cache layout is an optimisation. Serving the already validated
+            # source file is safer than turning an atomic remux failure into an
+            # unavailable track.
+            logger.warning("[PreviewCache] Legacy normalization failed for %s: %s", video_id, exc)
     try:
         os.utime(path, None)
     except OSError:
@@ -240,6 +345,7 @@ class CacheWriter:
     def commit(self, validator: Optional[Callable[[Path], bool]] = None) -> bool:
         if self._done:
             return False
+        normalized_output: Optional[Path] = None
         try:
             self._fh.close()
             if self.expected_size is not None and self._bytes != self.expected_size:
@@ -259,15 +365,30 @@ class CacheWriter:
                 )
                 self._part.unlink(missing_ok=True)
                 return False
-            _meta_path(self.video_id).write_text(
-                json.dumps({"content_type": self.content_type, "size": self._bytes})
-            )
-            os.replace(self._part, _audio_path(self.video_id))
+            committed = self._part
+            layout = SOURCE_LAYOUT
+            if _is_mp4(self.content_type):
+                normalized = _remux_flat_mp4(self._part, self.video_id)
+                if normalized is not None:
+                    normalized_output = normalized
+                    committed = normalized
+                    layout = FLAT_MP4_LAYOUT
+            target = _audio_path(self.video_id)
+            _write_meta(self.video_id, {
+                "content_type": self.content_type,
+                "size": committed.stat().st_size,
+                "layout": layout,
+            })
+            os.replace(committed, target)
+            if committed != self._part:
+                self._part.unlink(missing_ok=True)
             enforce_cache_limit()
             return True
         except OSError as e:
             logger.warning("[PreviewCache] Commit failed for %s: %s", self.video_id, e)
             self._part.unlink(missing_ok=True)
+            if normalized_output is not None:
+                normalized_output.unlink(missing_ok=True)
             return False
         finally:
             self._done = True

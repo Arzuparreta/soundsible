@@ -15,7 +15,6 @@ import {
   audioService,
   isActiveDeck,
   onDeckEvent,
-  setGraphReporter,
   setProgramTransportReporter,
   type LiveTransitionPlan,
   type ProgramTransportOrigin,
@@ -117,6 +116,8 @@ interface PlaybackAttempt {
   trigger: PlaybackTrigger;
   queueLane: string;
   startedAt: number;
+  loadedMetadataAt: number | null;
+  canPlayAt: number | null;
   audibleAt: number | null;
   /** When the current buffering spell began, or null between spells. */
   bufferStartedAt: number | null;
@@ -411,6 +412,8 @@ function createPlaybackAttempt(
     trigger,
     queueLane: 'queueLane' in track && typeof track.queueLane === 'string' ? track.queueLane : 'context',
     startedAt: performance.now(),
+    loadedMetadataAt: null,
+    canPlayAt: null,
     audibleAt: null,
     bufferStartedAt: null,
     startupStallMs: 0,
@@ -3838,26 +3841,6 @@ export function initStore(): void {
   const resumeAttempts = liveHandoffPending() ? RESUME_HANDOFF_ATTEMPTS : RESUME_SEARCH_ATTEMPTS;
 
   installAudioUnlock();
-  setGraphReporter((failure) => {
-    emitPlaybackEvent(
-      'ui_graph_state',
-      {
-        was_playing: failure.wasPlaying,
-        resumed: failure.resumed,
-        position_sec: Math.round(failure.positionSec),
-      },
-      { failure_reason: failure.reason, context_state: failure.contextState, display_mode: displayMode() },
-    );
-    // Only music that was actually sounding can fail to come back. A graph
-    // rebuilt under a paused player — the session this device put back on boot
-    // and nobody has pressed play on yet — leaves it exactly as it was, and
-    // saying "tap play to resume" there invents an interruption that never
-    // happened. Worse, the offer is honoured by the next tap anywhere on the
-    // page, which is a paused song starting on its own.
-    if (failure.resumed || !failure.wasPlaying) return;
-    setState('playback', { isPlaying: false, needsGesture: true });
-    toast.error(tr('toast.audioNeedsGesture'));
-  });
   setProgramTransportReporter((event) => {
     emitPlaybackEvent(
       event.kind === 'inactive_deck_play' ? 'ui_inactive_deck_play' : 'ui_program_transport',
@@ -3985,6 +3968,8 @@ export function initStore(): void {
   a.addEventListener('canplay', () => {
     // `canplay` can precede actual audio by a noticeable amount; `playing` is
     // the only event that closes the user's click-to-sound attempt.
+    const attempt = activeAttempt;
+    if (attempt && attempt.canPlayAt === null) attempt.canPlayAt = performance.now();
   });
   // First 'playing' after a user-initiated load → click-to-sound latency.
   a.addEventListener('playing', () => {
@@ -4011,8 +3996,17 @@ export function initStore(): void {
       // asks the stall question at a time when it has an answer.
       emitAttempt(attempt, 'ui_click_to_playing', 'playing', {
         click_to_playing_ms: Math.round(now - attempt.startedAt),
+        ...(attempt.loadedMetadataAt === null ? {} : {
+          loadedmetadata_ms: Math.round(attempt.loadedMetadataAt - attempt.startedAt),
+        }),
+        ...(attempt.canPlayAt === null ? {} : {
+          canplay_ms: Math.round(attempt.canPlayAt - attempt.startedAt),
+        }),
         startup_stall_ms: Math.round(attempt.startupStallMs),
         recovery_count: attempt.recoveryCount,
+        ready_state: audioEl().readyState,
+        network_state: audioEl().networkState,
+        buffered_ahead_ms: Math.max(0, Math.round((audioService.bufferedEnd() - audioEl().currentTime) * 1000)),
       });
     } else if (attempt.recoveryCount > attempt.reportedRecoveryCount) {
       emitAttempt(attempt, 'ui_recovery_succeeded', 'playing', {
@@ -4037,7 +4031,11 @@ export function initStore(): void {
     updatePositionState();
   };
   a.addEventListener('durationchange', setDur);
-  a.addEventListener('loadedmetadata', setDur);
+  a.addEventListener('loadedmetadata', () => {
+    const attempt = activeAttempt;
+    if (attempt && attempt.loadedMetadataAt === null) attempt.loadedMetadataAt = performance.now();
+    setDur();
+  });
   // A seek from anywhere — our transport, the lock screen, a car button — has
   // to re-anchor the OS scrubber or it keeps counting from the old position.
   a.addEventListener('seeked', updatePositionState);
