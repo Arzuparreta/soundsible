@@ -96,9 +96,8 @@ describe('gainToLinear', () => {
   });
 
   it('can never reach silence', () => {
-    // Silence on a playing deck looks exactly like a dead audio graph, and the
-    // mixer would tear the graph down and drop the live tap with it. A finite
-    // but absurd gain is clamped to the floor rather than honoured.
+    // A finite but absurd gain is clamped to the floor rather than turning a
+    // bad analysis into an accidental mute.
     expect(gainToLinear(-200)).toBe(MIN_LINEAR);
     expect(gainToLinear(200)).toBe(MAX_LINEAR);
   });

@@ -73,10 +73,9 @@ export interface PlaybackState {
   loadError: boolean;
   /** Detailed transport state; isLoading/loadError remain compatibility views. */
   phase: PlaybackPhase;
-  /** The platform refused to resume without a fresh gesture — after recovering
-   * from a dead audio graph, or after a `play()` that arrived too late to ride
-   * the previous one. The transport turns this into a visible invitation to tap
-   * instead of a player that simply stopped. */
+  /** The platform refused `play()` without a fresh gesture. The transport turns
+   * this into a visible invitation to tap instead of a player that simply
+   * stopped. */
   needsGesture: boolean;
   currentTime: number;
   duration: number;

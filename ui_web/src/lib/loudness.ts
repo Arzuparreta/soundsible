@@ -41,10 +41,9 @@ export const MIN_GAIN_DB = -15;
  * here", not a reading of the programme. */
 export const UNMEASURABLE_LUFS = -69;
 
-/** A gain of zero is silence, and silence on a playing deck is indistinguishable
- * from a dead audio graph — `checkAudible` would tear the graph down and take
- * the live tap with it. Flooring here makes levelling-induced silence
- * impossible as a property of the code rather than of the data. */
+/** A gain of zero is an accidental mute when it comes from invalid analysis.
+ * Flooring here makes levelling-induced silence impossible as a property of
+ * the code rather than of the data. */
 export const MIN_LINEAR = 0.05;
 export const MAX_LINEAR = 4;
 

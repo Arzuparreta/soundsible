@@ -614,11 +614,9 @@ describe('two-deck mixer', () => {
     await verdict;
   });
 
-  it('never rebuilds the decks while the page is hidden', async () => {
+  it('never treats silence as permission to rebuild the decks', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
-    const failures: unknown[] = [];
-    module.setGraphReporter((failure) => failures.push(failure));
     expect(module.audioService.unlockAudio()).toBe(true);
 
     const deck = module.audioEl() as unknown as FakeAudio;
@@ -632,21 +630,20 @@ describe('two-deck mixer', () => {
       deck.currentTime += 1;
       await vi.advanceTimersByTimeAsync(500);
     }
-    // A backgrounded page's silence reading is meaningless — its timers are
-    // throttled — and the verdict would destroy the elements holding the session.
     expect(created).toHaveLength(before);
+    expect(module.audioEl()).toBe(deck);
     expect(module.audioService.graphReady()).toBe(true);
-    expect(failures).toHaveLength(0);
 
-    // Not forgotten either: once the page is real again the same silence is
-    // judged on a clock that means something, and the recovery runs there.
+    // The same invariant holds in the foreground. A quiet master bus may be a
+    // fade or silence in the recording; it cannot diagnose speaker output.
     reveal();
     for (let step = 0; step < 8; step += 1) {
       deck.currentTime += 1;
       await vi.advanceTimersByTimeAsync(500);
     }
-    expect(module.audioService.graphReady()).toBe(false);
-    expect(failures).toHaveLength(1);
+    expect(created).toHaveLength(before);
+    expect(module.audioEl()).toBe(deck);
+    expect(module.audioService.graphReady()).toBe(true);
   });
 
   it('drives a blend from the media clock when timers are throttled', async () => {
@@ -671,47 +668,35 @@ describe('two-deck mixer', () => {
     expect(audioService.mixPhase()).toBe('idle');
   });
 
-  it('abandons a graph that stops sounding and keeps the music going', async () => {
+  it('keeps a silent ending on the original graph so the normal handoff can finish it', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
-    const failures: unknown[] = [];
-    module.setGraphReporter((failure) => failures.push(failure));
     expect(module.audioService.unlockAudio()).toBe(true);
     expect(module.audioService.graphReady()).toBe(true);
 
     const deck = module.audioEl() as unknown as FakeAudio;
     await module.audioService.load('/current', 1);
-    module.audioService.stage('/next', 0.8);
     deck.currentTime = 10;
-    // Silence on the master bus while the media clock advances: the samples are
-    // not reaching the speakers, whatever the element and the context claim.
     contexts.at(-1)!.analyser.level = 128;
+    const before = [...created];
     for (let step = 0; step < 8; step += 1) {
       deck.currentTime += 1;
       await vi.advanceTimersByTimeAsync(500);
     }
 
-    expect(module.audioService.graphReady()).toBe(false);
-    expect(failures).toHaveLength(1);
-    // New, unrouted decks, cued back to where the music was and playing again.
-    const rebuilt = module.audioEl() as unknown as FakeAudio;
-    expect(rebuilt).not.toBe(deck);
-    expect(rebuilt.src).toBe('/current');
-    expect(rebuilt.play).toHaveBeenCalled();
-    const restoredIdle = created.at(-1)!;
-    expect(restoredIdle).not.toBe(rebuilt);
-    expect(restoredIdle.src).toBe('/next');
-    expect(failures).toHaveLength(1);
+    expect(module.audioService.graphReady()).toBe(true);
+    expect(module.audioEl()).toBe(deck);
+    expect(created).toEqual(before);
   });
 
-  it('moves Live to direct deck capture when the mixer takes its tap down', async () => {
+  it('keeps the Live program tap attached through a silent passage', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
     let lost = 0;
-    module.setGraphReporter(() => {});
     module.setBroadcastLostReporter(() => { lost += 1; });
     expect(module.audioService.unlockAudio()).toBe(true);
-    expect(module.audioService.broadcastStream()).not.toBeNull();
+    const capture = module.audioService.acquireBroadcastCapture();
+    expect(capture?.kind).toBe('program');
     const context = contexts.at(-1)!;
 
     const deck = module.audioEl() as unknown as FakeAudio;
@@ -723,20 +708,10 @@ describe('two-deck mixer', () => {
       await vi.advanceTimersByTimeAsync(500);
     }
 
-    expect(module.audioService.graphReady()).toBe(false);
-    expect(context.broadcastTrack.stop).toHaveBeenCalledOnce();
-    expect(lost).toBe(1);
-    // The page will not rebuild that context, but playback and Live share the
-    // direct replacement deck instead of leaving Live stuck waiting forever.
-    const capture = module.audioService.acquireBroadcastCapture();
-    expect(capture?.kind).toBe('element');
-    const rebuilt = module.audioEl() as unknown as FakeAudio;
-    expect(capture?.stream).toBe(rebuilt.capturedStream);
-    let replacement: MediaStreamTrack | null = null;
-    capture?.onTrackChange((track) => { replacement = track; });
-    const nextTrack = { kind: 'audio', readyState: 'live', contentHint: '', stop: vi.fn() };
-    rebuilt.capturedStream.replaceAudioTrack(nextTrack);
-    expect(replacement).toBe(nextTrack);
+    expect(module.audioService.graphReady()).toBe(true);
+    expect(module.audioEl()).toBe(deck);
+    expect(context.broadcastTrack.stop).not.toHaveBeenCalled();
+    expect(lost).toBe(0);
   });
 
   it('routes decks that have never played, and only then spends their unlock sample', async () => {
@@ -760,67 +735,32 @@ describe('two-deck mixer', () => {
     expect(created.every((deck) => deck.play.mock.calls.length === 1)).toBe(true);
   });
 
-  it('gives up on a context whose clock never starts, before routing anything', async () => {
+  it('does not replace decks merely because a context clock is temporarily still', async () => {
     vi.stubGlobal('AudioContext', DeadAudioContext);
     const module = await import('./audio');
     module.audioService.unlockAudio();
+    const before = [...created];
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(module.audioService.graphReady()).toBe(false);
+    expect(module.audioService.graphReady()).toBe(true);
+    expect(created).toEqual(before);
   });
 
-  it('rebuilds the decks under a paused player without starting it', async () => {
-    // A session put back on boot sits cued and paused until somebody presses
-    // play. Whatever the graph does underneath it, that has to stay true: there
-    // is no music to restore, and the store must not be told a resume failed.
-    vi.stubGlobal('AudioContext', DeadAudioContext);
+  it('resumes an interrupted context without replacing its graph or decks', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
-    const failures: Array<{ wasPlaying: boolean; resumed: boolean }> = [];
-    module.setGraphReporter((failure) => { failures.push(failure); });
-    module.audioService.prime('/restored', 42, 1);
-    const primed = module.audioEl() as unknown as FakeAudio;
+    expect(module.audioService.unlockAudio()).toBe(true);
+    const context = contexts.at(-1)!;
+    const before = [...created];
+    const stateHandler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')?.[1];
+    expect(stateHandler).toBeTypeOf('function');
 
-    module.audioService.unlockAudio();
-    await vi.advanceTimersByTimeAsync(1_000);
+    context.state = 'suspended';
+    stateHandler();
+    await Promise.resolve();
 
-    expect(module.audioService.graphReady()).toBe(false);
-    expect(failures).toEqual([expect.objectContaining({ wasPlaying: false, resumed: false })]);
-    const rebuilt = module.audioEl() as unknown as FakeAudio;
-    expect(rebuilt).not.toBe(primed);
-    // Cued back where the session was left, and silent.
-    expect(rebuilt.src).toBe('/restored');
-    expect(rebuilt.currentTime).toBe(42);
-    expect(rebuilt.play).not.toHaveBeenCalled();
-  });
-
-  it('never mistakes the unlock sample for music the graph took down with it', async () => {
-    // Every gesture spends a silent sample on each empty deck, and `play()`
-    // clears `paused` the moment it is called — the platform answers when it
-    // feels like it. A graph abandoned inside that window used to see a deck
-    // that was "playing", restore a silent WAV onto the replacement as if it
-    // were the current track, and tell the listener their audio was interrupted.
-    vi.stubGlobal('AudioContext', DeadAudioContext);
-    const module = await import('./audio');
-    const failures: Array<{ wasPlaying: boolean; resumed: boolean }> = [];
-    module.setGraphReporter((failure) => { failures.push(failure); });
-    const deck = module.audioEl() as unknown as FakeAudio;
-    deck.play.mockImplementation(() => {
-      deck.paused = false;
-      deck.currentSrc = deck.src;
-      return new Promise<void>(() => {});
-    });
-
-    module.audioService.unlockAudio();
-    // The window: a deck that holds nothing but looks exactly like one that does.
-    expect(deck.paused).toBe(false);
-    expect(module.broadcastPlaybackActive()).toBe(false);
-
-    await vi.advanceTimersByTimeAsync(1_000);
-
-    expect(module.audioService.graphReady()).toBe(false);
-    expect(failures).toEqual([expect.objectContaining({ wasPlaying: false, resumed: false })]);
-    const rebuilt = module.audioEl() as unknown as FakeAudio;
-    expect(rebuilt).not.toBe(deck);
-    expect(rebuilt.src).toBe('');
+    expect(context.resume).toHaveBeenCalled();
+    expect(module.audioService.graphReady()).toBe(true);
+    expect(created).toEqual(before);
   });
 
   it('never carries a deck unlock over into the track it primes', async () => {
@@ -997,8 +937,7 @@ describe('volume levelling', () => {
     module.audioService.unlockAudio();
     const context = contexts[0];
 
-    // Silence on a deck whose clock is advancing is what `checkAudible` reads
-    // as a dead graph — it would tear the graph down and drop the live tap.
+    // An invalid or zero loudness analysis must not mute the programme.
     await module.audioService.load('/broken', 0);
     expect(levelValue(context, 0)).toBeGreaterThan(0);
 
@@ -1031,10 +970,9 @@ describe('volume levelling', () => {
     module.audioService.setVolume(1);
   });
 
-  it('keeps the level on the track it rescues from a dead graph', async () => {
+  it('keeps the level and original deck through a silent passage', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
-    module.setGraphReporter(() => {});
     expect(module.audioService.unlockAudio()).toBe(true);
 
     const deck = module.audioEl() as unknown as FakeAudio;
@@ -1046,11 +984,8 @@ describe('volume levelling', () => {
       await vi.advanceTimersByTimeAsync(500);
     }
 
-    expect(module.audioService.graphReady()).toBe(false);
-    const rebuilt = module.audioEl() as unknown as FakeAudio;
-    expect(rebuilt).not.toBe(deck);
-    // The levels live in the shadow, not in the nodes that just died, so the
-    // rescued track comes back at the volume it was already playing at.
-    expect(rebuilt.volume).toBeCloseTo(0.5, 5);
+    expect(module.audioService.graphReady()).toBe(true);
+    expect(module.audioEl()).toBe(deck);
+    expect(levelValue(contexts.at(-1)!, 0)).toBeCloseTo(0.5, 5);
   });
 });

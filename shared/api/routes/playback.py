@@ -4,6 +4,7 @@ Streaming, cover, preview, and playback queue/state routes.
 
 import logging
 import os
+import re
 import time
 
 from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
@@ -352,6 +353,7 @@ def stream_local_track(track_id):
             segments={
                 "open_ms": round((time.perf_counter() - started) * 1000, 1),
                 "ranged": bool(request.headers.get("Range")),
+                **_range_observation(request.headers.get("Range")),
                 # What was promised, not what reached the listener: the client
                 # can abandon the response mid-flight and routinely does. Named
                 # for what it is so it is not read as bytes on the wire.
@@ -400,6 +402,23 @@ def _report_stream_response(
         segments={**segments, "scope": scope},
     )
     return response
+
+
+def _range_observation(value: str | None) -> dict:
+    """Describe one HTTP Range request without changing what Werkzeug serves."""
+    if not value:
+        return {"range_kind": "none"}
+    match = re.fullmatch(r"bytes=(\d*)-(\d*)", value.strip(), re.IGNORECASE)
+    if not match or (not match.group(1) and not match.group(2)):
+        return {"range_kind": "invalid"}
+    start, end = match.groups()
+    if not start:
+        return {"range_kind": "suffix", "range_suffix": int(end)}
+    observed = {"range_kind": "closed" if end else "open", "range_start": int(start)}
+    if end:
+        observed["range_end"] = int(end)
+        observed["range_requested_bytes"] = max(0, int(end) - int(start) + 1)
+    return observed
 
 
 def _clean_attempt_id() -> str | None:
@@ -542,6 +561,7 @@ def _serve_cached_preview(
     response.headers["X-Soundsible-Playback-Source"] = "preview"
     response.headers["X-Soundsible-Playback-Cache"] = cache_state
     response.headers["X-Soundsible-Playback-Egress"] = egress
+    metadata = preview_cache.cached_metadata(video_id)
     return _report_stream_response(
         response,
         track_id=video_id,
@@ -550,9 +570,11 @@ def _serve_cached_preview(
         egress=egress,
         segments={
             "server_ready_ms": server_ready_ms,
+            **_range_observation(request.headers.get("Range")),
             "content_length": int(response.headers.get("Content-Length") or 0),
             "file_bytes": cached_bytes,
             "format": os.path.splitext(path)[1].lower().replace(".", "") or "unknown",
+            "layout": str(metadata.get("layout") or "unknown"),
             "at_ms": round(time.time() * 1000),
         },
     )

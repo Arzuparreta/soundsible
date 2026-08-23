@@ -292,3 +292,31 @@ def test_coverage_is_unanswerable_for_rows_that_predate_the_policy(tmp_path):
 
     assert report["delivery"]["whole_file"]["coverage"] is None
     assert report["delivery"]["whole_file"]["outcomes"] == {}
+
+
+def test_delivery_exposes_preview_layout_and_client_range_shape(tmp_path):
+    path = tmp_path / "play-timing.jsonl"
+    rows = [
+        {
+            "v": 2,
+            "ts": NOW,
+            "attempt_id": "",
+            "track_id": "preview1",
+            "phase": "server_stream_ready",
+            "source_kind": "preview",
+            "cache_state": "disk",
+            "segments": {
+                "content_length": 64_000,
+                "file_bytes": 3_000_000,
+                "range_kind": "closed",
+                "layout": "flat_mp4_v1",
+                "format": "audio",
+            },
+        },
+    ]
+
+    report = build_report(write(path, rows), days=7)
+    delivery = report["delivery"]["whole_file"]
+
+    assert delivery["layouts"] == {"flat_mp4_v1": 1}
+    assert delivery["range_kinds"] == {"closed": 1}

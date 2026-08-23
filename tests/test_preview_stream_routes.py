@@ -121,6 +121,8 @@ def test_preview_stream_cached_file_supports_range(tmp_path, monkeypatch):
     _patch_api(monkeypatch)
     data = bytes(range(256)) * 4
     _seed_cache(data, "audio/mp4")
+    rows = []
+    monkeypatch.setattr("shared.telemetry.emit", lambda event, row: rows.append(row))
 
     response = _make_app().test_client().get(
         f"/api/preview/stream/{VID}", headers={"Range": "bytes=100-199"}
@@ -128,6 +130,11 @@ def test_preview_stream_cached_file_supports_range(tmp_path, monkeypatch):
 
     assert response.status_code == 206
     assert response.data == data[100:200]
+    segments = rows[-1]["segments"]
+    assert segments["range_kind"] == "closed"
+    assert segments["range_start"] == 100
+    assert segments["range_end"] == 199
+    assert segments["layout"] == preview_cache.SOURCE_LAYOUT
 
 
 def test_cold_preview_is_acquired_once_then_served_from_disk(tmp_path, monkeypatch):

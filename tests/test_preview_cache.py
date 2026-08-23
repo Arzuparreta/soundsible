@@ -10,6 +10,9 @@ The contract that matters for playback UX:
 """
 
 import os
+import json
+from pathlib import Path
+import subprocess
 import threading
 import time
 from types import SimpleNamespace
@@ -18,8 +21,51 @@ import pytest
 
 from shared import preview_cache
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
+from shared.ffmpeg_runtime import ffmpeg_executable
 
 VID = "dQw4w9WgXcQ"
+
+
+def _fragmented_mp4(path: Path) -> None:
+    subprocess.run(
+        [
+            ffmpeg_executable(), "-y", "-v", "error",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1.25",
+            "-c:a", "aac", "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "-frag_duration", "200000",
+            "-f", "mp4", str(path),
+        ],
+        check=True,
+    )
+
+
+def _packet_hashes(path: Path) -> list[str]:
+    ffprobe = str(Path(ffmpeg_executable()).with_name("ffprobe"))
+    result = subprocess.run(
+        [
+            ffprobe, "-v", "error", "-select_streams", "a:0",
+            "-show_packets", "-show_entries", "packet=data_hash",
+            "-show_data_hash", "md5", "-of", "json", str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [packet["data_hash"] for packet in json.loads(result.stdout)["packets"]]
+
+
+def _probe(path: Path) -> dict:
+    ffprobe = str(Path(ffmpeg_executable()).with_name("ffprobe"))
+    result = subprocess.run(
+        [
+            ffprobe, "-v", "error", "-select_streams", "a:0",
+            "-show_entries", "stream=codec_name,duration", "-of", "json", str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(result.stdout)["streams"][0]
 
 
 def _patch_upstream(monkeypatch, fake_get):
@@ -89,6 +135,94 @@ def test_writer_commit_roundtrip(runtime):
     path, content_type = cached
     assert content_type == "audio/mp4"
     assert path.read_bytes() == data
+
+
+def test_mp4_commit_flattens_fragments_without_reencoding(runtime, tmp_path):
+    source = tmp_path / "fragmented.mp4"
+    _fragmented_mp4(source)
+    original_packets = _packet_hashes(source)
+    original_probe = _probe(source)
+    raw = source.read_bytes()
+    assert raw.count(b"mdat") > 1
+
+    writer = preview_cache.open_writer(VID, "audio/mp4", len(raw))
+    assert writer is not None
+    writer.write(raw)
+    assert writer.commit(preview_cache._preview_is_decodable) is True
+
+    cached = preview_cache.get_cached(VID)
+    assert cached is not None
+    path, content_type = cached
+    assert content_type == "audio/mp4"
+    assert path.read_bytes().count(b"mdat") == 1
+    # Packet hashes are the encoded AAC payload. Equality proves `-c copy`
+    # changed only the MP4 container, not one frame of the audio stream.
+    assert _packet_hashes(path) == original_packets
+    normalized_probe = _probe(path)
+    assert normalized_probe["codec_name"] == original_probe["codec_name"] == "aac"
+    # Container duration rounding varies between ffmpeg versions. Keep it within
+    # one 1024-sample AAC frame; the packet hashes above remain the exact proof
+    # that the encoded stream itself did not change.
+    assert float(normalized_probe["duration"]) == pytest.approx(float(original_probe["duration"]), abs=0.025)
+    assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.FLAT_MP4_LAYOUT
+
+
+def test_legacy_mp4_normalizes_once_for_concurrent_readers(runtime, monkeypatch):
+    root = preview_cache.preview_cache_dir()
+    root.mkdir(parents=True)
+    path = preview_cache._audio_path(VID)
+    path.write_bytes(b"fragmented")
+    preview_cache._meta_path(VID).write_text('{"content_type":"audio/mp4"}')
+    calls = []
+
+    def normalize(source, video_id):
+        calls.append((source, video_id))
+        time.sleep(0.05)
+        output = root / "normalized.tmp"
+        output.write_bytes(b"flat")
+        return output
+
+    monkeypatch.setattr(preview_cache, "_remux_flat_mp4", normalize)
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(preview_cache.get_cached(VID))) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=2)
+
+    assert len(calls) == 1
+    assert len(results) == 2
+    assert path.read_bytes() == b"flat"
+    assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.FLAT_MP4_LAYOUT
+
+
+def test_failed_mp4_normalization_keeps_playable_source_and_is_not_retried(runtime, monkeypatch):
+    root = preview_cache.preview_cache_dir()
+    root.mkdir(parents=True)
+    path = preview_cache._audio_path(VID)
+    path.write_bytes(b"source")
+    preview_cache._meta_path(VID).write_text('{"content_type":"audio/mp4"}')
+    calls = []
+    monkeypatch.setattr(preview_cache, "_remux_flat_mp4", lambda *_args: calls.append(True) or None)
+
+    assert preview_cache.get_cached(VID) == (path, "audio/mp4")
+    assert path.read_bytes() == b"source"
+    assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.SOURCE_LAYOUT
+    assert preview_cache.get_cached(VID) == (path, "audio/mp4")
+    assert calls == [True]
+
+
+def test_new_mp4_commit_falls_back_to_the_valid_source(runtime, monkeypatch):
+    monkeypatch.setattr(preview_cache, "_remux_flat_mp4", lambda *_args: None)
+    writer = preview_cache.open_writer(VID, "audio/mp4", 6)
+    assert writer is not None
+    writer.write(b"source")
+
+    assert writer.commit(lambda _path: True) is True
+    path, content_type = preview_cache.get_cached(VID)
+    assert path.read_bytes() == b"source"
+    assert content_type == "audio/mp4"
+    assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.SOURCE_LAYOUT
 
 
 def test_incomplete_stream_is_discarded(runtime):

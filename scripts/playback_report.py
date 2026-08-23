@@ -108,6 +108,8 @@ def _delivery(rows: list[dict]) -> dict:
     requests: dict[str, int] = defaultdict(int)
     outcomes: dict[str, int] = defaultdict(int)
     formats: dict[str, dict[str, int]] = defaultdict(lambda: {"requests": 0, "bounded": 0, "served": 0})
+    layouts: dict[str, int] = defaultdict(int)
+    range_kinds: dict[str, int] = defaultdict(int)
     bounded_requests = 0
     reshapable = 0
     instrumented = 0
@@ -138,6 +140,8 @@ def _delivery(rows: list[dict]) -> dict:
         fmt["served"] += length
         if segments.get("bounded"):
             fmt["bounded"] += 1
+        layouts[str(segments.get("layout") or "unknown")] += 1
+        range_kinds[str(segments.get("range_kind") or "unknown")] += 1
         span = segments.get("range_span")
         # A request for essentially all of what is left, whichever header spelled
         # it. This is the traffic a policy that only narrows `bytes=N-` cannot see.
@@ -165,6 +169,8 @@ def _delivery(rows: list[dict]) -> dict:
             }
             for name, value in sorted(formats.items(), key=lambda item: -item[1]["requests"])
         },
+        "layouts": dict(sorted(layouts.items(), key=lambda item: -item[1])),
+        "range_kinds": dict(sorted(range_kinds.items(), key=lambda item: -item[1])),
         "passthrough_whole_remainder": {
             "requests": whole_remainder["requests"],
             "served_mb": round(whole_remainder["served"] / 1048576, 1),
@@ -235,7 +241,9 @@ def build_report(path: Path, *, days: int) -> dict:
                 continue
             phase = row.get("phase")
             if phase == "server_stream_ready":
-                if row.get("source_kind") == "local":
+                if row.get("source_kind") == "local" or (
+                    row.get("source_kind") == "preview" and row.get("cache_state") == "disk"
+                ):
                     delivery[_regime(row)].append(row)
                 if attempt_id:
                     server[attempt_id] = row
@@ -338,7 +346,7 @@ def main() -> int:
         )
 
     if report["delivery"]:
-        print("\nDelivery of local files — whole_file is the standard HTTP range regime")
+        print("\nDelivery of local files and disk previews — whole_file is standard HTTP Range")
         for regime, values in report["delivery"].items():
             coverage = "-" if values["coverage"] is None else f"{values['coverage']:.0%}"
             print(
@@ -352,6 +360,8 @@ def main() -> int:
             if values["outcomes"]:
                 for outcome, count in values["outcomes"].items():
                     print(f"{'':30}  {count:5} {outcome}")
+            if values["range_kinds"]:
+                print(f"{'':30}  ranges={values['range_kinds']} layouts={values['layouts']}")
             whole = values["passthrough_whole_remainder"]
             if whole["requests"]:
                 print(
