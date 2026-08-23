@@ -160,7 +160,10 @@ def test_mp4_commit_flattens_fragments_without_reencoding(runtime, tmp_path):
     assert _packet_hashes(path) == original_packets
     normalized_probe = _probe(path)
     assert normalized_probe["codec_name"] == original_probe["codec_name"] == "aac"
-    assert float(normalized_probe["duration"]) == pytest.approx(float(original_probe["duration"]), abs=0.001)
+    # Container duration rounding varies between ffmpeg versions. Keep it within
+    # one 1024-sample AAC frame; the packet hashes above remain the exact proof
+    # that the encoded stream itself did not change.
+    assert float(normalized_probe["duration"]) == pytest.approx(float(original_probe["duration"]), abs=0.025)
     assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.FLAT_MP4_LAYOUT
 
 
