@@ -7,10 +7,10 @@ import os
 import re
 import time
 
-from flask import Blueprint, request, jsonify, send_file, Response, stream_with_context, redirect
+from flask import Blueprint, request, jsonify, send_file, Response, redirect
 from werkzeug.exceptions import HTTPException
 
-from shared import preview_cache
+from shared import preview_cache, request_scope
 from shared.api.memo import Memo
 from shared.hardening import SCOPE_PLAYBACK_CONTROL, _rate_limiter, rate_limit, require_scope
 from shared.path_resolver import is_scanned_track_path, resolve_local_track_path
@@ -505,42 +505,6 @@ def _preview_upstream(api, video_id: str, headers: dict[str, str]):
     return None, None, "unavailable", 0, 0
 
 
-def _acquire_preview(api, video_id: str):
-    """Acquire one complete file, refreshing one rejected signed URL.
-
-    `preview_cache.ensure_cached` is the concurrency boundary: a staged deck,
-    an active request and background prefetch all join the same transfer.
-    """
-    cache_was_warm = isinstance(_preview_stream_urls.get(video_id), ResolvedStream)
-    started = time.monotonic()
-
-    def resolve(vid: str):
-        return _get_preview_stream_cached(api, vid)
-
-    def refresh(vid: str):
-        nonlocal cache_was_warm
-        _invalidate_stream(vid)
-        cache_was_warm = False
-        return _get_preview_stream_cached(api, vid, skip_fast_path=True)
-
-    try:
-        cached, stream = preview_cache.acquire_cached(
-            video_id,
-            resolve,
-            refresh_resolver=refresh,
-        )
-    except preview_cache.PreviewUpstreamRejected:
-        cached, stream = None, None
-    elapsed_ms = round((time.monotonic() - started) * 1000)
-    return (
-        cached,
-        stream,
-        "url_warm" if cache_was_warm and cached else "cold",
-        0,
-        elapsed_ms,
-    )
-
-
 def _serve_cached_preview(
     video_id: str,
     cached,
@@ -580,6 +544,63 @@ def _serve_cached_preview(
     )
 
 
+def _progressive_range(range_header: str | None, total: int | None):
+    """Translate one browser byte range into local spool offsets."""
+    if not range_header:
+        return 0, total - 1 if total else None, 200
+    match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header.strip())
+    if not match or total is None:
+        return None
+    raw_start, raw_end = match.groups()
+    if not raw_start:
+        if not raw_end or int(raw_end) <= 0:
+            return None
+        length = min(total, int(raw_end))
+        return total - length, total - 1, 206
+    start = int(raw_start)
+    end = min(total - 1, int(raw_end)) if raw_end else total - 1
+    if start >= total or end < start:
+        return None
+    return start, end, 206
+
+
+def _serve_progressive_preview(video_id: str, handle: preview_cache.ProgressiveHandle):
+    total = handle.total_bytes
+    selected = _progressive_range(request.headers.get("Range"), total)
+    if selected is None:
+        handle.close()
+        response = jsonify({"error": "Requested range is not available"})
+        response.status_code = 416
+        if total is not None:
+            response.headers["Content-Range"] = f"bytes */{total}"
+        return response
+    start, end, status = selected
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, no-store",
+        "X-Soundsible-Playback-Source": "preview",
+        "X-Soundsible-Playback-Cache": "progressive",
+        "X-Soundsible-Playback-Egress": handle.egress,
+    }
+    if total is not None:
+        length = (end - start + 1) if end is not None else total - start
+        headers["Content-Length"] = str(length)
+        if status == 206:
+            headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+    response = Response(
+        handle.iter_bytes(start, end),
+        status=status,
+        headers=headers,
+        mimetype=handle.content_type,
+        direct_passthrough=True,
+    )
+    # WSGI may close a response before the generator is ever advanced. Register
+    # separately so that disconnect still drops reader interest and cancels an
+    # otherwise abandoned upstream fill.
+    response.call_on_close(handle.close)
+    return response
+
+
 @playback_bp.route("/api/preview/stream/<video_id>", methods=["GET"])
 def preview_stream_proxy(video_id):
     api = _get_api()
@@ -603,38 +624,51 @@ def preview_stream_proxy(video_id):
         response.headers["Retry-After"] = str(retry_after)
         return response
 
-    # Acquire the complete track before exposing any of it to a media element.
-    # This is deliberately synchronous for a cold miss: one upstream transfer
-    # costs about a second, while sending the first 512 KiB immediately made the
-    # browser ask googlevideo again mid-song. The incident captured on
-    # 2026-08-15 was exact: the first slice sounded for 1.96 s, the next slice
-    # was rejected, and Auto treated every 503 in the cooldown as another dead
-    # song. A staged deck, active playback and prefetch now share this one fill.
+    # One open-ended upstream transfer writes a local spool. Ordinary songs keep
+    # the complete-file fast path; a proven sustainable long transfer may be
+    # read from that same growing file. Browser ranges never reach the CDN.
     if preview_cache.cache_limit_bytes() > 0:
         try:
-            acquired, stream, cache_state, resolve_ms, download_ms = _acquire_preview(api, video_id)
+            stream = _get_preview_stream_cached(api, video_id)
+            if stream is None:
+                return jsonify({"error": "Preview unavailable"}), 502
+
+            def refresh(vid: str):
+                _invalidate_stream(vid)
+                return _get_preview_stream_cached(api, vid, skip_fast_path=True)
+
+            handle = preview_cache.start_progressive(
+                video_id,
+                stream,
+                refresh_resolver=refresh,
+            )
+            # Authentication/resolution are finished. Do not pin a pooled DB
+            # connection while five seconds of network budget or the response
+            # body's future bytes are pending.
+            request_scope.release_resources()
+            handle.wait_for_fast_complete()
         except Exception as exc:
             logger.warning("API: [Preview acquisition] Error for %s: %s", video_id, exc)
             return jsonify({"error": "Preview unavailable"}), 502
-        if acquired and stream:
+        acquired = preview_cache.get_cached(video_id)
+        if acquired:
+            handle.close()
             return _serve_cached_preview(
                 video_id,
                 acquired,
-                cache_state=cache_state,
-                egress=stream.egress,
-                server_ready_ms=resolve_ms + download_ms,
+                cache_state="cold",
+                egress=handle.egress,
             )
-        retry_after = preview_cache.upstream_backoff_remaining()
-        if retry_after:
-            response = jsonify({"error": "Preview upstream temporarily unavailable"})
-            response.status_code = 503
-            response.headers["Retry-After"] = str(retry_after)
-            return response
-        # Cache-enabled playback has one contract: a complete, decoder-checked
-        # file. Falling through to the compatibility proxy here would silently
-        # bypass that verdict and hand the media element the same unverified
-        # upstream resource the runway just rejected.
-        return jsonify({"error": "Preview unavailable"}), 502
+        if handle.done:
+            handle.close()
+            retry_after = preview_cache.upstream_backoff_remaining()
+            if retry_after:
+                response = jsonify({"error": "Preview upstream temporarily unavailable"})
+                response.status_code = 503
+                response.headers["Retry-After"] = str(retry_after)
+                return response
+            return jsonify({"error": "Preview unavailable"}), 502
+        return _serve_progressive_preview(video_id, handle)
 
     # Explicitly disabling the disk cache keeps a compatibility path. It uses
     # one open-ended upstream response for normal playback; never split a cold
@@ -704,13 +738,16 @@ def preview_stream_proxy(video_id):
                 # for a new handshake again.
                 resp.close()
 
-        return Response(
-            stream_with_context(iter_chunks()),
+        request_scope.release_resources()
+        response = Response(
+            iter_chunks(),
             status=status_code,
             headers=response_headers,
             mimetype=content_type,
             direct_passthrough=True,
         )
+        response.call_on_close(resp.close)
+        return response
     except Exception as e:
         logger.warning("API: [Preview stream] Error for %s: %s", video_id, e)
         return jsonify({"error": "Preview unavailable"}), 502
@@ -774,6 +811,15 @@ def preview_status():
             for video_id in video_ids
         }
     })
+
+
+@playback_bp.route("/api/preview/cancel/<video_id>", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+@rate_limit("preview_cancel", limit=60, window_sec=60)
+def preview_cancel(video_id):
+    if not validate_youtube_video_id(video_id):
+        return jsonify({"error": "Invalid video id"}), 400
+    return jsonify({"cancelled": preview_cache.cancel_progressive(video_id)})
 
 
 @playback_bp.route("/api/preview/stream-url/<video_id>", methods=["GET"])

@@ -62,6 +62,11 @@ export function previewPreparationState(videoId: string): PreviewPreparation['st
   return preparation.get(videoId)?.state;
 }
 
+/** Latest measured acquisition facts for a preview, when one is observed. */
+export function previewPreparation(videoId: string): PreviewPreparation | undefined {
+  return preparation.get(videoId);
+}
+
 /**
  * Warm previews before the user clicks play: the engine resolves the stream
  * URL in the background, and with `download` also lands the whole audio file
@@ -91,7 +96,12 @@ export function prefetchPreviews(
     .filter((id) => {
       if (!opts.download) return now - (lastWarm.get(id) ?? 0) > WARM_TTL_MS;
       const status = preparation.get(id);
-      if (status?.state === 'ready' || status?.state === 'pending' || observed.has(id)) return false;
+      if (
+        status?.state === 'ready'
+        || status?.state === 'pending'
+        || status?.state === 'streamable'
+        || observed.has(id)
+      ) return false;
       const retryMs = Math.max(DOWNLOAD_RETRY_MS, (status?.retry_after ?? 0) * 1000);
       return now - (lastDownloadAttempt.get(id) ?? 0) >= retryMs;
     })

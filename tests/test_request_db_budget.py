@@ -12,6 +12,7 @@ import sqlite3
 import pytest
 
 import shared.database as database
+from shared import request_scope
 
 
 @pytest.fixture()
@@ -86,3 +87,15 @@ def test_many_requests_do_not_grow_connections_unboundedly(client, db_budget):
     assert db_budget["connect"] <= 4, (
         f"25 requests opened {db_budget['connect']} connections"
     )
+
+
+def test_streaming_route_can_release_request_resources_before_teardown():
+    released = []
+    token = request_scope.begin()
+    try:
+        request_scope.on_end(lambda: released.append("connection"))
+        request_scope.release_resources()
+        assert released == ["connection"]
+    finally:
+        request_scope.end(token)
+    assert released == ["connection"]

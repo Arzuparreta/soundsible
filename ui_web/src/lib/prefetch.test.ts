@@ -4,13 +4,18 @@ import type { Track } from '../types/music';
 const apiMock = vi.hoisted(() => ({
   prefetchPreviews: vi.fn(() => Promise.resolve({
     status: 'queued',
-    preparation: undefined as Record<string, { state: string }> | undefined,
+    preparation: undefined as Record<string, { state: string; [key: string]: unknown }> | undefined,
   })),
   previewStatuses: vi.fn(() => Promise.resolve({ preparation: {} })),
 }));
 vi.mock('./api', () => ({ api: apiMock }));
 
-import { prefetchPreviews, previewPreparationState, upcomingPreviewIds } from './prefetch';
+import {
+  prefetchPreviews,
+  previewPreparation,
+  previewPreparationState,
+  upcomingPreviewIds,
+} from './prefetch';
 
 const preview = (id: string): Track => ({ id, title: id, artist: 'A', source: 'preview' });
 const local = (id: string): Track => ({ id, title: id, artist: 'A' });
@@ -90,6 +95,29 @@ describe('prefetchPreviews', () => {
     apiMock.prefetchPreviews.mockClear();
     prefetchPreviews(['pending1-_A'], { download: true });
     expect(apiMock.prefetchPreviews).not.toHaveBeenCalled();
+  });
+
+  it('keeps measured streamable progress observable without treating it as Auto-ready', async () => {
+    apiMock.prefetchPreviews.mockResolvedValueOnce({
+      status: 'queued',
+      preparation: {
+        'stream001_A': {
+          state: 'streamable', downloaded_bytes: 500, total_bytes: 1000,
+          progress: 0.5, buffered_seconds: 8, eta_seconds: 4,
+        },
+      },
+    });
+
+    prefetchPreviews(['stream001_A'], { download: true });
+    await vi.waitFor(() => expect(previewPreparationState('stream001_A')).toBe('streamable'));
+    expect(previewPreparation('stream001_A')).toMatchObject({
+      downloaded_bytes: 500,
+      total_bytes: 1000,
+      progress: 0.5,
+      buffered_seconds: 8,
+      eta_seconds: 4,
+    });
+    expect(previewPreparationState('stream001_A')).not.toBe('ready');
   });
 
   it('notifies the runway owner only when the engine reports a terminal verdict', async () => {

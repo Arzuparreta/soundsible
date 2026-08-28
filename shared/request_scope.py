@@ -45,6 +45,28 @@ def on_end(callback: Callable[[], None]) -> None:
     cache.setdefault(_CLEANUPS_KEY, []).append(callback)
 
 
+def release_resources() -> None:
+    """Run and forget the current scope's cleanups before response streaming.
+
+    Flask closes a request scope only after a route returns.  A route that must
+    wait for, or stream, a slow external resource can therefore pin its SQLite
+    connection for the entire transfer.  Such a route calls this once after its
+    final database read and before it starts waiting.  ``end`` remains safe: the
+    callbacks are removed here, so teardown cannot release anything twice.
+    """
+    cache = _scope.get()
+    if cache is None:
+        return
+    callbacks = list(cache.pop(_CLEANUPS_KEY, []))
+    for callback in callbacks:
+        try:
+            callback()
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("request_scope: early cleanup failed")
+
+
 def end(token: object) -> None:
     """Close the scope opened by ``token``, running any registered cleanups.
 

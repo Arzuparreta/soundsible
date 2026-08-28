@@ -80,6 +80,8 @@ export const en = {
     delete: 'Delete',
     rename: 'Rename',
     loading: 'Loading…',
+    preparingProgress: 'Preparing… {progress}%',
+    preparingProgressEta: 'Preparing… {progress}% · {eta}s',
     online: 'Connected',
     offline: 'Offline',
     continue: 'Continue',

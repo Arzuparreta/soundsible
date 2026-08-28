@@ -20,7 +20,12 @@ import {
   type ProgramTransportOrigin,
 } from '../lib/audio';
 import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers, playbackYoutubeId } from '../lib/media';
-import { prefetchPreviews, previewPreparationState, upcomingPreviewIds } from '../lib/prefetch';
+import {
+  prefetchPreviews,
+  previewPreparation,
+  previewPreparationState,
+  upcomingPreviewIds,
+} from '../lib/prefetch';
 import { toast } from '../lib/toast';
 import { vibrate } from '../lib/haptics';
 import { isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
@@ -149,6 +154,8 @@ interface PlaybackAttempt {
   /** Times this attempt's stall timer found the deck still fetching and waited
    * again instead of reloading it. See `scheduleStallRecovery`. */
   stallReprieves: number;
+  /** Last server spool position observed by startup supervision. */
+  spoolBytes: number;
   recoveryCount: number;
   reportedRecoveryCount: number;
   concluded: boolean;
@@ -422,6 +429,7 @@ function createPlaybackAttempt(
     seekRebufferCount: 0,
     seekPending: false,
     stallReprieves: 0,
+    spoolBytes: 0,
     recoveryCount: 0,
     reportedRecoveryCount: 0,
     concluded: false,
@@ -708,10 +716,15 @@ function loadIndex(
     loadError: false,
     needsGesture: false,
     phase: 'loading',
+    previewPreparation: null,
     currentTime: 0,
     duration: staged ? audioEl().duration || 0 : 0,
   });
   updateMediaSession(track);
+  const previewId = track.source === 'preview' ? playbackYoutubeId(track) : null;
+  if (previewId) {
+    prefetchPreviews([previewId], { download: true, onStatus: onPreviewPreparation });
+  }
   const start = staged
     ?? (opts.freshDeck
       ? audioService.recover(trackUrl(track), 0, level)
@@ -839,6 +852,19 @@ function scheduleStallRecovery(delayMs = STALL_RECOVERY_MS): void {
       scheduleStallRecovery(delayMs);
       return;
     }
+    const current = state.playback.currentTrack;
+    const previewId = current?.source === 'preview' ? playbackYoutubeId(current) : null;
+    const prep = previewId ? previewPreparation(previewId) : undefined;
+    const spoolBytes = prep?.downloaded_bytes ?? 0;
+    if (
+      prep
+      && (prep.state === 'pending' || prep.state === 'streamable')
+      && spoolBytes > attempt.spoolBytes
+    ) {
+      attempt.spoolBytes = spoolBytes;
+      scheduleStallRecovery(delayMs);
+      return;
+    }
     if (!recoverCurrent('stall')) onPlaybackFailed(attempt.generation, 'stall');
   }, delayMs);
 }
@@ -880,6 +906,15 @@ function onPlaybackFailed(
     activeAttempt = null;
   }
   setState('playback', { isPlaying: false, isLoading: false, loadError: true, phase: 'failed' });
+  if (
+    attempt?.sourceKind === 'preview'
+    && (attempt.trigger === 'selection' || attempt.trigger === 'retry')
+  ) {
+    // A listener explicitly chose this exact work. Keep it selected with the
+    // retry affordance; skipping is appropriate only for unattended context.
+    toast.error(tr('toast.trackUnavailable'));
+    return;
+  }
   if (state.autoMode.active) {
     // Once a handoff has made this the current track, a delivery failure is no
     // longer a failed *candidate*. Advancing here turned one station-wide 503
@@ -1744,6 +1779,9 @@ function promotePreparedAutoSuccessor(): boolean {
  * preserve the lane/context ordering already encoded by the queue. */
 function onPreviewPreparation(videoId: string, status: PreviewPreparation): void {
   const pb = state.playback;
+  if (pb.currentTrack && playbackYoutubeId(pb.currentTrack) === videoId) {
+    setState('playback', 'previewPreparation', status);
+  }
   const future = pb.queue.slice(Math.max(0, pb.index + 1));
   const matching = future.filter((entry) => playbackYoutubeId(entry) === videoId);
   if (status.state === 'unavailable' && matching.length > 0) {
@@ -2634,6 +2672,8 @@ export const actions = {
     if (pb.phase === 'loading' || pb.phase === 'recovering') {
       cancelActiveAttempt('user_pause');
       setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
+      const previewId = pb.currentTrack.source === 'preview' ? playbackYoutubeId(pb.currentTrack) : null;
+      if (previewId) void api.cancelPreview(previewId).catch(() => {});
     }
     audioService.pause(origin);
   },

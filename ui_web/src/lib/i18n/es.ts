@@ -81,6 +81,8 @@ export const es: Dict = {
     delete: 'Eliminar',
     rename: 'Renombrar',
     loading: 'Cargando…',
+    preparingProgress: 'Preparando… {progress} %',
+    preparingProgressEta: 'Preparando… {progress} % · {eta} s',
     online: 'Conectado',
     offline: 'Sin conexión',
     continue: 'Continuar',

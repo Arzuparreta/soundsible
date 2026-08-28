@@ -142,6 +142,7 @@ async function loadStore(
     setAutoplayEnabled: vi.fn().mockResolvedValue({ autoplay_enabled: true }),
     setVolumeLeveling: vi.fn().mockResolvedValue({ volume_leveling: true }),
     requestLoudness: vi.fn().mockResolvedValue({ queued: 0 }),
+    cancelPreview: vi.fn().mockResolvedValue({ cancelled: true }),
     ...apiOverrides,
   } as Record<string, any>;
   if (!apiOverrides.planMusicQueue) {
@@ -257,14 +258,21 @@ async function loadStore(
     bustCovers: vi.fn(),
   }));
   const previewPreparationState = (
-    apiOverrides.__previewPreparationState as ((id: string) => 'cold' | 'pending' | 'ready' | 'unavailable') | undefined
+    apiOverrides.__previewPreparationState as ((id: string) => 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable') | undefined
   ) ?? (() => 'ready' as const);
-  let previewStatusListener: ((id: string, status: { state: 'cold' | 'pending' | 'ready' | 'unavailable'; retry_after?: number }) => void) | null = null;
+  const previewPreparation = (
+    apiOverrides.__previewPreparation as ((id: string) => {
+      state: 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable';
+      downloaded_bytes?: number;
+    } | undefined) | undefined
+  ) ?? (() => undefined);
+  let previewStatusListener: ((id: string, status: { state: 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable'; retry_after?: number }) => void) | null = null;
   const prefetchPreviews = vi.fn((_ids: string[], opts?: { onStatus?: typeof previewStatusListener }) => {
     if (opts?.onStatus) previewStatusListener = opts.onStatus;
   });
   vi.doMock('../lib/prefetch', () => ({
     prefetchPreviews,
+    previewPreparation,
     previewPreparationState,
     upcomingPreviewIds: (queue: Track[], index: number, repeatAll: boolean, count = 2) => {
       const ids: string[] = [];
@@ -333,7 +341,7 @@ async function loadStore(
     fireDeckEvent,
     fireSocketEvent,
     fireProgramTransport,
-    firePreviewStatus: (id: string, status: { state: 'cold' | 'pending' | 'ready' | 'unavailable'; retry_after?: number }) => previewStatusListener?.(id, status),
+    firePreviewStatus: (id: string, status: { state: 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable'; retry_after?: number }) => previewStatusListener?.(id, status),
     prefetchPreviews,
     toastAction,
     toastError,
@@ -683,6 +691,17 @@ describe('Playback load coalescing', () => {
     expect(audioService.load).toHaveBeenCalledTimes(1);
   });
 
+  it('cancels the server fill when the listener cancels a loading preview', async () => {
+    const { actions, api, state } = await loadStore();
+
+    actions.playTrack(preview);
+    actions.pausePlayback();
+
+    expect(api.cancelPreview).toHaveBeenCalledWith(preview.id);
+    expect(state.playback.phase).toBe('paused');
+    expect(state.playback.isLoading).toBe(false);
+  });
+
   it('switching to a different preview mid-load loads exactly the newest one', async () => {
     const { actions, state, audioService } = await loadStore();
     const other: Track = { id: 'previewid02', title: 'Other', artist: 'Chan', source: 'preview' };
@@ -734,6 +753,23 @@ describe('Playback load coalescing', () => {
     expect(state.playback.currentTrack?.id).toBe('t2');
     expect(state.playback.loadError).toBe(true);
     expect(state.playback.isPlaying).toBe(false);
+  });
+
+  it('keeps an explicitly selected preview on Retry instead of skipping its context', async () => {
+    const selected: Track = {
+      id: 'chosen00001', title: 'Long work', artist: 'Artist', source: 'preview',
+    };
+    const { actions, state, audioService } = await loadStore({}, {
+      load: vi.fn().mockRejectedValue(new Error('502')),
+      recover: vi.fn().mockRejectedValue(new Error('502')),
+    });
+
+    actions.playFrom([selected, t2], 0);
+    await flush();
+
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+    expect(state.playback.currentTrack?.id).toBe(selected.id);
+    expect(state.playback.loadError).toBe(true);
   });
 
   it('reports one failure per attempt, not one per error channel', async () => {
@@ -856,15 +892,15 @@ describe('Playback load coalescing', () => {
       'route-00005', 'route-00006', 'route-00007', 'route-00008',
     ]));
     const armTransition = vi.fn();
-    const readiness: Record<string, 'pending' | 'ready'> = {
-      'route-00001': 'pending',
+    const readiness: Record<string, 'streamable' | 'ready'> = {
+      'route-00001': 'streamable',
       'route-00002': 'ready',
     };
     const { actions, state, initStore, fireDeckEvent, deck } = await loadStore(
       {
         planDjQueue,
         refineDjTransition: vi.fn().mockResolvedValue({ measured: false }),
-        __previewPreparationState: (id: string) => readiness[id] ?? 'pending',
+        __previewPreparationState: (id: string) => readiness[id] ?? 'streamable',
       },
       { armTransition },
     );
@@ -2856,6 +2892,37 @@ describe('playback delivery telemetry', () => {
       // Still nothing new by the next deadline: the load really is dead.
       await vi.advanceTimersByTimeAsync(12_000);
       expect(audioService.recover).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps waiting while the server spool makes measured progress', async () => {
+    vi.useFakeTimers();
+    try {
+      let downloaded = 100;
+      const never = new Promise<void>(() => {});
+      const longPreview: Track = {
+        id: 'long0000001', title: 'Long work', artist: 'Artist', source: 'preview',
+      };
+      const { actions, audioService, initStore } = await loadStore({
+        __previewPreparation: () => ({ state: 'pending', downloaded_bytes: downloaded }),
+      }, {
+        load: vi.fn(() => never),
+      });
+      initStore();
+
+      actions.playTrack(longPreview);
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(audioService.recover).not.toHaveBeenCalled();
+
+      downloaded = 200;
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(audioService.recover).not.toHaveBeenCalled();
+
+      // No byte moved during the next interval: now recovery is justified.
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(audioService.recover).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }

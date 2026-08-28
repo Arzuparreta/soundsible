@@ -17,6 +17,7 @@ import type {
   DeviceRegistration,
   DjDirection,
   DjProfile,
+  PreviewPreparation,
   RemotePlaybackState,
 } from '../lib/api';
 import { storedVolume } from '../lib/audio';
@@ -73,6 +74,8 @@ export interface PlaybackState {
   loadError: boolean;
   /** Detailed transport state; isLoading/loadError remain compatibility views. */
   phase: PlaybackPhase;
+  /** Live facts for the current cold internet preview. Cleared for local audio. */
+  previewPreparation?: PreviewPreparation | null;
   /** The platform refused `play()` without a fresh gesture. The transport turns
    * this into a visible invitation to tap instead of a player that simply
    * stopped. */
@@ -256,6 +259,7 @@ const [state, setState] = createStore<AppState>({
     isLoading: false,
     loadError: false,
     phase: 'idle',
+    previewPreparation: null,
     needsGesture: false,
     currentTime: 0,
     duration: 0,
