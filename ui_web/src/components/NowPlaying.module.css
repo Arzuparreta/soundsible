@@ -1,79 +1,12 @@
-/* ── Now Playing · three-panel music terminal ──────────────────────────────
-   Desktop is a fixed three-column workspace in the app's own chrome language
-   (flat bg-base columns split by hairlines, like the sidebar/library shell):
+/* ── Now Playing · the stage and what hangs off it ─────────────────────────
+   Art, track info, transport, lyrics, the action bar, and the two Live-room
+   affordances Now Playing adds to the browser panel.
 
-     [ search panel ] | [ stage: art · info · controls ] | [ queue panel ]
-
-   The two side panels share identical chrome — same header height, same
-   typography, same hairline rhythm — so the sheet reads as one engineered
-   surface instead of unrelated floating boxes. The queue column is always
-   mounted while something plays, so the stage never jumps width.
-   Mobile keeps the stacked player (art ↔ queue swap, swipe-to-close). */
-
-.sheet {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  flex-direction: column;
-  background:
-    radial-gradient(ellipse 58% 50% at 50% 26%, var(--ambient-accent), transparent 72%),
-    var(--bg-base);
-  transform: translateY(100%);
-  transition: transform var(--dur-medium) var(--ease-out);
-  will-change: transform;
-  overflow: hidden;
-}
-
-.open {
-  transform: translateY(0);
-}
-
-/* While the user is dragging the sheet down, suppress the open/close
-   transition so the transform tracks the pointer 1:1. The transition is
-   restored on release so the snap-back (→ translateY(0)) or close
-   (→ translateY(100%)) animation can play from the finger's release
-   position. */
-.sheet[data-swiping] {
-  transition: none;
-}
-
-/* ── Header ── */
-.head {
-  flex-shrink: 0;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  padding: var(--space-md) var(--gutter);
-  padding-top: max(var(--space-md), env(safe-area-inset-top, 0));
-  background: var(--stage-panel);
-  border-bottom: 1px solid var(--stage-line-soft);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-
-.iconBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* Adaptive density: 44px touch target on mobile (DESIGN.md min), 36px on desktop. */
-  width: var(--control-h);
-  height: var(--control-h);
-  color: var(--ink-secondary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-.iconBtn:hover {
-  color: var(--ink-primary);
-  background: var(--stage-material);
-}
-}
-
-.head > .iconBtn:last-child { justify-self: end; }
+   The shell around all of it is not here: `PlayerSurface` owns the sliding
+   surface and its swipe-to-close, `PlayerWorkspace` owns the resizable
+   browser│stage│queue columns and their splitters, and `PlayerTrackList` owns
+   the queue itself. This file kept a full second copy of all three, unreached
+   since that split, and it has been removed. */
 
 .empty {
   flex: 1;
@@ -83,19 +16,6 @@
   color: var(--ink-secondary);
 }
 
-/* Dynamic-panels wrapper: on mobile it dissolves so .body stays the sheet's
-   direct flex child (untouched layout); from tablet up it lays the stage and
-   the side panels out as hairline-separated columns. */
-.main {
-  display: contents;
-}
-
-.tile {
-  display: contents;
-}
-
-.splitter,
-.panelGrip,
 .desktopLyrics,
 .desktopLyricsToggle {
   display: none;
@@ -123,8 +43,9 @@
   width: 100%;
   margin: 0 auto;
   /* Lock the body to its content: no overscroll bounce (rubber-band) at the
-     top, and no scroll-chaining to the sheet behind it. Swipe-down is handled
-     at the sheet level (pointer events), not by the body's native scroll. */
+     top, and no scroll-chaining to the surface behind it. Swipe-down is
+     handled by `PlayerSurface` (pointer events), not by the body's native
+     scroll. */
   overscroll-behavior-y: none;
 }
 
@@ -590,17 +511,6 @@
   }
 }
 
-/* ── Queue panel (shares chrome with the search panel: same header height,
-      same label style, same hairline rhythm) ── */
-.queue {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.desktopQueue,
 .mobileLyrics,
 .mobileLyricsToggle {
   display: none;
@@ -678,313 +588,6 @@
   }
 }
 
-@media (max-width: 767px) {
-}
-
-.queueHead {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-height: 44px;
-  padding: 0 var(--space-sm) 0 var(--space-md);
-  border-bottom: 1px solid var(--stage-line);
-}
-
-.queueHeading {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.queueTitle {
-  margin: 0;
-  font-size: var(--text-caption);
-  font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.queueCount {
-  flex-shrink: 0;
-  min-width: 20px;
-  padding: 1px 6px;
-  font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  font-weight: var(--fw-medium);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  color: var(--ink-secondary);
-  background: var(--stage-material);
-  border: 1px solid var(--stage-line);
-  border-radius: var(--radius-full);
-}
-
-.queueClear {
-  flex-shrink: 0;
-  padding: var(--space-2xs) var(--space-sm);
-  font-size: var(--text-label);
-  font-weight: var(--fw-medium);
-  color: var(--ink-secondary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out);
-}
-
-:global(html[data-interface-size='normal']) .queueClear,
-:global(html[data-interface-size='large']) .queueClear {
-  min-height: 24px;
-}
-@media (hover: hover) and (pointer: fine) {
-.queueClear:hover {
-  color: var(--accent-ink);
-}
-}
-.queueClear:disabled {
-  color: var(--ink-tertiary);
-  opacity: 0.5;
-  cursor: default;
-}
-
-.queueRows {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--list-gap);
-  padding: var(--space-xs) var(--space-sm) var(--space-sm);
-  overscroll-behavior: contain;
-}
-
-.queueSection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--list-gap);
-}
-
-.queueSection + .queueSection {
-  margin-top: var(--space-sm);
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--stage-line-soft);
-}
-
-.queueSectionHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-height: 22px;
-  padding: 0 var(--space-xs);
-  font-size: var(--text-micro);
-  font-weight: var(--fw-semibold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-tertiary);
-}
-
-.queueSectionCount {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.queueExpand {
-  align-self: flex-start;
-  padding: var(--space-xs);
-  color: var(--ink-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: var(--text-caption);
-  cursor: pointer;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .queueExpand:hover {
-    color: var(--accent-ink);
-    background: var(--stage-row-hover);
-  }
-}
-
-.queueEmpty {
-  margin: var(--space-md) var(--space-xs);
-  color: var(--ink-tertiary);
-  font-size: var(--text-caption);
-}
-
-.qRow {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) 0;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  transition: background var(--dur-micro) var(--ease-out), border-color var(--dur-short) var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-.qRow:hover {
-  background: var(--stage-row-hover);
-  border-color: var(--stage-line-soft);
-}
-}
-
-.qActive {
-  background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
-  border-color: var(--accent-soft);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.qActive:hover {
-  background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
-  border-color: var(--accent-soft);
-}
-}
-
-.qHandle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--control-h);
-  flex-shrink: 0;
-  color: var(--ink-tertiary);
-  cursor: grab;
-}
-.qHandle:active {
-  cursor: grabbing;
-}
-
-.qPlay {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  flex: 1;
-  min-width: 0;
-  padding: var(--space-xs) 0;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-align: left;
-}
-
-.qPlay:disabled {
-  cursor: default;
-}
-
-.qRemove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--control-h);
-  height: var(--control-h);
-  flex-shrink: 0;
-  color: var(--ink-tertiary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-.qRemove:hover {
-  color: var(--danger);
-}
-}
-
-.qActive .qTitle {
-  color: var(--accent-ink);
-}
-
-.qIndex {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  width: 18px;
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: var(--text-caption);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-tertiary);
-}
-
-/* Animated equalizer on the active queue row; freezes while paused. */
-.eq {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-  width: 13px;
-  height: 12px;
-}
-.eq i {
-  flex: 1;
-  height: 100%;
-  border-radius: 1px;
-  background: var(--accent);
-  transform-origin: bottom;
-  animation: eqBar 1s var(--ease-in-out) infinite;
-  /* The sheet stays mounted while it is closed — PlayerSurface keeps it around
-     so the carousel and the mobile panels survive a reopen — so the default is
-     stopped and the surface has to say it is on screen. Otherwise these run for
-     the whole song behind a hidden surface. */
-  animation-play-state: paused;
-}
-.eq i:nth-child(2) {
-  animation-delay: 0.3s;
-}
-.eq i:nth-child(3) {
-  animation-delay: 0.6s;
-}
-:global([data-player-surface-open]) .eq i {
-  animation-play-state: running;
-}
-/* Last: same specificity as the rule above, and paused has to win. */
-.eq[data-paused] i {
-  animation-play-state: paused;
-}
-
-@keyframes eqBar {
-  0%, 100% {
-    transform: scaleY(0.3);
-  }
-  50% {
-    transform: scaleY(1);
-  }
-}
-
-.qMeta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.qTitle {
-  font-size: var(--text-label);
-  font-weight: var(--fw-medium);
-  color: var(--ink-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.qArtist {
-  font-size: var(--text-caption);
-  color: var(--ink-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* ── Mobile fine-tuning ── */
 @media (max-width: 767px) {
   .title {
@@ -1030,23 +633,6 @@
 
 /* ── Tablet & desktop: hairline-separated columns, stage in the middle ── */
 @media (min-width: 768px) {
-  .head {
-    padding: var(--space-sm) var(--space-md);
-    border-bottom: 1px solid var(--stage-line);
-  }
-
-  .main {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-    align-items: stretch;
-  }
-
-  /* Docking side: the search panel jumps to the far left; the queue stays
-     glued to the stage's right edge. */
-  .main[data-panel-side='left'] > aside {
-    order: -1;
-  }
 
   .body {
     flex: 1;
@@ -1087,26 +673,8 @@
     overflow-wrap: anywhere;
   }
 
-  .desktopQueue {
-    display: flex;
-    width: clamp(280px, 24vw, 360px);
-    flex-shrink: 0;
-    background: var(--stage-panel);
-    border-left: 1px solid var(--stage-line-soft);
-    box-shadow: var(--stage-shadow-side);
-  }
-
   .mobileQueueToggle {
     display: none;
-  }
-
-  .qHandle {
-    width: 28px;
-  }
-
-  .qRemove {
-    width: 32px;
-    height: 32px;
   }
 
   .actBtn {
@@ -1125,124 +693,6 @@
   }
 }
 @media (min-width: 1024px) {
-  .main {
-    display: grid;
-    flex: 1;
-    min-width: 0;
-    min-height: 0;
-    align-items: stretch;
-    overflow: hidden;
-    /* Transparent on purpose: the tiles are glass, and what they are glass over
-       is the room's wallpaper. An opaque fill here would seal it off. */
-    background: transparent;
-  }
-
-  .tile {
-    position: relative;
-    display: block;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .tile[data-now-playing-tile='browser'] {
-    display: block;
-  }
-
-  .tile[data-now-playing-tile='stage'] {
-    container-type: inline-size;
-  }
-
-  .tile > .body {
-    height: 100%;
-  }
-
-  .tile > .desktopQueue {
-    width: 100%;
-    height: 100%;
-  }
-
-  .splitter {
-    position: relative;
-    z-index: 8;
-    display: block;
-    width: 6px;
-    min-width: 6px;
-    cursor: col-resize;
-    touch-action: none;
-    background: transparent;
-  }
-
-  .splitter::after {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 2px;
-    width: 2px;
-    content: '';
-    background: var(--stage-line);
-    opacity: 0;
-    transition:
-      opacity var(--dur-short),
-      background var(--dur-short),
-      box-shadow var(--dur-short);
-  }
-
-  .splitter:focus-visible::after {
-    opacity: 1;
-    background: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-faint);
-  }
-
-  /* Drag paint is pointer-only: on a touch screen `:active` sticks after the
-     gesture ends, which is what the input-capability policy exists to prevent.
-     The keyboard rail above stays unguarded. */
-  @media (hover: hover) and (pointer: fine) {
-    .splitter:hover::after,
-    .splitter:active::after {
-      opacity: 1;
-      background: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-faint);
-    }
-  }
-
-  .panelGrip {
-    display: grid;
-    grid-template-columns: repeat(3, 3px);
-    grid-template-rows: repeat(2, 3px);
-    place-content: center;
-    gap: 3px;
-    width: 28px;
-    height: 32px;
-    flex: 0 0 auto;
-    padding: 0;
-    color: var(--ink-tertiary);
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-full);
-    cursor: grab;
-  }
-
-  .panelGrip:active {
-    cursor: grabbing;
-  }
-
-  .panelGrip i {
-    width: 3px;
-    height: 3px;
-    background: currentColor;
-    border-radius: 50%;
-  }
-
-  .tile[data-now-playing-tile='stage'] > .panelGrip {
-    position: absolute;
-    z-index: 12;
-    top: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--stage-material);
-    backdrop-filter: blur(10px);
-  }
 
   .desktopLyricsToggle {
     position: absolute;
@@ -1461,9 +911,6 @@
    width for a permanent queue beside the stage. Reuse the proven single-stage
    mobile interaction until desktop space is genuinely available. */
 @media (min-width: 768px) and (max-width: 1023px) {
-  :global(html[data-interface-size='large']) .main {
-    display: contents;
-  }
 
   :global(html[data-interface-size='large']) .body {
     max-width: 620px;
@@ -1475,21 +922,10 @@
     width: min(100%, 400px, 42dvh);
   }
 
-  :global(html[data-interface-size='large']) .desktopQueue {
-    display: none;
-  }
-
   :global(html[data-interface-size='large']) .mobileQueueToggle {
     display: inline-flex;
   }
 
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .eq i {
-    animation: none;
-    transform: scaleY(0.6);
-  }
 }
 
 /* Empty Now Playing still occupies the same room as the shared workspace. */
@@ -1539,12 +975,6 @@
 @media (min-width: 1024px) {
   .emptyWorkspace {
     padding-bottom: clamp(18px, 2.4vh, 30px);
-  }
-}
-
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .tile {
-    background: var(--stage-panel-opaque);
   }
 }
 .browserWithLive,
