@@ -52,23 +52,27 @@ test('a media element accepts a proven growing-spool response before it complete
     await page.setContent('<audio id="preview" preload="auto"></audio>');
     await page.locator('#preview').evaluate((element, source) => new Promise<void>((resolve, reject) => {
       const audio = element as HTMLAudioElement;
-      const timer = window.setTimeout(() => reject(new Error(`media remained at readyState ${audio.readyState}`)), 10_000);
-      audio.addEventListener('canplay', () => {
+      const timer = window.setTimeout(() => reject(new Error(
+        `media did not advance (readyState ${audio.readyState}, currentTime ${audio.currentTime})`,
+      )), 10_000);
+      audio.addEventListener('timeupdate', () => {
+        if (audio.currentTime < 0.25) return;
         window.clearTimeout(timer);
         resolve();
-      }, { once: true });
+      });
       audio.addEventListener('error', () => {
         window.clearTimeout(timer);
         reject(new Error(`media error ${audio.error?.code ?? 'unknown'}`));
       }, { once: true });
       audio.src = source;
       audio.load();
+      void audio.play().catch((error) => reject(error));
     }), `http://127.0.0.1:${address.port}/preview.mp3`);
 
     expect(responseCompleted).toBe(false);
     expect(requestCount).toBeGreaterThan(0);
-    const readyState = await page.locator('#preview').evaluate((element) => (element as HTMLAudioElement).readyState);
-    expect(readyState).toBeGreaterThanOrEqual(3); // HAVE_FUTURE_DATA
+    const currentTime = await page.locator('#preview').evaluate((element) => (element as HTMLAudioElement).currentTime);
+    expect(currentTime).toBeGreaterThanOrEqual(0.25);
   } finally {
     releaseRemainder();
     await page.locator('#preview').evaluate((element) => {
