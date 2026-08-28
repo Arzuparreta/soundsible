@@ -1,19 +1,13 @@
 import { createServer, type Server } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
-function mp3Audio(seconds = 8): Buffer {
-  // MPEG-1 Layer III, 128 kbps, 44.1 kHz, stereo. A zeroed payload is a
-  // deterministic silent frame and avoids requiring ffmpeg in the UI runner.
-  const samplesPerFrame = 1_152;
-  const frames = Math.ceil(seconds * 44_100 / samplesPerFrame);
-  const frameBytes = Math.floor(144 * 128_000 / 44_100);
-  const frame = Buffer.alloc(frameBytes);
-  frame.set([0xff, 0xfb, 0x90, 0x64]);
-  return Buffer.concat(Array.from({ length: frames }, () => frame));
-}
+const audioBytes = Buffer.from(
+  readFileSync(new URL('./fixtures/progressive-preview.mp3.b64', import.meta.url), 'utf8'),
+  'base64',
+);
 
 test('a media element accepts a proven growing-spool response before it completes', async ({ page }) => {
-  const audioBytes = mp3Audio();
   // Six seconds of encoded audio: the backend uses the same
   // minimum media-time budget before it publishes `streamable`.
   const prefixBytes = Math.ceil(audioBytes.length / 8 * 6);
