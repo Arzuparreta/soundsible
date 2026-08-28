@@ -43,9 +43,14 @@ export interface LibraryScanStatus {
 }
 
 export interface PreviewPreparation {
-  state: 'cold' | 'pending' | 'ready' | 'unavailable';
+  state: 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable';
   reason?: string;
   retry_after?: number;
+  downloaded_bytes?: number;
+  total_bytes?: number;
+  progress?: number;
+  buffered_seconds?: number;
+  eta_seconds?: number;
 }
 
 export interface DownloadItem {
@@ -624,6 +629,11 @@ export const api = {
     request<{ preparation?: Record<string, PreviewPreparation> }>('/api/preview/status', {
       method: 'POST',
       body: { video_ids: videoIds },
+      timeoutMs: 5000,
+    }),
+  cancelPreview: (videoId: string) =>
+    request<{ cancelled?: boolean }>(`/api/preview/cancel/${encodeURIComponent(videoId)}`, {
+      method: 'POST',
       timeoutMs: 5000,
     }),
   /** Local-only playback latency telemetry (see docs/TELEMETRY_PRIVACY.md). */

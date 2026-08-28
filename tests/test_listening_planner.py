@@ -83,6 +83,25 @@ def test_malformed_provider_score_does_not_break_the_plan():
     assert [item["id"] for item in plan] == ["r1"]
 
 
+def test_generated_sessions_exclude_known_long_form_but_keep_boundary_and_unknown():
+    boundary = _candidate("boundary", "related", 1.0)
+    boundary["duration_sec"] = 1800
+    too_long = _candidate("too-long", "related", 0.99)
+    too_long["duration_sec"] = 1801
+    unknown = _candidate("unknown", "related", 0.98)
+
+    for intent in ("autoplay", "radio", "auto_mode"):
+        plan = plan_generated_queue(
+            {"related": [boundary, too_long, unknown]},
+            intent=intent,
+            entropy="duration-policy" if intent == "auto_mode" else None,
+        )
+        ids = {item["id"] for item in plan}
+        assert "boundary" in ids
+        assert "unknown" in ids
+        assert "too-long" not in ids
+
+
 def test_invalid_intent_and_profile_are_rejected():
     with pytest.raises(ValueError):
         plan_generated_queue({}, intent="search")

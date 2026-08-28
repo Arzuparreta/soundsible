@@ -17,6 +17,10 @@ from typing import Any
 LISTENING_INTENTS = {"autoplay", "radio", "auto_mode"}
 AUTO_PROFILES = {"familiar", "balanced", "explore"}
 PLANNER_POOLS = ("local", "related", "discovery")
+# Generated listening must remain song-shaped.  Explicit selections, seeds,
+# source sets and DJ requests bypass this planner and therefore remain able to
+# play concerts, operas and mixes of any length.
+MAX_GENERATED_DURATION_SECONDS = 30 * 60
 
 _AUTO_SEQUENCES = {
     "familiar": ("local", "local", "local", "local", "related", "related", "related", "discovery"),
@@ -83,6 +87,18 @@ def _score(row: Mapping[str, Any]) -> float:
         return float(row.get("score") or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _generated_duration_allowed(row: Mapping[str, Any]) -> bool:
+    """Unknown duration is admissible; a known value over 30 min is not."""
+    raw = row.get("duration_sec", row.get("duration"))
+    if raw in (None, ""):
+        return True
+    try:
+        return float(raw) <= MAX_GENERATED_DURATION_SECONDS
+    except (TypeError, ValueError):
+        # Provider uncertainty is not evidence that a candidate is too long.
+        return True
 
 
 def _source_rank(row: Mapping[str, Any]) -> int:
@@ -190,7 +206,11 @@ def plan_generated_queue(
         pool: _prefer_song_variants([
             dict(row)
             for row in (pools.get(pool) or ())
-            if isinstance(row, Mapping) and not (_candidate_keys(row) & seen)
+            if (
+                isinstance(row, Mapping)
+                and _generated_duration_allowed(row)
+                and not (_candidate_keys(row) & seen)
+            )
         ])
         for pool in PLANNER_POOLS
     }

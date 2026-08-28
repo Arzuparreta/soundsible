@@ -5,10 +5,11 @@ Previews (tracks played before they are downloaded into the library) are
 acquired from the YouTube CDN by `/api/preview/stream/<video_id>`. Two pieces
 live here to make that path fast and deterministic:
 
-- Single-flight acquisition: every caller for one video id joins one complete
-  upstream download. Playback starts from the committed local file, so a media
-  element can seek and request as many ranges as it wants without turning one
-  song into repeated CDN requests.
+- Single-flight acquisition: every caller for one video id joins one open-ended
+  upstream download. Ordinary songs start from the committed local file. A
+  longer transfer may start from the same growing local spool only after its
+  prefix, buffer and transfer rate are proven viable; browser ranges never
+  become additional CDN requests.
 - Prefetch worker: a single background thread that resolves stream URLs
   (and optionally downloads the whole file into the cache) for tracks the
   user is *about* to play — next in queue, top search results — so a click
@@ -30,9 +31,11 @@ import re
 import subprocess
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Union
+from urllib.parse import parse_qs, urlparse
 
 import requests
 
@@ -64,12 +67,93 @@ class PreviewUpstreamRejected(Exception):
         self.status_code = status_code
 
 
-class _FillState:
-    """One in-flight whole-file acquisition shared by all callers for an id."""
+class PreviewFillCancelled(Exception):
+    """An unobserved speculative/current fill yielded the one upstream lane."""
 
-    def __init__(self):
+
+_PROGRESSIVE_FAST_COMPLETE_SEC = 5.0
+_PROGRESSIVE_MIN_BUFFER_SEC = 6.0
+_PROGRESSIVE_RATE_MARGIN = 1.25
+
+
+class _FillState:
+    """One upstream transfer and the growing local spool shared by its readers."""
+
+    def __init__(self, video_id: str = ""):
+        self.video_id = video_id
         self.done = threading.Event()
+        self.condition = threading.Condition()
         self.error: BaseException | None = None
+        self.cancel = threading.Event()
+        self.started_at = time.monotonic()
+        self.rate_samples: list[tuple[float, int]] = [(self.started_at, 0)]
+        self.downloaded_bytes = 0
+        self.total_bytes: int | None = None
+        self.duration_seconds: float | None = None
+        self.content_type = "audio/mpeg"
+        self.stream: ResolvedStream | None = None
+        self.streamable = False
+        self.prefix_checked = False
+        self.next_prefix_check_at = 0.0
+        self.progressive_requested = False
+        self.readers = 0
+        self.keep_warm = False
+
+    def update(self, downloaded: int) -> None:
+        with self.condition:
+            self.downloaded_bytes = downloaded
+            now = time.monotonic()
+            self.rate_samples.append((now, downloaded))
+            self.rate_samples = self.rate_samples[-32:]
+            self.condition.notify_all()
+
+    def start_transfer(self) -> None:
+        with self.condition:
+            self.started_at = time.monotonic()
+            self.rate_samples = [(self.started_at, self.downloaded_bytes)]
+
+    def sustained_rate(self, window_seconds: float = 5.0) -> float:
+        """Bytes/sec actually sustained over the recent transfer window."""
+        now = time.monotonic()
+        with self.condition:
+            samples = list(self.rate_samples)
+            if len(samples) < 2:
+                return 0.0
+            cutoff = now - window_seconds
+            before = [sample for sample in samples if sample[0] <= cutoff]
+            started_at, started_bytes = before[-1] if before else samples[0]
+            elapsed = now - started_at
+            if elapsed <= 0:
+                return 0.0
+            return max(0.0, (self.downloaded_bytes - started_bytes) / elapsed)
+
+    def finish(self, error: BaseException | None = None) -> None:
+        with self.condition:
+            self.error = error
+            self.done.set()
+            self.condition.notify_all()
+
+    def facts(self) -> dict[str, object]:
+        rate = self.sustained_rate()
+        total = self.total_bytes
+        duration = self.duration_seconds
+        progress = min(1.0, self.downloaded_bytes / total) if total else None
+        buffered = None
+        if total and duration and duration > 0:
+            buffered = min(duration, self.downloaded_bytes * duration / total)
+        eta = None
+        if total and rate > 0:
+            eta = max(0.0, (total - self.downloaded_bytes) / rate)
+        result: dict[str, object] = {"downloaded_bytes": self.downloaded_bytes}
+        if total is not None:
+            result["total_bytes"] = total
+        if progress is not None:
+            result["progress"] = round(progress, 4)
+        if buffered is not None:
+            result["buffered_seconds"] = round(buffered, 1)
+        if eta is not None:
+            result["eta_seconds"] = round(eta, 1)
+        return result
 
 
 _fills_lock = threading.Lock()
@@ -77,7 +161,35 @@ _fills: dict[str, _FillState] = {}
 # The CDN sees one whole-file transfer from this station at a time. Per-id
 # single-flight prevents duplicates of the same song; this lock also prevents
 # an active deck from overlapping a speculative fill for a different song.
-_upstream_download_lock = threading.Lock()
+# A priority gate, not parallel chunks: priority 0 is listener playback,
+# priority 1 is speculative prefetch. Exactly one owner may touch upstream.
+_upstream_gate = threading.Condition()
+_upstream_waiters: list[tuple[int, int, _FillState]] = []
+_upstream_ticket = 0
+_upstream_owned = False
+_active_upstream_lock = threading.Lock()
+_active_upstream_fill: _FillState | None = None
+
+
+@contextmanager
+def _upstream_slot(state: _FillState):
+    """Acquire the station's sole upstream lane by priority, then FIFO."""
+    global _upstream_ticket, _upstream_owned
+    priority = 0 if state.progressive_requested else 1
+    with _upstream_gate:
+        _upstream_ticket += 1
+        token = (priority, _upstream_ticket, state)
+        _upstream_waiters.append(token)
+        while _upstream_owned or min(_upstream_waiters, key=lambda item: item[:2]) is not token:
+            _upstream_gate.wait()
+        _upstream_waiters.remove(token)
+        _upstream_owned = True
+    try:
+        yield
+    finally:
+        with _upstream_gate:
+            _upstream_owned = False
+            _upstream_gate.notify_all()
 
 # ── Upstream connection reuse ────────────────────────────────────────────────
 # A browser plays audio by asking for ranges, not by asking for the file: one
@@ -340,9 +452,17 @@ class CacheWriter:
         if self._done:
             return
         self._fh.write(chunk)
+        # A progressive reader opens this same spool. Flush before publishing
+        # the byte count so a woken reader can observe every announced byte.
+        self._fh.flush()
         self._bytes += len(chunk)
 
-    def commit(self, validator: Optional[Callable[[Path], bool]] = None) -> bool:
+    def commit(
+        self,
+        validator: Optional[Callable[[Path], bool]] = None,
+        *,
+        normalize: bool = True,
+    ) -> bool:
         if self._done:
             return False
         normalized_output: Optional[Path] = None
@@ -367,7 +487,7 @@ class CacheWriter:
                 return False
             committed = self._part
             layout = SOURCE_LAYOUT
-            if _is_mp4(self.content_type):
+            if normalize and _is_mp4(self.content_type):
                 normalized = _remux_flat_mp4(self._part, self.video_id)
                 if normalized is not None:
                     normalized_output = normalized
@@ -504,6 +624,7 @@ class PreparationStatus:
     state: str
     reason: str | None = None
     retry_after: int = 0
+    progress_facts: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         result: dict[str, object] = {"state": self.state}
@@ -511,6 +632,8 @@ class PreparationStatus:
             result["reason"] = self.reason
         if self.retry_after > 0:
             result["retry_after"] = self.retry_after
+        if self.progress_facts:
+            result.update(self.progress_facts)
         return result
 
 
@@ -551,6 +674,13 @@ def preparation_status(video_id: str) -> PreparationStatus:
         with _fills_lock:
             pending = video_id in _fills
     if pending:
+        with _fills_lock:
+            fill = _fills.get(video_id)
+        if fill is not None:
+            return PreparationStatus(
+                "streamable" if fill.streamable else "pending",
+                progress_facts=fill.facts(),
+            )
         return PreparationStatus("pending")
     now = time.monotonic()
     with _preparation_lock:
@@ -604,18 +734,83 @@ def _preview_is_decodable(path: Path) -> bool:
     return result.returncode == 0
 
 
+def _resolved_media_facts(stream: ResolvedStream) -> tuple[int | None, float | None, str | None]:
+    """Read non-secret media facts embedded in a signed CDN URL."""
+    try:
+        values = parse_qs(urlparse(stream.url).query)
+        raw_size = values.get("clen", [None])[0]
+        raw_duration = values.get("dur", [None])[0]
+        raw_mime = values.get("mime", [None])[0]
+        size = int(raw_size) if raw_size and str(raw_size).isdigit() else None
+        duration = float(raw_duration) if raw_duration is not None else None
+        return size, duration if duration and duration > 0 else None, raw_mime
+    except (TypeError, ValueError):
+        return None, None, None
+
+
+def _emit_fill_event(event: str, state: _FillState, **extra: object) -> None:
+    """Local telemetry for acquisition lifecycle; signed URLs never enter it."""
+    try:
+        from shared.telemetry import emit
+
+        emit(event, {
+            "track_id": state.video_id,
+            **state.facts(),
+            **extra,
+        })
+    except Exception:
+        logger.debug("[PreviewCache] Could not emit %s", event, exc_info=True)
+
+
+def _maybe_mark_streamable(state: _FillState, part: Path) -> None:
+    now = time.monotonic()
+    if state.streamable or state.prefix_checked or now < state.next_prefix_check_at:
+        return
+    elapsed = now - state.started_at
+    if elapsed < _PROGRESSIVE_FAST_COMPLETE_SEC:
+        return
+    total = state.total_bytes
+    duration = state.duration_seconds
+    if not total or not duration or duration <= 0:
+        return
+    media_rate = total / duration
+    buffered = state.downloaded_bytes / media_rate
+    transfer_rate = state.sustained_rate()
+    if buffered < _PROGRESSIVE_MIN_BUFFER_SEC or transfer_rate < media_rate * _PROGRESSIVE_RATE_MARGIN:
+        return
+    state.prefix_checked = True
+    if not _preview_is_decodable(part):
+        logger.info("[PreviewCache] Prefix for %s is not yet decodable", state.video_id)
+        state.prefix_checked = False
+        state.next_prefix_check_at = time.monotonic() + 1.0
+        return
+    with state.condition:
+        state.streamable = True
+        state.condition.notify_all()
+    _emit_fill_event("preview_fill_streamable", state)
+
+
 def _download_once(
     video_id: str,
     stream: Union[ResolvedStream, str],
+    state: _FillState | None = None,
 ) -> Optional[tuple[Path, str]]:
     """Download one complete preview; the caller owns the per-id fill slot."""
+    global _active_upstream_fill
     cached = get_cached(video_id)
     if cached:
         return cached
     resolved = _coerce_resolution(stream)
     if resolved is None:
         return None
-    with _upstream_download_lock:
+    state = state or _FillState(video_id)
+    state.stream = resolved
+    url_size, url_duration, url_mime = _resolved_media_facts(resolved)
+    state.total_bytes = url_size
+    state.duration_seconds = url_duration
+    if url_mime:
+        state.content_type = url_mime
+    with _upstream_slot(state):
         # A different fill may have completed while this one waited for the
         # station-wide slot. Re-check both durable state and refusal state before
         # touching the network.
@@ -624,42 +819,68 @@ def _download_once(
             return cached
         if upstream_backoff_remaining():
             return None
-        # bytes=0- matters: googlevideo throttles DASH URLs fetched without a
-        # Range header to roughly realtime; an open-ended range runs at full speed.
-        with upstream_session().get(
-            resolved.url,
-            stream=True,
-            timeout=(5, 90),
-            proxies=resolved.requests_proxies(),
-            headers={"Range": "bytes=0-"},
-        ) as resp:
-            if resp.status_code in (403, 410):
-                retire_upstream_session()
-                raise PreviewUpstreamRejected(resp.status_code)
-            resp.raise_for_status()
-            raw_len = resp.headers.get("Content-Length")
-            expected = int(raw_len) if raw_len and raw_len.isdigit() else None
-            # For our open-ended `bytes=0-` request, Content-Range's total is
-            # the authoritative full-file size. Content-Length can describe
-            # only the returned slice; accepting that value committed a
-            # truncated prefix as a supposedly complete preview.
-            content_range = resp.headers.get("Content-Range") or ""
-            match = re.fullmatch(r"bytes\s+0-\d+/(\d+)", content_range.strip())
-            if match:
-                expected = int(match.group(1))
-            content_type = resp.headers.get("Content-Type") or "audio/mpeg"
-            writer = open_writer(video_id, content_type, expected)
-            if writer is None:
-                return get_cached(video_id)
-            try:
-                for chunk in resp.iter_content(chunk_size=65536):
-                    if chunk:
-                        writer.write(chunk)
-                if not writer.commit(_preview_is_decodable):
-                    return None
-            except BaseException:
-                writer.abandon()
-                raise
+        if state.cancel.is_set():
+            return None
+        with _active_upstream_lock:
+            _active_upstream_fill = state
+        state.start_transfer()
+        _emit_fill_event("preview_fill_started", state, egress=resolved.egress)
+        try:
+            # googlevideo throttles DASH without Range to roughly realtime.
+            # This remains the transfer's sole upstream request.
+            with upstream_session().get(
+                resolved.url,
+                stream=True,
+                timeout=(5, 90),
+                proxies=resolved.requests_proxies(),
+                headers={"Range": "bytes=0-"},
+            ) as resp:
+                if resp.status_code in (403, 410):
+                    retire_upstream_session()
+                    raise PreviewUpstreamRejected(resp.status_code)
+                resp.raise_for_status()
+                raw_len = resp.headers.get("Content-Length")
+                expected = int(raw_len) if raw_len and raw_len.isdigit() else None
+                # Content-Range is authoritative for an open-ended range.
+                content_range = resp.headers.get("Content-Range") or ""
+                match = re.fullmatch(r"bytes\s+0-\d+/(\d+)", content_range.strip())
+                if match:
+                    expected = int(match.group(1))
+                content_type = resp.headers.get("Content-Type") or "audio/mpeg"
+                state.total_bytes = expected or state.total_bytes
+                state.content_type = content_type
+                with state.condition:
+                    state.condition.notify_all()
+                writer = open_writer(video_id, content_type, expected)
+                if writer is None:
+                    return get_cached(video_id)
+                try:
+                    for chunk in resp.iter_content(chunk_size=65536):
+                        if state.cancel.is_set():
+                            raise PreviewFillCancelled()
+                        if chunk:
+                            writer.write(chunk)
+                            state.update(writer._bytes)
+                            if state.progressive_requested:
+                                _maybe_mark_streamable(state, writer._part)
+                    if not writer.commit(
+                        _preview_is_decodable,
+                        normalize=not state.progressive_requested,
+                    ):
+                        return None
+                    state.update(expected or writer._bytes)
+                    _emit_fill_event("preview_fill_completed", state)
+                except PreviewFillCancelled:
+                    writer.abandon()
+                    _emit_fill_event("preview_fill_cancelled", state)
+                    raise
+                except BaseException:
+                    writer.abandon()
+                    raise
+        finally:
+            with _active_upstream_lock:
+                if _active_upstream_fill is state:
+                    _active_upstream_fill = None
     return get_cached(video_id)
 
 
@@ -668,6 +889,7 @@ def acquire_cached(
     resolver: Resolver,
     *,
     refresh_resolver: Optional[RefreshResolver] = None,
+    keep_warm: bool = False,
 ) -> tuple[Optional[tuple[Path, str]], Optional[ResolvedStream]]:
     """Resolve and cache one preview, refreshing one CDN-rejected URL.
 
@@ -680,7 +902,7 @@ def acquire_cached(
         return None, None
     for attempt in range(2):
         try:
-            cached = ensure_cached(video_id, stream)
+            cached = ensure_cached(video_id, stream, keep_warm=keep_warm)
         except PreviewUpstreamRejected as exc:
             if attempt == 0 and refresh_resolver is not None:
                 stream = _coerce_resolution(refresh_resolver(video_id))
@@ -700,6 +922,7 @@ def ensure_cached(
     stream: Union[ResolvedStream, str],
     *,
     wait_timeout: float = 95,
+    keep_warm: bool = False,
 ) -> Optional[tuple[Path, str]]:
     """Return a complete local preview, joining an existing fill when needed.
 
@@ -716,8 +939,10 @@ def ensure_cached(
         state = _fills.get(video_id)
         owner = state is None
         if state is None:
-            state = _FillState()
+            state = _FillState(video_id)
             _fills[video_id] = state
+        if keep_warm:
+            state.keep_warm = True
 
     if not owner:
         if not state.done.wait(wait_timeout):
@@ -727,15 +952,200 @@ def ensure_cached(
         return get_cached(video_id)
 
     try:
-        return _download_once(video_id, stream)
+        return _download_once(video_id, stream, state)
+    except PreviewFillCancelled:
+        state.finish()
+        raise
     except BaseException as exc:
-        state.error = exc
+        state.finish(exc)
+        _emit_fill_event("preview_fill_failed", state, error=type(exc).__name__)
         raise
     finally:
-        state.done.set()
+        if not state.done.is_set():
+            state.finish()
         with _fills_lock:
             if _fills.get(video_id) is state:
                 _fills.pop(video_id, None)
+
+
+class ProgressiveHandle:
+    """A browser's interest in one growing local preview spool."""
+
+    def __init__(self, state: _FillState):
+        self.state = state
+        self._closed = False
+
+    @property
+    def content_type(self) -> str:
+        return self.state.content_type
+
+    @property
+    def total_bytes(self) -> int | None:
+        return self.state.total_bytes
+
+    @property
+    def egress(self) -> str:
+        return self.state.stream.egress if self.state.stream else "direct"
+
+    @property
+    def done(self) -> bool:
+        return self.state.done.is_set()
+
+    def wait_for_fast_complete(self, timeout: float = _PROGRESSIVE_FAST_COMPLETE_SEC) -> None:
+        """Give ordinary songs their existing whole-file fast path first."""
+        deadline = time.monotonic() + timeout
+        with self.state.condition:
+            while not self.state.done.is_set() and not self.state.streamable:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                self.state.condition.wait(remaining)
+
+    def iter_bytes(self, start: int = 0, end: int | None = None):
+        """Yield only local bytes, waiting when the requested offset is future."""
+        position = max(0, start)
+        try:
+            while end is None or position <= end:
+                with self.state.condition:
+                    while (
+                        self.state.downloaded_bytes <= position
+                        and not self.state.done.is_set()
+                        and self.state.error is None
+                    ):
+                        self.state.condition.wait(1.0)
+                    available = self.state.downloaded_bytes
+                    done = self.state.done.is_set()
+                    error = self.state.error
+                    playable = self.state.streamable or done
+                if error is not None:
+                    return
+                if not playable:
+                    # Do not expose an unproved prefix. A sustainable source
+                    # flips streamable; a fast source reaches done first.
+                    with self.state.condition:
+                        self.state.condition.wait(0.25)
+                    continue
+                if available <= position:
+                    if done:
+                        return
+                    continue
+                count = min(65536, available - position)
+                if end is not None:
+                    count = min(count, end - position + 1)
+                path = _part_path(self.state.video_id)
+                if not path.is_file():
+                    path = _audio_path(self.state.video_id)
+                try:
+                    with open(path, "rb") as source:
+                        source.seek(position)
+                        chunk = source.read(count)
+                except OSError:
+                    if done:
+                        return
+                    time.sleep(0.01)
+                    continue
+                if not chunk:
+                    if done:
+                        return
+                    time.sleep(0.01)
+                    continue
+                position += len(chunk)
+                yield chunk
+        finally:
+            self.close()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        with self.state.condition:
+            self.state.readers = max(0, self.state.readers - 1)
+            abandoned = self.state.readers == 0 and not self.state.keep_warm
+        if abandoned and not self.state.done.is_set():
+            self.state.cancel.set()
+
+
+def start_progressive(
+    video_id: str,
+    stream: Union[ResolvedStream, str],
+    *,
+    refresh_resolver: Optional[RefreshResolver] = None,
+) -> ProgressiveHandle:
+    """Start/join a high-priority fill without doing network I/O in the route."""
+    resolved = _coerce_resolution(stream)
+    if resolved is None:
+        raise ValueError("preview stream did not resolve")
+    with _fills_lock:
+        state = _fills.get(video_id)
+        owner = state is None
+        if state is None:
+            state = _FillState(video_id)
+            _fills[video_id] = state
+        state.progressive_requested = True
+        state.readers += 1
+
+    # If speculative work owns the sole lane but nobody is consuming it, the
+    # listener's click cancels that fill. The next loop iteration releases the
+    # lock; no second upstream request overlaps it.
+    with _active_upstream_lock:
+        active = _active_upstream_fill
+        if active is not None and active is not state and active.readers == 0:
+            active.cancel.set()
+
+    if owner:
+        def run() -> None:
+            current = resolved
+            try:
+                for attempt in range(2):
+                    try:
+                        cached = _download_once(video_id, current, state)
+                    except PreviewUpstreamRejected as exc:
+                        if attempt == 0 and refresh_resolver is not None:
+                            # This ephemeral playback thread must not pin a DB
+                            # connection after fallback URL resolution.
+                            from shared import request_scope
+
+                            with request_scope.request_scope():
+                                refreshed = _coerce_resolution(refresh_resolver(video_id))
+                            if refreshed is not None:
+                                current = refreshed
+                                state.stream = refreshed
+                                continue
+                        open_upstream_backoff(video_id, exc.status_code)
+                        raise
+                    if cached:
+                        clear_upstream_backoff()
+                    break
+            except PreviewFillCancelled:
+                state.finish()
+            except BaseException as exc:
+                state.finish(exc)
+                _record_preparation_failure(video_id, "download_failed")
+                _emit_fill_event("preview_fill_failed", state, error=type(exc).__name__)
+            finally:
+                if not state.done.is_set():
+                    state.finish()
+                with _fills_lock:
+                    if _fills.get(video_id) is state:
+                        _fills.pop(video_id, None)
+
+        threading.Thread(
+            target=run,
+            name=f"preview-playback-{video_id}",
+            daemon=True,
+        ).start()
+    return ProgressiveHandle(state)
+
+
+def cancel_progressive(video_id: str) -> bool:
+    """Cancel a listener-started fill; committed cache files are untouched."""
+    with _fills_lock:
+        state = _fills.get(video_id)
+    if state is None or not state.progressive_requested or state.done.is_set():
+        return False
+    state.keep_warm = False
+    state.cancel.set()
+    return True
 
 
 def _download_to_cache(video_id: str, stream: Union[ResolvedStream, str]) -> None:
@@ -755,6 +1165,7 @@ def _worker_loop(jobs: "queue.Queue[PrefetchJob]", *, download: bool) -> None:
                         video_id,
                         resolver,
                         refresh_resolver=refresh_resolver,
+                        keep_warm=True,
                     )
                     if cached:
                         _clear_preparation_failure(video_id)
@@ -776,6 +1187,10 @@ def _worker_loop(jobs: "queue.Queue[PrefetchJob]", *, download: bool) -> None:
                 upstream_backoff_remaining() or _UPSTREAM_BACKOFF_SEC,
             )
             logger.info("[PreviewCache] Prefetch rejected for %s: %s", video_id, e)
+        except PreviewFillCancelled:
+            # Preemption is scheduling, not evidence that the candidate is bad.
+            _clear_preparation_failure(video_id)
+            logger.info("[PreviewCache] Prefetch yielded to playback for %s", video_id)
         except Exception as e:
             if download:
                 _record_preparation_failure(video_id, "download_failed")

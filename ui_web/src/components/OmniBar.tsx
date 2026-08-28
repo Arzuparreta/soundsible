@@ -20,7 +20,16 @@ export function OmniBar() {
     if (state.playback.phase === 'starved') return t('omnibar.findingMore');
     if (state.playback.phase === 'recovering') return t('omnibar.reconnecting');
     if (state.playback.phase === 'buffering') return bufferingLine();
-    if (loading()) return t('omnibar.loading');
+    if (loading()) {
+      const prep = state.playback.previewPreparation;
+      if (prep && (prep.state === 'pending' || prep.state === 'streamable')) {
+        const pct = prep.progress == null ? null : Math.round(prep.progress * 100);
+        const eta = prep.eta_seconds == null ? null : Math.max(0, Math.round(prep.eta_seconds));
+        if (pct !== null && eta !== null) return t('omnibar.preparingProgressEta', { progress: pct, eta });
+        if (pct !== null) return t('omnibar.preparingProgress', { progress: pct });
+      }
+      return t('omnibar.loading');
+    }
     return current()?.artist ?? '';
   });
   /** "Buffering…" is true and useless. When the engine has measured the link and
@@ -97,7 +106,11 @@ export function OmniBar() {
       <button
         class={styles.ctrl}
         type="button"
-        aria-label={failed() ? t('common.retry') : state.playback.isPlaying ? t('common.pause') : t('common.play')}
+        aria-label={failed()
+          ? t('common.retry')
+          : loading()
+            ? t('common.cancel')
+            : state.playback.isPlaying ? t('common.pause') : t('common.play')}
         aria-busy={loading()}
         disabled={!current()}
         onClick={() => actions.togglePlay()}

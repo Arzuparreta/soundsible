@@ -44,4 +44,12 @@ describe('OmniBar interaction structure', () => {
     fireEvent.click(expand);
     expect(setNowPlayingOpen).toHaveBeenCalledWith(true);
   });
+
+  it('names the loading transport as Cancel', () => {
+    state.playback.isLoading = true;
+    render(() => <OmniBar />);
+
+    expect(screen.getByRole('button', { name: 'common.cancel' })).toBeInTheDocument();
+    state.playback.isLoading = false;
+  });
 });

@@ -81,6 +81,8 @@ export const zh: Dict = {
     delete: '删除',
     rename: '重命名',
     loading: '加载中…',
+    preparingProgress: '准备中… {progress}%',
+    preparingProgressEta: '准备中… {progress}% · {eta} 秒',
     online: '已连接',
     offline: '离线',
     continue: '继续',

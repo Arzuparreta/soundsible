@@ -94,6 +94,24 @@ class _FakeUpstream:
         return False
 
 
+class _ProgressiveUpstream(_FakeUpstream):
+    def __init__(self, data: bytes, first_ready: threading.Event, release: threading.Event):
+        super().__init__(
+            data,
+            "audio/mp4",
+            status_code=206,
+            content_range=f"bytes 0-{len(data) - 1}/{len(data)}",
+        )
+        self.first_ready = first_ready
+        self.release = release
+
+    def iter_content(self, chunk_size):
+        yield self._data[:chunk_size]
+        self.first_ready.set()
+        self.release.wait(timeout=5)
+        yield self._data[chunk_size:]
+
+
 def _seed_cache(data: bytes, content_type: str) -> None:
     writer = preview_cache.open_writer(VID, content_type, len(data))
     writer.write(data)
@@ -204,6 +222,125 @@ def test_cold_preview_client_range_is_served_from_complete_local_file(tmp_path, 
     assert response.status_code == 206
     assert response.data == data[500:]
     assert preview_cache.get_cached(VID) is not None
+
+
+def test_long_preview_streams_from_one_growing_local_spool(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    data = bytes(range(256)) * 1024
+    first_ready = threading.Event()
+    release = threading.Event()
+    calls = []
+    url = f"http://upstream.invalid/audio?clen={len(data)}&dur=120&mime=audio%2Fmp4"
+    monkeypatch.setattr(
+        playback_routes,
+        "_get_preview_stream_cached",
+        lambda api, vid, **_kw: resolved_stream(url, egress="direct"),
+    )
+    monkeypatch.setattr(preview_cache, "_PROGRESSIVE_FAST_COMPLETE_SEC", 0.0)
+    released_resources = []
+    monkeypatch.setattr(
+        playback_routes.request_scope,
+        "release_resources",
+        lambda: released_resources.append(True),
+    )
+
+    def fake_get(upstream_url, **kwargs):
+        calls.append((upstream_url, kwargs["headers"]))
+        return _ProgressiveUpstream(data, first_ready, release)
+
+    _patch_upstream(monkeypatch, fake_get)
+    response = _make_app().test_client().get(
+        f"/api/preview/stream/{VID}",
+        buffered=False,
+    )
+
+    assert first_ready.wait(timeout=2)
+    assert response.status_code == 200
+    assert response.headers["X-Soundsible-Playback-Cache"] == "progressive"
+    assert released_resources == [True]
+    status = preview_cache.preparation_status(VID).as_dict()
+    assert status["state"] == "streamable"
+    assert status["downloaded_bytes"] >= 65536
+    assert status["total_bytes"] == len(data)
+    assert status["buffered_seconds"] >= 6
+    assert 0 < status["progress"] < 1
+
+    release.set()
+    assert b"".join(response.response) == data
+    assert calls == [(url, {"Range": "bytes=0-"})]
+    deadline = time.time() + 2
+    while time.time() < deadline and preview_cache.get_cached(VID) is None:
+        time.sleep(0.01)
+    assert preview_cache.get_cached(VID) is not None
+
+
+def test_progressive_future_range_waits_locally_without_second_upstream_get(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    data = bytes(range(256)) * 1024
+    first_ready = threading.Event()
+    release = threading.Event()
+    calls = []
+    url = f"http://upstream.invalid/audio?clen={len(data)}&dur=120&mime=audio%2Fmp4"
+    monkeypatch.setattr(
+        playback_routes,
+        "_get_preview_stream_cached",
+        lambda api, vid, **_kw: resolved_stream(url, egress="direct"),
+    )
+    monkeypatch.setattr(preview_cache, "_PROGRESSIVE_FAST_COMPLETE_SEC", 0.0)
+    _patch_upstream(
+        monkeypatch,
+        lambda upstream_url, **kwargs: calls.append(kwargs["headers"])
+        or _ProgressiveUpstream(data, first_ready, release),
+    )
+
+    response = _make_app().test_client().get(
+        f"/api/preview/stream/{VID}",
+        headers={"Range": "bytes=70000-80000"},
+        buffered=False,
+    )
+    assert response.status_code == 206
+    assert response.headers["Content-Range"] == f"bytes 70000-80000/{len(data)}"
+    release.set()
+    assert b"".join(response.response) == data[70000:80001]
+    assert calls == [{"Range": "bytes=0-"}]
+
+
+def test_abandoned_progressive_response_cancels_its_fill(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    data = b"z" * (256 * 1024)
+    first_ready = threading.Event()
+    release = threading.Event()
+    url = f"http://upstream.invalid/audio?clen={len(data)}&dur=120&mime=audio%2Fmp4"
+    monkeypatch.setattr(
+        playback_routes,
+        "_get_preview_stream_cached",
+        lambda api, vid, **_kw: resolved_stream(url, egress="direct"),
+    )
+    monkeypatch.setattr(preview_cache, "_PROGRESSIVE_FAST_COMPLETE_SEC", 0.0)
+    _patch_upstream(
+        monkeypatch,
+        lambda upstream_url, **kwargs: _ProgressiveUpstream(data, first_ready, release),
+    )
+
+    response = _make_app().test_client().get(
+        f"/api/preview/stream/{VID}",
+        buffered=False,
+    )
+    assert response.headers["X-Soundsible-Playback-Cache"] == "progressive"
+    response.close()
+    release.set()
+
+    deadline = time.time() + 2
+    while time.time() < deadline and preview_cache.preparation_status(VID).state != "cold":
+        time.sleep(0.01)
+    assert preview_cache.preparation_status(VID).state == "cold"
+    assert preview_cache.get_cached(VID) is None
 
 
 def test_preview_refresh_keeps_each_resolutions_egress(tmp_path, monkeypatch):

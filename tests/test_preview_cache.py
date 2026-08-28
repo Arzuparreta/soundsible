@@ -298,6 +298,33 @@ def test_preparation_failure_has_a_bounded_retry_window(runtime):
     assert 1 <= status.retry_after <= 30
 
 
+def test_streamable_requires_recent_rate_above_encoded_media_rate(runtime, monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(preview_cache.time, "monotonic", lambda: now[0])
+    decodes = []
+    monkeypatch.setattr(
+        preview_cache,
+        "_preview_is_decodable",
+        lambda path: decodes.append(path) or True,
+    )
+    state = preview_cache._FillState(VID)
+    state.progressive_requested = True
+    state.total_bytes = 1_000
+    state.duration_seconds = 100  # encoded media rate = 10 bytes/sec
+
+    now[0] = 5.0
+    state.update(50)  # 10 B/s: below the required 1.25x safety margin
+    preview_cache._maybe_mark_streamable(state, preview_cache._part_path(VID))
+    assert state.streamable is False
+    assert decodes == []
+
+    now[0] = 10.0
+    state.update(200)  # 30 B/s over the recent window, with 20s buffered
+    preview_cache._maybe_mark_streamable(state, preview_cache._part_path(VID))
+    assert state.streamable is True
+    assert decodes == [preview_cache._part_path(VID)]
+
+
 def test_lru_eviction_removes_oldest_first(runtime, monkeypatch):
     monkeypatch.setenv("SOUNDSIBLE_PREVIEW_CACHE_MB", "1")
     root = preview_cache.preview_cache_dir()
@@ -480,6 +507,84 @@ def test_different_preview_ids_never_download_from_upstream_in_parallel(runtime,
     assert calls == [first_id, second_id]
     assert preview_cache.get_cached(first_id) is not None
     assert preview_cache.get_cached(second_id) is not None
+
+
+def test_explicit_playback_preempts_unobserved_prefetch_without_overlapping_upstreams(runtime, monkeypatch):
+    first_id = "prefetch001"
+    queued_id = "prefetch002"
+    selected_id = "selected001"
+    first_chunk = threading.Event()
+    release_first = threading.Event()
+    active = 0
+    max_active = 0
+    calls = []
+    guard = threading.Lock()
+
+    class _PreemptibleResponse(_FakeResponse):
+        def __init__(self, video_id: str):
+            super().__init__(video_id.encode() * 20_000)
+            self.video_id = video_id
+
+        def iter_content(self, chunk_size):
+            nonlocal active, max_active
+            with guard:
+                active += 1
+                max_active = max(max_active, active)
+            try:
+                yield self._data[:chunk_size]
+                if self.video_id == first_id:
+                    first_chunk.set()
+                    release_first.wait(timeout=5)
+                yield self._data[chunk_size:]
+            finally:
+                with guard:
+                    active -= 1
+
+    def fake_get(url, **kwargs):
+        video_id = url.rsplit("/", 1)[-1].split("?", 1)[0]
+        calls.append(video_id)
+        return _PreemptibleResponse(video_id)
+
+    _patch_upstream(monkeypatch, fake_get)
+    preempted = []
+
+    def run_speculative():
+        try:
+            preview_cache.ensure_cached(
+                first_id,
+                f"http://example.invalid/{first_id}",
+                keep_warm=True,
+            )
+        except preview_cache.PreviewFillCancelled:
+            preempted.append(first_id)
+
+    speculative = threading.Thread(target=run_speculative)
+    speculative.start()
+    assert first_chunk.wait(timeout=2)
+
+    queued = threading.Thread(
+        target=preview_cache.ensure_cached,
+        args=(queued_id, f"http://example.invalid/{queued_id}"),
+        kwargs={"keep_warm": True},
+    )
+    queued.start()
+
+    handle = preview_cache.start_progressive(
+        selected_id,
+        f"http://example.invalid/{selected_id}?clen=220000&dur=120&mime=audio%2Fwebm",
+    )
+    release_first.set()
+    assert handle.state.done.wait(timeout=5)
+    speculative.join(timeout=5)
+    queued.join(timeout=5)
+    handle.close()
+
+    assert calls == [first_id, selected_id, queued_id]
+    assert preempted == [first_id]
+    assert max_active == 1
+    assert preview_cache.get_cached(first_id) is None
+    assert preview_cache.get_cached(selected_id) is not None
+    assert preview_cache.get_cached(queued_id) is not None
 
 
 def test_request_prefetch_dedupes_and_downloads(runtime, monkeypatch):
