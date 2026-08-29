@@ -338,6 +338,10 @@ def test_play_timing_keeps_audio_context_dimensions(tmp_path, monkeypatch):
             "transport_action": "inactive_deck_play",
             "transport_origin": "media_session",
             "mix_phase": "idle",
+            "output_mode": "carrier",
+            "output_event": "carrier_playing",
+            "media_session_state": "playing",
+            "sync_reason": "output_change",
             "segments": {"position_sec": 96, "resumed": True},
         },
         headers={"Authorization": f"Bearer {play_tok}"},
@@ -352,6 +356,10 @@ def test_play_timing_keeps_audio_context_dimensions(tmp_path, monkeypatch):
     assert row["transport_action"] == "inactive_deck_play"
     assert row["transport_origin"] == "media_session"
     assert row["mix_phase"] == "idle"
+    assert row["output_mode"] == "carrier"
+    assert row["output_event"] == "carrier_playing"
+    assert row["media_session_state"] == "playing"
+    assert row["sync_reason"] == "output_change"
     # Seconds, not milliseconds: an `_ms` key over five minutes is dropped, and
     # a podcast duration passes that comfortably.
     assert row["segments"] == {"position_sec": 96, "resumed": True}

@@ -1135,6 +1135,13 @@ def playback_play_timing():
             "transport_action": 32,
             "transport_origin": 32,
             "mix_phase": 32,
+            # Stable programme-output and Media Session projection. These are
+            # declarations and booleans only; no metadata or audio leaves the
+            # browser.
+            "output_mode": 32,
+            "output_event": 32,
+            "media_session_state": 32,
+            "sync_reason": 32,
         }
         for key, max_len in string_fields.items():
             value = data.get(key)

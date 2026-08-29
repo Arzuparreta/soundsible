@@ -176,6 +176,7 @@ async function loadStore(
       };
     });
   }
+  let deck!: HTMLAudioElement;
   const audioService = {
     load: vi.fn().mockResolvedValue(undefined),
     recover: vi.fn().mockResolvedValue(undefined),
@@ -203,13 +204,32 @@ async function loadStore(
     setLevels: vi.fn(),
     setLevelingEnabled: vi.fn(),
     levelingEnabled: vi.fn(() => true),
+    snapshot: vi.fn(() => ({
+      outputMode: 'direct_fallback' as const,
+      playing: !deck.paused && !deck.ended,
+      sourcePlaying: !deck.paused && !deck.ended,
+      carrierPlaying: false,
+      position: deck.currentTime || 0,
+      duration: Number.isFinite(deck.duration) ? deck.duration : 0,
+      playbackRate: deck.playbackRate || 1,
+      ended: deck.ended,
+      readyState: deck.readyState,
+      networkState: deck.networkState,
+      mediaErrorCode: deck.error?.code ?? 0,
+      hasSource: Boolean(deck.currentSrc || deck.getAttribute('src')),
+      bufferedEnd: 0,
+      activeIndex: 0,
+      mixPhase: 'idle' as const,
+      dominant: false,
+      contextState: 'unavailable',
+    })),
     ...audioOverrides,
   };
 
   // `request` is the raw helper the discover cache uses directly; initStore
   // warms it, so the mock has to cover it too.
   vi.doMock('../lib/api', () => ({ api, request: vi.fn().mockResolvedValue({}) }));
-  const deck = {
+  deck = {
     duration: 180,
     currentTime: 0,
     paused: false,
@@ -227,14 +247,19 @@ async function loadStore(
     }
   };
   let programTransportReporter: ((event: ProgramTransportEvent) => void) | null = null;
+  let programOutputReporter: ((event: {
+    event: string; mode: 'carrier' | 'direct_fallback'; carrierPaused: boolean;
+    carrierReadyState: number; carrierPlaying: boolean; contextState: AudioContextState; reason?: string;
+  }) => void) | null = null;
   vi.doMock('../lib/audio', () => ({
-    audioEl: vi.fn(() => deck),
-    onDeckEvent: vi.fn((type: string, handler: (event: Event) => void) => {
+    onProgramEvent: vi.fn((type: string, handler: (snapshot: unknown, event: Event) => void) => {
       const list = deckHandlers.get(type) ?? [];
-      list.push(handler);
+      list.push((event) => handler(audioService.snapshot(), event));
       deckHandlers.set(type, list);
     }),
-    isActiveDeck: vi.fn(() => true),
+    setProgramOutputReporter: vi.fn((fn: typeof programOutputReporter) => {
+      programOutputReporter = fn;
+    }),
     setProgramTransportReporter: vi.fn((fn: (event: ProgramTransportEvent) => void) => {
       programTransportReporter = fn;
     }),
@@ -333,6 +358,15 @@ async function loadStore(
     deck1Playing: false,
     ...event,
   });
+  const fireProgramOutput = (event: Partial<Parameters<NonNullable<typeof programOutputReporter>>[0]>) => programOutputReporter?.({
+    event: 'carrier_playing',
+    mode: 'carrier',
+    carrierPaused: false,
+    carrierReadyState: 4,
+    carrierPlaying: true,
+    contextState: 'running',
+    ...event,
+  });
   return {
     ...store,
     api,
@@ -341,6 +375,7 @@ async function loadStore(
     fireDeckEvent,
     fireSocketEvent,
     fireProgramTransport,
+    fireProgramOutput,
     firePreviewStatus: (id: string, status: { state: 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable'; retry_after?: number }) => previewStatusListener?.(id, status),
     prefetchPreviews,
     toastAction,
@@ -2324,7 +2359,7 @@ describe('the end of a track', () => {
     expect(audioService.stage).toHaveBeenCalledWith('/stream/t1', expect.any(Number));
   });
 
-  it('tells the OS it is playing every time the track changes', async () => {
+  it('tells the OS the programme is playing as soon as the new output really starts', async () => {
     // CarPlay showed each new track sitting paused while it was audibly
     // playing, and stayed wrong until the phone was unlocked. `playbackState`
     // was published only from the decks' `play` event, which is filtered to
@@ -2342,10 +2377,13 @@ describe('the end of a track', () => {
     fireDeckEvent('pause');
     expect(controls.mediaSession.playbackState).toBe('paused');
 
-    // The next track is published as playing on the metadata change itself,
-    // without waiting for a `play` event that a DJ blend never delivers to the
-    // deck the store is listening to.
+    // Metadata alone must not fabricate playback. The programme event covers
+    // both a normal start and an incoming DJ deck becoming audible, without
+    // depending on whichever source deck happens to be considered active.
     actions.next();
+    expect(controls.mediaSession.playbackState).toBe('paused');
+    (deck as unknown as { paused: boolean }).paused = false;
+    fireDeckEvent('playing');
     expect(controls.mediaSession.playbackState).toBe('playing');
   });
 
