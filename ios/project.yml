@@ -78,7 +78,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.soundsible.player
         # Kept in step with shared/version.py by scripts/version_sync.py.
-        MARKETING_VERSION: "0.3.0"
+        MARKETING_VERSION: "0.3.1"
         CURRENT_PROJECT_VERSION: "1"
         # iPhone and iPad.
         TARGETED_DEVICE_FAMILY: "1,2"
