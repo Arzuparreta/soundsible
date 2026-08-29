@@ -11,15 +11,17 @@ import {
   type RemotePlaybackState,
 } from '../lib/api';
 import {
-  audioEl,
   audioService,
-  isActiveDeck,
-  onDeckEvent,
+  onProgramEvent,
+  setProgramOutputReporter,
   setProgramTransportReporter,
   type LiveTransitionPlan,
+  type ProgramMediaEventName,
+  type ProgramPlaybackSnapshot,
   type ProgramTransportOrigin,
 } from '../lib/audio';
-import { streamUrl, previewUrl, podcastStreamUrl, coverUrl, bustCovers, playbackYoutubeId } from '../lib/media';
+import { ProgramMediaSession, type MediaSessionSyncReason } from '../lib/mediaSession';
+import { streamUrl, previewUrl, podcastStreamUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import {
   prefetchPreviews,
   previewPreparation,
@@ -337,6 +339,10 @@ function emitPlaybackEvent(
     transport_action?: string;
     transport_origin?: string;
     mix_phase?: string;
+    output_mode?: string;
+    output_event?: string;
+    media_session_state?: string;
+    sync_reason?: string;
     video_id?: string;
     queue_lane?: string;
     queue_source?: string;
@@ -572,85 +578,19 @@ async function ensureAutoplay(force = false): Promise<boolean> {
   return ensureGeneratedQueue().ensureAutoplay(seed, force);
 }
 
-function updateMediaSession(track: Track | null): void {
-  if (!('mediaSession' in navigator)) return;
-  if (!track) {
-    navigator.mediaSession.metadata = null;
-    updatePositionState();
-    return;
-  }
-  const art = track.cover ?? coverUrl(track.id);
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: track.title,
-    artist: track.artist,
-    // Car head units and the macOS Now Playing panel have a dedicated album
-    // line; without this they show a blank one.
-    album: track.album ?? '',
-    artwork: art ? [{ src: art, sizes: '512x512' }] : [],
-  });
-  publishPlaybackState();
-  updatePositionState();
+const programMediaSession = new ProgramMediaSession();
+
+/** Publish metadata, position and transport from one canonical programme read. */
+function updateMediaSession(
+  track: Track | null,
+  reason: MediaSessionSyncReason = 'track',
+  forceMetadata = false,
+): void {
+  programMediaSession.sync(track, audioService.snapshot(), reason, forceMetadata);
 }
 
-/**
- * Tell the OS whether this is playing, alongside every change of metadata.
- *
- * `playbackState` used to be set only from the decks' own `play` and `pause`
- * events, and those are filtered to whichever deck currently owns playback. A
- * DJ blend starts the incoming deck *before* handing it ownership, so its `play`
- * was discarded and the state was never re-published — CarPlay showed the new
- * track sitting paused while it was audibly playing, and stayed wrong until the
- * phone was unlocked and the page caught up.
- *
- * Read from the store rather than the element on purpose: at a track change this
- * runs while the new deck is still opening its stream, and the honest answer to
- * "is this playing?" is what the listener asked for. The `play` and `pause`
- * handlers correct it the moment reality disagrees.
- */
-function publishPlaybackState(): void {
-  if (!('mediaSession' in navigator)) return;
-  const pb = state.playback;
-  if (!pb.currentTrack) {
-    navigator.mediaSession.playbackState = 'none';
-    return;
-  }
-  navigator.mediaSession.playbackState = pb.isPlaying ? 'playing' : 'paused';
-}
-
-/**
- * Publish the scrub position to the OS media controls.
- *
- * This is what turns a static lock-screen card into a real transport: the
- * progress bar, the elapsed/remaining times, and the draggable scrubber on
- * Android, iOS, macOS and most car head units all come from `positionState`.
- * Without it those surfaces show the title and nothing else.
- *
- * Browsers extrapolate between updates using `playbackRate`, so this only has
- * to run on the discrete events (metadata, seek, play/pause) — calling it from
- * `timeupdate` would be four times a second of pure waste.
- */
-function updatePositionState(): void {
-  if (!('mediaSession' in navigator)) return;
-  const ms = navigator.mediaSession;
-  if (typeof ms.setPositionState !== 'function') return;
-  const a = audioEl();
-  const duration = a.duration;
-  try {
-    if (!Number.isFinite(duration) || duration <= 0) {
-      // Nothing loaded, or a live/unknown-length stream: clear rather than
-      // publish a bar that would sit at zero forever.
-      ms.setPositionState();
-      return;
-    }
-    ms.setPositionState({
-      duration,
-      position: Math.min(Math.max(a.currentTime || 0, 0), duration),
-      // A rate of 0 is rejected by the spec; the element reports it while paused.
-      playbackRate: a.playbackRate > 0 ? a.playbackRate : 1,
-    });
-  } catch {
-    // Safari throws if the element is between loads. The next event re-publishes.
-  }
+function updatePositionState(reason: MediaSessionSyncReason = 'position'): void {
+  updateMediaSession(state.playback.currentTrack, reason);
 }
 
 /** Fallback jump for the OS skip buttons, when the platform names no offset of
@@ -718,7 +658,7 @@ function loadIndex(
     phase: 'loading',
     previewPreparation: null,
     currentTime: 0,
-    duration: staged ? audioEl().duration || 0 : 0,
+    duration: staged ? audioService.snapshot().duration : 0,
   });
   updateMediaSession(track);
   const previewId = track.source === 'preview' ? playbackYoutubeId(track) : null;
@@ -995,7 +935,7 @@ function playbackStateBody(
  * element's does not, and a state published as the page leaves has to say where
  * the listener was, not where the last frame left them. */
 function livePosition(): number {
-  const live = audioEl().currentTime;
+  const live = audioService.snapshot().position;
   return Number.isFinite(live) ? live : state.playback.currentTime || 0;
 }
 
@@ -1275,8 +1215,8 @@ let commitSeq = 0;
  * catalogue metadata — a plan clamped against a wrong duration is exactly how a
  * cue lands in the middle of a song. */
 function playingDuration(): number {
-  const deck = audioEl();
-  if (Number.isFinite(deck.duration) && deck.duration > 0) return deck.duration;
+  const duration = audioService.snapshot().duration;
+  if (Number.isFinite(duration) && duration > 0) return duration;
   const declared = state.playback.currentTrack?.duration ?? 0;
   return Number.isFinite(declared) && declared > 0 ? declared : 0;
 }
@@ -1351,13 +1291,13 @@ function commitTransition(
       // The incoming deck is already audible; there is no undo. Follow it.
       concludeAttempt(activeAttempt, 'handoff');
       activeAttempt = null;
-      const deck = audioEl();
+      const snapshot = audioService.snapshot();
       setState('playback', {
         currentTrack: next,
         index: index === -1 ? state.playback.index : index,
-        currentTime: deck.currentTime,
-        duration: Number.isFinite(deck.duration) && deck.duration > 0 ? deck.duration : next.duration ?? 0,
-        isPlaying: !deck.paused,
+        currentTime: snapshot.position,
+        duration: snapshot.duration > 0 ? snapshot.duration : next.duration ?? 0,
+        isPlaying: snapshot.playing,
         isLoading: false,
         loadError: false,
         phase: 'playing',
@@ -1367,7 +1307,7 @@ function commitTransition(
         technique: plan.technique,
         nextTrackId: toKey,
       });
-      updateMediaSession(next);
+      updateMediaSession(next, 'handoff_dominant', true);
       pushPlaybackState();
     },
     onComplete: (position) => {
@@ -1378,8 +1318,7 @@ function commitTransition(
       // `releaseDeck` paused the outgoing element immediately before this
       // callback. On iOS that element may still be the OS's chosen media
       // session, so re-assert B only after A is definitely out of the programme.
-      publishPlaybackState();
-      updatePositionState();
+      updateMediaSession(state.playback.currentTrack, 'handoff_settled', true);
       if (state.autoMode.active) void generatedQueue?.ensureRunway();
     },
     onCancel: () => {
@@ -1391,7 +1330,7 @@ function commitTransition(
       if (!owns()) return;
       committedTransition = null;
       setState('autoMode', 'transition', IDLE_TRANSITION);
-      const outgoingEnded = audioEl().ended;
+      const outgoingEnded = audioService.snapshot().ended;
       // `audio.ts` has deliberately kept the outgoing deck alive. Loading the
       // URL that just failed here used to throw that protection away, replace
       // the audible deck, and make Auto skip through several broken tracks in
@@ -1697,11 +1636,11 @@ let lastEmptyRefillAt = 0;
  * one comparison per event and gives a thin lane a whole minute of runway to be
  * filled in, retries included.
  */
-function watchRunway(deck: HTMLAudioElement): void {
+function watchRunway(snapshot: ProgramPlaybackSnapshot): void {
   const pb = state.playback;
-  const duration = deck.duration;
+  const duration = snapshot.duration;
   if (!Number.isFinite(duration) || duration <= 0) return;
-  if (duration - (deck.currentTime || 0) > RUNWAY_LEAD_SECONDS) return;
+  if (duration - snapshot.position > RUNWAY_LEAD_SECONDS) return;
   const key = pb.queue[pb.index]?.queueId ?? '';
   if (!key) return;
   // The check is latched per track, but an empty runway un-latches it: a lane
@@ -1829,9 +1768,9 @@ function onEnded(): void {
     emitPlaybackEvent('ui_track_ended', boundaryFacts());
     return;
   }
-  const deck = audioEl();
+  const snapshot = audioService.snapshot();
   const duration = playingDuration();
-  const position = deck.currentTime || 0;
+  const position = snapshot.position;
   // The store's clock only advances while the page is awake, so after a spell
   // with the screen off it is stale. The element is the authority at this point.
   setState('playback', { currentTime: position, duration });
@@ -3881,6 +3820,44 @@ export function initStore(): void {
   const resumeAttempts = liveHandoffPending() ? RESUME_HANDOFF_ATTEMPTS : RESUME_SEARCH_ATTEMPTS;
 
   installAudioUnlock();
+  setProgramOutputReporter((event) => {
+    emitPlaybackEvent(
+      'ui_program_output',
+      {
+        carrier_playing: event.carrierPlaying,
+        carrier_paused: event.carrierPaused,
+        carrier_ready_state: event.carrierReadyState,
+      },
+      {
+        output_mode: event.mode,
+        output_event: event.event,
+        failure_reason: event.reason,
+        context_state: event.contextState,
+        display_mode: displayMode(),
+      },
+    );
+    if (state.playback.currentTrack) {
+      const modeChanged = event.event === 'fallback_entered' || event.event === 'fallback_recovered';
+      updateMediaSession(state.playback.currentTrack, 'output_change', modeChanged);
+    }
+  });
+  programMediaSession.setReporter((event) => {
+    emitPlaybackEvent(
+      'ui_media_session_sync',
+      {
+        metadata_revision: event.revision,
+        carrier_playing: event.carrierPlaying,
+        source_playing: event.sourcePlaying,
+        state_matches: event.expectedState === event.declaredState,
+      },
+      {
+        output_mode: event.outputMode,
+        media_session_state: event.declaredState,
+        sync_reason: event.reason,
+        display_mode: displayMode(),
+      },
+    );
+  });
   setProgramTransportReporter((event) => {
     emitPlaybackEvent(
       event.kind === 'inactive_deck_play' ? 'ui_inactive_deck_play' : 'ui_program_transport',
@@ -3901,7 +3878,7 @@ export function initStore(): void {
     // A stale element just tried to reclaim the platform session. Publish the
     // canonical programme again after the audio layer has stopped it.
     if (event.kind === 'inactive_deck_play' && state.playback.currentTrack) {
-      updateMediaSession(state.playback.currentTrack);
+      updateMediaSession(state.playback.currentTrack, 'source_anomaly', true);
     }
   });
 
@@ -3932,27 +3909,13 @@ export function initStore(): void {
     // Test doubles and older engines may not expose this setting yet.
   }
 
-  /**
-   * Bind a media listener to both decks, delivering only the active one's
-   * events.
-   *
-   * Playback lives on whichever deck currently owns it, and a DJ handoff moves
-   * that ownership without loading anything. Binding both decks and filtering
-   * here is what lets the rest of the store keep treating playback as one
-   * element: the deck being prepared underneath is silent to it, so no
-   * transport flicker, no duplicate `ended`, no progress from a track the
-   * listener is already leaving.
-   */
-  const a = { addEventListener: (type: string, handler: (event: Event) => void) => {
-    onDeckEvent(type, (event: Event) => {
-      if (!isActiveDeck(event.currentTarget)) return;
-      handler(event);
-    });
-  } };
+  /** The store consumes one programme, never either implementation deck. */
+  const a = { addEventListener: (
+    type: ProgramMediaEventName,
+    handler: (snapshot: ProgramPlaybackSnapshot, event: Event) => void,
+  ) => onProgramEvent(type, handler) };
   a.addEventListener('play', () => {
     setState('playback', 'isPlaying', true);
-    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-    updatePositionState();
     pushPlaybackState();
   });
   a.addEventListener('pause', () => {
@@ -3960,25 +3923,23 @@ export function initStore(): void {
     if (state.playback.phase !== 'loading' && state.playback.phase !== 'recovering') {
       setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
     }
-    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-    updatePositionState();
+    updateMediaSession(state.playback.currentTrack, 'paused');
     pushPlaybackState();
   });
-  a.addEventListener('ended', onEnded);
-  a.addEventListener('error', () => {
+  a.addEventListener('ended', () => onEnded());
+  a.addEventListener('error', (snapshot) => {
     // `stop()` clears src, which some engines report as an error. Nothing is
     // loaded and nothing is expected to be — not a playback failure.
-    const deck = audioEl();
-    if (!deck.getAttribute('src') && !deck.currentSrc) return;
+    if (!snapshot.hasSource) return;
     // Restoring this device's last session primes the track while leaving it
     // paused. A stale or temporarily unreachable stream may reject that
     // best-effort preload, but nobody asked Soundsible to play it. Only a real
     // playback attempt is allowed to fail visibly.
     if (!activeAttempt) return;
     onPlaybackFailed(loadGeneration, 'media_error', {
-      media_error_code: deck.error?.code ?? 0,
-      network_state: deck.networkState,
-      ready_state: deck.readyState,
+      media_error_code: snapshot.mediaErrorCode,
+      network_state: snapshot.networkState,
+      ready_state: snapshot.readyState,
     });
   });
   // A seek the listener asked for. Remembered so that the `waiting` it is about
@@ -4012,9 +3973,10 @@ export function initStore(): void {
     if (attempt && attempt.canPlayAt === null) attempt.canPlayAt = performance.now();
   });
   // First 'playing' after a user-initiated load → click-to-sound latency.
-  a.addEventListener('playing', () => {
+  a.addEventListener('playing', (snapshot) => {
     clearStallTimer();
     setState('playback', { isLoading: false, loadError: false, phase: 'playing' });
+    updateMediaSession(state.playback.currentTrack, 'playing');
     consecutiveLoadFailures = 0;
     flushWhenAudible();
     // Only verified previews can reach this deck, so staging here reads the
@@ -4044,9 +4006,9 @@ export function initStore(): void {
         }),
         startup_stall_ms: Math.round(attempt.startupStallMs),
         recovery_count: attempt.recoveryCount,
-        ready_state: audioEl().readyState,
-        network_state: audioEl().networkState,
-        buffered_ahead_ms: Math.max(0, Math.round((audioService.bufferedEnd() - audioEl().currentTime) * 1000)),
+        ready_state: snapshot.readyState,
+        network_state: snapshot.networkState,
+        buffered_ahead_ms: Math.max(0, Math.round((snapshot.bufferedEnd - snapshot.position) * 1000)),
       });
     } else if (attempt.recoveryCount > attempt.reportedRecoveryCount) {
       emitAttempt(attempt, 'ui_recovery_succeeded', 'playing', {
@@ -4057,29 +4019,27 @@ export function initStore(): void {
       attempt.reportedRecoveryCount = attempt.recoveryCount;
     }
   });
-  a.addEventListener('timeupdate', () => {
-    const deck = audioEl();
-    const position = deck.currentTime || 0;
+  a.addEventListener('timeupdate', (snapshot) => {
+    const position = snapshot.position;
     setState('playback', 'currentTime', position);
-    listeningLearning.update(state.playback.currentTrack, position, !deck.paused && !deck.ended);
+    listeningLearning.update(state.playback.currentTrack, position, snapshot.playing);
     evaluateDjRunway();
-    watchRunway(deck);
+    watchRunway(snapshot);
   });
-  const setDur = () => {
-    const duration = audioEl().duration;
-    setState('playback', 'duration', Number.isFinite(duration) ? duration : 0);
+  const setDur = (snapshot: ProgramPlaybackSnapshot) => {
+    setState('playback', 'duration', snapshot.duration);
     updatePositionState();
   };
   a.addEventListener('durationchange', setDur);
-  a.addEventListener('loadedmetadata', () => {
+  a.addEventListener('loadedmetadata', (snapshot) => {
     const attempt = activeAttempt;
     if (attempt && attempt.loadedMetadataAt === null) attempt.loadedMetadataAt = performance.now();
-    setDur();
+    setDur(snapshot);
   });
   // A seek from anywhere — our transport, the lock screen, a car button — has
   // to re-anchor the OS scrubber or it keeps counting from the old position.
-  a.addEventListener('seeked', updatePositionState);
-  a.addEventListener('ratechange', updatePositionState);
+  a.addEventListener('seeked', () => updatePositionState());
+  a.addEventListener('ratechange', () => updatePositionState());
   let hiddenSince: number | null = null;
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
@@ -4089,20 +4049,18 @@ export function initStore(): void {
     // Coming back from a freeze. The store's clock stopped where the page did,
     // so anything derived from it — the scrubber, the OS position, the DJ
     // runway — has been reading a position the music left behind long ago.
-    const deck = audioEl();
-    const position = deck.currentTime || 0;
+    const snapshot = audioService.snapshot();
+    const position = snapshot.position;
     const drift = Math.abs(position - (state.playback.currentTime || 0));
     if (state.playback.currentTrack) {
-      const duration = deck.duration;
       setState('playback', {
         currentTime: position,
-        duration: Number.isFinite(duration) && duration > 0 ? duration : state.playback.duration,
-        isPlaying: !deck.paused && !deck.ended,
+        duration: snapshot.duration > 0 ? snapshot.duration : state.playback.duration,
+        isPlaying: snapshot.playing,
       });
       // The element is the authority after a spell asleep, and the OS card may
       // have been reading a state nobody corrected while the page was frozen.
-      publishPlaybackState();
-      updatePositionState();
+      updateMediaSession(state.playback.currentTrack, 'visibility_resume', true);
       if (hiddenSince !== null && drift > 1) {
         emitPlaybackEvent('ui_visibility_resume', {
           hidden_sec: Math.round((Date.now() - hiddenSince) / 1000),
@@ -4131,39 +4089,20 @@ export function initStore(): void {
     resumeFromStarved();
   });
 
-  if ('mediaSession' in navigator) {
-    const ms = navigator.mediaSession;
-    // Explicitly, never a toggle. The OS says which one it wants, and a phone
-    // that has been locked in a pocket is exactly where our own `isPlaying` is
-    // most likely to be stale — answering `play` with a toggle there pauses.
-    ms.setActionHandler('play', () => actions.resumePlayback('media_session'));
-    ms.setActionHandler('pause', () => actions.pausePlayback('media_session'));
-    ms.setActionHandler('nexttrack', () => {
+  programMediaSession.installActions({
+    play: () => actions.resumePlayback('media_session'),
+    pause: () => actions.pausePlayback('media_session'),
+    next: () => {
       if (state.autoMode.active) void actions.autoSkip();
       else actions.next();
-    });
-    ms.setActionHandler('previoustrack', () => actions.prev());
-    ms.setActionHandler('seekto', (d) => {
-      if (typeof d.seekTime === 'number') actions.seek(d.seekTime);
-    });
-    // Skip buttons on headphones, watches and car stereos. `seekOffset` is what
-    // the platform asks for when it has an opinion; `osSeekStep` is our answer
-    // when it does not. Not every browser exposes these actions — hence the
-    // guarded registration.
-    const setOptionalHandler = (action: MediaSessionAction, handler: MediaSessionActionHandler) => {
-      try {
-        ms.setActionHandler(action, handler);
-      } catch {
-        // Unsupported action: the platform simply won't offer that button.
-      }
-    };
-    setOptionalHandler('seekbackward', (d) =>
-      actions.seek(Math.max(0, state.playback.currentTime - (d.seekOffset ?? osSeekStep('backward')))),
-    );
-    setOptionalHandler('seekforward', (d) =>
-      actions.seek(state.playback.currentTime + (d.seekOffset ?? osSeekStep('forward'))),
-    );
-  }
+    },
+    previous: () => actions.prev(),
+    seekTo: (position) => actions.seek(position),
+    seekBackward: (offset) =>
+      actions.seek(Math.max(0, state.playback.currentTime - (offset ?? osSeekStep('backward')))),
+    seekForward: (offset) =>
+      actions.seek(state.playback.currentTime + (offset ?? osSeekStep('forward'))),
+  });
 
   socket = createSocket();
   socket.on('connect', () => {

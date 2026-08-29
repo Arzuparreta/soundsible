@@ -658,6 +658,10 @@ export const api = {
     transport_action?: string;
     transport_origin?: string;
     mix_phase?: string;
+    output_mode?: string;
+    output_event?: string;
+    media_session_state?: string;
+    sync_reason?: string;
     segments?: Record<string, number | boolean | string>;
   }) => request<{ status?: string }>('/api/playback/play-timing', { method: 'POST', body, timeoutMs: 5000 }),
 

@@ -82,7 +82,14 @@ opaque `attempt_id`. They may include:
   (`ui_program_transport`, `ui_inactive_deck_play`): whether the command came
   from the UI or Media Session, the mix phase, visibility, dominant deck and a
   boolean playing state for each deck. These fields diagnose Bluetooth and
-  lock-screen handoffs; they contain no audio, titles or control identifiers.
+  lock-screen handoffs; they contain no audio, titles or control identifiers;
+- programme-output lifecycle (`ui_program_output`): whether the stable output
+  carrier or the direct compatibility fallback was active, its ready/paused
+  state, the Web Audio context state and a bounded failure reason;
+- Media Session projection (`ui_media_session_sync`): the declared platform
+  playback state, why it was refreshed, a monotonic metadata revision and
+  booleans recording whether carrier/source state agreed. Track titles, artist,
+  artwork URLs and other metadata are never written to telemetry.
 
 Buffering before the first sound and buffering after it are recorded as separate
 fields. They used to be one counter emitted at the moment of first sound, where

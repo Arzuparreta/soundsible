@@ -53,6 +53,52 @@ def test_report_joins_server_egress_and_excludes_legacy_rows(tmp_path):
     assert bucket["status"] == "insufficient_data"
 
 
+def test_report_exposes_programme_output_fallbacks_and_media_session_declarations(tmp_path):
+    path = tmp_path / "play-timing.jsonl"
+    rows = [
+        {
+            "v": 2,
+            "ts": NOW,
+            "phase": "ui_program_output",
+            "output_mode": "carrier",
+            "output_event": "carrier_playing",
+            "segments": {"carrier_playing": True},
+        },
+        {
+            "v": 2,
+            "ts": NOW,
+            "phase": "ui_program_output",
+            "output_mode": "direct_fallback",
+            "output_event": "fallback_entered",
+            "failure_reason": "NotAllowedError",
+            "segments": {"carrier_playing": False},
+        },
+        {
+            "v": 2,
+            "ts": NOW,
+            "phase": "ui_media_session_sync",
+            "output_mode": "carrier",
+            "media_session_state": "playing",
+            "sync_reason": "handoff_settled",
+            "segments": {"state_matches": True},
+        },
+    ]
+
+    report = build_report(write(path, rows), days=7)
+
+    assert report["program_output"] == {
+        "events": {"carrier_playing": 1, "fallback_entered": 1},
+        "modes": {"carrier": 1, "direct_fallback": 1},
+        "failures": {"NotAllowedError": 1},
+    }
+    assert report["media_session"] == {
+        "syncs": 1,
+        "declared_states": {"playing": 1},
+        "reasons": {"handoff_settled": 1},
+        "declaration_mismatches": 0,
+    }
+
+
 def test_local_starts_are_split_by_what_triggered_them(tmp_path):
     """A click and a track boundary are not the same measurement.
 

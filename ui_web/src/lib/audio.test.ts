@@ -50,7 +50,10 @@ class FakeAudioContext {
   destination = new FakeAudioNode();
   analyser = new FakeAnalyserNode();
   gains: FakeGainNode[] = [];
-  broadcastTrack = { contentHint: '', stop: vi.fn() };
+  mediaTracks: Array<{ contentHint: string; stop: ReturnType<typeof vi.fn> }> = [];
+  get broadcastTrack() {
+    return this.mediaTracks.at(-1)!;
+  }
   resume = vi.fn(async () => { this.state = 'running'; });
   suspend = vi.fn(async () => { this.state = 'suspended'; });
   close = vi.fn(async () => { this.state = 'closed'; });
@@ -65,14 +68,18 @@ class FakeAudioContext {
   sampleRate = 44100;
   createBuffer = () => ({});
   createBufferSource = () => ({ buffer: null, connect: () => {}, start: () => {} });
-  createMediaStreamDestination = () => ({
-    connect: <T>(target: T) => target,
-    disconnect: vi.fn(),
-    stream: {
-      getAudioTracks: () => [this.broadcastTrack],
-      getTracks: () => [this.broadcastTrack],
-    },
-  });
+  createMediaStreamDestination = () => {
+    const track = { contentHint: '', stop: vi.fn() };
+    this.mediaTracks.push(track);
+    return {
+      connect: <T>(target: T) => target,
+      disconnect: vi.fn(),
+      stream: {
+        getAudioTracks: () => [track],
+        getTracks: () => [track],
+      },
+    };
+  };
 }
 
 /** A context whose clock never moves: `running` in name only, which is how an
@@ -131,6 +138,7 @@ class FakeAudio extends EventTarget {
   preservesPitch = true;
   preload = '';
   crossOrigin: string | null = null;
+  srcObject: MediaStream | null = null;
   captureTrack = { kind: 'audio', readyState: 'live', contentHint: '', stop: vi.fn() };
   capturedStream = new FakeCapturedStream([this.captureTrack]);
 
@@ -247,6 +255,7 @@ describe('two-deck mixer', () => {
     const module = await import('./audio');
 
     expect(module.audioService.unlockAudio()).toBe(true);
+    const carrierTrack = contexts[0].mediaTracks[0];
     const stream = module.audioService.broadcastStream();
     expect(stream).not.toBeNull();
     const context = contexts[0];
@@ -261,6 +270,7 @@ describe('two-deck mixer', () => {
 
     module.audioService.releaseBroadcastStream();
     expect(context.broadcastTrack.stop).toHaveBeenCalledOnce();
+    expect(carrierTrack.stop).not.toHaveBeenCalled();
     module.audioService.setMuted(false);
     module.audioService.setVolume(1);
   });
@@ -731,8 +741,9 @@ describe('two-deck mixer', () => {
     ]);
     // And the sample is still spent — from the same gesture, which is what
     // makes a later gestureless start legal on a locked phone.
-    expect(created).toHaveLength(2);
-    expect(created.every((deck) => deck.play.mock.calls.length === 1)).toBe(true);
+    expect(created).toHaveLength(3);
+    expect(created.slice(0, 2).every((deck) => deck.play.mock.calls.length === 1)).toBe(true);
+    expect(created[2].play).not.toHaveBeenCalled();
   });
 
   it('does not replace decks merely because a context clock is temporarily still', async () => {

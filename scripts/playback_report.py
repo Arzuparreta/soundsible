@@ -226,6 +226,13 @@ def build_report(path: Path, *, days: int) -> dict:
     fails: list[dict] = []
     deliveries: list[dict] = []
     stability: dict[str, list[dict]] = defaultdict(list)
+    output_events: dict[str, int] = defaultdict(int)
+    output_modes: dict[str, int] = defaultdict(int)
+    output_failures: dict[str, int] = defaultdict(int)
+    media_states: dict[str, int] = defaultdict(int)
+    media_reasons: dict[str, int] = defaultdict(int)
+    media_syncs = 0
+    media_mismatches = 0
     total = 0
 
     if path.exists():
@@ -236,10 +243,26 @@ def build_report(path: Path, *, days: int) -> dict:
                 continue
             if row.get("v") != 2 or float(row.get("ts") or 0) < cutoff:
                 continue
+            phase = row.get("phase")
+            if phase == "ui_program_output":
+                event = str(row.get("output_event") or "unknown")
+                mode = str(row.get("output_mode") or "unknown")
+                output_events[event] += 1
+                output_modes[mode] += 1
+                reason = row.get("failure_reason")
+                if event == "fallback_entered" and isinstance(reason, str):
+                    output_failures[reason] += 1
+                continue
+            if phase == "ui_media_session_sync":
+                media_syncs += 1
+                media_states[str(row.get("media_session_state") or "unknown")] += 1
+                media_reasons[str(row.get("sync_reason") or "unknown")] += 1
+                if (row.get("segments") or {}).get("state_matches") is False:
+                    media_mismatches += 1
+                continue
             attempt_id = row.get("attempt_id")
             if not isinstance(attempt_id, str):
                 continue
-            phase = row.get("phase")
             if phase == "server_stream_ready":
                 if row.get("source_kind") == "local" or (
                     row.get("source_kind") == "preview" and row.get("cache_state") == "disk"
@@ -302,12 +325,23 @@ def build_report(path: Path, *, days: int) -> dict:
         }
     regimes = sorted(set(delivery) | set(stability) | {"whole_file", "bounded"})
     return {
-        "schema": 3,
+        "schema": 4,
         "window_days": days,
         "samples": total,
         "buckets": buckets,
         "delivery": {regime: _delivery(rows) for regime, rows in sorted(delivery.items())},
         "stability": {regime: _stability(stability.get(regime, [])) for regime in regimes},
+        "program_output": {
+            "events": dict(sorted(output_events.items())),
+            "modes": dict(sorted(output_modes.items())),
+            "failures": dict(sorted(output_failures.items())),
+        },
+        "media_session": {
+            "syncs": media_syncs,
+            "declared_states": dict(sorted(media_states.items())),
+            "reasons": dict(sorted(media_reasons.items())),
+            "declaration_mismatches": media_mismatches,
+        },
     }
 
 
@@ -322,6 +356,16 @@ def main() -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
     print(f"Playback v2 — {report['window_days']}d — {report['samples']} valid starts")
+    output = report["program_output"]
+    media = report["media_session"]
+    print(
+        f"Programme output — modes={output['modes']} events={output['events']} "
+        f"failures={output['failures']}"
+    )
+    print(
+        f"Media Session — syncs={media['syncs']} states={media['declared_states']} "
+        f"declaration_mismatches={media['declaration_mismatches']}"
+    )
     print("\nTime to first sound, by trigger and delivery regime")
     for name, values in report["buckets"].items():
         print(

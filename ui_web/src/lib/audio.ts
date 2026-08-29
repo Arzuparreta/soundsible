@@ -1,4 +1,9 @@
 import { MAX_LINEAR as MAX_LEVEL, MIN_LINEAR as MIN_LEVEL } from './loudness';
+import {
+  ProgramOutput,
+  type ProgramOutputEvent,
+  type ProgramOutputMode,
+} from './audio/programOutput';
 
 const VOLUME_KEY = 'volume';
 
@@ -70,6 +75,9 @@ let deckEffects: DeckEffects[] | null = null;
 let masterGain: GainNode | null = null;
 /** Device-only monitor gain: volume and mute never alter the broadcast bus. */
 let monitorGain: GainNode | null = null;
+/** Stable post-mix media element that owns device/Media Session playback. */
+let programCarrier: ProgramOutput | null = null;
+let programOutputReporter: ((event: ProgramOutputEvent) => void) | null = null;
 let masterVolume = storedVolume();
 let allMuted = false;
 /** Peak limiter on the master bus, transparent until a blend needs it. */
@@ -105,6 +113,11 @@ let broadcastLostReporter: (() => void) | null = null;
 
 export function setBroadcastLostReporter(fn: (() => void) | null): void {
   broadcastLostReporter = fn;
+}
+
+/** Observe carrier/fallback changes without exposing either source deck. */
+export function setProgramOutputReporter(fn: ((event: ProgramOutputEvent) => void) | null): void {
+  programOutputReporter = fn;
 }
 
 export type BroadcastCaptureKind = 'program' | 'element';
@@ -176,22 +189,60 @@ function decks(): HTMLAudioElement[] {
   return elements;
 }
 
-/** The deck that currently owns playback. Everything outside this module talks
- * to Soundsible's playback through this one element. */
+/** The source deck that currently owns programme timing inside the engine. */
 export function audioEl(): HTMLAudioElement {
   return decks()[activeIndex];
-}
-
-/** Run `fn` for both decks — for binding listeners that have to survive a
- * handoff. Pair it with `isActiveDeck` to ignore the deck that is only being
- * prepared. */
-export function eachDeck(fn: (deck: HTMLAudioElement, index: number) => void): void {
-  decks().forEach(fn);
 }
 
 /** True when `target` is the deck that currently owns playback. */
 export function isActiveDeck(target: EventTarget | null): boolean {
   return target === decks()[activeIndex];
+}
+
+export type ProgramMediaEventName =
+  | 'play'
+  | 'pause'
+  | 'ended'
+  | 'error'
+  | 'seeking'
+  | 'waiting'
+  | 'canplay'
+  | 'playing'
+  | 'timeupdate'
+  | 'durationchange'
+  | 'loadedmetadata'
+  | 'seeked'
+  | 'ratechange';
+
+export interface ProgramPlaybackSnapshot {
+  outputMode: ProgramOutputMode;
+  playing: boolean;
+  sourcePlaying: boolean;
+  carrierPlaying: boolean;
+  position: number;
+  duration: number;
+  playbackRate: number;
+  ended: boolean;
+  readyState: number;
+  networkState: number;
+  mediaErrorCode: number;
+  hasSource: boolean;
+  bufferedEnd: number;
+  activeIndex: number;
+  mixPhase: MixPhase;
+  dominant: boolean;
+  contextState: string;
+}
+
+/** Subscribe to canonical programme events instead of a particular deck. */
+export function onProgramEvent(
+  type: ProgramMediaEventName,
+  handler: (snapshot: ProgramPlaybackSnapshot, event: Event) => void,
+): void {
+  onDeckEvent(type, (event) => {
+    if (!isActiveDeck(event.currentTarget)) return;
+    handler(programPlaybackSnapshot(), event);
+  });
 }
 
 function applyDeckVolume(): void {
@@ -317,6 +368,9 @@ export function unlockAudio(): boolean {
   if (graphState !== 'untested') {
     resumeContext();
     unlockDecks();
+    if (graphState === 'ready') {
+      void programCarrier?.retryFromGesture(deckIsPlaying(audioEl()));
+    }
     return graphState === 'ready';
   }
   const Context = globalThis.AudioContext
@@ -355,7 +409,6 @@ export function unlockAudio(): boolean {
       master.connect(monitor);
       programOutput = master;
     }
-    monitor.connect(context.destination);
     const effects: DeckEffects[] = [];
     const levels: GainNode[] = [];
     const gains = list.map((deck, index) => {
@@ -394,6 +447,9 @@ export function unlockAudio(): boolean {
     deckEffects = effects;
     masterGain = master;
     monitorGain = monitor;
+    programCarrier = new ProgramOutput(context, monitor);
+    programCarrier.subscribe((event) => programOutputReporter?.(event));
+    programCarrier.initialize();
     graphState = 'ready';
     watchContextState(context);
     // Routed and never played: now the sample can be spent, still inside the
@@ -509,6 +565,8 @@ function discardGraph(): void {
   const context = audioContext;
   const lostBroadcast = broadcastCapture?.kind === 'program';
   releaseBroadcastCapture();
+  programCarrier?.destroy();
+  programCarrier = null;
   audioContext = null;
   deckGains = null;
   // The nodes go; `levelGains` stays, so the levels survive into whatever
@@ -539,9 +597,53 @@ function deckIsPlaying(deck: HTMLAudioElement): boolean {
     && !holdsUnlockSample(deck);
 }
 
-/** The element is the source of truth across Music, Auto and Now Playing. */
+/** Start a source and the stable device carrier in the same activation turn. */
+function playProgramDeck(deck: HTMLAudioElement): Promise<void> {
+  const started = deck.play();
+  void programCarrier?.play();
+  return started;
+}
+
+function deckBufferedEnd(deck: HTMLAudioElement): number {
+  let furthest = 0;
+  for (let i = 0; i < deck.buffered.length; i += 1) {
+    const end = deck.buffered.end(i);
+    if (Number.isFinite(end) && end > furthest) furthest = end;
+  }
+  return furthest;
+}
+
+/** The complete read-only state consumed by the store and Media Session. */
+export function programPlaybackSnapshot(): ProgramPlaybackSnapshot {
+  const deck = audioEl();
+  const output = programCarrier?.snapshot();
+  const outputMode = output?.mode ?? 'direct_fallback';
+  const sourcePlaying = deckIsPlaying(deck);
+  const carrierPlaying = output?.carrierPlaying ?? false;
+  return {
+    outputMode,
+    playing: sourcePlaying && (outputMode === 'carrier' ? carrierPlaying : true),
+    sourcePlaying,
+    carrierPlaying,
+    position: Number.isFinite(deck.currentTime) ? deck.currentTime : 0,
+    duration: Number.isFinite(deck.duration) ? deck.duration : 0,
+    playbackRate: Number.isFinite(deck.playbackRate) && deck.playbackRate > 0 ? deck.playbackRate : 1,
+    ended: deck.ended,
+    readyState: deck.readyState,
+    networkState: deck.networkState,
+    mediaErrorCode: deck.error?.code ?? 0,
+    hasSource: Boolean(deck.getAttribute('src') || deck.currentSrc),
+    bufferedEnd: deckBufferedEnd(deck),
+    activeIndex,
+    mixPhase: mix?.phase ?? 'idle',
+    dominant: mix?.dominant ?? false,
+    contextState: audioContext?.state ?? 'unavailable',
+  };
+}
+
+/** Audible programme state across Music, Auto, Live and platform controls. */
 export function broadcastPlaybackActive(): boolean {
-  return deckIsPlaying(audioEl());
+  return programPlaybackSnapshot().playing;
 }
 
 function releaseBroadcastCapture(): void {
@@ -1054,6 +1156,9 @@ function bindLifecycle(): void {
   });
   onDeckEvent('ended', () => {
     if (mix) tick();
+    queueMicrotask(() => {
+      if (!mix && !deckIsPlaying(audioEl())) programCarrier?.pause();
+    });
   });
   const rejectOrphanedDeck = (event: Event) => {
     const deck = event.currentTarget as HTMLAudioElement | null;
@@ -1166,7 +1271,7 @@ function tick(): void {
       return;
     }
     current.phase = 'prerolling';
-    void to.play().catch((error) => failMix(error));
+    void playProgramDeck(to).catch((error) => failMix(error));
     // A requested skip has no head start to wait out: fall straight through.
     if (!current.manual) return;
   }
@@ -1261,7 +1366,7 @@ export const audioService = {
     // fetch. No explicit detach: it would emit a spurious `pause` between the
     // two tracks and flicker the transport controls.
     a.src = url;
-    return a.play().catch((err: unknown) => {
+    return playProgramDeck(a).catch((err: unknown) => {
       if (token !== loadSeq) return; // superseded — the newer load owns the deck
       if (err instanceof Error && err.name === 'AbortError') return;
       throw err;
@@ -1297,7 +1402,7 @@ export const audioService = {
           : position;
       }
       try {
-        await a.play();
+        await playProgramDeck(a);
       } catch (err: unknown) {
         if (token !== loadSeq) return;
         if (err instanceof Error && err.name === 'AbortError') return;
@@ -1369,7 +1474,7 @@ export const audioService = {
     const current = mix;
     const phase = current?.phase ?? 'idle';
     const dominant = current?.dominant ?? false;
-    const started = audioEl().play();
+    const started = playProgramDeck(audioEl());
     reportProgramTransport('resume', origin, phase, dominant);
     return started;
   },
@@ -1392,6 +1497,7 @@ export const audioService = {
     const current = mix;
     const phase = current?.phase ?? 'idle';
     const dominant = current?.dominant ?? false;
+    programCarrier?.pause();
     if (current && current.phase !== 'armed') cancelMix('transport_pause');
     audioEl().pause();
     reportProgramTransport('pause', origin, phase, dominant);
@@ -1400,6 +1506,7 @@ export const audioService = {
    * not for pausing. */
   stop(): void {
     loadSeq += 1;
+    programCarrier?.pause();
     cancelMix('stop');
     stagedUrl = '';
     releaseDeck(activeIndex);
@@ -1420,13 +1527,7 @@ export const audioService = {
    * that is genuinely stuck looks like.
    */
   bufferedEnd(): number {
-    const buffered = audioEl().buffered;
-    let furthest = 0;
-    for (let i = 0; i < buffered.length; i += 1) {
-      const end = buffered.end(i);
-      if (Number.isFinite(end) && end > furthest) furthest = end;
-    }
-    return furthest;
+    return deckBufferedEnd(audioEl());
   },
   /** 0..1 — persisted so volume survives reloads. */
   setVolume(v: number): void {
@@ -1479,6 +1580,7 @@ export const audioService = {
   broadcastStream,
   releaseBroadcastStream,
   programMixSnapshot,
+  snapshot: programPlaybackSnapshot,
 
   /**
    * Cue the next track on the idle deck without playing it.
@@ -1550,7 +1652,7 @@ export const audioService = {
     activeIndex = toIndex;
     setDeckGain(toIndex, 1);
     setDeckGain(fromIndex, 0);
-    const started = to.play().catch((err: unknown) => {
+    const started = playProgramDeck(to).catch((err: unknown) => {
       if (token !== loadSeq) return;
       if (err instanceof Error && err.name === 'AbortError') return;
       throw err;
