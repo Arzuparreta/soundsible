@@ -5,7 +5,7 @@ import type { RemotePlaybackState } from '../lib/api';
 import { t } from '../lib/i18n';
 import styles from './ResumeBanner.module.css';
 
-/** Auto sessions come back as Auto sessions, so the offer says which one it is
+/** DJ sessions come back as DJ sessions, so the offer says which one it is
  * — picking up a route, its sources and its direction is a different act from
  * picking up a song. */
 const isAutoSession = (remote: RemotePlaybackState) =>

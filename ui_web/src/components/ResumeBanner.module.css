@@ -3,7 +3,9 @@
   top: calc(env(safe-area-inset-top, 0px) + var(--space-md));
   left: 50%;
   transform: translateX(-50%);
-  z-index: var(--z-overlay);
+  /* Above the fullscreen player (--z-auto), so the resume prompt is never
+   * hidden behind the stage when it asks to resume that session. */
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   gap: var(--space-md);

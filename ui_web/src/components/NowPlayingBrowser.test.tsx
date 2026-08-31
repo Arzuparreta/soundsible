@@ -147,7 +147,7 @@ describe('NowPlayingBrowser', () => {
       render(() => <NowPlayingBrowser purpose={purpose} onClose={vi.fn()} />);
 
       // The discover rail sits on the root view and used to keep both browse
-      // controls in Auto Mode, because it never received the flag that hid them.
+      // controls in DJ Mode, because it never received the flag that hid them.
       expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Add Node Song to the route' })).toBeInTheDocument();
@@ -163,7 +163,7 @@ describe('NowPlayingBrowser', () => {
     },
   );
 
-  it('keeps the queue and overflow controls outside Auto Mode', () => {
+  it('keeps the queue and overflow controls outside DJ Mode', () => {
     nodeMock.items = [{ id: 'node-1', title: 'Node Song', channel: 'Node Artist' }];
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
 
@@ -202,7 +202,7 @@ describe('NowPlayingBrowser', () => {
     ));
   });
 
-  it('opens favourites as a first-class Now Playing collection', () => {
+  it('opens favourites as a first-class NORMAL collection', () => {
     storeMock.state.favorites = ['local-1'];
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
 
@@ -227,7 +227,7 @@ describe('NowPlayingBrowser', () => {
     expect(storeMock.actions.addAutoSource).toHaveBeenCalledWith([storeMock.local], 'Favourites');
   });
 
-  it('keeps sources out of the way outside Auto Mode', () => {
+  it('keeps sources out of the way outside DJ Mode', () => {
     storeMock.state.favorites = ['local-1'];
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
 

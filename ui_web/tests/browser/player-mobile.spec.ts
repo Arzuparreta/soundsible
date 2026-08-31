@@ -203,7 +203,7 @@ test('Now Playing keeps the visible card interactive after both lateral round tr
   }
 });
 
-test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ page }) => {
+test('DJ reuses the compact workspace, pager and touch lifecycle', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);
   const nowPlayingStage = await page.locator('[data-now-playing-tile="stage"]').boundingBox();
@@ -216,7 +216,7 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
   expect(nowPlayingCover).not.toBeNull();
   expect(nowPlayingTransport).not.toBeNull();
 
-  await page.getByRole('tab', { name: 'AUTO' }).click();
+  await page.getByRole('tab', { name: 'DJ' }).click();
   const surface = page.locator('[data-player-stage]');
   const carousel = page.locator('[data-auto-carousel]');
   const autoStage = page.locator('[data-auto-tile="stage"]');
@@ -308,7 +308,7 @@ test('Auto reuses the compact workspace, pager and touch lifecycle', async ({ pa
 test('mobile route insertion targets stay contextual and aligned', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);
-  await page.getByRole('tab', { name: 'AUTO' }).click();
+  await page.getByRole('tab', { name: 'DJ' }).click();
 
   const route = page.locator('[data-auto-tile="route"]');
   await holdCarousel(page, '[data-auto-carousel]');
@@ -354,7 +354,7 @@ test('mobile route insertion targets stay contextual and aligned', async ({ page
   expect(targetGeometry.every((target) => target.markerOffset <= 1)).toBe(true);
 });
 
-test('the shared mode pill and Auto workspace stay contained in compact viewports', async ({ page }) => {
+test('the shared mode pill and DJ workspace stay contained in compact viewports', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   test.setTimeout(60_000);
   const viewports = [
@@ -376,8 +376,8 @@ test('the shared mode pill and Auto workspace stay contained in compact viewport
     }));
 
     for (const mode of ['now-playing', 'auto'] as const) {
-      if (mode === 'auto') await page.getByRole('tab', { name: 'AUTO' }).click();
-      else await page.getByRole('tab', { name: 'Now Playing' }).click();
+      if (mode === 'auto') await page.getByRole('tab', { name: 'DJ' }).click();
+      else await page.getByRole('tab', { name: 'NORMAL' }).click();
 
       // Switching modes slides the pill's marker, and the centring assertion
       // below allows one pixel. Measuring mid-transition is measuring where the
@@ -418,7 +418,7 @@ test('the shared mode pill and Auto workspace stay contained in compact viewport
   }
 });
 
-test('Now Playing and Auto share centered desktop Stage geometry through scale reflows', async ({ page }) => {
+test('NORMAL and DJ share centered desktop Stage geometry through scale reflows', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) <= 1023, 'desktop player regression');
   await page.addInitScript(() => {
     localStorage.setItem('soundsible:interface-size', 'large');
@@ -475,9 +475,9 @@ test('Now Playing and Auto share centered desktop Stage geometry through scale r
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     }));
 
-    await page.getByRole('tab', { name: 'Now Playing' }).click();
+    await page.getByRole('tab', { name: 'NORMAL' }).click();
     const nowPlaying = await geometry('now-playing');
-    await page.getByRole('tab', { name: 'AUTO' }).click();
+    await page.getByRole('tab', { name: 'DJ' }).click();
     await expect(page.locator('[data-player-stage-mode="auto"]')).toBeVisible();
     const auto = await geometry('auto');
 
