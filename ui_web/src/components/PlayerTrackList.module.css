@@ -17,7 +17,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  padding: 7px 10px;
+  padding: var(--space-xs) var(--space-sm);
   background: var(--stage-material-quiet);
   border-bottom: 1px solid var(--stage-line-soft);
 }
@@ -111,7 +111,7 @@
   min-height: calc(var(--lane-head) + var(--lane-rows) * max(var(--row-h), 48px));
   flex: 0 1 auto;
   flex-direction: column;
-  margin-bottom: 14px;
+  margin-bottom: var(--space-lg);
 }
 
 /* A lane with no label — the Auto Mode route — reserves no band for one. */
@@ -147,8 +147,8 @@
   justify-content: space-between;
   min-height: 26px;
   flex: 0 0 auto;
-  margin: 0 -8px;
-  padding: 0 14px;
+  margin: 0 calc(-1 * var(--space-sm));
+  padding: 0 var(--space-md);
   color: var(--ink-tertiary);
   font-size: var(--text-caption);
   font-weight: var(--fw-semibold);
@@ -173,6 +173,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Unified row recipe (shared with NowPlayingBrowser): the separator is the
+ * row's own bottom hairline and the rounded state fill paints on a ::before
+ * layer, so a fill never clips the separator and the rounded corner never
+ * wears through the line. */
 .row {
   position: relative;
   display: grid;
@@ -181,11 +185,18 @@
   min-width: 0;
   min-height: max(var(--row-h), 48px);
   border-bottom: 1px solid var(--stage-line-soft);
-  border-radius: var(--radius-sm);
 }
 
-.row[data-current],
-.row[data-locked] {
+.row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.row[data-current]::before,
+.row[data-locked]::before {
   background: var(--stage-material-active);
 }
 
@@ -360,7 +371,10 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .row:not([data-current], [data-locked]):hover,
+  .row:not([data-current], [data-locked]):hover::before {
+    background: var(--stage-row-hover);
+  }
+
   .headAction:not(:disabled):hover {
     background: var(--stage-row-hover);
   }

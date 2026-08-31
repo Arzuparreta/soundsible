@@ -745,7 +745,7 @@
     aspect-ratio: auto;
     overflow: hidden;
     border: 1px solid var(--stage-line);
-    border-radius: 28px;
+    border-radius: var(--radius-panel);
     box-shadow: var(--stage-shadow-lg), inset 0 1px var(--stage-rim);
     background: var(--stage-panel);
     backdrop-filter: var(--stage-material-filter);
