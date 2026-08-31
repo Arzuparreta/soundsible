@@ -393,6 +393,42 @@ class DatabaseManager:
                 FOREIGN KEY (playlist_name) REFERENCES playlists(name) ON DELETE CASCADE
             )
         """)
+        # Track ids used to be content hashes, so a lossless technical rewrite
+        # could change the id without changing the song.  Keep the old names as
+        # durable aliases: stale clients and portable exports can then be
+        # normalized instead of reintroducing dead playlist entries.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS track_id_aliases (
+                old_track_id TEXT PRIMARY KEY,
+                new_track_id TEXT NOT NULL
+            )
+        """)
+
+    @staticmethod
+    def _track_id_aliases(conn, incoming: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        aliases = {
+            str(row[0]): str(row[1])
+            for row in conn.execute(
+                "SELECT old_track_id, new_track_id FROM track_id_aliases"
+            ).fetchall()
+            if row[0] and row[1] and str(row[0]) != str(row[1])
+        }
+        aliases.update({
+            str(old): str(new)
+            for old, new in (incoming or {}).items()
+            if old and new and str(old) != str(new)
+        })
+
+        resolved: Dict[str, str] = {}
+        for old in aliases:
+            value = old
+            seen = set()
+            while value in aliases and value not in seen:
+                seen.add(value)
+                value = aliases[value]
+            if value not in seen and value != old:
+                resolved[old] = value
+        return resolved
 
     @staticmethod
     def _create_fts5_triggers(conn):
@@ -946,6 +982,20 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
+                aliases = self._track_id_aliases(conn, id_replacements)
+                # This is the persistence boundary for a complete library
+                # snapshot.  Normalize here as a final invariant even when a
+                # caller forgot to update one of the reference-bearing fields.
+                metadata.remap_track_ids(aliases)
+                conn.executemany(
+                    """
+                    INSERT INTO track_id_aliases (old_track_id, new_track_id)
+                    VALUES (?, ?)
+                    ON CONFLICT(old_track_id) DO UPDATE SET
+                        new_track_id=excluded.new_track_id
+                    """,
+                    aliases.items(),
+                )
                 replacement_state: Dict[str, sqlite3.Row] = {}
                 # The date the replaced row carried. A rescan or a lossless
                 # upgrade gives one song a new id; without this it would read as
@@ -1175,7 +1225,7 @@ class DatabaseManager:
                 playlists.setdefault(str(row["name"]), [])
                 if row["track_id"] is not None:
                     playlists[str(row["name"])].append(str(row["track_id"]))
-            return LibraryMetadata(
+            metadata = LibraryMetadata(
                 version=int(state["version"]),
                 tracks=tracks,
                 playlists=playlists,
@@ -1184,6 +1234,11 @@ class DatabaseManager:
                 podcast_subscriptions=json.loads(state["podcast_subscriptions_json"]),
                 podcast_episode_cache=json.loads(state["podcast_episode_cache_json"]),
             )
+            # Normally rows are already canonical.  This also repairs a stale
+            # write from an old client in memory before it reaches the API, and
+            # the next save makes that normalization durable.
+            metadata.remap_track_ids(self._track_id_aliases(conn))
+            return metadata
 
     def backfill_added_at(self, resolver: Optional[Any] = None) -> int:
         """Date the tracks a library from before `added_at` left behind.

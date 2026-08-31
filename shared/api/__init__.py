@@ -1418,22 +1418,7 @@ def remap_track_ids_for_all_users(id_map: dict) -> dict:
                 if not lib.metadata:
                     continue
 
-                changed = 0
-                for track in lib.metadata.tracks:
-                    new_id = id_map.get(track.id)
-                    if new_id:
-                        track.id = new_id
-                        track.file_hash = new_id
-                        changed += 1
-
-                for name, ids in list(lib.metadata.playlists.items()):
-                    lib.metadata.playlists[name] = [id_map.get(tid, tid) for tid in ids]
-
-                covers = (lib.metadata.settings or {}).get("playlist_covers")
-                if isinstance(covers, dict):
-                    for name, tid in list(covers.items()):
-                        if tid in id_map:
-                            covers[name] = id_map[tid]
+                changed = lib.metadata.remap_track_ids(id_map)
 
                 for old_id, new_id in id_map.items():
                     # Keeps the entry's snapshot and `added_at`, which a
@@ -1442,8 +1427,9 @@ def remap_track_ids_for_all_users(id_map: dict) -> dict:
 
                 if changed:
                     lib.metadata.version += 1
-                    lib._save_metadata()
-                    touched[user_id] = changed
+                    if not lib._save_metadata(id_replacements=id_map):
+                        raise RuntimeError("could not persist remapped library")
+                    touched[user_id] = 1
                     emit_to_user("library_updated", user_id=user_id)
         except Exception as e:
             logger.warning("API: could not remap optimized track ids for user %s: %s", user_id, e)
@@ -1518,10 +1504,8 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
                 if not dry_run and summary["id_map"]:
                     library.metadata.tracks = summary["tracks"]
                     library.metadata.version += 1
-                    library._library_revision = library.db.replace_library(
-                        library.metadata, id_replacements=summary["id_map"]
-                    )
-                    library._export_metadata(library.metadata.to_json())
+                    if not library._save_metadata(id_replacements=summary["id_map"]):
+                        raise RuntimeError("could not persist repaired track ids")
                     for old_id, new_id in summary["id_map"].items():
                         core.favourites.remap_library_id(old_id, new_id)
                     remap_track_ids_for_all_users(summary["id_map"])

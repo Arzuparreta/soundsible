@@ -61,6 +61,66 @@ def test_complete_library_round_trips_through_sqlite(tmp_path):
     assert restored.tracks[0].artists == ["Artist", "Guest"]
 
 
+def test_track_replacement_atomically_rekeys_playlists_covers_and_user_state(tmp_path):
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    original = LibraryMetadata(
+        version=1,
+        tracks=[_track("old", youtube_id="video")],
+        playlists={"Mix": ["old", "preview", "old"]},
+        settings={"playlist_covers": {"Mix": "old"}},
+    )
+    db.replace_library(original)
+    db.set_track_rating("old", 5)
+
+    replacement = LibraryMetadata(
+        version=2,
+        tracks=[_track("new", youtube_id="video")],
+        # This was the library-repair bug: the technical track was replaced,
+        # while every reference in the initiating account still named `old`.
+        playlists={"Mix": ["old", "preview", "old"]},
+        settings={"playlist_covers": {"Mix": "old"}},
+    )
+    db.replace_library(replacement, id_replacements={"old": "new"})
+
+    restored = db.load_library_metadata()
+    assert replacement.playlists == {"Mix": ["new", "preview", "new"]}
+    assert replacement.settings["playlist_covers"] == {"Mix": "new"}
+    assert restored.playlists == {"Mix": ["new", "preview", "new"]}
+    assert restored.settings["playlist_covers"] == {"Mix": "new"}
+    assert db.get_track_user_state("new")["rating"] == 5
+
+
+def test_track_aliases_stop_a_stale_client_from_reviving_old_playlist_ids(tmp_path):
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    intermediate = LibraryMetadata(
+        version=1,
+        tracks=[_track("middle")],
+        playlists={"Mix": ["old"]},
+        settings={"playlist_covers": {"Mix": "old"}},
+    )
+    db.replace_library(intermediate, id_replacements={"old": "middle"})
+    current = LibraryMetadata(
+        version=2,
+        tracks=[_track("new")],
+        playlists={"Mix": ["middle"]},
+        settings={"playlist_covers": {"Mix": "middle"}},
+    )
+    db.replace_library(current, id_replacements={"middle": "new"})
+
+    stale = LibraryMetadata(
+        version=3,
+        tracks=[_track("new")],
+        playlists={"Mix": ["old"]},
+        settings={"playlist_covers": {"Mix": "old"}},
+    )
+    db.replace_library(stale)
+
+    restored = db.load_library_metadata()
+    assert restored.playlists == {"Mix": ["new"]}
+    assert restored.settings["playlist_covers"] == {"Mix": "new"}
+    assert stale.playlists == {"Mix": ["new"]}
+
+
 def test_replace_is_atomic_and_preserves_user_state(tmp_path, monkeypatch):
     db = DatabaseManager(str(tmp_path / "library.db"))
     original = _library(_track("keep"))
@@ -96,6 +156,55 @@ def test_legacy_manifest_migrates_once_and_sqlite_wins_afterwards(monkeypatch):
     assert [track.id for track in restarted.metadata.tracks] == ["legacy"]
     assert [track["id"] for track in json.loads(restarted.manifest_path.read_text())["tracks"]] == ["legacy"]
     assert json.loads(backup.read_text())["tracks"][0]["id"] == "legacy"
+
+
+def test_pre_alias_broken_playlist_recovers_only_by_unique_strong_identity(monkeypatch):
+    monkeypatch.setattr("player.library._output_dir_for_library", lambda: None)
+    manager = LibraryManager(silent=True)
+    current = LibraryMetadata(
+        version=2,
+        tracks=[
+            _track("new", youtube_id="video-one"),
+            _track("ambiguous-a", youtube_id="duplicate"),
+            _track("ambiguous-b", youtube_id="duplicate"),
+        ],
+        playlists={"Mix": ["old", "preview", "ambiguous-old"]},
+        settings={"playlist_covers": {"Mix": "old"}},
+    )
+    manager.db.replace_library(current)
+    legacy = LibraryMetadata(
+        version=1,
+        tracks=[
+            _track("old", youtube_id="video-one"),
+            _track("ambiguous-old", youtube_id="duplicate"),
+        ],
+        playlists={"Mix": ["old", "preview", "ambiguous-old"]},
+        settings={},
+    )
+    backup = manager.manifest_path.with_name("library.json.pre-sqlite.bak")
+    backup.write_text(legacy.to_json(), encoding="utf-8")
+
+    restarted = LibraryManager(silent=True)
+    assert restarted.sync_library() is True
+
+    # The exact provider identity is recovered. A saved/preview-only id is
+    # retained, and a non-unique identity is deliberately left untouched.
+    assert restarted.metadata.playlists == {
+        "Mix": ["new", "preview", "ambiguous-old"]
+    }
+    assert restarted.metadata.settings["playlist_covers"] == {"Mix": "new"}
+    assert json.loads(restarted.manifest_path.read_text())["playlists"] == {
+        "Mix": ["new", "preview", "ambiguous-old"]
+    }
+
+    stale = LibraryMetadata(
+        version=3,
+        tracks=current.tracks,
+        playlists={"Mix": ["old"]},
+        settings={},
+    )
+    restarted.db.replace_library(stale)
+    assert restarted.db.load_library_metadata().playlists == {"Mix": ["new"]}
 
 
 def test_per_user_manifest_wins_over_portable_manifest_during_migration(monkeypatch, tmp_path):
