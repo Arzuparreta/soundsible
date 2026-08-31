@@ -1035,7 +1035,7 @@ describe('Playback load coalescing', () => {
     expect(armTransition).toHaveBeenCalledTimes(2);
     mixCallbacks!.onError();
     expect(toastError).toHaveBeenLastCalledWith(
-      'Previews unavailable right now — Auto Mode will try again shortly',
+      'Previews unavailable right now — DJ will try again shortly',
     );
 
     // The breaker is open: a third automatic candidate is never even tried,

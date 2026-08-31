@@ -63,13 +63,13 @@ beforeEach(() => {
 });
 
 describe('resume banner', () => {
-  it('offers an Auto session as the Auto session it is', () => {
+  it('offers a DJ session as the DJ session it is', () => {
     store.offered = offer(true);
 
     render(() => <ResumeBanner />);
 
-    expect(screen.getByText('Resume your Auto session?')).toBeVisible();
-    expect(screen.getByText(/Auto session · from Phone/)).toBeVisible();
+    expect(screen.getByText('Resume your DJ session?')).toBeVisible();
+    expect(screen.getByText(/DJ session · from Phone/)).toBeVisible();
   });
 
   it('offers ordinary playback as ordinary playback', () => {
@@ -78,7 +78,7 @@ describe('resume banner', () => {
     render(() => <ResumeBanner />);
 
     expect(screen.getByText('Resume playback?')).toBeVisible();
-    expect(screen.queryByText(/Auto session/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/DJ session/)).not.toBeInTheDocument();
   });
 
   it('still offers a state published without a session at all', () => {
