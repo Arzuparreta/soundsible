@@ -425,6 +425,77 @@ class LibraryMetadata:
         """Find track by file hash."""
         return self._lookup("file_hash", file_hash)
 
+    def remap_track_ids(self, replacements: Optional[Dict[str, str]]) -> bool:
+        """Move every durable reference when a technical track id changes.
+
+        Managed tracks historically used the content hash as their public id.
+        Remuxing or otherwise repairing the same audio therefore gives it a new
+        id.  A replacement is not complete until the track row, playlist
+        entries, and an explicitly selected playlist cover all move together.
+
+        Mappings may contain old aliases (``old -> middle -> current``); resolve
+        the complete chain so a stale client or export cannot resurrect an
+        intermediate id.  Playlist duplicates are intentional and retain their
+        order.
+        """
+        if not replacements:
+            return False
+
+        aliases = {
+            str(old): str(new)
+            for old, new in replacements.items()
+            if old and new and str(old) != str(new)
+        }
+        if not aliases:
+            return False
+
+        def current_id(track_id: str) -> str:
+            value = str(track_id)
+            seen = set()
+            while value in aliases and value not in seen:
+                seen.add(value)
+                value = aliases[value]
+            # A cycle is invalid input; leaving the original reference alone is
+            # safer than choosing an arbitrary member of it.
+            return str(track_id) if value in seen else value
+
+        changed = False
+        for track in self.tracks:
+            old_id = track.id
+            new_id = current_id(old_id)
+            if new_id != old_id:
+                track.id = new_id
+                changed = True
+            old_hash = track.file_hash
+            new_hash = current_id(old_hash) if old_hash else old_hash
+            if new_hash != old_hash:
+                track.file_hash = new_hash
+                changed = True
+        if changed:
+            self._indexes = None
+
+        playlist_map = self.playlists if isinstance(self.playlists, dict) else {}
+        for name, track_ids in list(playlist_map.items()):
+            if not isinstance(track_ids, list):
+                continue
+            remapped = [current_id(track_id) for track_id in track_ids]
+            if remapped != track_ids:
+                playlist_map[name] = remapped
+                changed = True
+
+        settings = self.settings if isinstance(self.settings, dict) else {}
+        covers = settings.get("playlist_covers")
+        if isinstance(covers, dict):
+            for name, track_id in list(covers.items()):
+                if not isinstance(track_id, str):
+                    continue
+                remapped = current_id(track_id)
+                if remapped != track_id:
+                    covers[name] = remapped
+                    changed = True
+
+        return changed
+
     def add_track(self, track: Track) -> None:
         """Add a track to the library, dating it if the caller has not.
 

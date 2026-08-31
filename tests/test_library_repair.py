@@ -27,7 +27,7 @@ from shared.library_repair import (
     repair_library,
     shrink_cover,
 )
-from shared.models import Track
+from shared.models import LibraryMetadata, Track
 
 
 @pytest.fixture(autouse=True)
@@ -224,6 +224,53 @@ def test_a_repaired_track_keeps_everything_that_was_not_its_bytes(tmp_path, pool
     assert repaired.title == "Corpo e Canção"
     assert (tmp_path / f"{repaired.id}.{repaired.format}").exists()
     assert not path.exists(), "the oversized original is not left behind"
+
+
+def test_cross_user_remap_saves_an_account_with_only_playlist_references(tmp_path, monkeypatch):
+    """The initiating repair account already has the new track objects by the
+    time the all-user pass runs. Its playlists still have to make the save."""
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from shared.api import remap_track_ids_for_all_users
+
+    path = tmp_path / "new.flac"
+    path.write_bytes(b"audio")
+    metadata = LibraryMetadata(
+        version=1,
+        tracks=[_track("new", path)],
+        playlists={"Mix": ["old"]},
+        settings={"playlist_covers": {"Mix": "old"}},
+    )
+    saves = []
+
+    class Library:
+        def __init__(self):
+            self.metadata = metadata
+
+        def _save_metadata(self, *, id_replacements=None):
+            saves.append(dict(id_replacements or {}))
+            return True
+
+    @contextmanager
+    def bound_user(_user_id):
+        yield
+
+    monkeypatch.setattr("shared.users.list_users", lambda: [{"id": "user"}])
+    monkeypatch.setattr("shared.user_context.user_context", bound_user)
+    monkeypatch.setattr(
+        "shared.api.get_user_core",
+        lambda _user_id: SimpleNamespace(
+            library=Library(),
+            favourites=SimpleNamespace(remap_library_id=lambda *_args: False),
+        ),
+    )
+    monkeypatch.setattr("shared.api.emit_to_user", lambda *_args, **_kwargs: None)
+
+    assert remap_track_ids_for_all_users({"old": "new"}) == {"user": 1}
+    assert metadata.playlists == {"Mix": ["new"]}
+    assert metadata.settings["playlist_covers"] == {"Mix": "new"}
+    assert saves == [{"old": "new"}]
 
 
 def test_repair_copies_a_scanned_external_file_without_mutating_it(tmp_path, pool_paths):

@@ -224,7 +224,7 @@ class LibraryManager:
             except Exception as exc:
                 self._log(f"Remote library export failed: {exc}")
 
-    def _save_metadata(self) -> bool:
+    def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None) -> bool:
         """
         Commit the canonical SQLite snapshot, then refresh portable exports.
         """
@@ -233,9 +233,12 @@ class LibraryManager:
             
         with self._lock:
             try:
-                json_str = self.metadata.to_json()
-                self._library_revision = self.db.replace_library(self.metadata)
-                self._export_metadata(json_str)
+                self._library_revision = self.db.replace_library(
+                    self.metadata, id_replacements=id_replacements
+                )
+                # replace_library is also the alias-normalization boundary, so
+                # serialize only after it has moved every durable reference.
+                self._export_metadata(self.metadata.to_json())
                 return True
             except Exception as e:
                 self._log(f"Error saving metadata: {e}")
@@ -260,8 +263,14 @@ class LibraryManager:
         canonical = self.db.load_library_metadata()
         if canonical is not None:
             self.metadata = canonical
-            self._library_revision = self.db.get_library_revision()
-            self._export_metadata(canonical.to_json())
+            recovered = self._legacy_playlist_id_replacements(canonical)
+            if recovered:
+                canonical.version += 1
+                if not self._save_metadata(id_replacements=recovered):
+                    return False
+            else:
+                self._library_revision = self.db.get_library_revision()
+                self._export_metadata(canonical.to_json())
             return True
 
         # A per-user manifest is the authoritative legacy source: it names this
@@ -437,6 +446,68 @@ class LibraryManager:
                 shutil.copy2(cache_path, backup)
             except OSError as exc:
                 self._log(f"Could not back up legacy library manifest: {exc}")
+
+    def _legacy_playlist_id_replacements(self, current: LibraryMetadata) -> Dict[str, str]:
+        """Recover pre-alias playlist ids from the per-user migration backup.
+
+        Releases before ``track_id_aliases`` could successfully repair a file
+        but leave the initiating account's playlist references on the old
+        content hash.  The one per-user pre-SQLite backup still describes those
+        old hashes.  Only strong provider identities are considered, and a
+        replacement is accepted only when every available identity agrees on
+        exactly one current track.
+        """
+        backup = self.manifest_path.with_name(
+            f"{self.manifest_path.name}.pre-sqlite.bak"
+        )
+        if not backup.is_file() or not isinstance(current.playlists, dict):
+            return {}
+
+        current_ids = {track.id for track in current.tracks}
+        unresolved = {
+            track_id
+            for track_ids in current.playlists.values()
+            if isinstance(track_ids, list)
+            for track_id in track_ids
+            if isinstance(track_id, str) and track_id not in current_ids
+        }
+        if not unresolved:
+            return {}
+
+        try:
+            legacy = LibraryMetadata.from_json(backup.read_text(encoding="utf-8"))
+        except OSError:
+            return {}
+
+        legacy_by_id = {track.id: track for track in legacy.tracks}
+        fields = ("youtube_id", "musicbrainz_id", "isrc")
+        indexes: Dict[str, Dict[str, set[str]]] = {
+            field: {} for field in fields
+        }
+        for track in current.tracks:
+            for field in fields:
+                value = getattr(track, field, None)
+                if isinstance(value, str) and value.strip():
+                    key = value.strip() if field == "youtube_id" else value.strip().lower()
+                    indexes[field].setdefault(key, set()).add(track.id)
+
+        replacements: Dict[str, str] = {}
+        for old_id in unresolved:
+            old_track = legacy_by_id.get(old_id)
+            if old_track is None:
+                continue
+            candidates: Optional[set[str]] = None
+            for field in fields:
+                value = getattr(old_track, field, None)
+                if not isinstance(value, str) or not value.strip():
+                    continue
+                key = value.strip() if field == "youtube_id" else value.strip().lower()
+                matches = indexes[field].get(key, set())
+                if matches:
+                    candidates = set(matches) if candidates is None else candidates & matches
+            if candidates is not None and len(candidates) == 1:
+                replacements[old_id] = next(iter(candidates))
+        return replacements
     
     def get_track_url(self, track: Track) -> Optional[str]:
         """
