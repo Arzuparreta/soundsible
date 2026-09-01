@@ -12,6 +12,7 @@ import { responsiveTapConstants } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
+import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
 import { KaraokeMicIcon, SourceIcon } from './icons';
@@ -97,7 +98,7 @@ export function PlayerStage(props: {
     const duration = state.playback.duration;
     return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;
   };
-  const volPct = () => Math.round((state.playback.muted ? 0 : state.playback.volume) * 100);
+  const volPct = () => Math.round(gainToVolumePosition(state.playback.muted ? 0 : state.playback.volume) * 100);
   const artistLinkable = createMemo(() => {
     const current = track();
     return Boolean(current && current.source !== 'preview' && current.artist);
@@ -519,7 +520,8 @@ export function PlayerStage(props: {
                       value={volPct()}
                       style={{ '--fill': `${volPct()}%` }}
                       aria-label={t('omnibar.volume')}
-                      onInput={(event) => actions.setVolume(Number(event.currentTarget.value) / 100)}
+                      aria-valuetext={`${volPct()}%`}
+                      onInput={(event) => actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
                     />
                   </div>
 

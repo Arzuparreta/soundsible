@@ -17,7 +17,7 @@
 
 /** Seconds per arrow-key seek. */
 export const SEEK_STEP_SEC = 5;
-/** Volume delta per Shift+Arrow, as a fraction of full scale. */
+/** Volume delta per Shift+Arrow, as a fraction of perceptual slider travel. */
 export const VOLUME_STEP = 0.05;
 
 /** What the shortcut table needs to know about the app right now. */
@@ -37,7 +37,7 @@ export interface ShortcutActions {
   prev(): void;
   /** Seek relative to the current position, in seconds (may be negative). */
   seekBy(deltaSec: number): void;
-  /** Change volume by a fraction of full scale (may be negative). */
+  /** Change volume by a fraction of perceptual slider travel (may be negative). */
   nudgeVolume(delta: number): void;
   toggleMute(): void;
   toggleShuffle(): void;

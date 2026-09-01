@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { actions, setNowPlayingOpen, state } = vi.hoisted(() => ({
   actions: {
@@ -37,6 +37,12 @@ vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 import { OmniBar } from './OmniBar';
 
 describe('OmniBar interaction structure', () => {
+  beforeEach(() => {
+    state.playback.volume = 0.8;
+    state.playback.muted = false;
+    actions.setVolume.mockClear();
+  });
+
   it('keeps the radio action separate from the expand-player button', () => {
     render(() => <OmniBar />);
 
@@ -71,5 +77,21 @@ describe('OmniBar interaction structure', () => {
     expect(screen.getByText('DJ').closest('button')).toBe(expand);
     dj.unmount();
     state.autoMode.active = false;
+  });
+
+  it('maps the volume slider and wheel through the perceptual audio taper', () => {
+    state.playback.volume = 0.1;
+    render(() => <OmniBar />);
+
+    const slider = screen.getByRole('slider', { name: 'omnibar.volume' });
+    expect(slider).toHaveValue('50');
+    expect(slider).toHaveAttribute('aria-valuetext', '50%');
+
+    fireEvent.input(slider, { target: { value: '50' } });
+    expect(actions.setVolume).toHaveBeenLastCalledWith(expect.closeTo(0.1, 10));
+
+    actions.setVolume.mockClear();
+    fireEvent.wheel(slider, { deltaY: -1 });
+    expect(actions.setVolume).toHaveBeenCalledWith(expect.closeTo(0.1276447, 6));
   });
 });
