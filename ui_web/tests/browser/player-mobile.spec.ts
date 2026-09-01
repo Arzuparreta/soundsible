@@ -395,24 +395,30 @@ test('mobile route insertion targets stay contextual and aligned', async ({ page
 
 test('the shared mode pill and DJ workspace stay contained in compact viewports', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const viewports = [
     { width: 320, height: 568 },
     { width: 390, height: 844 },
     { width: 844, height: 390 },
   ];
-  await page.setViewportSize(viewports[0]);
-  await openNowPlaying(page);
 
+  // Each viewport is entered by navigating, never by resizing the open surface
+  // underneath itself. Reflowing a live Now Playing on WebKit's mobile
+  // emulation — `isMobile`, three device pixels per CSS pixel — killed the web
+  // process mid-`page.evaluate`, which surfaces as "Target page, context or
+  // browser has been closed" and took `main` red. The desktop matrix in
+  // interface-scale.spec.ts walks the same shape of loop and has never crashed
+  // because it re-navigates for every size; this now does the same. The
+  // assertions below are unchanged: what is being proven is still that the pill
+  // and the workspace stay inside each compact viewport, in both modes.
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
-    await expect.poll(() => page.evaluate(() => [window.innerWidth, window.innerHeight])).toEqual([
-      viewport.width,
-      viewport.height,
-    ]);
-    await page.evaluate(() => new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    }));
+    // `openNowPlaying` navigates to `/player/#/`, and going there from
+    // `/player/#/` is a fragment change, not a load: the surface would still be
+    // open and the library button underneath it unreachable. Blanking the page
+    // first makes every iteration a real document load.
+    await page.goto('about:blank');
+    await openNowPlaying(page);
 
     for (const mode of ['now-playing', 'auto'] as const) {
       if (mode === 'auto') await page.getByRole('tab', { name: 'DJ' }).click();
