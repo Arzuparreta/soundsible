@@ -108,13 +108,40 @@
 }
 
 .cover {
+  position: relative;
   width: 44px;
   height: 44px;
   flex-shrink: 0;
+  overflow: hidden;
   border-radius: var(--radius-xs);
   background: var(--bg-raised);
   border: 1px solid var(--hairline-soft);
   box-shadow: var(--shadow-1);
+}
+
+/* DJ is the exceptional shell state, so it labels the artwork instead of
+   becoming another fixed-width transport control. NORMAL remains explicit in
+   the player surface, where the mode can actually be changed. */
+.coverModeBadge {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 17px;
+  padding: 0 5px;
+  color: var(--ink-on-accent);
+  font-size: 9px;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  background: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--ink-on-accent) 28%, transparent);
+  border-radius: var(--radius-full);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.34);
+  pointer-events: none;
 }
 
 .meta {
@@ -151,38 +178,6 @@
   color: var(--accent-ink);
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
-}
-
-.modeBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 52px;
-  height: 32px;
-  padding: 0 var(--space-sm);
-  flex-shrink: 0;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-pill, 999px);
-  background: var(--bg-inset);
-  color: var(--ink-secondary);
-  font-size: var(--text-caption);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.06em;
-  cursor: pointer;
-}
-
-.modeBadgeDj {
-  border-color: var(--accent-soft);
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-}
-
-@media (max-width: 1023px) {
-  .modeBadge {
-    min-width: 44px;
-    height: 40px;
-    padding: 0 var(--space-xs);
-  }
 }
 
 @media (min-width: 1024px) {
