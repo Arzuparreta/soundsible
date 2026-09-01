@@ -23,6 +23,7 @@ const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
       transition: { status: 'idle' as 'idle' | 'armed' },
       repairing: false,
       pendingDirection: false,
+      phase: 'ready' as 'idle' | 'following_queue' | 'planning' | 'ready' | 'degraded',
       staleSeams: [] as string[],
       plan: { 'q-next': { trackId: 'next', fromKey: 'current', source: 'related' as const, reasonKey: '', sourceSetLabel: 'Warehouse techno', lineage: ['root', 'next'] } },
     },
@@ -126,6 +127,37 @@ describe('AutoMode workspace', () => {
   it('offers no repair when the route is a single song', () => {
     renderAuto('route');
     expect(screen.getByRole('button', { name: 'autoMode.route.fix' })).toBeDisabled();
+  });
+
+  it('shows route-building feedback instead of asking to start playback while music is already playing', () => {
+    const next = state.playback.queue.pop()!;
+    state.autoMode.sources = [];
+    state.autoMode.phase = 'planning';
+    try {
+      const { container } = renderAuto('route');
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent('autoMode.route.preparingFrom:Current song');
+      expect(status).toHaveTextContent('autoMode.route.preparingWhilePlaying');
+      expect(status).not.toHaveTextContent('autoMode.source.routeEmpty');
+      expect(container.querySelector('[data-route-loading="planning"]')).toBe(status);
+    } finally {
+      state.autoMode.phase = 'ready';
+      state.autoMode.sources = [{ id: 'source-1', label: 'Warehouse techno', activation: 1, tracks: [{ id: 'root', title: 'Root', artist: 'DJ' }] }];
+      state.playback.queue.push(next);
+    }
+  });
+
+  it('says the DJ is trying another route after a planner miss', () => {
+    const next = state.playback.queue.pop()!;
+    state.autoMode.phase = 'degraded';
+    try {
+      renderAuto('route');
+      expect(screen.getByRole('status')).toHaveTextContent('autoMode.route.retrying');
+      expect(screen.getByRole('status')).toHaveTextContent('autoMode.route.retryingHint');
+    } finally {
+      state.autoMode.phase = 'ready';
+      state.playback.queue.push(next);
+    }
   });
 
   it('moves a carried route occurrence instead of inserting a duplicate', () => {

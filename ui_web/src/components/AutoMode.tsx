@@ -171,6 +171,41 @@ export function AutoMode(props: {
   }));
 
   const mixPending = createMemo(() => routeEntries().some((entry) => entry.stale));
+  const routeWaiting = createMemo(() => (
+    routeEntries().length === 0
+    && (state.autoMode.phase === 'planning' || state.autoMode.phase === 'degraded')
+  ));
+
+  const routeEmpty = () => (
+    <Show
+      when={routeWaiting()}
+      fallback={state.autoMode.sources.length ? t('autoMode.mobile.routeEmpty') : t('autoMode.source.routeEmpty')}
+    >
+      <div
+        class={styles.routeLoading}
+        data-route-loading={state.autoMode.phase}
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <span class={styles.routeLoadingMark} aria-hidden="true"><i /><i /><i /></span>
+        <strong>
+          {state.autoMode.phase === 'degraded'
+            ? t('autoMode.route.retrying')
+            : state.playback.currentTrack
+              ? t('autoMode.route.preparingFrom', { title: state.playback.currentTrack.title })
+              : t('autoMode.route.preparing')}
+        </strong>
+        <span>
+          {state.autoMode.phase === 'degraded'
+            ? t('autoMode.route.retryingHint')
+            : state.playback.isPlaying
+              ? t('autoMode.route.preparingWhilePlaying')
+              : t('autoMode.route.preparingHint')}
+        </span>
+      </div>
+    </Show>
+  );
 
   const Browser = (dragHandle: JSX.Element) => (
     <section class={styles.sourcePanel}>
@@ -255,7 +290,7 @@ export function AutoMode(props: {
     <PlayerTrackList
       title={t('autoMode.dj.route')}
       count={routeEntries().length}
-      empty={state.autoMode.sources.length ? t('autoMode.mobile.routeEmpty') : t('autoMode.source.routeEmpty')}
+      empty={routeEmpty()}
       dragHandle={dragHandle}
       placing={Boolean(carriedTrack())}
       headAction={[

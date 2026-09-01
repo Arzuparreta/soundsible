@@ -62,7 +62,9 @@ export function PlayerTrackList(props: {
   title: string;
   count: number;
   sections: PlayerTrackListSection[];
-  empty: string;
+  /** Plain copy for ordinary empty queues, or a richer status when emptiness
+   * itself is a live state such as the DJ building its first route. */
+  empty: JSX.Element;
   dragHandle?: JSX.Element;
   headAction?: PlayerTrackListHeadAction | PlayerTrackListHeadAction[];
   onDragOver?: (event: DragEvent) => void;
@@ -184,7 +186,7 @@ export function PlayerTrackList(props: {
           if (target) props.onDropAtSlot(target, event);
         }}
       >
-        <Show when={props.sections.some((section) => section.entries.length > 0)} fallback={<p class={styles.empty}>{props.empty}</p>}>
+        <Show when={props.sections.some((section) => section.entries.length > 0)} fallback={<div class={styles.empty}>{props.empty}</div>}>
           <For each={props.sections}>
             {(section) => (
               <Show when={section.entries.length > 0}>
