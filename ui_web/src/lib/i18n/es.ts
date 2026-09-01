@@ -222,6 +222,12 @@ export const es: Dict = {
       mixPending: 'Hay uniones sin transición planeada',
       moved: '«{title}» se ha movido · falta rehacer la mezcla',
       dropHere: 'Suelta para colocar aquí',
+      preparingFrom: 'Preparando la ruta desde «{title}»',
+      preparing: 'Preparando la ruta DJ',
+      preparingWhilePlaying: 'La canción sigue sonando mientras el DJ encaja lo siguiente.',
+      preparingHint: 'La ruta aparecerá aquí en cuanto la mezcla esté lista.',
+      retrying: 'Buscando otra ruta',
+      retryingHint: 'El DJ volverá a intentarlo hasta encontrar una mezcla que encaje.',
     },
     workspace: {
       aria: 'Paneles de DJ',

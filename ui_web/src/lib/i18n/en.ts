@@ -221,6 +221,12 @@ export const en = {
       mixPending: 'Some joins have no transition planned yet',
       moved: '“{title}” moved · the mix still needs rebuilding',
       dropHere: 'Drop to place here',
+      preparingFrom: 'Building the route from “{title}”',
+      preparing: 'Building the DJ route',
+      preparingWhilePlaying: 'The track keeps playing while the DJ fits what comes next.',
+      preparingHint: 'The route will appear here as soon as the mix is ready.',
+      retrying: 'Looking for another route',
+      retryingHint: 'The DJ will keep trying until it finds a mix that fits.',
     },
     workspace: {
       aria: 'DJ panels',

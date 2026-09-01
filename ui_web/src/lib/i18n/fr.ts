@@ -222,6 +222,12 @@ export const fr: Dict = {
       mixPending: 'Des enchaînements n’ont pas encore de transition prévue',
       moved: '« {title} » déplacé · le mix reste à reconstruire',
       dropHere: 'Relâchez pour placer ici',
+      preparingFrom: 'Préparation du parcours depuis « {title} »',
+      preparing: 'Préparation du parcours DJ',
+      preparingWhilePlaying: 'Le morceau continue pendant que le DJ prépare la suite.',
+      preparingHint: 'Le parcours apparaîtra ici dès que le mix sera prêt.',
+      retrying: 'Recherche d’un autre parcours',
+      retryingHint: 'Le DJ réessaiera jusqu’à trouver un enchaînement adapté.',
     },
     workspace: {
       aria: 'Panneaux DJ',

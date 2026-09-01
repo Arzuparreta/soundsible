@@ -155,6 +155,92 @@
   cursor: pointer;
 }
 
+.routeLoading {
+  display: grid;
+  width: min(100%, 24rem);
+  justify-items: center;
+  gap: 0.55rem;
+}
+
+.routeLoading strong {
+  color: var(--ink-primary);
+  font-size: var(--text-body);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+
+.routeLoading > span:last-child {
+  max-width: 22rem;
+  color: var(--ink-secondary);
+  font-size: var(--text-label);
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+/* Three connected stops read as a route being assembled, rather than as audio
+ * buffering. The travelling emphasis provides feedback without competing with
+ * the equaliser on the track that is already playing. */
+.routeLoadingMark {
+  position: relative;
+  display: grid;
+  width: 5.3rem;
+  height: 1.35rem;
+  grid-template-columns: repeat(3, 1fr);
+  place-items: center;
+}
+
+.routeLoadingMark::before {
+  position: absolute;
+  right: 0.85rem;
+  left: 0.85rem;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent) 38%, var(--stage-line));
+  content: '';
+}
+
+.routeLoadingMark i {
+  z-index: 1;
+  width: 0.62rem;
+  height: 0.62rem;
+  border: 2px solid color-mix(in srgb, var(--accent) 62%, var(--stage-panel));
+  border-radius: var(--radius-full);
+  background: var(--stage-panel);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 24%, transparent);
+  animation: routeLoadingStep 1.35s ease-in-out infinite;
+}
+
+.routeLoadingMark i:nth-child(2) { animation-delay: 180ms; }
+.routeLoadingMark i:nth-child(3) { animation-delay: 360ms; }
+
+.routeLoading[data-route-loading='degraded'] .routeLoadingMark i {
+  animation-duration: 2.2s;
+}
+
+@keyframes routeLoadingStep {
+  0%, 55%, 100% {
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--stage-line));
+    box-shadow: 0 0 0 0 transparent;
+    transform: scale(0.82);
+  }
+  22% {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 0.34rem color-mix(in srgb, var(--accent) 14%, transparent);
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .routeLoadingMark i {
+    animation: none;
+  }
+
+  .routeLoadingMark i:nth-child(2) {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--accent) 12%, transparent);
+    transform: scale(1);
+  }
+}
+
 .routeAction:focus-visible {
   color: var(--ink-primary);
   background: var(--stage-material-active);
