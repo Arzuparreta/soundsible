@@ -33,7 +33,7 @@ import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/n
 import { catalogArtists, librarySort, libraryTab, setLibrarySort, setLibraryTab, sortTracks } from '../lib/libraryView';
 import { artistKey } from '../lib/artistRoute';
 import { searchLibrary, type LibrarySearchResult } from '../lib/librarySearch';
-import { catalogPreviewId, itemArtist, itemToTrack, playCatalogItem } from '../lib/catalogItem';
+import { addCatalogItemsAsAutoSource, catalogPreviewId, itemArtist, itemToTrack, playCatalogItem } from '../lib/catalogItem';
 import { writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
@@ -1088,14 +1088,15 @@ function CatalogArtistView(props: {
       <ViewHeader title={props.view.name} onBack={props.onBack}>
         <Show when={props.inAuto}>
           <button type="button" disabled={!profile()?.top_tracks.length} onClick={() => {
-            const resolved = (profile()?.top_tracks ?? []).map(playableTrack).filter((track): track is Track => !!track);
-            if (resolved.length) actions.addAutoSource(resolved, props.view.name);
+            void addCatalogItemsAsAutoSource(profile()?.top_tracks ?? [], props.view.name);
           }}>{t('autoMode.source.add')}</button>
         </Show>
-        <button type="button" disabled={!profile()?.top_tracks.length} aria-label={t('artist.play')} onClick={() => {
-          const tracks = profile()?.top_tracks ?? [];
-          if (tracks[0]) play(tracks[0], tracks);
-        }}><PlayIcon /></button>
+        <Show when={!props.inAuto}>
+          <button type="button" disabled={!profile()?.top_tracks.length} aria-label={t('artist.play')} onClick={() => {
+            const tracks = profile()?.top_tracks ?? [];
+            if (tracks[0]) play(tracks[0], tracks);
+          }}><PlayIcon /></button>
+        </Show>
       </ViewHeader>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
         <Show when={profile()} fallback={<div class={styles.empty}>{t('artist.noCatalogData')}</div>}>
@@ -1165,14 +1166,15 @@ function CatalogAlbumView(props: {
       <ViewHeader title={props.view.name} meta={props.view.artist} onBack={props.onBack}>
         <Show when={props.inAuto}>
           <button type="button" disabled={!profile()?.tracklist.length} onClick={() => {
-            const resolved = (profile()?.tracklist ?? []).map(playableTrack).filter((track): track is Track => !!track);
-            if (resolved.length) actions.addAutoSource(resolved, props.view.name);
+            void addCatalogItemsAsAutoSource(profile()?.tracklist ?? [], props.view.name);
           }}>{t('autoMode.source.add')}</button>
         </Show>
-        <button type="button" disabled={!profile()?.tracklist.length} aria-label={t('album.play')} onClick={() => {
-          const tracks = profile()?.tracklist ?? [];
-          if (tracks[0]) play(tracks[0], tracks);
-        }}><PlayIcon /></button>
+        <Show when={!props.inAuto}>
+          <button type="button" disabled={!profile()?.tracklist.length} aria-label={t('album.play')} onClick={() => {
+            const tracks = profile()?.tracklist ?? [];
+            if (tracks[0]) play(tracks[0], tracks);
+          }}><PlayIcon /></button>
+        </Show>
       </ViewHeader>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
         <Show when={profile()} fallback={<div class={styles.empty}>{t('album.noCatalogData')}</div>}>

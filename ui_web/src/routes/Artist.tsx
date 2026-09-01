@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
-import { actions, musicLibrary, isPlayingItem } from '../stores';
+import { actions, musicLibrary, isPlayingItem, state } from '../stores';
 import { api } from '../lib/api';
 import { coverUrl } from '../lib/media';
 import { shuffled } from '../lib/shuffle';
@@ -8,7 +8,7 @@ import { toast } from '../lib/toast';
 import { artistKey, artistPath, albumPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { ArtistProfile, CatalogItem, Track } from '../types/music';
-import { itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import { addCatalogItemsAsAutoSource, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import { coverGradient, coverStyle } from '../lib/cover';
@@ -117,6 +117,11 @@ export default function Artist() {
 
   const playAll = () => {
     const context = { id: `artist:${name()}`, kind: 'artist' as const, label: name() };
+    if (state.autoMode.active) {
+      if (view() === 'library') actions.addAutoSource(libraryTrackList(), name());
+      else void addCatalogItemsAsAutoSource(topTracks(), name());
+      return;
+    }
     if (view() === 'library') {
       const tracks = libraryTrackList();
       if (tracks.length > 0) actions.playFrom(tracks, 0, { context });
@@ -129,6 +134,11 @@ export default function Artist() {
 
   const shuffle = () => {
     const context = { id: `artist:${name()}`, kind: 'artist' as const, label: name() };
+    if (state.autoMode.active) {
+      if (view() === 'library') actions.addAutoSource(libraryTrackList(), name());
+      else void addCatalogItemsAsAutoSource(topTracks(), name());
+      return;
+    }
     if (view() === 'library') {
       actions.playShuffled(libraryTrackList(), context);
     } else {
@@ -261,14 +271,16 @@ export default function Artist() {
           </span>
           <div class={styles.actions}>
             <Button onClick={playAll} disabled={view() === 'library' ? libraryTrackList().length === 0 : topTracks().length === 0}>
-              {t('artist.play')}
+              {state.autoMode.active ? t('autoMode.source.add') : t('artist.play')}
             </Button>
-            <Button variant="secondary" onClick={shuffle} disabled={view() === 'library' ? libraryTrackList().length === 0 : topTracks().length === 0}>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style={{ 'margin-right': '6px' }}>
-                <path d="M16 3h5v5M21 3l-7 7M4 20l7-7M16 21h5v-5M4 4l5 5" />
-              </svg>
-              {t('artist.shuffle')}
-            </Button>
+            <Show when={!state.autoMode.active}>
+              <Button variant="secondary" onClick={shuffle} disabled={view() === 'library' ? libraryTrackList().length === 0 : topTracks().length === 0}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style={{ 'margin-right': '6px' }}>
+                  <path d="M16 3h5v5M21 3l-7 7M4 20l7-7M16 21h5v-5M4 4l5 5" />
+                </svg>
+                {t('artist.shuffle')}
+              </Button>
+            </Show>
           </div>
         </div>
 

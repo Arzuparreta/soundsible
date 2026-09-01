@@ -74,20 +74,25 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   const isLibrary = track.source !== 'preview';
   const isSaved = isLibrary || isSavedTrack(track);
   const isPodcast = isPodcastTrack(track);
+  const inAuto = ctx.auto === true || state.autoMode.active;
   // A streamed podcast episode plays via a minted token, not a `previewUrl`, so
   // the generic queue can't re-load it — keep it out of queue/playlist flows.
   // Downloaded episodes are real library files and queue fine.
-  const queueable = (!isPodcast || isLibrary) && !ctx.auto;
+  const queueable = (!isPodcast || isLibrary) && !inAuto;
   const list: MenuAction[] = [];
 
-  if (queueable) {
+  if (inAuto && !isPodcast) {
+    list.push({ icon: icons.playNext(), label: t('autoMode.dj.mixNow'), onSelect: () => actions.playNow(track) });
+    list.push({ icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: () => void actions.placeAutoTrack(track) });
+    list.push({ icon: icons.radio(), label: t('autoMode.route.useAsSource'), onSelect: () => actions.useAutoTrackAsSource(track) });
+  } else if (queueable) {
     list.push({ icon: icons.playNext(), label: t('trackActions.playNext'), onSelect: () => actions.playNext(track) });
     list.push({ icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => actions.enqueue(track) });
   }
   if (ctx.onAddToPlaylist && !isPodcast)
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
-  if (!isPodcast && !ctx.auto)
-    list.push({ icon: icons.radio(), label: t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
+  if (!isPodcast)
+    list.push({ icon: icons.radio(), label: inAuto ? t('modeChange.startRadio') : t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
   if (ctx.navigate && track.artist && isLibrary && !isPodcast)
     list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist, { view: 'library' })) });
   // The heart only makes sense over songs you have: it marks some of them out
@@ -149,7 +154,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
       });
     }
   }
-  if (ctx.onPlayOnDevice && isLibrary && !ctx.auto)
+  if (ctx.onPlayOnDevice && isLibrary && !inAuto)
     list.push({ icon: icons.device(), label: t('trackActions.playOnDevice'), onSelect: () => ctx.onPlayOnDevice!(track) });
   if (ctx.playlistName && ctx.onRemoveFromPlaylist)
     list.push({ icon: icons.remove(), label: t('trackActions.removeFromPlaylist'), danger: true, onSelect: () => ctx.onRemoveFromPlaylist!(track) });

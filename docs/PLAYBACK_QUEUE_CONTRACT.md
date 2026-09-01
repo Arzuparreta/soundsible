@@ -42,9 +42,17 @@ continuation. Reordering cannot cross lane or generator boundaries.
   in both without either fact implying the other. Sources may be tracks,
   selections, filtered views, favourites, playlists, albums or artists.
 - Auto may be entered empty. Music that actually sounds joins rolling context,
-  but never becomes a visible source implicitly. Adding a source never starts
-  playback. Playing a different song while Auto is active remains an immediate
-  pivot, not an exit.
+  but never becomes a visible source implicitly. The first source added to a
+  silent session asks the server to choose an opening from that source and
+  starts the returned route. Later sources only steer the runway. Playing a
+  different song while Auto is active is a short immediate mix, not an exit;
+  if a blend is already audible, it finishes and only the latest pending request
+  is chained after it.
+- Mode is an explicit session state. Individual music actions mean **Mix now**
+  or placement while Auto owns the session; collection primary actions add a
+  source. Podcast and Radio requests require confirmation before switching to
+  ordinary playback. Generated-queue lifecycle statuses never select or clear
+  the mode implicitly.
 - A song dropped into the route inlet is placed by the DJ among editable gaps;
   a song dropped into a concrete gap is fixed there. Both are real queue
   occurrences, not requests or waypoints. Local placement preserves existing

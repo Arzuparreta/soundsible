@@ -299,6 +299,9 @@ export interface DjPlanResponse extends ListeningPlanResponse {
   /** Features of the track the route continues from — the only reading the
    * player has for a song it did not plan itself. */
   seed_analysis?: { bpm?: number; key?: string | null; energy?: number; analysed?: boolean };
+  /** Present only when a source-only DJ session asked the server to choose its
+   * opening. It is not repeated in `items`; those are the route after it. */
+  opening?: ListeningPlanItem;
   items: ListeningPlanItem[];
 }
 
@@ -1028,7 +1031,7 @@ export const api = {
       session_id?: string;
       segment_index?: number;
       context?: DjItemRef[];
-      seed: {
+      seed?: {
         id?: string;
         track_id?: string;
         youtube_id?: string;

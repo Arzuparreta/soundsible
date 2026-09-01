@@ -191,6 +191,11 @@ export const zh: Dict = {
       repaired: '路线已重新衔接 · 你的歌曲保持原位',
       repairFailed: '无法重建混音 · 路线未改动',
       repairSkipped: '重建期间路线发生变化 · 没有移动任何内容',
+      immediateQueued: '当前混音结束后将立即接入“{title}”',
+      mixingImmediate: '正在准备接入“{title}”…',
+      openingSource: '正在选择开场曲…',
+      openedSource: '以“{title}”开启本次会话',
+      openingFailed: '此来源中没有可播放的开场曲',
     },
     upNext: '接下来播放',
     panel: {
@@ -200,7 +205,7 @@ export const zh: Dict = {
       route: '路线',
     },
     source: {
-      title: '来源', add: '添加到来源', empty: '将音乐拖到此处以调整播放方向。',
+      title: '来源', add: '添加到来源', selection: '所选内容', empty: '将音乐拖到此处以调整播放方向。',
       libraryActions: '将音乐库用作来源', remove: '移除来源 {title}',
       routeEmpty: '向路线添加歌曲或继续播放',
       added: '正从《{title}》调整播放方向',
@@ -278,12 +283,19 @@ export const zh: Dict = {
       promote: '提前播放 {title}',
       routePanelAria: '向路线添加歌曲',
       searchPlaceholder: '歌曲或艺人', searching: '搜索中…',
-      searchEmpty: '查找要添加到路线的歌曲', routeAction: '添加到路线',
+      searchEmpty: '查找要添加到路线的歌曲', routeAction: '添加到路线', mixNow: '立即混音',
       technique: {
         long_blend: '长混音', bass_swap: '低音切换', filter_blend: '滤波混音',
         echo_cut: '回声切换', structural_fade: '结构切换', safe_fade: '平滑淡化',
       },
     },
+  },
+  modeChange: {
+    toNormalTitle: '切换到 NORMAL',
+    podcastMessage: 'DJ 仅混合音乐。播放此播客将结束 DJ 会话。',
+    radioMessage: 'Radio 与 DJ 是不同的会话。启动 Radio 将结束 DJ 会话。',
+    playPodcast: '切换并播放',
+    startRadio: '切换并启动 Radio',
   },
   autoplay: {
     reason: '与你刚才收听的内容相似',
@@ -1016,6 +1028,7 @@ export const zh: Dict = {
     trackUnavailable: '无法播放这首歌曲',
     trackUnavailableSkipping: '歌曲不可用 — 跳到下一首',
     autoModeHandoffPaused: '预览暂时不可用 — DJ 稍后会重试',
+    autoModeOpeningFailed: 'DJ 在此来源中找不到可播放的开场曲',
     audioNeedsGesture: '音频被中断 — 点按播放以继续',
   },
   password: {

@@ -46,6 +46,16 @@ describe('buildTrackMenu — podcast coherence', () => {
     expect(l).toContain('Download');
   });
 
+  it('turns music actions into DJ-native actions while DJ owns the session', () => {
+    const song: Track = { id: 'dj1', title: 'Song', artist: 'A', source: 'preview' };
+    const l = labels(song, { ...ctx, auto: true });
+    expect(l).toContain('Mix now');
+    expect(l).toContain('Add to route');
+    expect(l).toContain('From this track');
+    expect(l).not.toContain('Play next');
+    expect(l).not.toContain('Add to queue');
+  });
+
   it('withholds the heart until a song is in the library, and offers saving instead', () => {
     // A search result the user has never claimed. Marking it out among "your
     // songs" would presuppose the thing the ＋ above it is there to do.

@@ -148,6 +148,54 @@ export async function playCatalogItem(
   }
 }
 
+/** Resolve the playable roots of a catalogue collection and hand them to DJ.
+ *
+ * Album and artist profiles are metadata-first: many rows have title/artist but
+ * no video id until somebody asks to hear them. A collection source must not
+ * silently become empty just because those rows came from Deezer, so resolution
+ * happens here in small batches and the usable subset is applied atomically. */
+export async function addCatalogItemsAsAutoSource(items: CatalogItem[], label: string): Promise<void> {
+  const progress = toast.loading(t('collection.resolving'));
+  const selected = items.slice(0, 15);
+  const tracks: Track[] = [];
+  for (let offset = 0; offset < selected.length; offset += 3) {
+    const batch = await Promise.all(selected.slice(offset, offset + 3).map(async (item) => {
+      const immediate = itemToTrack(item);
+      if (immediate) return immediate;
+      const artist = itemArtist(item);
+      if (!artist || !item.title) return null;
+      try {
+        const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration });
+        if (!resolved.video_id) return null;
+        actions.linkCatalogItem(item.id, resolved.video_id);
+        return {
+          id: resolved.video_id,
+          title: item.title,
+          artist,
+          album: item.album,
+          duration: item.duration,
+          cover: item.cover,
+          source: 'preview' as const,
+          originKeys: catalogItemKeys(item),
+        } satisfies Track;
+      } catch {
+        return null;
+      }
+    }));
+    tracks.push(...batch.filter((track): track is Track => track !== null));
+  }
+  if (!state.autoMode.active) {
+    progress.dismiss();
+    return;
+  }
+  if (tracks.length === 0) {
+    progress.update('error', t('toast.autoModeOpeningFailed'));
+    return;
+  }
+  actions.addAutoSource(tracks, label);
+  progress.update('success', t('autoMode.source.added', { title: label }));
+}
+
 /** Whether a catalog row is mid-flight — being matched, or matched and buffering.
  * Both read the same to a listener: it is working. */
 export function itemBusy(item: CatalogItem): boolean {

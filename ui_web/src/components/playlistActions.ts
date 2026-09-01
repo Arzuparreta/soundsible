@@ -23,21 +23,25 @@ function playlistTracks(name: string): Track[] {
 
 /** Play / rename / duplicate / change-cover / delete menu definition for a playlist. */
 export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {}): ActionMenuOptions {
+  const inAuto = state.autoMode.active;
   return {
     title: name,
     actions: [
       {
-        label: t('playlistActions.play'),
+        label: inAuto ? t('autoMode.source.add') : t('playlistActions.play'),
         onSelect: () => {
           const t = playlistTracks(name);
           if (t.length) {
-            actions.playFrom(t, 0, {
-              context: { id: `playlist:${name}`, kind: 'playlist', label: name },
-            });
+            if (state.autoMode.active) actions.addAutoSource(t, name);
+            else {
+              actions.playFrom(t, 0, {
+                context: { id: `playlist:${name}`, kind: 'playlist', label: name },
+              });
+            }
           }
         },
       },
-      {
+      ...(!inAuto ? [{
         label: t('playlistActions.shuffle'),
         onSelect: () => {
           const t = playlistTracks(name);
@@ -49,7 +53,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
             });
           }
         },
-      },
+      }] : []),
       {
         label: t('playlistActions.rename'),
         onSelect: async () => {

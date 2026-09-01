@@ -323,6 +323,9 @@ async function loadStore(
   const toastError = vi.fn();
   const toastSuccess = vi.fn();
   const toastInfo = vi.fn();
+  const confirmDialog = (
+    apiOverrides.__confirmDialog as ((options: unknown) => Promise<boolean>) | undefined
+  ) ?? vi.fn().mockResolvedValue(true);
   vi.doMock('../lib/toast', () => ({
     toast: {
       success: toastSuccess,
@@ -332,6 +335,7 @@ async function loadStore(
       action: toastAction,
     },
   }));
+  vi.doMock('../lib/confirm', () => ({ confirmDialog }));
   vi.doMock('../lib/haptics', () => ({ vibrate: vi.fn() }));
   /** Events the store subscribed to, so a test can send one the way the engine
    * would — a remote control command, a handoff from another device. */
@@ -382,6 +386,7 @@ async function loadStore(
     toastError,
     toastSuccess,
     toastInfo,
+    confirmDialog,
   };
 }
 
@@ -1290,10 +1295,21 @@ describe('Auto Mode store contract', () => {
   });
 
   it('keeps Auto and treats a manual Play action as an immediate pivot', async () => {
+    let mixCallbacks: {
+      onDominant: () => void;
+      onComplete: (position: number) => void;
+    } | null = null;
+    const armTransition = vi.fn((
+      _url: string,
+      _plan: unknown,
+      callbacks: { onDominant: () => void; onComplete: (position: number) => void },
+    ) => {
+      mixCallbacks = callbacks;
+    });
     const { actions, state } = await loadStore({
       relatedYouTube: vi.fn().mockResolvedValue([]),
       searchYouTube: vi.fn().mockResolvedValue([{ id: 'yt-current' }]),
-    });
+    }, { armTransition });
     const current: Track = { id: 'current', title: 'Current', artist: 'A', youtube_id: 'yt-current' };
     const later: Track = { id: 'later', title: 'Later', artist: 'B' };
     const now: Track = { id: 'now', title: 'Now', artist: 'C' };
@@ -1306,9 +1322,89 @@ describe('Auto Mode store contract', () => {
 
     actions.playNow(now);
     expect(state.autoMode.active).toBe(true);
+    expect(state.playback.currentTrack?.id).toBe('current');
+    expect(state.playback.queue[state.playback.index + 1]?.id).toBe('now');
+    expect(armTransition).toHaveBeenCalledOnce();
+
+    mixCallbacks!.onDominant();
     expect(state.playback.currentTrack?.id).toBe('now');
     expect(state.autoMode.sources).toEqual([]);
     expect(state.autoMode.heard.at(-1)).toMatchObject(now);
+    mixCallbacks!.onComplete(0);
+  });
+
+  it('finishes the audible blend, then mixes the latest requested song', async () => {
+    let phase: 'idle' | 'crossfading' = 'idle';
+    const callbacks: Array<{
+      onDominant: () => void;
+      onComplete: (position: number) => void;
+    }> = [];
+    const armTransition = vi.fn((
+      _url: string,
+      _plan: unknown,
+      handlers: { onDominant: () => void; onComplete: (position: number) => void },
+    ) => callbacks.push(handlers));
+    const { actions, state } = await loadStore({}, {
+      armTransition,
+      mixPhase: vi.fn(() => phase),
+    });
+    actions.playFrom([{ id: 'current', title: 'Current', artist: 'A' }], 0);
+    actions.enterAutoMode();
+
+    actions.playNow({ id: 'first', title: 'First', artist: 'B' });
+    phase = 'crossfading';
+    callbacks[0].onDominant();
+    actions.playNow({ id: 'second', title: 'Second', artist: 'C' });
+    actions.playNow({ id: 'latest', title: 'Latest', artist: 'D' });
+    expect(armTransition).toHaveBeenCalledOnce();
+    expect(state.playback.currentTrack?.id).toBe('first');
+
+    phase = 'idle';
+    callbacks[0].onComplete(0);
+    await flush();
+    expect(armTransition).toHaveBeenCalledTimes(2);
+    expect(armTransition.mock.calls[1][0]).toBe('/stream/latest');
+    expect(state.autoMode.active).toBe(true);
+  });
+
+  it('opens an empty DJ session from the collection chosen as its source', async () => {
+    const sourcePlan = {
+      ...autoPlan(['after-opening']),
+      v: 6 as const,
+      opening: {
+        id: 'opening', title: 'Opening', artist: 'Selector', source: 'preview' as const,
+        source_pool: 'related' as const,
+        recommendation_identity: 'music:youtube:opening', recommendation_source: 'auto_mode' as const,
+      },
+    };
+    const planDjQueue = vi.fn().mockResolvedValue(sourcePlan);
+    const { actions, state, audioService } = await loadStore({ planDjQueue });
+    actions.enterAutoMode();
+    actions.addAutoSource([
+      { id: 'opening', title: 'Opening', artist: 'Selector', source: 'preview' },
+      { id: 'other', title: 'Other', artist: 'Selector', source: 'preview' },
+    ], 'Selected album');
+
+    await vi.waitFor(() => expect(state.playback.currentTrack?.id).toBe('opening'));
+    expect(state.autoMode.active).toBe(true);
+    expect(state.playback.queue.map((track) => track.id)).toEqual(['opening', 'after-opening']);
+    expect(planDjQueue.mock.calls[0][0]).not.toHaveProperty('seed');
+    expect(audioService.load).toHaveBeenCalledWith('/preview/opening', 1);
+  });
+
+  it('asks before a podcast switches a DJ session back to Normal', async () => {
+    const confirmDialog = vi.fn().mockResolvedValue(true);
+    const { actions, state } = await loadStore({ __confirmDialog: confirmDialog });
+    actions.playFrom([{ id: 'music', title: 'Music', artist: 'Artist' }], 0);
+    actions.enterAutoMode();
+
+    actions.playNow({
+      id: 'episode', title: 'Episode', artist: 'Show', media_kind: 'podcast_episode',
+    });
+    expect(state.autoMode.active).toBe(true);
+    await vi.waitFor(() => expect(state.playback.currentTrack?.id).toBe('episode'));
+    expect(confirmDialog).toHaveBeenCalledOnce();
+    expect(state.autoMode.active).toBe(false);
   });
 
   /**
@@ -1587,17 +1683,18 @@ describe('Auto Mode store contract', () => {
     await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
 
     actions.enqueue({ id: 'asked-for', title: 'Asked for', artist: 'Listener', source: 'preview' });
+    await vi.waitFor(() => expect(state.playback.queue.some((entry) => entry.id === 'asked-for')).toBe(true));
     const manual = state.playback.queue.find((entry) => entry.id === 'asked-for')!;
-    expect(manual.queueLane).toBe('manual');
+    expect(manual.autoRoute).toMatchObject({ kind: 'user' });
 
     await actions.repairAutoRoute();
 
-    // A song asked for by name has no `autoRoute`, but it is every bit as
-    // pinned as one that was dragged: the planner must be told so.
+    // A song asked for by name becomes an explicit DJ-route occurrence, so the
+    // planner may bridge around it but never replace it.
     const posted = api.repairDjRoute.mock.calls[0][0];
     expect(posted.route.find((ref: { queue_id: string }) => ref.queue_id === manual.queueId).route_kind).toBe('user');
     const survivor = state.playback.queue.find((entry) => entry.queueId === manual.queueId);
-    expect(survivor?.queueLane).toBe('manual');
+    expect(survivor?.autoRoute).toMatchObject({ kind: 'user' });
   });
 
   it('rebuilds the chain so every repaired entry names the track it mixes out of', async () => {

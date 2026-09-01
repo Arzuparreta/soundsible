@@ -10,6 +10,7 @@ import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import { EmptyState } from '../components/EmptyState';
+import Button from '../components/Button';
 
 const context = () => ({ id: 'favourites', kind: 'favourites' as const, label: t('favourites.title') });
 
@@ -61,6 +62,11 @@ export default function Favourites() {
       <ViewHeader
         title={t('favourites.title')}
         meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
+        actions={state.autoMode.active ? (
+          <Button onClick={() => actions.addAutoSource(favTracks(), t('favourites.title'))} disabled={favTracks().length === 0}>
+            {t('autoMode.source.add')}
+          </Button>
+        ) : undefined}
       />
       <TrackList
         tracks={favTracks()}

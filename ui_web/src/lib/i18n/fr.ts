@@ -191,6 +191,11 @@ export const fr: Dict = {
       repaired: 'Parcours recousu · vos morceaux gardent leur place',
       repairFailed: 'Impossible de reconstruire le mix · le parcours est intact',
       repairSkipped: 'Le parcours a changé pendant la reconstruction · rien n’a bougé',
+      immediateQueued: '« {title} » entrera dès que le mix actuel sera terminé',
+      mixingImmediate: 'Préparation du mix vers « {title} »…',
+      openingSource: 'Choix de l’ouverture de la session…',
+      openedSource: 'Ouverture de la session avec « {title} »',
+      openingFailed: 'Aucune ouverture lisible dans cette source',
     },
     upNext: 'À suivre',
     panel: {
@@ -200,7 +205,7 @@ export const fr: Dict = {
       route: 'Parcours',
     },
     source: {
-      title: 'Sources', add: 'Ajouter aux sources', empty: 'Faites glisser de la musique ici pour orienter la session.',
+      title: 'Sources', add: 'Ajouter aux sources', selection: 'Sélection', empty: 'Faites glisser de la musique ici pour orienter la session.',
       libraryActions: 'Utiliser la bibliothèque comme source', remove: 'Retirer la source {title}',
       routeEmpty: 'Ajoutez un morceau au parcours ou reprenez la lecture',
       added: 'La session s’oriente depuis « {title} »',
@@ -278,12 +283,19 @@ export const fr: Dict = {
       promote: 'Avancer {title}',
       routePanelAria: 'Ajouter un morceau au parcours',
       searchPlaceholder: 'Morceau ou artiste', searching: 'Recherche…',
-      searchEmpty: 'Cherchez un morceau pour le parcours', routeAction: 'Ajouter au parcours',
+      searchEmpty: 'Cherchez un morceau pour le parcours', routeAction: 'Ajouter au parcours', mixNow: 'Mixer maintenant',
       technique: {
         long_blend: 'Mix long', bass_swap: 'Échange de basses', filter_blend: 'Mix filtré',
         echo_cut: 'Coupe écho', structural_fade: 'Changement structurel', safe_fade: 'Fondu doux',
       },
     },
+  },
+  modeChange: {
+    toNormalTitle: 'Passer à NORMAL',
+    podcastMessage: 'DJ ne mixe que de la musique. Lire ce podcast mettra fin à la session DJ.',
+    radioMessage: 'Radio et DJ sont des sessions distinctes. Démarrer Radio mettra fin à la session DJ.',
+    playPodcast: 'Changer et lire',
+    startRadio: 'Changer et démarrer Radio',
   },
   autoplay: {
     reason: 'Similaire à ce que vous écoutiez',
@@ -1039,6 +1051,7 @@ export const fr: Dict = {
     trackUnavailable: 'Impossible de lire ce morceau',
     trackUnavailableSkipping: 'Morceau indisponible — on passe au suivant',
     autoModeHandoffPaused: 'Aperçus indisponibles pour le moment — DJ réessaiera bientôt',
+    autoModeOpeningFailed: 'DJ n’a trouvé aucun morceau lisible pour ouvrir cette source',
     audioNeedsGesture: 'Audio interrompu — appuyez sur lecture pour reprendre',
   },
   password: {

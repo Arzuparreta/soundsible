@@ -80,7 +80,7 @@ export function OmniBar() {
         class={styles.openArea}
         type="button"
         aria-label={current() ? undefined : t('autoMode.enter')}
-        onClick={() => current() ? setNowPlayingOpen(true) : actions.enterAutoMode()}
+        onClick={() => (current() || state.autoMode.active) ? setNowPlayingOpen(true) : actions.enterAutoMode()}
       >
         <div class={styles.cover} style={coverBg()} />
         <div class={styles.meta}>
@@ -99,6 +99,17 @@ export function OmniBar() {
             <span classList={{ [styles.sub]: true, [styles.subAlert]: failed() }}>{subtitle()}</span>
           </Show>
         </div>
+      </button>
+
+      <button
+        class={styles.modeBadge}
+        classList={{ [styles.modeBadgeDj]: state.autoMode.active }}
+        type="button"
+        aria-label={state.autoMode.active ? t('autoMode.enter') : t('nowPlaying.modeSelector')}
+        title={state.autoMode.active ? 'DJ' : 'NORMAL'}
+        onClick={() => setNowPlayingOpen(true)}
+      >
+        {state.autoMode.active ? 'DJ' : 'NORMAL'}
       </button>
 
       <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
@@ -142,7 +153,7 @@ export function OmniBar() {
         type="button"
         aria-label={t('common.next')}
         disabled={!current()}
-        onClick={() => actions.next()}
+        onClick={() => state.autoMode.active ? void actions.autoSkip() : actions.next()}
       >
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
           <path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z" />

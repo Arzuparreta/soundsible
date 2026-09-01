@@ -1,20 +1,22 @@
-# Auto Mode
+# DJ Mode
 
-Auto Mode is Soundsible's built-in automatic DJ. It does not put a crossfade on
+DJ Mode (called Auto Mode in the internal APIs) is Soundsible's built-in
+automatic DJ. It does not put a crossfade on
 a shuffled queue. It builds an editable musical route, analyses how each pair
 can meet, prepares the incoming track on a second deck, and performs the handoff
 at a chosen cue point.
 
-Auto Mode is currently labelled **beta** in the player. Its core mixing and
+DJ Mode is currently labelled **beta** in the player. Its core mixing and
 route workflow is available now; the label sets the expectation that its
 planning and interface are still being refined.
 
 ## Start a set
 
-- With nothing playing, press **Start a DJ session** in the bottom player. Auto
-  chooses an opening track from your listening context.
-- With a track playing, open Now Playing and switch from **NOW PLAYING** to
-  **AUTO**. The current track becomes the start of the set.
+- With nothing playing, press **Start a DJ session** in the bottom player, then
+  choose a source. The DJ chooses an opening from that collection and starts
+  the route there.
+- With a track playing, open the player and switch from **NORMAL** to **DJ**.
+  The current track becomes the start of the set.
 - Use **Sources** to steer the session with a track, artist, album, playlist,
   favourites, or another selection. Sources influence what Auto generates;
   adding one does not abruptly replace what is playing.
@@ -60,10 +62,21 @@ program path, so a transition does not need a sudden volume jump to feel alive.
   their chosen order and depth.
 - **Skip without leaving Auto.** Next asks the DJ for a short handoff to the next
   route item instead of dropping back to ordinary playback.
+- **Choose music from anywhere.** While the **DJ** badge is active, playing an
+  individual song means **Mix now** and uses a short musical handoff. Choosing
+  an album, artist, playlist, favourites, or another collection means **Use as
+  source**. These actions never switch the mode back to Normal.
 
 Auto keeps explicit requests ahead of generated music. Leaving Auto removes its
 generated branches and bridges, but tracks you explicitly placed survive as a
 normal manual queue.
+
+The **NORMAL / DJ** badge in the mini-player always shows who owns playback. The
+choice is sticky for the current listening session and is included in session
+handoff state. Only selecting **NORMAL** explicitly, or accepting the prompt
+shown before starting incompatible Podcast or Radio playback, leaves DJ Mode.
+If another song is selected while a blend is already audible, that blend
+finishes and the most recent selection is mixed next.
 
 ## Auto, Radio, and Autoplay are different
 
