@@ -205,6 +205,29 @@ export class GeneratedQueueController {
     return this.sync(true);
   }
 
+  /** Adopt a route the server already planned while choosing an opening.
+   *
+   * Source-only DJ starts return the opening and its first runway atomically.
+   * Registering that session here avoids immediately asking for a second route
+   * and lets ordinary refill ownership take over from then on. */
+  adopt(
+    intent: Exclude<ListeningPlanIntent, 'autoplay'>,
+    seed: Track,
+    profile: AutoProfile = 'balanced',
+    continuity?: { sessionId?: string | null; nextSegmentIndex?: number },
+  ): void {
+    this.stop();
+    this.session = {
+      intent,
+      seed,
+      profile,
+      continuous: true,
+      id: intent === 'auto_mode' ? (continuity?.sessionId || sessionId()) : undefined,
+      segmentIndex: intent === 'auto_mode' ? Math.max(1, continuity?.nextSegmentIndex ?? 1) : 0,
+    };
+    this.deps.onStatus(intent, 'ready');
+  }
+
   ensureAutoplay(seed: Track, force = false): Promise<boolean> {
     if (this.session && this.session.intent !== 'autoplay') return Promise.resolve(false);
     if (!this.session) {

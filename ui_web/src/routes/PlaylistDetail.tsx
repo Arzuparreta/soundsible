@@ -28,6 +28,10 @@ export default function PlaylistDetail() {
 
   const playAll = () => {
     if (tracks().length > 0) {
+      if (state.autoMode.active) {
+        actions.addAutoSource(tracks(), name());
+        return;
+      }
       actions.playFrom(tracks(), 0, {
         context: { id: `playlist:${name()}`, kind: 'playlist', label: name() },
       });
@@ -53,7 +57,7 @@ export default function PlaylistDetail() {
           <span class={styles.count}>{trackCount(trackIds().length)}</span>
         </div>
         <Button onClick={playAll} disabled={tracks().length === 0}>
-          {t('playlistDetail.play')}
+          {state.autoMode.active ? t('autoMode.source.add') : t('playlistDetail.play')}
         </Button>
         <button class={styles.menu} type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={openMenu}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">

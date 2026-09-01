@@ -1,6 +1,6 @@
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
-import { actions } from '../stores';
+import { actions, state } from '../stores';
 import { api } from '../lib/api';
 import { tracksByIds } from '../lib/catalogTracks';
 import { albumPath } from '../lib/artistRoute';
@@ -27,24 +27,27 @@ function albumContext(album: CatalogAlbum) {
 
 /** Play / shuffle / go-to-album menu definition for a catalog album. */
 export function albumMenuOptions(album: CatalogAlbum, ctx: AlbumMenuContext = {}): ActionMenuOptions {
+  const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
     {
-      label: t('albumActions.play'),
+      label: inAuto ? t('autoMode.source.add') : t('albumActions.play'),
       onSelect: () => {
         void albumTracks(album).then((tracks) => {
-          if (tracks.length) actions.playFrom(tracks, 0, { context: albumContext(album) });
+          if (!tracks.length) return;
+          if (state.autoMode.active) actions.addAutoSource(tracks, album.title);
+          else actions.playFrom(tracks, 0, { context: albumContext(album) });
         });
       },
     },
-    {
+  ];
+  if (!inAuto) list.push({
       label: t('albumActions.shuffle'),
       onSelect: () => {
         void albumTracks(album).then((tracks) => {
           if (tracks.length) actions.playShuffled(tracks, albumContext(album));
         });
       },
-    },
-  ];
+    });
   if (ctx.navigate) {
     list.push({
       label: t('albumActions.goToAlbum'),

@@ -995,8 +995,6 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     """
     seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
     sources = [row for row in data.get("sources", []) if isinstance(row, dict)]
-    if not seed:
-        return {"error": "seed is required"}, 400
     raw_heard = data.get("heard") if isinstance(data.get("heard"), list) else []
     if not sources and not raw_heard:
         return {"error": "at least one source or heard track is required"}, 400
@@ -1096,9 +1094,34 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         target = measured_energies[min(len(measured_energies) - 1, int(arc * len(measured_energies)))]
         analysed.sort(key=lambda pair: abs(float(pair[1].get("energy") or 0.5) - target))
 
+    opening: dict | None = None
+    opening_analysis: dict | None = None
+    if not seed:
+        # An empty session must open *inside the collection the listener just
+        # handed to the DJ*, never on a related walk or implicit taste history.
+        # Recent sources win; within that source the opening arc favours a
+        # measured, moderate-energy start. The earlier deterministic shuffle is
+        # the stable tie-breaker for otherwise equivalent roots.
+        root_pairs = [
+            pair for pair in analysed
+            if pair[0].get("reason_code") == "music_set_source"
+        ]
+        if not root_pairs:
+            return {"error": "sources contain no playable opening tracks"}, 400
+        root_pairs.sort(key=lambda pair: (
+            -float(pair[0].get("source_weight") or 0),
+            abs(float(pair[1].get("energy") or 0.5) - arc),
+        ))
+        opening, opening_analysis = root_pairs[0]
+        opening = dict(opening)
+        opening["analysis"] = opening_analysis
+        opening.pop("transition", None)
+        seed = opening
+        analysed = [pair for pair in analysed if pair[0] is not root_pairs[0][0]]
+
     ordered: list[tuple[dict, dict]] = []
     pool = analysed
-    previous = _dj_item_analysis(metadata, seed, schedule=True)
+    previous = opening_analysis or _dj_item_analysis(metadata, seed, schedule=True)
     for item, analysis in pool:
         if len(ordered) >= limit:
             break
@@ -1119,7 +1142,8 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         "dj_profile": "adaptive",
         "source_profile": "balanced",
         "seed_identity": str(seed.get("id") or seed.get("youtube_id") or ""),
-        "seed_analysis": _dj_item_analysis(metadata, seed, schedule=True),
+        "seed_analysis": opening_analysis or _dj_item_analysis(metadata, seed, schedule=True),
+        **({"opening": opening} if opening else {}),
         "items": route,
         "degraded": degraded or not route,
         "pool_counts": {

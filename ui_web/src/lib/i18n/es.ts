@@ -191,6 +191,11 @@ export const es: Dict = {
       repaired: 'Ruta recosida · tus canciones mantienen su sitio',
       repairFailed: 'No se pudo rehacer la mezcla · la ruta sigue igual',
       repairSkipped: 'La ruta cambió mientras se rehacía · no se movió nada',
+      immediateQueued: '«{title}» entra en cuanto termine la mezcla actual',
+      mixingImmediate: 'Preparando la mezcla hacia «{title}»…',
+      openingSource: 'Eligiendo cómo abrir la sesión…',
+      openedSource: 'Abriendo la sesión con «{title}»',
+      openingFailed: 'No encontré una apertura reproducible en esta fuente',
     },
     upNext: 'A continuación',
     panel: {
@@ -200,7 +205,7 @@ export const es: Dict = {
       route: 'Ruta',
     },
     source: {
-      title: 'Fuentes', add: 'Añadir a fuentes', empty: 'Arrastra aquí música para orientar la sesión.',
+      title: 'Fuentes', add: 'Añadir a fuentes', selection: 'Selección', empty: 'Arrastra aquí música para orientar la sesión.',
       libraryActions: 'Usar la biblioteca como fuente', remove: 'Quitar la fuente {title}',
       routeEmpty: 'Añade una canción a la ruta o reanuda la reproducción',
       added: 'Orientando la sesión desde «{title}»',
@@ -278,12 +283,19 @@ export const es: Dict = {
       promote: 'Adelantar {title}',
       routePanelAria: 'Añadir una canción a la ruta',
       searchPlaceholder: 'Tema o artista', searching: 'Buscando…',
-      searchEmpty: 'Busca una canción para la ruta', routeAction: 'Añadir a la ruta',
+      searchEmpty: 'Busca una canción para la ruta', routeAction: 'Añadir a la ruta', mixNow: 'Mezclar ahora',
       technique: {
         long_blend: 'Mezcla larga', bass_swap: 'Cambio de graves', filter_blend: 'Mezcla filtrada',
         echo_cut: 'Corte con eco', structural_fade: 'Cambio de estructura', safe_fade: 'Fundido suave',
       },
     },
+  },
+  modeChange: {
+    toNormalTitle: 'Cambiar a NORMAL',
+    podcastMessage: 'DJ sólo mezcla música. Para reproducir este podcast hay que terminar la sesión DJ.',
+    radioMessage: 'Radio y DJ son sesiones distintas. Para iniciar Radio hay que terminar la sesión DJ.',
+    playPodcast: 'Cambiar y reproducir',
+    startRadio: 'Cambiar e iniciar Radio',
   },
   autoplay: {
     reason: 'Similar a lo que estabas escuchando',
@@ -1031,6 +1043,7 @@ export const es: Dict = {
     trackUnavailable: 'No se pudo reproducir esta canción',
     trackUnavailableSkipping: 'Canción no disponible — pasando a la siguiente',
     autoModeHandoffPaused: 'Las vistas previas no están disponibles ahora — DJ lo volverá a intentar en breve',
+    autoModeOpeningFailed: 'DJ no encontró una canción reproducible con la que abrir esta fuente',
     audioNeedsGesture: 'El audio se interrumpió — toca play para reanudar',
   },
   password: {

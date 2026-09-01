@@ -190,6 +190,11 @@ export const en = {
       repaired: 'Route re-seamed · your songs kept their places',
       repairFailed: 'Could not rebuild the mix · the route is untouched',
       repairSkipped: 'The route changed while it was being rebuilt · nothing was moved',
+      immediateQueued: '“{title}” will enter as soon as the current mix settles',
+      mixingImmediate: 'Preparing the mix into “{title}”…',
+      openingSource: 'Choosing how to open the session…',
+      openedSource: 'Opening the session with “{title}”',
+      openingFailed: 'No playable opening was found in this source',
     },
     upNext: 'Up next',
     panel: {
@@ -199,7 +204,7 @@ export const en = {
       route: 'Route',
     },
     source: {
-      title: 'Sources', add: 'Add to sources', empty: 'Drag music here to steer the session.',
+      title: 'Sources', add: 'Add to sources', selection: 'Selection', empty: 'Drag music here to steer the session.',
       libraryActions: 'Use the library as a source', remove: 'Remove the {title} source',
       routeEmpty: 'Add a track to the route or resume playback',
       added: 'Steering the session from “{title}”',
@@ -277,12 +282,19 @@ export const en = {
       promote: 'Play {title} sooner',
       routePanelAria: 'Add a track to the route',
       searchPlaceholder: 'Track or artist', searching: 'Searching…',
-      searchEmpty: 'Find a track for the route', routeAction: 'Add to route',
+      searchEmpty: 'Find a track for the route', routeAction: 'Add to route', mixNow: 'Mix now',
       technique: {
         long_blend: 'Long blend', bass_swap: 'Bass swap', filter_blend: 'Filter blend',
         echo_cut: 'Echo cut', structural_fade: 'Structural change', safe_fade: 'Smooth fade',
       },
     },
+  },
+  modeChange: {
+    toNormalTitle: 'Switch to NORMAL',
+    podcastMessage: 'DJ only mixes music. Playing this podcast will end the DJ session.',
+    radioMessage: 'Radio and DJ are different sessions. Starting Radio will end the DJ session.',
+    playPodcast: 'Switch and play',
+    startRadio: 'Switch and start Radio',
   },
   autoplay: {
     reason: 'Similar to what you were listening to',
@@ -1027,6 +1039,7 @@ export const en = {
     trackUnavailable: 'This track could not be played',
     trackUnavailableSkipping: 'Track unavailable — skipping',
     autoModeHandoffPaused: 'Previews unavailable right now — DJ will try again shortly',
+    autoModeOpeningFailed: 'DJ could not find a playable opening in this source',
     audioNeedsGesture: 'Audio was interrupted — tap play to resume',
   },
   password: {

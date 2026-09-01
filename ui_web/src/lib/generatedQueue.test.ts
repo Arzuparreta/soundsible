@@ -184,6 +184,22 @@ describe('GeneratedQueueController', () => {
     next.controller.stop();
   });
 
+  it('continues the session lineage of an already planned source opening', async () => {
+    const h = harness();
+    h.controller.adopt('auto_mode', seed, 'balanced', {
+      sessionId: 'source-session',
+      nextSegmentIndex: 4,
+    });
+
+    await h.controller.ensureRunway();
+
+    expect(h.requestPlan.mock.calls[0][6]).toMatchObject({
+      id: 'source-session',
+      segmentIndex: 4,
+    });
+    h.controller.stop();
+  });
+
   it('reports a partial but playable plan as ready instead of a retry failure', async () => {
     const h = harness();
     h.requestPlan.mockResolvedValueOnce({ ...response('radio'), degraded: true });

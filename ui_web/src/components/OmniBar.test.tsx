@@ -5,6 +5,8 @@ const { actions, setNowPlayingOpen, state } = vi.hoisted(() => ({
   actions: {
     togglePlay: vi.fn(),
     next: vi.fn(),
+    autoSkip: vi.fn(),
+    enterAutoMode: vi.fn(),
     setVolume: vi.fn(),
     toggleMute: vi.fn(),
     stopRadio: vi.fn(),
@@ -12,6 +14,7 @@ const { actions, setNowPlayingOpen, state } = vi.hoisted(() => ({
   setNowPlayingOpen: vi.fn(),
   state: {
     online: true,
+    autoMode: { active: false },
     playback: {
       currentTrack: { id: 'track-1', title: 'A track', artist: 'An artist' },
       currentTime: 30,
@@ -51,5 +54,15 @@ describe('OmniBar interaction structure', () => {
 
     expect(screen.getByRole('button', { name: 'common.cancel' })).toBeInTheDocument();
     state.playback.isLoading = false;
+  });
+
+  it('always exposes the active playback mode', () => {
+    render(() => <OmniBar />);
+    expect(screen.getByRole('button', { name: 'nowPlaying.modeSelector' })).toHaveTextContent('NORMAL');
+
+    state.autoMode.active = true;
+    render(() => <OmniBar />);
+    expect(screen.getByRole('button', { name: 'autoMode.enter' })).toHaveTextContent('DJ');
+    state.autoMode.active = false;
   });
 });

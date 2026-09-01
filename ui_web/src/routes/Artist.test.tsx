@@ -40,6 +40,7 @@ vi.mock('../stores', async () => {
       get library() {
         return storeMock.library;
       },
+      autoMode: { active: false },
       playback: { currentTrack: null, queue: [] },
     },
     musicLibrary: () => storeMock.library,

@@ -1,6 +1,6 @@
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
-import { actions, musicLibrary } from '../stores';
+import { actions, musicLibrary, state } from '../stores';
 import type { Track } from '../types/music';
 import { artistKey, artistPath } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
@@ -16,19 +16,24 @@ function artistTracks(artist: string): Track[] {
 
 /** Play / shuffle / go-to-artist menu definition for an artist. */
 export function artistMenuOptions(artist: string, ctx: ArtistMenuContext = {}): ActionMenuOptions {
+  const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
     {
-      label: t('artistActions.play'),
+      label: inAuto ? t('autoMode.source.add') : t('artistActions.play'),
       onSelect: () => {
         const t = artistTracks(artist);
         if (t.length) {
-          actions.playFrom(t, 0, {
-            context: { id: `artist:${artist}`, kind: 'artist', label: artist },
-          });
+          if (state.autoMode.active) actions.addAutoSource(t, artist);
+          else {
+            actions.playFrom(t, 0, {
+              context: { id: `artist:${artist}`, kind: 'artist', label: artist },
+            });
+          }
         }
       },
     },
-    {
+  ];
+  if (!inAuto) list.push({
       label: t('artistActions.shuffle'),
       onSelect: () => {
         const t = artistTracks(artist);
@@ -40,8 +45,7 @@ export function artistMenuOptions(artist: string, ctx: ArtistMenuContext = {}): 
           });
         }
       },
-    },
-  ];
+    });
   if (ctx.navigate)
     list.push({ label: t('artistActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(artist, { view: 'library' })) });
   return { title: artist, actions: list };

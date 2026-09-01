@@ -1038,6 +1038,41 @@ def test_dj_plan_v6_ignores_legacy_boundaries_and_walks_explicit_sources(tmp_pat
     assert all("source_boundary" not in item for item in body["items"])
 
 
+def test_dj_plan_v6_chooses_an_opening_from_a_source_when_there_is_no_seed(tmp_path):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={
+                "session_id": "source-only",
+                "sources": [{
+                    "id": "album:chosen",
+                    "label": "Chosen album",
+                    "tracks": [
+                        {"id": "opening-a", "track_id": "opening-a", "title": "Opening A", "artist": "One"},
+                        {"id": "opening-b", "track_id": "opening-b", "title": "Opening B", "artist": "Two"},
+                    ],
+                }],
+                "limit": 4,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["v"] == 6
+    assert body["opening"]["reason_code"] == "music_set_source"
+    assert body["opening"]["source_set_id"] == "album:chosen"
+    assert body["seed_identity"] == body["opening"]["id"]
+    assert all(item["id"] != body["opening"]["id"] for item in body["items"])
+
+
 def test_dj_plan_v6_walks_from_sources_and_applies_exact_exclusions(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()
