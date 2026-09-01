@@ -12,6 +12,11 @@ export function OmniBar() {
   const current = createMemo(() => state.playback.currentTrack);
   const loading = createMemo(() => state.playback.isLoading);
   const failed = createMemo(() => state.playback.loadError);
+  const modeLabel = createMemo(() => state.autoMode.active ? t('autoMode.label') : t('nowPlaying.modeLabel'));
+  const openLabel = createMemo(() => {
+    const track = current();
+    return track ? `${modeLabel()}: ${track.title} — ${track.artist}` : t('autoMode.enter');
+  });
   /** What the second line says: the artist normally, the playback state when
    * there is something more urgent to report. */
   const subtitle = createMemo(() => {
@@ -68,7 +73,7 @@ export function OmniBar() {
   };
 
   return (
-    <div classList={{ [styles.omni]: true, [styles.empty]: !current() }}>
+    <div classList={{ [styles.omni]: true, [styles.empty]: !current() }} data-omni-player="">
       {/* The line only ever reports position. Loading is already said by the
           transport spinner and the subtitle, so it stays quiet until there is a
           real position to show. */}
@@ -79,11 +84,15 @@ export function OmniBar() {
       <button
         class={styles.openArea}
         type="button"
-        aria-label={current() ? undefined : t('autoMode.enter')}
+        aria-label={openLabel()}
         onClick={() => (current() || state.autoMode.active) ? setNowPlayingOpen(true) : actions.enterAutoMode()}
       >
-        <div class={styles.cover} style={coverBg()} />
-        <div class={styles.meta}>
+        <div class={styles.cover} style={coverBg()} data-omni-cover="">
+          <Show when={state.autoMode.active}>
+            <span class={styles.coverModeBadge} data-omni-mode-badge="" aria-hidden="true">DJ</span>
+          </Show>
+        </div>
+        <div class={styles.meta} data-omni-meta="">
           <Show
             when={current()}
             fallback={
@@ -99,17 +108,6 @@ export function OmniBar() {
             <span classList={{ [styles.sub]: true, [styles.subAlert]: failed() }}>{subtitle()}</span>
           </Show>
         </div>
-      </button>
-
-      <button
-        class={styles.modeBadge}
-        classList={{ [styles.modeBadgeDj]: state.autoMode.active }}
-        type="button"
-        aria-label={state.autoMode.active ? t('autoMode.enter') : t('nowPlaying.modeSelector')}
-        title={state.autoMode.active ? 'DJ' : 'NORMAL'}
-        onClick={() => setNowPlayingOpen(true)}
-      >
-        {state.autoMode.active ? 'DJ' : 'NORMAL'}
       </button>
 
       <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />

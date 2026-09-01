@@ -305,6 +305,45 @@ test('DJ reuses the compact workspace, pager and touch lifecycle', async ({ page
   await expect(surface).not.toHaveAttribute('data-player-surface-open');
 });
 
+test('the compact mini-player overlays DJ state without taking title width', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/player/#/');
+  await page.getByRole('button', { name: /Reproducir Una canción/ }).click();
+
+  const mini = page.locator('[data-omni-player]');
+  const cover = mini.locator('[data-omni-cover]');
+  const meta = mini.locator('[data-omni-meta]');
+  await expect(mini.getByRole('button', { name: /NORMAL: Una canción/ })).toBeVisible();
+  await expect(mini.locator('[data-omni-mode-badge]')).toHaveCount(0);
+  const normalMeta = await meta.boundingBox();
+  expect(normalMeta).not.toBeNull();
+  expect(normalMeta!.width, 'the long title keeps the width recovered from the old mode control')
+    .toBeGreaterThanOrEqual(100);
+
+  await mini.getByRole('button', { name: /NORMAL: Una canción/ }).click();
+  await page.getByRole('tab', { name: 'DJ' }).click();
+  await page.getByRole('button', { name: 'Cerrar' }).click();
+
+  const badge = mini.locator('[data-omni-mode-badge]');
+  await expect(mini.getByRole('button', { name: /DJ: Una canción/ })).toBeVisible();
+  await expect(badge).toHaveText('DJ');
+  const [coverBox, badgeBox, djMeta] = await Promise.all([
+    cover.boundingBox(), badge.boundingBox(), meta.boundingBox(),
+  ]);
+  expect(coverBox).not.toBeNull();
+  expect(badgeBox).not.toBeNull();
+  expect(djMeta).not.toBeNull();
+  expect(badgeBox!.x).toBeGreaterThanOrEqual(coverBox!.x);
+  expect(badgeBox!.y).toBeGreaterThanOrEqual(coverBox!.y);
+  expect(badgeBox!.x + badgeBox!.width).toBeLessThanOrEqual(coverBox!.x + coverBox!.width);
+  expect(badgeBox!.y + badgeBox!.height).toBeLessThanOrEqual(coverBox!.y + coverBox!.height);
+  expect(Math.abs(djMeta!.width - normalMeta!.width), 'the DJ badge must not consume flex width')
+    .toBeLessThanOrEqual(1);
+  const accessibility = await new AxeBuilder({ page }).include('[data-omni-player]').analyze();
+  expect(accessibility.violations).toEqual([]);
+});
+
 test('mobile route insertion targets stay contextual and aligned', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);

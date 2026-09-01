@@ -56,13 +56,20 @@ describe('OmniBar interaction structure', () => {
     state.playback.isLoading = false;
   });
 
-  it('always exposes the active playback mode', () => {
-    render(() => <OmniBar />);
-    expect(screen.getByRole('button', { name: 'nowPlaying.modeSelector' })).toHaveTextContent('NORMAL');
+  it('exposes the mode without reserving a horizontal control', () => {
+    const normal = render(() => <OmniBar />);
+    expect(screen.getByRole('button', { name: 'nowPlaying.modeLabel: A track — An artist' })).toBeInTheDocument();
+    expect(screen.queryByText('DJ')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'nowPlaying.modeSelector' })).not.toBeInTheDocument();
+    normal.unmount();
 
     state.autoMode.active = true;
-    render(() => <OmniBar />);
-    expect(screen.getByRole('button', { name: 'autoMode.enter' })).toHaveTextContent('DJ');
+    const dj = render(() => <OmniBar />);
+    const expand = screen.getByRole('button', { name: 'autoMode.label: A track — An artist' });
+    expect(expand).toBeInTheDocument();
+    expect(screen.getByText('DJ')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByText('DJ').closest('button')).toBe(expand);
+    dj.unmount();
     state.autoMode.active = false;
   });
 });
