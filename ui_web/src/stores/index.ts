@@ -44,6 +44,7 @@ import {
   type AutoProfile,
 } from '../lib/generatedQueue';
 import { createShortcutHandler } from '../lib/shortcuts';
+import { nudgeVolumeGain } from '../lib/volumeScale';
 import { t as tr } from '../lib/i18n';
 import { ListeningLearning } from '../lib/listeningLearning';
 import {
@@ -4475,7 +4476,7 @@ export function initStore(): void {
           seekBy: (delta) => actions.seek(Math.max(0, state.playback.currentTime + delta)),
           // `setVolume` clamps, and already lifts mute when the level goes
           // above zero — turning it up is a request to hear something.
-          nudgeVolume: (delta) => actions.setVolume(state.playback.volume + delta),
+          nudgeVolume: (delta) => actions.setVolume(nudgeVolumeGain(state.playback.volume, delta)),
           toggleMute: () => actions.toggleMute(),
           toggleShuffle: () => actions.toggleShuffle(),
           cycleRepeat: () => actions.cycleRepeat(),

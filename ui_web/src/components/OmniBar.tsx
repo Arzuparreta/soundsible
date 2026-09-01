@@ -3,6 +3,7 @@ import { state, actions, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import { linkFits, linkReading, mbps, trackKbps } from '../lib/linkQuality';
+import { gainToVolumePosition, nudgeVolumeGain, volumePositionToGain } from '../lib/volumeScale';
 import { RadioBadge } from './RadioBadge';
 import { Spinner } from './Spinner';
 import styles from './OmniBar.module.css';
@@ -51,7 +52,7 @@ export function OmniBar() {
     return t('omnibar.buffering');
   };
   const audibleVolume = createMemo(() => (state.playback.muted ? 0 : state.playback.volume));
-  const volumePct = createMemo(() => Math.round(audibleVolume() * 100));
+  const volumePct = createMemo(() => Math.round(gainToVolumePosition(audibleVolume()) * 100));
   const pct = createMemo(() => {
     const d = state.playback.duration;
     return d > 0 ? Math.min(100, (state.playback.currentTime / d) * 100) : 0;
@@ -69,7 +70,7 @@ export function OmniBar() {
   const adjustVolumeByWheel = (e: WheelEvent) => {
     e.preventDefault();
     const step = e.deltaY < 0 ? 0.05 : -0.05;
-    actions.setVolume(audibleVolume() + step);
+    actions.setVolume(nudgeVolumeGain(audibleVolume(), step));
   };
 
   return (
@@ -190,7 +191,7 @@ export function OmniBar() {
             value={volumePct()}
             aria-label={t('omnibar.volume')}
             aria-valuetext={`${volumePct()}%`}
-            onInput={(e) => actions.setVolume(Number(e.currentTarget.value) / 100)}
+            onInput={(e) => actions.setVolume(volumePositionToGain(Number(e.currentTarget.value) / 100))}
           />
         </div>
 

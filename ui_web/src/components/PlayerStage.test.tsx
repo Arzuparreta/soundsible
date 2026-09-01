@@ -64,4 +64,17 @@ describe('PlayerStage lyrics transition', () => {
     expect(screen.getByText('Still visible')).toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'lyricsPanel.loading' })).toBeInTheDocument();
   });
+
+  it('uses perceptual position while sending linear gain to playback', () => {
+    state.playback.volume = 0.1;
+    actions.setVolume.mockClear();
+    render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+
+    const slider = screen.getByRole('slider', { name: 'omnibar.volume' });
+    expect(slider).toHaveValue('50');
+    expect(slider).toHaveAttribute('aria-valuetext', '50%');
+
+    fireEvent.input(slider, { target: { value: '50' } });
+    expect(actions.setVolume).toHaveBeenCalledWith(expect.closeTo(0.1, 10));
+  });
 });
