@@ -1,9 +1,10 @@
 import { For, Show, createMemo, type JSX } from 'solid-js';
 import { openOverlay } from '../lib/overlay';
 import { state, actions, musicLibrary } from '../stores';
-import { coverUrl } from '../lib/media';
+import { trackCoverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
+import { coverStyle } from '../lib/cover';
 import styles from './CoverPicker.module.css';
 import { EmptyState } from './EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -21,9 +22,9 @@ export function openPlaylistCoverPicker(name: string): void {
     });
     const current = () => state.librarySettings.playlist_covers?.[name];
 
-    const bg = (id: string): JSX.CSSProperties => ({
-      background: `url("${coverUrl(id)}") center / cover no-repeat, var(--bg-inset)`,
-    });
+    // A saved-but-not-downloaded song carries its own thumbnail and has nothing
+    // at the engine's cover endpoint, so asking by id drew an empty cell for it.
+    const bg = (track: Track): JSX.CSSProperties => coverStyle(track.id, trackCoverUrl(track));
 
     const pick = (id: string | null) => {
       void actions.setPlaylistCover(name, id);
@@ -53,7 +54,7 @@ export function openPlaylistCoverPicker(name: string): void {
                     data-pressable
                     {...tap}
                   >
-                    <span class={styles.cover} style={bg(t.id)} />
+                    <span class={styles.cover} style={bg(t)} />
                   </button>
                 );
               }}

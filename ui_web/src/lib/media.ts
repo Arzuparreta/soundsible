@@ -24,6 +24,41 @@ export const coverUrl = (id: string, size?: 'thumb'): string => {
   return `${apiOrigin()}/api/static/cover/${encodeURIComponent(id)}${params ? `?${params}` : ''}`;
 };
 
+interface TrackCoverIdentity {
+  id: string;
+  cover?: string;
+  source?: 'preview';
+}
+
+/**
+ * Artwork for a track, wherever that artwork actually lives.
+ *
+ * A song you saved but never downloaded is not a library track: it has no row
+ * the engine knows about, so `/api/static/cover/<its id>` is a question about
+ * something that has never existed and the answer is a placeholder at best.
+ * Its one image is the thumbnail captured in the saved snapshot (see
+ * `lib/saved.ts`), and that is the only artwork it will ever have until a
+ * download gives it a file. A library track is the other way round: the engine
+ * always has an answer, its embedded art or the shipped placeholder.
+ *
+ * This fork used to be written out at every call site — grids, rows, pickers —
+ * and the playlist surfaces were simply the ones that never got the copy, so a
+ * playlist opening on a saved-only song showed a blank card while the same song
+ * drew fine one screen away. Same reasoning as `coverGradient` in `lib/cover.ts`:
+ * one rule, one place. `playbackYoutubeId` below is its audio-side twin.
+ *
+ * Pass `size: 'thumb'` from list/grid rows; full size is for now-playing and
+ * edit views. A preview's thumbnail is already small and has no size variants.
+ */
+export const trackCoverUrl = (track: TrackCoverIdentity, size?: 'thumb'): string | undefined =>
+  track.source === 'preview' ? track.cover || undefined : coverUrl(track.id, size);
+
+/** Whether a track has any artwork to show. Defined in terms of
+ * `trackCoverUrl` rather than restating the rule, so the two cannot drift:
+ * "has art" is exactly "asking for the art yields a URL". */
+export const hasCoverArt = (track: TrackCoverIdentity): boolean =>
+  trackCoverUrl(track) !== undefined;
+
 /**
  * Audio stream for a library track.
  *

@@ -25,8 +25,12 @@ def client():
     return app.test_client()
 
 
-def _cover_response(client, cover_path):
-    """GET a track cover, with the library stubbed to hand back `cover_path`."""
+def _cover_response(client, cover_path, *, known=True):
+    """GET a track cover, with the library stubbed to hand back `cover_path`.
+
+    `known=False` stands for an id the engine has no row for — a song saved
+    but never downloaded, say.
+    """
 
     class _Track:
         id = "track-1"
@@ -39,7 +43,7 @@ def _cover_response(client, cover_path):
         "shared.api.routes.playback._get_api",
         return_value={
             "get_core": lambda: (_Lib(), None, None),
-            "get_track_by_id": lambda lib, track_id: _Track(),
+            "get_track_by_id": lambda lib, track_id: _Track() if known else None,
             "is_trusted_network": lambda addr: True,
             "is_safe_path": lambda path, is_trusted=False: True,
             "WEB_UI_PATH": os.path.join(os.path.dirname(os.path.dirname(__file__)), "ui_web"),
@@ -73,7 +77,27 @@ def test_cover_placeholder_is_cacheable(client, tmp_path):
     response = _cover_response(client, str(tmp_path / "missing.jpg"))
 
     assert response.status_code == 200
-    assert "max-age=" in response.headers["Cache-Control"]
+    cache_control = response.headers["Cache-Control"]
+    assert "max-age=" in cache_control
+    assert "public" in cache_control
+
+
+def test_unknown_track_gets_a_placeholder_image_not_a_404(client, tmp_path):
+    """An <img> asking about an id we have no row for still deserves an image.
+
+    A song saved but never downloaded lives in the saved snapshot, not the
+    library, so anything building a cover URL from a bare id lands here.
+    """
+    response = _cover_response(client, str(tmp_path / "missing.jpg"), known=False)
+
+    assert response.status_code == 200
+    assert response.mimetype == "image/png"
+    cache_control = response.headers["Cache-Control"]
+    # Short and private, unlike the placeholder for a track we do know: this id
+    # can become a real cover at any moment (that song finishes downloading)
+    # without its URL changing, so the stand-in must not outlive it by a day.
+    assert "private" in cache_control
+    assert "max-age=86400" not in cache_control
 
 
 def test_service_worker_is_never_stored(client, tmp_path, isolated_runtime):

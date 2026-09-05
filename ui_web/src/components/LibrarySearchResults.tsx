@@ -10,18 +10,12 @@ import SongRow from './SongRow';
 import { EmptyState } from './EmptyState';
 import { artistPath } from '../lib/artistRoute';
 import { coverBackground } from '../lib/cover';
-import { coverUrl } from '../lib/media';
+import { coverUrl, trackCoverUrl } from '../lib/media';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { t } from '../lib/i18n';
 import type { LibrarySearchResult } from '../lib/librarySearch';
 import styles from './LibrarySearchResults.module.css';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
-
-/** Artwork for a row: the engine's file cover, or the snapshot's thumbnail for
- * a song we hold no file for. */
-function trackCover(track: { id: string; cover?: string; source?: 'preview' }): string | undefined {
-  return track.source === 'preview' ? track.cover : coverUrl(track.id, 'thumb');
-}
 
 function readRowHeight(): number {
   if (typeof document === 'undefined') return 60;
@@ -127,7 +121,7 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
                       track={(result() as Extract<LibrarySearchResult, { kind: 'track' }>).track}
                       // A saved song with no file has no engine-side cover to
                       // ask for; its thumbnail is the only artwork it has.
-                      cover={trackCover((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
+                      cover={trackCoverUrl((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track, 'thumb')}
                       badge={t('library.resultTrack')}
                       active={isPlayingTrack((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
                       onPlay={(track) => actions.playFrom(

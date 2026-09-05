@@ -26,7 +26,7 @@ import {
   ownedTrackForResult,
   state,
 } from '../stores';
-import { coverUrl } from '../lib/media';
+import { coverUrl, trackCoverUrl } from '../lib/media';
 import { coverStyle } from '../lib/cover';
 import { parseYouTubeInput } from '../lib/youtube';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
@@ -39,7 +39,7 @@ import { catalogItemKeys } from '../lib/playbackIdentity';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { prefetchPreviews } from '../lib/prefetch';
 import { isPodcastTrack } from '../lib/track';
-import { pickPlaylistCoverId } from '../lib/playlists';
+import { pickPlaylistCoverTrack } from '../lib/playlists';
 import { openTrackMenu } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
@@ -144,10 +144,6 @@ async function enqueueCatalogItem(item: CatalogItem): Promise<void> {
   } catch {
     toast.error(t('searchPanel.noResolve'));
   }
-}
-
-function trackCover(track: Track): string | undefined {
-  return track.source === 'preview' ? track.cover : coverUrl(track.id);
 }
 
 export function NowPlayingBrowser(props: {
@@ -478,7 +474,7 @@ export function NowPlayingBrowser(props: {
     <BrowserTrackRow
       title={track.title}
       subtitle={track.artist}
-      cover={trackCover(track)}
+      cover={trackCoverUrl(track)}
       seed={track.id}
       active={isPlayingTrack(track)}
       queued={isQueuedTrack(track)}
@@ -907,8 +903,11 @@ function PlaylistsView(props: {
       <For each={props.names}>
         {(name) => {
           const ids = () => state.playlists[name] ?? [];
-          const coverId = () => pickPlaylistCoverId(name, ids(), props.byId, state.librarySettings);
-          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={coverId() ? coverUrl(coverId()!, 'thumb') : undefined} onClick={() => props.onOpen(name)} />;
+          const cover = () => {
+            const track = pickPlaylistCoverTrack(name, ids(), props.byId, state.librarySettings);
+            return track ? trackCoverUrl(track, 'thumb') : undefined;
+          };
+          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onClick={() => props.onOpen(name)} />;
         }}
       </For>
     </div>

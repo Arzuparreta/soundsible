@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./config', () => ({ apiOrigin: () => '' }));
 
-const { previewUrl, streamUrl, podcastStreamUrl } = await import('./media');
+const { previewUrl, streamUrl, podcastStreamUrl, coverUrl, trackCoverUrl, hasCoverArt } =
+  await import('./media');
 
 /**
  * A media URL is the browser's cache key.
@@ -48,5 +49,45 @@ describe('media URLs are cacheable', () => {
   it('still escapes an id that would otherwise change the path', () => {
     expect(streamUrl('a/../b')).toBe('/api/static/stream/a%2F..%2Fb');
     expect(podcastStreamUrl('a b')).toBe('/api/podcasts/stream/a%20b');
+  });
+});
+
+/**
+ * A song you saved without downloading is not a track the engine has a row
+ * for, so `/api/static/cover/<its id>` is a question about nothing. Its only
+ * artwork is the thumbnail in its saved snapshot. Getting this fork wrong is
+ * what left a playlist opening on such a song with a blank cover.
+ */
+describe('track artwork comes from wherever that track keeps it', () => {
+  const owned = { id: 't1' };
+  const saved = { id: 'vid', source: 'preview' as const, cover: 'https://img.youtube.com/vi/vid/mqdefault.jpg' };
+  const savedNoArt = { id: 'vid2', source: 'preview' as const };
+  const savedBlankArt = { id: 'vid3', source: 'preview' as const, cover: '' };
+
+  it('asks the engine for a library track, at the size the caller wanted', () => {
+    expect(trackCoverUrl(owned, 'thumb')).toBe(coverUrl('t1', 'thumb'));
+    expect(trackCoverUrl(owned, 'thumb')).toContain('size=thumb');
+    expect(trackCoverUrl(owned)).toBe(coverUrl('t1'));
+    expect(trackCoverUrl(owned)).not.toContain('size=');
+  });
+
+  it('never asks the engine about a preview, whatever size is requested', () => {
+    for (const url of [trackCoverUrl(saved), trackCoverUrl(saved, 'thumb')]) {
+      expect(url).toBe(saved.cover);
+      expect(url).not.toContain('/api/static/cover');
+    }
+  });
+
+  it('says a preview with no thumbnail has nothing, rather than inventing a URL', () => {
+    expect(trackCoverUrl(savedNoArt)).toBeUndefined();
+    expect(trackCoverUrl(savedBlankArt)).toBeUndefined();
+  });
+
+  it('keeps `hasCoverArt` and `trackCoverUrl` answering the same question', () => {
+    // The pair exists so the rule is written once. Two implementations of
+    // "does this have art?" is exactly the drift that caused the bug.
+    for (const track of [owned, saved, savedNoArt, savedBlankArt]) {
+      expect(hasCoverArt(track)).toBe(trackCoverUrl(track) !== undefined);
+    }
   });
 });

@@ -7,7 +7,7 @@ import { openTrackMenu, type TrackMenuContext } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
-import { coverUrl } from '../lib/media';
+import { trackCoverUrl } from '../lib/media';
 import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
 import { t as tr } from '../lib/i18n';
@@ -152,10 +152,7 @@ export default function TrackList(props: {
                       >
                         <SongRow
                           track={t()}
-                          // A preview's artwork is the thumbnail it carries;
-                          // asking the engine for a cover it has no file for
-                          // just 404s into the placeholder gradient.
-                          cover={t().source === 'preview' ? t().cover : coverUrl(t().id, 'thumb')}
+                          cover={trackCoverUrl(t(), 'thumb')}
                           favouritable={!isPodcastTrack(t())}
                           active={isPlayingTrack(t())}
                           onPlay={() =>
