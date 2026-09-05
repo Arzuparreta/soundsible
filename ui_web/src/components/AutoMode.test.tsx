@@ -33,7 +33,10 @@ const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
 vi.mock('../stores', () => ({ actions, state }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu }));
 vi.mock('./ActionMenu', () => ({ openActionMenu }));
-vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
+vi.mock('../lib/media', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/media')>()),
+  coverUrl: (id: string) => `/cover/${id}`,
+}));
 vi.mock('../lib/i18n', () => ({ t: (key: string, params?: Record<string, string | number>) => params ? `${key}:${Object.values(params).join(',')}` : key }));
 vi.mock('./PlayerStage', () => ({ PlayerStage: (props: { mode: string }) => <div data-testid="shared-stage" data-mode={props.mode} /> }));
 vi.mock('./NowPlayingBrowser', () => ({ NowPlayingBrowser: (props: { purpose?: string }) => <aside aria-label="source-browser" data-purpose={props.purpose} /> }));

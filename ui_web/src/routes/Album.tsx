@@ -2,7 +2,7 @@ import { createEffect, createMemo, createResource, createSignal, For, on, Show, 
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { actions, musicLibrary, isPlayingItem, state } from '../stores';
 import { api } from '../lib/api';
-import { coverUrl } from '../lib/media';
+import { trackCoverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
@@ -303,7 +303,7 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
           <SongRow
             track={track}
             index={i() + 1}
-            cover={track.source === 'preview' ? track.cover : coverUrl(track.id, 'thumb')}
+            cover={trackCoverUrl(track, 'thumb')}
             onPlay={() => actions.playFrom(props.tracks, i(), {
               context: { id: `album:${props.contextLabel}`, kind: 'album', label: props.contextLabel },
             })}

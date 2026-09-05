@@ -2,15 +2,14 @@ import { createMemo, For, Show, type JSX } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
 import { state, actions, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
-import { coverUrl } from '../lib/media';
+import { trackCoverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
 import { neutralCoverStyle } from '../lib/cover';
-import { pickPlaylistCoverId } from '../lib/playlists';
+import { pickPlaylistCoverTrack } from '../lib/playlists';
 import { openPlaylistMenu, playlistMenuOptions } from '../components/playlistActions';
 import { attachContextMenu } from '../lib/contextMenu';
 import { promptDialog } from '../lib/prompt';
 import { t } from '../lib/i18n';
-import type { Track } from '../types/music';
 import styles from './Playlists.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -22,8 +21,8 @@ export default function Playlists() {
   const names = createMemo(() => Object.keys(state.playlists));
 
   const coverBg = (name: string, ids: string[]): JSX.CSSProperties => {
-    const id = pickPlaylistCoverId(name, ids, byId() as Map<string, Track>, state.librarySettings);
-    return neutralCoverStyle(id ? coverUrl(id, 'thumb') : null);
+    const track = pickPlaylistCoverTrack(name, ids, byId(), state.librarySettings);
+    return neutralCoverStyle(track ? trackCoverUrl(track, 'thumb') : null);
   };
 
   const createNew = async () => {

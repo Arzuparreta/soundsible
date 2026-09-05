@@ -57,7 +57,10 @@ const storeMock = vi.hoisted(() => {
 });
 
 vi.mock('../lib/api', () => ({ api: apiMock }));
-vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
+vi.mock('../lib/media', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/media')>()),
+  coverUrl: (id: string) => `/cover/${id}`,
+}));
 vi.mock('../lib/prefetch', () => ({ prefetchPreviews: vi.fn() }));
 vi.mock('../lib/nodeDiscover', () => ({
   ensureNodeFeed: nodeMock.ensureNodeFeed,

@@ -18,7 +18,10 @@ const storeMock = vi.hoisted(() => ({
 }));
 
 vi.mock('../lib/api', () => ({ api: apiMock }));
-vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
+vi.mock('../lib/media', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/media')>()),
+  coverUrl: (id: string) => `/cover/${id}`,
+}));
 vi.mock('../lib/toast', () => ({
   toast: {
     info: vi.fn(),

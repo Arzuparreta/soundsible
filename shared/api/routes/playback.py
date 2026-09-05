@@ -850,14 +850,18 @@ def preview_cover_redirect(video_id):
 def get_track_cover(track_id):
     api = _get_api()
     lib, _, _ = api["get_core"]()
+    # An id this engine has never heard of used to be a 404 with a JSON body,
+    # which is a strange answer to give an <img>. A saved-but-not-downloaded
+    # song is exactly that id — it lives in the saved snapshot, not in the
+    # library — and any caller that builds a cover URL from a bare id (the
+    # head-unit rows in `routes/car.py`, say) hits it. Fall through to the
+    # placeholder below instead: an image request gets an image.
     track = api["get_track_by_id"](lib, track_id)
-    if not track:
-        return jsonify({"error": "Track not found"}), 404
     from player.cover_manager import CoverFetchManager
 
     manager = CoverFetchManager.get_instance()
-    path = lib.get_cover_url(track)
-    if not path:
+    path = lib.get_cover_url(track) if track else None
+    if track and not path:
         try:
             path = manager.extract_now(track, resolve_local_track_path(track))
         except Exception as e:
@@ -895,7 +899,14 @@ def get_track_cover(track_id):
         response = send_file(placeholder, mimetype="image/png", conditional=True)
         # A shipped asset that never changes — and the answer for every track
         # with no artwork at all, so it is worth pinning hard.
-        response.headers["Cache-Control"] = "public, max-age=86400"
+        #
+        # Not for an unknown id, though. That id can become a real track at any
+        # moment (a saved song finishes downloading), and its URL does not
+        # change when it does, so pinning the app icon there for a day would
+        # outlive the thing it stood in for. Keep that answer short and private.
+        response.headers["Cache-Control"] = (
+            "public, max-age=86400" if track else "private, max-age=60"
+        )
         return response
     return jsonify({"error": "Cover not ready"}), 404
 

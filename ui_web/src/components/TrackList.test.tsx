@@ -3,7 +3,10 @@ import { render, screen } from '@solidjs/testing-library';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
-vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
+vi.mock('../lib/media', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/media')>()),
+  coverUrl: (id: string) => `/cover/${id}`,
+}));
 vi.mock('@solidjs/router', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('./trackActions', () => ({ openTrackMenu: vi.fn() }));
 vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
