@@ -176,14 +176,25 @@ test.describe('interface scale geometry', () => {
       await expect(settingsLink).toBeVisible();
 
       const scroller = settings.locator('[data-primary-scroll]');
-      await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
       await settle(page, '[data-settings-page]');
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      });
+      // A real scroll starts with user input, which cancels any pending route
+      // restoration. Setting scrollTop alone can race that initial restore.
+      await scroller.dispatchEvent('pointerdown');
+      await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
       const lastControl = scroller.locator('button, input, select, a[href]').last();
       const lastBox = await lastControl.boundingBox();
       const playerBox = await player.boundingBox();
       expect(lastBox).not.toBeNull();
       expect(playerBox).not.toBeNull();
-      expect(lastBox!.y + lastBox!.height).toBeLessThanOrEqual(playerBox!.y + 1);
+      const scrollGeometry = await scroller.evaluate((element) => ({
+        top: element.scrollTop, height: element.scrollHeight, viewport: element.clientHeight,
+        clearance: getComputedStyle(element, '::after').height,
+      }));
+      expect(lastBox!.y + lastBox!.height, JSON.stringify(scrollGeometry)).toBeLessThanOrEqual(playerBox!.y + 1);
       await assertGeometry(page);
 
       await settingsLink.click();
@@ -237,7 +248,7 @@ test.describe('interface scale geometry', () => {
     await search.clear();
 
     await settings.getByRole('button', { name: /Reproducción/ }).click();
-    await expect(settings.getByRole('heading', { name: 'Reproducción', level: desktop ? 2 : 1 })).toBeVisible();
+    await expect(settings.locator('header').getByRole('heading', { name: 'Reproducción', exact: true })).toBeVisible();
 
     if (desktop) {
       // The index stays beside the open submenu, so there is nothing to go back
@@ -285,7 +296,7 @@ test.describe('interface scale geometry', () => {
     await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
     await page.goForward();
     await page.goForward();
-    await expect(settings.getByRole('heading', { name: 'Apariencia' })).toBeVisible();
+    await expect(settings.locator('header').getByRole('heading', { name: 'Apariencia', exact: true })).toBeVisible();
   });
 
   test('a device link still opens settings on the submenu it names', async ({ page }) => {
@@ -295,7 +306,7 @@ test.describe('interface scale geometry', () => {
     await page.goto('/player/#/settings/devices');
 
     const settings = page.locator('[data-settings-page]');
-    await expect(settings.getByRole('heading', { name: 'Dispositivos' })).toBeVisible();
+    await expect(settings.locator('header').getByRole('heading', { name: 'Dispositivos', exact: true })).toBeVisible();
   });
 
   test('missing preference migrates every existing device to Normal', async ({ page }) => {
