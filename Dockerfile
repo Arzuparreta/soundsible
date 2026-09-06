@@ -4,6 +4,8 @@ WORKDIR /build/ui_web
 COPY ui_web/package.json ui_web/package-lock.json ./
 RUN npm ci
 COPY ui_web/ ./
+# The HTML startup screen embeds the canonical logo during the Vite build.
+COPY branding/logo-mark.svg /build/branding/logo-mark.svg
 RUN npm run build
 
 
