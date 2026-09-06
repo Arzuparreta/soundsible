@@ -47,11 +47,10 @@ const DESKTOP = '(min-width: 1024px)';
 
 function renderShell(initial: string | null = null) {
   const [section, setSection] = createSignal<string | null>(initial);
-  const onClose = vi.fn();
   const view = render(() => (
-    <SettingsShell section={section()} onSectionChange={setSection} onClose={onClose} />
+    <SettingsShell section={section()} onSectionChange={setSection} />
   ));
-  return { ...view, section, onClose };
+  return { ...view, section };
 }
 
 beforeEach(async () => {
@@ -71,9 +70,9 @@ describe('settings shell on mobile', () => {
     fireEvent.click(screen.getByRole('button', { name: /Reproducción/ }));
 
     expect(section()).toBe('playback');
-    // The submenu takes the whole window, so the index is gone and the title
+    // The submenu fills the route outlet, so the index is gone and the title
     // names where you are — one h1, not two with one hidden.
-    expect(screen.getByRole('heading', { name: 'Reproducción', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Reproducción' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Ajustes' })).toBeNull();
     expect(screen.getByText('panel de reproducción')).toBeInTheDocument();
 
@@ -99,18 +98,12 @@ describe('settings shell on mobile', () => {
     expect(screen.queryByRole('button', { name: /Cuenta/ })).toBeNull();
   });
 
-  it('closes the window from the index', () => {
-    const { onClose } = renderShell();
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar ajustes' }));
-    expect(onClose).toHaveBeenCalled();
+  it('has no modal close control and registers the index scroller', () => {
+    const view = renderShell();
+    expect(screen.queryByRole('button', { name: 'Cerrar ajustes' })).toBeNull();
+    expect(view.container.querySelectorAll('[data-primary-scroll]')).toHaveLength(1);
   });
 
-  it('sends a dead id back to the index instead of an empty pane', () => {
-    const { section } = renderShell('deleted-section');
-
-    expect(section()).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeInTheDocument();
-  });
 });
 
 describe('settings shell on desktop', () => {
@@ -120,7 +113,7 @@ describe('settings shell on desktop', () => {
     renderShell('playback');
 
     expect(screen.getByRole('button', { name: /Cuenta/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Reproducción', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Reproducción' })).toBeInTheDocument();
     expect(screen.getByText('panel de reproducción')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Volver' })).toBeNull();
   });
@@ -128,7 +121,8 @@ describe('settings shell on desktop', () => {
   it('never leaves the right-hand pane empty', () => {
     const { section } = renderShell();
 
-    expect(section()).toBe('account');
+    expect(section()).toBeNull();
+    expect(screen.getByRole('button', { name: /Cuenta/ })).toHaveAttribute('aria-current', 'true');
     expect(screen.getByText('panel de cuenta')).toBeInTheDocument();
   });
 
@@ -145,7 +139,7 @@ describe('settings shell on desktop', () => {
 
     setMediaQuery(DESKTOP, false);
 
-    // Mobile is a push stack: the open submenu is the whole window again.
+    // Mobile is a push stack: the open submenu fills the route outlet.
     expect(screen.queryByRole('button', { name: /Cuenta/ })).toBeNull();
     expect(screen.getByText('panel de reproducción')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument();
