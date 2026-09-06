@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import solid from 'vite-plugin-solid';
+import { startupScreen } from './src/boot/plugin';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -18,7 +19,7 @@ export default defineConfig(({ command }) => ({
   // Copied verbatim to dist/ (stable names, no hashing) so the manifest and its
   // icons keep predictable URLs — a .webmanifest can't reference hashed assets.
   publicDir: resolve(root, 'public'),
-  plugins: [solid()],
+  plugins: [solid(), startupScreen()],
   resolve: {
     alias: {
       '@': resolve(root, 'src'),

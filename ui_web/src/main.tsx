@@ -1,6 +1,7 @@
 /* SolidJS player entry point for mobile, desktop, PWA, and the desktop shell. */
 import { render } from 'solid-js/web';
 import { Show, createEffect, lazy, onMount } from 'solid-js';
+import type { ParentProps } from 'solid-js';
 import { HashRouter, Route, useNavigate } from '@solidjs/router';
 import Shell from './app';
 // Library is the landing route; Login and Invite are the pre-auth screens. All
@@ -132,6 +133,13 @@ function InviteOrLogin() {
   return token ? <Invite token={token} /> : <Login />;
 }
 
+/** The HTML loader outlives module loading and authentication. Only release it
+ * once the appropriate screen is actually mounted, including Login/Invite. */
+function StartupReady(props: ParentProps) {
+  onMount(() => window.__SOUNDSIBLE_BOOT__?.complete());
+  return props.children;
+}
+
 /**
  * Nothing renders until the engine has told us who we are. Booting the stores
  * first would fire a burst of library requests as the wrong account — or as
@@ -152,13 +160,22 @@ function App() {
   return (
     <>
       <Show when={ready()} fallback={null}>
-        <Show when={authenticated()} fallback={<InviteOrLogin />}>
-          <Player />
-        </Show>
+        <StartupReady>
+          <Show when={authenticated()} fallback={<InviteOrLogin />}>
+            <Player />
+          </Show>
+        </StartupReady>
       </Show>
       <OverlayOutlet />
     </>
   );
 }
 
-render(() => <App />, root);
+// Initial styles are fetched without blocking the HTML launch screen. Mount
+// after they apply, so layout measurements also see the correct app geometry.
+void (window.__SOUNDSIBLE_BOOT__?.stylesReady ?? Promise.resolve())
+  .then(() => render(() => <App />, root))
+  .catch((error) => {
+    console.error('Soundsible startup failed', error);
+    window.__SOUNDSIBLE_BOOT__?.fail();
+  });
