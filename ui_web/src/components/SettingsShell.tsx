@@ -1,4 +1,7 @@
-import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Show, type JSX } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
+import { ViewHeader } from './ViewHeader';
+import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { t } from '../lib/i18n';
 import { SearchField } from './SearchField';
 import { Chevron } from './SettingsRows';
@@ -13,36 +16,23 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { desktopShell } from '../lib/shellLayout';
 import styles from './SettingsShell.module.css';
 
-/**
- * The inside of the settings window, and the only settings shell there is.
- *
- * Desktop keeps a rail of submenus beside the open one; mobile pushes one
- * submenu at a time over the index. Both compositions come from the same tree
- * and the same registry — the difference is `desktopShell()`, a boolean, not a
- * stylesheet full of crossed-out `display: none`. Which is what makes the two
- * layouts stay in step: there is no second layout to forget to update.
- */
-
+/** Categories and detail live in the app's route outlet at every size. */
 export interface SettingsShellProps {
-  /** The open submenu's id, or null for the index. Owned by the caller so the
-   *  window can reopen where it was left. */
   section: string | null;
   onSectionChange: (id: string | null) => void;
-  onClose: () => void;
 }
 
-function CloseButton(props: { onClose: () => void }) {
+function ScrollArea(props: { primary: boolean; class: string; children: JSX.Element }) {
+  let element!: HTMLDivElement;
+  // Switching between the index and split view also switches which scroller
+  // participates in route history. The effect cleans up the old registration.
+  createEffect(() => {
+    if (props.primary) registerPrimaryScroll(element);
+  });
   return (
-    <button
-      type="button"
-      class={styles.close}
-      aria-label={t('settings.close')}
-      onClick={() => props.onClose()}
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <path d="M7 7l10 10M17 7L7 17" />
-      </svg>
-    </button>
+    <div ref={element} class={props.class} data-primary-scroll={props.primary ? '' : undefined}>
+      {props.children}
+    </div>
   );
 }
 
@@ -84,23 +74,11 @@ function CategoryRow(props: {
 export default function SettingsShell(props: SettingsShellProps) {
   const [query, setQuery] = createSignal('');
 
-  const current = createMemo(() => findSection(props.section ?? undefined) ?? null);
+  const current = createMemo(() => props.section
+    ? findSection(props.section) ?? null
+    : desktopShell() ? visibleSections()[0] ?? null : null);
   const matches = createMemo(() => matchSections(visibleSections(), query()));
   const groups = createMemo(() => groupSections(visibleSections(), SETTINGS_GROUPS));
-
-  createEffect(() => {
-    // A stale id — an old deep link, or an admin-only submenu on an account
-    // that just lost admin — must land on the index, not on an empty pane.
-    if (props.section && !current()) {
-      props.onSectionChange(null);
-      return;
-    }
-    // Desktop is a split view: an empty right-hand pane is a dead pane, so the
-    // rail always has a selection. Mobile starts on the index by design.
-    if (desktopShell() && !current()) {
-      props.onSectionChange(visibleSections()[0]?.id ?? null);
-    }
-  });
 
   const select = (id: string) => {
     setQuery('');
@@ -108,17 +86,11 @@ export default function SettingsShell(props: SettingsShellProps) {
   };
 
   return (
-    <div class={styles.window} data-layout={desktopShell() ? 'split' : 'stack'}>
+    <div class={`view ${styles.page}`} data-settings-page data-layout={desktopShell() ? 'split' : 'stack'}>
       <Show when={desktopShell() || !current()}>
         <div class={styles.rail}>
-          <div class={styles.railHead}>
-            <CloseButton onClose={props.onClose} />
-            <Show when={!desktopShell()}>
-              <h1 class={styles.railTitle}>{t('settings.title')}</h1>
-            </Show>
-          </div>
-
-          <div class={styles.railScroll}>
+          <ViewHeader title={t('settings.title')} />
+          <ScrollArea primary={!desktopShell()} class={styles.railScroll}>
             <SearchField
               value={query()}
               placeholder={t('settings.searchPlaceholder')}
@@ -137,7 +109,7 @@ export default function SettingsShell(props: SettingsShellProps) {
                           {(section) => (
                             <CategoryRow
                               section={section}
-                              current={section.id === props.section}
+                              current={section.id === current()?.id}
                               compact={desktopShell()}
                               onSelect={select}
                             />
@@ -161,7 +133,7 @@ export default function SettingsShell(props: SettingsShellProps) {
                       {(section) => (
                         <CategoryRow
                           section={section}
-                          current={section.id === props.section}
+                          current={section.id === current()?.id}
                           compact={desktopShell()}
                           onSelect={select}
                         />
@@ -171,7 +143,7 @@ export default function SettingsShell(props: SettingsShellProps) {
                 </Show>
               )}
             </Show>
-          </div>
+          </ScrollArea>
         </div>
       </Show>
 
@@ -191,12 +163,11 @@ export default function SettingsShell(props: SettingsShellProps) {
                   </svg>
                 </button>
               </Show>
-              <h1 class={styles.detailTitle}>{section.title()}</h1>
-              <Show when={!desktopShell()}>
-                <CloseButton onClose={props.onClose} />
-              </Show>
+              <Dynamic component={desktopShell() ? 'h2' : 'h1'} class={styles.detailTitle}>
+                {section.title()}
+              </Dynamic>
             </header>
-            <div class={styles.detailScroll}>{section.content()}</div>
+            <ScrollArea primary={true} class={styles.detailScroll}>{section.content()}</ScrollArea>
           </section>
         )}
       </Show>

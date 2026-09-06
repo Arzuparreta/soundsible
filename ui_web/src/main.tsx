@@ -1,7 +1,7 @@
 /* SolidJS player entry point for mobile, desktop, PWA, and the desktop shell. */
 import { render } from 'solid-js/web';
 import { Show, createEffect, lazy, onMount } from 'solid-js';
-import { HashRouter, Route, useNavigate, useParams } from '@solidjs/router';
+import { HashRouter, Route, useNavigate } from '@solidjs/router';
 import Shell from './app';
 // Library is the landing route; Login and Invite are the pre-auth screens. All
 // three stay in the entry chunk — and Login/Invite must, because they render
@@ -14,6 +14,7 @@ import Login from './routes/Login';
 import Invite from './routes/Invite';
 
 const Favourites = lazy(() => import('./routes/Favourites'));
+const Settings = lazy(() => import('./routes/Settings'));
 const Search = lazy(() => import('./routes/Search'));
 const Playlists = lazy(() => import('./routes/Playlists'));
 const PlaylistDetail = lazy(() => import('./routes/PlaylistDetail'));
@@ -33,7 +34,6 @@ import { applyVisualPreferences } from './lib/visualPreferences';
 import { initLocale, t } from './lib/i18n';
 import { registerServiceWorker } from './lib/pwa';
 import { OverlayOutlet } from './lib/overlay';
-import { openSettings } from './lib/settingsSurface';
 import { installSessionGuard, ready, refreshSession, requiresLogin, user } from './lib/session';
 // Self-host the design-system typefaces (DESIGN.md) so they render for every
 // user, not only those who happen to have them installed locally. Subsets load
@@ -95,26 +95,6 @@ function DiscoverRedirect() {
   return <Search />;
 }
 
-/**
- * Turns a settings address into an open settings window. It renders nothing:
- * the window mounts from the overlay outlet, which lives outside the router, so
- * it survives the step off this route — and stepping off is the point. A window
- * needs something behind it, and `/settings` no longer draws anything.
- */
-function SettingsLink() {
-  const params = useParams();
-  const navigate = useNavigate();
-  onMount(() => {
-    // Step off the address first: the window pushes its own history entries on
-    // top of wherever the app ends up, and replacing afterwards would overwrite
-    // the first of them.
-    const section = params.section;
-    navigate('/', { replace: true });
-    openSettings(section);
-  });
-  return null;
-}
-
 function Player() {
   return (
     <HashRouter root={Shell}>
@@ -122,13 +102,8 @@ function Player() {
       <Route path="/library" component={Library} />
       <Route path="/favourites" component={Favourites} />
       <Route path="/search" component={Search} />
-      {/* Settings is a window now, not a page — but it still has an address.
-          A paired device sends its owner back to `#/settings/devices`
-          (lib/trackShare), and bookmarks outlive redesigns. Opening the window
-          and stepping off the URL keeps both working without settings owning a
-          route it no longer renders anything into. */}
-      <Route path="/settings" component={SettingsLink} />
-      <Route path="/settings/:section" component={SettingsLink} />
+      <Route path="/settings" component={Settings} />
+      <Route path="/settings/:section" component={Settings} />
       <Route path="/discover" component={DiscoverRedirect} />
       <Route path="/playlists" component={Playlists} />
       <Route path="/playlists/:name" component={PlaylistDetail} />

@@ -80,12 +80,7 @@ async function installPreferences(page: Page, size?: InterfaceSize, highContrast
   );
 }
 
-/**
- * `within` scopes the control and text checks to one surface. Settings is a
- * window now: it opens over whatever you were on, so an unscoped sweep would
- * grade the page behind the scrim instead of the thing under test. Page-level
- * overflow stays global — that is a property of the document either way.
- */
+/** Scope optional checks to a surface while keeping document overflow global. */
 async function assertGeometry(page: Page, within?: string) {
   const geometry = await page.evaluate((rootSelector) => {
     const scope = rootSelector ? document.querySelector(rootSelector) : document;
@@ -123,8 +118,6 @@ async function assertGeometry(page: Page, within?: string) {
         return element.scrollWidth > element.clientWidth + 1;
       })
       .map((element) => `${element.tagName}:${element.textContent?.trim()}`);
-    // Buttons too: the settings entry opens a window rather than navigating, so
-    // it is a button, and its label has the same right to fit as the others'.
     const clippedNavigationLabels = [...scope.querySelectorAll<HTMLElement>('nav a span, nav button span')]
       .filter(visible)
       .filter((element) => (
@@ -158,9 +151,57 @@ test.describe('interface scale geometry', () => {
       await mockEngine(page, true);
       await installPreferences(page, size);
       await page.goto('/player/#/settings');
-      await expect(page.getByRole('dialog', { name: 'Ajustes' })).toBeVisible();
+      await expect(page.locator('[data-settings-page]')).toBeVisible();
       await expect(page.locator('html')).toHaveAttribute('data-interface-size', size);
-      await assertGeometry(page, '[role="dialog"]');
+      await assertGeometry(page);
+    });
+
+    test(`${size} keeps the player and navigation usable through settings`, async ({ page }) => {
+      await mockEngine(page, true);
+      await installPreferences(page, size);
+      await page.goto('/player/#/');
+      await page.getByRole('button', { name: /Reproducir Una canción/ }).click();
+      const player = page.locator('[data-omni-player]');
+      await expect(player).toBeVisible();
+      const originalPlayer = await player.elementHandle();
+      const settingsLink = page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true });
+      await settingsLink.click();
+      const settings = page.locator('[data-settings-page]');
+      await expect(settings).toBeVisible();
+      await settings.getByRole('button', { name: /Reproducción/ }).click();
+      await expect(page).toHaveURL(/#\/settings\/playback$/);
+      await expect(player).toBeVisible();
+      await expect(player).toContainText(TRACKS[0].title);
+      expect(await player.evaluate((element, original) => element === original, originalPlayer)).toBe(true);
+      await expect(settingsLink).toBeVisible();
+
+      const scroller = settings.locator('[data-primary-scroll]');
+      await settle(page, '[data-settings-page]');
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      });
+      // A real scroll starts with user input, which cancels any pending route
+      // restoration. Setting scrollTop alone can race that initial restore.
+      await scroller.dispatchEvent('pointerdown');
+      await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+      const lastControl = scroller.locator('button, input, select, a[href]').last();
+      const lastBox = await lastControl.boundingBox();
+      const playerBox = await player.boundingBox();
+      expect(lastBox).not.toBeNull();
+      expect(playerBox).not.toBeNull();
+      const scrollGeometry = await scroller.evaluate((element) => ({
+        top: element.scrollTop, height: element.scrollHeight, viewport: element.clientHeight,
+        clearance: getComputedStyle(element, '::after').height,
+      }));
+      expect(lastBox!.y + lastBox!.height, JSON.stringify(scrollGeometry)).toBeLessThanOrEqual(playerBox!.y + 1);
+      await assertGeometry(page);
+
+      await settingsLink.click();
+      await expect(page).toHaveURL(/#\/settings$/);
+      await page.getByRole('link', { name: 'Biblioteca', exact: true }).filter({ visible: true }).click();
+      await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
+      expect(await player.evaluate((element, original) => element === original, originalPlayer)).toBe(true);
     });
   }
 
@@ -168,7 +209,7 @@ test.describe('interface scale geometry', () => {
     await mockEngine(page, true);
     await installPreferences(page, 'compact');
     await page.goto('/player/#/settings');
-    await expect(page.getByRole('dialog', { name: 'Ajustes' })).toBeVisible();
+    await expect(page.locator('[data-settings-page]')).toBeVisible();
     const desktop = page.viewportSize()!.width >= 1024;
     const tokens = await page.locator('html').evaluate((element) => {
       const styles = getComputedStyle(element);
@@ -190,81 +231,72 @@ test.describe('interface scale geometry', () => {
     await installPreferences(page, 'normal');
     await page.goto('/player/#/settings');
 
-    const window_ = page.getByRole('dialog', { name: 'Ajustes' });
-    await expect(window_).toBeVisible();
+    const settings = page.locator('[data-settings-page]');
+    await expect(settings).toBeVisible();
     const desktop = page.viewportSize()!.width >= 1024;
 
-    // A window is not a page: it opens over wherever you were, and the address
-    // that opened it is spent. The library is still behind it.
-    await expect(page).toHaveURL(/#\/$/);
+    await expect(page).toHaveURL(/#\/settings$/);
+    await expect(page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }))
+      .toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     const search = page.getByPlaceholder('Buscar en ajustes');
     await expect(search).toBeVisible();
     await search.fill('contraseña');
-    await expect(window_.getByRole('button', { name: /Cuenta/ })).toBeVisible();
-    await expect(window_.getByRole('button', { name: /Apariencia/ })).toBeHidden();
+    await expect(settings.getByRole('button', { name: /Cuenta/ })).toBeVisible();
+    await expect(settings.getByRole('button', { name: /Apariencia/ })).toBeHidden();
     await search.clear();
 
-    await window_.getByRole('button', { name: /Reproducción/ }).click();
-    await expect(window_.getByRole('heading', { name: 'Reproducción', level: 1 })).toBeVisible();
+    await settings.getByRole('button', { name: /Reproducción/ }).click();
+    await expect(settings.locator('header').getByRole('heading', { name: 'Reproducción', exact: true })).toBeVisible();
 
     if (desktop) {
       // The index stays beside the open submenu, so there is nothing to go back
       // to and no back button pretending otherwise.
       await expect(search).toBeVisible();
-      await expect(window_.getByRole('button', { name: /Cuenta/ })).toBeVisible();
-      await expect(window_.getByRole('button', { name: 'Volver' })).toHaveCount(0);
+      await expect(settings.getByRole('button', { name: /Cuenta/ })).toBeVisible();
+      await expect(settings.getByRole('button', { name: 'Volver' })).toHaveCount(0);
     } else {
       // The push replaces the index, and the title names where you are.
       await expect(search).toBeHidden();
-      await expect(window_.getByRole('heading', { name: 'Ajustes' })).toHaveCount(0);
-      await window_.getByRole('button', { name: 'Volver' }).click();
+      await expect(settings.getByRole('heading', { name: 'Ajustes' })).toHaveCount(0);
+      await settings.getByRole('button', { name: 'Volver' }).click();
       await expect(search).toBeVisible();
-      await expect(window_.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
+      await expect(settings.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
     }
 
-    await settle(page, '[role="dialog"]');
-    await assertGeometry(page, '[role="dialog"]');
+    await settle(page, '[data-settings-page]');
+    await assertGeometry(page);
     const results = await new AxeBuilder({ page })
-      .include('[role="dialog"]')
+      .include('[data-settings-page]')
       .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
       .analyze();
     expect(results.violations).toEqual([]);
 
-    // Escape gives the app back, and the tab stops claiming to be current.
     await page.keyboard.press('Escape');
-    await expect(window_).toBeHidden();
+    await expect(settings).toBeVisible();
+    await page.getByRole('link', { name: 'Buscar', exact: true }).filter({ visible: true }).click();
+    await expect(page).toHaveURL(/#\/search$/);
+    await expect(settings).toHaveCount(0);
   });
 
-  test('the back gesture unwinds settings instead of the page under it', async ({ page }) => {
+  test('back and forward traverse settings routes inside the shell', async ({ page }) => {
     await mockEngine(page, true);
     await installPreferences(page, 'normal');
     await page.goto('/player/#/');
     await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
-
-    const window_ = page.getByRole('dialog', { name: 'Ajustes' });
-    const desktop = page.viewportSize()!.width >= 1024;
-
-    await page.getByRole('button', { name: 'Ajustes' }).click();
-    await expect(window_).toBeVisible();
-    await window_.getByRole('button', { name: /Apariencia/ }).click();
-    await expect(window_.getByRole('heading', { name: 'Apariencia', level: 1 })).toBeVisible();
-
+    await page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }).click();
+    const settings = page.locator('[data-settings-page]');
+    await settings.getByRole('button', { name: /Apariencia/ }).click();
+    await expect(page).toHaveURL(/#\/settings\/appearance$/);
     await page.goBack();
-
-    if (desktop) {
-      // The index never left, so there is no step back into settings to take.
-      await expect(window_).toBeHidden();
-    } else {
-      // A submenu really is pushed over the index, so back returns to it —
-      // rather than unwinding the library underneath and leaving the window up.
-      await expect(window_).toBeVisible();
-      await expect(window_.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
-      await page.goBack();
-      await expect(window_).toBeHidden();
-    }
-
+    await expect(page).toHaveURL(/#\/settings$/);
+    await expect(settings.getByRole('heading', { name: 'Ajustes' })).toBeVisible();
+    await page.goBack();
     await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
+    await page.goForward();
+    await page.goForward();
+    await expect(settings.locator('header').getByRole('heading', { name: 'Apariencia', exact: true })).toBeVisible();
   });
 
   test('a device link still opens settings on the submenu it names', async ({ page }) => {
@@ -273,8 +305,8 @@ test.describe('interface scale geometry', () => {
     // What a paired device sends its owner back to (lib/trackShare).
     await page.goto('/player/#/settings/devices');
 
-    const window_ = page.getByRole('dialog', { name: 'Ajustes' });
-    await expect(window_.getByRole('heading', { name: 'Dispositivos', level: 1 })).toBeVisible();
+    const settings = page.locator('[data-settings-page]');
+    await expect(settings.locator('header').getByRole('heading', { name: 'Dispositivos', exact: true })).toBeVisible();
   });
 
   test('missing preference migrates every existing device to Normal', async ({ page }) => {
@@ -321,11 +353,12 @@ test.describe('interface scale geometry', () => {
       { width: 320, height: 568 },
       { width: 768, height: 1024 },
       { width: 1024, height: 600 },
+      { width: 1280, height: 720 },
     ]) {
       await page.setViewportSize(viewport);
       await page.goto('/player/#/settings');
-      await expect(page.getByRole('dialog', { name: 'Ajustes' })).toBeVisible();
-      await assertGeometry(page, '[role="dialog"]');
+      await expect(page.locator('[data-settings-page]')).toBeVisible();
+      await assertGeometry(page);
     }
     expect(['chromium', 'webkit']).toContain(browserName);
   });
@@ -370,7 +403,7 @@ test.describe('interface scale geometry', () => {
     await mockEngine(page, true);
     await installPreferences(page, 'large', true);
     await page.goto('/player/#/settings');
-    await expect(page.getByRole('dialog', { name: 'Ajustes' })).toBeVisible();
+    await expect(page.locator('[data-settings-page]')).toBeVisible();
     await expect(page).toHaveScreenshot('settings-large-high-contrast.png', { fullPage: false });
   });
 });
