@@ -67,7 +67,7 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  height: max(36px, var(--control-h, 36px));
+  height: max(44px, var(--control-h, 44px));
   padding-inline: 12px;
   background: transparent;
   border: 1px solid var(--hairline-soft);
