@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const port = Number(process.env.SOUNDSIBLE_UI_TEST_PORT || 4173);
+
 export default defineConfig({
   testDir: './tests/browser',
   fullyParallel: false,
@@ -16,14 +18,14 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   expect: { timeout: 7_500, toHaveScreenshot: { animations: 'disabled', maxDiffPixelRatio: 0.015 } },
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: `http://127.0.0.1:${port}`,
     locale: 'es-ES',
     colorScheme: 'dark',
     reducedMotion: 'reduce',
   },
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 4173',
-    url: 'http://127.0.0.1:4173/player/',
+    command: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
+    url: `http://127.0.0.1:${port}/player/`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

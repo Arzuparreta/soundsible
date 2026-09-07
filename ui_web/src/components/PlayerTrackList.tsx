@@ -1,4 +1,10 @@
-import { createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from './MusicListRow';
+import { openContextMenu } from '../lib/contextMenu';
+import { t } from '../lib/i18n';
+import type { MenuAction } from './ActionMenu';
+import type { SavedEntry } from '../types/music';
+import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import { createResponsiveTap, responsiveTapConstants } from '../lib/responsiveTap';
 import { claimHoldGesture, clearTextSelection } from '../lib/holdGesture';
 import {
@@ -27,6 +33,11 @@ export interface PlayerTrackListEntry {
   badge?: string;
   onActivate?: () => void;
   trailing?: JSX.Element;
+  entry?: SavedEntry;
+  menu?: () => MenuAction[];
+  onMove?: (direction: -1 | 1) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   draggable?: boolean;
   onDragStart?: (event: DragEvent) => void;
   onDragOver?: (event: DragEvent) => void;
@@ -85,7 +96,20 @@ export function PlayerTrackList(props: {
   };
   const [slot, setSlot] = createSignal<DropSlot | null>(null);
   const [dragging, setDragging] = createSignal(false);
+  // Sections rebuild their entry objects when the queue moves. Editing belongs
+  // to the occurrence, not to a row instance that disappears after one nudge.
+  const [editingId, setEditingId] = createSignal<string | null>(null);
   let rowsEl: HTMLDivElement | undefined;
+  createEffect(() => {
+    if (editingId() && !props.sections.some((section) => section.entries.some((entry) =>
+      entry.id === editingId() && !entry.current && !entry.locked))) setEditingId(null);
+  });
+  const focusRowControl = (id: string, command?: string) => queueMicrotask(() => {
+    const row = [...(rowsEl?.querySelectorAll<HTMLElement>('[data-drag-row]') ?? [])]
+      .find((row) => row.dataset.dragRow === id);
+    const preferred = command ? row?.querySelector<HTMLButtonElement>(`[data-edit-command="${command}"]:not(:disabled)`) : null;
+    (preferred ?? row?.querySelector<HTMLButtonElement>('[data-edit-command]:not(:disabled), [data-row-menu]'))?.focus();
+  });
   let depth = 0;
   let scrollFrame: number | undefined;
   let scrollSpeed = 0;
@@ -209,7 +233,10 @@ export function PlayerTrackList(props: {
                       {(entry, index) => (
                         <>
                           {entry.before}
-                          <PlayerTrackListRow entry={entry} seam={slot()?.index === index()} />
+                          <PlayerTrackListRow entry={entry} seam={slot()?.index === index()}
+                            editing={editingId() === entry.id}
+                            onEditingChange={(editing) => { setEditingId(editing ? entry.id : null); focusRowControl(entry.id); }}
+                            onMove={(direction) => { entry.onMove?.(direction); focusRowControl(entry.id, direction < 0 ? 'up' : 'down'); }} />
                         </>
                       )}
                     </For>
@@ -227,12 +254,25 @@ export function PlayerTrackList(props: {
   );
 }
 
-function PlayerTrackListRow(props: { entry: PlayerTrackListEntry; seam?: boolean }) {
+function PlayerTrackListRow(props: {
+  entry: PlayerTrackListEntry;
+  seam?: boolean;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
+  onMove: (direction: -1 | 1) => void;
+}) {
   const disabled = () => Boolean(props.entry.current || props.entry.locked || !props.entry.onActivate);
   const tap = createResponsiveTap({
     disabled,
     onTap: () => props.entry.onActivate?.(),
   });
+  const openMenu = () => {
+    const actions = [...(props.entry.menu?.() ?? [])];
+    if (!props.entry.locked && !props.entry.current && (props.entry.onMove || props.entry.onCarry)) actions.unshift({
+      label: t('musicList.move'), onSelect: () => props.entry.onMove ? props.onEditingChange(true) : props.entry.onCarry?.(),
+    });
+    if (actions.length) openContextMenu({ title: props.entry.title, subtitle: props.entry.artist, actions });
+  };
   let carryTimer: number | undefined;
   let carryStart: { x: number; y: number } | null = null;
   let releaseHold: (() => void) | undefined;
@@ -243,6 +283,7 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry; seam?: boolean
     releaseHold?.();
     releaseHold = undefined;
   };
+  onCleanup(cancelCarry);
   return (
     <div
       class={styles.row}
@@ -259,7 +300,7 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry; seam?: boolean
       onDragOver={props.entry.onDragOver}
       onDrop={props.entry.onDrop}
       onPointerDown={(event) => {
-        if (!props.entry.onCarry) return;
+        if (mobileListLayout() || !props.entry.onCarry) return;
         cancelCarry();
         carryStart = { x: event.clientX, y: event.clientY };
         // Touch only: a mouse hold has no selection gesture to head off, and
@@ -282,6 +323,17 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry; seam?: boolean
       onPointerUp={cancelCarry}
       onPointerCancel={cancelCarry}
     >
+      <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.entry.title} subtitle={props.entry.artist}
+        seed={props.entry.id} cover={props.entry.cover} index={props.entry.current ? undefined : props.entry.position}
+        active={props.entry.current} disabled={disabled() || props.editing} entry={props.entry.entry}
+        annotation={props.entry.current && props.entry.paused ? t('musicList.paused') : props.entry.badge ?? props.entry.annotation}
+        onActivate={props.entry.onActivate}
+        onMenu={props.entry.menu || props.entry.onMove || props.entry.onCarry ? openMenu : undefined}
+        editing={props.editing} editControls={<>
+          <button type="button" data-edit-command="up" aria-label={t('musicList.moveUp')} disabled={!props.entry.canMoveUp} onClick={() => props.onMove(-1)}>↑</button>
+          <button type="button" data-edit-command="down" aria-label={t('musicList.moveDown')} disabled={!props.entry.canMoveDown} onClick={() => props.onMove(1)}>↓</button>
+          <button type="button" data-edit-command="done" aria-label={t('musicList.done')} onClick={() => props.onEditingChange(false)}>✓</button>
+        </>} />}>
       <button class={styles.main} type="button" disabled={disabled()} data-pressable {...tap}>
         <span class={styles.position}>
           <Show when={!props.entry.current} fallback={
@@ -308,6 +360,7 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry; seam?: boolean
       </button>
       <Show when={props.entry.trailing}>
         <span class={styles.trailing}>{props.entry.trailing}</span>
+      </Show>
       </Show>
     </div>
   );

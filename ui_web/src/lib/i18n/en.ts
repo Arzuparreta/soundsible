@@ -1,5 +1,13 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
+  musicList: {
+    paused: 'Paused',
+    move: 'Move',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    done: 'Done',
+  },
+
   brand: {
     soundsible: 'Soundsible',
     soundsibleWeb: 'Soundsible Web',

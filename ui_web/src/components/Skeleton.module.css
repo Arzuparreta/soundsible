@@ -160,3 +160,11 @@
     animation: none;
   }
 }
+
+@media (max-width: 1023px) {
+  .rows { padding-inline: 0; gap: 0; }
+  .row, .compactRows .row { height: var(--row-h); gap: 8px; padding-inline: 12px; border: 0; }
+  .rowCopy { order: 0; }
+  .cover { order: 1; }
+  .trailing { order: 2; width: max(44px, var(--control-h)); flex-basis: max(44px, var(--control-h)); }
+}

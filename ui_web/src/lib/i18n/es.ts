@@ -1,6 +1,13 @@
 import type { Dict } from './en';
 
 export const es: Dict = {
+  musicList: {
+    paused: 'En pausa',
+    move: 'Mover',
+    moveUp: 'Subir',
+    moveDown: 'Bajar',
+    done: 'Listo',
+  },
   brand: {
     soundsible: 'Soundsible',
     soundsibleWeb: 'Soundsible Web',

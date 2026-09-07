@@ -1,6 +1,13 @@
 import type { Dict } from './en';
 
 export const zh: Dict = {
+  musicList: {
+    paused: '已暂停',
+    move: '移动',
+    moveUp: '上移',
+    moveDown: '下移',
+    done: '完成',
+  },
   brand: {
     soundsible: 'Soundsible',
     soundsibleWeb: 'Soundsible Web',

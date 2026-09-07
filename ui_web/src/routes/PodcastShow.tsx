@@ -1,3 +1,6 @@
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from '../components/MusicListRow';
+import { openContextMenu } from '../lib/contextMenu';
 import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
@@ -109,8 +112,19 @@ export default function PodcastShow() {
             {(ep) => {
               const id = ep.guid || ep.enclosure_url;
               const downloaded = () => isDownloaded(ep);
+              const downloading = () => state.downloads.queue.some((item) => item.song_str === ep.enclosure_url
+                && (item.status === 'pending' || item.status === 'downloading'));
               const tap = createResponsiveTap({ onTap: () => playEp(ep) });
               return (
+                <Show when={!mobileListLayout()} fallback={<MusicListRow title={ep.title}
+                  subtitle={[fmtDate(ep.published), fmtDur(ep.duration_sec)].filter(Boolean).join(' · ')}
+                  seed={id} cover={ep.image || image()} active={isPlayingEpisode(id)} busy={downloading()} busyLabel={t('collection.downloading')}
+                  actionLabel={`${t('podcastShow.ariaPlay')}: ${ep.title}`} onActivate={() => playEp(ep)}
+                  onMenu={() => openContextMenu({ title: ep.title, subtitle: title(), actions: [
+                    { label: t('podcastShow.ariaPlay'), onSelect: () => playEp(ep) },
+                    { label: t(downloaded() ? 'podcastShow.ariaDownloaded' : downloading() ? 'collection.downloading' : 'podcastShow.ariaDownload'), disabled: downloaded() || downloading(),
+                      onSelect: () => void actions.downloadEpisode(ep, sub()) },
+                  ] })} />}>
                 <div
                   class={styles.ep}
                   data-now-playing={isPlayingEpisode(id) ? '' : undefined}
@@ -170,6 +184,7 @@ export default function PodcastShow() {
                     </span>
                   </Show>
                 </div>
+                </Show>
               );
             }}
           </For>

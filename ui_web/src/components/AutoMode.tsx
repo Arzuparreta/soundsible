@@ -1,3 +1,7 @@
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from './MusicListRow';
+import { openContextMenu } from '../lib/contextMenu';
+import { savedFromTrack } from '../lib/saved';
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import { actions, state } from '../stores';
 import {
@@ -146,7 +150,12 @@ export function AutoMode(props: {
           : bridge ? t('autoMode.route.bridge') : undefined,
       before: gap,
       onDragStart: (event) => writeAutoTrackTransfer(event, { track, queueId: track.queueId }),
-      onCarry: () => setCarriedTrack({ track, queueId: track.queueId }),
+      entry: savedFromTrack(track),
+      onCarry: committed ? undefined : () => setCarriedTrack({ track, queueId: track.queueId }),
+      menu: committed ? undefined : () => [
+        { label: t('autoMode.route.useAsSource'), onSelect: () => actions.useAutoTrackAsSource(track) },
+        { label: t('autoMode.route.remove'), danger: true, onSelect: () => actions.removeAutoRouteOccurrence(track.queueId) },
+      ],
       // Two things worth doing to a queued song, both one press away. Removing
       // carries the stronger reading — "and don't bring it back" — on its toast.
       trailing: committed ? undefined : (
@@ -245,6 +254,13 @@ export function AutoMode(props: {
             <p class={styles.sourceHint}>{t('autoMode.source.add')}</p>
           </Show>
           <For each={state.autoMode.sources}>{(source) => (
+            <Show when={!mobileListLayout()} fallback={<MusicListRow title={source.label} subtitle={`${source.tracks.length}`} seed={source.id}
+              cover={source.tracks[0]?.cover ?? (source.tracks[0] ? coverUrl(source.tracks[0].id, 'thumb') : undefined)}
+              onActivate={destination().kind === 'route' && source.tracks.length === 1 ? () => {
+                placeInRoute(source.tracks[0], destination().beforeQueueId); finishDestination('route');
+              } : undefined}
+              onMenu={() => openContextMenu({ title: source.label, actions: [{ label: t('autoMode.source.remove', { title: source.label }), danger: true,
+                onSelect: () => actions.removeAutoSource(source.id) }] })} />}>
             <div
               class={styles.sourceChip}
               data-route-target={destination().kind === 'route' && source.tracks.length === 1 ? '' : undefined}
@@ -259,6 +275,7 @@ export function AutoMode(props: {
               <span><strong>{source.label}</strong><small>{source.tracks.length}</small></span>
               <button type="button" aria-label={t('autoMode.source.remove', { title: source.label })} onClick={(event) => { event.stopPropagation(); actions.removeAutoSource(source.id); }}>×</button>
             </div>
+            </Show>
           )}</For>
         </Show>
       </div>

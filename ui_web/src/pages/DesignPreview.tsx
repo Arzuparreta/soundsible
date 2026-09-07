@@ -1,3 +1,5 @@
+import { MusicListRow } from '../components/MusicListRow';
+import { openContextMenu } from '../lib/contextMenu';
 import { createSignal, For } from 'solid-js';
 import Button from '../components/Button';
 import SongRow from '../components/SongRow';
@@ -91,6 +93,20 @@ export default function DesignPreview() {
         </div>
       </section>
 
+      <section class={styles.section} data-mobile-list-preview>
+        <h2 class={styles.h2}>Mobile lists</h2>
+        <div class={styles.list}>
+          <For each={[
+            { title: 'Una canción con un título muy largo que conserva su comienzo', subtitle: 'Artista con un nombre largo', favourite: true },
+            { title: 'En Favoritos, sin repetir el corazón', subtitle: 'Artista', favourite: true, favouritesKnown: true },
+            { title: 'Descargando', subtitle: 'Artista', favourite: true, busy: true },
+            { title: 'Artista', subtitle: '12 canciones', round: true },
+            { title: 'Próxima canción', subtitle: 'Artista', annotation: 'Preparada', active: true },
+          ]}>{(sample) => <MusicListRow {...sample} seed={sample.title} onActivate={() => setActiveId(sample.title)}
+            onMenu={() => openContextMenu({ title: sample.title, subtitle: sample.subtitle,
+              actions: [{ label: 'Reproducir', onSelect: () => setActiveId(sample.title) }] })} />}</For>
+        </div>
+      </section>
       <section class={styles.section}>
         <h2 class={styles.h2}>Song list</h2>
         <p class={styles.hint}>
@@ -99,7 +115,7 @@ export default function DesignPreview() {
         <div class={styles.list}>
           <For each={SAMPLE_TRACKS}>
             {(track, i) => (
-              <SongRow track={track} index={i() + 1} active={activeId() === track.id} onPlay={setActiveId} />
+              <SongRow track={track} index={i() + 1} active={activeId() === track.id} onPlay={(track) => setActiveId(track.id)} onMenu={() => openContextMenu({ title: track.title, actions: [{ label: 'Reproducir', onSelect: () => setActiveId(track.id) }] })} />
             )}
           </For>
         </div>

@@ -152,6 +152,7 @@ export default function TrackList(props: {
                       >
                         <SongRow
                           track={t()}
+                          favouritesKnown={props.context?.kind === 'favourites'}
                           cover={trackCoverUrl(t(), 'thumb')}
                           favouritable={!isPodcastTrack(t())}
                           active={isPlayingTrack(t())}

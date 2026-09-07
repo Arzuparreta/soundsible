@@ -66,10 +66,10 @@ const row = (page: Page, n: number) =>
 async function rowUnder(page: Page, x: number, y: number): Promise<string | null> {
   return page.evaluate(([px, py]) => {
     const covered = document.elementsFromPoint(px, py).find((element) => {
-      const rowElement = element.closest<HTMLElement>('[role="button"][aria-label^="Play "]');
+      const rowElement = element.closest<HTMLElement>('[role="button"][aria-label^="Play "], [data-row-main][aria-label^="Play "]');
       return rowElement && !rowElement.closest('[role="dialog"]');
     });
-    return covered?.closest<HTMLElement>('[role="button"]')?.getAttribute('aria-label') ?? null;
+    return covered?.closest<HTMLElement>('[role="button"], [data-row-main]')?.getAttribute('aria-label') ?? null;
   }, [x, y]);
 }
 
@@ -85,7 +85,8 @@ test('an action chosen in the song menu never reaches the list underneath', asyn
 
   // The topmost row, so its sheet is the furthest from it: what the sheet
   // covers is other songs.
-  await row(page, 12).getByRole('button', { name: 'More options' }).tap();
+  await page.locator('[data-music-list-row]').filter({ has: row(page, 12) })
+    .getByRole('button', { name: /^More options/ }).tap();
   const sheet = page.getByRole('dialog');
   await expect(sheet).toBeVisible();
 

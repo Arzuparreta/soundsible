@@ -1,3 +1,5 @@
+import { buildTrackMenu } from './trackActions';
+import { savedFromTrack } from '../lib/saved';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { actions, state } from '../stores';
 import { coverUrl } from '../lib/media';
@@ -111,6 +113,18 @@ export function NowPlaying(props: {
       paused: current && !state.playback.isPlaying,
       onActivate: current ? undefined : () => actions.playQueueEntry(entry.queueId),
       trailing: current ? undefined : removeButton(entry),
+      entry: savedFromTrack(entry),
+      menu: () => [
+        ...buildTrackMenu(entry),
+        ...(!current ? [{ label: t('nowPlaying.removeFromQueue'), danger: true,
+          onSelect: () => actions.removeQueueEntry(entry.queueId) }] : []),
+      ],
+      canMoveUp: !current && queueIndex() > state.playback.index + 1,
+      canMoveDown: !current && queueIndex() < state.playback.queue.length - 1,
+      onMove: current ? undefined : (direction) => {
+        const from = queueIndex(); const to = from + direction;
+        if (from > state.playback.index && to > state.playback.index && to < state.playback.queue.length) actions.moveInQueue(from, to);
+      },
       draggable: !current,
       onDragStart: () => { dragFrom = queueIndex(); },
       onDragOver: (event) => {

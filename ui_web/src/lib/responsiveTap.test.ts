@@ -69,6 +69,23 @@ function compatibilityClick(target: Element): MouseEvent {
 }
 
 describe('responsive touch activation', () => {
+  it.each(['scroll', 'cancel'])('suppresses the compatibility click after %s without swallowing keyboard activation', (gesture) => {
+    const onTap = vi.fn();
+    const target = document.createElement('button');
+    document.body.append(target);
+    const handlers = createResponsiveTap({ onTap });
+    target.addEventListener('click', handlers.onClick);
+    handlers.onPointerDown(pointerEvent(target));
+    if (gesture === 'scroll') {
+      handlers.onPointerMove(pointerEvent(target, { clientY: 100 }));
+      handlers.onPointerUp(pointerEvent(target));
+    } else handlers.onPointerCancel(pointerEvent(target));
+    expect(compatibilityClick(target).defaultPrevented).toBe(true);
+    expect(onTap).not.toHaveBeenCalled();
+    handlers.onClick(mouseEvent(0));
+    expect(onTap).toHaveBeenCalledOnce();
+  });
+
   it('activates on touch pointerup, and the click that follows activates nothing', () => {
     const onTap = vi.fn();
     const target = document.createElement('div');
