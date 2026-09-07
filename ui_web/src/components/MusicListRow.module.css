@@ -28,14 +28,10 @@
   border-radius: var(--radius-xs);
 }
 .main[aria-disabled='true'] { cursor: default; }
-/* The text sits to the left of the cover, so it reads against it: ranged right,
- * every row's title and subtitle end on the same edge instead of trailing off
- * into the gap. A title too long to fit still fills the line and elides at its
- * end, which is where the eye leaves it. */
-.meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; text-align: right; }
+.meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .title, .subtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title { font-size: var(--text-body); font-weight: var(--fw-medium); }
-.subtitle { display: flex; justify-content: flex-end; gap: 4px; color: var(--ink-secondary); font-size: var(--text-label); }
+.subtitle { display: flex; gap: 4px; color: var(--ink-secondary); font-size: var(--text-label); }
 .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .index { font-variant-numeric: tabular-nums; }
 .annotation { flex-shrink: 0; max-width: 55%; overflow: hidden; text-overflow: ellipsis; color: var(--accent-ink); }
