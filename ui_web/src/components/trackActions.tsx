@@ -19,6 +19,8 @@ import { toast } from '../lib/toast';
  */
 export interface TrackMenuContext {
   navigate?: (path: string) => void;
+  onOpenArtist?: () => void;
+  collection?: boolean;
   /** Present when the row lives inside a playlist; enables "remove from playlist". */
   playlistName?: string;
   onAddToPlaylist?: (track: Track) => void;
@@ -93,11 +95,12 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
   if (!isPodcast)
     list.push({ icon: icons.radio(), label: inAuto ? t('modeChange.startRadio') : t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
-  if (ctx.navigate && track.artist && isLibrary && !isPodcast)
+  if (ctx.onOpenArtist) list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: ctx.onOpenArtist });
+  if (!ctx.onOpenArtist && ctx.navigate && track.artist && isLibrary && !isPodcast)
     list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist, { view: 'library' })) });
   // The heart only makes sense over songs you have: it marks some of them out
   // from the others. The menu offers saving instead until then.
-  if (!isPodcast && isSaved)
+  if (ctx.collection !== false && !isPodcast && isSaved)
     list.push({
       icon: icons.heart(),
       label: isFav ? t('trackActions.removeFav') : t('trackActions.addFav'),
@@ -124,7 +127,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   // Having a song and having its bytes are two separate steps, and the menu
   // offers exactly the one the song is standing on.
   // Podcast episodes are excluded — they use a different download flow.
-  if (track.source === 'preview' && !track.podcast_episode_guid) {
+  if (ctx.collection !== false && track.source === 'preview' && !track.podcast_episode_guid) {
     const entry = savedFromTrack(track);
     const alreadyOnDisk = state.library.some((t) => t.youtube_id === track.id || t.id === track.id);
     if (!isSaved) {

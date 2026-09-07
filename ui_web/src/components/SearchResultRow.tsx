@@ -1,3 +1,6 @@
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from './MusicListRow';
+import { openEntryMenu } from './entryActions';
 import { createMemo, Show, type JSX } from 'solid-js';
 import type { SearchResult } from '../types/music';
 import { t } from '../lib/i18n';
@@ -41,6 +44,9 @@ export default function SearchResultRow(props: SearchResultRowProps) {
       : { background: 'var(--bg-raised)' };
 
   return (
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.r.title} subtitle={props.r.channel} seed={props.r.id} cover={props.r.thumbnail}
+      active={props.active} entry={entry()} onActivate={props.onPreview}
+      onMenu={() => openEntryMenu(entry(), { onRadio: props.onRadio })} />}>
     <div
       class={styles.row}
       data-pressable
@@ -48,6 +54,7 @@ export default function SearchResultRow(props: SearchResultRowProps) {
       role="button"
       tabindex="0"
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         props.onPreview();
@@ -81,5 +88,6 @@ export default function SearchResultRow(props: SearchResultRowProps) {
       </Show>
       <CollectionButton entry={entry()} compact />
     </div>
+    </Show>
   );
 }

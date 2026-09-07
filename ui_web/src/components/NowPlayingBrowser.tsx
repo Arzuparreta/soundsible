@@ -1,3 +1,10 @@
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from './MusicListRow';
+import { buildEntryMenu } from './entryActions';
+import { savedFromTrack, savedFromCatalogItem } from '../lib/saved';
+import { openContextMenu } from '../lib/contextMenu';
+import { openPlaylistMenu } from './playlistActions';
+import type { SavedEntry } from '../types/music';
 import {
   createEffect,
   createMemo,
@@ -82,6 +89,8 @@ type SearchReturn = {
  * Built once per row by `NowPlayingBrowser.autoRow` and handed down, so every
  * list gets the same behaviour without repeating the reasoning. */
 interface AutoRowProps {
+  entry?: SavedEntry;
+  favouritesKnown?: boolean;
   variant: 'browse' | 'auto';
   onAddToRoute?: () => void;
   track?: Track;
@@ -432,6 +441,8 @@ export function NowPlayingBrowser(props: {
     const track = item ? playableTrack(item) : (target as Track | null);
     const auto = Boolean(props.purpose?.startsWith('auto-'));
     return {
+      entry: item ? savedFromCatalogItem(item) : track ? savedFromTrack(track) : undefined,
+      favouritesKnown: !query().trim() && currentView().kind === 'favourites',
       variant: auto ? 'auto' : 'browse',
       // Picking a source is its own errand; offering the route mid-way through
       // it would be answering a question the listener did not ask.
@@ -465,6 +476,7 @@ export function NowPlayingBrowser(props: {
       onAddToPlaylist: openPlaylistPicker,
       onEditMetadata: openMetadataEditor,
       onPlayOnDevice: openPlayOnDevice,
+      onOpenArtist: track.artist ? () => push({ kind: 'libraryArtist', name: track.artist }) : undefined,
     }, event);
 
   const renderTrack = (
@@ -908,7 +920,7 @@ function PlaylistsView(props: {
             const track = pickPlaylistCoverTrack(name, ids(), props.byId, state.librarySettings);
             return track ? trackCoverUrl(track, 'thumb') : undefined;
           };
-          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onClick={() => props.onOpen(name)} />;
+          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onMenu={(event) => openPlaylistMenu(name, {}, event)} onClick={() => props.onOpen(name)} />;
         }}
       </For>
     </div>
@@ -1218,14 +1230,17 @@ function NavigationCard(props: { icon: JSX.Element; title: string; meta: string;
   return <button class={styles.navCard} type="button" data-pressable {...tap}><span>{props.icon}</span><strong>{props.title}</strong><small>{props.meta}</small><ChevronIcon /></button>;
 }
 
-function NavigationRow(props: { title: string; subtitle: string; cover?: string; round?: boolean; onClick: () => void }) {
+function NavigationRow(props: { title: string; subtitle: string; cover?: string; round?: boolean; onClick: () => void; onMenu?: (event?: MouseEvent) => void }) {
   const tap = createResponsiveTap({ onTap: props.onClick });
   return (
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.title} subtitle={props.subtitle} seed={props.title}
+      cover={props.cover} round={props.round} onActivate={props.onClick} onMenu={props.onMenu} />}>
     <button class={styles.navRow} type="button" data-pressable {...tap}>
       <span classList={{ [styles.round]: props.round }} style={coverStyle(props.title, props.cover)} />
       <span><strong>{props.title}</strong><small>{props.subtitle}</small></span>
       <ChevronIcon />
     </button>
+    </Show>
   );
 }
 
@@ -1252,13 +1267,15 @@ function BrowserTrackRow(props: {
   subtitle: string;
   cover?: string;
   seed: string;
+  entry?: SavedEntry;
+  favouritesKnown?: boolean;
   active: boolean;
   queued: boolean;
   resolving?: boolean;
   owned?: boolean;
   onPlay: () => void;
   onQueue: () => void;
-  onMenu?: (event: MouseEvent) => void;
+  onMenu?: (event?: MouseEvent) => void;
   primaryLabel?: string;
   variant?: 'browse' | 'auto';
   onAddToRoute?: () => void;
@@ -1275,7 +1292,28 @@ function BrowserTrackRow(props: {
     releaseHold?.();
     releaseHold = undefined;
   };
+  const mobileMenu = () => {
+    if (props.onMenu && !auto()) { props.onMenu(); return; }
+    const entry = props.entry ?? savedFromTrack(props.track ?? {
+      id: props.seed, title: props.title, artist: props.subtitle, cover: props.cover, source: 'preview',
+    });
+    const menu = buildEntryMenu(entry, { track: props.track });
+    if (auto() && props.onAddToRoute) {
+      const label = t('autoMode.dj.routeAction');
+      const existing = menu.findIndex((action) => action.label === label);
+      const action = { label, onSelect: props.onAddToRoute };
+      if (existing >= 0) menu[existing] = action; else menu.unshift(action);
+    } else if (!props.track) menu.unshift({ label: t('trackActions.addToQueue'), onSelect: props.onQueue });
+    if (props.track && props.onCarryTrack) menu.unshift({ label: t('musicList.move'), onSelect: () => props.onCarryTrack?.(props.track!) });
+    openContextMenu({ title: props.title, subtitle: props.subtitle, actions: menu });
+  };
+  onCleanup(cancelHold);
   return (
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.title} subtitle={props.subtitle} seed={props.seed}
+      cover={props.cover} active={props.active} busy={props.resolving} entry={props.entry}
+      annotation={props.queued ? t('searchPanel.inQueue') : undefined}
+      favouritesKnown={props.favouritesKnown} actionLabel={props.primaryLabel ? `${props.primaryLabel}: ${props.title}` : undefined}
+      onActivate={props.onPlay} onMenu={mobileMenu} />}>
     <div
       classList={{ [styles.trackRow]: true, [styles.trackActive]: props.active }}
       draggable={Boolean(props.track)}
@@ -1324,6 +1362,7 @@ function BrowserTrackRow(props: {
         </Show>
       </Show>
     </div>
+    </Show>
   );
 }
 

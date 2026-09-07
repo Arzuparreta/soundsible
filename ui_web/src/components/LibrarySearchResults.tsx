@@ -1,3 +1,6 @@
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from './MusicListRow';
+import { openArtistMenu } from './artistActions';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
@@ -19,12 +22,18 @@ import { registerPrimaryScroll } from '../lib/scrollHistory';
 
 function readRowHeight(): number {
   if (typeof document === 'undefined') return 60;
-  return window.matchMedia('(min-width: 1024px)').matches ? 48 : 60;
+  if (!mobileListLayout()) return 48;
+  const value = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h'));
+  return Number.isFinite(value) && value > 0 ? value : 56;
 }
 
 function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'artist' }>; onOpen: () => void }) {
   const tap = createResponsiveTap({ onTap: props.onOpen });
   return (
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.result.artist.name}
+      subtitle={t('library.artistTrackCount', { count: props.result.artist.count })} seed={props.result.artist.name}
+      cover={coverUrl(props.result.artist.coverId, 'thumb')} round onActivate={props.onOpen}
+      onMenu={(event) => openArtistMenu(props.result.artist.name, {}, event)} />}>
     <div
       class={styles.artistRow}
       data-pressable
@@ -51,6 +60,7 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
         <path d="m9 18 6-6-6-6" />
       </svg>
     </div>
+    </Show>
   );
 }
 
@@ -83,7 +93,9 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
     const sync = () => setRowH(readRowHeight());
     sync();
     mq.addEventListener('change', sync);
-    onCleanup(() => mq.removeEventListener('change', sync));
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-interface-size'] });
+    onCleanup(() => { mq.removeEventListener('change', sync); observer.disconnect(); });
   });
 
   const virtualizer = createVirtualizer({
