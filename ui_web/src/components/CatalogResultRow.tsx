@@ -1,5 +1,8 @@
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from './MusicListRow';
+import { openEntryMenu } from './entryActions';
 import { createMemo, Show, type JSX } from 'solid-js';
-import { itemArtist, itemBusy } from '../lib/catalogItem';
+import { itemArtist, itemBusy, itemToTrack } from '../lib/catalogItem';
 import { coverStyle } from '../lib/cover';
 import { coverUrl } from '../lib/media';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -35,6 +38,11 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
     );
 
   return (
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.item.title} subtitle={props.showArtist === false ? undefined : props.item.subtitle || itemArtist(props.item)}
+      seed={props.item.id} cover={props.item.cover || (props.item.track_id ? coverUrl(props.item.track_id, 'thumb') : undefined)}
+      index={props.index} active={props.active} busy={busy() || props.saving} entry={entry()}
+      onActivate={props.onPlay} onMenu={() => openEntryMenu(entry(), { track: itemToTrack(props.item) ?? undefined,
+        onDownload: props.onDownload, busy: props.saving })} />}>
     <div
       class={styles.row}
       data-pressable
@@ -44,6 +52,7 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
       tabindex="0"
       {...tap}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         props.onPlay();
@@ -79,5 +88,6 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
         onDownload={props.onDownload}
       />
     </div>
+    </Show>
   );
 }

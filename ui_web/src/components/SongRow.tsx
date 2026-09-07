@@ -1,3 +1,9 @@
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from './MusicListRow';
+import { openTrackMenu } from './trackActions';
+import { openPlaylistPicker } from './PlaylistPicker';
+import { openMetadataEditor } from './MetadataEditor';
+import { openPlayOnDevice } from './DeviceSheet';
 import { createMemo, Show, type JSX } from 'solid-js';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
@@ -6,7 +12,7 @@ import { coverStyle } from '../lib/cover';
 import { formatDuration } from '../lib/format';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
-import { isSavedTrack } from '../stores';
+import { isSavedTrack, state } from '../stores';
 import { FavouriteButton } from './FavouriteButton';
 import { Spinner } from './Spinner';
 import { CollectionButton } from './CollectionButton';
@@ -20,6 +26,7 @@ export interface SongRowProps {
   /** Optional compact type marker used by mixed result lists. */
   badge?: string;
   active?: boolean;
+  favouritesKnown?: boolean;
   /** When false, the row hides its heart (podcast episodes). */
   favouritable?: boolean;
   onPlay?: (track: Track) => void;
@@ -94,6 +101,17 @@ export default function SongRow(props: SongRowProps) {
       : props.track.title);
 
   return (
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.track.title} subtitle={props.track.artist} seed={props.track.id}
+      cover={props.cover ?? props.track.cover} index={props.index} annotation={props.badge}
+      active={props.active} busy={props.busy || (props.active && state.playback.isLoading)}
+      // A compact row carries no collection marks — the same trim the desktop
+      // row makes — so the shared row is told there is no entry to mark.
+      entry={props.compact || props.favouritable === false ? undefined : entry()}
+      favouritesKnown={props.favouritesKnown} actionLabel={label()} primaryAction={props.primaryAction}
+      onActivate={() => props.onPlay?.(props.track)} onMenu={(event) => props.onMenu
+        ? props.onMenu(props.track, event)
+        : openTrackMenu(props.track, { onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor,
+            onPlayOnDevice: openPlayOnDevice, onOpenArtist: props.onArtist ? () => props.onArtist!(props.track.artist) : undefined }, event)} />}>
     <div
       class={styles.row}
       data-compact={props.compact ? '' : undefined}
@@ -173,5 +191,6 @@ export default function SongRow(props: SongRowProps) {
         </Show>
       </div>
     </div>
+    </Show>
   );
 }

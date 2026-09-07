@@ -1,5 +1,6 @@
 import { claimHoldGesture, clearTextSelection } from './holdGesture';
 import { shieldGhostClicks } from './ghostClick';
+import { getOwner, onCleanup } from 'solid-js';
 
 const TAP_SLOP = 8;
 const LONG_PRESS_MS = 450;
@@ -52,6 +53,9 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
     cancelled = false;
     longPressed = false;
   };
+
+  // Virtualization can remove a pressed row before pointerup arrives.
+  if (getOwner()) onCleanup(reset);
 
   const nestedInteractive = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
@@ -110,19 +114,22 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
   const onPointerUp = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
     const shouldTap = !cancelled && !longPressed && !options.disabled?.();
-    const handled = shouldTap || longPressed;
     reset();
     // Whatever this press did — activated the control, or opened a menu that is
     // now sitting under the finger — the mouse events the platform still owes
     // this touch belong to nobody. Armed before the activation runs, so the
     // guard is already up when the screen changes under it.
-    if (handled) shieldGhostClicks();
+    // A cancelled pan must not leave an activation behind either.
+    shieldGhostClicks();
     if (!shouldTap) return;
     options.onTap(event);
   };
 
   const onPointerCancel = (event: PointerEvent) => {
-    if (pointerId === event.pointerId) reset();
+    if (pointerId === event.pointerId) {
+      shieldGhostClicks();
+      reset();
+    }
   };
 
   const onClick = (event: MouseEvent) => {

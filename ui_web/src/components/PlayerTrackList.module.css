@@ -401,3 +401,8 @@
 @keyframes playerTrackEq {
   to { transform: scaleY(0.45); }
 }
+
+@media (max-width: 1023px) {
+  .row { display: block; }
+  .row[data-current]::before { background: transparent; }
+}

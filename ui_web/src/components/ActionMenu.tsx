@@ -90,5 +90,5 @@ export function ActionMenuList(props: { opts: ActionMenuOptions; close: () => vo
  * For a cursor-anchored context menu use `openContextMenu` (lib/contextMenu).
  */
 export function openActionMenu(opts: ActionMenuOptions): void {
-  openOverlay((close) => <ActionMenuList opts={opts} close={close} />);
+  openOverlay((close) => <ActionMenuList opts={opts} close={close} />, { ariaLabel: opts.title });
 }

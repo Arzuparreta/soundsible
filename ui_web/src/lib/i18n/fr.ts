@@ -28,7 +28,6 @@ export const fr: Dict = {
     collectionFailed: 'Résolution impossible : {titles}',
     requesting: 'Préparation de vos demandes…',
     partial: 'Certaines sources ne répondent pas. Les résultats disponibles sont affichés.',
-    openArtist: 'Voir l’artiste',
     openAlbum: 'Voir l’album',
     playNow: 'Écouter maintenant',
     referencePicking: 'Choisissez la musique pour guider la session',
@@ -36,6 +35,13 @@ export const fr: Dict = {
     downloaded: 'Téléchargés',
     catalog: 'Explorer l’artiste',
     library: 'Dans votre bibliothèque',
+  },
+  musicList: {
+    paused: 'En pause',
+    move: 'Déplacer',
+    moveUp: 'Monter',
+    moveDown: 'Descendre',
+    done: 'Terminé',
   },
   brand: {
     soundsible: 'Soundsible',

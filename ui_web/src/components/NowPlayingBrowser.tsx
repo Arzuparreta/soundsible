@@ -1,3 +1,7 @@
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from './MusicListRow';
+import { savedFromTrack, savedFromCatalogItem } from '../lib/saved';
+import type { SavedEntry } from '../types/music';
 import {
   createEffect,
   createMemo,
@@ -78,6 +82,8 @@ export type { BrowserView } from '../lib/musicBrowserNavigation';
  * Built once per row by `NowPlayingBrowser.autoRow` and handed down, so every
  * list gets the same behaviour without repeating the reasoning. */
 interface AutoRowProps {
+  entry?: SavedEntry;
+  favouritesKnown?: boolean;
   variant: 'browse' | 'auto';
   primaryLabel?: string;
   onAddToRoute?: () => void;
@@ -396,6 +402,8 @@ export function NowPlayingBrowser(props: {
     const track = item ? playableTrack(item) : (target as Track | null);
     const auto = Boolean(props.purpose?.startsWith('auto-'));
     return {
+      entry: item ? savedFromCatalogItem(item) : track ? savedFromTrack(track) : undefined,
+      favouritesKnown: !query().trim() && currentView().kind === 'favourites',
       variant: auto ? 'auto' : 'browse',
       primaryLabel: referenceMode() ? t('musicExplorer.reference') : auto ? t('musicExplorer.request') : undefined,
       onAddToRoute: auto && target
@@ -429,7 +437,7 @@ export function NowPlayingBrowser(props: {
       onAddToPlaylist: openPlaylistPicker,
       onEditMetadata: openMetadataEditor,
       onPlayOnDevice: openPlayOnDevice,
-      onOpenArtist: () => push({ kind: 'catalogArtist', name: track.artist }),
+      onOpenArtist: track.artist ? () => push({ kind: 'catalogArtist', name: track.artist }) : undefined,
       onOpenAlbum: track.album ? () => push({ kind: 'catalogAlbum', name: track.album!, artist: track.album_artist || track.artist }) : undefined,
       onRemoveFromPlaylist: currentView().kind === 'playlist' ? () => void actions.removeFromPlaylist((currentView() as { name: string }).name, track.id) : undefined,
     }, event);
@@ -944,7 +952,7 @@ function PlaylistsView(props: {
             const track = pickPlaylistCoverTrack(name, ids(), props.byId, state.librarySettings);
             return track ? trackCoverUrl(track, 'thumb') : undefined;
           };
-          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onClick={() => props.onOpen(name)} />;
+          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onMenu={(event) => openPlaylistMenu(name, {}, event)} onClick={() => props.onOpen(name)} />;
         }}
       </For>}>
         <MusicReorderList items={props.names} label={(name) => name} render={(name) => <span>{name}</span>} onChange={actions.reorderPlaylists} />
@@ -1221,14 +1229,17 @@ function ViewHeader(props: { title: string; meta?: string; onBack?: () => void; 
   return <SharedViewHeader {...props} compact />;
 }
 
-function NavigationRow(props: { title: string; subtitle: string; cover?: string; round?: boolean; onClick: () => void }) {
+function NavigationRow(props: { title: string; subtitle: string; cover?: string; round?: boolean; onClick: () => void; onMenu?: (event?: MouseEvent) => void }) {
   const tap = createResponsiveTap({ onTap: props.onClick });
   return (
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.title} subtitle={props.subtitle} seed={props.title}
+      cover={props.cover} round={props.round} onActivate={props.onClick} onMenu={props.onMenu} />}>
     <button class={styles.navRow} type="button" data-pressable {...tap}>
       <span classList={{ [styles.round]: props.round }} style={coverStyle(props.title, props.cover)} />
       <span><strong>{props.title}</strong><small>{props.subtitle}</small></span>
       <ChevronIcon />
     </button>
+    </Show>
   );
 }
 
@@ -1247,6 +1258,8 @@ function BrowserTrackRow(props: {
   subtitle: string;
   cover?: string;
   seed: string;
+  entry?: SavedEntry;
+  favouritesKnown?: boolean;
   active: boolean;
   queued: boolean;
   resolving?: boolean;

@@ -28,7 +28,6 @@ export const zh: Dict = {
     collectionFailed: '无法解析：{titles}',
     requesting: '正在准备点播…',
     partial: '部分来源未响应，已显示可用结果。',
-    openArtist: '查看艺人',
     openAlbum: '查看专辑',
     playNow: '立即播放',
     referencePicking: '选择引导本场的音乐',
@@ -36,6 +35,13 @@ export const zh: Dict = {
     downloaded: '已下载',
     catalog: '探索艺人',
     library: '我的音乐库',
+  },
+  musicList: {
+    paused: '已暂停',
+    move: '移动',
+    moveUp: '上移',
+    moveDown: '下移',
+    done: '完成',
   },
   brand: {
     soundsible: 'Soundsible',

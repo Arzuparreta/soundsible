@@ -1,3 +1,4 @@
+import { savedFromTrack } from '../lib/saved';
 import { createMemo, createSignal, Show, type JSX } from 'solid-js';
 import { actions, state } from '../stores';
 import {
@@ -139,7 +140,12 @@ export function AutoMode(props: {
           : bridge ? t('autoMode.route.bridge') : undefined,
       before: gap,
       onDragStart: (event) => writeAutoTrackTransfer(event, { track, queueId: track.queueId }),
-      onCarry: () => setCarriedTrack({ track, queueId: track.queueId }),
+      entry: savedFromTrack(track),
+      onCarry: committed ? undefined : () => setCarriedTrack({ track, queueId: track.queueId }),
+      menu: committed ? undefined : () => [
+        { label: t('autoMode.route.useAsSource'), onSelect: () => actions.useAutoTrackAsSource(track) },
+        { label: t('autoMode.route.remove'), danger: true, onSelect: () => actions.removeAutoRouteOccurrence(track.queueId) },
+      ],
       // Two things worth doing to a queued song, both one press away. Removing
       // carries the stronger reading — "and don't bring it back" — on its toast.
       trailing: committed ? undefined : (

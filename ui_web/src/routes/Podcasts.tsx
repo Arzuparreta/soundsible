@@ -1,3 +1,6 @@
+import { mobileListLayout } from '../lib/listLayout';
+import { MusicListRow } from '../components/MusicListRow';
+import { openContextMenu } from '../lib/contextMenu';
 import { createMemo, createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
@@ -262,6 +265,16 @@ export default function Podcasts() {
                   onTap: () => void subscribe(r),
                 });
                 return (
+                  <Show when={!mobileListLayout()} fallback={<MusicListRow title={r.title} subtitle={r.author}
+                    seed={r.feed_url} cover={r.image_url} busy={disabled()} busyLabel={t('podcasts.subscribing')}
+                    onActivate={subscribedFeeds().has(r.feed_url) ? () => {
+                      const sub = state.podcastSubscriptions.find((sub) => sub.rss_url === r.feed_url);
+                      if (sub) navigate(`/podcasts/${sub.id}`);
+                    } : undefined}
+                    onMenu={() => openContextMenu({ title: r.title, subtitle: r.author, actions: [
+                      { label: t(subscribedFeeds().has(r.feed_url) ? 'podcasts.subscribed' : 'podcasts.subscribe'),
+                        disabled: disabled() || subscribedFeeds().has(r.feed_url), onSelect: () => void subscribe(r) },
+                    ] })} />}>
                   <div class={styles.row}>
                     <div class={styles.rowCover} style={neutralCoverStyle(r.image_url)} />
                     <div class={styles.meta}>
@@ -283,6 +296,7 @@ export default function Podcasts() {
                       </button>
                     </Show>
                   </div>
+                  </Show>
                 );
               }}
             </For>

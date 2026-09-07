@@ -27,7 +27,6 @@ export const en = {
     collectionFailed: 'Could not resolve: {titles}',
     requesting: 'Preparing your requests…',
     partial: 'Some sources could not answer. Available results are shown.',
-    openArtist: 'Go to artist',
     openAlbum: 'Go to album',
     playNow: 'Play now',
     referencePicking: 'Choose music to guide the session',
@@ -36,6 +35,14 @@ export const en = {
     catalog: 'Explore artist',
     library: 'In your library',
   },
+  musicList: {
+    paused: 'Paused',
+    move: 'Move',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    done: 'Done',
+  },
+
   brand: {
     soundsible: 'Soundsible',
     soundsibleWeb: 'Soundsible Web',
