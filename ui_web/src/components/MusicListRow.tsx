@@ -24,11 +24,6 @@ export interface MusicListRowProps {
   favouritesKnown?: boolean;
   favourite?: boolean;
   actionLabel?: string;
-  /** A named action the row carries in the open, beside the overflow menu.
-   * Reserved for placement — asking for a song, putting one in the route —
-   * where the whole list exists to be acted on and burying the verb in a menu
-   * would cost a tap per item. */
-  primaryAction?: { label: string; onSelect: () => void };
   disabled?: boolean;
   onActivate?: () => void;
   onMenu?: (event?: MouseEvent) => void;
@@ -52,9 +47,6 @@ export function MusicListRow(props: MusicListRowProps) {
     onLongPress: props.onMenu ? () => props.onMenu?.() : undefined,
   });
   const menuTap = createResponsiveTap({ onTap: (event) => { event.stopPropagation(); props.onMenu?.(); } });
-  const primaryTap = createResponsiveTap({
-    onTap: (event) => { event.stopPropagation(); if (!props.disabled && !busy()) props.primaryAction?.onSelect(); },
-  });
   return (
     <div class={styles.row} data-music-list-row data-now-playing={props.active ? '' : undefined}
       data-editing={props.editing ? '' : undefined} aria-busy={busy() || undefined}>
@@ -86,15 +78,6 @@ export function MusicListRow(props: MusicListRowProps) {
           </Show>
         </span>
       </button>
-      {/* Named by its own text, the way the desktop row names it. The row
-        * itself already announces the same verb against the title, and a second
-        * control repeating that name verbatim would leave a screen reader with
-        * two identical buttons and no way to tell them apart. */}
-      <Show when={props.primaryAction}>{(action) => (
-        <button class={styles.primary} type="button" data-row-primary data-pressable
-          aria-disabled={props.disabled || busy() || undefined}
-          {...primaryTap}>{action().label}</button>
-      )}</Show>
       <Show when={props.editing && props.editControls} fallback={<Show when={props.onMenu}>
         <button class={styles.menu} type="button" data-row-menu data-pressable
           aria-label={`${t('songRow.ariaMore')}: ${props.title}`} aria-haspopup="dialog" {...menuTap}>
