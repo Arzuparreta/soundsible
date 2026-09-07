@@ -134,6 +134,11 @@ async function enqueueCatalogItem(item: CatalogItem): Promise<void> {
   }
 }
 
+/** How long a restore may keep asking for a position the panel cannot hold yet.
+ * Long enough for a list to fetch and lay out, short enough that a genuinely
+ * shorter view settles where it lands instead of fighting the user's scroll. */
+const RESTORE_GRACE_MS = 1000;
+
 export function NowPlayingBrowser(props: {
   onClose: () => void;
   dragHandle?: JSX.Element;
@@ -456,16 +461,30 @@ export function NowPlayingBrowser(props: {
     const offset = untrack(() => navigation.current().scroll);
     restoringScroll = true;
     let frame = 0;
-    const observer = new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(restore); });
+    const observer = new MutationObserver(() => { cancelAnimationFrame(frame); deadline = 0; frame = requestAnimationFrame(restore); });
     const finish = () => { restoringScroll = false; observer.disconnect(); };
+    // A panel that has just swapped content is often still shorter than the
+    // offset it owes, and the assignment silently clamps to zero. What makes it
+    // tall enough is the virtual window sizing its spacer, and that is an inline
+    // style on an element that was already there — no child is added, so waiting
+    // on the mutation observer alone waits for an event that never comes. Keep
+    // asking across frames until the list can hold the position, and stop at a
+    // deadline rather than spinning behind a list that will never be that long.
+    let deadline = 0;
     const restore = () => {
       const body = panelEl?.querySelector<HTMLElement>('[data-browser-body]');
       if (!body) return;
       body.scrollTop = offset;
-      if (Math.abs(body.scrollTop - offset) <= 1) frame = requestAnimationFrame(() => {
-        if (Math.abs(body.scrollTop - offset) <= 1) finish();
-        else restore();
-      });
+      if (Math.abs(body.scrollTop - offset) <= 1) {
+        frame = requestAnimationFrame(() => {
+          if (Math.abs(body.scrollTop - offset) <= 1) finish();
+          else restore();
+        });
+        return;
+      }
+      if (!deadline) deadline = performance.now() + RESTORE_GRACE_MS;
+      if (performance.now() < deadline) frame = requestAnimationFrame(restore);
+      else finish();
     };
     observer.observe(panelEl, { childList: true, subtree: true });
     panelEl.addEventListener('wheel', finish, { once: true, passive: true });
