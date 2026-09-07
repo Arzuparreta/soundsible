@@ -35,6 +35,7 @@ import { artistKey } from '../lib/artistRoute';
 import { searchLibrary, type LibrarySearchResult } from '../lib/librarySearch';
 import { addCatalogItemsAsAutoSource, catalogPreviewId, itemArtist, itemToTrack, playCatalogItem } from '../lib/catalogItem';
 import { writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
+import { claimHoldGesture, clearTextSelection } from '../lib/holdGesture';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { prefetchPreviews } from '../lib/prefetch';
@@ -1267,19 +1268,28 @@ function BrowserTrackRow(props: {
   const auto = () => props.variant === 'auto';
   const tap = createResponsiveTap({ onTap: props.onPlay });
   let holdTimer: number | undefined;
+  let releaseHold: (() => void) | undefined;
   const cancelHold = () => {
     if (holdTimer !== undefined) window.clearTimeout(holdTimer);
     holdTimer = undefined;
+    releaseHold?.();
+    releaseHold = undefined;
   };
   return (
     <div
       classList={{ [styles.trackRow]: true, [styles.trackActive]: props.active }}
       draggable={Boolean(props.track)}
       onDragStart={(event) => props.track && writeAutoTrackTransfer(event, { track: props.track })}
-      onPointerDown={() => {
+      onPointerDown={(event) => {
         if (!props.track || !props.onCarryTrack) return;
         cancelHold();
-        holdTimer = window.setTimeout(() => props.onCarryTrack?.(props.track!), 460);
+        // Touch only: a mouse hold has no selection gesture to head off, and
+        // claiming one would cancel a drag-select that starts inside the row.
+        if (event.pointerType !== 'mouse') releaseHold = claimHoldGesture();
+        holdTimer = window.setTimeout(() => {
+          clearTextSelection();
+          props.onCarryTrack?.(props.track!);
+        }, 460);
       }}
       onPointerMove={cancelHold}
       onPointerUp={cancelHold}

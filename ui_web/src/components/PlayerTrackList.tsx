@@ -1,5 +1,6 @@
 import { createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import { createResponsiveTap, responsiveTapConstants } from '../lib/responsiveTap';
+import { claimHoldGesture, clearTextSelection } from '../lib/holdGesture';
 import {
   buildDropSlots,
   containerPointer,
@@ -234,10 +235,13 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry; seam?: boolean
   });
   let carryTimer: number | undefined;
   let carryStart: { x: number; y: number } | null = null;
+  let releaseHold: (() => void) | undefined;
   const cancelCarry = () => {
     if (carryTimer !== undefined) window.clearTimeout(carryTimer);
     carryTimer = undefined;
     carryStart = null;
+    releaseHold?.();
+    releaseHold = undefined;
   };
   return (
     <div
@@ -258,7 +262,13 @@ function PlayerTrackListRow(props: { entry: PlayerTrackListEntry; seam?: boolean
         if (!props.entry.onCarry) return;
         cancelCarry();
         carryStart = { x: event.clientX, y: event.clientY };
-        carryTimer = window.setTimeout(() => props.entry.onCarry?.(), 460);
+        // Touch only: a mouse hold has no selection gesture to head off, and
+        // claiming one would cancel a drag-select that starts inside the row.
+        if (event.pointerType !== 'mouse') releaseHold = claimHoldGesture();
+        carryTimer = window.setTimeout(() => {
+          clearTextSelection();
+          props.entry.onCarry?.();
+        }, 460);
       }}
       // A held finger is never perfectly still. Cancelling on any movement at
       // all made the long press a gesture only a mouse could land.

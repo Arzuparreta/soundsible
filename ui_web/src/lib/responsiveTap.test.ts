@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createResponsiveTap, responsiveTapConstants } from './responsiveTap';
+import { holdGestureConstants } from './holdGesture';
 
 function pointerEvent(
   currentTarget: Element,
@@ -17,16 +18,38 @@ function pointerEvent(
   } as PointerEvent;
 }
 
-function mouseEvent(detail: number): MouseEvent {
+function mouseEvent(detail: number, currentTarget: Element | null = null): MouseEvent {
   return {
     detail,
+    currentTarget,
     preventDefault: vi.fn(),
     stopPropagation: vi.fn(),
   } as unknown as MouseEvent;
 }
 
+const armed = () => document.documentElement.hasAttribute(holdGestureConstants.ATTRIBUTE);
+
+/** A row with a live text selection across it, as a drag with a mouse leaves. */
+function selectedRow(): HTMLElement {
+  const row = document.createElement('div');
+  row.textContent = 'Una canción con título';
+  document.body.append(row);
+  const range = document.createRange();
+  range.selectNodeContents(row);
+  const selection = window.getSelection()!;
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return row;
+}
+
 afterEach(() => {
+  // A long-press candidate claims the platform gesture (lib/holdGesture).
+  // Anything a case left open expires on its own failsafe rather than leaking
+  // into the next one.
+  if (vi.isFakeTimers()) vi.advanceTimersByTime(holdGestureConstants.MAX_HOLD_MS);
   vi.useRealTimers();
+  document.body.innerHTML = '';
+  window.getSelection()?.removeAllRanges();
 });
 
 describe('responsive touch activation', () => {
@@ -113,6 +136,67 @@ describe('responsive touch activation', () => {
 
     expect(onLongPress).toHaveBeenCalledTimes(1);
     expect(onTap).not.toHaveBeenCalled();
+  });
+
+  it('owns the platform gesture from the first touch, not from the long press', () => {
+    vi.useFakeTimers();
+    const target = document.createElement('div');
+    const handlers = createResponsiveTap({ onTap: vi.fn(), onLongPress: vi.fn() });
+
+    // Armed on contact: Safari decides what to select at around 500ms, by
+    // which time the menu this press opens is already under the finger.
+    handlers.onPointerDown(pointerEvent(target));
+    expect(armed()).toBe(true);
+
+    vi.advanceTimersByTime(responsiveTapConstants.LONG_PRESS_MS);
+    handlers.onPointerUp(pointerEvent(target));
+    expect(armed()).toBe(true);
+
+    vi.advanceTimersByTime(holdGestureConstants.RELEASE_TAIL_MS);
+    expect(armed()).toBe(false);
+  });
+
+  it('hands the gesture back the moment a press becomes a pan', () => {
+    vi.useFakeTimers();
+    const target = document.createElement('div');
+    const handlers = createResponsiveTap({ onTap: vi.fn(), onLongPress: vi.fn() });
+
+    handlers.onPointerDown(pointerEvent(target));
+    handlers.onPointerMove(
+      pointerEvent(target, { clientY: 30 + responsiveTapConstants.TAP_SLOP + 1 }),
+    );
+
+    vi.advanceTimersByTime(holdGestureConstants.RELEASE_TAIL_MS);
+    expect(armed()).toBe(false);
+  });
+
+  it('never claims the gesture for a candidate with no long press to protect', () => {
+    vi.useFakeTimers();
+    const target = document.createElement('div');
+    const handlers = createResponsiveTap({ onTap: vi.fn() });
+
+    handlers.onPointerDown(pointerEvent(target));
+
+    expect(armed()).toBe(false);
+  });
+
+  it('ignores the click that closes a drag-selection inside the row', () => {
+    const onTap = vi.fn();
+    const row = selectedRow();
+    const handlers = createResponsiveTap({ onTap });
+
+    // Dragging across a title to copy it must not also play the song.
+    handlers.onClick(mouseEvent(1, row));
+    expect(onTap).not.toHaveBeenCalled();
+
+    // Keyboard activation carries no selection of its own and is never filtered.
+    handlers.onClick(mouseEvent(0, row));
+    expect(onTap).toHaveBeenCalledTimes(1);
+
+    // A plain click: the browser collapsed the selection on mousedown.
+    window.getSelection()?.removeAllRanges();
+    handlers.onClick(mouseEvent(1, row));
+    expect(onTap).toHaveBeenCalledTimes(2);
   });
 
   it('leaves nested controls to their own activation handler', () => {

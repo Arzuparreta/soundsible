@@ -1,3 +1,5 @@
+import { claimHoldGesture, clearTextSelection } from './holdGesture';
+
 const TAP_SLOP = 8;
 const LONG_PRESS_MS = 450;
 const CLICK_SUPPRESSION_MS = 700;
@@ -28,14 +30,23 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
   let longPressed = false;
   let longPressTimer: number | undefined;
   let suppressClickUntil = 0;
+  let releaseHold: (() => void) | undefined;
 
   const clearLongPress = () => {
     window.clearTimeout(longPressTimer);
     longPressTimer = undefined;
   };
 
+  /** Hand the platform its gesture back. Safe to call from every path that
+   * ends a press, and from several of them at once. */
+  const endHold = () => {
+    releaseHold?.();
+    releaseHold = undefined;
+  };
+
   const reset = () => {
     clearLongPress();
+    endHold();
     pointerId = null;
     cancelled = false;
     longPressed = false;
@@ -66,9 +77,15 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
     longPressed = false;
     clearLongPress();
     if (options.onLongPress) {
+      // Claimed up front, not when the press completes: Safari decides what to
+      // select at around 500ms, and by then the menu is already open under the
+      // finger. Arming late is arming after the damage.
+      endHold();
+      releaseHold = claimHoldGesture();
       longPressTimer = window.setTimeout(() => {
         if (pointerId !== event.pointerId || cancelled) return;
         longPressed = true;
+        clearTextSelection();
         options.onLongPress?.(event);
       }, LONG_PRESS_MS);
     }
@@ -82,6 +99,10 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
     ) {
       cancelled = true;
       clearLongPress();
+      // A pan is not a hold. Releasing here, rather than waiting for the lift,
+      // keeps a scroll that started on a row from holding selection hostage
+      // for the length of the flick.
+      endHold();
     }
   };
 
@@ -105,10 +126,26 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
       event.stopPropagation();
       return;
     }
+    // A click that closes a text selection inside this element is not an
+    // activation: dragging across a song title to copy it must not also play
+    // the song. A plain click never trips this — mousedown collapses whatever
+    // was selected before the click is dispatched.
+    if (event.detail > 0 && selectionWithin(event.currentTarget)) return;
     if (!options.disabled?.()) options.onTap(event);
   };
 
   return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onClick };
+}
+
+/** Does the document's selection live inside this element? */
+function selectionWithin(node: EventTarget | null): boolean {
+  if (typeof window === 'undefined' || !(node instanceof Node)) return false;
+  const selection = window.getSelection?.();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
+  return (
+    (!!selection.anchorNode && node.contains(selection.anchorNode)) ||
+    (!!selection.focusNode && node.contains(selection.focusNode))
+  );
 }
 
 export const responsiveTapConstants = {
