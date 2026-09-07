@@ -100,16 +100,14 @@ export default function SongRow(props: SongRowProps) {
       ? t('songRow.ariaPlay', { title: props.track.title, artist: props.track.artist })
       : props.track.title);
 
-  /* The compact row is the music explorer's, and it carries controls the shared
-   * row has no place for — a named request action, a busy spinner, a drag
-   * source. Handing it over would drop them silently, so it keeps the markup it
-   * was built and tested with; every other list gets the shared mobile row. */
   return (
-    <Show when={!mobileListLayout() || props.compact} fallback={<MusicListRow title={props.track.title} subtitle={props.track.artist} seed={props.track.id}
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.track.title} subtitle={props.track.artist} seed={props.track.id}
       cover={props.cover ?? props.track.cover} index={props.index} annotation={props.badge}
-      active={props.active} busy={props.active && state.playback.isLoading}
-      entry={props.favouritable === false ? undefined : entry()}
-      favouritesKnown={props.favouritesKnown} actionLabel={label()}
+      active={props.active} busy={props.busy || (props.active && state.playback.isLoading)}
+      // A compact row carries no collection marks — the same trim the desktop
+      // row makes — so the shared row is told there is no entry to mark.
+      entry={props.compact || props.favouritable === false ? undefined : entry()}
+      favouritesKnown={props.favouritesKnown} actionLabel={label()} primaryAction={props.primaryAction}
       onActivate={() => props.onPlay?.(props.track)} onMenu={(event) => props.onMenu
         ? props.onMenu(props.track, event)
         : openTrackMenu(props.track, { onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor,
