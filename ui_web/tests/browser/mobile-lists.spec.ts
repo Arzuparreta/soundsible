@@ -106,6 +106,27 @@ test('library moves actions into the menu, keeps keyboard actions separate, and 
   await expect(page.getByRole('dialog').getByText('Quitar de favoritos', { exact: true })).toBeVisible();
 });
 
+test('the cover plays its song and holds open its menu, from outside the button', async ({ page }, info) => {
+  test.skip(!info.project.name.includes('mobile'));
+  await page.goto('/player/#/');
+  const row = page.locator('[data-music-list-row]').first();
+  const cover = row.locator('[data-row-cover]');
+  await expect(cover).toBeVisible();
+
+  // The artwork is the last thing in the row, past the menu and outside the
+  // button that names the song — which is exactly how it stopped playing once.
+  await cover.tap();
+  await expect(row).toHaveAttribute('data-now-playing', '');
+
+  // And what a hold does to the words, it does to the picture.
+  const box = (await cover.boundingBox())!;
+  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  await page.locator('body').dispatchEvent('pointerdown');
+  await cover.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, clientX: box.x + 2, clientY: box.y + 2 });
+  await page.waitForTimeout(600);
+  await expect(page.getByRole('dialog')).toBeVisible();
+});
+
 test('scroll cancellation and long press do not play the row or click through its menu', async ({ page }, info) => {
   test.skip(!info.project.name.includes('mobile'));
   await page.goto('/player/#/');
