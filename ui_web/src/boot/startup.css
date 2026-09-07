@@ -1,0 +1,94 @@
+/* Critical first-paint styles. Deliberately scoped and independent of the app's
+   stylesheet/font downloads; the background matches the existing theme tokens. */
+html[data-booting], html[data-booting] body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0c0c0e;
+}
+html[data-booting][data-theme='light'], html[data-booting][data-theme='light'] body {
+  background: #f6f6f7;
+}
+html[data-booting] #app { visibility: hidden; }
+#startup-screen {
+  --startup-bg: #0c0c0e;
+  --startup-ink: #f2f2f5;
+  --startup-muted: #a0a0a8;
+  --startup-accent: #f97a12;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: radial-gradient(ellipse 240px 210px at 50% 46%, rgba(249, 122, 18, 0.055), transparent), var(--startup-bg);
+  color: var(--startup-ink);
+  font-family: system-ui, -apple-system, sans-serif;
+  text-align: center;
+  -webkit-font-smoothing: antialiased;
+  transition: opacity 180ms ease-out;
+}
+[data-theme='light'] #startup-screen {
+  --startup-bg: #f6f6f7;
+  --startup-ink: #1c1c20;
+  --startup-muted: #5d5d66;
+  --startup-accent: #b84d00;
+}
+#startup-screen .startup-brand { width: min(100%, 360px); }
+#startup-screen .startup-logo { display: block; margin: 0 auto 16px; }
+#startup-screen h1 {
+  margin: 0;
+  font: 600 24px/1.25 system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.7px;
+}
+#startup-screen .startup-waves {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin: 28px 0 14px;
+}
+#startup-screen .startup-waves span {
+  display: block;
+  width: 3px;
+  height: 24px;
+  border-radius: 3px;
+  background: var(--startup-accent);
+  transform: scaleY(0.3);
+  animation: startup-wave 1100ms ease-in-out infinite alternate;
+}
+#startup-screen .startup-waves span:nth-child(2) { animation-delay: -640ms; height: 19px; }
+#startup-screen .startup-waves span:nth-child(3) { animation-delay: -280ms; }
+#startup-screen .startup-waves span:nth-child(4) { animation-delay: -850ms; height: 19px; }
+#startup-screen .startup-waves span:nth-child(5) { animation-delay: -430ms; }
+@keyframes startup-wave { to { transform: scaleY(1); } }
+#startup-screen p {
+  margin: 0;
+  color: var(--startup-muted);
+  font: 400 13px/1.6 system-ui, -apple-system, sans-serif;
+}
+#startup-screen button {
+  min-height: 44px;
+  margin: 20px 0 0;
+  padding: 8px 20px;
+  border: 1px solid var(--startup-accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--startup-accent);
+  font: 600 14px/1.4 system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+}
+#startup-screen button[hidden] { display: none; }
+#startup-screen button:focus-visible { outline: 2px solid var(--startup-accent); outline-offset: 4px; }
+#startup-screen[data-state='error'] .startup-waves span { animation-play-state: paused; }
+#startup-screen.startup-leaving { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  #startup-screen { transition: none; }
+  #startup-screen .startup-waves span { animation: none; transform: scaleY(0.65); }
+}
+@media (forced-colors: active) {
+  #startup-screen .startup-waves span { background: CanvasText; }
+}

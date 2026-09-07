@@ -156,6 +156,17 @@ jobs:
         run: npm run test:unit
       - name: Build player bundle (vite + tailwind)
         run: npm run build
+      - name: Install startup test browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: Validate production startup and cached PWA
+        run: npx playwright test --config playwright.startup.config.ts
+      - name: Upload startup browser report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-startup-report
+          path: ui_web/playwright-report
+          retention-days: 14
 
   docker:
     needs: changes

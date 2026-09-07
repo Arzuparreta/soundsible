@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-booting>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -35,9 +35,11 @@
         } catch (e) {}
       })();
     </script>
+    <!-- soundsible:boot-head -->
   </head>
   <body>
-    <div id="app"></div>
+    <!-- soundsible:boot-screen -->
+    <div id="app" inert></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
