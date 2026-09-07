@@ -75,16 +75,6 @@ export function MusicListRow(props: MusicListRowProps) {
             <Show when={props.annotation}><span class={styles.annotation}>{props.subtitle ? ' · ' : ''}{props.annotation}</span></Show>
           </span>
         </span>
-        <span class={styles.cover} data-row-cover data-round={props.round ? '' : undefined}
-          style={coverStyle(props.seed, props.cover)} aria-hidden="true">
-          <Show when={busy()} fallback={<Show when={favourite()}>
-            <span class={styles.mark} data-row-favourite>
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" /></svg>
-            </span>
-          </Show>}>
-            <span class={styles.busy} data-row-busy><Spinner size={18} /></span>
-          </Show>
-        </span>
       </button>
       {/* Named by its own text, the way the desktop row names it. The row
         * itself already announces the same verb against the title, and a second
@@ -105,6 +95,20 @@ export function MusicListRow(props: MusicListRowProps) {
       </Show>}>
         <span class={styles.edit}>{props.editControls}</span>
       </Show>
+      {/* Last in the row and hard against the screen edge, so the covers line
+        * up as one column down the list. It sits outside the main button now:
+        * decorative, as its `aria-hidden` always said, and no longer part of
+        * what a tap on the row's text activates. */}
+      <span class={styles.cover} data-row-cover data-round={props.round ? '' : undefined}
+        style={coverStyle(props.seed, props.cover)} aria-hidden="true">
+        <Show when={busy()} fallback={<Show when={favourite()}>
+          <span class={styles.mark} data-row-favourite>
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" /></svg>
+          </span>
+        </Show>}>
+          <span class={styles.busy} data-row-busy><Spinner size={18} /></span>
+        </Show>
+      </span>
     </div>
   );
 }
