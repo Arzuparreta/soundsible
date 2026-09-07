@@ -7,7 +7,9 @@
   height: var(--row-h, 56px);
   padding-block: 0;
   padding-left: max(12px, env(safe-area-inset-left, 0px));
-  padding-right: max(12px, env(safe-area-inset-right, 0px));
+  /* The cover is the last thing in the row and rests on the screen edge, so
+   * the row gives away its right padding — all but the inset a notch needs. */
+  padding-right: env(safe-area-inset-right, 0px);
   border-radius: var(--radius-sm);
   color: var(--ink-primary);
 }

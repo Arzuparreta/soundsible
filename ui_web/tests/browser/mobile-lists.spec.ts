@@ -44,7 +44,7 @@ async function assertRows(page: Page, selector = '[data-music-list-row]') {
     const cover = row.querySelector('[data-row-cover]')!.getBoundingClientRect();
     const menu = row.querySelector('[data-row-menu]')?.getBoundingClientRect();
     const box = row.getBoundingClientRect();
-    return { textWidth: meta.width, ordered: meta.right <= cover.left && (!menu || cover.right <= menu.left),
+    return { textWidth: meta.width, ordered: menu ? meta.right <= menu.left && menu.right <= cover.left : meta.right <= cover.left,
       contained: box.right <= innerWidth + 1 && box.left >= -1,
       menuSize: !menu || (menu.width >= 44 && menu.height >= 44),
       buttonCount: row.querySelectorAll('button').length, nested: !!row.querySelector('button button') };
