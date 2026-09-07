@@ -12,7 +12,6 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  user-select: none;
   transition:
     background var(--dur-micro) var(--ease-out),
     border-color var(--dur-short) var(--ease-out),

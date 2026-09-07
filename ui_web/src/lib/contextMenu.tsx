@@ -1,6 +1,7 @@
 import { createSignal, Show, onCleanup, onMount } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { ActionMenuList, openActionMenu, type ActionMenuOptions } from '../components/ActionMenu';
+import { claimHoldGesture, clearTextSelection } from './holdGesture';
 import styles from './contextMenu.module.css';
 
 /** A getter the directive calls lazily so the menu reflects current state. */
@@ -95,17 +96,28 @@ export function attachContextMenu(el: HTMLElement, provide: MenuProvider) {
 
   let timer: number | undefined;
   let longFired = false;
-  const clearTimer = () => {
+  let releaseHold: (() => void) | undefined;
+  const endPress = () => {
     if (timer) clearTimeout(timer);
     timer = undefined;
+    releaseHold?.();
+    releaseHold = undefined;
   };
   const onTouchStart = () => {
     longFired = false;
-    clearTimer();
+    endPress();
+    // Nothing to open means no gesture to claim: an element without a menu
+    // leaves the long press to the platform, selection and all.
+    if (!provide()) return;
+    // This listener is passive (the platform needs its scroll), so the native
+    // long press cannot be cancelled here. Claiming the gesture is what keeps
+    // Safari from selecting the sheet this press is about to open.
+    releaseHold = claimHoldGesture();
     timer = window.setTimeout(() => {
       const opts = provide();
       if (!opts) return;
       longFired = true;
+      clearTextSelection();
       openContextMenu(opts); // no event → bottom sheet
     }, 450);
   };
@@ -120,18 +132,18 @@ export function attachContextMenu(el: HTMLElement, provide: MenuProvider) {
 
   el.addEventListener('contextmenu', onContext);
   el.addEventListener('touchstart', onTouchStart, { passive: true });
-  el.addEventListener('touchend', clearTimer);
-  el.addEventListener('touchmove', clearTimer, { passive: true });
-  el.addEventListener('touchcancel', clearTimer);
+  el.addEventListener('touchend', endPress);
+  el.addEventListener('touchmove', endPress, { passive: true });
+  el.addEventListener('touchcancel', endPress);
   el.addEventListener('click', onClickCapture, true);
 
   onCleanup(() => {
-    clearTimer();
+    endPress();
     el.removeEventListener('contextmenu', onContext);
     el.removeEventListener('touchstart', onTouchStart);
-    el.removeEventListener('touchend', clearTimer);
-    el.removeEventListener('touchmove', clearTimer);
-    el.removeEventListener('touchcancel', clearTimer);
+    el.removeEventListener('touchend', endPress);
+    el.removeEventListener('touchmove', endPress);
+    el.removeEventListener('touchcancel', endPress);
     el.removeEventListener('click', onClickCapture, true);
   });
 }

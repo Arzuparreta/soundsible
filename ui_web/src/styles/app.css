@@ -139,6 +139,23 @@ html[data-player-surface='auto'] #app {
   touch-action: manipulation;
 }
 
+/* While the app owns a press-and-hold (lib/holdGesture), nothing on the page is
+   selectable. Safari reads a long press as "select what is under the finger" at
+   around 500ms — by which time what is under it is the sheet the press just
+   opened, so the platform gesture lands on the menu's own title. Scoped to the
+   gesture rather than pinned on a component, so ordinary selection — a title
+   worth copying, an error code worth pasting — stays available the rest of the
+   time. The prefixed property is not decoration: Safari before 16.4 ignores the
+   plain one, and Safari is the browser with the problem. Editable fields are
+   left out: a caret and its handles are never what the guard is protecting
+   against. */
+html[data-hold-gesture],
+html[data-hold-gesture] *:not(input):not(textarea) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* Touch gets one quiet, transient press cue. Native :active is cancelled when
    the gesture becomes a pan, so scrolling never leaves a visual selection. */
 @media (hover: none) and (pointer: coarse) {
