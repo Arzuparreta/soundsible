@@ -2,6 +2,7 @@ import { createSignal, Show, onCleanup, onMount } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { ActionMenuList, openActionMenu, type ActionMenuOptions } from '../components/ActionMenu';
 import { claimHoldGesture, clearTextSelection } from './holdGesture';
+import { shieldGhostClicks } from './ghostClick';
 import styles from './contextMenu.module.css';
 
 /** A getter the directive calls lazily so the menu reflects current state. */
@@ -121,30 +122,29 @@ export function attachContextMenu(el: HTMLElement, provide: MenuProvider) {
       openContextMenu(opts); // no event → bottom sheet
     }, 450);
   };
-  // Swallow the click that follows a long-press so the row doesn't also activate.
-  const onClickCapture = (e: MouseEvent) => {
-    if (longFired) {
-      e.preventDefault();
-      e.stopPropagation();
-      longFired = false;
-    }
+  // The sheet this press opened is under the finger, and the mouse events the
+  // platform still owes the touch would land in it — choosing an item nobody
+  // asked for. lib/ghostClick swallows them wherever they land, which includes
+  // the row underneath: a press that opened a menu never also activates.
+  const onTouchEnd = () => {
+    if (longFired) shieldGhostClicks();
+    longFired = false;
+    endPress();
   };
 
   el.addEventListener('contextmenu', onContext);
   el.addEventListener('touchstart', onTouchStart, { passive: true });
-  el.addEventListener('touchend', endPress);
+  el.addEventListener('touchend', onTouchEnd);
   el.addEventListener('touchmove', endPress, { passive: true });
   el.addEventListener('touchcancel', endPress);
-  el.addEventListener('click', onClickCapture, true);
 
   onCleanup(() => {
     endPress();
     el.removeEventListener('contextmenu', onContext);
     el.removeEventListener('touchstart', onTouchStart);
-    el.removeEventListener('touchend', endPress);
+    el.removeEventListener('touchend', onTouchEnd);
     el.removeEventListener('touchmove', endPress);
     el.removeEventListener('touchcancel', endPress);
-    el.removeEventListener('click', onClickCapture, true);
   });
 }
 

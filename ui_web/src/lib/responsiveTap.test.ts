@@ -48,27 +48,65 @@ afterEach(() => {
   // into the next one.
   if (vi.isFakeTimers()) vi.advanceTimersByTime(holdGestureConstants.MAX_HOLD_MS);
   vi.useRealTimers();
+  // Same for the guard a handled tap leaves behind (lib/ghostClick): a press
+  // ends it, which is how the next case starts on a clean document.
+  document.dispatchEvent(new MouseEvent('pointerdown'));
   document.body.innerHTML = '';
   window.getSelection()?.removeAllRanges();
 });
 
+/** The click the platform synthesises once it has finished with a touch. */
+function compatibilityClick(target: Element): MouseEvent {
+  const event = new MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    detail: 1,
+    clientX: 20,
+    clientY: 30,
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
 describe('responsive touch activation', () => {
-  it('activates on touch pointerup and suppresses the compatibility click', () => {
+  it('activates on touch pointerup, and the click that follows activates nothing', () => {
     const onTap = vi.fn();
     const target = document.createElement('div');
+    document.body.append(target);
     const handlers = createResponsiveTap({ onTap });
+    target.addEventListener('click', handlers.onClick);
 
     handlers.onPointerDown(pointerEvent(target));
     handlers.onPointerUp(pointerEvent(target));
     expect(onTap).toHaveBeenCalledTimes(1);
 
-    const compatibilityClick = mouseEvent(1);
-    handlers.onClick(compatibilityClick);
+    // Swallowed document-wide rather than by this element: the same touch may
+    // by now be pointing at something the activation moved (lib/ghostClick).
+    expect(compatibilityClick(target).defaultPrevented).toBe(true);
     expect(onTap).toHaveBeenCalledTimes(1);
-    expect(compatibilityClick.preventDefault).toHaveBeenCalled();
 
+    // Keyboard activation carries no pointer, and is never filtered.
     handlers.onClick(mouseEvent(0));
     expect(onTap).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets no click through the menu a long press opened either', () => {
+    vi.useFakeTimers();
+    const onTap = vi.fn();
+    const target = document.createElement('div');
+    document.body.append(target);
+    const handlers = createResponsiveTap({ onTap, onLongPress: vi.fn() });
+    const beneath = vi.fn();
+    document.addEventListener('click', beneath);
+
+    handlers.onPointerDown(pointerEvent(target));
+    vi.advanceTimersByTime(responsiveTapConstants.LONG_PRESS_MS);
+    handlers.onPointerUp(pointerEvent(target));
+
+    // The sheet is under the finger by the time the lift is synthesised.
+    expect(compatibilityClick(target).defaultPrevented).toBe(true);
+    expect(beneath).not.toHaveBeenCalled();
+    document.removeEventListener('click', beneath);
   });
 
   it('cancels a touch candidate once it becomes a scroll gesture', () => {
