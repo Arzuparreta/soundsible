@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, Show, type JSX } from 'solid-js';
 import { actions, state } from '../stores';
 import {
   AUTO_MODE_LAYOUT_KEY,
@@ -11,7 +11,7 @@ import {
   type AutoModeLayoutPresetId,
   type AutoModePanelId,
 } from '../lib/autoModeLayout';
-import { autoTrackDragging, readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
+import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { isNoopMove } from '../lib/dragReorder';
 import { queueIdentity } from '../lib/queueDiscovery';
 import { coverUrl } from '../lib/media';
@@ -22,6 +22,7 @@ import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
+import { AutoReferences } from './AutoReferences';
 import { SourceIcon } from './icons';
 import styles from './AutoMode.module.css';
 
@@ -47,19 +48,11 @@ export function AutoMode(props: {
   surfaceOpen: boolean;
 }) {
   const [layout, setLayout] = createSignal(readLayout());
-  // Aiming at a seam is the only mode left. Picking sources used to be one too,
-  // and it was a mode with no visible state: its whole payload was deferred
-  // until you happened to navigate into a collection, so pressing the button
-  // that armed it looked like pressing nothing.
-  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'route'; beforeQueueId?: string }>({ kind: 'neutral' });
+  // Explicit picker intent distinguishes requesting a song at a seam from
+  // adding reference material; ordinary browsing remains free of either task.
+  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'route' | 'reference'; beforeQueueId?: string }>({ kind: 'neutral' });
   const [carriedTrack, setCarriedTrack] = createSignal<CarriedTrack | null>(null);
-  const [trayOver, setTrayOver] = createSignal(false);
-  let trayDepth = 0;
-  // Something is in the air and the tray can take it. Saying so the instant a
-  // drag begins is the whole difference between a gesture and a secret.
-  const trayArmed = createMemo(() => Boolean(autoTrackDragging() || carriedTrack()));
-
-  const openDestination = (kind: 'route', beforeQueueId?: string) => {
+  const openDestination = (kind: 'route' | 'reference', beforeQueueId?: string) => {
     setDestination({ kind, beforeQueueId });
     props.onPanelChange('browser');
   };
@@ -138,7 +131,7 @@ export function AutoMode(props: {
       // it, the blend it will actually play is the planned one.
       stale: !committed && staleSeams().has(track.queueId),
       draggable: !committed,
-      annotation: source ? t('autoMode.source.title') : plan?.sourceSetLabel,
+      annotation: source?.label ?? plan?.sourceSetLabel,
       badge: committed
         ? t('autoMode.dj.cued')
         : userPlaced
@@ -209,62 +202,11 @@ export function AutoMode(props: {
 
   const Browser = (dragHandle: JSX.Element) => (
     <section class={styles.sourcePanel}>
-      <header class={styles.sourceHeader}>
-        {dragHandle}
-        <span><small>{t('autoMode.label')}</small><strong>{t('autoMode.source.title')}</strong></span>
-      </header>
-      <div
-        class={styles.sourceTray}
-        data-target={trayArmed() ? '' : undefined}
-        data-over={trayOver() ? '' : undefined}
-        onClick={() => carriedTrack() && addToSources(carriedTrack()!.track)}
-        // `dragleave` fires for every child the pointer crosses, so only a
-        // matched count of them means the drag has actually left the tray.
-        onDragEnter={() => { trayDepth += 1; setTrayOver(true); }}
-        onDragLeave={() => {
-          trayDepth = Math.max(0, trayDepth - 1);
-          if (!trayDepth) setTrayOver(false);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          // A source is a copy: the song keeps its place in the route.
-          if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          trayDepth = 0;
-          setTrayOver(false);
-          const transfer = readAutoTrackTransfer(event);
-          if (transfer) addToSources(transfer.track);
-        }}
-      >
-        <Show when={state.autoMode.sources.length} fallback={
-          <p class={styles.sourceEmpty}>{trayArmed() ? t('autoMode.source.add') : t('autoMode.source.empty')}</p>
-        }>
-          <Show when={trayArmed()}>
-            <p class={styles.sourceHint}>{t('autoMode.source.add')}</p>
-          </Show>
-          <For each={state.autoMode.sources}>{(source) => (
-            <div
-              class={styles.sourceChip}
-              data-route-target={destination().kind === 'route' && source.tracks.length === 1 ? '' : undefined}
-              draggable={source.tracks.length === 1}
-              onDragStart={(event) => source.tracks[0] && writeAutoTrackTransfer(event, { track: source.tracks[0] })}
-              onClick={() => {
-                if (destination().kind !== 'route' || source.tracks.length !== 1) return;
-                placeInRoute(source.tracks[0], destination().beforeQueueId);
-                finishDestination('route');
-              }}
-            >
-              <span><strong>{source.label}</strong><small>{source.tracks.length}</small></span>
-              <button type="button" aria-label={t('autoMode.source.remove', { title: source.label })} onClick={(event) => { event.stopPropagation(); actions.removeAutoSource(source.id); }}>×</button>
-            </div>
-          )}</For>
-        </Show>
-      </div>
       <div class={styles.sourceBrowser}>
         <NowPlayingBrowser
-          purpose={destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
+          dragHandle={dragHandle}
+          active={props.surfaceOpen}
+          purpose={destination().kind === 'reference' ? 'auto-reference' : destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
           routeBeforeQueueId={destination().beforeQueueId}
           onPlaced={() => finishDestination('route')}
           onCarryTrack={(track) => setCarriedTrack({ track })}
@@ -287,7 +229,7 @@ export function AutoMode(props: {
     />
   );
   const Route = (dragHandle: JSX.Element) => (
-    <PlayerTrackList
+    <section class={styles.routePanel}><div class={styles.routeList}><PlayerTrackList
       title={t('autoMode.dj.route')}
       count={routeEntries().length}
       empty={routeEmpty()}
@@ -335,7 +277,7 @@ export function AutoMode(props: {
         actions.moveAutoRoute(transfer.queueId, slot.beforeId);
       }}
       sections={[{ id: 'route', entries: routeEntries() }]}
-    />
+    /></div><AutoReferences carried={carriedTrack()?.track} onUse={addToSources} onAdd={() => openDestination('reference')} /></section>
   );
 
   return (
@@ -360,7 +302,7 @@ export function AutoMode(props: {
           presets={[
             { id: 'balanced', label: t('autoMode.workspace.layoutBalanced') },
             { id: 'stage', label: t('autoMode.workspace.layoutStage') },
-            { id: 'left', label: t('autoMode.source.title') },
+            { id: 'left', label: t('musicExplorer.title') },
             { id: 'right', label: t('autoMode.workspace.layoutRoute') },
           ]}
           onSelect={applyLayoutPreset}

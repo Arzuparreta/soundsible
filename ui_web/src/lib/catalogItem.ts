@@ -110,27 +110,9 @@ export async function playCatalogItem(
   const signal = resolveAborter.signal;
   setResolvingItemId(item.id);
   try {
-    const resolved = await api.resolveCatalogItem(
-      { artist, title: item.title, duration: item.duration },
-      signal,
-    );
+    const track = await resolveCatalogTrack(item, signal);
     if (signal.aborted) return;
-    if (!resolved.video_id) throw new Error('not-found');
-    actions.linkCatalogItem(item.id, resolved.video_id);
-    const track: Track = {
-      id: resolved.video_id,
-      title: item.title,
-      artist,
-      album: item.album,
-      duration: item.duration,
-      cover: item.cover,
-      source: 'preview',
-      // Carry the row's identity along: the video id shares nothing with the
-      // Deezer/MusicBrainz row that picked it, so without this the row could
-      // not tell that the thing it just started is the thing now playing.
-      originKeys: catalogItemKeys(item),
-      recommendation: item.raw?.recommendation,
-    };
+    if (!track) throw new Error('not-found');
     if (queue) {
       const rest = queue
         .filter((q) => q !== item)
@@ -148,52 +130,50 @@ export async function playCatalogItem(
   }
 }
 
-/** Resolve the playable roots of a catalogue collection and hand them to DJ.
- *
- * Album and artist profiles are metadata-first: many rows have title/artist but
- * no video id until somebody asks to hear them. A collection source must not
- * silently become empty just because those rows came from Deezer, so resolution
- * happens here in small batches and the usable subset is applied atomically. */
-export async function addCatalogItemsAsAutoSource(items: CatalogItem[], label: string): Promise<void> {
+/** One resolution path for individual and collection actions in every surface. */
+export async function resolveCatalogTrack(item: CatalogItem, signal?: AbortSignal): Promise<Track | null> {
+  const immediate = itemToTrack(item);
+  if (immediate) return immediate;
+  const artist = itemArtist(item);
+  if (!artist || !item.title) return null;
+  const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration }, signal);
+  if (signal?.aborted || !resolved.video_id) return null;
+  actions.linkCatalogItem(item.id, resolved.video_id);
+  return {
+    id: resolved.video_id, title: item.title, artist, album: item.album,
+    duration: item.duration, cover: item.cover, source: 'preview', originKeys: catalogItemKeys(item),
+    recommendation: item.raw?.recommendation,
+  };
+}
+
+export async function useCatalogCollection(items: CatalogItem[], label: string, purpose: 'reference' | 'request', beforeQueueId?: string, isCurrent: () => boolean = () => true): Promise<boolean> {
+  const epoch = actions.autoSessionToken();
   const progress = toast.loading(t('collection.resolving'));
-  const selected = items.slice(0, 15);
   const tracks: Track[] = [];
-  for (let offset = 0; offset < selected.length; offset += 3) {
-    const batch = await Promise.all(selected.slice(offset, offset + 3).map(async (item) => {
-      const immediate = itemToTrack(item);
-      if (immediate) return immediate;
-      const artist = itemArtist(item);
-      if (!artist || !item.title) return null;
+  const failed: string[] = [];
+  for (let offset = 0; offset < items.length; offset += 3) {
+    if (!state.autoMode.active || actions.autoSessionToken() !== epoch || !isCurrent()) { progress.dismiss(); return false; }
+    const batch = await Promise.all(items.slice(offset, offset + 3).map(async (item) => {
       try {
-        const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration });
-        if (!resolved.video_id) return null;
-        actions.linkCatalogItem(item.id, resolved.video_id);
-        return {
-          id: resolved.video_id,
-          title: item.title,
-          artist,
-          album: item.album,
-          duration: item.duration,
-          cover: item.cover,
-          source: 'preview' as const,
-          originKeys: catalogItemKeys(item),
-        } satisfies Track;
-      } catch {
-        return null;
-      }
+        const track = await resolveCatalogTrack(item);
+        if (track) return track;
+      } catch { /* Keep the rest of the collection and report the missing title. */ }
+      failed.push(item.title);
+      return null;
     }));
     tracks.push(...batch.filter((track): track is Track => track !== null));
   }
-  if (!state.autoMode.active) {
-    progress.dismiss();
-    return;
-  }
-  if (tracks.length === 0) {
-    progress.update('error', t('toast.autoModeOpeningFailed'));
-    return;
-  }
-  actions.addAutoSource(tracks, label);
-  progress.update('success', t('autoMode.source.added', { title: label }));
+  if (!state.autoMode.active || actions.autoSessionToken() !== epoch || !isCurrent()) { progress.dismiss(); return false; }
+  progress.dismiss();
+  if (purpose === 'request') await actions.placeAutoTracks(tracks, beforeQueueId);
+  else if (tracks.length) actions.addAutoSource(tracks, label);
+  if (failed.length) toast.error(t('musicExplorer.collectionFailed', { titles: failed.join(', ') }));
+  else if (purpose === 'reference' && tracks.length) toast.success(t('autoMode.source.added', { title: label }));
+  return tracks.length > 0 && isCurrent() && actions.autoSessionToken() === epoch;
+}
+
+export async function addCatalogItemsAsAutoSource(items: CatalogItem[], label: string): Promise<void> {
+  await useCatalogCollection(items, label, 'reference');
 }
 
 /** Whether a catalog row is mid-flight — being matched, or matched and buffering.

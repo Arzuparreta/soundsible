@@ -1,14 +1,13 @@
 import { createMemo, For, Show, type JSX } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
-import { state, actions, musicLibrary } from '../stores';
+import { state, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import { trackCoverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
 import { neutralCoverStyle } from '../lib/cover';
 import { pickPlaylistCoverTrack } from '../lib/playlists';
-import { openPlaylistMenu, playlistMenuOptions } from '../components/playlistActions';
+import { createPlaylistDialog, openPlaylistMenu, playlistMenuOptions } from '../components/playlistActions';
 import { attachContextMenu } from '../lib/contextMenu';
-import { promptDialog } from '../lib/prompt';
 import { t } from '../lib/i18n';
 import styles from './Playlists.module.css';
 import { EmptyState } from '../components/EmptyState';
@@ -25,10 +24,7 @@ export default function Playlists() {
     return neutralCoverStyle(track ? trackCoverUrl(track, 'thumb') : null);
   };
 
-  const createNew = async () => {
-    const name = await promptDialog({ title: t('playlists.new'), placeholder: t('playlists.newPlaceholder'), confirmLabel: t('playlists.newConfirm') });
-    if (name) void actions.createPlaylist(name);
-  };
+  const createNew = () => void createPlaylistDialog();
 
   const menu = (e: MouseEvent, name: string) => {
     e.preventDefault();

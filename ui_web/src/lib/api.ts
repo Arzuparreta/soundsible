@@ -1075,6 +1075,15 @@ export const api = {
     timeoutMs: 20000,
     signal,
   }),
+  placeDjTracks: (
+    body: {
+      dj_profile: DjProfile; seed: DjItemRef; route: DjRouteRef[];
+      before_queue_id?: string; sources?: DjMusicSetSource[]; heard?: Track[]; exclude?: string[];
+      requests: Array<{ track: Track; requested_queue_id: string }>;
+    },
+  ): Promise<{ placements: DjPlacementResponse[] }> => request('/api/discovery/music/dj-place', {
+    method: 'POST', body, timeoutMs: 60000,
+  }),
   /** Re-seam the whole route around the songs the listener pinned. Every ref
    * has to carry its `route_kind`; that is the only way the server can tell an
    * anchor from filler it may replace. */

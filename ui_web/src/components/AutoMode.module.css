@@ -19,119 +19,9 @@
   flex-direction: column;
 }
 
-.sourceHeader {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.72rem 0.85rem;
-  border-bottom: 1px solid var(--stage-line);
-}
-
-.sourceHeader > span {
-  display: grid;
-  min-width: 0;
-}
-
-.sourceHeader small {
-  color: var(--ink-secondary);
-  font-size: 0.64rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.sourceHeader strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sourceTray {
-  display: flex;
-  gap: 0.4rem;
-  padding: 0.55rem 0.65rem;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--stage-line);
-}
-
 /* Armed the moment anything is picked up, anywhere in DJ. Empty, this tray is
  * one line of small print — too slight a thing to aim a drag at unless it says
  * it is a target. */
-.sourceTray[data-target] {
-  min-height: 3.1rem;
-  align-items: center;
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
-  cursor: copy;
-}
-
-.sourceTray[data-target][data-over] {
-  background: color-mix(in srgb, var(--accent) 19%, transparent);
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-
-.sourceEmpty {
-  margin: 0;
-  color: var(--ink-secondary);
-  font-size: 0.72rem;
-  line-height: 1.4;
-}
-
-.sourceHint {
-  margin: 0;
-  align-self: center;
-  color: var(--accent);
-  font-size: 0.7rem;
-  font-weight: var(--fw-semibold);
-  white-space: nowrap;
-}
-
-.sourceChip {
-  display: flex;
-  min-width: max-content;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.38rem 0.42rem 0.38rem 0.58rem;
-  border-radius: var(--radius-full);
-  background: var(--stage-material-quiet);
-}
-
-.sourceChip > span {
-  display: flex;
-  max-width: 11rem;
-  gap: 0.3rem;
-  align-items: baseline;
-}
-
-.sourceChip strong {
-  overflow: hidden;
-  font-size: 0.72rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sourceChip small {
-  color: var(--ink-tertiary);
-  font-size: 0.62rem;
-}
-
-.sourceChip button {
-  padding: 0.25rem 0.4rem;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: var(--stage-material-active);
-  color: inherit;
-  font-size: 0.62rem;
-}
-
-.sourceChip button:last-child {
-  background: transparent;
-  font-size: 0.9rem;
-}
-
-.sourceChip[data-route-target] {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
-  cursor: copy;
-}
 
 .sourceBrowser {
   min-height: 0;
@@ -388,3 +278,23 @@
     transform: none;
   }
 }
+
+.routePanel { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
+.routeList { flex: 1; min-height: 0; }
+.references { flex: 0 0 auto; max-height: 35%; overflow: auto; padding: 8px 12px max(10px, var(--player-mobile-footer-clearance, 10px)); border-top: 1px solid var(--stage-line); background: var(--stage-material-quiet); }
+.references header { display: flex; align-items: center; gap: 8px; }
+.references header strong { flex: 1; font-size: var(--text-label); }
+.references button { color: var(--ink-secondary); font: inherit; background: none; border: 0; min-width: 36px; min-height: 36px; cursor: pointer; }
+.references p { margin: 0 0 4px; font-size: var(--text-caption); color: var(--ink-secondary); }
+.references[data-target] { background: var(--accent-faint); box-shadow: inset 0 0 0 1px var(--accent); }
+.references[data-over] { box-shadow: inset 0 0 0 2px var(--accent); }
+.referenceEmpty { display: block; width: 100%; text-align: left; padding: 6px 0; line-height: 1.5; font-size: var(--text-caption) !important; }
+.referenceRows { max-height: 80px; overflow: hidden; }
+.referenceRow { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.referenceCover { flex: 0 0 28px; height: 28px; border-radius: 4px; }
+.referenceName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-caption); }
+.referenceRow small { color: var(--ink-secondary); }
+.referenceMore { font-size: var(--text-caption) !important; color: var(--accent) !important; padding: 0; }
+.referenceSheet { padding: 16px; }
+.referenceSheet button { background: none; border: 0; color: var(--ink-primary); min-width: 40px; min-height: 40px; }
+.routePanel, .routeList { min-width: 0; }

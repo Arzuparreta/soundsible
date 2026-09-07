@@ -257,6 +257,7 @@ export function NowPlaying(props: {
                 </button>
               </Show>
               <NowPlayingBrowser
+                active={props.surfaceOpen}
                 onClose={() => props.onMobilePanelChange('stage')}
                 dragHandle={dragHandle}
               />

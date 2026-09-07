@@ -1374,3 +1374,65 @@ def test_dj_transition_validates_its_pair(tmp_path):
         "/api/discovery/music/dj-transition",
         json={"dj_profile": "mystery", "from": {}, "to": {}},
     ).status_code == 400
+
+
+def test_dj_collection_places_every_occurrence_beyond_the_analysis_window(tmp_path):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    requests = [
+        {"track": {"id": f"song-{index % 19}", "title": f"Song {index}", "artist": "Listener"},
+         "requested_queue_id": f"request-{index}"}
+        for index in range(24)
+    ]
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)),
+    ):
+        response = _make_app().test_client().post("/api/discovery/music/dj-place", json={
+            "seed": {"id": "seed", "title": "Seed", "artist": "Artist"},
+            "route": [{"queue_id": "existing", "id": "existing", "title": "Existing", "artist": "Artist"}],
+            "requests": requests,
+        })
+    assert response.status_code == 200
+    placements = response.get_json()["placements"]
+    route = [{"queue_id": "existing"}]
+    for placement in placements:
+        route[placement["insert_at"]:placement["insert_at"]] = placement["items"]
+    assert {row["queue_id"] for row in route} == {"existing", *(row["requested_queue_id"] for row in requests)}
+    assert len(route) == 25
+
+
+def test_dj_collection_rejects_ambiguous_occurrence_ids(tmp_path):
+    _make_runtime(tmp_path)
+    response = _make_app().test_client().post("/api/discovery/music/dj-place", json={
+        "requests": [{"requested_queue_id": "same"}, {"requested_queue_id": "same"}],
+    })
+    assert response.status_code == 400
+
+
+def test_dj_collection_keeps_a_selected_seam_beyond_the_analysis_window(tmp_path):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    route = _repair_route(*(["user"] * 24))
+    requests = [
+        {"track": {"id": f"wanted-{index}", "title": f"Wanted {index}", "artist": "Listener"},
+         "requested_queue_id": f"wanted-{index}"}
+        for index in range(24)
+    ]
+    with patch.object(_auto_mode, "_get_api", return_value=mock_api):
+        response = _make_app().test_client().post("/api/discovery/music/dj-place", json={
+            "seed": _REPAIR_SEED, "route": route, "before_queue_id": "q-23", "requests": requests,
+        })
+    assert response.status_code == 200
+    for placement in response.get_json()["placements"]:
+        assert placement["before_queue_id"] == "q-23"
+        route[placement["insert_at"]:placement["insert_at"]] = placement["items"]
+    assert [row["queue_id"] for row in route] == [
+        *(f"q-{index}" for index in range(23)), *(f"wanted-{index}" for index in range(24)), "q-23",
+    ]

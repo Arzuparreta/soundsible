@@ -49,9 +49,9 @@ describe('buildTrackMenu — podcast coherence', () => {
   it('turns music actions into DJ-native actions while DJ owns the session', () => {
     const song: Track = { id: 'dj1', title: 'Song', artist: 'A', source: 'preview' };
     const l = labels(song, { ...ctx, auto: true });
-    expect(l).toContain('Mix now');
+    expect(l).toContain('Play now');
     expect(l).toContain('Add to route');
-    expect(l).toContain('From this track');
+    expect(l).toContain('Use as reference');
     expect(l).not.toContain('Play next');
     expect(l).not.toContain('Add to queue');
   });

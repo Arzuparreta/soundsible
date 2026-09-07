@@ -1,3 +1,4 @@
+import { snapCarousel, snapPlayerCarousel, holdCarousel, releaseCarousel } from './playerGestures';
 import { expect, test, type Page } from '@playwright/test';
 import { settle } from './settle';
 import AxeBuilder from '@axe-core/playwright';
@@ -60,58 +61,6 @@ async function openNowPlaying(page: Page) {
   await surface.evaluate(async (element) => {
     await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
   });
-}
-
-async function snapCarousel(page: Page, panel: 'queue' | 'stage' | 'browser') {
-  await page.locator('[data-now-playing-carousel]').evaluate(async (element, destination) => {
-    const carousel = element as HTMLElement;
-    const target = carousel.querySelector<HTMLElement>(`[data-now-playing-tile="${destination}"]`)!;
-    const previousBehavior = carousel.style.scrollBehavior;
-    carousel.style.scrollBehavior = 'auto';
-    // Measured off the rects, like the component does: `offsetLeft` is relative
-    // to the positioned workspace, not to the scroller, so it carries padding.
-    carousel.scrollLeft += target.getBoundingClientRect().left - carousel.getBoundingClientRect().left;
-    carousel.dispatchEvent(new Event('scroll'));
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    carousel.style.scrollBehavior = previousBehavior;
-  }, panel);
-}
-
-async function holdCarousel(page: Page, selector: string) {
-  await page.locator(selector).dispatchEvent('pointerdown', {
-    pointerId: 1,
-    pointerType: 'touch',
-    isPrimary: true,
-    clientX: 200,
-    clientY: 400,
-  });
-}
-
-async function releaseCarousel(page: Page, selector: string) {
-  await page.locator(selector).dispatchEvent('pointerup', {
-    pointerId: 1,
-    pointerType: 'touch',
-    isPrimary: true,
-    clientX: 80,
-    clientY: 400,
-  });
-}
-
-async function snapPlayerCarousel(
-  page: Page,
-  scope: 'now-playing' | 'auto',
-  panel: string,
-) {
-  await page.locator(`[data-${scope}-carousel]`).evaluate(async (element, args) => {
-    const carousel = element as HTMLElement;
-    const target = carousel.querySelector<HTMLElement>(`[data-${args.scope}-tile="${args.panel}"]`)!;
-    const previousBehavior = carousel.style.scrollBehavior;
-    carousel.style.scrollBehavior = 'auto';
-    carousel.scrollLeft += target.getBoundingClientRect().left - carousel.getBoundingClientRect().left;
-    carousel.dispatchEvent(new Event('scroll'));
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    carousel.style.scrollBehavior = previousBehavior;
-  }, { scope, panel });
 }
 
 async function swipeSurfaceDown(page: Page, targetSelector: string) {
@@ -272,19 +221,13 @@ test('DJ reuses the compact workspace, pager and touch lifecycle', async ({ page
       expect(favouritesBox).not.toBeNull();
       expect(playlistsBox).not.toBeNull();
       expect(Math.abs(favouritesBox!.y - playlistsBox!.y)).toBeLessThanOrEqual(1);
-      expect(favouritesBox!.y).toBeGreaterThan(libraryBox!.y + libraryBox!.height);
-      expect(Math.abs(favouritesBox!.width - playlistsBox!.width)).toBeLessThanOrEqual(1);
-      expect(libraryBox!.width).toBeGreaterThan(favouritesBox!.width + playlistsBox!.width);
+      expect(Math.abs(favouritesBox!.y - libraryBox!.y)).toBeLessThanOrEqual(1);
+
       const [tileBox, panelBox] = await Promise.all([side.boundingBox(), browserPanel.boundingBox()]);
       expect(tileBox).not.toBeNull();
       expect(panelBox).not.toBeNull();
       expect(Math.abs(panelBox!.x - tileBox!.x)).toBeLessThanOrEqual(1);
       expect(Math.abs(panelBox!.width - tileBox!.width)).toBeLessThanOrEqual(2);
-      const panelRight = panelBox!.x + panelBox!.width;
-      const libraryRight = libraryBox!.x + libraryBox!.width;
-      const playlistsRight = playlistsBox!.x + playlistsBox!.width;
-      expect(Math.abs(libraryRight - playlistsRight)).toBeLessThanOrEqual(1);
-      expect(panelRight - libraryRight).toBeLessThanOrEqual(12);
     } else {
       await expect(side.getByRole('heading', { name: 'Ruta preparada' })).toBeVisible();
     }
@@ -355,13 +298,13 @@ test('mobile route insertion targets stay contextual and aligned', async ({ page
   await releaseCarousel(page, '[data-auto-carousel]');
   await expect(route).not.toHaveAttribute('inert', '');
 
-  await route.getByRole('button', { name: 'Añadir' }).click();
+  await route.getByRole('button', { name: 'Añadir', exact: true }).click();
   const browser = page.locator('[data-auto-tile="browser"]');
   await expect(browser).not.toHaveAttribute('inert', '');
   await browser.getByRole('button', { name: /^Biblioteca/ }).click();
   await browser.getByRole('button', { name: /Luz de verano/ }).first().click();
   await expect(route).not.toHaveAttribute('inert', '');
-  await route.getByRole('button', { name: 'Añadir' }).click();
+  await route.getByRole('button', { name: 'Añadir', exact: true }).click();
   await expect(browser).not.toHaveAttribute('inert', '');
   await browser.getByRole('button', { name: /Horizonte/ }).first().click();
   await expect(route).not.toHaveAttribute('inert', '');

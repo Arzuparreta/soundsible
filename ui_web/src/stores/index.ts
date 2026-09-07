@@ -2334,6 +2334,92 @@ export const actions = {
     setState('autoMode', 'activity', { id: ++generatedActivityId, status, key, values });
   },
 
+  autoSessionToken(): number { return autoSessionEpoch; },
+
+  async placeAutoTracks(tracks: Track[], beforeQueueId?: string): Promise<void> {
+    if (!state.autoMode.active) return;
+    const usable = tracks.filter((track) => !isPodcastTrack(track));
+    if (!usable.length) return;
+    if (usable.length === 1) return actions.placeAutoTrack(usable[0], beforeQueueId);
+    const epoch = autoSessionEpoch;
+    if (!state.playback.currentTrack) {
+      await actions.placeAutoTrack(usable[0]);
+      if (!state.autoMode.active || epoch !== autoSessionEpoch) return;
+      return actions.placeAutoTracks(usable.slice(1), beforeQueueId);
+    }
+    const floor = insertionFloor();
+    const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
+    const route = state.playback.queue.slice(floor + 1);
+    const signature = route.map((row) => row.queueId).join('|');
+    const occurrences = usable.map((track) => ({
+      ...createQueueEntry(track, 'generated', 'auto_mode'),
+      autoRoute: { kind: 'user' as const, placement: beforeQueueId ? 'fixed' as const : 'dj' as const },
+    }));
+    const progress = toast.loading(tr('musicExplorer.requesting'));
+    const fallback = () => {
+      if (!state.autoMode.active || epoch !== autoSessionEpoch) return;
+      const currentFloor = insertionFloor();
+      const target = beforeQueueId ? state.playback.queue.findIndex((row) => row.queueId === beforeQueueId) : -1;
+      const at = target > currentFloor ? target : currentFloor + 1;
+      setState('playback', 'queue', (queue) => [...queue.slice(0, at), ...occurrences, ...queue.slice(at)]);
+      setState('autoMode', 'staleSeams', state.playback.queue.slice(currentFloor + 1).map((row) => row.queueId));
+      prefetchUpcoming();
+    };
+    try {
+      const response = await api.placeDjTracks({
+        dj_profile: state.autoMode.djProfile, seed: djItemRef(seed),
+        route: route.map((row) => ({ ...djItemRef(row), queue_id: row.queueId })),
+        requests: occurrences.map((row) => ({ track: row, requested_queue_id: row.queueId })),
+        before_queue_id: beforeQueueId,
+        sources: state.autoMode.sources, heard: state.autoMode.heard, exclude: state.autoMode.avoidedIdentities,
+      });
+      if (!state.autoMode.active || epoch !== autoSessionEpoch) { progress.dismiss(); return; }
+      if (insertionFloor() !== floor || state.playback.queue.slice(floor + 1).map((row) => row.queueId).join('|') !== signature) {
+        fallback();
+      } else {
+        const working = [...route];
+        const plan = { ...state.autoMode.plan };
+        const byId = new Map(occurrences.map((row) => [row.queueId, row]));
+        const placed = new Set<string>();
+        for (const placement of response.placements) {
+          const requested = byId.get(placement.requested_queue_id);
+          if (!requested || placed.has(requested.queueId)) throw new Error('invalid collection placement');
+          placed.add(requested.queueId);
+          let fromKey = queueIdentity(working[placement.insert_at - 1] ?? seed);
+          const entries = placement.items.map((item, index) => {
+            const entry = item.route_kind === 'user' ? requested : {
+              ...createQueueEntry(planItemTrack(item), 'generated', 'auto_mode'),
+              queueId: `${requested.queueId}:bridge:${index}`,
+              autoRoute: { kind: 'bridge' as const, ownerQueueId: requested.queueId },
+            };
+            plan[entry.queueId] = {
+              trackId: queueIdentity(entry), source: item.source_pool, reasonKey: autoReasonKey(item),
+              fromKey, transition: item.transition, bpm: item.analysis?.bpm, key: item.analysis?.key,
+            };
+            fromKey = queueIdentity(entry);
+            return entry;
+          });
+          if (entries.filter((row) => row.queueId === requested.queueId).length !== 1) throw new Error('missing request');
+          const following = working[placement.insert_at];
+          if (following && placement.following_transition) plan[following.queueId] = {
+            ...(plan[following.queueId] ?? { trackId: queueIdentity(following), source: 'local', reasonKey: 'autoMode.reason.library' }),
+            fromKey, transition: placement.following_transition,
+          };
+          working.splice(placement.insert_at, 0, ...entries);
+        }
+        if (placed.size !== occurrences.length) throw new Error('incomplete collection placement');
+        setState('playback', 'queue', (queue) => [...queue.slice(0, floor + 1), ...working]);
+        setState('autoMode', 'plan', plan);
+        prefetchUpcoming();
+      }
+      progress.update('success', tr('musicExplorer.collectionDone', { count: occurrences.length }));
+    } catch {
+      if (!state.autoMode.active || epoch !== autoSessionEpoch) { progress.dismiss(); return; }
+      fallback();
+      progress.update('info', tr('autoMode.agent.placedFallback', { title: tr('musicExplorer.collectionDone', { count: occurrences.length }) }));
+    }
+  },
+
   async placeAutoTrack(track: Track, beforeQueueId?: string): Promise<void> {
     if (!state.autoMode.active || isPodcastTrack(track)) return;
     const floor = insertionFloor();
@@ -2449,6 +2535,7 @@ export const actions = {
       });
       prefetchUpcoming();
     } catch {
+      if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
       // The user's placement is authoritative even if musical analysis is not.
       setState('playback', 'queue', (queue) => [
         ...queue.slice(0, fallbackIndex),
@@ -2483,12 +2570,14 @@ export const actions = {
     if (!state.autoMode.active || state.autoMode.repairing) return;
     const floor = insertionFloor();
     const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
-    const route = state.playback.queue.slice(floor + 1);
+    const fullRoute = state.playback.queue.slice(floor + 1);
+    const route = fullRoute.slice(0, 16);
+    const untouchedTail = fullRoute.slice(16);
     // One seam is a transition, not a route. There is nothing to re-seam.
     if (!seed || route.length < 2) return;
 
     const sessionEpoch = autoSessionEpoch;
-    const routeSignature = route.map((entry) => entry.queueId).join('|');
+    const routeSignature = fullRoute.map((entry) => entry.queueId).join('|');
     const previousQueue = state.playback.queue.slice();
     const previousPlan = { ...state.autoMode.plan };
     const previousStaleSeams = state.autoMode.staleSeams.slice();
@@ -2546,14 +2635,14 @@ export const actions = {
         if (kept) return item.route_kind === 'user' ? kept : { ...kept, autoRoute };
         return { ...createQueueEntry(planItemTrack(item), 'generated', 'auto_mode'), autoRoute };
       });
-      setState('playback', 'queue', (queue) => [...queue.slice(0, floor + 1), ...entries]);
+      setState('playback', 'queue', (queue) => [...queue.slice(0, floor + 1), ...entries, ...untouchedTail]);
 
       // Everything up to and including the floor keeps its plan. Wiping it
       // wholesale would strip the cued handoff's own entry and turn a blend
       // that is already loaded into a fade at the moment it fires.
       const prefix = new Set(state.playback.queue.slice(0, floor + 1).map((entry) => entry.queueId));
       const plan: Record<string, AutoPlanItem> = Object.fromEntries(
-        Object.entries(state.autoMode.plan).filter(([id]) => prefix.has(id)),
+        Object.entries(state.autoMode.plan).filter(([id]) => prefix.has(id) || untouchedTail.some((row) => row.queueId === id)),
       );
       let fromKey = queueIdentity(state.playback.queue[floor] ?? seed);
       entries.forEach((entry, index) => {
@@ -2578,9 +2667,9 @@ export const actions = {
       });
       setState('autoMode', {
         plan,
-        // The whole route was just re-seamed: every join it covers is planned
-        // again, which is exactly what this list was tracking.
-        staleSeams: [],
+        // Only the analysed horizon was repaired. Keep the untouched tail
+        // visible and mark its joins for planning as playback approaches.
+        staleSeams: untouchedTail.map((row) => row.queueId),
         activity: { id: ++generatedActivityId, status: 'done', key: 'autoMode.agent.repaired' },
       });
       prefetchUpcoming();
@@ -3549,12 +3638,14 @@ export const actions = {
     }
   },
 
-  async deletePlaylist(name: string): Promise<void> {
+  async deletePlaylist(name: string): Promise<boolean> {
     try {
       applyPlaylistMutation(await api.deletePlaylist(name));
       toast.success(tr('toast.playlistDeleted'));
+      return true;
     } catch {
       toast.error(tr('toast.playlistDeleteFailed'));
+      return false;
     }
   },
 
@@ -3619,6 +3710,13 @@ export const actions = {
     } catch {
       toast.error(tr('toast.removeFromPlaylistFailed'));
     }
+  },
+
+  async reorderPlaylistTracks(name: string, ids: string[]): Promise<boolean> {
+    try {
+      applyPlaylistMutation(await api.setPlaylistTracks(name, ids));
+      return true;
+    } catch { toast.error(tr('toast.reorderFailed')); return false; }
   },
 
   async reorderPlaylists(order: string[]): Promise<void> {

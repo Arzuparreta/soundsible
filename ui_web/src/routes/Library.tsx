@@ -1,3 +1,4 @@
+import { openAlbumBrowseMenu } from '../components/albumBrowseMenu';
 import { createMemo, createResource, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
 import { state, actions, downloadCounts, favouriteRows, musicLibrary } from '../stores';
@@ -22,7 +23,6 @@ import {
   filterTracks,
   catalogArtists,
   albumSort,
-  setAlbumSort,
   albumFilter,
   setAlbumFilter,
 } from '../lib/libraryView';
@@ -30,7 +30,6 @@ import {
   albumBrowseQuery,
   collateAlbums,
   NO_ALBUM_FILTER,
-  ALBUM_SORTS,
   type AlbumSort,
 } from '../lib/albumBrowse';
 import { searchLibrary } from '../lib/librarySearch';
@@ -227,62 +226,6 @@ export default function Library() {
     return '';
   };
 
-  /** Ordering and narrowing from one control, the way the songs tab already
-   * does it. Two buttons beside a three-tab pill do not fit a phone, and the
-   * second one was never a different kind of decision.
-   *
-   * The orderings are the engine's own, so this menu and a Subsonic client's
-   * offer the same list. The filter is one axis at a time — a shelf, not a
-   * query builder — and each entry opens the values the library actually has. */
-  const browseAlbums = () => {
-    const active = albumFilter();
-    const tick = (on: boolean) => (on ? '✓  ' : '');
-    openActionMenu({
-      sections: [
-        {
-          label: t('library.albumSortTitle'),
-          actions: ALBUM_SORTS.map((sort) => ({
-            label: `${tick(albumSort() === sort)}${sortLabel(sort)}`,
-            onSelect: () => setAlbumSort(sort),
-          })),
-        },
-        {
-          label: t('library.albumFilterTitle'),
-          actions: [
-            {
-              label: `${tick(active.kind === 'none')}${t('library.albumFilterAll')}`,
-              onSelect: () => setAlbumFilter(NO_ALBUM_FILTER),
-            },
-            {
-              label: t('library.albumFilterByGenre'),
-              disabled: state.catalog.genres.length === 0,
-              onSelect: () =>
-                openActionMenu({
-                  title: t('library.albumFilterByGenre'),
-                  actions: state.catalog.genres.map((genre) => ({
-                    label: `${tick(active.kind === 'genre' && active.value === genre.name)}${genre.name}`,
-                    onSelect: () => setAlbumFilter({ kind: 'genre', value: genre.name }),
-                  })),
-                }),
-            },
-            {
-              label: t('library.albumFilterByYear'),
-              disabled: state.catalog.years.length === 0,
-              onSelect: () =>
-                openActionMenu({
-                  title: t('library.albumFilterByYear'),
-                  actions: state.catalog.years.map((year) => ({
-                    label: `${tick(active.kind === 'year' && active.value === year.year)}${year.year}`,
-                    onSelect: () => setAlbumFilter({ kind: 'year', value: year.year }),
-                  })),
-                }),
-            },
-          ],
-        },
-      ],
-    });
-  };
-
   const sortLibrary = () =>
     openActionMenu({
       sections: [
@@ -393,7 +336,7 @@ export default function Library() {
             <button
               class={styles.sortButton}
               type="button"
-              onClick={browseAlbums}
+              onClick={openAlbumBrowseMenu}
               aria-label={t('library.albumSortTitle')}
               data-pressable
             >

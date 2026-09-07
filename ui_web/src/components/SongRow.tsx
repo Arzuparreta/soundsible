@@ -8,6 +8,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
 import { isSavedTrack } from '../stores';
 import { FavouriteButton } from './FavouriteButton';
+import { Spinner } from './Spinner';
 import { CollectionButton } from './CollectionButton';
 
 export interface SongRowProps {
@@ -22,6 +23,11 @@ export interface SongRowProps {
   /** When false, the row hides its heart (podcast episodes). */
   favouritable?: boolean;
   onPlay?: (track: Track) => void;
+  compact?: boolean;
+  actionLabel?: string;
+  primaryAction?: { label: string; onSelect: () => void };
+  busy?: boolean;
+  onDragStart?: (event: DragEvent) => void;
   /** When set, the artist name becomes a tappable link (navigates to the artist). */
   onArtist?: (artist: string) => void;
   /** When set, exposes the context menu (⋯ button, long-press, right-click).
@@ -66,6 +72,7 @@ export default function SongRow(props: SongRowProps) {
    * Without this the whole library was mouse-only: nothing in a list of
    * thousands of songs could be reached, let alone played, from the keyboard. */
   const onKeyDown = (e: KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault(); // Space would scroll the list out from under the user
       props.onPlay?.(props.track);
@@ -82,13 +89,16 @@ export default function SongRow(props: SongRowProps) {
   /** What a screen reader announces for the row: what it is, then what
    * activating it does. The nested artist/menu buttons name themselves. */
   const label = () =>
-    props.track.artist
+    props.actionLabel ?? (props.track.artist
       ? t('songRow.ariaPlay', { title: props.track.title, artist: props.track.artist })
-      : props.track.title;
+      : props.track.title);
 
   return (
     <div
       class={styles.row}
+      data-compact={props.compact ? '' : undefined}
+      draggable={Boolean(props.onDragStart)}
+      onDragStart={props.onDragStart}
       data-pressable
       data-now-playing={props.active ? '' : undefined}
       role="button"
@@ -131,16 +141,18 @@ export default function SongRow(props: SongRowProps) {
         * presence is how a streamed song announces itself — there is no second
         * badge saying the same thing. It deliberately sits before the stable
         * duration/heart/menu stripe, so appearing never shifts those controls. */}
-      <Show when={props.favouritable !== false}>
+      <Show when={!props.compact && props.favouritable !== false}>
         <CollectionButton entry={entry()} class={styles.rowCollect} hideOwned />
       </Show>
       <div class={styles.actionStripe}>
-        <span class={styles.duration}>{formatDuration(props.track.duration)}</span>
+        <Show when={props.busy}><Spinner size={14} /></Show>
+        <Show when={props.primaryAction}>{(action) => <button type="button" class={styles.primaryAction} disabled={props.busy} onClick={(event) => { event.stopPropagation(); action().onSelect(); }}>{action().label}</button>}</Show>
+        <Show when={!props.compact}><span class={styles.duration}>{formatDuration(props.track.duration)}</span></Show>
         {/* Downloaded or not, a song in the library gets a heart — the mark is
           * about which of your songs stand out, not about where they live. What
           * it never gets is a heart before it is yours: `entry()` is only saved
           * once the row is part of the collection. */}
-        <Show when={props.favouritable !== false && isSavedTrack(props.track)}>
+        <Show when={!props.compact && props.favouritable !== false && isSavedTrack(props.track)}>
           <FavouriteButton favourite={entry()} class={styles.rowHeart} />
         </Show>
         <Show when={props.onMenu}>
