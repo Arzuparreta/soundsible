@@ -52,6 +52,16 @@ export function MusicListRow(props: MusicListRowProps) {
     onLongPress: props.onMenu ? () => props.onMenu?.() : undefined,
   });
   const menuTap = createResponsiveTap({ onTap: (event) => { event.stopPropagation(); props.onMenu?.(); } });
+  // The cover sits outside the main button so the menu can come between them,
+  // but it is still the song: pressing the artwork plays it and holding it
+  // opens the same menu, exactly as it did when it lived inside the button.
+  // It stays hidden from assistive technology — the button beside it already
+  // carries the name and the action, and announcing the picture again would
+  // only add a second way to say the same thing.
+  const coverTap = createResponsiveTap({
+    onTap: (event) => { event.stopPropagation(); if (!props.disabled) props.onActivate?.(); },
+    onLongPress: props.onMenu ? () => props.onMenu?.() : undefined,
+  });
   const primaryTap = createResponsiveTap({
     onTap: (event) => { event.stopPropagation(); if (!props.disabled && !busy()) props.primaryAction?.onSelect(); },
   });
@@ -96,11 +106,9 @@ export function MusicListRow(props: MusicListRowProps) {
         <span class={styles.edit}>{props.editControls}</span>
       </Show>
       {/* Last in the row and hard against the screen edge, so the covers line
-        * up as one column down the list. It sits outside the main button now:
-        * decorative, as its `aria-hidden` always said, and no longer part of
-        * what a tap on the row's text activates. */}
+        * up as one column down the list. */}
       <span class={styles.cover} data-row-cover data-round={props.round ? '' : undefined}
-        style={coverStyle(props.seed, props.cover)} aria-hidden="true">
+        style={coverStyle(props.seed, props.cover)} aria-hidden="true" {...coverTap}>
         <Show when={busy()} fallback={<Show when={favourite()}>
           <span class={styles.mark} data-row-favourite>
             <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" /></svg>
