@@ -1,8 +1,8 @@
 import { claimHoldGesture, clearTextSelection } from './holdGesture';
+import { shieldGhostClicks } from './ghostClick';
 
 const TAP_SLOP = 8;
 const LONG_PRESS_MS = 450;
-const CLICK_SUPPRESSION_MS = 700;
 
 export interface ResponsiveTapOptions {
   onTap: (event: PointerEvent | MouseEvent) => void;
@@ -19,8 +19,10 @@ export interface ResponsiveTapOptions {
  * drags: movement beyond the slop, pointercancel and a nested interactive
  * control all cancel the candidate.
  *
- * Mouse and keyboard keep the platform `click` path. A short suppression
- * window consumes the compatibility click that follows a handled touch tap.
+ * Mouse and keyboard keep the platform `click` path. The compatibility click
+ * that follows a handled touch is left to lib/ghostClick, which swallows it
+ * wherever it lands — including on whatever this activation just moved under
+ * the finger.
  */
 export function createResponsiveTap(options: ResponsiveTapOptions) {
   let pointerId: number | null = null;
@@ -29,7 +31,6 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
   let cancelled = false;
   let longPressed = false;
   let longPressTimer: number | undefined;
-  let suppressClickUntil = 0;
   let releaseHold: (() => void) | undefined;
 
   const clearLongPress = () => {
@@ -109,9 +110,14 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
   const onPointerUp = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
     const shouldTap = !cancelled && !longPressed && !options.disabled?.();
+    const handled = shouldTap || longPressed;
     reset();
+    // Whatever this press did — activated the control, or opened a menu that is
+    // now sitting under the finger — the mouse events the platform still owes
+    // this touch belong to nobody. Armed before the activation runs, so the
+    // guard is already up when the screen changes under it.
+    if (handled) shieldGhostClicks();
     if (!shouldTap) return;
-    suppressClickUntil = performance.now() + CLICK_SUPPRESSION_MS;
     options.onTap(event);
   };
 
@@ -120,12 +126,6 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
   };
 
   const onClick = (event: MouseEvent) => {
-    // Keyboard activation has detail=0 and must never be swallowed.
-    if (event.detail > 0 && performance.now() < suppressClickUntil) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
     // A click that closes a text selection inside this element is not an
     // activation: dragging across a song title to copy it must not also play
     // the song. A plain click never trips this — mousedown collapses whatever
@@ -151,5 +151,4 @@ function selectionWithin(node: EventTarget | null): boolean {
 export const responsiveTapConstants = {
   TAP_SLOP,
   LONG_PRESS_MS,
-  CLICK_SUPPRESSION_MS,
 } as const;
