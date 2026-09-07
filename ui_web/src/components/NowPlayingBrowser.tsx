@@ -134,6 +134,10 @@ async function enqueueCatalogItem(item: CatalogItem): Promise<void> {
   }
 }
 
+/** How long a restore may keep a panel's scroll position under its own control
+ * before handing it back to whoever is reading. */
+const RESTORE_GRACE_MS = 1500;
+
 export function NowPlayingBrowser(props: {
   onClose: () => void;
   dragHandle?: JSX.Element;
@@ -456,14 +460,30 @@ export function NowPlayingBrowser(props: {
     const offset = untrack(() => navigation.current().scroll);
     restoringScroll = true;
     let frame = 0;
-    const observer = new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(restore); });
+    // A list that is already where it belongs is done, whatever else changes in
+    // it. Re-arming on those mutations cancels the frame that would have closed
+    // the restore, and a panel whose rows carry live marks never stops mutating
+    // — so the restore stayed open, kept yanking the list back to the offset
+    // under whoever was reading it, and swallowed the positions they scrolled
+    // to, because a scroll is only recorded once the restore has let go.
+    const body = () => panelEl?.querySelector<HTMLElement>('[data-browser-body]');
+    const atOffset = () => { const el = body(); return !!el && Math.abs(el.scrollTop - offset) <= 1; };
+    const observer = new MutationObserver(() => {
+      if (atOffset()) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(restore);
+    });
     const finish = () => { restoringScroll = false; observer.disconnect(); };
+    // And a position this view can never reach — a shorter list than the one
+    // the offset was taken from — must not hold the restore open for good.
+    const expiry = window.setTimeout(finish, RESTORE_GRACE_MS);
+    onCleanup(() => window.clearTimeout(expiry));
     const restore = () => {
-      const body = panelEl?.querySelector<HTMLElement>('[data-browser-body]');
-      if (!body) return;
-      body.scrollTop = offset;
-      if (Math.abs(body.scrollTop - offset) <= 1) frame = requestAnimationFrame(() => {
-        if (Math.abs(body.scrollTop - offset) <= 1) finish();
+      const el = body();
+      if (!el) return;
+      el.scrollTop = offset;
+      if (Math.abs(el.scrollTop - offset) <= 1) frame = requestAnimationFrame(() => {
+        if (atOffset()) finish();
         else restore();
       });
     };
