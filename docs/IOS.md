@@ -34,11 +34,10 @@ setup it re-signs your apps on the phone itself, with no computer.
 3. Install Soundsible from that source.
 4. Open it and pair with your server (below).
 
-> **Not published yet.** The source above goes live with the first release that
-> carries the app. Until then the `.ipa` exists only as an artefact of the
-> [iOS workflow](https://github.com/Arzuparreta/soundsible/actions/workflows/ios-build.yml);
-> check [Releases](https://github.com/Arzuparreta/soundsible/releases) to see
-> whether it has shipped.
+> **Release downloads.** Published releases include `apps.json` and
+> `Soundsible.ipa`. Use the source above to install the released app; workflow
+> artifacts are development builds. This does not verify the separate AltStore
+> PAL distribution path described below.
 
 > **The seven-day thing.** A free Apple ID can sign at most **3** sideloaded
 > apps, and the signature lasts **7 days**. SideStore renews it in the

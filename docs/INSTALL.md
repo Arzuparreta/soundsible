@@ -10,7 +10,8 @@ The supported entry point everywhere is `python3 run.py`. It creates the project
 
 ## 1. Requirements
 
-- **Python 3.10+** and **git**
+- **Python 3.10+**, **git**, and **Node.js 22+** with **npm**
+  (the web player is built from source during engine startup).
 - **FFmpeg** — not bundled; install via your OS package manager:
   - Debian/Ubuntu: `sudo apt install ffmpeg`
   - Arch: `sudo pacman -S ffmpeg`
@@ -28,11 +29,17 @@ Same as a local install, run over SSH:
 
 ```bash
 sudo apt update
-sudo apt install -y python3-venv python3-pip ffmpeg git
+sudo apt install -y python3-venv python3-pip ffmpeg git nodejs npm
 git clone https://github.com/Arzuparreta/soundsible.git
 cd soundsible
+cd ui_web && npm ci && cd ..
 python3 run.py          # first run opens setup; then choose "Start Station Engine"
 ```
+
+Check `node --version` before installing the web player dependencies. If your
+distribution provides an older Node.js version, install Node.js 22 or newer
+first. The desktop beta already bundles the player; this requirement applies
+to source installations.
 
 Access the player from another machine on the network:
 

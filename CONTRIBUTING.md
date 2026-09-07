@@ -5,7 +5,7 @@ Thanks for your interest in contributing – every bug report, idea, and pull re
 ### Prerequisites
 
 - **Python 3.10+**, **git**, **FFmpeg**
-- **Node.js 20+** and **npm** — required to build or develop the SolidJS player in `ui_web/` (the production bundle in `ui_web/dist/` is not committed)
+- **Node.js 22+** and **npm** — required to build or develop the SolidJS player in `ui_web/` (the production bundle in `ui_web/dist/` is not committed)
 
 ### How to get started
 
