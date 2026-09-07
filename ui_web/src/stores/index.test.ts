@@ -114,6 +114,12 @@ async function loadStore(
       }],
       degraded: false,
     })),
+    placeDjTracks: vi.fn().mockImplementation(async (body: { requests: Array<{ track: Track; requested_queue_id: string }> }) => ({
+      placements: body.requests.map((row, index) => ({
+        v: 1, insert_at: index, before_queue_id: null, requested_queue_id: row.requested_queue_id,
+        items: [{ ...row.track, source_pool: 'local', route_kind: 'user', request_id: row.requested_queue_id }], degraded: false,
+      })),
+    })),
     // Echoes the posted route straight back: a repair that changes nothing is
     // still a repair, and it keeps every assertion about what the *client* does
     // with the answer independent of what the planner chose.
@@ -1515,6 +1521,53 @@ describe('Auto Mode store contract', () => {
     expect(state.autoMode.sources).toEqual([]);
     expect(state.playback.queue.slice(1).filter((entry) => entry.id !== 'wanted').map((entry) => entry.queueId)).toEqual(neighbours);
     expect(planDjQueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps all collection occurrences through a bounded repair and a source replan', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1']));
+    const { actions, state, api } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
+    const collection = Array.from({ length: 24 }, (_, index) => ({ id: `song-${index % 20}`, title: `Song ${index}`, artist: 'Listener' }));
+    await actions.placeAutoTracks(collection);
+    const requests = state.playback.queue.filter((row) => row.autoRoute?.kind === 'user');
+    expect(requests).toHaveLength(24);
+    expect(new Set(requests.map((row) => row.queueId)).size).toBe(24);
+    await actions.repairAutoRoute();
+    expect(api.repairDjRoute.mock.calls[0][0].route).toHaveLength(16);
+    expect(state.playback.queue.filter((row) => row.autoRoute?.kind === 'user').map((row) => row.queueId)).toEqual(requests.map((row) => row.queueId));
+    actions.addAutoSource([t2], 'Direction');
+    await vi.waitFor(() => expect(planDjQueue).toHaveBeenCalledTimes(2));
+    expect(state.playback.queue.filter((row) => row.autoRoute?.kind === 'user').map((row) => row.queueId)).toEqual(requests.map((row) => row.queueId));
+  });
+
+  it('rebases pending collection requests onto a changed route without resurrecting removed songs', async () => {
+    const gate = deferred<{ placements: [] }>();
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0', 'route-1']));
+    const { actions, state } = await loadStore({ planDjQueue, placeDjTracks: vi.fn().mockReturnValue(gate.promise) });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
+    const pending = actions.placeAutoTracks([t2, t2]);
+    const removed = state.playback.queue[1].queueId;
+    actions.removeAutoRouteOccurrence(removed);
+    gate.resolve({ placements: [] }); await pending;
+    expect(state.playback.queue.some((row) => row.queueId === removed)).toBe(false);
+    expect(state.playback.queue.filter((row) => row.id === t2.id)).toHaveLength(2);
+    expect(state.playback.currentTrack?.id).toBe(t1.id);
+  });
+
+  it('discards a collection answer after leaving its session', async () => {
+    const gate = deferred<{ placements: [] }>();
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['route-0']));
+    const { actions, state } = await loadStore({ planDjQueue, placeDjTracks: vi.fn().mockReturnValue(gate.promise) });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    const pending = actions.placeAutoTracks([t2, t2]);
+    actions.exitAutoMode();
+    const ids = state.playback.queue.map((row) => row.queueId);
+    gate.resolve({ placements: [] }); await pending;
+    expect(state.playback.queue.map((row) => row.queueId)).toEqual(ids);
   });
 
   it('carries a bridge with the song it leads into, and pins only the song', async () => {

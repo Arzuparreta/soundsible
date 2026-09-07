@@ -14,6 +14,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { savedFromTrack } from '../lib/saved';
 import { isSavedTrack, state } from '../stores';
 import { FavouriteButton } from './FavouriteButton';
+import { Spinner } from './Spinner';
 import { CollectionButton } from './CollectionButton';
 
 export interface SongRowProps {
@@ -29,6 +30,11 @@ export interface SongRowProps {
   /** When false, the row hides its heart (podcast episodes). */
   favouritable?: boolean;
   onPlay?: (track: Track) => void;
+  compact?: boolean;
+  actionLabel?: string;
+  primaryAction?: { label: string; onSelect: () => void };
+  busy?: boolean;
+  onDragStart?: (event: DragEvent) => void;
   /** When set, the artist name becomes a tappable link (navigates to the artist). */
   onArtist?: (artist: string) => void;
   /** When set, exposes the context menu (⋯ button, long-press, right-click).
@@ -90,14 +96,19 @@ export default function SongRow(props: SongRowProps) {
   /** What a screen reader announces for the row: what it is, then what
    * activating it does. The nested artist/menu buttons name themselves. */
   const label = () =>
-    props.track.artist
+    props.actionLabel ?? (props.track.artist
       ? t('songRow.ariaPlay', { title: props.track.title, artist: props.track.artist })
-      : props.track.title;
+      : props.track.title);
 
+  /* The compact row is the music explorer's, and it carries controls the shared
+   * row has no place for — a named request action, a busy spinner, a drag
+   * source. Handing it over would drop them silently, so it keeps the markup it
+   * was built and tested with; every other list gets the shared mobile row. */
   return (
-    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.track.title} subtitle={props.track.artist} seed={props.track.id}
+    <Show when={!mobileListLayout() || props.compact} fallback={<MusicListRow title={props.track.title} subtitle={props.track.artist} seed={props.track.id}
       cover={props.cover ?? props.track.cover} index={props.index} annotation={props.badge}
-      active={props.active} busy={props.active && state.playback.isLoading} entry={props.favouritable === false ? undefined : entry()}
+      active={props.active} busy={props.active && state.playback.isLoading}
+      entry={props.favouritable === false ? undefined : entry()}
       favouritesKnown={props.favouritesKnown} actionLabel={label()}
       onActivate={() => props.onPlay?.(props.track)} onMenu={(event) => props.onMenu
         ? props.onMenu(props.track, event)
@@ -105,6 +116,9 @@ export default function SongRow(props: SongRowProps) {
             onPlayOnDevice: openPlayOnDevice, onOpenArtist: props.onArtist ? () => props.onArtist!(props.track.artist) : undefined }, event)} />}>
     <div
       class={styles.row}
+      data-compact={props.compact ? '' : undefined}
+      draggable={Boolean(props.onDragStart)}
+      onDragStart={props.onDragStart}
       data-pressable
       data-now-playing={props.active ? '' : undefined}
       role="button"
@@ -147,16 +161,18 @@ export default function SongRow(props: SongRowProps) {
         * presence is how a streamed song announces itself — there is no second
         * badge saying the same thing. It deliberately sits before the stable
         * duration/heart/menu stripe, so appearing never shifts those controls. */}
-      <Show when={props.favouritable !== false}>
+      <Show when={!props.compact && props.favouritable !== false}>
         <CollectionButton entry={entry()} class={styles.rowCollect} hideOwned />
       </Show>
       <div class={styles.actionStripe}>
-        <span class={styles.duration}>{formatDuration(props.track.duration)}</span>
+        <Show when={props.busy}><Spinner size={14} /></Show>
+        <Show when={props.primaryAction}>{(action) => <button type="button" class={styles.primaryAction} disabled={props.busy} onClick={(event) => { event.stopPropagation(); action().onSelect(); }}>{action().label}</button>}</Show>
+        <Show when={!props.compact}><span class={styles.duration}>{formatDuration(props.track.duration)}</span></Show>
         {/* Downloaded or not, a song in the library gets a heart — the mark is
           * about which of your songs stand out, not about where they live. What
           * it never gets is a heart before it is yours: `entry()` is only saved
           * once the row is part of the collection. */}
-        <Show when={props.favouritable !== false && isSavedTrack(props.track)}>
+        <Show when={!props.compact && props.favouritable !== false && isSavedTrack(props.track)}>
           <FavouriteButton favourite={entry()} class={styles.rowHeart} />
         </Show>
         <Show when={props.onMenu}>

@@ -107,6 +107,9 @@ function Rows<T>(props: {
     // an initially visible list from starting at a zero-height range and only
     // appearing after a tab switch forces another calculation.
     initialRect: initialRect(),
+    // Recreating the virtual window after layout must preserve a restored
+    // browser position instead of scrolling the shared list back to zero.
+    initialOffset: () => props.scrollElement()?.scrollTop ?? 0,
     get overscan() {
       return props.overscan ?? 10;
     },

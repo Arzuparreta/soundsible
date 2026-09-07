@@ -1392,24 +1392,50 @@ def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tupl
 @discovery_bp.route("/api/discovery/music/dj-place", methods=["POST"])
 @rate_limit("discovery_music_dj_place", limit=90, window_sec=60)
 def discovery_music_dj_place():
-    """Place one song in the current route without rebuilding that route."""
+    """Place songs in the current route without rebuilding existing occurrences."""
     data = request.get_json(silent=True) or {}
+    requests = data.get("requests")
+    if requests is None:
+        body, status = _dj_place_one(data)
+        return jsonify(body), status
+    if not isinstance(requests, list) or not requests:
+        return jsonify({"error": "requests must be a non-empty list"}), 400
+    ids = [str(row.get("requested_queue_id") or "") for row in requests if isinstance(row, dict)]
+    if len(ids) != len(requests) or not all(ids) or len(set(ids)) != len(ids):
+        return jsonify({"error": "each request needs a unique requested_queue_id"}), 400
+    route = list(data.get("route") or [])
+    placements = []
+    for requested in requests:
+        result, status = _dj_place_one({**data, **requested, "route": route})
+        if status != 200:
+            return jsonify(result), status
+        # Give bridge occurrences identities that the browser can reproduce.
+        for index, item in enumerate(result["items"]):
+            item["queue_id"] = (result["requested_queue_id"] if item["route_kind"] == "user"
+                                else f"{result['requested_queue_id']}:bridge:{index}")
+        route[result["insert_at"]:result["insert_at"]] = result["items"]
+        placements.append(result)
+    return jsonify({"placements": placements}), 200
+
+
+def _dj_place_one(data: dict) -> tuple[dict, int]:
+    """Plan one insertion; collection requests reuse the same scoring contract."""
     seed = data.get("seed") if isinstance(data.get("seed"), dict) else {}
     raw_track = data.get("track") if isinstance(data.get("track"), dict) else {}
     raw_route = data.get("route") if isinstance(data.get("route"), list) else []
     requested_queue_id = str(data.get("requested_queue_id") or "").strip()
     if not seed or not raw_track or not requested_queue_id:
-        return jsonify({"error": "seed, track and requested_queue_id are required"}), 400
+        return ({"error": "seed, track and requested_queue_id are required"}), 400
     profile = str(data.get("dj_profile") or "adaptive").strip()
     if profile not in DJ_PROFILES:
-        return jsonify({"error": "unsupported dj_profile"}), 400
+        return ({"error": "unsupported dj_profile"}), 400
 
     api = _get_api()
     lib, _, _ = api["get_core"]()
     metadata = getattr(lib, "metadata", None)
     target = _music_set_item(raw_track, source_id="route", label="Route")
     if not target:
-        return jsonify({"error": "track cannot be placed"}), 400
+        return ({"error": "track cannot be placed"}), 400
     target.update({
         "request_id": requested_queue_id,
         "reason": "Placed in route",
@@ -1417,9 +1443,24 @@ def discovery_music_dj_place():
     })
     target_analysis = _dj_item_analysis(metadata, target, schedule=True)
 
+    # A listener-selected seam may sit beyond the automatic analysis horizon.
+    # Score only its immediate neighbours, then translate the local insertion
+    # back to the full route. Long collections must not invalidate that seam.
+    before_queue_id = str(data.get("before_queue_id") or "").strip()
+    route_offset = 0
+    if before_queue_id:
+        raw_index = next((index for index, row in enumerate(raw_route)
+                          if isinstance(row, dict) and row.get("queue_id") == before_queue_id), None)
+        if raw_index is None:
+            return {"error": "before_queue_id is not in the editable route"}, 409
+        if raw_index >= 16:
+            seed = raw_route[raw_index - 1]
+            route_offset = raw_index
+
     route: list[tuple[dict, dict]] = []
     occupied = {str(target.get("recommendation_identity") or target.get("id") or "")}
-    for raw in raw_route[:16]:
+    horizon = raw_route[route_offset:route_offset + (1 if route_offset else 16)]
+    for raw in horizon:
         if not isinstance(raw, dict):
             continue
         item = _music_set_item(raw, source_id="route", label="Route")
@@ -1429,13 +1470,12 @@ def discovery_music_dj_place():
         occupied.add(str(item.get("recommendation_identity") or item.get("id") or ""))
         route.append((item, _dj_item_analysis(metadata, item)))
 
-    before_queue_id = str(data.get("before_queue_id") or "").strip()
     fixed_index = next(
         (index for index, (item, _) in enumerate(route) if item.get("queue_id") == before_queue_id),
         None,
     ) if before_queue_id else None
     if before_queue_id and fixed_index is None:
-        return jsonify({"error": "before_queue_id is not in the editable route"}), 409
+        return ({"error": "before_queue_id is not in the editable route"}), 409
     gap_indexes = [fixed_index] if fixed_index is not None else list(range(len(route) + 1))
     bridge_pool = [] if fixed_index is not None else _dj_place_bridge_pool(metadata, data, occupied)
     seed_analysis = _dj_item_analysis(metadata, seed, schedule=True)
@@ -1463,7 +1503,7 @@ def discovery_music_dj_place():
             best = candidate
 
     if best is None:
-        return jsonify({"error": "route has no editable gap"}), 409
+        return ({"error": "route has no editable gap"}), 409
     _, _, insert_at, segment, following = best
     items = []
     for row in segment:
@@ -1474,9 +1514,9 @@ def discovery_music_dj_place():
             placed["owner_queue_id"] = requested_queue_id
         items.append(placed)
         _dj_item_analysis(metadata, placed, schedule=True)
-    return jsonify({
+    return ({
         "v": 1,
-        "insert_at": insert_at,
+        "insert_at": route_offset + insert_at,
         "before_queue_id": route[insert_at][0].get("queue_id") if insert_at < len(route) else None,
         "requested_queue_id": requested_queue_id,
         "items": items,

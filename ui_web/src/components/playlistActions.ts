@@ -12,6 +12,9 @@ export interface PlaylistMenuHooks {
   onRenamed?: (newName: string) => void;
   /** Called after the playlist is deleted (e.g. to navigate away). */
   onDeleted?: () => void;
+  onEdit?: () => void;
+  beforeQueueId?: string;
+  onPlaced?: () => void;
 }
 
 /** Resolve a playlist's track ids to library tracks (in order). */
@@ -28,12 +31,15 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
     title: name,
     actions: [
       {
-        label: inAuto ? t('autoMode.source.add') : t('playlistActions.play'),
-        onSelect: () => {
+        label: inAuto ? t('musicExplorer.requestAll') : t('playlistActions.play'),
+        onSelect: async () => {
           const t = playlistTracks(name);
           if (t.length) {
-            if (state.autoMode.active) actions.addAutoSource(t, name);
-            else {
+            if (state.autoMode.active) {
+              const epoch = actions.autoSessionToken();
+              await actions.placeAutoTracks(t, hooks.beforeQueueId);
+              if (actions.autoSessionToken() === epoch) hooks.onPlaced?.();
+            } else {
               actions.playFrom(t, 0, {
                 context: { id: `playlist:${name}`, kind: 'playlist', label: name },
               });
@@ -41,6 +47,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
           }
         },
       },
+      ...(inAuto ? [{ label: t('musicExplorer.reference'), onSelect: () => { actions.addAutoSource(playlistTracks(name), name); hooks.onPlaced?.(); } }] : []),
       ...(!inAuto ? [{
         label: t('playlistActions.shuffle'),
         onSelect: () => {
@@ -54,6 +61,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
           }
         },
       }] : []),
+      ...(hooks.onEdit ? [{ label: t('musicExplorer.edit'), onSelect: hooks.onEdit }] : []),
       {
         label: t('playlistActions.rename'),
         onSelect: async () => {
@@ -73,8 +81,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
             confirmLabel: t('playlistActions.deleteConfirm'),
             danger: true,
           });
-          if (ok) {
-            await actions.deletePlaylist(name);
+          if (ok && await actions.deletePlaylist(name)) {
             hooks.onDeleted?.();
           }
         },
@@ -86,4 +93,9 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
 /** Open the playlist menu. Pass the triggering event to anchor a cursor popover. */
 export function openPlaylistMenu(name: string, hooks: PlaylistMenuHooks = {}, ev?: MouseEvent): void {
   openContextMenu(playlistMenuOptions(name, hooks), ev);
+}
+
+export async function createPlaylistDialog(): Promise<string | null> {
+  const name = await promptDialog({ title: t('playlists.new'), placeholder: t('playlists.newPlaceholder'), confirmLabel: t('playlists.newConfirm') });
+  return name && await actions.createPlaylist(name) ? name.trim() : null;
 }

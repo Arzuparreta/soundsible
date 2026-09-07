@@ -1,9 +1,6 @@
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
-import { buildEntryMenu } from './entryActions';
 import { savedFromTrack, savedFromCatalogItem } from '../lib/saved';
-import { openContextMenu } from '../lib/contextMenu';
-import { openPlaylistMenu } from './playlistActions';
 import type { SavedEntry } from '../types/music';
 import {
   createEffect,
@@ -11,8 +8,11 @@ import {
   createResource,
   createSignal,
   For,
+  ErrorBoundary,
   Match,
   onCleanup,
+  untrack,
+  useContext,
   Show,
   Switch,
   type JSX,
@@ -37,12 +37,11 @@ import { coverUrl, trackCoverUrl } from '../lib/media';
 import { coverStyle } from '../lib/cover';
 import { parseYouTubeInput } from '../lib/youtube';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
-import { catalogArtists, librarySort, libraryTab, setLibrarySort, setLibraryTab, sortTracks } from '../lib/libraryView';
+import { albumSort, albumFilter, filterTracks, libraryFilter, setLibraryFilter, catalogArtists, librarySort, libraryTab, setLibrarySort, setLibraryTab, sortTracks } from '../lib/libraryView';
 import { artistKey } from '../lib/artistRoute';
-import { searchLibrary, type LibrarySearchResult } from '../lib/librarySearch';
-import { addCatalogItemsAsAutoSource, catalogPreviewId, itemArtist, itemToTrack, playCatalogItem } from '../lib/catalogItem';
+import { normalizeLibraryQuery, searchLibrary, type LibrarySearchResult } from '../lib/librarySearch';
+import { resolveCatalogTrack, catalogPreviewId, itemArtist, itemToTrack, playCatalogItem } from '../lib/catalogItem';
 import { writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
-import { claimHoldGesture, clearTextSelection } from '../lib/holdGesture';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { prefetchPreviews } from '../lib/prefetch';
@@ -54,7 +53,6 @@ import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { openActionMenu } from './ActionMenu';
 import { VirtualRows } from './VirtualRows';
-import { Spinner } from './Spinner';
 import { SkeletonRows } from './Skeleton';
 import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
@@ -67,23 +65,18 @@ import {
   type CachedCatalog,
   type ResolvedSection,
 } from '../lib/searchSections';
-import type { CatalogItem, CatalogSection, SearchResult, Track } from '../types/music';
+import type { CatalogAlbum, CatalogItem, CatalogSection, SearchResult, Track } from '../types/music';
+import { musicBrowserNavigation as navigation, type BrowserView, type BrowserSection, type SearchScope, type ResultType } from '../lib/musicBrowserNavigation';
+import { tracksByIds } from '../lib/catalogTracks';
+import { albumBrowseQuery, collateAlbums } from '../lib/albumBrowse';
+import { createPlaylistDialog, openPlaylistMenu } from './playlistActions';
+import { CollectionActions, CollectionPlacementContext } from './CollectionActions';
+import SongRow from './SongRow';
+import { openAlbumBrowseMenu } from './albumBrowseMenu';
+import { ViewHeader as SharedViewHeader } from './ViewHeader';
+import { MusicReorderList } from './MusicReorderList';
 import styles from './NowPlayingBrowser.module.css';
-
-export type BrowserView =
-  | { kind: 'root' }
-  | { kind: 'library' }
-  | { kind: 'favourites' }
-  | { kind: 'libraryArtist'; name: string }
-  | { kind: 'playlists' }
-  | { kind: 'playlist'; name: string }
-  | { kind: 'catalogArtist'; name: string; deezerId?: string }
-  | { kind: 'catalogAlbum'; name: string; artist: string; deezerId?: string };
-
-type SearchReturn = {
-  query: string;
-  scope: 'global' | 'library';
-};
+export type { BrowserView } from '../lib/musicBrowserNavigation';
 
 /** What a song row needs to know about the session it is being listed inside.
  * Built once per row by `NowPlayingBrowser.autoRow` and handed down, so every
@@ -92,7 +85,9 @@ interface AutoRowProps {
   entry?: SavedEntry;
   favouritesKnown?: boolean;
   variant: 'browse' | 'auto';
+  primaryLabel?: string;
   onAddToRoute?: () => void;
+  onMenu?: (event?: MouseEvent) => void;
   track?: Track;
   onCarryTrack?: (track: Track) => void;
 }
@@ -130,27 +125,10 @@ function resultTrack(result: SearchResult): Track {
 }
 
 async function enqueueCatalogItem(item: CatalogItem): Promise<void> {
-  const immediate = itemToTrack(item);
-  if (immediate) {
-    actions.enqueue(immediate);
-    return;
-  }
-  const artist = itemArtist(item);
-  if (!artist) return;
   try {
-    const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration });
-    if (!resolved.video_id) throw new Error('unresolved');
-    actions.linkCatalogItem(item.id, resolved.video_id);
-    actions.enqueue({
-      id: resolved.video_id,
-      title: item.title,
-      artist,
-      album: item.album,
-      duration: item.duration,
-      cover: item.cover,
-      source: 'preview',
-      originKeys: catalogItemKeys(item),
-    });
+    const track = await resolveCatalogTrack(item);
+    if (!track) throw new Error('unresolved');
+    actions.enqueue(track);
   } catch {
     toast.error(t('searchPanel.noResolve'));
   }
@@ -159,19 +137,25 @@ async function enqueueCatalogItem(item: CatalogItem): Promise<void> {
 export function NowPlayingBrowser(props: {
   onClose: () => void;
   dragHandle?: JSX.Element;
-  purpose?: 'browse' | 'auto-neutral' | 'auto-route';
+  purpose?: 'browse' | 'auto-neutral' | 'auto-route' | 'auto-reference';
+  active?: boolean;
   routeBeforeQueueId?: string;
   onPlaced?: () => void;
   onCarryTrack?: (track: Track) => void;
 }) {
+  let resetContentError: (() => void) | undefined;
   const routeMode = () => props.purpose === 'auto-route';
   const inAuto = () => Boolean(props.purpose?.startsWith('auto-'));
-  const autoNeutral = () => props.purpose === 'auto-neutral';
-  const [stack, setStack] = createSignal<BrowserView[]>([{ kind: 'root' }]);
-  const [returnSearches, setReturnSearches] = createSignal<Array<SearchReturn | null>>([null]);
-  const currentView = createMemo(() => stack()[stack().length - 1] ?? { kind: 'root' as const });
-  const [scope, setScope] = createSignal<'global' | 'library'>('global');
-  const [query, setQuery] = createSignal('');
+  const currentView = createMemo(() => navigation.current().view);
+  const scope = createMemo(() => navigation.current().scope);
+  const setScope = (value: SearchScope) => navigation.update({ scope: value });
+  const query = createMemo(() => navigation.current().query);
+  const setQuery = (value: string) => navigation.update({ query: value, scroll: 0 });
+  const filter = createMemo(() => navigation.current().filter);
+  const [partial, setPartial] = createSignal(false);
+  const referenceMode = () => props.purpose === 'auto-reference';
+  let panelEl: HTMLElement | undefined;
+  let restoringScroll = false;
   const [items, setItems] = createSignal<CatalogItem[]>([]);
   const [sections, setSections] = createSignal<CatalogSection[]>([]);
   const [ytResults, setYtResults] = createSignal<SearchResult[]>([]);
@@ -188,68 +172,50 @@ export function NowPlayingBrowser(props: {
   ensureNodeFeed();
 
   const libraryTracks = createMemo(() =>
-    sortTracks(musicLibrary(), librarySort(), new Set(favouriteLibraryIds())),
+    sortTracks(filterTracks(musicLibrary(), libraryFilter()), librarySort(), new Set(favouriteLibraryIds())),
   );
   const favourites = createMemo(() => favouriteTracks().filter((track) => !isPodcastTrack(track)));
   const libraryArtists = createMemo(() => catalogArtists(state.catalog.artists));
   const localResults = createMemo(() =>
     scope() === 'library' ? searchLibrary(libraryTracks(), libraryArtists(), query()) : [],
   );
-  const globalSearching = createMemo(() => scope() === 'global' && query().trim().length >= 2);
+  const [searchAlbums, { refetch: refetchSearchAlbums }] = createResource(() => props.active !== false && scope() === 'library' && query().trim() ? state.catalog.revision : false, () => api.getLibraryAlbums());
+  const localAlbums = createMemo(() => (searchAlbums() ?? []).filter((album) => normalizeLibraryQuery(`${album.title} ${album.album_artist}`).includes(normalizeLibraryQuery(query()))));
+  const globalSearching = createMemo(() => scope() !== 'library' && query().trim().length >= 2);
   const localSearching = createMemo(() => scope() === 'library' && query().trim().length > 0);
   // The panel used to render entities first and then songs, while the Search
   // route rendered songs first and then entities — two hardcoded orders, both
   // wrong in the other's case. Both now follow the one the server sends.
   const resolved = createMemo(() => resolveSections(items(), sections()));
-  const topResult = createMemo(() => topResultItem(resolved()));
+  const matchingPlaylists = createMemo(() => {
+    const q = normalizeLibraryQuery(query());
+    return q ? Object.keys(state.playlists).filter((name) => normalizeLibraryQuery(name).includes(q)) : [];
+  });
+  const topResult = createMemo(() => filter() === 'all' ? topResultItem(resolved()) : null);
   const panelSections = createMemo<ResolvedSection[]>(() => {
-    const body = resolved().filter((section) => section.id !== 'top');
-    // Asking the DJ for something only makes sense for an artist.
-    if (!routeMode()) return body;
-    return body
-      .map((section) => ({
-        ...section,
-        items: section.items.filter(
-          (item) => item.type !== 'album' && item.type !== 'playlist',
-        ),
-      }))
-      .filter((section) => section.items.length > 0);
+    const sections = resolved().filter((row) => row.id !== 'top');
+    if (filter() === 'all') return sections;
+    const top = topResultItem(resolved());
+    const type = filter() === 'songs' ? ['track', 'library_track'] : [filter().slice(0, -1)];
+    const rows = sections.flatMap((row) => row.items).filter((item) => type.includes(item.type));
+    if (top && type.includes(top.type) && !rows.some((item) => item.id === top.id)) rows.unshift(top);
+    return rows.length ? [{ id: filter(), items: rows, layout: 'rows', total: rows.length }] : [];
+  });
+  createEffect(() => {
+    currentView(); query(); scope();
+    const reset = resetContentError;
+    resetContentError = undefined;
+    reset?.();
   });
   const playlistNames = createMemo(() => Object.keys(state.playlists));
   const byId = createMemo(() => new Map(musicLibrary().map((track) => [track.id, track] as const)));
-  const currentMusic = createMemo(() => {
-    const current = state.playback.currentTrack;
-    return current && !isPodcastTrack(current) ? current : null;
-  });
-  const surprisePool = createMemo(() => {
-    const favourites = musicLibrary().filter((track) => favouriteLibraryIds().has(track.id));
-    return favourites.length >= 3 ? favourites : musicLibrary();
-  });
-
-  const push = (view: BrowserView, returnToSearch = false) => {
-    setStack((views) => [...views, view]);
-    setReturnSearches((searches) => [
-      ...searches,
-      returnToSearch ? { query: query(), scope: scope() } : null,
-    ]);
-    setScope('global');
-    setQuery('');
+  const savePosition = () => {
+    const body = panelEl?.querySelector<HTMLElement>('[data-browser-body]');
+    if (body && props.active !== false && !restoringScroll) navigation.update({ scroll: body.scrollTop });
   };
-  const back = () => {
-    const restore = returnSearches()[returnSearches().length - 1];
-    if (stack().length > 1) {
-      setStack((views) => views.slice(0, -1));
-      setReturnSearches((searches) => searches.slice(0, -1));
-    } else {
-      setStack([{ kind: 'root' }]);
-      setReturnSearches([null]);
-    }
-    setScope(restore?.scope ?? 'global');
-    setQuery(restore?.query ?? '');
-    if (restore?.scope === 'global' && restore.query) runSearch(restore.query);
-    else clearSearchState();
-  };
-
+  const push = (view: BrowserView, _returnToSearch = false) => { savePosition(); clearTimeout(debounce); clearSearchState(); navigation.push(view); };
+  const back = () => { savePosition(); clearTimeout(debounce); clearSearchState(); navigation.back(); };
+  const selectSection = (section: BrowserSection) => { savePosition(); clearTimeout(debounce); clearSearchState(); navigation.select(section); };
   const clearSearchState = () => {
     requestId += 1;
     aborter?.abort();
@@ -273,13 +239,21 @@ export function NowPlayingBrowser(props: {
     setYtResults([]);
     setDirect(null);
 
-    if (scope() !== 'global' || q.length < 2) {
+    if (scope() === 'library' || q.length < 2) {
       setLoading(false);
       setYtLoading(false);
       return;
     }
     aborter = new AbortController();
     const signal = aborter.signal;
+    setPartial(false);
+    if (scope() === 'youtube') {
+      setYtLoading(true);
+      api.searchYouTube(q, signal).then((rows) => { if (request === requestId) setYtResults(rows); })
+        .catch((error) => { if (!isAbort(error) && request === requestId) setFailed(true); })
+        .finally(() => { if (request === requestId) setYtLoading(false); });
+      return;
+    }
     const pasted = parseYouTubeInput(q);
     if (pasted) {
       setYtLoading(true);
@@ -316,6 +290,7 @@ export function NowPlayingBrowser(props: {
     api.searchCatalog(q, signal)
       .then((response) => {
         if (request !== requestId) return;
+        setPartial(Boolean(response.partial_failures?.length));
         setItems(response.items ?? []);
         setSections(response.sections ?? []);
         writeSearchCache(CATALOG_CACHE_NS, q, {
@@ -350,10 +325,10 @@ export function NowPlayingBrowser(props: {
   };
 
   const onInput = (value: string) => {
+    clearSearchState();
     setQuery(value);
-    clearTimeout(debounce);
-    if (scope() === 'library') return;
-    debounce = window.setTimeout(() => runSearch(value), 230);
+    setLoading(scope() !== 'library' && value.trim().length >= 2);
+
   };
 
   const clear = () => {
@@ -385,31 +360,16 @@ export function NowPlayingBrowser(props: {
       return next;
     });
 
-  const resolveItem = async (item: CatalogItem): Promise<Track | null> => {
-    const immediate = playableTrack(item);
-    if (immediate) return immediate;
-    const artist = itemArtist(item);
-    if (!artist) return null;
-    const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration });
-    if (!resolved.video_id) return null;
-    actions.linkCatalogItem(item.id, resolved.video_id);
-    return {
-      id: resolved.video_id,
-      title: item.title,
-      artist,
-      album: item.album,
-      duration: item.duration,
-      cover: item.cover,
-      source: 'preview',
-      originKeys: catalogItemKeys(item),
-    };
-  };
-
   const useItem = async (item: CatalogItem, action: (track: Track) => void) => {
+    if (resolving().has(item.id)) return;
+    const purpose = props.purpose;
+    const before = props.routeBeforeQueueId;
+    const epoch = inAuto() ? actions.autoSessionToken() : null;
     markResolving(item.id, true);
     try {
-      const track = await resolveItem(item);
+      const track = await resolveCatalogTrack(item);
       if (!track) throw new Error('unresolved');
+      if (props.purpose !== purpose || props.routeBeforeQueueId !== before || (epoch !== null && actions.autoSessionToken() !== epoch)) return;
       action(track);
     } catch {
       toast.error(t('searchPanel.noResolve'));
@@ -419,11 +379,12 @@ export function NowPlayingBrowser(props: {
   };
 
   const placeTrack = (track: Track) => {
-    void actions.placeAutoTrack(track, props.routeBeforeQueueId);
+    if (referenceMode()) actions.useAutoTrackAsSource(track);
+    else void actions.placeAutoTrack(track, props.routeBeforeQueueId);
     // Only a placement aimed at a seam is a finished errand. Adding from
     // ordinary browsing leaves the listener where they are, free to add more —
     // bouncing them to the route after every song made building a set a chore.
-    if (routeMode()) props.onPlaced?.();
+    if (routeMode() || referenceMode()) props.onPlaced?.();
   };
   /**
    * The Auto-Mode half of a song row, for anything the panel can list.
@@ -444,11 +405,11 @@ export function NowPlayingBrowser(props: {
       entry: item ? savedFromCatalogItem(item) : track ? savedFromTrack(track) : undefined,
       favouritesKnown: !query().trim() && currentView().kind === 'favourites',
       variant: auto ? 'auto' : 'browse',
-      // Picking a source is its own errand; offering the route mid-way through
-      // it would be answering a question the listener did not ask.
+      primaryLabel: referenceMode() ? t('musicExplorer.reference') : auto ? t('musicExplorer.request') : undefined,
       onAddToRoute: auto && target
         ? () => item ? void useItem(item, placeTrack) : placeTrack(target as Track)
         : undefined,
+      onMenu: target ? (event) => item ? void useItem(item, (resolved) => openTrackActions(resolved, event)) : openTrackActions(target as Track, event) : undefined,
       track: track ?? undefined,
       onCarryTrack: props.onCarryTrack,
     };
@@ -476,8 +437,43 @@ export function NowPlayingBrowser(props: {
       onAddToPlaylist: openPlaylistPicker,
       onEditMetadata: openMetadataEditor,
       onPlayOnDevice: openPlayOnDevice,
-      onOpenArtist: track.artist ? () => push({ kind: 'libraryArtist', name: track.artist }) : undefined,
+      onOpenArtist: track.artist ? () => push({ kind: 'catalogArtist', name: track.artist }) : undefined,
+      onOpenAlbum: track.album ? () => push({ kind: 'catalogAlbum', name: track.album!, artist: track.album_artist || track.artist }) : undefined,
+      onRemoveFromPlaylist: currentView().kind === 'playlist' ? () => void actions.removeFromPlaylist((currentView() as { name: string }).name, track.id) : undefined,
     }, event);
+
+  createEffect(() => {
+    const value = query(); const searchScope = scope(); const active = props.active !== false;
+    clearTimeout(debounce);
+    if (!active) { aborter?.abort(); return; }
+    debounce = window.setTimeout(() => { untrack(() => runSearch(value)); }, value ? 230 : 0);
+    void searchScope;
+  });
+  // Restore after asynchronous content and the virtual window have laid out.
+  createEffect(() => {
+    const view = currentView(); const q = query(); const type = filter(); const active = props.active !== false;
+    if (!active || !panelEl) return;
+    const offset = untrack(() => navigation.current().scroll);
+    restoringScroll = true;
+    let frame = 0;
+    const observer = new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(restore); });
+    const finish = () => { restoringScroll = false; observer.disconnect(); };
+    const restore = () => {
+      const body = panelEl?.querySelector<HTMLElement>('[data-browser-body]');
+      if (!body) return;
+      body.scrollTop = offset;
+      if (Math.abs(body.scrollTop - offset) <= 1) frame = requestAnimationFrame(() => {
+        if (Math.abs(body.scrollTop - offset) <= 1) finish();
+        else restore();
+      });
+    };
+    observer.observe(panelEl, { childList: true, subtree: true });
+    panelEl.addEventListener('wheel', finish, { once: true, passive: true });
+    panelEl.addEventListener('pointerdown', finish, { once: true, passive: true });
+    frame = requestAnimationFrame(restore);
+    onCleanup(() => { cancelAnimationFrame(frame); observer.disconnect(); panelEl?.removeEventListener('wheel', finish); panelEl?.removeEventListener('pointerdown', finish); });
+    void view; void q; void type;
+  });
 
   const renderTrack = (
     track: Track,
@@ -491,7 +487,7 @@ export function NowPlayingBrowser(props: {
       seed={track.id}
       active={isPlayingTrack(track)}
       queued={isQueuedTrack(track)}
-      onPlay={routeMode() ? () => placeTrack(track) : onPlay}
+      onPlay={inAuto() ? () => placeTrack(track) : onPlay}
       onQueue={onQueue}
       onMenu={(event) => openTrackActions(track, event)}
       {...autoRow(track)}
@@ -499,7 +495,20 @@ export function NowPlayingBrowser(props: {
   );
 
   return (
-    <aside
+    <CollectionPlacementContext.Provider value={{
+      get beforeQueueId() { return props.routeBeforeQueueId; },
+      get referenceOnly() { return referenceMode(); },
+      get intent() { return props.purpose; },
+      onCompleted: () => { if (routeMode() || referenceMode()) props.onPlaced?.(); },
+    }}><aside
+      ref={(element) => {
+        panelEl = element;
+        const saveScroll = (event: Event) => {
+          if (!restoringScroll && props.active !== false && (event.target as HTMLElement).hasAttribute('data-browser-body')) navigation.update({ scroll: (event.target as HTMLElement).scrollTop });
+        };
+        element.addEventListener('scroll', saveScroll, true);
+        onCleanup(() => element.removeEventListener('scroll', saveScroll, true));
+      }}
       class={styles.panel}
       aria-label={routeMode() ? t('autoMode.dj.routePanelAria') : t('nowPlayingBrowser.aria')}
       data-purpose={props.purpose}
@@ -542,12 +551,33 @@ export function NowPlayingBrowser(props: {
         </button>
       </header>
 
-      <Switch>
+      <nav class={styles.destinations} aria-label={t('musicExplorer.title')}>
+        <For each={(['library', 'favourites', 'playlists', 'root'] as const)}>{(section) =>
+          <button type="button" aria-current={navigation.section() === section ? 'page' : undefined} onClick={() => selectSection(section)}>{section === 'root' ? t('musicExplorer.explore') : t(`nav.${section}`)}</button>
+        }</For>
+      </nav>
+      <Show when={routeMode() || referenceMode()}>
+        <div class={styles.intent}><span>{t(referenceMode() ? 'musicExplorer.referencePicking' : 'musicExplorer.placing')}</span><button type="button" onClick={props.onPlaced}>{t('musicExplorer.cancelPlacement')}</button></div>
+      </Show>
+      <Show when={query().trim() || scope() !== 'global'}><div class={styles.searchFilters}>
+        <select aria-label={t('musicExplorer.allMusic')} value={scope()} onChange={(event) => { clearSearchState(); setScope(event.currentTarget.value as SearchScope); }}>
+          <option value="global">{t('musicExplorer.allMusic')}</option><option value="library">{t('musicExplorer.libraryOnly')}</option><option value="youtube">YouTube</option>
+        </select>
+        <Show when={query().trim()}><select aria-label={t('musicExplorer.types')} value={filter()} onChange={(event) => navigation.update({ filter: event.currentTarget.value as ResultType, scroll: 0 })}>
+          <For each={(['all', 'songs', 'artists', 'albums', 'playlists'] as const)}>{(type) => <option value={type}>{type === 'all' ? t('musicExplorer.all') : type === 'playlists' ? t('nav.playlists') : t(`library.${type}`)}</option>}</For>
+        </select></Show>
+      </div></Show>
+      <Show when={partial()}><p class={styles.intent} role="status">{t('musicExplorer.partial')}</p></Show>
+      <ErrorBoundary fallback={(_error, reset) => { resetContentError = reset; return <div class={styles.empty} role="alert"><p>{t('searchPanel.searchError')}</p><button type="button" onClick={() => { void refetchSearchAlbums(); reset(); }}>{t('common.retry')}</button></div>; }}><Switch>
         <Match when={localSearching()}>
           <LocalSearchView
-            results={localResults()}
+            albums={filter() === 'all' || filter() === 'albums' ? localAlbums() : []}
+            onAlbum={(album) => push({ kind: 'libraryAlbum', name: album.title, artist: album.album_artist, albumId: album.id }, true)}
+            results={localResults().filter((row) => filter() === 'all' || (filter() === 'songs' && row.kind === 'track') || (filter() === 'artists' && row.kind === 'artist'))}
+            playlists={filter() === 'all' || filter() === 'playlists' ? matchingPlaylists() : []}
+            onPlaylist={(name) => push({ kind: 'playlist', name }, true)}
             query={query()}
-            onArtist={(name) => push({ kind: 'libraryArtist', name }, true)}
+            onArtist={(name) => push({ kind: 'libraryArtist', name, artistId: libraryArtists().find((row) => row.name === name)?.id }, true)}
             renderTrack={renderTrack}
             onSearchGlobal={() => {
               const value = query();
@@ -560,19 +590,21 @@ export function NowPlayingBrowser(props: {
         <Match when={globalSearching()}>
           <GlobalSearchView
             sections={panelSections()}
+            playlists={scope() !== 'youtube' && (filter() === 'all' || filter() === 'playlists') ? matchingPlaylists() : []}
+            onPlaylist={(name) => push({ kind: 'playlist', name }, true)}
             top={topResult()}
-            youtube={ytResults()}
+            youtube={filter() === 'all' || filter() === 'songs' ? ytResults() : []}
             direct={direct()}
             loading={loading() || ytLoading()}
             failed={failed()}
             resolving={resolving()}
             onRetry={() => runSearch(query())}
-            primaryLabel={routeMode() ? t('autoMode.dj.routeAction') : undefined}
+            primaryLabel={inAuto() ? t(referenceMode() ? 'musicExplorer.reference' : 'musicExplorer.request') : undefined}
             autoRow={autoRow}
-            onTrack={(item) => void useItem(item, routeMode() ? placeTrack : actions.playNow)}
+            onTrack={(item) => void useItem(item, inAuto() ? placeTrack : actions.playNow)}
             onQueue={(item) => void useItem(item, actions.enqueue)}
             onEntity={(item) => {
-              if (item.type === 'artist') {
+              if (item.type === 'playlist') { push({ kind: 'playlist', name: item.title }, true); } else if (item.type === 'artist') {
                 push({
                   kind: 'catalogArtist',
                   name: itemArtist(item) || item.title,
@@ -591,32 +623,13 @@ export function NowPlayingBrowser(props: {
                 }, true);
               }
             }}
-            onYoutube={(result) => routeMode() ? placeTrack(resultTrack(result)) : actions.playNow(resultTrack(result))}
+            onYoutube={(result) => inAuto() ? placeTrack(resultTrack(result)) : actions.playNow(resultTrack(result))}
           />
         </Match>
         <Match when={true}>
           <Switch>
             <Match when={currentView().kind === 'root'}>
-              <RootView
-                autoRow={autoRow}
-                libraryCount={musicLibrary().length}
-                favouriteCount={favourites().length}
-                playlistCount={playlistNames().length}
-                showListenNow={!props.purpose?.startsWith('auto-')}
-                canRadio={!autoNeutral() && !!currentMusic()}
-                canSurprise={!autoNeutral() && surprisePool().length > 0}
-                onLibrary={() => push({ kind: 'library' })}
-                onFavourites={() => push({ kind: 'favourites' })}
-                onPlaylists={() => push({ kind: 'playlists' })}
-                onRadio={() => {
-                  const current = currentMusic();
-                  if (current) void actions.startRadio(current);
-                }}
-                onSurprise={() => {
-                  const pool = surprisePool();
-                  if (pool.length) void actions.startRadio(pool[Math.floor(Math.random() * pool.length)]);
-                }}
-              />
+              <RootView autoRow={autoRow} />
             </Match>
             <Match when={currentView().kind === 'library'}>
               <LibraryView
@@ -624,7 +637,8 @@ export function NowPlayingBrowser(props: {
                 artists={libraryArtists()}
                 onBack={back}
                 onSearch={activateLibrarySearch}
-                onArtist={(name) => push({ kind: 'libraryArtist', name })}
+                onArtist={(name) => push({ kind: 'libraryArtist', name, artistId: libraryArtists().find((row) => row.name === name)?.id })}
+                onAlbum={(album) => push({ kind: 'libraryAlbum', name: album.title, artist: album.album_artist, albumId: album.id })}
                 renderTrack={renderTrack}
                 onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, t('nav.library')) : undefined}
               />
@@ -644,6 +658,9 @@ export function NowPlayingBrowser(props: {
             <Match when={currentView().kind === 'libraryArtist'}>
               <LibraryArtistView
                 name={(currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name}
+                onAlbum={(album) => push({ kind: 'libraryAlbum', name: album.title, artist: album.album_artist, albumId: album.id })}
+                artistId={(currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).artistId}
+                onExplore={() => push({ kind: 'catalogArtist', name: (currentView() as { name: string }).name })}
                 onBack={back}
                 renderTrack={renderTrack}
                 onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'libraryArtist' }>).name) : undefined}
@@ -662,13 +679,17 @@ export function NowPlayingBrowser(props: {
                 onUse={inAuto() ? (tracks) => actions.addAutoSource(tracks, (currentView() as Extract<BrowserView, { kind: 'playlist' }>).name) : undefined}
               />
             </Match>
+            <Match when={currentView().kind === 'libraryAlbum'}>
+              <LibraryAlbumView view={currentView() as Extract<BrowserView, { kind: 'libraryAlbum' }>} onBack={back} renderTrack={renderTrack} inAuto={inAuto()} />
+            </Match>
             <Match when={currentView().kind === 'catalogArtist'}>
               <CatalogArtistView
                 view={currentView() as Extract<BrowserView, { kind: 'catalogArtist' }>}
                 onBack={back}
+                onArtist={(name, deezerId) => push({ kind: 'catalogArtist', name, deezerId })}
                 onAlbum={(name, artist, deezerId) => push({ kind: 'catalogAlbum', name, artist, deezerId })}
                 inAuto={inAuto()}
-                routeMode={routeMode()}
+                routeMode={inAuto()}
                 autoRow={autoRow}
                 onRouteItem={(item) => void useItem(item, placeTrack)}
               />
@@ -678,48 +699,21 @@ export function NowPlayingBrowser(props: {
                 view={currentView() as Extract<BrowserView, { kind: 'catalogAlbum' }>}
                 onBack={back}
                 inAuto={inAuto()}
-                routeMode={routeMode()}
+                routeMode={inAuto()}
                 autoRow={autoRow}
                 onRouteItem={(item) => void useItem(item, placeTrack)}
               />
             </Match>
           </Switch>
         </Match>
-      </Switch>
-    </aside>
+      </Switch></ErrorBoundary>
+    </aside></CollectionPlacementContext.Provider>
   );
 }
 
-function RootView(props: {
-  autoRow: (track: Track) => AutoRowProps;
-  libraryCount: number;
-  favouriteCount: number;
-  playlistCount: number;
-  showListenNow: boolean;
-  canRadio: boolean;
-  canSurprise: boolean;
-  onLibrary: () => void;
-  onFavourites: () => void;
-  onPlaylists: () => void;
-  onRadio: () => void;
-  onSurprise: () => void;
-}) {
+function RootView(props: { autoRow: (track: Track) => AutoRowProps }) {
   return (
-    <div class={styles.body}>
-      <section class={styles.rootNav}>
-        <NavigationCard icon={<LibraryIcon />} title={t('nav.library')} meta={`${props.libraryCount}`} onClick={props.onLibrary} />
-        <NavigationCard icon={<HeartIcon />} title={t('nav.favourites')} meta={`${props.favouriteCount}`} onClick={props.onFavourites} />
-        <NavigationCard icon={<PlaylistIcon />} title={t('nav.playlists')} meta={`${props.playlistCount}`} onClick={props.onPlaylists} />
-      </section>
-      <Show when={props.showListenNow}>
-        <section class={styles.section}>
-          <h2>{t('nowPlayingBrowser.listenNow')}</h2>
-          <div class={styles.quickGrid}>
-            <QuickAction title={t('searchPanel.radioTile')} icon={<RadioIcon />} disabled={!props.canRadio} onClick={props.onRadio} />
-            <QuickAction title={t('searchPanel.surpriseTile')} icon={<ShuffleIcon />} disabled={!props.canSurprise} onClick={props.onSurprise} />
-          </div>
-        </section>
-      </Show>
+    <div class={styles.body} data-browser-body>
       <section class={styles.section}>
         <div class={styles.sectionHead}>
           <h2>{t('discoverNodes.title')}</h2>
@@ -759,9 +753,11 @@ function LibraryView(props: {
   onBack: () => void;
   onSearch: () => void;
   onArtist: (name: string) => void;
+  onAlbum: (album: CatalogAlbum) => void;
   renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
   onUse?: (tracks: Track[]) => void;
 }) {
+  const [albums] = createResource(() => { void state.catalog.revision; return libraryTab() === 'albums' ? albumBrowseQuery(albumSort(), albumFilter()) : false; }, (params) => api.getLibraryAlbums(params));
   const sort = () =>
     openActionMenu({
       title: t('library.sortTitle'),
@@ -780,21 +776,23 @@ function LibraryView(props: {
   // it is assigned and have to react when it appears.
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
-    <div class={styles.body} ref={setScrollRef}>
-      <ViewHeader title={t('nav.library')} onBack={props.onBack}>
-        <Show when={props.onUse}>
-          <button type="button" disabled={!props.tracks.length} onClick={() => props.onUse?.(props.tracks)}>{t('autoMode.source.add')}</button>
-        </Show>
+    <div class={styles.body} data-browser-body ref={setScrollRef}>
+      <ViewHeader title={t('nav.library')}>
+        <Show when={props.onUse}><button type="button" onClick={() => props.onUse?.(props.tracks)}>{t('musicExplorer.reference')}</button></Show>
         <button type="button" aria-label={t('nowPlayingBrowser.searchLibrary')} onClick={props.onSearch}><SearchIcon /></button>
       </ViewHeader>
       <div class={styles.tabs}>
         <button classList={{ [styles.activeTab]: libraryTab() === 'songs' }} type="button" onClick={() => setLibraryTab('songs')}>{t('library.songs')}</button>
+        <button classList={{ [styles.activeTab]: libraryTab() === 'albums' }} type="button" onClick={() => setLibraryTab('albums')}>{t('library.albums')}</button>
         <button classList={{ [styles.activeTab]: libraryTab() === 'artists' }} type="button" onClick={() => setLibraryTab('artists')}>{t('library.artists')}</button>
+        <Show when={libraryTab() === 'albums'}><button type="button" onClick={openAlbumBrowseMenu} aria-label={t('library.albumSortTitle')}><SortIcon /></button></Show>
         <Show when={libraryTab() === 'songs'}>
           <button class={styles.sort} type="button" aria-label={t('library.sortTitle')} onClick={sort}><SortIcon /></button>
         </Show>
       </div>
-      <Show
+      <Show when={libraryTab() === 'songs'}><select class={styles.libraryFilter} aria-label={t('musicExplorer.filter')} value={libraryFilter()} onChange={(event) => setLibraryFilter(event.currentTarget.value)}><option value="all">{t('musicExplorer.all')}</option><option value="downloaded">{t('musicExplorer.downloaded')}</option></select></Show>
+      <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}><For each={collateAlbums(albums() ?? [], albumSort())}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For></Show></Show>
+      <Show when={libraryTab() !== 'albums'}><Show
         when={libraryTab() === 'songs'}
         fallback={
           <VirtualRows
@@ -831,28 +829,34 @@ function LibraryView(props: {
               : null;
           }}
         </VirtualRows>
-      </Show>
+      </Show></Show>
     </div>
   );
 }
 
 function LibraryArtistView(props: {
   name: string;
+  artistId?: string;
+  onAlbum: (album: CatalogAlbum) => void;
+  onExplore: () => void;
   onBack: () => void;
   renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
   onUse?: (tracks: Track[]) => void;
 }) {
-  const tracks = createMemo(() =>
+  const [catalog] = createResource(() => props.artistId, (id) => api.getLibraryArtist(id));
+  const tracks = createMemo(() => props.artistId ? tracksByIds(catalog()?.track_ids ?? []) :
     musicLibrary().filter((track) =>
       artistKey(track.artist) === artistKey(props.name) || artistKey(track.album_artist) === artistKey(props.name),
     ),
   );
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
-    <div class={styles.body} ref={setScrollRef}>
+    <div class={styles.body} data-browser-body ref={setScrollRef}>
       <ViewHeader title={props.name} meta={`${tracks().length}`} onBack={props.onBack}>
-        <Show when={props.onUse}><button type="button" disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}>{t('autoMode.source.add')}</button></Show>
+        <button type="button" onClick={props.onExplore}>{t('musicExplorer.catalog')}</button>
+        <Show when={props.onUse}><CollectionActions title={props.name} tracks={tracks()} auto onReference={props.onUse} /></Show>
       </ViewHeader>
+      <For each={catalog()?.albums ?? []}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For>
       <VirtualRows
         items={tracks()}
         scrollElement={scrollRef}
@@ -871,7 +875,26 @@ function LibraryArtistView(props: {
   );
 }
 
+function LibraryAlbumView(props: {
+  view: Extract<BrowserView, { kind: 'libraryAlbum' }>;
+  onBack: () => void;
+  renderTrack: (track: Track, onPlay: () => void) => JSX.Element;
+  inAuto: boolean;
+}) {
+  const [album] = createResource(() => props.view.albumId, (id) => api.getLibraryAlbum(id));
+  const tracks = createMemo(() => tracksByIds(album()?.track_ids ?? []));
+  return <Show when={!album.loading} fallback={<SkeletonRows count={8} />}>
+    <TrackCollectionView title={props.view.name} tracks={tracks()} empty={t('album.noCatalogData')}
+      context={{ id: `album:${props.view.albumId}`, kind: 'album', label: props.view.name }} onBack={props.onBack}
+      renderTrack={props.renderTrack} showPlayAll={!props.inAuto} onUse={props.inAuto ? (rows) => actions.addAutoSource(rows, props.view.name) : undefined} />
+  </Show>;
+}
+
 function LocalSearchView(props: {
+  albums: CatalogAlbum[];
+  onAlbum: (album: CatalogAlbum) => void;
+  playlists: string[];
+  onPlaylist: (name: string) => void;
   results: LibrarySearchResult[];
   query: string;
   onArtist: (name: string) => void;
@@ -881,10 +904,12 @@ function LocalSearchView(props: {
 }) {
   const tracks = createMemo(() => props.results.flatMap((result) => result.kind === 'track' ? [result.track] : []));
   return (
-    <div class={styles.body}>
+    <div class={styles.body} data-browser-body>
       <ViewHeader title={t('nowPlayingBrowser.libraryResults')} meta={`${props.results.length}`}>
-        <Show when={props.onUse}><button type="button" disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}>{t('autoMode.source.add')}</button></Show>
+        <Show when={props.onUse}><button type="button" disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}>{t('musicExplorer.reference')}</button></Show>
       </ViewHeader>
+      <For each={props.albums}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} onClick={() => props.onAlbum(album)} />}</For>
+      <For each={props.playlists}>{(name) => <NavigationRow title={name} subtitle={t('nav.playlists')} onClick={() => props.onPlaylist(name)} />}</For>
       <For each={props.results}>
         {(result) => result.kind === 'artist'
           ? <NavigationRow title={result.artist.name} subtitle={t('library.artistTrackCount', { count: result.artist.count })} cover={coverUrl(result.artist.coverId, 'thumb')} round onClick={() => props.onArtist(result.artist.name)} />
@@ -895,7 +920,7 @@ function LocalSearchView(props: {
             ))}
       </For>
       <div class={styles.searchEverywhere}>
-        <Show when={props.results.length === 0}>
+        <Show when={props.results.length === 0 && !props.albums.length && !props.playlists.length}>
           <p>{t('library.noSearchResults')}</p>
         </Show>
         <button type="button" onClick={props.onSearchGlobal}>{t('nowPlayingBrowser.searchEverywhere', { query: props.query })}</button>
@@ -910,9 +935,16 @@ function PlaylistsView(props: {
   onBack: () => void;
   onOpen: (name: string) => void;
 }) {
+  const [editing, setEditing] = createSignal(false);
+  const createNew = async () => { const name = await createPlaylistDialog(); if (name) props.onOpen(name); };
+
   return (
-    <div class={styles.body}>
-      <ViewHeader title={t('nav.playlists')} meta={`${props.names.length}`} onBack={props.onBack} />
+    <div class={styles.body} data-browser-body>
+      <ViewHeader title={t('nav.playlists')} meta={`${props.names.length}`}>
+        <button type="button" onClick={() => void createNew()}>{t('musicExplorer.newPlaylist')}</button>
+        <button type="button" onClick={() => setEditing(!editing())}>{t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit')}</button>
+      </ViewHeader>
+      <Show when={editing()} fallback={
       <For each={props.names}>
         {(name) => {
           const ids = () => state.playlists[name] ?? [];
@@ -922,7 +954,9 @@ function PlaylistsView(props: {
           };
           return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onMenu={(event) => openPlaylistMenu(name, {}, event)} onClick={() => props.onOpen(name)} />;
         }}
-      </For>
+      </For>}>
+        <MusicReorderList items={props.names} label={(name) => name} render={(name) => <span>{name}</span>} onChange={actions.reorderPlaylists} />
+      </Show>
     </div>
   );
 }
@@ -935,9 +969,11 @@ function PlaylistView(props: {
   showPlayAll: boolean;
   onUse?: (tracks: Track[]) => void;
 }) {
+  const placement = useContext(CollectionPlacementContext);
   const tracks = createMemo(() =>
     (state.playlists[props.name] ?? []).map((id) => props.byId.get(id)).filter((track): track is Track => !!track),
   );
+  const [editing, setEditing] = createSignal(false);
   return (
     <TrackCollectionView
       title={props.name}
@@ -948,11 +984,18 @@ function PlaylistView(props: {
       renderTrack={props.renderTrack}
       showPlayAll={props.showPlayAll}
       onUse={props.onUse}
+      headerActions={<>
+        <Show when={editing()}><button type="button" onClick={() => setEditing(false)}>{t('musicExplorer.done')}</button></Show>
+        <button type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={(event) => openPlaylistMenu(props.name, { beforeQueueId: placement.beforeQueueId, onPlaced: placement.onCompleted, onEdit: () => setEditing(true), onRenamed: (name) => navigation.renamePlaylist(props.name, name), onDeleted: () => { navigation.back(); } }, event)}>•••</button>
+      </>}
+      editContent={editing() ? <MusicReorderList items={state.playlists[props.name] ?? []} label={(id) => props.byId.get(id)?.title ?? id} render={(id) => <span>{props.byId.get(id)?.title ?? id}</span>} onChange={(ids) => actions.reorderPlaylistTracks(props.name, ids)} /> : undefined}
     />
   );
 }
 
 function TrackCollectionView(props: {
+  headerActions?: JSX.Element;
+  editContent?: JSX.Element;
   title: string;
   tracks: Track[];
   empty: string;
@@ -962,30 +1005,32 @@ function TrackCollectionView(props: {
   showPlayAll: boolean;
   onUse?: (tracks: Track[]) => void;
 }) {
+  const [scroller, setScroller] = createSignal<HTMLElement | null>(null);
   return (
-    <div class={styles.body}>
+    <div class={styles.body} data-browser-body ref={setScroller}>
       <ViewHeader title={props.title} meta={`${props.tracks.length}`} onBack={props.onBack}>
-        <Show when={props.onUse}>
-          <button type="button" disabled={!props.tracks.length} onClick={() => props.onUse?.(props.tracks)}>{t('autoMode.source.add')}</button>
-        </Show>
+        <Show when={props.onUse}><CollectionActions title={props.title} tracks={props.tracks} auto hideReferenceMenu={Boolean(props.headerActions)} onReference={props.onUse} /></Show>
         <Show when={!props.onUse && props.showPlayAll}>
           <button type="button" disabled={props.tracks.length === 0} aria-label={t('playlistDetail.play')} onClick={() =>
             actions.playFrom(props.tracks, 0, { context: props.context })
           }><PlayIcon /></button>
         </Show>
+        {props.headerActions}
       </ViewHeader>
-      <Show when={props.tracks.length > 0} fallback={<div class={styles.empty}><p>{props.empty}</p></div>}>
-        <For each={props.tracks}>
-          {(track, index) => props.renderTrack(track, () =>
-            actions.playFrom(props.tracks, index(), { context: props.context }),
-          )}
-        </For>
-      </Show>
+      <Show when={props.editContent} fallback={
+        <Show when={props.tracks.length > 0} fallback={<div class={styles.empty}><p>{props.empty}</p></div>}>
+          <VirtualRows items={props.tracks} scrollElement={scroller} rowHeight={{ cssVar: '--row-h', fallback: 56 }}>{(track, index) => {
+            const row = track(); return row ? props.renderTrack(row, () => actions.playFrom(props.tracks, index, { context: props.context })) : null;
+          }}</VirtualRows>
+        </Show>
+      }>{props.editContent}</Show>
     </div>
   );
 }
 
 function GlobalSearchView(props: {
+  playlists: string[];
+  onPlaylist: (name: string) => void;
   sections: ResolvedSection[];
   top: CatalogItem | null;
   youtube: SearchResult[];
@@ -1001,7 +1046,7 @@ function GlobalSearchView(props: {
   primaryLabel?: string;
   autoRow: (target: Track | CatalogItem) => AutoRowProps;
 }) {
-  const empty = () => props.sections.every((section) => section.items.length === 0);
+  const empty = () => !props.top && props.playlists.length === 0 && props.sections.every((section) => section.items.length === 0);
   // The panel is a list, not a page: the server's *order* applies, its grid and
   // hero layouts do not.
   const row = (item: CatalogItem) =>
@@ -1031,14 +1076,13 @@ function GlobalSearchView(props: {
     );
 
   return (
-    <div class={styles.body} aria-busy={props.loading}>
+    <div class={styles.body} data-browser-body aria-busy={props.loading}>
       <Show when={props.loading && empty() && props.youtube.length === 0 && !props.direct}>
         <SkeletonRows count={8} />
       </Show>
       <Show when={props.top}>{(item) => row(item())}</Show>
-      <For each={props.sections}>
-        {(section) => <For each={section.items}>{(item) => row(item)}</For>}
-      </For>
+      <For each={props.sections}>{(section) => <section class={styles.section}><h2>{section.id === 'playlists' ? t('nav.playlists') : t(`library.${section.id}`)}</h2><For each={section.items}>{(item) => row(item)}</For></section>}</For>
+      <Show when={props.playlists.length}><section class={styles.section}><h2>{t('nav.playlists')}</h2><For each={props.playlists}>{(name) => <NavigationRow title={name} subtitle={`${state.playlists[name]?.length ?? 0}`} onClick={() => props.onPlaylist(name)} />}</For></section></Show>
       <Show when={props.direct}>
         {(result) => <YoutubeRow result={result()} onPlay={() => props.onYoutube(result())} primaryLabel={props.primaryLabel} autoRow={props.autoRow} />}
       </Show>
@@ -1084,6 +1128,7 @@ function CatalogArtistView(props: {
   view: Extract<BrowserView, { kind: 'catalogArtist' }>;
   onBack: () => void;
   onAlbum: (name: string, artist: string, deezerId?: string) => void;
+  onArtist: (name: string, deezerId?: string) => void;
   inAuto?: boolean;
   routeMode?: boolean;
   autoRow: (target: Track | CatalogItem) => AutoRowProps;
@@ -1096,27 +1141,18 @@ function CatalogArtistView(props: {
   const play = (item: CatalogItem, queue: CatalogItem[]) =>
     void playCatalogItem(item, queue, { id: `artist:${props.view.name}`, kind: 'artist', label: props.view.name });
   return (
-    <div class={styles.body}>
+    <div class={styles.body} data-browser-body>
       <ViewHeader title={props.view.name} onBack={props.onBack}>
-        <Show when={props.inAuto}>
-          <button type="button" disabled={!profile()?.top_tracks.length} onClick={() => {
-            void addCatalogItemsAsAutoSource(profile()?.top_tracks ?? [], props.view.name);
-          }}>{t('autoMode.source.add')}</button>
-        </Show>
-        <Show when={!props.inAuto}>
-          <button type="button" disabled={!profile()?.top_tracks.length} aria-label={t('artist.play')} onClick={() => {
-            const tracks = profile()?.top_tracks ?? [];
-            if (tracks[0]) play(tracks[0], tracks);
-          }}><PlayIcon /></button>
-        </Show>
+        <CollectionActions title={props.view.name} items={profile()?.top_tracks ?? []} auto={Boolean(props.inAuto)} onPlay={() => { const tracks = profile()?.top_tracks ?? []; if (tracks[0]) play(tracks[0], tracks); }} />
       </ViewHeader>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
         <Show when={profile()} fallback={<div class={styles.empty}>{t('artist.noCatalogData')}</div>}>
           {(data) => (
             <>
+              <Show when={!data().resolved && data().candidates?.length}><For each={data().candidates}>{(candidate) => <NavigationRow title={candidate.name} subtitle={`${candidate.nb_album ?? 0} ${t('library.albums')}`} cover={candidate.picture} onClick={() => props.onArtist(candidate.name, candidate.deezer_id)} />}</For></Show>
               <section class={styles.section}>
                 <h2>{t('artist.topTracks')}</h2>
-                <For each={data().top_tracks.slice(0, 10)}>
+                <For each={data().top_tracks}>
                   {(item) => (
                     <BrowserTrackRow
                       title={item.title}
@@ -1125,7 +1161,7 @@ function CatalogArtistView(props: {
                       seed={item.id}
                       active={isPlayingItem(item)}
                       queued={isQueuedItem(item)}
-                      onPlay={() => props.routeMode ? props.onRouteItem(item) : play(item, data().top_tracks.slice(0, 10))}
+                      onPlay={() => props.routeMode ? props.onRouteItem(item) : play(item, data().top_tracks)}
                       onQueue={() => void enqueueCatalogItem(item)}
                       {...props.autoRow(item)}
                     />
@@ -1134,23 +1170,9 @@ function CatalogArtistView(props: {
               </section>
               <section class={styles.section}>
                 <h2>{t('artist.albums')}</h2>
-                <div class={styles.albumGrid}>
-                  <For each={data().albums}>
-                    {(album) => {
-                      const tap = createResponsiveTap({
-                        onTap: () => props.onAlbum(album.title, props.view.name, album.deezer_id),
-                      });
-                      return (
-                        <button type="button" data-pressable {...tap}>
-                          <span style={coverStyle(album.title, album.cover)} />
-                          <strong>{album.title}</strong>
-                          <small>{album.year ?? ''}</small>
-                        </button>
-                      );
-                    }}
-                  </For>
-                </div>
+                <For each={[...data().albums, ...(data().singles_eps ?? [])]}>{(album) => <NavigationRow title={album.title} subtitle={`${album.year ?? ''}`} cover={album.cover} onClick={() => props.onAlbum(album.title, props.view.name, album.deezer_id)} />}</For>
               </section>
+              <section class={styles.section}><h2>{t('artist.related')}</h2><For each={data().related_artists ?? []}>{(artist) => <NavigationRow title={artist.name} subtitle={t('searchPanel.chipArtist')} cover={artist.picture} round onClick={() => props.onArtist(artist.name, artist.deezer_id)} />}</For></section>
             </>
           )}
         </Show>
@@ -1174,19 +1196,9 @@ function CatalogAlbumView(props: {
   const play = (item: CatalogItem, queue: CatalogItem[]) =>
     void playCatalogItem(item, queue, { id: `album:${props.view.name}`, kind: 'album', label: props.view.name });
   return (
-    <div class={styles.body}>
+    <div class={styles.body} data-browser-body>
       <ViewHeader title={props.view.name} meta={props.view.artist} onBack={props.onBack}>
-        <Show when={props.inAuto}>
-          <button type="button" disabled={!profile()?.tracklist.length} onClick={() => {
-            void addCatalogItemsAsAutoSource(profile()?.tracklist ?? [], props.view.name);
-          }}>{t('autoMode.source.add')}</button>
-        </Show>
-        <Show when={!props.inAuto}>
-          <button type="button" disabled={!profile()?.tracklist.length} aria-label={t('album.play')} onClick={() => {
-            const tracks = profile()?.tracklist ?? [];
-            if (tracks[0]) play(tracks[0], tracks);
-          }}><PlayIcon /></button>
-        </Show>
+        <CollectionActions title={props.view.name} items={profile()?.tracklist ?? []} auto={Boolean(props.inAuto)} onPlay={() => { const tracks = profile()?.tracklist ?? []; if (tracks[0]) play(tracks[0], tracks); }} />
       </ViewHeader>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
         <Show when={profile()} fallback={<div class={styles.empty}>{t('album.noCatalogData')}</div>}>
@@ -1214,20 +1226,7 @@ function CatalogAlbumView(props: {
 }
 
 function ViewHeader(props: { title: string; meta?: string; onBack?: () => void; children?: JSX.Element }) {
-  return (
-    <header class={styles.viewHeader}>
-      <Show when={props.onBack}>
-        <button type="button" aria-label={t('common.back')} onClick={props.onBack}><BackIcon /></button>
-      </Show>
-      <div><h1>{props.title}</h1><Show when={props.meta}><span>{props.meta}</span></Show></div>
-      <div class={styles.viewActions}>{props.children}</div>
-    </header>
-  );
-}
-
-function NavigationCard(props: { icon: JSX.Element; title: string; meta: string; onClick: () => void }) {
-  const tap = createResponsiveTap({ onTap: props.onClick });
-  return <button class={styles.navCard} type="button" data-pressable {...tap}><span>{props.icon}</span><strong>{props.title}</strong><small>{props.meta}</small><ChevronIcon /></button>;
+  return <SharedViewHeader {...props} compact />;
 }
 
 function NavigationRow(props: { title: string; subtitle: string; cover?: string; round?: boolean; onClick: () => void; onMenu?: (event?: MouseEvent) => void }) {
@@ -1242,14 +1241,6 @@ function NavigationRow(props: { title: string; subtitle: string; cover?: string;
     </button>
     </Show>
   );
-}
-
-function QuickAction(props: { title: string; icon: JSX.Element; disabled: boolean; onClick: () => void }) {
-  const tap = createResponsiveTap({
-    disabled: () => props.disabled,
-    onTap: props.onClick,
-  });
-  return <button class={styles.quick} type="button" disabled={props.disabled} data-pressable {...tap}><span>{props.icon}</span><strong>{props.title}</strong></button>;
 }
 
 /**
@@ -1283,87 +1274,14 @@ function BrowserTrackRow(props: {
   onCarryTrack?: (track: Track) => void;
 }) {
   const auto = () => props.variant === 'auto';
-  const tap = createResponsiveTap({ onTap: props.onPlay });
-  let holdTimer: number | undefined;
-  let releaseHold: (() => void) | undefined;
-  const cancelHold = () => {
-    if (holdTimer !== undefined) window.clearTimeout(holdTimer);
-    holdTimer = undefined;
-    releaseHold?.();
-    releaseHold = undefined;
-  };
-  const mobileMenu = () => {
-    if (props.onMenu && !auto()) { props.onMenu(); return; }
-    const entry = props.entry ?? savedFromTrack(props.track ?? {
-      id: props.seed, title: props.title, artist: props.subtitle, cover: props.cover, source: 'preview',
-    });
-    const menu = buildEntryMenu(entry, { track: props.track });
-    if (auto() && props.onAddToRoute) {
-      const label = t('autoMode.dj.routeAction');
-      const existing = menu.findIndex((action) => action.label === label);
-      const action = { label, onSelect: props.onAddToRoute };
-      if (existing >= 0) menu[existing] = action; else menu.unshift(action);
-    } else if (!props.track) menu.unshift({ label: t('trackActions.addToQueue'), onSelect: props.onQueue });
-    if (props.track && props.onCarryTrack) menu.unshift({ label: t('musicList.move'), onSelect: () => props.onCarryTrack?.(props.track!) });
-    openContextMenu({ title: props.title, subtitle: props.subtitle, actions: menu });
-  };
-  onCleanup(cancelHold);
-  return (
-    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.title} subtitle={props.subtitle} seed={props.seed}
-      cover={props.cover} active={props.active} busy={props.resolving} entry={props.entry}
-      annotation={props.queued ? t('searchPanel.inQueue') : undefined}
-      favouritesKnown={props.favouritesKnown} actionLabel={props.primaryLabel ? `${props.primaryLabel}: ${props.title}` : undefined}
-      onActivate={props.onPlay} onMenu={mobileMenu} />}>
-    <div
-      classList={{ [styles.trackRow]: true, [styles.trackActive]: props.active }}
-      draggable={Boolean(props.track)}
-      onDragStart={(event) => props.track && writeAutoTrackTransfer(event, { track: props.track })}
-      onPointerDown={(event) => {
-        if (!props.track || !props.onCarryTrack) return;
-        cancelHold();
-        // Touch only: a mouse hold has no selection gesture to head off, and
-        // claiming one would cancel a drag-select that starts inside the row.
-        if (event.pointerType !== 'mouse') releaseHold = claimHoldGesture();
-        holdTimer = window.setTimeout(() => {
-          clearTextSelection();
-          props.onCarryTrack?.(props.track!);
-        }, 460);
-      }}
-      onPointerMove={cancelHold}
-      onPointerUp={cancelHold}
-      onPointerCancel={cancelHold}
-      onContextMenu={(event) => {
-      if (!props.onMenu || auto()) return;
-      event.preventDefault();
-      props.onMenu(event);
-    }}>
-      <button class={styles.trackMain} type="button" aria-label={props.primaryLabel ? `${props.primaryLabel}: ${props.title}` : undefined} data-pressable {...tap}>
-        <span class={styles.trackCover} style={coverStyle(props.seed, props.cover)} />
-        <span class={styles.trackMeta}><strong>{props.title}</strong><small>{props.subtitle}</small></span>
-      </button>
-      <Show when={props.resolving}><Spinner size={14} /></Show>
-      <Show when={props.owned || props.queued}><span class={styles.check}>✓</span></Show>
-      <Show when={auto()} fallback={
-        <>
-          <button class={styles.rowAction} type="button" aria-label={t('searchPanel.ariaAddQueue')} onClick={props.onQueue}><QueueIcon /></button>
-          <Show when={props.onMenu}>
-            <button class={styles.rowAction} type="button" aria-label={t('common.more')} onClick={(event) => props.onMenu?.(event)}>•••</button>
-          </Show>
-        </>
-      }>
-        <Show when={props.onAddToRoute}>
-          <button
-            class={styles.rowAdd}
-            type="button"
-            aria-label={props.primaryLabel ?? t('autoMode.route.addToRoute', { title: props.title })}
-            title={props.primaryLabel ?? t('autoMode.route.addToRoute', { title: props.title })}
-            onClick={props.onAddToRoute}
-          ><QueueIcon /></button>
-        </Show>
-      </Show>
-    </div>
-    </Show>
-  );
+  const track = () => props.track ?? { id: props.seed, title: props.title, artist: props.subtitle, cover: props.cover, source: 'preview' as const };
+  return <SongRow track={track()} cover={props.cover} active={props.active} compact busy={props.resolving}
+    actionLabel={auto() ? `${props.primaryLabel ?? t('musicExplorer.request')}: ${props.title}` : undefined}
+    onPlay={() => auto() ? props.onAddToRoute?.() : props.onPlay()}
+    primaryAction={auto() && props.onAddToRoute ? { label: props.primaryLabel ?? t('musicExplorer.request'), onSelect: props.onAddToRoute } : undefined}
+    onMenu={props.onMenu ? (_track, event) => props.onMenu?.(event) : undefined}
+    onDragStart={props.track ? (event) => writeAutoTrackTransfer(event, { track: props.track! }) : undefined}
+  />;
 }
 
 const icon = (path: JSX.Element) => <svg viewBox="0 0 24 24" aria-hidden="true">{path}</svg>;
@@ -1371,14 +1289,8 @@ const SearchIcon = () => icon(<><circle cx="11" cy="11" r="7" /><path d="m20 20-
 const BackIcon = () => icon(<path d="m15 18-6-6 6-6" />);
 const CloseIcon = () => icon(<path d="m7 7 10 10M17 7 7 17" />);
 const ChevronIcon = () => icon(<path d="m9 18 6-6-6-6" />);
-const LibraryIcon = () => icon(<><path d="M5 4h14v16H5z" /><path d="M9 4v16" /></>);
-const HeartIcon = () => icon(<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" />);
-const PlaylistIcon = () => icon(<><path d="M4 6h16M4 12h16M4 18h10" /><path d="M18 15v6M21 18h-6" /></>);
-const RadioIcon = () => icon(<><path d="M4 12a8 8 0 0 1 8-8M4 12a8 8 0 0 0 8 8M8 12a4 4 0 0 1 4-4" /><circle cx="12" cy="12" r="1.5" /></>);
-const ShuffleIcon = () => icon(<><path d="M4 5h3l10 14h3M17 5h3v3M4 19h3l3-4M14 9l3-4h3" /></>);
 const SortIcon = () => icon(<path d="M4 7h16M7 12h10M10 17h4" />);
 const PlayIcon = () => icon(<path d="m8 5 11 7-11 7z" />);
 /** "A list, plus one." Serves both the queue outside Auto Mode and the route
  * inside it — the two never share a row, and they are the same idea. */
-const QueueIcon = () => icon(<><path d="M3 6h13M3 12h9M3 18h9M16 14v6M19 17h-6" /></>);
 const RefreshIcon = (props: { spinning: boolean }) => <span classList={{ [styles.spinning]: props.spinning }}>{icon(<path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6" />)}</span>;

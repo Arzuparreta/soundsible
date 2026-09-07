@@ -20,6 +20,7 @@ import { toast } from '../lib/toast';
 export interface TrackMenuContext {
   navigate?: (path: string) => void;
   onOpenArtist?: () => void;
+  onOpenAlbum?: () => void;
   collection?: boolean;
   /** Present when the row lives inside a playlist; enables "remove from playlist". */
   playlistName?: string;
@@ -84,9 +85,9 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   const list: MenuAction[] = [];
 
   if (inAuto && !isPodcast) {
-    list.push({ icon: icons.playNext(), label: t('autoMode.dj.mixNow'), onSelect: () => actions.playNow(track) });
+    list.push({ icon: icons.playNext(), label: t('musicExplorer.playNow'), onSelect: () => actions.playNow(track) });
     list.push({ icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: () => void actions.placeAutoTrack(track) });
-    list.push({ icon: icons.radio(), label: t('autoMode.route.useAsSource'), onSelect: () => actions.useAutoTrackAsSource(track) });
+    list.push({ icon: icons.radio(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) });
   } else if (queueable) {
     list.push({ icon: icons.playNext(), label: t('trackActions.playNext'), onSelect: () => actions.playNext(track) });
     list.push({ icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => actions.enqueue(track) });
@@ -96,6 +97,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   if (!isPodcast)
     list.push({ icon: icons.radio(), label: inAuto ? t('modeChange.startRadio') : t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
   if (ctx.onOpenArtist) list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: ctx.onOpenArtist });
+  if (ctx.onOpenAlbum) list.push({ icon: icons.playlist(), label: t('musicExplorer.openAlbum'), onSelect: ctx.onOpenAlbum });
   if (!ctx.onOpenArtist && ctx.navigate && track.artist && isLibrary && !isPodcast)
     list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist, { view: 'library' })) });
   // The heart only makes sense over songs you have: it marks some of them out
