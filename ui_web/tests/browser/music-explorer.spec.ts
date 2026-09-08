@@ -21,6 +21,29 @@ test.beforeEach(async ({ page }) => {
   } }));
 });
 
+/**
+ * KNOWN FLAKE — fails roughly once per full-suite run on webkit-mobile, and has
+ * done since before this test was written. It passes twelve times in twelve on
+ * its own, however hard it is repeated; only whole-suite contention brings it
+ * out, which points at the runner rather than at the app.
+ *
+ * The symptom moves — a search box reported missing, a button that never
+ * settles, the snap helper's own `evaluate` timing out at thirty seconds — and
+ * that last one is the tell: `snapPlayerCarousel` awaits a single
+ * `requestAnimationFrame`, and WebKit stops delivering frames to a window it
+ * considers occluded. Every symptom is then whatever the test reached for after
+ * the hang.
+ *
+ * Four fixes have been measured against it and none held. Racing that frame
+ * against a timer reads as the obvious answer and made the suite worse — eleven
+ * failures in five runs against seven in four, and it pushed the scroll-restore
+ * test below to four failures in five. Re-snapping until the tile aligns was
+ * worse still: twelve of twelve on main became three failures in twelve.
+ *
+ * Written down rather than papered over: whoever picks this up should start
+ * from why a fix that removes a real hang makes the runner less reliable, not
+ * from a fresh guess at the symptom.
+ */
 test('explores inside the shell, restores search, and separates DJ references below Route', async ({ page }, info) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

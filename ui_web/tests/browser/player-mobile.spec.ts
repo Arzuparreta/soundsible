@@ -283,6 +283,12 @@ test('the compact mini-player overlays DJ state without taking title width', asy
   expect(badgeBox!.y + badgeBox!.height).toBeLessThanOrEqual(coverBox!.y + coverBox!.height);
   expect(Math.abs(djMeta!.width - normalMeta!.width), 'the DJ badge must not consume flex width')
     .toBeLessThanOrEqual(1);
+  // Closing the sheet hands the mini-player back with an entrance to run, and
+  // an audit taken inside it reads the badge through a fading ancestor: dark
+  // text on a half-drawn orange, 4.2:1 where the settled colours are 7:1. The
+  // wait is page-wide on purpose — what fades is the shell above the player,
+  // so scoping to the player itself watches the wrong subtree.
+  await settle(page);
   const accessibility = await new AxeBuilder({ page }).include('[data-omni-player]').analyze();
   expect(accessibility.violations).toEqual([]);
 });

@@ -77,6 +77,9 @@ test('queue lane labels never land on top of each other', async ({ page }) => {
 
   const heads = queue.locator('section[data-head] > div:first-child');
   await expect.poll(() => heads.count()).toBeGreaterThan(1);
+  // The panel settled before the lanes existed. They arrive with an entrance of
+  // their own, and a rect read inside it is a rect of something still growing.
+  await settle(page, '[data-now-playing-tile="queue"]');
 
   const boxes = await heads.evaluateAll((nodes) =>
     nodes.map((node) => {
@@ -96,11 +99,18 @@ test('queue lane labels never land on top of each other', async ({ page }) => {
 
   // A lane squeezed past its label is a lane showing none of its songs, which
   // is the same collapse seen from the other side.
-  const laneHeights = await queue
-    .locator('[data-section-rows]')
-    .evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height));
-  expect(laneHeights.length).toBeGreaterThan(1);
-  for (const height of laneHeights) expect(height).toBeGreaterThan(40);
+  const laneRows = queue.locator('[data-section-rows]');
+  await expect.poll(() => laneRows.count()).toBeGreaterThan(1);
+  // Polled rather than read once: a lane that has not finished laying out
+  // measures zero, which looks exactly like the collapse this guards against.
+  await expect
+    .poll(async () => {
+      const heights = await laneRows.evaluateAll((nodes) =>
+        nodes.map((node) => node.getBoundingClientRect().height),
+      );
+      return Math.min(...heights);
+    }, { message: 'every lane must show songs, not only its label' })
+    .toBeGreaterThan(40);
 });
 
 test('the context lane names where it came from', async ({ page }) => {
