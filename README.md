@@ -21,7 +21,7 @@
 
 Soundsible is a music service you run on your **own** machine. It searches far
 beyond the files you already have, turns a find into a properly tagged library
-track, and can mix the result into a continuous set with its built-in **Auto DJ**.
+track, and can mix the result into a continuous set with its built-in **DJ**.
 YouTube, YouTube Music, podcasts, your existing collection, recommendations,
 lyrics, Live broadcasting, and every playback surface live in one player. No
 ads, no tracking, no subscription.
@@ -29,7 +29,7 @@ ads, no tracking, no subscription.
 Most self-hosted music servers begin after you have found, downloaded, and
 organized the music. Soundsible handles that missing journey:
 
-> **discover → listen now → acquire and tag → keep in your library → Auto DJ the set → play anywhere**
+> **discover → listen now → acquire and tag → keep in your library → mix the set in DJ → play anywhere**
 
 | Source | What it gives you |
 | ------------------- | ------------------------------------ |
@@ -40,7 +40,7 @@ organized the music. Soundsible handles that missing journey:
 
 **What you get**
 
-- 🎛️ **Auto Mode (beta) — a DJ, not a shuffle button** — a two-deck mixer analyses
+- 🎛️ **DJ (beta) — a DJ, not a shuffle button** — a two-deck mixer analyses
   tempo, key, energy, structure, and cue points; then beatmatches and chooses
   blends, bass swaps, filter transitions, cuts, or safe fades. Pick the music,
   steer the direction, edit the route, or let the DJ run.
@@ -50,7 +50,7 @@ organized the music. Soundsible handles that missing journey:
 - 🧠 **Personal discovery without surrendering your profile** — recommendations,
   Autoplay, and endless Radio learn from listening history held on your server.
 - 📻 **Broadcast the whole program live** — share the actual two-deck output,
-  including Auto Mode transitions and effects, through a browser listening room.
+  including DJ transitions and effects, through a browser listening room.
 - 📱 **One polished player everywhere** — web, PWA, desktop beta, native iOS,
   car controls, and OpenSubsonic clients all connect to the same library.
 - 🔐 **Private by design** — self-hosted and multi-user, with no ads, tracking,
@@ -67,7 +67,7 @@ acquire, understand, mix, and share the music?**
 | --- | --- | --- |
 | **Music you do not own yet** | Bring a file to the server first | Search YouTube/YouTube Music alongside your library, preview it, then acquire it from the player |
 | **From result to library** | An external downloader and tagging workflow | Resolve the best match, download, tag with catalog metadata, and add it to the library in one flow |
-| **Automatic listening** | Shuffle, smart playlists, or radio over the collection | Local recommendations, Autoplay, endless Radio, plus Auto Mode's editable DJ route |
+| **Automatic listening** | Shuffle, smart playlists, or radio over the collection | Local recommendations, Autoplay, endless Radio, plus an editable route in DJ mode |
 | **Transitions** | Normal player handoff or configurable client behavior | A two-deck engine with analysis-driven cueing, beatmatching, EQ/filter blends, cuts, fades, and loudness levelling |
 | **Going live** | Share files or public links | Broadcast the program output and its transitions to a browser room with chat |
 | **Spoken requests and automation** | General API/client ecosystem | A scoped agent API that can search, queue, play, and target a specific device |
@@ -79,7 +79,7 @@ already perfect and you only want to serve it with very low resource use,
 Navidrome may be the better fit. If you want the path from discovery to a mixed,
 owned, private collection inside one app, that is the reason Soundsible exists.
 
-See [Auto Mode](docs/AUTO_MODE.md) for the DJ workflow and
+See [DJ](docs/AUTO_MODE.md) for the DJ workflow and
 [Moving from Spotify or Apple Music](docs/MUSIC_MIGRATION.md) for bringing an
 existing music profile across.
 
@@ -284,7 +284,7 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 | [Docker deployment](docs/DOCKER.md) | Compose, volumes, host libraries, backups, upgrades, security |
 | [Configuration](docs/CONFIGURATION.md) | Settings, environment variables, downloads, cookies |
 | [Architecture](docs/ARCHITECTURE.md) | How Soundsible works, and how data flows |
-| [Auto Mode](docs/AUTO_MODE.md) | How the two-deck Auto DJ plans, mixes, and lets you edit a set |
+| [DJ](docs/AUTO_MODE.md) | How the two-deck DJ plans, mixes, and lets you edit a set |
 | [Live](docs/LIVE.md) | Broadcasting your station, sharing a room, and checking that it sounds |
 | [OpenSubsonic](docs/OPENSUBSONIC.md) | Playing your library in Symfonium, Amperfy, Feishin and the rest |
 | [Legal & Acceptable Use](docs/LEGAL.md) | Disclaimer and your responsibilities |

@@ -246,7 +246,7 @@ new profile work must not silently alter them.
 
 Required regression coverage is geometry plus reviewed screenshots on Chromium
 and WebKit, mobile and desktop. The test matrix also exercises 320px phones,
-tablets, short 1024px windows, primary routes, Now Playing, pre-auth access,
+tablets, short 1024px windows, primary routes, NORMAL, pre-auth access,
 preference migration and WCAG AA checks for the accessibility dialog.
 
 | Date | Decision | Rationale |

@@ -41,7 +41,7 @@
 > unsubscribe). Store gained `podcastSubscriptions`; `actions.playEpisode`. `types/podcast.ts`.
 >
 > **Playback subsystem DONE** — single shared audio element + store-owned `playback` slice:
-> queue with next/prev/auto-advance, shuffle, repeat (off/all/one), seek bar, expand-to-Now-Playing
+> queue with next/prev/auto-advance, shuffle, repeat (off/all/one), seek bar, expandable NORMAL
 > sheet (with queue list + jump-to), and Media Session API (lock-screen metadata + transport handlers).
 > (`stores/index.ts`, `OmniBar.tsx`, `NowPlaying.tsx`, `lib/audio.ts`.)
 >
@@ -55,7 +55,7 @@
 >
 > **Artist DONE** — `routes/Artist.tsx` (`/artist/:name`): every library track by one artist (matches
 > `artist`/`album_artist`), artist hero (gradient avatar + initial), play-all + shuffle. Reachable by
-> tapping an artist name in any `SongRow`/`TrackList` row, or on the Now Playing screen (library tracks
+> tapping an artist name in any `SongRow`/`TrackList` row, or on the NORMAL screen (library tracks
 > only — preview/podcast sources are not library artists). Store gained `actions.playShuffled`.
 >
 > **🎉 ALL VIEWS DONE:** Biblioteca · Buscar · Favoritos · Listas (+detalle) · Podcasts (+show)
@@ -68,7 +68,7 @@
 > **unified context menus** (right-click + long-press). **Phase 4 is done.**
 >
 > **QA + design-review pass (2026-06-22):** browser QA of every view — playback, queue/auto-advance,
-> Now Playing, unified search (autocomplete + online), discover rails, playlists, podcasts, downloads,
+> NORMAL, unified search (autocomplete + online), discover rails, playlists, podcasts, downloads,
 > artist nav, theme dark/light, desktop sidebar, import — **zero console errors**; one content bug
 > fixed (`trackCount` pluralization, "1 pista"). Design-review (calibrated to `DESIGN.md`, Codex
 > outside-voice): **AI-slop PASS**, score A−; four HIGH findings fixed — **self-hosted Plus Jakarta
@@ -129,7 +129,7 @@ ui_web/
     main.tsx         # mount
     app.tsx          # shell + router outlet
     routes/          # one folder per view (home, favourites, artist, playlists,
-                     #   discover, podcasts, settings, search, downloads, now-playing)
+                     #   discover, podcasts, settings, search, downloads, NORMAL)
     components/      # design-system primitives (Button, Sheet, VirtualList, SongRow, …)
     stores/          # reactive single source of truth (createStore / signals)
     lib/
@@ -179,7 +179,7 @@ the hard, tested half of the system doesn't move.
   with a preview page. Each ships with a component test.
 - **Phase 3 — Views, one at a time, mobile-first.** Suggested order (value + risk):
   Library → Favourites → Artist detail → Playlists/detail → **Search discovery** (worst leaker,
-  now trivially correct) → Podcasts → Settings → Search → Downloads → Now-Playing/omni player.
+  now trivially correct) → Podcasts → Settings → Search → Downloads → NORMAL/omni player.
   Each view: bind to store + API client, redesign per the design system, add component +
   e2e tests, and check off a **parity checklist** against the legacy view.
 - **Phase 4 — Desktop.** Desktop layout/shell on the shared core; `app_desktop` parity.

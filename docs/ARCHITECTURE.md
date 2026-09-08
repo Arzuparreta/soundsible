@@ -156,13 +156,13 @@ An account without a canonical marker is migrated once using the previous manife
 - Playback discovery pools can consume that contract without changing the
   existing **Search** presentation. **Library** remains the root route.
 - **`POST /api/discovery/music/plan`** is the generated-listening contract for
-  Autoplay, Radio, and Auto Mode. The Station assembles playable local,
+  Autoplay, Radio, and DJ. The Station assembles playable local,
   seed-related, cached graph, and artist candidates, applies the account
   profile, diversity, exclusions, and intent/profile policy, then returns the
   final ordered segment. A single browser coordinator owns cancellation,
   retries, and refill; it never re-ranks the server response.
 - Radio remains the explicit “more of this now” mode and continuously refills.
-  Auto Mode uses the v6 compositional contract: route occurrences determine
+  DJ uses the v6 compositional contract: route occurrences determine
   what will sound, while visible ephemeral sources independently steer the
   generated runway. Sources accumulate with recency decay; heard tracks provide
   rolling one-hop context only after they actually sound. Exact placement and
@@ -193,7 +193,7 @@ An account without a canonical marker is migrated once using the previous manife
   can offer "see all N" without asking again. Section order is part of the
   answer: an artist-name query leads with artists, an album name with albums.
   Every search surface renders that one order (`ui_web/src/lib/searchSections.ts`);
-  the Search route and the Now Playing panel used to hardcode two different ones.
+  the Search route and the NORMAL panel used to hardcode two different ones.
   Clients send `type=all` and filter tabs locally — a `type=artist` request costs
   a full provider fan-out for a strictly smaller answer.
 - **`top_result` is gated, not just "the first row".** It is emitted only above a
@@ -233,7 +233,7 @@ An account without a canonical marker is migrated once using the previous manife
 - Each account has transactional `discovery_events` and
   `discovery_signals` tables in its own `library.db`, plus an inspectable local
   `listening-events.jsonl`.
-- Discovery, Radio, Auto Mode, Autoplay, and podcast recommendations use the same exact
+- Discovery, Radio, DJ, Autoplay, and podcast recommendations use the same exact
   identity multiplier. `not_interested` is soft, monotonic, undoable, and
   bounded above zero; it never becomes a blacklist. Search and manual queues do
   not call this ranker.
@@ -244,7 +244,7 @@ The engine cannot make a cold preview instant — there is a yt-dlp extraction b
 
 - **Idempotent.** `loadIndex` treats a request for the entry that is already active as a no-op (or a resume, if paused). Repeated taps on a row cost nothing; only `{ restart: true }` replays from 0:00. `playCatalogItem` (`lib/catalogItem.ts`) does the same for rows that still need resolving.
 - **Last click wins.** Assigning `src` aborts the previous fetch, and `audio.ts` tags each attempt with a sequence number so the superseded `play()` rejection — an `AbortError` — is swallowed instead of being reported as the new track failing. `audioService.stop()` (teardown, not pause) clears `src` so the engine stops streaming bytes nobody is listening to.
-- **Visible.** `playback.isLoading` / `playback.loadError` drive a spinner and an indeterminate progress sweep in the OmniBar and the Now Playing transport, a retry affordance on failure, and a spinner on the specific row that was tapped. A failed track auto-advances, bounded to 3 consecutive skips.
+- **Visible.** `playback.isLoading` / `playback.loadError` drive a spinner and an indeterminate progress sweep in the OmniBar and the NORMAL transport, a retry affordance on failure, and a spinner on the specific row that was tapped. A failed track auto-advances, bounded to 3 consecutive skips.
 
 A failed load surfaces on two channels (`play()` rejects **and** the element fires `error`), so failure reporting is keyed by a load generation — the first report retires the attempt and the duplicate is ignored.
 
@@ -252,7 +252,7 @@ A failed load surfaces on two channels (`play()` rejects **and** the element fir
 
 The Solid player uses occurrence-based manual, context, and generated lanes.
 Its single generated-session coordinator and the ordering, replacement,
-shuffle, Radio, Auto Mode, and Autoplay semantics are normative in
+shuffle, Radio, DJ, and Autoplay semantics are normative in
 [`PLAYBACK_QUEUE_CONTRACT.md`](PLAYBACK_QUEUE_CONTRACT.md).
 
 ### 5. Data and configuration (conceptual)

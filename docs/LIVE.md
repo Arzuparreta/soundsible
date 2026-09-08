@@ -14,7 +14,7 @@ Community relay, and the relay fans it out to listeners.
 
 **Everything you hear.** The broadcast is tapped from the program bus, after
 both decks, the EQ and filters, the crossfade and the echo send, and after the
-limiter. Auto Mode transitions, Now Playing, ordinary playback, previews,
+limiter. DJ transitions, NORMAL playback, previews,
 podcasts and radio all run through the same two audio elements, so all of it is
 broadcast exactly as you hear it.
 
@@ -82,7 +82,7 @@ When the origin is not trusted, the Live page says so and offers a link to the
 secure address if it can find one. Following that link is a handoff, not just a
 change of address: the insecure page publishes its session on the way out, the
 secure one opens the room by itself on arrival, and the session you were
-listening to — queue, mode, and the whole Auto Mode workspace when Auto was
+listening to — queue, mode, and the whole DJ workspace when DJ was
 driving — is offered back by the resume banner. A different origin is a
 different device as far as the browser is concerned, which is why it arrives as
 an offer rather than simply carrying on.
