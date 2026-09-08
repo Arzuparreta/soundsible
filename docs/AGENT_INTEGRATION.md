@@ -624,7 +624,7 @@ State includes:
 ```
 
 Players may also publish a `session` object alongside it — the queue, the
-transport preferences and the Auto Mode workspace behind the song — which is
+transport preferences and the DJ workspace behind the song — which is
 what lets another device pick the session up rather than just the track. It is a
 delta: omit the key and whatever is stored for that device is kept, send `null`
 to end it. Agents have no reason to write one, and an agent that starts an

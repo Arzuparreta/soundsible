@@ -20,7 +20,7 @@ Soundsible closes that gap:
 
 Search reaches your library, Deezer, MusicBrainz and YouTube at once and returns
 one ranked list. Saving something resolves it, scores the match, downloads it,
-tags it and adds it. [Auto Mode](AUTO_MODE.md) then plays it as an editable,
+tags it and adds it. [DJ](AUTO_MODE.md) then plays it as an editable,
 analysis-driven DJ set rather than a shuffled queue.
 
 ## Where it is going
@@ -70,8 +70,8 @@ The catalog depends on yt-dlp working against YouTube, and YouTube changes.
 
 ### Sharpen what is already unique
 
-- [x] Auto Mode documented as the product's two-deck, editable DJ workflow
-- [ ] Auto Mode out of beta
+- [x] DJ documented as the product's two-deck, editable DJ workflow
+- [ ] DJ out of beta
 - [ ] Live becomes explicitly opt-in, with self-hosting the relay documented
 - [ ] Federated Live relays
 

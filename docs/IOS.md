@@ -96,7 +96,7 @@ difference and not the sum.
 never evicted; only music that was downloaded on the way past is, least recently
 played first.
 
-## Crossfade and Auto Mode
+## Crossfade and DJ
 
 **Settings → Playback** sets a crossfade of up to 12 seconds. Halfway through the
 blend the lock screen and the car switch to the incoming track — that handover

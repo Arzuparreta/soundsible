@@ -17,39 +17,39 @@ front (LIFO). Choosing another album, playlist, artist, search result set, or
 library view starts the selected track immediately, preserves pending manual
 requests, replaces the old context, and cancels stale generators.
 
-Shuffle only changes the remaining context order. Clearing the queue from Now
-Playing clears pending manual requests, not the active context or generated
+Shuffle only changes the remaining context order. Clearing the queue from
+NORMAL clears pending manual requests, not the active context or generated
 continuation. Reordering cannot cross lane or generator boundaries.
 
 ## Generated playback
 
 - **Server planners** own candidate ranking, diversification, exclusions, and
-  final order. Autoplay and Radio use `POST /api/discovery/music/plan`. Auto
+  final order. Autoplay and Radio use `POST /api/discovery/music/plan`. DJ
   uses `POST /api/discovery/music/dj-plan` for source-driven runway changes,
   `POST /api/discovery/music/dj-place` for local placement in an existing route,
   and `POST /api/discovery/music/dj-repair` to re-seam a route the listener has
   rearranged. The browser never assembles provider pools.
 - **Autoplay** is an account preference, enabled by default. Near the end of a
   finite music context it prepares a small related tail. It never runs for
-  podcasts, Radio, Auto Mode, or while repeat is active. Failure ends playback
+  podcasts, Radio, DJ, or while repeat is active. Failure ends playback
   normally.
 - **Radio** preserves pending manual requests, places its generated mix behind
   them, resumes the mix afterwards, and replenishes its generated runway until
   the listener stops Radio. Starting a new context or stopping Radio aborts
   in-flight generation.
-- **Auto Mode** has two independent, composable facts. A route occurrence will
+- **DJ** has two independent, composable facts. A route occurrence will
   sound; an ephemeral source steers generation. The same song may participate
   in both without either fact implying the other. Sources may be tracks,
   selections, filtered views, favourites, playlists, albums or artists.
-- Auto may be entered empty. Music that actually sounds joins rolling context,
+- DJ may be entered empty. Music that actually sounds joins rolling context,
   but never becomes a visible source implicitly. The first source added to a
   silent session asks the server to choose an opening from that source and
   starts the returned route. Later sources only steer the runway. Playing a
-  different song while Auto is active is a short immediate mix, not an exit;
+  different song while DJ is active is a short immediate mix, not an exit;
   if a blend is already audible, it finishes and only the latest pending request
   is chained after it.
 - Mode is an explicit session state. Individual music actions mean **Mix now**
-  or placement while Auto owns the session; collection primary actions add a
+  or placement while DJ owns the session; collection primary actions add a
   source. Podcast and Radio requests require confirmation before switching to
   ordinary playback. Generated-queue lifecycle statuses never select or clear
   the mode implicitly.
@@ -74,14 +74,14 @@ continuation. Reordering cannot cross lane or generator boundaries.
   a user occurrence is refused outright.
 - Only explicit sources and tracks that actually sounded may seed one-hop
   related retrieval. Unplayed recommendations never become graph roots.
-- Leaving Auto discards generated branches and bridges. User route occurrences
+- Leaving DJ discards generated branches and bridges. User route occurrences
   survive as ordinary manual queue entries.
-- **The committed handoff** is the one upcoming entry Auto Mode has already
+- **The committed handoff** is the one upcoming entry DJ has already
   loaded and cued. It survives every replan, and manual insertions land behind
   it rather than in front of it. DJ, direction and request changes are debounced
   and source changes rewrite only the runway past that point — a session can be steered at any
   moment without disturbing the mix that is already prepared.
-- Auto Mode's plans are **chained**: an entry's transition records which track
+- DJ's plans are **chained**: an entry's transition records which track
   its cue was planned out of, and a refill continues the route from the tail of
   what survives. A cue whose origin does not match what is playing is never
   performed.
