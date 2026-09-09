@@ -1,0 +1,32 @@
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--gutter);
+}
+.header h1 { min-width: 0; margin: 0; font-size: var(--text-h2); }
+.header h1 button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: 100%;
+  min-height: var(--control-h);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-primary);
+  font: inherit;
+  font-weight: var(--fw-bold);
+  text-align: start;
+}
+.header h1 span { color: var(--ink-secondary); }
+.actions { flex: none; display: flex; align-items: center; }
+.actions button {
+  min-width: var(--control-h);
+  min-height: var(--control-h);
+  border: 0;
+  background: none;
+  color: var(--ink-secondary);
+}

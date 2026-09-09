@@ -8,6 +8,7 @@ export interface MenuAction {
   label: string;
   danger?: boolean;
   disabled?: boolean;
+  selected?: boolean;
   onSelect: () => void;
 }
 
@@ -27,12 +28,12 @@ export interface ActionMenuOptions {
   sections?: ActionMenuSection[];
 }
 
-function ActionButton(props: { action: MenuAction; close: () => void }) {
+function ActionButton(props: { action: MenuAction; close: (afterClose?: () => void) => void; deferSelection?: boolean }) {
   const tap = createResponsiveTap({
     disabled: () => Boolean(props.action.disabled),
     onTap: () => {
-      props.close();
-      props.action.onSelect();
+      if (props.deferSelection) props.close(props.action.onSelect);
+      else { props.close(); props.action.onSelect(); }
     },
   });
   return (
@@ -41,6 +42,7 @@ function ActionButton(props: { action: MenuAction; close: () => void }) {
       class={styles.item}
       classList={{ [styles.danger]: props.action.danger }}
       disabled={props.action.disabled}
+      aria-current={props.action.selected ? 'true' : undefined}
       data-pressable
       {...tap}
     >
@@ -48,13 +50,14 @@ function ActionButton(props: { action: MenuAction; close: () => void }) {
         <span class={styles.icon}>{props.action.icon}</span>
       </Show>
       <span class={styles.label}>{props.action.label}</span>
+      <Show when={props.action.selected}><span aria-hidden="true">✓</span></Show>
     </button>
   );
 }
 
 /** The menu body (header + action buttons). Shared by the bottom-sheet
  * (`openActionMenu`) and the cursor-anchored popover (`openContextMenu`). */
-export function ActionMenuList(props: { opts: ActionMenuOptions; close: () => void }) {
+export function ActionMenuList(props: { opts: ActionMenuOptions; close: (afterClose?: () => void) => void; deferSelection?: boolean }) {
   return (
     <div class={styles.menu}>
       <Show when={props.opts.title}>
@@ -68,14 +71,14 @@ export function ActionMenuList(props: { opts: ActionMenuOptions; close: () => vo
       <Show
         when={props.opts.sections}
         fallback={
-          <For each={props.opts.actions}>{(a) => <ActionButton action={a} close={props.close} />}</For>
+          <For each={props.opts.actions}>{(a) => <ActionButton action={a} close={props.close} deferSelection={props.deferSelection} />}</For>
         }
       >
         <For each={props.opts.sections}>
           {(section) => (
             <div class={styles.section}>
               <span class={styles.sectionLabel}>{section.label}</span>
-              <For each={section.actions}>{(a) => <ActionButton action={a} close={props.close} />}</For>
+              <For each={section.actions}>{(a) => <ActionButton action={a} close={props.close} deferSelection={props.deferSelection} />}</For>
             </div>
           )}
         </For>
@@ -89,6 +92,6 @@ export function ActionMenuList(props: { opts: ActionMenuOptions; close: () => vo
  * and a centered popover on desktop (overlay.module.css handles placement).
  * For a cursor-anchored context menu use `openContextMenu` (lib/contextMenu).
  */
-export function openActionMenu(opts: ActionMenuOptions): void {
-  openOverlay((close) => <ActionMenuList opts={opts} close={close} />, { ariaLabel: opts.title });
+export function openActionMenu(opts: ActionMenuOptions, history = false): void {
+  openOverlay((close) => <ActionMenuList opts={opts} close={close} deferSelection={history} />, { ariaLabel: opts.title, history });
 }

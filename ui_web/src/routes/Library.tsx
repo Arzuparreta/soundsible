@@ -2,6 +2,7 @@ import { openAlbumBrowseMenu } from '../components/albumBrowseMenu';
 import { createMemo, createResource, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
 import { state, actions, downloadCounts, favouriteRows, musicLibrary } from '../stores';
+import { MobileLibraryHeader } from '../components/MobileLibraryHeader';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
@@ -19,6 +20,7 @@ import {
   setLibraryFilter,
   libraryTab,
   setLibraryTab,
+  setMobileLibrarySection,
   sortTracks,
   filterTracks,
   catalogArtists,
@@ -100,6 +102,7 @@ export default function Library() {
   const swipeReveal = createTopSwipeReveal();
 
   onMount(() => {
+    setMobileLibrarySection('library');
     const mq = window.matchMedia('(max-width: 1023px)');
     setIsMobile(mq.matches);
     setSearchProgress(mq.matches ? (searching() ? 1 : 0) : 1);
@@ -113,6 +116,10 @@ export default function Library() {
       }
     };
     mq.addEventListener('change', onChange);
+    if (searchParams.search === '1') {
+      setSearchParams({ search: undefined }, { replace: true });
+      revealSearch();
+    }
 
     const scrollSurface = (target: EventTarget | null) =>
       target instanceof HTMLElement ? target.closest<HTMLElement>('[data-library-scroll]') : null;
@@ -174,6 +181,11 @@ export default function Library() {
       view?.removeEventListener('scroll', onScroll, true);
     });
   });
+
+  const revealSearch = () => {
+    setSearchProgress(1);
+    requestAnimationFrame(() => viewRef?.querySelector<HTMLInputElement>('input')?.focus());
+  };
 
   const searchRevealStyle = () =>
     isMobile()
@@ -252,8 +264,34 @@ export default function Library() {
       ],
     });
 
+  const sortControl = () => (<>
+    <Show when={libraryTab() === 'songs'}>
+      <button class={styles.sortButton} type="button" onClick={sortLibrary} aria-label={t('library.sortTitle')} data-pressable>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 6h18M6 12h12M10 18h4" />
+        </svg>
+        <span>{librarySort() === 'az' ? t('library.sortAZ') : librarySort() === 'fav' ? t('library.sortFavFirst') : t('library.sortRecent')}</span>
+      </button>
+    </Show>
+    <Show when={libraryTab() === 'albums'}>
+      <button
+        class={styles.sortButton}
+        type="button"
+        onClick={openAlbumBrowseMenu}
+        aria-label={t('library.albumSortTitle')}
+        data-pressable
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 6h18M6 12h12M10 18h4" />
+        </svg>
+        <span>{sortLabel(albumSort())}</span>
+      </button>
+    </Show>
+  </>);
+
   return (
     <div ref={viewRef} class="view">
+      <Show when={isMobile()} fallback={
       <ViewHeader
         title={t('library.title')}
         onTitleTap={() => reselectPrimaryTab('/')}
@@ -283,6 +321,9 @@ export default function Library() {
           </>
         }
       />
+      }>
+        <MobileLibraryHeader onSearch={revealSearch} onViewChange={() => { setQuery(''); setSearchProgress(0); setSearchFocused(false); }} actions={!searching() ? sortControl() : undefined} />
+      </Show>
 
       <Show when={isMobile()}>
         <div
@@ -296,7 +337,7 @@ export default function Library() {
         </div>
       </Show>
 
-      <Show when={!searching()}>
+      <Show when={!searching() && !isMobile()}>
         <div class={styles.toolbar}>
           <div class={styles.tabs}>
             <button
@@ -324,28 +365,15 @@ export default function Library() {
               {t('library.artists')}
             </button>
           </div>
-          <Show when={libraryTab() === 'songs'}>
-            <button class={styles.sortButton} type="button" onClick={sortLibrary} aria-label={t('library.sortTitle')} data-pressable>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 6h18M6 12h12M10 18h4" />
-              </svg>
-              <span>{librarySort() === 'az' ? t('library.sortAZ') : librarySort() === 'fav' ? t('library.sortFavFirst') : t('library.sortRecent')}</span>
-            </button>
-          </Show>
-          <Show when={libraryTab() === 'albums'}>
-            <button
-              class={styles.sortButton}
-              type="button"
-              onClick={openAlbumBrowseMenu}
-              aria-label={t('library.albumSortTitle')}
-              data-pressable
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 6h18M6 12h12M10 18h4" />
-              </svg>
-              <span>{sortLabel(albumSort())}</span>
-            </button>
-          </Show>
+          {sortControl()}
+        </div>
+      </Show>
+
+      <Show when={!searching() && libraryTab() === 'songs' && libraryFilter() === 'downloaded'}>
+        <div class={styles.filterChips}>
+          <button class={styles.chip} type="button" onClick={() => setLibraryFilter('all')} data-pressable>
+            {t('library.filterDownloaded')} <span aria-hidden="true">×</span>
+          </button>
         </div>
       </Show>
 

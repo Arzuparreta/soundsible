@@ -3,12 +3,15 @@ import { Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLocale } from '../lib/i18n';
 import styles from './TabBar.module.css';
+import { OverlayOutlet } from '../lib/overlay';
+import { setMobileLibrarySection } from '../lib/libraryView';
+import { setState } from '../stores/core';
 import { TabBar } from './TabBar';
 
 function renderTabs() {
   const Root = (props: RouteSectionProps) => (
     <>
-      <TabBar />
+      <TabBar /><OverlayOutlet />
       {props.children}
     </>
   );
@@ -23,6 +26,8 @@ beforeEach(async () => {
   // Non-English dictionaries load on demand now.
   await setLocale('es');
   window.history.pushState({}, '', '/');
+  setMobileLibrarySection('library');
+  setState('downloads', 'queue', []);
 });
 
 afterEach(() => {
@@ -30,38 +35,41 @@ afterEach(() => {
 });
 
 describe('mobile tab bar', () => {
-  it('exposes the five decided top-level destinations', () => {
+  it('exposes three destinations and More', () => {
     const view = renderTabs();
-    const bar = view.container.querySelector('nav')!;
-
-    expect([...bar.children].map((tab) => tab.textContent?.trim())).toEqual([
-      'Biblioteca',
-      'Buscar',
-      'Live',
-      'Listas',
-      'Ajustes',
-    ]);
+    expect([...view.container.querySelector('nav')!.children].map((tab) => tab.textContent?.trim()))
+      .toEqual(['Biblioteca', 'Buscar', 'Listas', 'Más']);
   });
 
-  it('navigates to settings and marks its subroutes active', async () => {
+  it('opens settings through More and marks its subroutes active', async () => {
     window.history.replaceState({}, '', '/settings/devices');
     renderTabs();
-    const tab = screen.getByRole('link', { name: 'Ajustes' });
+    const tab = screen.getByRole('button', { name: 'Más' });
     expect(tab).toHaveClass(styles.active);
     fireEvent.click(tab);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ajustes' }));
     await waitFor(() => expect(window.location.pathname).toBe('/settings'));
-    expect(tab).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('reselecting the settings index scrolls to the top', () => {
-    window.history.replaceState({}, '', '/settings');
-    const surface = document.createElement('div');
-    surface.dataset.primaryScroll = '';
-    surface.scrollTo = vi.fn();
-    document.body.append(surface);
+  it('keeps the download count live while More is open', async () => {
     renderTabs();
-    fireEvent.click(screen.getByRole('link', { name: 'Ajustes' }));
-    expect(surface.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+    setState('downloads', 'queue', [{ id: 'one', status: 'pending' }]);
+    fireEvent.click(screen.getByRole('button', { name: /Más/ }));
+    expect(await screen.findByRole('button', { name: 'Descargas (1)' })).toBeInTheDocument();
+    setState('downloads', 'queue', []);
+    expect(screen.getByRole('button', { name: 'Descargas' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('restores Favourites when returning to Library', async () => {
+    setMobileLibrarySection('favourites');
+    window.history.replaceState({}, '', '/search');
+    renderTabs();
+    fireEvent.click(screen.getByRole('link', { name: 'Biblioteca' }));
+    await waitFor(() => expect(window.location.pathname).toBe('/favourites'));
+    expect(screen.getByRole('link', { name: 'Biblioteca' })).toHaveClass(styles.active);
   });
 
   it('reselecting the active root tab returns its primary surface to the top', () => {

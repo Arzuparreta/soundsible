@@ -18,7 +18,7 @@ export function Placeholder(props: { title: string; blurb?: string }) {
         <p class={styles.demoText}>
           {t('placeholder.overlayText')}
         </p>
-        <Button onClick={close}>{t('placeholder.overlayClose')}</Button>
+        <Button onClick={() => close()}>{t('placeholder.overlayClose')}</Button>
       </div>
     ));
 

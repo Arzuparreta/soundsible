@@ -86,7 +86,7 @@ export function openMetadataEditor(track: Track): void {
         </label>
 
         <div class={styles.actions}>
-          <button type="button" class={styles.cancel} onClick={close}>
+          <button type="button" class={styles.cancel} onClick={() => close()}>
             {t('metadataEditor.cancel')}
           </button>
           <button type="submit" class={styles.confirm} disabled={busy()}>

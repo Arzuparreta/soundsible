@@ -48,6 +48,7 @@ export const en = {
     soundsibleWeb: 'Soundsible Web',
   },
   nav: {
+    more: 'More',
     mobile: 'Main navigation',
     search: 'Search',
     favourites: 'Favourites',
@@ -349,6 +350,7 @@ export const en = {
     reason: 'Similar to what you were listening to',
   },
   library: {
+    searchAction: 'Search library',
     title: 'Your library',
     favourites: 'Favourites',
     playlists: 'Playlists',

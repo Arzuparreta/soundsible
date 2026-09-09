@@ -48,6 +48,7 @@ export const zh: Dict = {
     soundsibleWeb: 'Soundsible Web',
   },
   nav: {
+    more: '更多',
     mobile: '主导航',
     search: '搜索',
     favourites: '收藏',
@@ -349,6 +350,7 @@ export const zh: Dict = {
     reason: '与你刚才收听的内容相似',
   },
   library: {
+    searchAction: '搜索音乐库',
     title: '你的资料库',
     favourites: '收藏',
     playlists: '歌单',

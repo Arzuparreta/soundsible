@@ -48,6 +48,7 @@ export const fr: Dict = {
     soundsibleWeb: 'Soundsible Web',
   },
   nav: {
+    more: 'Plus',
     mobile: 'Navigation principale',
     search: 'Rechercher',
     favourites: 'Favoris',
@@ -349,6 +350,7 @@ export const fr: Dict = {
     reason: 'Similaire à ce que vous écoutiez',
   },
   library: {
+    searchAction: 'Rechercher dans la bibliothèque',
     title: 'Votre bibliothèque',
     favourites: 'Favoris',
     playlists: 'Listes',

@@ -5,7 +5,7 @@
    gets a margin of its own instead of labels flush against the bezel. */
 .bar {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
 }
 
@@ -90,3 +90,5 @@
   width: var(--icon-md);
   height: var(--icon-md);
 }
+
+.badge { margin-inline-start: 4px; color: var(--accent-ink); }

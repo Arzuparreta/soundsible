@@ -164,8 +164,11 @@ test.describe('interface scale geometry', () => {
       const player = page.locator('[data-omni-player]');
       await expect(player).toBeVisible();
       const originalPlayer = await player.elementHandle();
-      const settingsLink = page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true });
+      const settingsLink = page.viewportSize()!.width < 1024
+        ? page.getByRole('button', { name: 'Más', exact: true })
+        : page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true });
       await settingsLink.click();
+      if (page.viewportSize()!.width < 1024) await page.getByRole('dialog').getByRole('button', { name: 'Ajustes', exact: true }).click();
       const settings = page.locator('[data-settings-page]');
       await expect(settings).toBeVisible();
       await settings.getByRole('button', { name: /Reproducción/ }).click();
@@ -198,9 +201,10 @@ test.describe('interface scale geometry', () => {
       await assertGeometry(page);
 
       await settingsLink.click();
+      if (page.viewportSize()!.width < 1024) await page.getByRole('dialog').getByRole('button', { name: 'Ajustes', exact: true }).click();
       await expect(page).toHaveURL(/#\/settings$/);
       await page.getByRole('link', { name: 'Biblioteca', exact: true }).filter({ visible: true }).click();
-      await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: page.viewportSize()!.width < 1024 ? 'Canciones' : 'Tu biblioteca' })).toBeVisible();
       expect(await player.evaluate((element, original) => element === original, originalPlayer)).toBe(true);
     });
   }
@@ -236,7 +240,8 @@ test.describe('interface scale geometry', () => {
     const desktop = page.viewportSize()!.width >= 1024;
 
     await expect(page).toHaveURL(/#\/settings$/);
-    await expect(page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }))
+    await expect(desktop ? page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true })
+      : page.getByRole('button', { name: 'Más', exact: true }))
       .toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
@@ -284,8 +289,11 @@ test.describe('interface scale geometry', () => {
     await mockEngine(page, true);
     await installPreferences(page, 'normal');
     await page.goto('/player/#/');
-    await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
-    await page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }).click();
+    await expect(page.getByRole('heading', { name: page.viewportSize()!.width < 1024 ? 'Canciones' : 'Tu biblioteca' })).toBeVisible();
+    if (page.viewportSize()!.width < 1024) {
+      await page.getByRole('button', { name: 'Más', exact: true }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Ajustes', exact: true }).click();
+    } else await page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }).click();
     const settings = page.locator('[data-settings-page]');
     await settings.getByRole('button', { name: /Apariencia/ }).click();
     await expect(page).toHaveURL(/#\/settings\/appearance$/);
@@ -293,7 +301,7 @@ test.describe('interface scale geometry', () => {
     await expect(page).toHaveURL(/#\/settings$/);
     await expect(settings.getByRole('heading', { name: 'Ajustes' })).toBeVisible();
     await page.goBack();
-    await expect(page.getByRole('heading', { name: 'Tu biblioteca' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: page.viewportSize()!.width < 1024 ? 'Canciones' : 'Tu biblioteca' })).toBeVisible();
     await page.goForward();
     await page.goForward();
     await expect(settings.locator('header').getByRole('heading', { name: 'Apariencia', exact: true })).toBeVisible();
