@@ -5,6 +5,9 @@
 }
 
 .bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: var(--space-lg) var(--gutter) var(--space-sm);
 }
 

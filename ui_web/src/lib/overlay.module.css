@@ -160,3 +160,9 @@
     opacity: 0;
   }
 }
+
+.scrim[data-variant='drawer'] { align-items: stretch; justify-content: flex-start; }
+.sheet[data-variant='drawer'] { background: var(--bg-elevated); width: min(320px, calc(100vw - 40px)); max-height: none; height: 100%; padding: 0; border-radius: 0 var(--radius-lg) var(--radius-lg) 0; animation: drawer-in var(--dur-medium) var(--ease-out); }
+.sheet[data-variant='drawer']::before { display: none; }
+@keyframes drawer-in { from { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) { .scrim, .sheet, .sheet[data-variant='drawer'] { animation: none; } }

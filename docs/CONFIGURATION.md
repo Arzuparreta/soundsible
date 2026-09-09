@@ -17,6 +17,20 @@ Key options:
 
 Changes made here are persisted so future sessions pick them up automatically.
 
+### Navigation preferences
+
+The mobile bottom bar starts with **Library, Search, Favourites, Settings**.
+Open **Settings → Appearance → Bottom bar** to choose between three and five
+sections and set their order. Selecting a section already assigned to another
+position swaps the two. Changes apply immediately and are saved in this browser
+or installation; **Restore defaults** returns the original four buttons.
+
+The header's menu opens the complete navigation, including Playlists, Podcasts,
+Live, Downloads and the Songs, Albums and Artists library views. Settings remains
+accessible there even if you remove it from the bottom bar. Desktop uses the same
+complete navigation in its persistent sidebar; customizing the bottom bar does
+not rearrange that sidebar.
+
 ### 2. Environment variables
 
 Depending on how you deploy Soundsible, you may expose certain values via environment variables.

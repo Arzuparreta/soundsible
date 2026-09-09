@@ -20,7 +20,6 @@ import {
   setLibraryFilter,
   libraryTab,
   setLibraryTab,
-  setMobileLibrarySection,
   sortTracks,
   filterTracks,
   catalogArtists,
@@ -102,7 +101,6 @@ export default function Library() {
   const swipeReveal = createTopSwipeReveal();
 
   onMount(() => {
-    setMobileLibrarySection('library');
     const mq = window.matchMedia('(max-width: 1023px)');
     setIsMobile(mq.matches);
     setSearchProgress(mq.matches ? (searching() ? 1 : 0) : 1);

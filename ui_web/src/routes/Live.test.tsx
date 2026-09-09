@@ -313,3 +313,6 @@ describe('Live operational UI', () => {
     expect(community.create).not.toHaveBeenCalled();
   });
 });
+
+// Navigation behavior is covered by the router integration and browser tests.
+vi.mock('../components/NavigationMenu', () => ({ NavigationMenuButton: () => null }));

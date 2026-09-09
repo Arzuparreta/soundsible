@@ -1,0 +1,13 @@
+.editor { width: 100%; min-width: 0; padding: 12px; }
+.preview { display: flex; gap: 4px; padding: 16px 4px; margin-bottom: 12px; background: var(--bg-raised); border-radius: var(--radius-md); }
+.preview > div { flex: 1; min-width: 0; display: flex; align-items: center; flex-direction: column; gap: 6px; text-align: center; font-size: var(--text-caption); overflow-wrap: anywhere; }
+.preview span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview svg { width: 21px; height: 21px; }
+.row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.row label { font-size: var(--text-caption); flex: none; }
+.row select { flex: 1; min-width: 0; }
+.editor select, .editor button { min-height: 44px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 8px; color: var(--ink-primary); background: var(--bg-raised); font: inherit; }
+.row button { min-width: 44px; font-size: 22px; }
+.editor button { cursor: pointer; }
+.editor button:disabled { opacity: .4; cursor: default; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }

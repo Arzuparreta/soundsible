@@ -1,3 +1,4 @@
+import { NavigationMenuButton } from './NavigationMenu';
 import { t } from '../lib/i18n';
 import { Show, type JSX } from 'solid-js';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -19,7 +20,8 @@ export function ViewHeader(props: {
   return (
     <header class={styles.header} data-compact={props.compact ? '' : undefined}>
       <Show when={props.onBack}><button type="button" class={styles.back} aria-label={t('common.back')} onClick={props.onBack}>‹</button></Show>
-      <div class={styles.heading}>
+      <Show when={!props.onBack && !props.compact}><NavigationMenuButton /></Show>
+      <div class={styles.heading} style={{ flex: "1" }}>
         <Show
           when={props.onTitleTap}
           fallback={<h1 class={styles.title}>{props.title}</h1>}

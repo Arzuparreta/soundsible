@@ -1,7 +1,6 @@
 import { createMemo, createSignal, onMount, onCleanup, Show } from 'solid-js';
 import { actions, favouriteRows, state } from '../stores';
 import { MobileLibraryHeader } from '../components/MobileLibraryHeader';
-import { setMobileLibrarySection } from '../lib/libraryView';
 import { openActionMenu } from '../components/ActionMenu';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
@@ -30,7 +29,6 @@ const context = () => ({ id: 'favourites', kind: 'favourites' as const, label: t
 export default function Favourites() {
   const [isMobile, setIsMobile] = createSignal(window.matchMedia('(max-width: 1023px)').matches);
   onMount(() => {
-    setMobileLibrarySection('favourites');
     const mq = window.matchMedia('(max-width: 1023px)');
     const change = () => setIsMobile(mq.matches);
     mq.addEventListener('change', change);

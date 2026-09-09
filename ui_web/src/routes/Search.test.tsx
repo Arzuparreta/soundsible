@@ -413,3 +413,6 @@ describe('Search route', () => {
     expect(apiMock.searchYouTube).not.toHaveBeenCalled();
   });
 });
+
+// Navigation behavior is covered by the router integration and browser tests.
+vi.mock('../components/NavigationMenu', () => ({ NavigationMenuButton: () => null }));
