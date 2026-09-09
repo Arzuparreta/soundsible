@@ -74,6 +74,27 @@ test('local search can be left through the selector, and downloaded filtering st
   await expect(filter).toHaveCount(0);
 });
 
+test('the view selector is marked with a drawn chevron sitting on the title axis', async ({ page }) => {
+  const title = page.locator('[data-mobile-library-header] h1 button');
+  const chevron = title.locator('svg');
+  await expect(chevron).toHaveCount(1);
+  for (const size of ['compact', 'normal', 'large']) {
+    await page.evaluate((size) => document.documentElement.dataset.interfaceSize = size, size);
+    const font = await title.evaluate((node) => parseFloat(getComputedStyle(node).fontSize));
+    const box = (await chevron.boundingBox())!;
+    // Half its box wide, so it stays a chevron beside the title rather than the
+    // needle-thin glyph it replaced, and it tracks the interface scale.
+    expect(box.width / font).toBeGreaterThan(0.45);
+    expect(box.width / font).toBeLessThan(0.75);
+    expect(box.height / box.width).toBeCloseTo(1, 1);
+    // On the axis of the capitals, which sits a hair above the line box middle.
+    const label = (await title.locator('span').boundingBox())!;
+    const off = (box.y + box.height / 2) - (label.y + label.height / 2);
+    expect(off).toBeLessThan(0);
+    expect(Math.abs(off)).toBeLessThan(font * 0.09);
+  }
+});
+
 for (const width of [320, 390, 430]) {
   for (const size of ['compact', 'normal', 'large']) {
     test(`one header row and accessible controls at ${width}px, ${size}`, async ({ page }) => {
