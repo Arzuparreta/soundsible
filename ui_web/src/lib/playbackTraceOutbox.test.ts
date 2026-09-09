@@ -49,6 +49,24 @@ describe('automatic trace delivery', () => {
     expect(sent).toHaveLength(count);
   });
 
+  it('drains evidence faster than it accumulates during continuous playback', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('indexedDB', undefined);
+    const sent: TraceBatch[] = [];
+    cleanups.push(startAutomaticPlaybackDiagnostics(setup, async (b) => {
+      sent.push(b);
+      return { id: b.id, enabled: true };
+    }));
+    await vi.advanceTimersByTimeAsync(1);
+    for (let index = 0; index < 60; index++) {
+      recordPlaybackDiagnostic('sample');
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    await vi.advanceTimersByTimeAsync(5000);
+    const samples = sent.flatMap((b) => b.events).filter((row) => (row as { event: string }).event === 'sample');
+    expect(samples).toHaveLength(60);
+  });
+
   it('does not send queued evidence after the authenticated account changes', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('indexedDB', undefined);

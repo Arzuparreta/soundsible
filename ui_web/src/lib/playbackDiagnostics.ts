@@ -190,7 +190,9 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
       await chain;
       const batches = await outbox.pending();
       if (Date.now() < retryAt) return;
-      for (const batch of batches.slice(0, 4)) {
+      // Persisting once per second can create five batches between sends.
+      // Drain more than that so an offline backlog shrinks during playback.
+      for (const batch of batches.slice(0, 6)) {
         if (stopped || !stillSameUser()) break;
         const ack = await send(batch);
         if (ack.id !== batch.id) throw new Error('trace_ack_mismatch');
