@@ -76,22 +76,30 @@ test('local search can be left through the selector, and downloaded filtering st
 
 test('the view selector is marked with a drawn chevron sitting on the title axis', async ({ page }) => {
   const title = page.locator('[data-mobile-library-header] h1 button');
-  const chevron = title.locator('svg');
-  await expect(chevron).toHaveCount(1);
+  await expect(title.locator('svg')).toHaveCount(1);
   for (const size of ['compact', 'normal', 'large']) {
     await page.evaluate((size) => document.documentElement.dataset.interfaceSize = size, size);
-    const font = await title.evaluate((node) => parseFloat(getComputedStyle(node).fontSize));
-    const box = (await chevron.boundingBox())!;
-    // Half its box wide, so it stays a chevron beside the title rather than the
-    // needle-thin glyph it replaced, and it tracks the interface scale.
-    expect(box.width / font).toBeGreaterThan(0.45);
-    expect(box.width / font).toBeLessThan(0.75);
-    expect(box.height / box.width).toBeCloseTo(1, 1);
-    // On the axis of the capitals, which sits a hair above the line box middle.
-    const label = (await title.locator('span').boundingBox())!;
-    const off = (box.y + box.height / 2) - (label.y + label.height / 2);
-    expect(off).toBeLessThan(0);
-    expect(Math.abs(off)).toBeLessThan(font * 0.09);
+    // The drawing, not the box around it: the box is whatever the stylesheet
+    // asks for, while these are the proportions somebody actually sees.
+    const drawn = await title.evaluate((node) => {
+      const chevron = node.querySelector('svg path')!.getBoundingClientRect();
+      const label = node.querySelector('span')!.getBoundingClientRect();
+      return {
+        font: parseFloat(getComputedStyle(node).fontSize),
+        width: chevron.width,
+        ratio: chevron.height / chevron.width,
+        offset: (chevron.y + chevron.height / 2) - (label.y + label.height / 2),
+      };
+    });
+    // Scaled to the title it follows, and twice as wide as it is tall — a
+    // chevron, where the `⌄` glyph it replaced was a narrow, sharp mark.
+    expect(drawn.width / drawn.font).toBeGreaterThan(0.45);
+    expect(drawn.width / drawn.font).toBeLessThan(0.75);
+    expect(drawn.ratio).toBeGreaterThan(0.4);
+    expect(drawn.ratio).toBeLessThan(0.65);
+    // On the axis of the capitals, a hair above the middle of the line box.
+    expect(drawn.offset).toBeLessThan(0);
+    expect(Math.abs(drawn.offset)).toBeLessThan(drawn.font * 0.09);
   }
 });
 
