@@ -90,11 +90,13 @@ existing music profile across.
 ## Screenshots
 
 <div align="center">
-  <img src="docs/images/desktop-now-playing.png" alt="Soundsible app interface" width="100%">
+  <img src="docs/images/desktop-now-playing.png" alt="Soundsible desktop player with library, artwork and playback queue" width="100%">
   <br>
-  <img src="docs/images/mobile-now-playing.png" alt="Soundsible app interface" width="32%">
-  <img src="docs/images/mobile-now-playing-library.png" alt="Soundsible app interface" width="32%">
-  <img src="docs/images/mobile-now-playing-lyrics.png" alt="Soundsible app interface" width="32%">
+  <img src="docs/images/desktop-library.png" alt="Soundsible desktop library listing every song" width="49%">
+  <img src="docs/images/desktop-search.png" alt="Soundsible desktop search with artist, songs and albums" width="49%">
+  <br>
+  <img src="docs/images/mobile-library.png" alt="Soundsible mobile library with the mini player" width="32%">
+  <img src="docs/images/mobile-now-playing.png" alt="Soundsible mobile player with synced lyrics" width="32%">
 </div>
 
 ---
