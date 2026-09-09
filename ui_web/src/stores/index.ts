@@ -1,3 +1,4 @@
+import { user } from '../lib/session';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import {
   api,
@@ -22,7 +23,7 @@ import {
   type ProgramTransportOrigin,
 } from '../lib/audio';
 import { ProgramMediaSession, type MediaSessionSyncReason } from '../lib/mediaSession';
-import { recordPlaybackDiagnostic } from '../lib/playbackDiagnostics';
+import { recordPlaybackDiagnostic, startAutomaticPlaybackDiagnostics } from '../lib/playbackDiagnostics';
 import { streamUrl, previewUrl, podcastStreamUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import {
   prefetchPreviews,
@@ -1326,9 +1327,8 @@ function commitTransition(
       committedTransition = null;
       setState('playback', { currentTime: position, duration: playingDuration() });
       setState('autoMode', 'transition', IDLE_TRANSITION);
-      // The outgoing source has left the audible mix (diagnostics can defer
-      // its pause). This publication does not prove iOS changed its selected
-      // Now Playing element; the field experiment observes that separately.
+      // The outgoing source has been retired. This publication does not prove
+      // iOS changed its selected Now Playing element.
       updateMediaSession(state.playback.currentTrack, 'handoff_settled', true);
       const pending = pendingImmediateAutoTrack;
       pendingImmediateAutoTrack = null;
@@ -4149,6 +4149,14 @@ function installAudioUnlock(): void {
 
 export function initStore(): void {
   if (socket) return;
+  const diagnosticUser = user()?.id;
+  if (diagnosticUser) startAutomaticPlaybackDiagnostics({
+    userId: diagnosticUser, deviceId: state.device.device_id,
+    platform: /(?:iPhone|iPad|iPod)/.test(navigator.userAgent)
+      ? `ios-reported-${navigator.userAgent.match(/OS ([\d_]+)/)?.[1]?.replaceAll('_', '.') ?? 'unknown'}`
+      : 'other',
+    displayMode: displayMode(),
+  }, api.sendPlaybackTrace, () => user()?.id === diagnosticUser);
 
   // Read now, spent later. Live clears the marker as soon as it has opened the
   // room it was sent here to open, and that can happen before the library sync

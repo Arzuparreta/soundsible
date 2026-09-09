@@ -48,7 +48,7 @@ describe('programme Media Session projection', () => {
   it('records the previous declaration before overwriting it with the expected state', () => {
     const session = controls();
     session.playbackState = 'paused';
-    startPlaybackDiagnostics({ variant: 'reference', ios: '999', connection: 'bluetooth' });
+    startPlaybackDiagnostics({ userId: 'user', deviceId: 'device', platform: 'test', displayMode: 'browser' });
     try {
       new ProgramMediaSession().sync(track, snapshot(true), 'handoff_settled', true);
       const rows = JSON.parse(playbackDiagnosticExport()).events;

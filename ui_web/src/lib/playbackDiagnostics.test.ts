@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { diagnosticPlay, diagnosticPause, diagnosticStatus, observeDiagnosticMedia, playbackDiagnosticExport,
-  recordPlaybackDiagnostic, retirementVariant, setDiagnosticSnapshot, startPlaybackDiagnostics, stopPlaybackDiagnostics } from './playbackDiagnostics';
+  recordPlaybackDiagnostic, setDiagnosticSnapshot, startPlaybackDiagnostics, stopPlaybackDiagnostics } from './playbackDiagnostics';
 
-const setup = { variant: 'reference' as const, ios: '999', connection: 'bluetooth' as const };
+const setup = { userId: 'user', deviceId: 'device', platform: 'test', displayMode: 'browser' };
 const cleanups: Array<() => void> = [];
 afterEach(() => {
   stopPlaybackDiagnostics();
@@ -27,7 +27,6 @@ describe('local playback flight recorder', () => {
     const then = vi.spyOn(promise, 'then');
     expect(diagnosticPlay(element)).toBe(promise);
     expect(then).not.toHaveBeenCalled();
-    expect(retirementVariant()).toBe('reference');
   });
 
   it('records native events before subsequent listeners and keeps URLs out', async () => {
@@ -64,7 +63,8 @@ describe('local playback flight recorder', () => {
     startPlaybackDiagnostics(setup);
     for (let i = 0; i < 4200; i++) recordPlaybackDiagnostic('sample');
     const data = exported();
-    expect(data.dropped).toBe(105);
+    expect(data.ringDiscarded).toBe(105);
+    expect(data.dropped).toBe(0);
     expect(data.events).toHaveLength(4096);
     expect(data.events[0].sequence).toBe(106);
     expect(data.events.at(-1).sequence).toBe(4201);

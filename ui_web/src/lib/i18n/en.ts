@@ -1,24 +1,5 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
-  playbackDiagnostic: {
-    title: "Car playback diagnosis",
-    note: "Experimental, local capture. Export before reloading or starting another capture. Opening the phone can affect the fault; markers record when you report it, not when it began.",
-    variant: "Test",
-    reference: "Reference",
-    delayed: "Delayed retirement (8 s)",
-    excluded: "Muted retirement",
-    ios: "Exact iOS version",
-    connection: "Car connection",
-    other: "Other",
-    start: "Start new capture",
-    startHint: "Pause playback first. A new capture replaces the previous one.",
-    stop: "Pause and finish capture",
-    failure: "Mark incorrect playback state",
-    volumeFailure: "Mark volume controls failing",
-    recovered: "Mark controls recovered",
-    events: "Events retained / lost",
-    export: "Export capture",
-  },
   musicExplorer: {
     title: 'Music',
     explore: 'Explore',
