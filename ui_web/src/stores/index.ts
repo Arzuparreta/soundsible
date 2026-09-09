@@ -22,6 +22,7 @@ import {
   type ProgramTransportOrigin,
 } from '../lib/audio';
 import { ProgramMediaSession, type MediaSessionSyncReason } from '../lib/mediaSession';
+import { recordPlaybackDiagnostic } from '../lib/playbackDiagnostics';
 import { streamUrl, previewUrl, podcastStreamUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import {
   prefetchPreviews,
@@ -353,6 +354,11 @@ function emitPlaybackEvent(
     queue_source?: string;
   } = {},
 ): void {
+  recordPlaybackDiagnostic(`store.${phase}`, {
+    mode: state.autoMode.active ? 'dj' : 'normal', phase: state.playback.phase,
+    origin: strings.transport_origin ?? '', action: strings.transport_action ?? '',
+    syncReason: strings.sync_reason ?? '',
+  });
   void api
     .sendPlayTiming({
       v: 2,
@@ -1320,9 +1326,9 @@ function commitTransition(
       committedTransition = null;
       setState('playback', { currentTime: position, duration: playingDuration() });
       setState('autoMode', 'transition', IDLE_TRANSITION);
-      // `releaseDeck` paused the outgoing element immediately before this
-      // callback. On iOS that element may still be the OS's chosen media
-      // session, so re-assert B only after A is definitely out of the programme.
+      // The outgoing source has left the audible mix (diagnostics can defer
+      // its pause). This publication does not prove iOS changed its selected
+      // Now Playing element; the field experiment observes that separately.
       updateMediaSession(state.playback.currentTrack, 'handoff_settled', true);
       const pending = pendingImmediateAutoTrack;
       pendingImmediateAutoTrack = null;
@@ -4124,6 +4130,7 @@ function displayMode(): string {
 function installAudioUnlock(): void {
   if (typeof window === 'undefined') return;
   const unlock = () => {
+    recordPlaybackDiagnostic('gesture.audio_unlock');
     audioService.unlockAudio();
     // Carrying on from an interruption, never starting something nobody asked
     // for: this fires on any tap on the page, so the only thing it may act on is

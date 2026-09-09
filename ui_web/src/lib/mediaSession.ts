@@ -1,4 +1,5 @@
 import { coverUrl } from './media';
+import { recordPlaybackDiagnostic } from './playbackDiagnostics';
 import type { ProgramPlaybackSnapshot } from './audio';
 import type { Track } from '../types/music';
 
@@ -47,10 +48,14 @@ export class ProgramMediaSession {
   installActions(actions: MediaSessionActions): void {
     if (!hasMediaSession()) return;
     const session = navigator.mediaSession;
-    session.setActionHandler('play', actions.play);
-    session.setActionHandler('pause', actions.pause);
-    session.setActionHandler('nexttrack', actions.next);
-    session.setActionHandler('previoustrack', actions.previous);
+    const invoke = (action: string, handler: () => void) => () => {
+      recordPlaybackDiagnostic('media_session.action', { action });
+      handler();
+    };
+    session.setActionHandler('play', invoke('play', actions.play));
+    session.setActionHandler('pause', invoke('pause', actions.pause));
+    session.setActionHandler('nexttrack', invoke('nexttrack', actions.next));
+    session.setActionHandler('previoustrack', invoke('previoustrack', actions.previous));
     session.setActionHandler('seekto', (details) => {
       if (typeof details.seekTime === 'number') actions.seekTo(details.seekTime);
     });
@@ -65,6 +70,7 @@ export class ProgramMediaSession {
     forceMetadata = false,
   ): void {
     if (!hasMediaSession()) return;
+    recordPlaybackDiagnostic('media_session.before_sync', { reason });
     const session = navigator.mediaSession;
     if (!track) {
       if (this.trackKey || session.metadata) this.revision += 1;
@@ -100,6 +106,7 @@ export class ProgramMediaSession {
     snapshot: ProgramPlaybackSnapshot,
   ): void {
     if (!hasMediaSession()) return;
+    recordPlaybackDiagnostic('media_session.after_sync', { reason, expectedState });
     this.reporter?.({
       reason,
       expectedState,
