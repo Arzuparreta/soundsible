@@ -91,6 +91,17 @@ opaque `attempt_id`. They may include:
   booleans recording whether carrier/source state agreed. Track titles, artist,
   artwork URLs and other metadata are never written to telemetry.
 
+An optional **Car playback diagnosis** capture in Settings → Playback is separate
+from server telemetry. It keeps at most 4,096 events in this page's memory, with
+explicit counts for overwritten or unrecordable events. It records media state,
+client timing/sequence, operation outcomes, a random capture ID, the entered iOS
+version and connection, the selected experiment, and the UI source fingerprint.
+It records no audio, titles, artwork, source URLs, account IDs or credentials and
+does not upload the capture. Export explicitly downloads a JSON file. Starting
+another capture or reloading discards the previous in-memory data. Ordinary
+server telemetry continues unchanged. See [the protocol](PLAYBACK_DIAGNOSIS.md)
+for what these observations can and cannot prove.
+
 Buffering before the first sound and buffering after it are recorded as separate
 fields. They used to be one counter emitted at the moment of first sound, where
 the second kind cannot have happened yet — so it reported the opening wait that
