@@ -1,3 +1,5 @@
+import { diagnosticPause, diagnosticPlay, diagnosticSource, observeDiagnosticMedia } from '../playbackDiagnostics';
+
 export type ProgramOutputMode = 'carrier' | 'direct_fallback';
 
 export type ProgramOutputEventName =
@@ -24,12 +26,12 @@ export interface ProgramOutputEvent extends ProgramOutputSnapshot {
 type OutputListener = (event: ProgramOutputEvent) => void;
 
 /**
- * The one media element allowed to represent Soundsible's mixed output.
+ * Stable media element carrying Soundsible's mixed output.
  *
  * Source decks remain HTML media elements because they provide progressive
- * network decoding, but they feed Web Audio only. The carrier owns the device
- * output and stays the same object for the lifetime of the graph, so a deck
- * handoff can no longer look like a pause/play handoff to the platform.
+ * network decoding and feed Web Audio. The carrier stays the same object for
+ * the graph lifetime, but WebKit may still select a source deck for Now Playing.
+ * Stable audio routing does not establish ownership of the platform controls.
  */
 export class ProgramOutput {
   private carrier: HTMLAudioElement | null = null;
@@ -37,6 +39,7 @@ export class ProgramOutput {
   private mode: ProgramOutputMode = 'direct_fallback';
   private directConnected = false;
   private listeners = new Set<OutputListener>();
+  private stopObserving: (() => void) | null = null;
 
   constructor(
     private readonly context: AudioContext,
@@ -50,8 +53,9 @@ export class ProgramOutput {
       }
       const destination = this.context.createMediaStreamDestination();
       const carrier = new Audio();
+      this.stopObserving = observeDiagnosticMedia(carrier, 'carrier');
       carrier.preload = 'auto';
-      carrier.srcObject = destination.stream;
+      diagnosticSource(carrier, () => { carrier.srcObject = destination.stream; });
       carrier.addEventListener('playing', () => this.emit('carrier_playing'));
       carrier.addEventListener('pause', () => this.emit('carrier_paused'));
       carrier.addEventListener('error', () => {
@@ -89,7 +93,7 @@ export class ProgramOutput {
   async play(): Promise<void> {
     if (this.mode !== 'carrier' || !this.carrier) return;
     try {
-      await this.carrier.play();
+      await diagnosticPlay(this.carrier);
     } catch (error) {
       this.emit('carrier_error', errorReason(error));
       this.enterFallback(errorReason(error));
@@ -97,7 +101,7 @@ export class ProgramOutput {
   }
 
   pause(): void {
-    this.carrier?.pause();
+    if (this.carrier) diagnosticPause(this.carrier);
   }
 
   /**
@@ -108,7 +112,7 @@ export class ProgramOutput {
     if (this.mode !== 'direct_fallback' || !this.carrier || !this.destination) return false;
     if (!programPlaying) return false;
     try {
-      await this.carrier.play();
+      await diagnosticPlay(this.carrier);
       if (this.directConnected) {
         try {
           this.monitor.disconnect(this.context.destination);
@@ -126,11 +130,16 @@ export class ProgramOutput {
   }
 
   destroy(): void {
-    this.carrier?.pause();
-    if (this.carrier) this.carrier.srcObject = null;
+    const carrier = this.carrier;
+    if (carrier) {
+      diagnosticPause(carrier);
+      diagnosticSource(carrier, () => { carrier.srcObject = null; });
+    }
     for (const track of this.destination?.stream.getTracks() ?? []) track.stop();
     this.listeners.clear();
     this.carrier = null;
+    this.stopObserving?.();
+    this.stopObserving = null;
     this.destination = null;
   }
 

@@ -1,5 +1,10 @@
 import { MAX_LINEAR as MAX_LEVEL, MIN_LINEAR as MIN_LEVEL } from './loudness';
 import {
+  diagnosticLoad, diagnosticPause, diagnosticPlay, diagnosticSource,
+  observeDiagnosticMedia, recordPlaybackDiagnostic, retirementVariant, setDiagnosticSnapshot,
+} from './playbackDiagnostics';
+import { DiagnosticRetirement } from './audio/diagnosticRetirement';
+import {
   ProgramOutput,
   type ProgramOutputEvent,
   type ProgramOutputMode,
@@ -38,6 +43,8 @@ function pageHidden(): boolean {
 
 let elements: HTMLAudioElement[] | null = null;
 let activeIndex = 0;
+const diagnosticRetirement = new DiagnosticRetirement();
+const excludedDecks = new WeakSet<HTMLAudioElement>();
 /** Shadow of each deck's mix gain, so volume changes can be reapplied without
  * an AudioContext. */
 const mixGains = [1, 0];
@@ -75,7 +82,7 @@ let deckEffects: DeckEffects[] | null = null;
 let masterGain: GainNode | null = null;
 /** Device-only monitor gain: volume and mute never alter the broadcast bus. */
 let monitorGain: GainNode | null = null;
-/** Stable post-mix media element that owns device/Media Session playback. */
+/** Stable post-mix output; platform control selection remains browser-owned. */
 let programCarrier: ProgramOutput | null = null;
 let programOutputReporter: ((event: ProgramOutputEvent) => void) | null = null;
 let masterVolume = storedVolume();
@@ -163,8 +170,13 @@ export function onDeckEvent(type: string, handler: (event: Event) => void): void
   if (elements) for (const deck of elements) deck.addEventListener(type, handler);
 }
 
-function createDeck(): HTMLAudioElement {
+function createDeck(index: number): HTMLAudioElement {
   const deck = new Audio();
+  observeDiagnosticMedia(deck, 'deck', index);
+  if (retirementVariant() === 'excluded') {
+    excludedDecks.add(deck);
+    deck.muted = true;
+  }
   deck.preload = 'auto';
   if ('preservesPitch' in deck) deck.preservesPitch = true;
   for (const binding of deckBindings) deck.addEventListener(binding.type, binding.handler);
@@ -182,7 +194,7 @@ function createDeck(): HTMLAudioElement {
  */
 function decks(): HTMLAudioElement[] {
   if (!elements) {
-    elements = [createDeck(), createDeck()];
+    elements = [createDeck(0), createDeck(1)];
     applyDeckVolume();
     bindLifecycle();
   }
@@ -251,13 +263,13 @@ function applyDeckVolume(): void {
     monitorGain.gain.value = allMuted ? 0 : masterVolume;
     for (const deck of elements) {
       deck.volume = 1;
-      deck.muted = false;
+      deck.muted = retirementVariant() === 'excluded' && excludedDecks.has(deck);
     }
     return;
   }
   elements.forEach((deck, index) => {
     deck.volume = Math.min(1, Math.max(0, mixGains[index] * masterVolume * fallbackLevel(index)));
-    deck.muted = allMuted;
+    deck.muted = allMuted || (retirementVariant() === 'excluded' && excludedDecks.has(deck));
   });
 }
 
@@ -335,6 +347,12 @@ function setDeckLevel(index: number, linear: number, ramp = false): void {
  * Pairing the two is what stops a levelled track leaking its gain onto whatever
  * the deck is handed next. */
 function releaseDeck(index: number): void {
+  recordPlaybackDiagnostic('deck.release', { index });
+  if (retirementVariant() === 'excluded') {
+    excludedDecks.add(decks()[index]);
+    decks()[index].muted = true;
+    recordPlaybackDiagnostic('deck.excluded', { index });
+  }
   detach(decks()[index]);
   setDeckLevel(index, 1);
 }
@@ -505,15 +523,15 @@ function unlockDecks(): void {
     if (unlockedDecks.has(deck)) continue;
     if (deck.getAttribute('src') !== null || deck.currentSrc) continue;
     deck.muted = true;
-    deck.src = SILENT_WAV;
+    diagnosticSource(deck, () => { deck.src = SILENT_WAV; });
     const release = () => {
-      deck.muted = graphState === 'ready' ? false : allMuted;
+      deck.muted = (retirementVariant() === 'excluded' && excludedDecks.has(deck)) || (graphState === 'ready' ? false : allMuted);
       if (deck.src !== SILENT_WAV) return; // a real track claimed this deck
-      deck.pause();
-      deck.removeAttribute('src');
-      deck.load();
+      diagnosticPause(deck);
+      diagnosticSource(deck, () => deck.removeAttribute('src'));
+      diagnosticLoad(deck);
     };
-    void deck.play().then(
+    void diagnosticPlay(deck).then(
       () => {
         unlockedDecks.add(deck);
         release();
@@ -556,6 +574,7 @@ function resumeContext(): void {
 function watchContextState(context: AudioContext): void {
   if (typeof context.addEventListener !== 'function') return;
   context.addEventListener('statechange', () => {
+    recordPlaybackDiagnostic('context.statechange', { state: context.state });
     if (audioContext !== context || graphState !== 'ready') return;
     if (context.state !== 'running') void context.resume?.().catch(() => {});
   });
@@ -599,7 +618,12 @@ function deckIsPlaying(deck: HTMLAudioElement): boolean {
 
 /** Start a source and the stable device carrier in the same activation turn. */
 function playProgramDeck(deck: HTMLAudioElement): Promise<void> {
-  const started = deck.play();
+  if (retirementVariant() === 'excluded') {
+    excludedDecks.delete(deck);
+    deck.muted = graphReady() ? false : allMuted;
+    recordPlaybackDiagnostic('deck.included');
+  }
+  const started = diagnosticPlay(deck);
   void programCarrier?.play();
   return started;
 }
@@ -1099,7 +1123,7 @@ function scheduleRateReturn(index: number): void {
  * googlevideo stream, so leaving it open keeps the engine streaming bytes nobody
  * is listening to. */
 function detach(deck: HTMLAudioElement): void {
-  deck.pause();
+  diagnosticPause(deck);
   deck.playbackRate = 1;
   if (deck.getAttribute('src') === null && !deck.currentSrc) return;
   // Not while the page is in the background. This runs the instant a handoff
@@ -1112,8 +1136,8 @@ function detach(deck: HTMLAudioElement): void {
     pendingDetach.add(deck);
     return;
   }
-  deck.removeAttribute('src');
-  deck.load();
+  diagnosticSource(deck, () => deck.removeAttribute('src'));
+  diagnosticLoad(deck);
 }
 
 /** Decks whose stream outlived their track because the page was hidden. */
@@ -1125,8 +1149,8 @@ function flushDeferredWork(): void {
     // Skip a deck that has been handed a real track in the meantime — `stage`
     // and `load` both assign `src` without going through `detach`.
     if (deck.paused && (deck.getAttribute('src') !== null || deck.currentSrc)) {
-      deck.removeAttribute('src');
-      deck.load();
+      diagnosticSource(deck, () => deck.removeAttribute('src'));
+      diagnosticLoad(deck);
     }
   }
   pendingDetach.clear();
@@ -1141,6 +1165,7 @@ function bindLifecycle(): void {
   lifecycleBound = true;
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
+      recordPlaybackDiagnostic('lifecycle.visibility');
       if (document.visibilityState !== 'hidden') flushDeferredWork();
     });
   }
@@ -1152,6 +1177,7 @@ function bindLifecycle(): void {
   // and compares them, so being called twice for the same moment costs nothing
   // and being called at all is the difference between a handoff and silence.
   onDeckEvent('timeupdate', () => {
+    diagnosticRetirement.tick();
     if (mix) tick();
   });
   onDeckEvent('ended', () => {
@@ -1186,6 +1212,7 @@ function bindLifecycle(): void {
  * incoming track is simply the current track now".
  */
 function cancelMix(reason: MixCancelReason): void {
+  diagnosticRetirement.flush(reason);
   const current = mix;
   mixGeneration += 1;
   stopTicker();
@@ -1219,7 +1246,8 @@ function finishMix(): void {
     activeIndex = current.toIndex;
     current.callbacks.onDominant();
   }
-  releaseDeck(current.fromIndex);
+  recordPlaybackDiagnostic('handoff.retirement', { from: current.fromIndex, to: current.toIndex });
+  diagnosticRetirement.retire(() => releaseDeck(current.fromIndex), graphReady());
   scheduleRateReturn(current.toIndex);
   current.callbacks.onComplete(incoming.currentTime);
 }
@@ -1365,7 +1393,7 @@ export const audioService = {
     // Assigning src runs the media load algorithm, which aborts the previous
     // fetch. No explicit detach: it would emit a spurious `pause` between the
     // two tracks and flicker the transport controls.
-    a.src = url;
+    diagnosticSource(a, () => { a.src = url; });
     return playProgramDeck(a).catch((err: unknown) => {
       if (token !== loadSeq) return; // superseded — the newer load owns the deck
       if (err instanceof Error && err.name === 'AbortError') return;
@@ -1390,7 +1418,7 @@ export const audioService = {
     activeIndex = toIndex;
     setDeckGain(toIndex, 1);
     setDeckGain(fromIndex, 0);
-    a.src = url;
+    diagnosticSource(a, () => { a.src = url; });
     releaseDeck(fromIndex);
     const resumeAtPosition = async () => {
       if (token !== loadSeq) return;
@@ -1452,9 +1480,9 @@ export const audioService = {
     // from `unlockDecks` — the silent sample every gesture spends on an empty
     // deck — would otherwise carry that play straight into the track being
     // primed, and a session put back on boot would start sounding on its own.
-    a.pause();
-    a.src = url;
-    a.load();
+    diagnosticPause(a);
+    diagnosticSource(a, () => { a.src = url; });
+    diagnosticLoad(a);
     const applyPosition = () => {
       if (token !== loadSeq) return;
       const pos = Math.max(0, positionSec);
@@ -1467,6 +1495,7 @@ export const audioService = {
   },
   /** Resume the one deck that owns the programme. */
   resume(origin: ProgramTransportOrigin = 'ui'): Promise<void> {
+    recordPlaybackDiagnostic('transport.resume', { origin });
     // Once the decks are routed through the graph, their output only exists
     // inside it. Resuming here costs nothing and means any play gesture can
     // recover a context the browser suspended behind our back.
@@ -1494,12 +1523,14 @@ export const audioService = {
    * context that will not come back is silence; an idle one is a rounding error.
    */
   pause(origin: ProgramTransportOrigin = 'ui'): void {
+    recordPlaybackDiagnostic('transport.pause', { origin });
+    diagnosticRetirement.flush('transport_pause');
     const current = mix;
     const phase = current?.phase ?? 'idle';
     const dominant = current?.dominant ?? false;
     programCarrier?.pause();
     if (current && current.phase !== 'armed') cancelMix('transport_pause');
-    audioEl().pause();
+    diagnosticPause(audioEl());
     reportProgramTransport('pause', origin, phase, dominant);
   },
   /** Stop and release the stream — for teardown (track deleted, queue emptied),
@@ -1535,6 +1566,7 @@ export const audioService = {
     masterVolume = clamped;
     if (monitorGain) monitorGain.gain.value = allMuted ? 0 : clamped;
     else applyDeckVolume();
+    recordPlaybackDiagnostic('volume.local_applied');
     try {
       localStorage.setItem(VOLUME_KEY, String(clamped));
     } catch {
@@ -1547,6 +1579,7 @@ export const audioService = {
   setMuted(muted: boolean): void {
     allMuted = muted;
     applyDeckVolume();
+    recordPlaybackDiagnostic('volume.local_mute_applied');
   },
   /**
    * Set both decks' levelling at once, ramped.
@@ -1595,6 +1628,7 @@ export const audioService = {
    */
   stage(url: string, level: number): void {
     if (mix || !url) return;
+    if (diagnosticRetirement.defer(() => audioService.stage(url, level))) return;
     const index = 1 - activeIndex;
     const idle = decks()[index];
     pendingDetach.delete(idle);
@@ -1605,14 +1639,16 @@ export const audioService = {
     if (stagedUrl === url && (idle.getAttribute('src') !== null || idle.currentSrc)) return;
     stagedUrl = url;
     setDeckGain(index, 0);
-    idle.muted = graphReady() ? false : allMuted;
+    if (retirementVariant() === 'excluded') excludedDecks.add(idle);
+    idle.muted = retirementVariant() === 'excluded' || (graphReady() ? false : allMuted);
     idle.playbackRate = 1;
-    idle.src = url;
-    idle.load();
+    diagnosticSource(idle, () => { idle.src = url; });
+    diagnosticLoad(idle);
   },
 
   /** Release the idle deck's stream — the staged track is no longer next. */
   clearStaged(): void {
+    diagnosticRetirement.flush('clear_staged');
     if (mix || !stagedUrl) return;
     stagedUrl = '';
     releaseDeck(1 - activeIndex);
@@ -1657,7 +1693,8 @@ export const audioService = {
       if (err instanceof Error && err.name === 'AbortError') return;
       throw err;
     });
-    releaseDeck(fromIndex);
+    recordPlaybackDiagnostic('handoff.retirement', { from: fromIndex, to: toIndex });
+    diagnosticRetirement.retire(() => releaseDeck(fromIndex), graphReady());
     return started;
   },
   mixPhase(): MixPhase {
@@ -1699,6 +1736,10 @@ export const audioService = {
     callbacks: MixCallbacks,
     options: { manual?: boolean; level: number },
   ): void {
+    if (!options.manual && diagnosticRetirement.defer(
+      () => audioService.armTransition(url, plan, callbacks, options),
+      () => callbacks.onCancel('superseded'),
+    )) return;
     cancelMix('superseded');
     const generation = ++mixGeneration;
     // No graph is built here. Routing an element into an AudioContext is
@@ -1731,9 +1772,10 @@ export const audioService = {
     setDeckLevel(toIndex, options.level);
     resetDeckEffects(toIndex);
     resetDeckEffects(fromIndex);
-    to.muted = graphReady() ? false : allMuted;
-    to.src = url;
-    to.load();
+    if (retirementVariant() === 'excluded') excludedDecks.add(to);
+    to.muted = retirementVariant() === 'excluded' || (graphReady() ? false : allMuted);
+    diagnosticSource(to, () => { to.src = url; });
+    diagnosticLoad(to);
     to.playbackRate = rate;
     const cue = () => {
       if (generation !== mixGeneration) return;
@@ -1776,3 +1818,28 @@ export const audioService = {
     if (mix) startTicker();
   },
 };
+
+/** Configuration never switches an experiment underneath live audio. */
+export function canConfigurePlaybackDiagnostics(): boolean {
+  return (!mix || mix.phase === 'armed')
+    && (!elements || elements.every((deck) => deck.paused || deck.ended || holdsUnlockSample(deck)))
+    && !programCarrier?.snapshot().carrierPlaying;
+}
+
+export function resetDiagnosticRetirement(): void {
+  diagnosticRetirement.flush('capture_stop');
+  if (retirementVariant() === 'excluded') {
+    for (const deck of elements ?? []) {
+      if (deck.paused || deck.ended) excludedDecks.add(deck);
+    }
+  }
+  applyDeckVolume();
+}
+
+setDiagnosticSnapshot(() => ({
+  activeIndex, mixPhase: mix?.phase ?? 'idle', dominant: mix?.dominant ?? false,
+  contextState: audioContext?.state ?? 'unavailable', contextTime: audioContext?.currentTime ?? 0,
+  outputMode: programCarrier?.snapshot().mode ?? 'direct_fallback',
+  gain0Target: mixGains[0], gain1Target: mixGains[1],
+  localVolume: masterVolume, localMuted: allMuted,
+}));

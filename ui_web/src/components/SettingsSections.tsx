@@ -13,6 +13,7 @@ import { associationUrl } from '../lib/trackShare';
 import { communityConfig, loadCommunityConfig } from '../lib/community';
 import { accessibleSections, findSectionById } from '../lib/settingsIndex';
 import { DevicesPanel } from './DeviceSheet';
+import { PlaybackDiagnostics } from './PlaybackDiagnostics';
 import { PairedDevicesPanel } from './PairDevice';
 import { DisplayPreferences } from './DisplayPreferences';
 import { LosslessUpgrades } from './LosslessUpgrades';
@@ -333,6 +334,7 @@ function PlaybackSection() {
         <SwitchRow label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
         <ActionRow label={t('settings.resetLearning')} onClick={resetLearning} />
       </SettingsGroup>
+      <PlaybackDiagnostics />
     </>
   );
 }

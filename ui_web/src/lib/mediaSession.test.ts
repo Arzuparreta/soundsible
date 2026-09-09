@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProgramMediaSession } from './mediaSession';
 import type { ProgramPlaybackSnapshot } from './audio';
 import type { Track } from '../types/music';
+import { playbackDiagnosticExport, startPlaybackDiagnostics, stopPlaybackDiagnostics } from './playbackDiagnostics';
 
 const track: Track = { id: 'one', title: 'One', artist: 'Artist', duration: 180 };
 
@@ -44,6 +45,18 @@ beforeEach(() => {
 });
 
 describe('programme Media Session projection', () => {
+  it('records the previous declaration before overwriting it with the expected state', () => {
+    const session = controls();
+    session.playbackState = 'paused';
+    startPlaybackDiagnostics({ variant: 'reference', ios: '999', connection: 'bluetooth' });
+    try {
+      new ProgramMediaSession().sync(track, snapshot(true), 'handoff_settled', true);
+      const rows = JSON.parse(playbackDiagnosticExport()).events;
+      expect(rows.find((row: { event: string }) => row.event === 'media_session.before_sync').declaredState).toBe('paused');
+      expect(rows.find((row: { event: string }) => row.event === 'media_session.after_sync').declaredState).toBe('playing');
+    } finally { stopPlaybackDiagnostics(); }
+  });
+
   it('publishes metadata, position and playback state from one snapshot', () => {
     const session = controls();
     const media = new ProgramMediaSession();
