@@ -48,6 +48,17 @@ export const fr: Dict = {
     soundsibleWeb: 'Soundsible Web',
   },
   nav: {
+    menu: "Menu",
+    yourMusic: "Votre musique",
+    explore: "Explorer",
+    application: "Application",
+    bottomBar: "Barre inférieure",
+    bottomBarHint: "Choisissez 3 à 5 destinations. Les changements concernent ce navigateur ou cette installation.",
+    position: "Position {position}",
+    addDestination: "Ajouter une destination",
+    removeDestination: "Retirer {name}",
+    restoreDefaults: "Rétablir les valeurs par défaut",
+
     more: 'Plus',
     mobile: 'Navigation principale',
     search: 'Rechercher',

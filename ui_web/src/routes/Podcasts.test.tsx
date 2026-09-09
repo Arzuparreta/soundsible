@@ -111,3 +111,6 @@ describe('Podcasts route search state', () => {
     await waitFor(() => expect(screen.queryByText('Old response')).not.toBeInTheDocument());
   });
 });
+
+// Navigation behavior is covered by the router integration and browser tests.
+vi.mock('../components/NavigationMenu', () => ({ NavigationMenuButton: () => null }));

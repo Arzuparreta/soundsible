@@ -93,3 +93,6 @@ describe('the playlists grid draws a cover whenever any song in the list has one
     expect(html).not.toContain('/cover/first');
   });
 });
+
+// Navigation behavior is covered by the router integration and browser tests.
+vi.mock('../components/NavigationMenu', () => ({ NavigationMenuButton: () => null }));

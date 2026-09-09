@@ -10,7 +10,7 @@ type OverlayRender = (close: (afterClose?: () => void) => void) => JSX.Element;
  * full screen on mobile, a fixed-size pane on desktop — for a surface that owns
  * its own header and scrollers, like settings.
  */
-type OverlayVariant = 'sheet' | 'window';
+type OverlayVariant = 'sheet' | 'window' | 'drawer';
 
 /**
  * A thunk keeps the accessible name live. It matters for anything that can be

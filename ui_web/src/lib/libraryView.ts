@@ -30,12 +30,6 @@ export const [librarySort, setLibrarySort] = persisted('library:sort', 'recent')
 export const [libraryTab, setLibraryTab] = persisted('library:tab', 'songs');
 export const [libraryFilter, setLibraryFilter] = persisted('library:filter', 'all');
 
-/** Mobile remembers Favourites without changing the desktop's three-view preference. */
-export const [mobileLibrarySection, setMobileLibrarySection] = persisted('library:mobileSection', 'library');
-export function mobileLibraryHref(): string {
-  return mobileLibrarySection() === 'favourites' ? '/favourites' : '/';
-}
-
 /* The album grid's own two preferences. Stored as text and read back through
  * the pure helpers in `albumBrowse.ts`, so a value written by an older release
  * — or by hand — resolves to something the grid can actually render instead of

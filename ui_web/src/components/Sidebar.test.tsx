@@ -2,7 +2,7 @@ import { fireEvent, render, within, waitFor } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setLocale } from '../lib/i18n';
-import styles from './Sidebar.module.css';
+import styles from './NavigationMenu.module.css';
 import { Sidebar } from './Sidebar';
 
 function renderSidebar() {
@@ -21,14 +21,15 @@ beforeEach(async () => {
 
 
 describe('desktop sidebar', () => {
-  it('uses the same five primary destinations and order as mobile', () => {
+  it('exposes the complete grouped navigation', () => {
     const view = renderSidebar();
     const groups = view.container.querySelectorAll('nav');
-
-    expect([...groups[0].children].map((item) => item.textContent?.trim()))
-      .toEqual(['Biblioteca', 'Buscar', 'Live', 'Listas', 'Ajustes']);
-    expect(within(groups[1] as HTMLElement).getAllByRole('link').map((link) => link.textContent?.trim()))
-      .toEqual(['Podcasts', 'Favoritos', 'Descargas']);
+    expect(within(groups[0]).getAllByRole('link').map(link => link.textContent?.trim()))
+      .toEqual(['Biblioteca', 'Canciones', 'Álbumes', 'Artistas', 'Favoritos', 'Listas']);
+    expect(within(groups[1]).getAllByRole('link').map(link => link.textContent?.trim()))
+      .toEqual(['Buscar', 'Podcasts', 'Live']);
+    expect(within(groups[2]).getAllByRole('link').map(link => link.textContent?.trim()))
+      .toEqual(['Descargas', 'Ajustes']);
   });
 
   it('navigates from a settings subroute back to its index', async () => {

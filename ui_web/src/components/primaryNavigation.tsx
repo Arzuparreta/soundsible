@@ -70,17 +70,6 @@ export const primaryNavigation: PrimaryNavItem[] = [
   },
 ];
 
-/** Same destinations and labels, different mobile priorities. */
-export const mobilePrimaryNavigation = primaryNavigation.filter((item) =>
-  ['/', '/search', '/playlists'].includes(item.href));
-
-export function mobileNavGroup(path: string): string {
-  if (['/favourites', '/library', '/'].includes(path) || /^\/(album|artist)\//.test(path)) return '/';
-  if (/^\/playlists(?:\/|$)/.test(path)) return '/playlists';
-  if (/^\/(podcasts|live|downloads|settings)(?:\/|$)/.test(path)) return 'more';
-  return path;
-}
-
 /** Library destinations reused by the desktop rail and mobile menus. */
 export const libraryShortcuts: PrimaryNavItem[] = [
   {
@@ -111,4 +100,16 @@ export const libraryShortcuts: PrimaryNavItem[] = [
       </svg>
     ),
   },
+];
+
+export const navigationItems = [...primaryNavigation, ...libraryShortcuts];
+export const defaultBottomNavigation = ['/', '/search', '/favourites', '/settings'];
+export function mobileNavGroup(path: string): string {
+  if (['/', '/library'].includes(path) || /^\/(album|artist)\//.test(path)) return '/';
+  return navigationItems.find(item => item.href !== '/' && (path === item.href || path.startsWith(`${item.href}/`)))?.href ?? path;
+}
+export const navigationGroups = [
+  { label: () => t('nav.yourMusic'), hrefs: ['/', '/favourites', '/playlists'] },
+  { label: () => t('nav.explore'), hrefs: ['/search', '/podcasts', '/live'] },
+  { label: () => t('nav.application'), hrefs: ['/downloads', '/settings'] },
 ];

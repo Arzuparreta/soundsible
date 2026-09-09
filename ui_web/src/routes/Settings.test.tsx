@@ -52,13 +52,12 @@ afterEach(() => setMediaQuery('(min-width: 1024px)', false));
 describe('integrated settings routes', () => {
   it('keeps navigation available through categories, back and forward', async () => {
     mount('/search');
-    fireEvent.click(screen.getByRole('button', { name: 'Más' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Ajustes' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Ajustes' }));
     await screen.findByRole('heading', { name: 'Ajustes' });
     fireEvent.click(screen.getByRole('button', { name: /Dispositivos/ }));
     await screen.findByRole('heading', { name: 'Dispositivos' });
     expect(window.location.hash).toBe('#/settings/devices');
-    expect(screen.getByRole('button', { name: 'Más' })).toHaveClass(tabStyles.active);
+    expect(screen.getByRole('link', { name: 'Ajustes' })).toHaveClass(tabStyles.active);
     expect(screen.queryByRole('dialog')).toBeNull();
     window.history.back();
     await screen.findByRole('heading', { name: 'Ajustes' });

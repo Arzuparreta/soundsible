@@ -37,7 +37,10 @@ export async function mockMusicEngine(page: Page) {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
   await page.addInitScript(() => {
-    localStorage.clear();
+    if (!sessionStorage.getItem('music-fixture-initialized')) {
+      localStorage.clear();
+      sessionStorage.setItem('music-fixture-initialized', 'true');
+    }
     localStorage.setItem('lang', 'es');
     localStorage.setItem('soundsible:interface-size', 'normal');
   });

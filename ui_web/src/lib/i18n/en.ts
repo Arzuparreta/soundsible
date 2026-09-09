@@ -48,6 +48,17 @@ export const en = {
     soundsibleWeb: 'Soundsible Web',
   },
   nav: {
+    menu: "Menu",
+    yourMusic: "Your music",
+    explore: "Explore",
+    application: "Application",
+    bottomBar: "Bottom bar",
+    bottomBarHint: "Choose 3–5 destinations. Changes apply to this browser or installation.",
+    position: "Position {position}",
+    addDestination: "Add destination",
+    removeDestination: "Remove {name}",
+    restoreDefaults: "Restore defaults",
+
     more: 'More',
     mobile: 'Main navigation',
     search: 'Search',

@@ -48,6 +48,17 @@ export const zh: Dict = {
     soundsibleWeb: 'Soundsible Web',
   },
   nav: {
+    menu: "菜单",
+    yourMusic: "你的音乐",
+    explore: "探索",
+    application: "应用",
+    bottomBar: "底部导航栏",
+    bottomBarHint: "选择 3–5 个目的地。更改仅应用于此浏览器或安装。",
+    position: "位置 {position}",
+    addDestination: "添加目的地",
+    removeDestination: "移除 {name}",
+    restoreDefaults: "恢复默认设置",
+
     more: '更多',
     mobile: '主导航',
     search: '搜索',

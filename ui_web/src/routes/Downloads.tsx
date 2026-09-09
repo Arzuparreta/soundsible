@@ -1,11 +1,11 @@
+import { registerPrimaryScroll } from '../lib/scrollHistory';
+import { NavigationMenuButton } from '../components/NavigationMenu';
 import { createMemo, For, Show, onMount, type JSX } from 'solid-js';
-import { useNavigate } from '@solidjs/router';
 import { state, actions, downloadCounts } from '../stores';
 import { t } from '../lib/i18n';
 import type { DownloadQueueItem } from '../types/download';
 import styles from './Downloads.module.css';
 import { coverStyle } from '../lib/cover';
-import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 
 function titleOf(i: DownloadQueueItem): string {
   return i.display_title || i.podcast_title || i.song_str || t('downloads.fallbackTitle');
@@ -64,7 +64,6 @@ const RANK: Record<string, number> = {
  * so only the changed row re-renders. Retry/remove/clear are optimistic.
  */
 export default function Downloads() {
-  const navigate = useNavigate();
   onMount(() => void actions.loadDownloads());
 
   const items = createMemo(() =>
@@ -76,11 +75,7 @@ export default function Downloads() {
   return (
     <div class="view">
       <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label={t('downloads.ariaBack')} onClick={() => navigateBackOr(navigate, '/')}>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
+        <NavigationMenuButton />
         <div class={styles.titleWrap}>
           <h1 class={styles.title}>{t('downloads.title')}</h1>
           <span class={styles.count}>

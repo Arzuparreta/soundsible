@@ -1,3 +1,4 @@
+import { BottomNavigationSettings } from './BottomNavigationSettings';
 import { createSignal, onMount, For, Show, type JSX } from 'solid-js';
 import { state, actions } from '../stores';
 import { api } from '../lib/api';
@@ -203,7 +204,7 @@ function themeLabel(theme: (typeof THEMES)[number]): string {
 
 function AppearanceSection() {
   return (
-    <SettingsGroup label={t('settings.appearance')} note={t('settings.note.theme')}>
+    <><SettingsGroup label={t('settings.appearance')} note={t('settings.note.theme')}>
       <SegmentedRow
         label={t('settings.theme')}
         options={THEMES.map((theme) => ({
@@ -221,7 +222,7 @@ function AppearanceSection() {
       >
         <For each={LOCALES}>{(l) => <option value={l.code}>{l.native}</option>}</For>
       </SelectRow>
-    </SettingsGroup>
+    </SettingsGroup><BottomNavigationSettings /></>
   );
 }
 
@@ -728,6 +729,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       t('settings.themeLight'),
       t('settings.themeSystem'),
       t('settings.language'),
+      t('nav.bottomBar'),
     ],
     content: () => <AppearanceSection />,
   },

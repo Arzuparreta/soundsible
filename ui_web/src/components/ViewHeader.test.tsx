@@ -23,3 +23,6 @@ describe('ViewHeader title', () => {
     expect(onTitleTap).toHaveBeenCalledOnce();
   });
 });
+
+// Navigation behavior is covered by the router integration and browser tests.
+vi.mock('./NavigationMenu', () => ({ NavigationMenuButton: () => null }));

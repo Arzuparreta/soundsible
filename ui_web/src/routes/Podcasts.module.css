@@ -1,4 +1,7 @@
 .bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
   padding: var(--space-lg) var(--gutter) var(--space-md);
 }

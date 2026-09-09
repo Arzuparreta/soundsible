@@ -201,3 +201,5 @@ describe('Migrate route', () => {
     expect(await screen.findByText('Moving your music')).toBeInTheDocument();
   });
 });
+
+vi.mock('../components/NavigationMenu', () => ({ NavigationMenuButton: () => null }));

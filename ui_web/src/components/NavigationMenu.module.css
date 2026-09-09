@@ -1,0 +1,15 @@
+.trigger, .close { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 44px; padding: 10px; background: none; border: 0; border-radius: var(--radius-sm); color: var(--ink-primary); cursor: pointer; }
+.trigger svg { width: 22px; height: 22px; }
+.close { font-size: 28px; }
+.drawer { padding: max(12px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)); }
+.head { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 12px; }
+.head strong { font-size: var(--text-h2); }
+.group { margin-bottom: 16px; }
+.group h2 { margin: 0; padding: 8px 12px; font-size: var(--text-caption); font-weight: var(--fw-medium); color: var(--ink-tertiary); }
+.item { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 12px; border-radius: var(--radius-sm); color: var(--ink-secondary); font-size: var(--text-body); text-decoration: none; overflow-wrap: anywhere; }
+.icon { display: inline-flex; flex: none; width: 21px; height: 21px; }
+.icon svg { width: 100%; height: 100%; }
+.active, .views .item[aria-current='page'] { background: var(--bg-raised); color: var(--accent-ink); }
+.views { margin: 4px 0 6px 20px; padding-left: 8px; border-left: 1px solid var(--hairline); }
+.badge { margin-left: auto; font-size: var(--text-caption); }
+@media (hover: hover) and (pointer: fine) { .item:hover, .trigger:hover, .close:hover { background: var(--bg-raised); } }

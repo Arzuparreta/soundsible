@@ -8,65 +8,73 @@ test.beforeEach(async ({ page }, info) => {
   await expect(page.locator('#startup-screen')).toHaveCount(0);
 });
 
-test('compact selector, favourites persistence, and explicit local search', async ({ page }) => {
-  const header = page.locator('[data-mobile-library-header]');
-  await expect(header.getByRole('button', { name: 'Canciones' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Mi biblioteca', exact: true })).toHaveCount(0);
+test('complete menu and independent favourites', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Navegación principal' });
   await expect(nav.locator(':scope > *')).toHaveCount(4);
-  await header.getByRole('button', { name: 'Canciones' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Biblioteca' });
-  await expect(sheet.getByRole('button', { name: 'Canciones', exact: true })).toHaveAttribute('aria-current', 'true');
-  await sheet.getByRole('button', { name: 'Álbumes', exact: true }).click();
-  await expect(header.getByRole('button', { name: 'Álbumes', exact: true })).toBeVisible();
-  await header.getByRole('button', { name: 'Álbumes', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Favoritos', exact: true }).click();
-  await expect(page).toHaveURL(/#\/favourites$/);
-  await expect(header.getByRole('button', { name: 'Favoritos' })).toBeVisible();
-  await expect(nav.getByRole('link', { name: 'Biblioteca' })).toHaveAttribute('aria-current', 'page');
-  await nav.getByRole('link', { name: 'Buscar', exact: true }).click();
-  await nav.getByRole('link', { name: 'Biblioteca', exact: true }).click();
-  await expect(header.getByRole('button', { name: 'Favoritos' })).toBeVisible();
-  await header.getByRole('button', { name: 'Favoritos' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Buscar en biblioteca' }).click();
-  await expect(page.getByRole('textbox', { name: 'Buscar canciones y artistas' })).toBeFocused();
+  await page.getByRole('button', { name: 'Menú', exact: true }).click();
+  const panel = page.getByRole('dialog', { name: 'Menú' });
+  await expect(panel.getByRole('link')).toHaveCount(11);
+  await page.screenshot({ animations: 'disabled', path: 'test-results/navigation-drawer.png' });
+  await panel.getByRole('link', { name: 'Álbumes', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Álbumes', exact: true })).toBeVisible();
+  await nav.getByRole('link', { name: 'Favoritos' }).click();
+  await expect(nav.getByRole('link', { name: 'Favoritos' })).toHaveAttribute('aria-current', 'page');
+  await nav.getByRole('link', { name: 'Biblioteca' }).click();
+  await expect(page.getByRole('heading', { name: 'Álbumes', exact: true })).toBeVisible();
 });
 
-test('More closes on Back and Escape, restores focus, and navigates without a phantom history entry', async ({ page }) => {
-  const more = page.getByRole('button', { name: 'Más', exact: true });
-  await more.click();
-  await expect(page.getByRole('dialog', { name: 'Más' })).toBeVisible();
+test('drawer closes on Back and Escape and restores focus', async ({ page }) => {
+  const menu = page.getByRole('button', { name: 'Menú', exact: true });
+  await menu.click();
+  await expect(page.getByRole('dialog')).toBeVisible();
   await page.goBack();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page).toHaveURL(/#\/$/);
-  await expect(more).toBeFocused();
-  await more.click();
+  await expect(menu).toBeFocused();
+  await menu.click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(more).toBeFocused();
-  await more.click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Descargas', exact: true }).click();
+  await expect(menu).toBeFocused();
+  await menu.click();
+  await page.getByRole('dialog').getByRole('link', { name: 'Descargas', exact: true }).click();
   await expect(page).toHaveURL(/#\/downloads$/);
-  await expect(more).toHaveAttribute('aria-current', 'page');
   await page.goBack();
   await expect(page).toHaveURL(/#\/$/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('local search can be left through the selector, and downloaded filtering stays visible and removable', async ({ page }) => {
+test('custom bar persists and settings remain accessible after removal', async ({ page }) => {
+  const nav = page.getByRole('navigation', { name: 'Navegación principal' });
+  await nav.getByRole('link', { name: 'Ajustes' }).click();
+  await page.getByRole('button', { name: /Apariencia/ }).click();
+  await expect(page.getByLabel('Posición 2')).toHaveValue('/search');
+  await page.getByLabel('Posición 4').selectOption('/live');
+  await expect(page.getByLabel('Posición 4')).toHaveValue('/live');
+  await page.getByRole('button', { name: 'Añadir destino' }).click();
+  await expect(nav.getByRole('link')).toHaveCount(5);
+  await page.screenshot({ animations: 'disabled', path: 'test-results/navigation-editor.png' });
+  await page.reload();
+  await expect(nav.getByRole('link')).toHaveCount(5);
+  await nav.getByRole('link', { name: 'Biblioteca' }).click();
+  await page.getByRole('button', { name: 'Menú', exact: true }).click();
+  await page.getByRole('dialog').getByRole('link', { name: 'Ajustes' }).click();
+  await page.getByRole('button', { name: /Apariencia/ }).click();
+  await page.getByRole('button', { name: 'Restablecer predeterminados' }).click();
+  await expect(nav.getByRole('link')).toHaveCount(4);
+  await expect(nav.getByRole('link', { name: 'Ajustes' })).toBeVisible();
+});
+
+test('local search and view switching keep filters usable', async ({ page }) => {
   const header = page.locator('[data-mobile-library-header]');
-  await header.getByRole('button', { name: 'Canciones', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Buscar en biblioteca' }).click();
+  await header.getByRole('button', { name: 'Buscar en biblioteca' }).click();
   const search = page.getByRole('textbox', { name: 'Buscar canciones y artistas' });
   await expect(search).toBeFocused();
   await search.fill('biblioteca 320');
-  await header.getByRole('button', { name: 'Canciones', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Artistas', exact: true }).click();
+  await header.getByRole('button', { name: 'Menú' }).click();
+  await page.getByRole('dialog').getByRole('link', { name: 'Artistas', exact: true }).click();
   await expect(search).toBeHidden();
-  await expect(header.getByRole('button', { name: 'Artistas', exact: true })).toBeVisible();
-  await header.getByRole('button', { name: 'Artistas', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Canciones', exact: true }).click();
-  await header.getByRole('button', { name: 'Ordenar biblioteca', exact: true }).click();
+  await header.getByRole('button', { name: 'Menú' }).click();
+  await page.getByRole('dialog').getByRole('link', { name: 'Canciones', exact: true }).click();
+  await header.getByRole('button', { name: 'Ordenar biblioteca' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Descargadas', exact: true }).click();
   const filter = page.getByRole('button', { name: 'Descargadas', exact: true });
   await expect(filter).toBeVisible();
@@ -74,32 +82,34 @@ test('local search can be left through the selector, and downloaded filtering st
   await expect(filter).toHaveCount(0);
 });
 
-test('the view selector is marked with a drawn chevron sitting on the title axis', async ({ page }) => {
-  const title = page.locator('[data-mobile-library-header] h1 button');
-  await expect(title.locator('svg')).toHaveCount(1);
-  for (const size of ['compact', 'normal', 'large']) {
-    await page.evaluate((size) => document.documentElement.dataset.interfaceSize = size, size);
-    // The drawing, not the box around it: the box is whatever the stylesheet
-    // asks for, while these are the proportions somebody actually sees.
-    const drawn = await title.evaluate((node) => {
-      const chevron = node.querySelector('svg path')!.getBoundingClientRect();
-      const label = node.querySelector('span')!.getBoundingClientRect();
-      return {
-        font: parseFloat(getComputedStyle(node).fontSize),
-        width: chevron.width,
-        ratio: chevron.height / chevron.width,
-        offset: (chevron.y + chevron.height / 2) - (label.y + label.height / 2),
-      };
-    });
-    // Scaled to the title it follows, and twice as wide as it is tall — a
-    // chevron, where the `⌄` glyph it replaced was a narrow, sharp mark.
-    expect(drawn.width / drawn.font).toBeGreaterThan(0.45);
-    expect(drawn.width / drawn.font).toBeLessThan(0.75);
-    expect(drawn.ratio).toBeGreaterThan(0.4);
-    expect(drawn.ratio).toBeLessThan(0.65);
-    // On the axis of the capitals, a hair above the middle of the line box.
-    expect(drawn.offset).toBeLessThan(0);
-    expect(Math.abs(drawn.offset)).toBeLessThan(drawn.font * 0.09);
+test('drawer traps focus and yields to desktop navigation on resize', async ({ page }) => {
+  await page.getByRole('button', { name: 'Menú', exact: true }).click();
+  const panel = page.getByRole('dialog', { name: 'Menú' });
+  await expect(panel.getByRole('button', { name: 'Cerrar', exact: true })).toBeFocused();
+  await expect(page.locator('#app')).toHaveAttribute('inert', '');
+  await page.keyboard.press('Shift+Tab');
+  await expect(panel.getByRole('link', { name: 'Ajustes', exact: true })).toBeFocused();
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await expect(panel).toHaveCount(0);
+  await expect(page.locator('#app')).not.toHaveAttribute('inert', '');
+  await expect(page.locator('aside').getByRole('link', { name: 'Ajustes', exact: true })).toBeVisible();
+});
+
+test('five custom destinations fit a narrow viewport and preserve order', async ({ page }) => {
+  await page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }).click();
+  await page.getByRole('button', { name: /Apariencia/ }).click();
+  await page.getByRole('button', { name: 'Añadir destino' }).click();
+  await page.getByLabel('Posición 1').selectOption('/settings');
+  await expect(page.getByLabel('Posición 4')).toHaveValue('/');
+  await page.setViewportSize({ width: 320, height: 700 });
+  const nav = page.getByRole('navigation', { name: 'Navegación principal' });
+  await expect(nav.getByRole('link').first()).toHaveText('Ajustes');
+  await expect(nav.getByRole('link')).toHaveCount(5);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  for (const link of await nav.getByRole('link').all()) {
+    const box = await link.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(320);
   }
 });
 

@@ -145,3 +145,6 @@ describe('settings shell on desktop', () => {
     expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument();
   });
 });
+
+// Navigation behavior is covered by the router integration and browser tests.
+vi.mock('./NavigationMenu', () => ({ NavigationMenuButton: () => null }));

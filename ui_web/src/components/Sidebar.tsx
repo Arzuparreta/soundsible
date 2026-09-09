@@ -1,34 +1,11 @@
-import { For, Show } from 'solid-js';
-import { A } from '@solidjs/router';
-import { downloadCounts } from '../stores';
-import { t } from '../lib/i18n';
-import { primaryNavigation, libraryShortcuts as shortcuts, type PrimaryNavItem } from './primaryNavigation';
+import { setLibraryTab } from '../lib/libraryView';
+import { NavigationLinks } from './NavigationMenu';
+import { A, useLocation, useNavigate } from '@solidjs/router';
 import styles from './Sidebar.module.css';
 
-function ItemBody(props: { item: PrimaryNavItem; badge?: number }) {
-  return (
-    <>
-      <span class={styles.icon}>{props.item.icon()}</span>
-      <span class={styles.label}>{props.item.label()}</span>
-      <Show when={props.badge}>
-        <span class={styles.badge}>{props.badge}</span>
-      </Show>
-    </>
-  );
-}
-
-function Item(props: { item: PrimaryNavItem; badge?: number }) {
-  return (
-    <A href={props.item.href} end={props.item.end} class={styles.item} activeClass={styles.active}>
-      <ItemBody item={props.item} badge={props.badge} />
-    </A>
-  );
-}
-
-/** Desktop-only left navigation rail. Its primary group is the exact same
- *  source as the mobile tab bar; only secondary library shortcuts are extra. */
 export function Sidebar() {
-  const active = () => downloadCounts().active;
+  const location = useLocation();
+  const navigate = useNavigate();
   return (
     <aside class={styles.sidebar}>
       <A href="/" end class={styles.brand}>
@@ -45,16 +22,7 @@ export function Sidebar() {
         <span class={styles.wordmark}>Soundsible</span>
       </A>
 
-      <nav class={styles.group}>
-        <For each={primaryNavigation}>{(item) => <Item item={item} />}</For>
-      </nav>
-
-      <p class={styles.heading}>{t('nav.shortcuts')}</p>
-      <nav class={styles.group}>
-        <For each={shortcuts}>
-          {(item) => <Item item={item} badge={item.href === '/downloads' ? active() : undefined} />}
-        </For>
-      </nav>
+      <NavigationLinks path={location.pathname} select={(href, view) => { if (view) setLibraryTab(view); navigate(href); }} />
 
       <div class={styles.spacer} />
     </aside>
