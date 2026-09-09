@@ -42,3 +42,25 @@ export function SourceIcon(props: { size?: number }) {
     </svg>
   );
 }
+
+/** Downward chevron — the "this title opens a menu" mark. Lucide's
+ * "chevron-down" (ISC): 45° arms with rounded joins, which reads as a control
+ * at text size where the sharper `⌄` glyph reads as a stray character and
+ * sits wherever its font decides. Unsized on purpose: the caller gives it an
+ * `em` box so it tracks the text it follows across the interface scales. */
+export function ChevronDownIcon(props: { class?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}

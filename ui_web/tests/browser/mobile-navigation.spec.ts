@@ -74,6 +74,35 @@ test('local search can be left through the selector, and downloaded filtering st
   await expect(filter).toHaveCount(0);
 });
 
+test('the view selector is marked with a drawn chevron sitting on the title axis', async ({ page }) => {
+  const title = page.locator('[data-mobile-library-header] h1 button');
+  await expect(title.locator('svg')).toHaveCount(1);
+  for (const size of ['compact', 'normal', 'large']) {
+    await page.evaluate((size) => document.documentElement.dataset.interfaceSize = size, size);
+    // The drawing, not the box around it: the box is whatever the stylesheet
+    // asks for, while these are the proportions somebody actually sees.
+    const drawn = await title.evaluate((node) => {
+      const chevron = node.querySelector('svg path')!.getBoundingClientRect();
+      const label = node.querySelector('span')!.getBoundingClientRect();
+      return {
+        font: parseFloat(getComputedStyle(node).fontSize),
+        width: chevron.width,
+        ratio: chevron.height / chevron.width,
+        offset: (chevron.y + chevron.height / 2) - (label.y + label.height / 2),
+      };
+    });
+    // Scaled to the title it follows, and twice as wide as it is tall — a
+    // chevron, where the `⌄` glyph it replaced was a narrow, sharp mark.
+    expect(drawn.width / drawn.font).toBeGreaterThan(0.45);
+    expect(drawn.width / drawn.font).toBeLessThan(0.75);
+    expect(drawn.ratio).toBeGreaterThan(0.4);
+    expect(drawn.ratio).toBeLessThan(0.65);
+    // On the axis of the capitals, a hair above the middle of the line box.
+    expect(drawn.offset).toBeLessThan(0);
+    expect(Math.abs(drawn.offset)).toBeLessThan(drawn.font * 0.09);
+  }
+});
+
 for (const width of [320, 390, 430]) {
   for (const size of ['compact', 'normal', 'large']) {
     test(`one header row and accessible controls at ${width}px, ${size}`, async ({ page }) => {

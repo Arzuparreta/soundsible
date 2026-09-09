@@ -3,6 +3,7 @@ import { useNavigate } from '@solidjs/router';
 import { t } from '../lib/i18n';
 import { libraryTab, setLibraryTab, setMobileLibrarySection } from '../lib/libraryView';
 import { openActionMenu } from './ActionMenu';
+import { ChevronDownIcon } from './icons';
 import styles from './MobileLibraryHeader.module.css';
 
 export function MobileLibraryHeader(props: { favourites?: boolean; onSearch?: () => void; onViewChange?: () => void; actions?: JSX.Element }) {
@@ -35,7 +36,7 @@ export function MobileLibraryHeader(props: { favourites?: boolean; onSearch?: ()
   return (
     <header class={styles.header} data-mobile-library-header>
       <h1><button type="button" onClick={(event) => { event.currentTarget.focus(); open(); }} aria-haspopup="dialog" data-pressable>
-        {label(current())}<span aria-hidden="true">⌄</span>
+        <span class={styles.label}>{label(current())}</span><ChevronDownIcon class={styles.chevron} />
       </button></h1>
       <div class={styles.actions}>{props.actions}</div>
     </header>

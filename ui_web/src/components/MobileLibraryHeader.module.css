@@ -10,7 +10,7 @@
 .header h1 button {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   max-width: 100%;
   min-height: var(--control-h);
   padding: 0;
@@ -21,7 +21,18 @@
   font-weight: var(--fw-bold);
   text-align: start;
 }
-.header h1 span { color: var(--ink-secondary); }
+.label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chevron {
+  flex: none;
+  /* Sized in `em` so it follows the title through the interface scales. The
+     drawing fills half its box, so 1.15em of box is ~0.58em of chevron. */
+  width: 1.15em;
+  height: 1.15em;
+  /* Flex centring lines the box up with the line box, whose middle sits below
+     the middle of the capitals; this puts the chevron back on their axis. */
+  transform: translateY(-0.045em);
+  color: var(--ink-secondary);
+}
 .actions { flex: none; display: flex; align-items: center; }
 .actions button {
   min-width: var(--control-h);
