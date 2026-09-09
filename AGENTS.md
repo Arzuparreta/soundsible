@@ -6,6 +6,21 @@
   explicitly asks to include other working-tree changes.
 - All work in Soundsible reaches `main` through a pull request from a branch —
   never commit to `main` directly.
+- Before opening any pull request, fetch its target branch from GitHub and
+  verify that the working branch contains that latest remote base. For the
+  usual `main` target, run `git fetch origin` followed by
+  `git merge-base --is-ancestor origin/main HEAD`. Use the actual remote and
+  target branch when they differ; a local `main` or an earlier fetch is not
+  evidence that the base is current. If the fetch fails or the ancestry check
+  fails, do not open the PR yet. Incorporate the updated base into the task
+  branch, resolve any conflicts without dropping either task's changes, run
+  the checks appropriate to the combined changes, commit as needed, and push.
+  Fetch and repeat the ancestry check immediately before `gh pr create`, and
+  ensure the PR's remote head matches the verified local `HEAD`. Do not rely
+  on CI to discover that the branch was already stale when the PR was opened.
+  The base can still advance afterward: repeat this check before merging and
+  after merging another PR into the same base; update and revalidate as needed
+  rather than bypassing GitHub's required checks.
 - Every pull request carries exactly one impact label, set when you open it:
   `gh pr create ... --label impact:minor`. It answers "what does merging this
   do to someone who upgrades?" — `major` they must act by hand, `minor` a new
