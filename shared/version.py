@@ -23,7 +23,7 @@ import os
 
 #: The version this source tree declares. Bump on release; CI overrides it with
 #: the git tag for anything it publishes.
-VERSION = "0.6.4"
+VERSION = "0.7.0"
 
 __version__ = VERSION
 
