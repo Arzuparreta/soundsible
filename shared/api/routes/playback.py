@@ -1096,6 +1096,36 @@ def playback_get_state():
     return jsonify(state)
 
 
+@playback_bp.route("/api/playback/trace", methods=["POST"])
+@require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
+@rate_limit("playback_trace", limit=90, window_sec=60)
+def playback_trace():
+    import json
+
+    from shared.playback_trace import MAX_BODY, save_batch, validate_batch
+    from shared.telemetry import is_telemetry_enabled, user_telemetry_dir
+    from shared.user_context import current_user_id
+
+    # Enforce a bounded body even for chunked/unknown-length requests.
+    if request.content_length is not None and request.content_length > MAX_BODY:
+        return jsonify({"error": "trace too large"}), 413
+    raw = request.stream.read(MAX_BODY + 1)
+    if len(raw) > MAX_BODY:
+        return jsonify({"error": "trace too large"}), 413
+    try:
+        batch = validate_batch(json.loads(raw), current_user_id())
+    except (ValueError, TypeError):
+        return jsonify({"error": "invalid playback trace"}), 400
+    enabled = is_telemetry_enabled()
+    if enabled:
+        try:
+            save_batch(batch, user_telemetry_dir())
+        except Exception:
+            logger.exception("Playback trace persistence failed")
+            return jsonify({"error": "trace storage unavailable"}), 503
+    return jsonify({"id": batch["id"], "enabled": enabled})
+
+
 @playback_bp.route("/api/playback/play-timing", methods=["POST"])
 @require_scope(SCOPE_PLAYBACK_CONTROL, allow_trusted_network=True)
 @rate_limit("playback_play_timing", limit=120, window_sec=60)

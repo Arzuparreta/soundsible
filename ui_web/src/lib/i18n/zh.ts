@@ -1,25 +1,6 @@
 import type { Dict } from './en';
 
 export const zh: Dict = {
-  playbackDiagnostic: {
-    title: "车载播放诊断",
-    note: "实验性本地记录。重新加载或开始新记录前请导出。打开手机可能影响故障；标记表示报告时间，而非故障开始时间。",
-    variant: "测试",
-    reference: "基准",
-    delayed: "延迟停止（8 秒）",
-    excluded: "静音后停止",
-    ios: "准确的 iOS 版本",
-    connection: "车载连接",
-    other: "其他",
-    start: "开始新记录",
-    startHint: "请先暂停播放。新记录将替换旧记录。",
-    stop: "暂停并结束记录",
-    failure: "标记播放状态错误",
-    volumeFailure: "标记音量控制失效",
-    recovered: "标记控制已恢复",
-    events: "保留 / 丢失的事件",
-    export: "导出记录",
-  },
   musicExplorer: {
     title: '音乐',
     explore: '探索',

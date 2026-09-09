@@ -91,16 +91,23 @@ opaque `attempt_id`. They may include:
   booleans recording whether carrier/source state agreed. Track titles, artist,
   artwork URLs and other metadata are never written to telemetry.
 
-An optional **Car playback diagnosis** capture in Settings → Playback is separate
-from server telemetry. It keeps at most 4,096 events in this page's memory, with
-explicit counts for overwritten or unrecordable events. It records media state,
-client timing/sequence, operation outcomes, a random capture ID, the entered iOS
-version and connection, the selected experiment, and the UI source fingerprint.
-It records no audio, titles, artwork, source URLs, account IDs or credentials and
-does not upload the capture. Export explicitly downloads a JSON file. Starting
-another capture or reloading discards the previous in-memory data. Ordinary
-server telemetry continues unchanged. See [the protocol](PLAYBACK_DIAGNOSIS.md)
-for what these observations can and cannot prove.
+Playback diagnostics start automatically with the authenticated player. They
+record browser media state, timing, source/carrier identifiers, device ID, source
+fingerprint, reported platform and transport operations. They do not include
+track titles, media URLs, artwork, audio, credentials, or the car's display.
+
+Unacknowledged batches are held in account-partitioned IndexedDB for retry after
+an offline trip or reload (pruned each delivery cycle to 16 MiB / 8,192 batches / seven days). If browser
+storage fails, bounded memory is used instead. The instance stores validated,
+deduplicated batches in each user's `telemetry/playback-traces.sqlite3`, capped at
+64 MiB of payload / 32,768 batches / seven days. SQLite indexes and reusable pages
+add some filesystem overhead. This data only goes to the user's Soundsible
+instance, with its existing authentication; it is not sent to a third party.
+
+The existing `SOUNDSIBLE_TELEMETRY_ENABLED=0` switch disables server persistence;
+the response stops automatic collection and clears the page's pending account
+outbox. See [PLAYBACK_DIAGNOSIS.md](PLAYBACK_DIAGNOSIS.md) for limits and the
+operator's report command. The listener need not activate or export anything.
 
 Buffering before the first sound and buffering after it are recorded as separate
 fields. They used to be one counter emitted at the moment of first sound, where

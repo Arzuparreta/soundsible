@@ -1,25 +1,6 @@
 import type { Dict } from './en';
 
 export const es: Dict = {
-  playbackDiagnostic: {
-    title: "Diagnóstico de reproducción en el coche",
-    note: "Captura experimental y local. Exporta antes de recargar o empezar otra captura. Abrir el móvil puede afectar al fallo; las marcas indican cuándo lo comunicas, no cuándo empezó.",
-    variant: "Prueba",
-    reference: "Referencia",
-    delayed: "Retirada diferida (8 s)",
-    excluded: "Retirada silenciada",
-    ios: "Versión exacta de iOS",
-    connection: "Conexión con el coche",
-    other: "Otra",
-    start: "Iniciar nueva captura",
-    startHint: "Pausa la reproducción primero. Una nueva captura sustituye la anterior.",
-    stop: "Pausar y finalizar captura",
-    failure: "Marcar estado de reproducción incorrecto",
-    volumeFailure: "Marcar fallo de los controles de volumen",
-    recovered: "Marcar controles recuperados",
-    events: "Eventos conservados / perdidos",
-    export: "Exportar captura",
-  },
   musicExplorer: {
     title: 'Música',
     explore: 'Explorar',
