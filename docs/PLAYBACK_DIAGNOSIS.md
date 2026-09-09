@@ -1,6 +1,6 @@
 # Automatic iPhone / car playback evidence
 
-Status: candidate iOS output correction, **not a device-verified fix**. Collection remains automatic. Neither a successful `play()` nor `playbackState=playing`
+Status: candidate iOS output and source-retirement correction, **not a device-verified fix**. Collection remains automatic. Neither a successful `play()` nor `playbackState=playing`
 proves what Now Playing, CarPlay or the head unit displays, or that sound reaches
 the speakers. Device acceptance is still required.
 
@@ -33,6 +33,15 @@ Gestures cannot switch intentional direct output back to the carrier. The Live
 stream tap remains independent, upstream of local volume and mute. Other
 platforms retain their carrier path.
 
+Source eligibility is tracked independently of gain: empty, staged and retired
+decks stay muted; an incoming deck is unmuted before play, including zero-gain
+preroll. Both sources participate during a blend. Retirement mutes before
+pausing, while the canonical paused source remains eligible for resume. Volume
+changes and completion of an old unlock sample cannot unmute an idle source.
+Settled source operations and inactive native events trigger a coalesced
+microtask publication of canonical state, including in the background. This
+does not issue play commands or claim ownership of iOS's selected element.
+
 Physical acceptance requires matched songs on the same iPhone/car: at least
 five minutes of steady playback without periodic pitch dips, multiple automatic
 and manual transitions in foreground and with the screen locked, car pause/play,
@@ -49,8 +58,8 @@ resume at 22:30:48–49. These are server receipt times, not client execution ti
 The inactive-play event's `media_session` origin is inferred by the existing
 code, not proof of a remote command.
 
-The source deck being retired is paused but left unmuted; preload and volume
-operations also leave idle elements unmuted. WebKit can select one of these
+Before this correction the source being retired was paused but left unmuted;
+preload and volume operations also left idle elements unmuted. WebKit can select one of these
 elements for platform controls even though the mixed carrier stays playing.
 Its candidate comparator includes user-interaction recency; it does not always
 prefer the playing element. Metadata and the selected element's playing state

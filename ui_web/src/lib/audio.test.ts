@@ -198,9 +198,7 @@ function callbacks() {
 async function armed() {
   const module = await import('./audio');
   const outgoing = module.audioEl() as unknown as FakeAudio;
-  outgoing.src = '/current';
-  outgoing.currentSrc = '/current';
-  outgoing.paused = false;
+  await module.audioService.load('/current', 1);
   outgoing.currentTime = 100;
   const handlers = callbacks();
   module.audioService.armTransition('/next', plan, handlers, { level: 1 });
@@ -251,6 +249,51 @@ afterEach(() => {
 });
 
 describe('two-deck mixer', () => {
+  it.each([false, true])('keeps idle sources muted through volume, reuse and hidden retirement (graph=%s)', async (graph) => {
+    if (graph) vi.stubGlobal('AudioContext', FakeAudioContext);
+    vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    await module.audioService.load('/first', 1);
+    const first = module.audioEl() as unknown as FakeAudio;
+    module.audioService.stage('/second', 1);
+    const second = created.find((deck) => deck !== first)!;
+    module.audioService.setMuted(true);
+    module.audioService.setMuted(false);
+    module.audioService.setVolume(0.5);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(first.muted).toBe(false);
+    expect(second.muted).toBe(true);
+
+    const order: string[] = [];
+    first.addEventListener('pause', () => order.push(first.muted ? 'muted pause' : 'unmuted pause'));
+    module.onProgramEvent('sourcesettled', (snapshot) => order.push(`settled ${snapshot.playing}`));
+    hide();
+    await module.audioService.takeStaged('/second', 1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(order[0]).toBe('muted pause');
+    expect(order.at(-1)).toBe('settled true');
+    expect(first.muted).toBe(true);
+    expect(second.muted).toBe(false);
+    expect(first.src).toBe('/first'); // deferred unload stays ineligible
+    module.audioService.stage('/third', 1);
+    reveal();
+    expect(first.src).toBe('/third'); // no stale deferred cleanup
+    expect(first.muted).toBe(true);
+    module.audioService.pause('media_session');
+    expect(second.muted).toBe(false); // current paused track remains resumable
+    await module.audioService.resume('media_session');
+    await module.audioService.takeStaged('/third', 1);
+    expect(first.muted).toBe(false);
+    expect(second.muted).toBe(true);
+    module.audioService.stop();
+    expect(created.every((deck) => deck.muted)).toBe(true);
+    module.audioService.prime('/restored', 10, 1);
+    expect(module.audioEl().muted).toBe(false);
+    expect(module.audioEl().paused).toBe(true);
+    module.audioService.setVolume(1);
+  });
+
   it('keeps iPhone playback and Live independent with direct device output', async () => {
     vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
     vi.stubGlobal('AudioContext', FakeAudioContext);
@@ -285,6 +328,7 @@ describe('two-deck mixer', () => {
     const module = await import('./audio');
 
     expect(module.audioService.unlockAudio()).toBe(true);
+    await module.audioService.load('/current', 1);
     const carrierTrack = contexts[0].mediaTracks[0];
     const stream = module.audioService.broadcastStream();
     expect(stream).not.toBeNull();
@@ -295,7 +339,8 @@ describe('two-deck mixer', () => {
     expect(context.gains[1].gain.value).toBe(0.35);
     module.audioService.setMuted(true);
     expect(context.gains[1].gain.value).toBe(0);
-    expect(created.every((deck) => !deck.muted)).toBe(true);
+    expect(module.audioEl().muted).toBe(false);
+    expect(created[1].muted).toBe(true);
     expect(context.broadcastTrack.stop).not.toHaveBeenCalled();
 
     module.audioService.releaseBroadcastStream();
@@ -399,6 +444,8 @@ describe('two-deck mixer', () => {
   it('pauses on the incoming deck after dominance and never revives the old song', async () => {
     const { audioEl, audioService, outgoing, incoming } = await armed();
     await play(outgoing, 108.5);
+    expect(incoming.muted).toBe(false); // zero-gain preroll still participates
+    expect(outgoing.muted).toBe(false);
     incoming.currentTime = 2;
     await play(outgoing, 110);
     await play(incoming, 4);
@@ -409,6 +456,8 @@ describe('two-deck mixer', () => {
     expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
     expect(outgoing.src).toBe('');
     expect(incoming.paused).toBe(true);
+    expect(incoming.muted).toBe(false);
+    expect(outgoing.muted).toBe(true);
 
     const outgoingStarts = outgoing.play.mock.calls.length;
     await audioService.resume('media_session');
@@ -523,10 +572,10 @@ describe('two-deck mixer', () => {
     }
 
     await vi.advanceTimersByTimeAsync(0);
-    // …and each gives its stream straight back, unmuted and empty.
+    // …and each gives its stream back, empty and ineligible for controls.
     for (const deck of created) {
       expect(deck.src).toBe('');
-      expect(deck.muted).toBe(false);
+      expect(deck.muted).toBe(true);
     }
   });
 
@@ -539,6 +588,20 @@ describe('two-deck mixer', () => {
     const active = module.audioEl() as unknown as FakeAudio;
     expect(active.src).toBe('/current');
     expect(active.paused).toBe(false);
+    expect(active.muted).toBe(false);
+  });
+
+  it('does not carry an unresolved unlock into a paused preload', async () => {
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    module.audioService.stage('/next', 1);
+    const idle = created[1];
+    await vi.advanceTimersByTimeAsync(0);
+    expect(idle.src).toBe('/next');
+    expect(idle.paused).toBe(true);
+    expect(idle.muted).toBe(true);
+    module.audioService.setMuted(false);
+    expect(idle.muted).toBe(true);
   });
 
   it('keeps a staged deck so the next track starts without a request', async () => {

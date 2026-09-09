@@ -4263,6 +4263,11 @@ export function initStore(): void {
     type: ProgramMediaEventName,
     handler: (snapshot: ProgramPlaybackSnapshot, event: Event) => void,
   ) => onProgramEvent(type, handler) };
+  a.addEventListener('sourcesettled', () => {
+    // Retiring/preloading a source can change WebKit's selected media element.
+    // Reconcile after ownership changes, even while hidden, without play().
+    updateMediaSession(state.playback.currentTrack, 'sources_settled');
+  });
   a.addEventListener('play', () => {
     setState('playback', 'isPlaying', true);
     pushPlaybackState();
