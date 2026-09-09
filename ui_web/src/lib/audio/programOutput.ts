@@ -1,8 +1,9 @@
 import { diagnosticPause, diagnosticPlay, diagnosticSource, observeDiagnosticMedia } from '../playbackDiagnostics';
 
-export type ProgramOutputMode = 'carrier' | 'direct_fallback';
+export type ProgramOutputMode = 'carrier' | 'direct' | 'direct_fallback';
 
 export type ProgramOutputEventName =
+  | 'direct_attached'
   | 'carrier_attached'
   | 'carrier_playing'
   | 'carrier_paused'
@@ -25,12 +26,21 @@ export interface ProgramOutputEvent extends ProgramOutputSnapshot {
 
 type OutputListener = (event: ProgramOutputEvent) => void;
 
+/** iPadOS can advertise itself as a Mac in both Safari and installed PWAs. */
+function prefersDirectOutput(): boolean {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 /**
- * Stable media element carrying Soundsible's mixed output.
+ * Device output after the mix and local volume control.
  *
  * Source decks remain HTML media elements because they provide progressive
  * network decoding and feed Web Audio. The carrier stays the same object for
  * the graph lifetime, but WebKit may still select a source deck for Now Playing.
+ * iOS uses the context destination directly: a MediaStream carrier introduces
+ * another clock and WebKit's adaptive resampling can audibly change its pitch
+ * with Bluetooth output. Live's separate stream tap is unaffected.
  * Stable audio routing does not establish ownership of the platform controls.
  */
 export class ProgramOutput {
@@ -40,6 +50,7 @@ export class ProgramOutput {
   private directConnected = false;
   private listeners = new Set<OutputListener>();
   private stopObserving: (() => void) | null = null;
+  private initialized = false;
 
   constructor(
     private readonly context: AudioContext,
@@ -47,6 +58,15 @@ export class ProgramOutput {
   ) {}
 
   initialize(): ProgramOutputMode {
+    if (this.initialized) return this.mode;
+    this.initialized = true;
+    if (prefersDirectOutput()) {
+      this.monitor.connect(this.context.destination);
+      this.directConnected = true;
+      this.mode = 'direct';
+      this.emit('direct_attached');
+      return this.mode;
+    }
     try {
       if (typeof this.context.createMediaStreamDestination !== 'function') {
         throw new Error('media_stream_destination_unavailable');
@@ -136,6 +156,11 @@ export class ProgramOutput {
       diagnosticSource(carrier, () => { carrier.srcObject = null; });
     }
     for (const track of this.destination?.stream.getTracks() ?? []) track.stop();
+    if (this.directConnected) {
+      this.monitor.disconnect(this.context.destination);
+      this.directConnected = false;
+    }
+    if (this.destination) this.monitor.disconnect(this.destination);
     this.listeners.clear();
     this.carrier = null;
     this.stopObserving?.();

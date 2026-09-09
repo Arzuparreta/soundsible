@@ -117,3 +117,41 @@ def test_operator_report_orders_offline_delivery_and_exposes_gaps(tmp_path):
     assert 'missing-sequences=1' in result
     assert result.index('#1 ') < result.index('#3 ')
     assert 'NOT an acknowledgement' in result
+
+
+def clock_rows():
+    return [dict(sequence=i + 1, elapsedMs=i * 5000, event='media.timeupdate',
+                 facts={'node': 'deck-1'}, visibility='visible', declaredState='playing',
+                 program=dict(activeIndex=0, contextState='running', mixPhase='idle', outputMode='direct', contextTime=i * 4.983),
+                 media=[dict(id='deck-1', deckIndex=0, paused=False, sourceKind='track', rate=1, position=i * 5)])
+            for i in range(4)]
+
+
+def test_clock_report_measures_stable_drift_without_carrier(tmp_path):
+    from scripts.playback_trace_report import report
+    batch = sample()
+    batch['events'] = clock_rows()
+    save_batch(validate_batch(batch, TEST_USER_ID), tmp_path)
+    result = report(tmp_path / 'playback-traces.sqlite3')
+    assert 'Clocks mode=direct visibility=visible intervals=3' in result
+    assert 'context/wall=0.996600 source/wall=1.000000 context-drift=-0.340%' in result
+    assert 'not measured audible pitch' in result
+
+
+@pytest.mark.parametrize('interrupt', [
+    lambda r: r.update(event='media.seeking'),
+    lambda r: r.update(event='call.play'),
+    lambda r: r.update(declaredState='paused'),
+    lambda r: r.update(visibility='hidden'),
+    lambda r: r['program'].update(mixPhase='crossfading'),
+    lambda r: r['program'].update(contextState='suspended'),
+    lambda r: r['program'].update(activeIndex=1),
+    lambda r: r['media'][0].update(rate=1.05),
+    lambda r: r['media'][0].update(position=70),
+    lambda r: r.update(sequence=9),
+])
+def test_clock_report_does_not_bridge_interruptions(interrupt):
+    from scripts.playback_trace_report import clock_comparison
+    rows = clock_rows()
+    interrupt(rows[1])
+    assert clock_comparison(rows) == []

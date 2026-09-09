@@ -123,6 +123,7 @@ class FakeCapturedStream extends EventTarget {
 }
 
 class FakeAudio extends EventTarget {
+  buffered = { length: 0, end: () => 0 };
   src = '';
   currentSrc = '';
   currentTime = 0;
@@ -250,6 +251,35 @@ afterEach(() => {
 });
 
 describe('two-deck mixer', () => {
+  it('keeps iPhone playback and Live independent with direct device output', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    await module.audioService.load('/current', 1);
+    expect(created).toHaveLength(2);
+    expect(contexts[0].mediaTracks).toHaveLength(0);
+    expect(module.programPlaybackSnapshot()).toMatchObject({ outputMode: 'direct', playing: true, carrierPlaying: false });
+    const capture = module.audioService.acquireBroadcastCapture();
+    expect(capture?.kind).toBe('program');
+    expect(contexts[0].mediaTracks).toHaveLength(1);
+    module.audioService.setVolume(0.35);
+    module.audioService.setMuted(true);
+    expect(contexts[0].gains[0].gain.value).toBe(1);
+    expect(contexts[0].gains[1].gain.value).toBe(0);
+    module.audioService.setMuted(false);
+    module.audioService.pause();
+    expect(module.programPlaybackSnapshot().playing).toBe(false);
+    await module.audioService.resume();
+    module.audioService.unlockAudio();
+    expect(created).toHaveLength(2);
+    expect(module.programPlaybackSnapshot()).toMatchObject({ outputMode: 'direct', playing: true });
+    module.audioService.releaseBroadcastStream();
+    expect(contexts[0].broadcastTrack.stop).toHaveBeenCalledOnce();
+    expect(module.programPlaybackSnapshot().playing).toBe(true);
+    module.audioService.setVolume(1);
+  });
+
   it('keeps local mute and volume downstream from the live program tap', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');

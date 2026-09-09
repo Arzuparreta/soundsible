@@ -39,10 +39,35 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('stable programme output', () => {
+  it.each([
+    ['iPhone', 'iPhone', 5],
+    ['iPad', 'iPad', 5],
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X)', 'MacIntel', 5],
+  ])('uses direct output on %s without creating or retrying a carrier', async (userAgent, platform, maxTouchPoints) => {
+    vi.stubGlobal('navigator', { userAgent, platform, maxTouchPoints });
+    const { output, context, monitor, events } = fixture();
+    expect(output.initialize()).toBe('direct');
+    expect(output.initialize()).toBe('direct');
+    await output.play();
+    output.pause();
+    expect(await output.retryFromGesture(true)).toBe(false);
+    expect(context.createMediaStreamDestination).not.toHaveBeenCalled();
+    expect(monitor.connect).toHaveBeenCalledExactlyOnceWith(context.destination);
+    expect(events).toEqual(['direct_attached']);
+    expect(output.snapshot()).toMatchObject({ mode: 'direct', carrierPlaying: false });
+    output.destroy();
+    expect(monitor.disconnect).toHaveBeenCalledExactlyOnceWith(context.destination);
+  });
+
+  it('retains the carrier for desktop Macs', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Macintosh', platform: 'MacIntel', maxTouchPoints: 0 });
+    expect(fixture().output.initialize()).toBe('carrier');
+  });
   it('keeps one carrier through play and pause and reports its real state', async () => {
     const { output, context, monitor, events } = fixture();
 

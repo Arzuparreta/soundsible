@@ -1,10 +1,45 @@
 # Automatic iPhone / car playback evidence
 
-Status: diagnostic implementation, **not a verified fix**. Collection is automatic and passive; transport behavior is unchanged. Neither a successful `play()` nor `playbackState=playing`
+Status: candidate iOS output correction, **not a device-verified fix**. Collection remains automatic. Neither a successful `play()` nor `playbackState=playing`
 proves what Now Playing, CarPlay or the head unit displays, or that sound reaches
 the speakers. Device acceptance is still required.
 
 ## Evidence and hypothesis
+
+The September 9 trip confirmed by the listener (21:14–21:20 Europe/Madrid)
+has 548 received events, no internal sequence gaps and no reported loss. All
+recorded media rates are one. At 21:17:34, pausing the outgoing source changes
+the observed Media Session declaration from playing to paused; the incoming
+source and carrier keep playing. The application republishes playing about
+41 ms later. This measures browser observations, not the head unit's delay.
+
+During 33 stable foreground intervals, the context/wall clock median is
+0.996618, while source and carrier positions advance at approximately one
+second per second. Two other iPhone sessions and desktop sessions have medians
+near one. The listener reports normal sound outside the car; the browser does
+not identify the physical output route.
+
+WebKit's [AudioSampleDataConverter](https://github.com/WebKit/WebKit/blob/ca3a9f205bcecd15c9d2ed0680acc25b56785109/Source/WebCore/platform/audio/cocoa/AudioSampleDataConverter.mm)
+adapts a low buffer with 1.05 output resampling, entering at 20 ms and leaving
+above 60 ms. With the observed clock ratio, a simplified buffer model predicts
+11.8 seconds of normal playback and 0.86 seconds of correction. This closely
+matches the reported periodic slowdown/pitch drop, but does not establish the
+exact WebKit build or converter activity on the phone.
+
+The candidate removes the MediaStream carrier from iOS/iPadOS device output:
+the mixed monitor connects directly to the AudioContext destination. The
+reported mode is `direct`, distinct from a carrier failure's `direct_fallback`.
+Gestures cannot switch intentional direct output back to the carrier. The Live
+stream tap remains independent, upstream of local volume and mute. Other
+platforms retain their carrier path.
+
+Physical acceptance requires matched songs on the same iPhone/car: at least
+five minutes of steady playback without periodic pitch dips, multiple automatic
+and manual transitions in foreground and with the screen locked, car pause/play,
+and correct title/state without unlocking. Compare the reference and candidate;
+do not equate an improved clock ratio or passing tests with audible acceptance.
+
+### Earlier evidence
 
 The September 8 trip window (21:30–23:00 Europe/Madrid) contains 325 server
 telemetry records, including 14 completed PWA handoffs. All handoff projections
@@ -81,6 +116,11 @@ python scripts/playback_trace_report.py /path/to/user/telemetry/playback-traces.
 
 The report groups captures/device/revision, prints loss and sequence gaps, and
 extracts two seconds before / ten seconds after handoffs and transport commands.
+It also compares context and source clocks against client monotonic time in
+stable intervals, grouped by output mode and visibility. It excludes observed
+transport operations, pauses, seeks, rate changes, transitions and sequence
+gaps. At least three usable intervals are required; a clock ratio is not a
+measurement of audible pitch. This works with both direct and carrier output.
 It also identifies declared non-playing state while media position advances.
 That flag is an observation for investigation: seeking or an inactive source can
 also advance position. It is not proof of the car's state or audible output.
