@@ -2,40 +2,8 @@ import { For, Show } from 'solid-js';
 import { A } from '@solidjs/router';
 import { downloadCounts } from '../stores';
 import { t } from '../lib/i18n';
-import { primaryNavigation, type PrimaryNavItem } from './primaryNavigation';
+import { primaryNavigation, libraryShortcuts as shortcuts, type PrimaryNavItem } from './primaryNavigation';
 import styles from './Sidebar.module.css';
-
-/** Secondary library shortcuts shared by the desktop rail only. */
-const shortcuts: PrimaryNavItem[] = [
-  {
-    href: '/podcasts',
-    label: () => t('nav.podcasts'),
-    icon: () => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="11" r="1" />
-        <path d="M17.7 17.7A8 8 0 1012 20v-5M15.5 14.5a5 5 0 10-7 0" />
-      </svg>
-    ),
-  },
-  {
-    href: '/favourites',
-    label: () => t('nav.favourites'),
-    icon: () => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" />
-      </svg>
-    ),
-  },
-  {
-    href: '/downloads',
-    label: () => t('nav.downloads'),
-    icon: () => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" />
-      </svg>
-    ),
-  },
-];
 
 function ItemBody(props: { item: PrimaryNavItem; badge?: number }) {
   return (

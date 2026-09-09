@@ -1,5 +1,8 @@
-import { createMemo } from 'solid-js';
+import { createMemo, createSignal, onMount, onCleanup, Show } from 'solid-js';
 import { actions, favouriteRows, state } from '../stores';
+import { MobileLibraryHeader } from '../components/MobileLibraryHeader';
+import { setMobileLibrarySection } from '../lib/libraryView';
+import { openActionMenu } from '../components/ActionMenu';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import { trackCount } from '../lib/format';
@@ -25,6 +28,14 @@ const context = () => ({ id: 'favourites', kind: 'favourites' as const, label: t
  * they live under their own section.
  */
 export default function Favourites() {
+  const [isMobile, setIsMobile] = createSignal(window.matchMedia('(max-width: 1023px)').matches);
+  onMount(() => {
+    setMobileLibrarySection('favourites');
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const change = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', change);
+    onCleanup(() => mq.removeEventListener('change', change));
+  });
   const rows = createMemo(() => favouriteRows().filter((row) => !isPodcastTrack(row.track)));
   const favTracks = createMemo<Track[]>(() => rows().map((row) => row.track));
 
@@ -59,6 +70,7 @@ export default function Favourites() {
 
   return (
     <div class="view">
+      <Show when={isMobile()} fallback={
       <ViewHeader
         title={t('favourites.title')}
         meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
@@ -68,6 +80,17 @@ export default function Favourites() {
           </Button>
         ) : undefined}
       />
+      }>
+        <MobileLibraryHeader favourites actions={
+          <Show when={state.autoMode.active}>
+            <button type="button" aria-label={t('nav.more')} aria-haspopup="dialog" onClick={() => openActionMenu({
+              title: t('nav.favourites'),
+              actions: [{ label: t('autoMode.source.add'), disabled: favTracks().length === 0,
+                onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) }],
+            })}>⋯</button>
+          </Show>
+        } />
+      </Show>
       <TrackList
         tracks={favTracks()}
         context={context()}

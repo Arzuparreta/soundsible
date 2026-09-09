@@ -2,7 +2,7 @@ import { createSignal, For, onCleanup, onMount, type JSX, type Component } from 
 import { Portal } from 'solid-js/web';
 import styles from './overlay.module.css';
 
-type OverlayRender = (close: () => void) => JSX.Element;
+type OverlayRender = (close: (afterClose?: () => void) => void) => JSX.Element;
 
 /**
  * `sheet` is the default surface: a bottom sheet on mobile, a centred card on
@@ -27,6 +27,8 @@ interface OverlayEntry {
   variant: OverlayVariant;
   ariaLabel?: OverlayLabel;
   returnFocus?: HTMLElement | null;
+  historyBack?: (afterClose?: () => void) => void;
+  cleanup?: () => void;
 }
 
 function labelOf(label: OverlayLabel | undefined): string | undefined {
@@ -36,10 +38,19 @@ function labelOf(label: OverlayLabel | undefined): string | undefined {
 const [overlays, setOverlays] = createSignal<OverlayEntry[]>([]);
 let nextId = 1;
 
-function remove(id: number) {
+function remove(id: number, afterClose?: () => void) {
   const entry = overlays().find((overlay) => overlay.id === id);
+  if (!entry) return;
+  if (entry.historyBack) {
+    entry.historyBack(afterClose);
+    return;
+  }
+  entry.cleanup?.();
   setOverlays((list) => list.filter((o) => o.id !== id));
-  queueMicrotask(() => entry?.returnFocus?.focus());
+  queueMicrotask(() => {
+    entry.returnFocus?.focus();
+    afterClose?.();
+  });
 }
 
 /**
@@ -51,7 +62,7 @@ function remove(id: number) {
  */
 export function openOverlay(
   render: OverlayRender,
-  opts: { dismissable?: boolean; ariaLabel?: OverlayLabel; variant?: OverlayVariant } = {},
+  opts: { dismissable?: boolean; ariaLabel?: OverlayLabel; variant?: OverlayVariant; history?: boolean } = {},
 ): () => void {
   const id = nextId++;
   setOverlays((list) => [
@@ -65,6 +76,29 @@ export function openOverlay(
       returnFocus: typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null,
     },
   ]);
+  // Navigation sheets consume Back without changing the URL. Wait for the
+  // transient entry to be popped before navigating, so selection replaces its
+  // forward entry instead of leaving a duplicate route behind.
+  if (opts.history) {
+    let pending: (() => void) | undefined;
+    let closing = false;
+    const onPop = () => {
+      const entry = overlays().find((item) => item.id === id);
+      if (entry) entry.historyBack = undefined;
+      remove(id, pending);
+    };
+    window.history.pushState({ ...window.history.state, __soundsibleSheet: id }, '');
+    window.addEventListener('popstate', onPop);
+    const entry = overlays().find((item) => item.id === id)!;
+    entry.cleanup = () => window.removeEventListener('popstate', onPop);
+    entry.historyBack = (afterClose) => {
+      if (closing) return;
+      closing = true;
+      pending = afterClose;
+      if (window.history.state?.__soundsibleSheet === id) window.history.back();
+      else onPop();
+    };
+  }
   return () => remove(id);
 }
 
@@ -109,7 +143,7 @@ export const OverlayOutlet: Component = () => {
     <Portal>
       <For each={overlays()}>
         {(entry) => {
-          const close = () => remove(entry.id);
+          const close = (afterClose?: () => void) => remove(entry.id, afterClose);
           return (
             <div
               class={styles.scrim}

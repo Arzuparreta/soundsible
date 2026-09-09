@@ -47,7 +47,7 @@ export function openCopyLinkDialog(opts: CopyLinkOptions): void {
           onClick={selectAll}
         />
         <div class={styles.actions}>
-          <button type="button" class={styles.cancel} onClick={close}>
+          <button type="button" class={styles.cancel} onClick={() => close()}>
             {t('common.close')}
           </button>
           <button type="button" class={styles.confirm} onClick={() => void retry()}>

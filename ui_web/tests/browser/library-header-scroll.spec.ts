@@ -68,7 +68,9 @@ test('tapping the library header returns a scrolled track list to the top', asyn
   });
   await page.goto('/player/#/');
 
-  const heading = page.getByRole('button', { name: 'Your library' });
+  const heading = page.viewportSize()!.width < 1024
+    ? page.getByRole('link', { name: 'Library', exact: true })
+    : page.getByRole('button', { name: 'Your library' });
   await expect(heading).toBeVisible();
   await expect(page.getByText('Track 80')).toBeVisible();
 
