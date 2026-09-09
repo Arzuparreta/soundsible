@@ -2818,7 +2818,7 @@ describe('cross-device sessions', () => {
 
   it('resumes an Auto session as an Auto session, route and sources included', async () => {
     const { body, queue } = await publishedAutoSession();
-    const { actions, state, resumeState, audioService } = await loadStore({
+    const { actions, state, resumeState, audioService, nowPlayingOpen } = await loadStore({
       getPlaybackState: vi.fn().mockResolvedValue(asRemote(body)),
       relatedYouTube: vi.fn().mockResolvedValue(related),
     });
@@ -2837,11 +2837,14 @@ describe('cross-device sessions', () => {
     expect(state.playback.index).toBe(0);
     expect(state.playback.isPlaying).toBe(true);
     await vi.waitFor(() => expect(audioService.seek).toHaveBeenCalledWith(42));
+    // Picking a session up is not asking to watch it: the workspace is rebuilt
+    // behind the collapsed shell, wherever the listener happens to be.
+    expect(nowPlayingOpen()).toBe(false);
   });
 
   it('puts this device\'s own session back paused, queue and all, after a reload', async () => {
     const { body, queue } = await publishedAutoSession();
-    const { actions, state, resumeState, audioService } = await loadStore({
+    const { actions, state, resumeState, audioService, nowPlayingOpen } = await loadStore({
       getPlaybackState: vi.fn().mockResolvedValue({ ...body, updated_at: Date.now() / 1000 }),
     });
 
@@ -2854,6 +2857,22 @@ describe('cross-device sessions', () => {
     expect(state.playback.isPlaying).toBe(false);
     expect(state.playback.currentTime).toBe(42);
     expect(audioService.prime).toHaveBeenCalledWith('/stream/current', 42, 1);
+    // Reopening the app lands where the listener left the app, not on the
+    // player: the session is back in the shell, waiting, not on screen.
+    expect(nowPlayingOpen()).toBe(false);
+  });
+
+  it('raises the player only when Auto is the listener\'s own request', async () => {
+    const { actions, nowPlayingOpen } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+    });
+    await actions.syncLibrary();
+    actions.playFrom([t1], 0);
+    expect(nowPlayingOpen()).toBe(false);
+
+    actions.enterAutoMode();
+
+    expect(nowPlayingOpen()).toBe(true);
   });
 
   it('resumes the single song a session-less state names, as it always did', async () => {

@@ -168,6 +168,20 @@ describe('PlayerSurface', () => {
     expect(document.documentElement).not.toHaveAttribute('data-player-surface');
   });
 
+  it('stays out of the way when a restored session turns Auto on', async () => {
+    // A session put back on boot flips the same flag a listener asking for Auto
+    // does. Only the asking raises the surface, so the restore has to leave the
+    // shell collapsed rather than covering whatever the app opened onto.
+    harness.setOpen?.(false);
+    render(() => <PlayerSurface />);
+
+    harness.setState?.('autoMode', 'active', true);
+    const view = await screen.findByTestId('auto-mode-view');
+
+    expect(document.documentElement).not.toHaveAttribute('data-player-surface');
+    expect(view.closest('[aria-hidden]')).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('keeps the Auto half visible but disabled for podcasts', () => {
     harness.setState?.('playback', 'currentTrack', {
       id: 'episode',

@@ -117,11 +117,12 @@ export function PlayerSurface() {
       surfaceEl.scrollLeft = 0;
       surfaceEl.scrollTop = 0;
     });
-    if (active && !wasAuto) {
-      setNowPlayingOpen(true);
-      setPanel('stage');
-    }
-    if (!active && wasAuto) setPanel('stage');
+    // Landing on the stage card, not opening the surface: what raises the
+    // surface is the listener asking for Auto (`actions.enterAutoMode`), so a
+    // session put back on boot — this device's own, or one picked up from
+    // another — restores the workspace behind the collapsed shell instead of
+    // throwing the player up over whatever they opened the app to do.
+    if (active !== wasAuto) setPanel('stage');
     wasAuto = active;
   });
 

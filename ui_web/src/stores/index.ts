@@ -2148,6 +2148,11 @@ export const actions = {
   enterAutoMode(): void {
     const current = state.playback.currentTrack;
     if (state.autoMode.active || (current && isPodcastTrack(current))) return;
+    // Asking for Auto is asking to see it. This lives here rather than in a
+    // reaction to `autoMode.active`, because the flag also turns on when a
+    // session is restored on boot — and a restore has no one asking for
+    // anything, so it must leave the shell collapsed.
+    setNowPlayingOpen(true);
     autoSessionEpoch += 1;
     pendingImmediateAutoTrack = null;
     autoOpeningAborter?.abort();
