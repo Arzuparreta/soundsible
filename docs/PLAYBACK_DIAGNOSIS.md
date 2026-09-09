@@ -1,7 +1,6 @@
-# iPhone / car playback-state experiment
+# Automatic iPhone / car playback evidence
 
-Status: diagnostic implementation, **not a verified fix**. The normal player
-remains the reference. Neither a successful `play()` nor `playbackState=playing`
+Status: diagnostic implementation, **not a verified fix**. Collection is automatic and passive; transport behavior is unchanged. Neither a successful `play()` nor `playbackState=playing`
 proves what Now Playing, CarPlay or the head unit displays, or that sound reaches
 the speakers. Device acceptance is still required.
 
@@ -29,81 +28,75 @@ Source references pinned to the inspected WebKit commit:
 - [Element eligibility and Now Playing state](https://github.com/WebKit/WebKit/blob/ca3a9f205bcecd15c9d2ed0680acc25b56785109/Source/WebCore/html/MediaElementSession.cpp)
 - [Metadata projection](https://github.com/WebKit/WebKit/blob/ca3a9f205bcecd15c9d2ed0680acc25b56785109/Source/WebCore/Modules/mediasession/MediaSession.cpp)
 
-## Run a capture
+## Listener workflow
 
-1. Open **Settings → Playback → Car playback diagnosis** in the affected PWA.
-   Enter the exact iOS version from the phone's settings and the car connection.
-   Select Reference, Delayed retirement, or Muted retirement. Pause first; a
-   variant cannot be changed during the capture. Start a new capture.
-2. Start the same sequence of at least three tracks from its first song, then
-   lock the phone. Use the same mode, tracks, transition and connection in each
-   comparison. An observer records car state, audible playback and volume
-   response without opening the phone at the transition. Record the transition
-   number and approximate delay before failure; unlocking can change the result.
-3. The marker buttons record **when the observation is reported**, not when it
-   happened. They do not read the car. Opening Settings can itself unlock audio;
-   `gesture.audio_unlock` and visibility events make that intervention visible.
-4. Pause and finish, then **Export capture**. Export before starting another
-   capture or reloading/closing the PWA. Records live only in this page's memory.
-   An export during playback is allowed but does not stop the experiment.
+Play music normally. No settings, experiment selection, markers, export, or
+computer connection is required. Collection begins after authentication when the
+player loads. The running server must contain the trace endpoint and the player
+must have loaded these sources; an already-open old page cannot be instrumented
+retroactively. A normal subsequent opening loads the current player.
 
-The capture includes the chosen variant, a random capture ID, reported iOS
-version, client wall-clock start, client monotonic timestamps and sequence
-numbers. Production embeds a SHA-256 identity of UI sources, lockfile and Vite
-configuration; development is explicitly marked unverified because HMR can
-change its sources. This identity is not the server's Git SHA or an iOS build.
+## Automatic collection and delivery
 
-Raw events cover both decks and the carrier before active-deck filtering. Call,
-return and promise-settlement events describe application play/pause/load calls.
-Browser-internal operations only expose their resulting events. Source changes
-are recorded without their URLs. Snapshots contain media flags, source presence,
-position/rate, graph clock/state, active deck, phase and gain targets (not sampled
-audibility). Media Session is read before sync and passively on media events.
-Reads after sync remain declarations, never OS acknowledgments.
+- Each page session has a random capture ID, source fingerprint, existing device
+  ID, client start time and strictly increasing sequence with monotonic elapsed
+  milliseconds. The iOS version is inferred from the user agent and explicitly
+  marked as reported, not an exact verified OS build. Connection type and the
+  car's display are not exposed to the web app and are not invented.
+- Records cover source/carrier native media events, source changes, play promise
+  outcomes, pause/load calls, context state, gesture unlock, transport origin,
+  retirement, and Media Session before/after publication. Snapshots include all
+  observed elements, mute/paused/readiness/position, source category, mix state,
+  gain targets, and local volume. No media URLs, names, artwork or audio.
+- Healthy time updates are sampled every five seconds per element; for ten
+  seconds around a handoff they are sampled up to four times per second. Native
+  pause/play/load/error events are not sampled away. Background execution can
+  be suspended by iOS; the recorder does not claim a timer always runs.
+- Events are batched and committed to IndexedDB within one second (or when a
+  batch fills), sent every five seconds and on lifecycle/online events. Requests
+  use keepalive and bounded bodies. An unacknowledged batch survives reloads and
+  is retried with backoff. Delivery order can differ from execution order; the
+  report uses capture ID and sequence, not receipt time.
+- The server commits each batch in an account-local SQLite database before
+  acknowledgement. Batch IDs deduplicate retries. A mismatched authenticated
+  account is rejected. Browser outboxes are also partitioned by account.
+- The browser prunes its outbox to 16 MiB / 8,192 batches / seven days on each
+  delivery cycle (normally five seconds, including offline cycles); the server
+  retains at most 64 MiB of payload / 32,768 batches for seven days, whichever
+  limit is reached first. SQLite may occupy additional space for indexes and
+  reusable pages. Browser storage refusal falls back to bounded memory; a sudden
+  process kill may lose events not yet committed. Loss counters and sequence
+  gaps are evidence limitations, not successful delivery.
+- `SOUNDSIBLE_TELEMETRY_ENABLED=0` disables server storage and the acknowledgement
+  stops this page's recorder, clearing its pending account outbox.
 
-## Compare the variants
+## Operator analysis (the listener does not run this)
 
-- **Reference:** current transport and retirement, with the same recorder active.
-- **Delayed retirement:** after the normal handoff, hold the outgoing source at
-  zero mix gain for eight seconds before pausing/releasing it. Preload and
-  automatic next-transition preparation wait. A media-event clock also checks
-  the deadline because background timers can be late. `retirement.release`
-  records the actual execution and lateness. This requires the mixing graph;
-  `retirement.delay_unavailable` means the comparison is invalid.
-- **Muted retirement:** mute the source before retiring it, keep retired/preloaded
-  sources muted, and unmute a source as it joins playback. Volume/mute changes
-  preserve this experiment's exclusion. This is a candidate intervention, not
-  a default fix or proof that the carrier owns the system session.
+The authenticated user's server directory contains
+`telemetry/playback-traces.sqlite3`. The agent can read it directly:
 
-A new load, manual skip, cancellation or transport pause flushes a pending
-retirement and discards its queued reuse. An early `retirement.release` means
-that trial did not complete the intended eight-second hold. An outgoing `ended`
-event before the deadline also invalidates the intended hold comparison. Do not
-manually skip again within that window; use a transition with sufficient source
-duration remaining when testing the delay. Do not count invalid trials as passes.
+```sh
+python scripts/playback_trace_report.py /path/to/user/telemetry/playback-traces.sqlite3 --since 2026-09-08T21:30:00+02:00
+```
 
-Run Reference → Delayed → Reference and Reference → Muted → Reference, repeating
-each valid condition at least three times. Evidence for retirement as the trigger
-requires the fault to move with delayed retirement, not merely disappear once.
-Evidence for the muted candidate requires disappearance under the intervention
-and return under the reference with matched conditions. Contradictory or missing
-evidence leaves the cause unresolved. Compare the selection code with the actual
-iOS/WebKit release before attributing a platform implementation defect.
+The report groups captures/device/revision, prints loss and sequence gaps, and
+extracts two seconds before / ten seconds after handoffs and transport commands.
+It also identifies declared non-playing state while media position advances.
+That flag is an observation for investigation: seeking or an inactive source can
+also advance position. It is not proof of the car's state or audible output.
 
-## Acceptance and next change
+A raw inactive-element `play` without a preceding application `call.play` or
+`media_session.action` is distinguishable from an app-issued operation. It does
+not by itself identify the origin as the car. Unlock samples are distinguished
+from real source tracks and the mixed stream. Correlate the outgoing source's
+pause/unload and the incoming/carrier progression with subsequent commands and
+recovery; never interpret a read-back of `playbackState` as OS acknowledgement.
 
-The experimental variants stay opt-in until device evidence supports a fix.
-If confirmed, promote the exclusion invariant in a separate reviewed change;
-if not, discard it as the incident's solution. Do not replace the experiment
-with periodic state assertions or automatic pause/play.
+## Validation boundaries
 
-After a supported correction, verify five manual and five automatic transitions
-for each of NORMAL and DJ over Bluetooth and wired CarPlay with the phone locked.
-Observe sound, track identity, playing/paused state and volume response. Exercise
-pause/resume from the car and lock screen, including a longer pause, without
-recovering inside the PWA. Treat inability to resume as a separately measured
-failure until evidence links it to retirement.
-
-Unit tests cover recorder ordering/privacy/loss, promise lifetime, experimental
-retirement cancellation, and inactive-source exclusion. Browser UI tests cover
-capture controls/export only. Neither proves physical iPhone/car behavior.
+Unit/backend tests cover observation ordering, original promise behavior,
+privacy filtering, validation, durability, deduplication, account mismatch,
+storage failure and retention. Browser tests cover automatic startup, IndexedDB
+retry across reloads, account separation, and telemetry opt-out. These do not
+reproduce iPhone/Toyota arbitration. The historical trip cannot be reconstructed
+at this detail from the older server logs. No physical-device fix is claimed.

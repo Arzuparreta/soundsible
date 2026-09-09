@@ -640,6 +640,10 @@ export const api = {
       timeoutMs: 5000,
     }),
   /** Local-only playback latency telemetry (see docs/TELEMETRY_PRIVACY.md). */
+  sendPlaybackTrace: (body: import('./playbackTraceOutbox').TraceBatch) =>
+    request<{ id: string; enabled: boolean }>('/api/playback/trace', {
+      method: 'POST', body, timeoutMs: 5000, keepalive: true,
+    }),
   sendPlayTiming: (body: {
     v?: number;
     attempt_id?: string;
