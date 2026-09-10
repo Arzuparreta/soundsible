@@ -1,3 +1,5 @@
+import { ArtistLinks } from './MusicLinks';
+import { trackMusic } from '../lib/musicNavigation';
 import { savedFromTrack } from '../lib/saved';
 import { createMemo, createSignal, Show, type JSX } from 'solid-js';
 import { actions, state } from '../stores';
@@ -125,6 +127,7 @@ export function AutoMode(props: {
       id: track.queueId,
       title: track.title,
       artist: track.artist,
+      music: trackMusic(track),
       cover: track.cover ?? coverUrl(track.id, 'thumb'),
       position: index + 1,
       locked: committed,
@@ -320,7 +323,7 @@ export function AutoMode(props: {
       <Show when={carriedTrack()}>
         {(track) => (
           <div class={styles.carry} role="status">
-            <span><strong>{track().track.title}</strong><small>{track().track.artist}</small></span>
+            <span><strong>{track().track.title}</strong><small><ArtistLinks music={trackMusic(track().track)} /></small></span>
             {/* On a phone the panels are a carousel with the inactive ones
               * inert, so a song can never be dragged from the route to the
               * tray. Carrying it here is that gesture, and this is where it

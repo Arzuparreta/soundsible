@@ -336,3 +336,8 @@
 .editRow > div { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editRow > button { min-width: 40px; min-height: 40px; border: 0; background: none; color: var(--ink-primary); cursor: pointer; }
 .editRow > button:disabled { opacity: .35; }
+
+.navRow { position: relative; }
+.rowActivate { position: absolute; inset: 0; background: transparent; border: 0; border-radius: inherit; cursor: pointer; }
+.rowActivate:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.navRow a:not(.rowActivate) { position: relative; z-index: 1; }

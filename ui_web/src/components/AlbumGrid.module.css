@@ -60,3 +60,5 @@
   font-size: var(--text-caption);
   color: var(--ink-tertiary);
 }
+
+.albumLink { display: flex; flex-direction: column; min-width: 0; }

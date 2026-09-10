@@ -435,7 +435,6 @@ export default function Library() {
               context={{ id: 'library', kind: 'library', label: t('library.title') }}
               loading={state.loading}
               empty={emptyState(t('library.emptyLibrary'))}
-              linkArtist={!isMobile()}
             />
           </Match>
         </Switch>

@@ -29,7 +29,7 @@ const album = (over: Partial<CatalogAlbum> = {}): CatalogAlbum => ({
 describe('AlbumGrid', () => {
   it('carries the catalog id in the link, so the page can ask which songs these are', () => {
     render(() => <AlbumGrid albums={[album({ id: 'al-abc' })]} />);
-    const href = screen.getByRole('link').getAttribute('href') ?? '';
+    const href = screen.getByRole('link', { name: 'Album' }).getAttribute('href') ?? '';
     expect(href).toContain('album_id=al-abc');
     expect(href).toContain('view=library');
   });
@@ -65,6 +65,6 @@ describe('AlbumGrid', () => {
     // No cover track means no image — the gradient carries the card. Rendering
     // `/cover/undefined` would put a broken request behind every such tile.
     render(() => <AlbumGrid albums={[album({ cover_track_id: null })]} />);
-    expect(screen.getByRole('link').innerHTML).not.toContain('/cover/');
+    expect(screen.getByRole('link', { name: 'Album' }).innerHTML).not.toContain('/cover/');
   });
 });

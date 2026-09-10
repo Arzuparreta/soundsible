@@ -1,7 +1,7 @@
+import { ArtistLinks } from './MusicLinks';
+import { trackMusic } from '../lib/musicNavigation';
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
-import { useNavigate } from '@solidjs/router';
 import { actions, isSavedTrack, state } from '../stores';
-import { artistPath } from '../lib/artistRoute';
 import { clockTime } from '../lib/format';
 import { coverUrl } from '../lib/media';
 import {
@@ -52,7 +52,6 @@ export function PlayerStage(props: {
   onTrackDragStart?: (event: DragEvent, track: Track) => void;
   onCarryTrack?: (track: Track) => void;
 }) {
-  const navigate = useNavigate();
   const track = createMemo(() => state.playback.currentTrack);
   const podcast = createMemo(() => Boolean(track() && isPodcastTrack(track()!)));
   const [mobileVisual, setMobileVisual] = createSignal(initialMobileVisualState);
@@ -99,10 +98,6 @@ export function PlayerStage(props: {
     return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;
   };
   const volPct = () => Math.round(gainToVolumePosition(state.playback.muted ? 0 : state.playback.volume) * 100);
-  const artistLinkable = createMemo(() => {
-    const current = track();
-    return Boolean(current && current.source !== 'preview' && current.artist);
-  });
   const artBg = (): JSX.CSSProperties => {
     const current = track();
     const url = current ? (current.cover ?? coverUrl(current.id)) : '';
@@ -166,13 +161,6 @@ export function PlayerStage(props: {
     window.addEventListener('keydown', onKeyDown);
     onCleanup(() => window.removeEventListener('keydown', onKeyDown));
   });
-
-  const goArtist = () => {
-    const current = track();
-    if (!current?.artist) return;
-    props.onCloseSurface?.();
-    navigate(artistPath(current.artist, { view: current.source === 'preview' ? 'discover' : 'library' }));
-  };
 
   const openLyricsOverflow = () => {
     const current = track();
@@ -321,11 +309,7 @@ export function PlayerStage(props: {
                       <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
                     </Show>
                   </div>
-                  <Show when={artistLinkable()} fallback={<p class={styles.artist}>{current().artist}</p>}>
-                    <button class={styles.artistLink} type="button" onClick={goArtist}>
-                      {current().artist}
-                    </button>
-                  </Show>
+                  <ArtistLinks class={styles.artist} music={trackMusic(current())} />
                 </div>
               </div>
 
@@ -533,7 +517,6 @@ export function PlayerStage(props: {
                     onClick={() => desktopLyricsActive()
                       ? openLyricsOverflow()
                       : openTrackMenu(current(), {
-                          navigate,
                           onAddToPlaylist: openPlaylistPicker,
                           onEditMetadata: openMetadataEditor,
                           onPlayOnDevice: openPlayOnDevice,

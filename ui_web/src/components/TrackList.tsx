@@ -1,3 +1,4 @@
+import { trackMusic } from '../lib/musicNavigation';
 import { createEffect, createSignal, For, Show, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
@@ -8,7 +9,6 @@ import { openPlaylistPicker } from './PlaylistPicker';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
 import { trackCoverUrl } from '../lib/media';
-import { artistPath } from '../lib/artistRoute';
 import { isPodcastTrack } from '../lib/track';
 import { t as tr } from '../lib/i18n';
 import type { Track } from '../types/music';
@@ -41,10 +41,6 @@ export default function TrackList(props: {
   empty?: JSX.Element;
   menu?: Partial<TrackMenuContext>;
   context?: PlaybackContextDescriptor;
-  /** When false, the artist name is rendered as plain text so tapping it
-   * bubbles to the row and plays the track instead of navigating. Useful on
-   * mobile, where tapping the subtitle is the same gesture as tapping the row. */
-  linkArtist?: boolean;
   /** Override how a row starts playback. Defaults to `actions.playFrom` over
    * the whole list; Favourites uses it to resolve a saved song that has no
    * source attached yet before handing it to the queue. */
@@ -52,12 +48,12 @@ export default function TrackList(props: {
 }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
-  const goArtist = (artist: string) => artist && navigate(artistPath(artist, { view: 'library' }));
   const openMenu = (track: Track, ev?: MouseEvent) =>
     openTrackMenu(
       track,
       {
         navigate,
+        music: { ...trackMusic(track), view: "library" },
         onAddToPlaylist: openPlaylistPicker,
         onEditMetadata: openMetadataEditor,
         onPlayOnDevice: openPlayOnDevice,
@@ -161,7 +157,7 @@ export default function TrackList(props: {
                               ? props.onPlay(props.tracks, vi.index)
                               : actions.playFrom(props.tracks, vi.index, { context: props.context })
                           }
-                          onArtist={props.linkArtist === false ? undefined : goArtist}
+                          music={{ ...trackMusic(track()!), view: "library" }}
                           onMenu={openMenu}
                         />
                       </div>

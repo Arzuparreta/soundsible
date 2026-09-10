@@ -1,3 +1,5 @@
+import { ArtistLinks, MusicLink } from './MusicLinks';
+import { albumMusic, albumDestination, catalogDestination, catalogMusic, trackMusic, navigateMusic, type MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { savedFromTrack, savedFromCatalogItem } from '../lib/saved';
@@ -38,7 +40,7 @@ import { coverStyle } from '../lib/cover';
 import { parseYouTubeInput } from '../lib/youtube';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
 import { albumSort, albumFilter, filterTracks, libraryFilter, setLibraryFilter, catalogArtists, librarySort, libraryTab, setLibrarySort, setLibraryTab, sortTracks } from '../lib/libraryView';
-import { artistKey } from '../lib/artistRoute';
+import { artistKey, artistPath, albumPath } from '../lib/artistRoute';
 import { normalizeLibraryQuery, searchLibrary, type LibrarySearchResult } from '../lib/librarySearch';
 import { resolveCatalogTrack, catalogPreviewId, itemArtist, itemToTrack, playCatalogItem } from '../lib/catalogItem';
 import { writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
@@ -89,6 +91,7 @@ interface AutoRowProps {
   onAddToRoute?: () => void;
   onMenu?: (event?: MouseEvent) => void;
   track?: Track;
+  music?: MusicMetadata;
   onCarryTrack?: (track: Track) => void;
 }
 
@@ -118,6 +121,7 @@ function resultTrack(result: SearchResult): Track {
     id: result.id,
     title: result.title,
     artist: result.channel ?? '',
+    artist_is_channel: true,
     duration: result.duration,
     cover: result.thumbnail,
     source: 'preview',
@@ -217,7 +221,20 @@ export function NowPlayingBrowser(props: {
     const body = panelEl?.querySelector<HTMLElement>('[data-browser-body]');
     if (body && props.active !== false && !restoringScroll) navigation.update({ scroll: body.scrollTop });
   };
-  const push = (view: BrowserView, _returnToSearch = false) => { savePosition(); clearTimeout(debounce); clearSearchState(); navigation.push(view); };
+  const push = (view: BrowserView, _returnToSearch = false) => {
+    savePosition();
+    if (view.kind === 'libraryArtist' || view.kind === 'catalogArtist') {
+      navigateMusic(artistPath(view.name, view.kind === 'libraryArtist'
+        ? { view: 'library', artistId: view.artistId } : { view: 'discover', deezerId: view.deezerId }));
+      return;
+    }
+    if (view.kind === 'libraryAlbum' || view.kind === 'catalogAlbum') {
+      navigateMusic(albumPath(view.name, view.artist, view.kind === 'libraryAlbum'
+        ? { view: 'library', albumId: view.albumId } : { view: 'discover', deezerId: view.deezerId }));
+      return;
+    }
+    clearTimeout(debounce); clearSearchState(); navigation.push(view);
+  };
   const back = () => { savePosition(); clearTimeout(debounce); clearSearchState(); navigation.back(); };
   const selectSection = (section: BrowserSection) => { savePosition(); clearTimeout(debounce); clearSearchState(); navigation.select(section); };
   const clearSearchState = () => {
@@ -413,7 +430,7 @@ export function NowPlayingBrowser(props: {
       onAddToRoute: auto && target
         ? () => item ? void useItem(item, placeTrack) : placeTrack(target as Track)
         : undefined,
-      onMenu: target ? (event) => item ? void useItem(item, (resolved) => openTrackActions(resolved, event)) : openTrackActions(target as Track, event) : undefined,
+      onMenu: target ? (event) => item ? void useItem(item, (resolved) => openTrackActions(resolved, event, catalogMusic(item))) : openTrackActions(target as Track, event) : undefined,
       track: track ?? undefined,
       onCarryTrack: props.onCarryTrack,
     };
@@ -436,13 +453,12 @@ export function NowPlayingBrowser(props: {
     aborter?.abort();
   });
 
-  const openTrackActions = (track: Track, event?: MouseEvent) =>
+  const openTrackActions = (track: Track, event?: MouseEvent, music: MusicMetadata = { ...trackMusic(track), view: "library" }) =>
     openTrackMenu(track, {
       onAddToPlaylist: openPlaylistPicker,
       onEditMetadata: openMetadataEditor,
       onPlayOnDevice: openPlayOnDevice,
-      onOpenArtist: track.artist ? () => push({ kind: 'catalogArtist', name: track.artist }) : undefined,
-      onOpenAlbum: track.album ? () => push({ kind: 'catalogAlbum', name: track.album!, artist: track.album_artist || track.artist }) : undefined,
+      music,
       onRemoveFromPlaylist: currentView().kind === 'playlist' ? () => void actions.removeFromPlaylist((currentView() as { name: string }).name, track.id) : undefined,
     }, event);
 
@@ -502,7 +518,7 @@ export function NowPlayingBrowser(props: {
   ) => (
     <BrowserTrackRow
       title={track.title}
-      subtitle={track.artist}
+      subtitle={track.artist} music={{ ...trackMusic(track), view: "library" }}
       cover={trackCoverUrl(track)}
       seed={track.id}
       active={isPlayingTrack(track)}
@@ -748,7 +764,7 @@ function RootView(props: { autoRow: (track: Track) => AutoRowProps }) {
               return (
                 <BrowserTrackRow
                   title={track.title}
-                  subtitle={track.artist}
+                  subtitle={track.artist} music={{ ...trackMusic(track), view: "library" }}
                   cover={track.cover}
                   seed={track.id}
                   active={isPlayingTrack(track)}
@@ -811,7 +827,7 @@ function LibraryView(props: {
         </Show>
       </div>
       <Show when={libraryTab() === 'songs'}><select class={styles.libraryFilter} aria-label={t('musicExplorer.filter')} value={libraryFilter()} onChange={(event) => setLibraryFilter(event.currentTarget.value)}><option value="all">{t('musicExplorer.all')}</option><option value="downloaded">{t('musicExplorer.downloaded')}</option></select></Show>
-      <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}><For each={collateAlbums(albums() ?? [], albumSort())}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For></Show></Show>
+      <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}><For each={collateAlbums(albums() ?? [], albumSort())}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For></Show></Show>
       <Show when={libraryTab() !== 'albums'}><Show
         when={libraryTab() === 'songs'}
         fallback={
@@ -824,7 +840,7 @@ function LibraryView(props: {
               const row = artist();
               return row ? (
                 <NavigationRow
-                  title={row.name}
+                  title={row.name} destination={artistPath(row.name, { view: "library", artistId: row.id })}
                   subtitle={t('library.artistTrackCount', { count: row.count })}
                   cover={coverUrl(row.coverId, 'thumb')}
                   round
@@ -876,7 +892,7 @@ function LibraryArtistView(props: {
         <button type="button" onClick={props.onExplore}>{t('musicExplorer.catalog')}</button>
         <Show when={props.onUse}><CollectionActions title={props.name} tracks={tracks()} auto onReference={props.onUse} /></Show>
       </ViewHeader>
-      <For each={catalog()?.albums ?? []}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For>
+      <For each={catalog()?.albums ?? []}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For>
       <VirtualRows
         items={tracks()}
         scrollElement={scrollRef}
@@ -928,11 +944,11 @@ function LocalSearchView(props: {
       <ViewHeader title={t('nowPlayingBrowser.libraryResults')} meta={`${props.results.length}`}>
         <Show when={props.onUse}><button type="button" disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}>{t('musicExplorer.reference')}</button></Show>
       </ViewHeader>
-      <For each={props.albums}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} onClick={() => props.onAlbum(album)} />}</For>
+      <For each={props.albums}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} onClick={() => props.onAlbum(album)} />}</For>
       <For each={props.playlists}>{(name) => <NavigationRow title={name} subtitle={t('nav.playlists')} onClick={() => props.onPlaylist(name)} />}</For>
       <For each={props.results}>
         {(result) => result.kind === 'artist'
-          ? <NavigationRow title={result.artist.name} subtitle={t('library.artistTrackCount', { count: result.artist.count })} cover={coverUrl(result.artist.coverId, 'thumb')} round onClick={() => props.onArtist(result.artist.name)} />
+          ? <NavigationRow title={result.artist.name} destination={artistPath(result.artist.name, { view: "library", artistId: result.artist.id })} subtitle={t('library.artistTrackCount', { count: result.artist.count })} cover={coverUrl(result.artist.coverId, 'thumb')} round onClick={() => props.onArtist(result.artist.name)} />
           : props.renderTrack(result.track, () => actions.playFrom(
               tracks(),
               Math.max(0, tracks().findIndex((track) => track.id === result.track.id)),
@@ -1072,8 +1088,9 @@ function GlobalSearchView(props: {
   const row = (item: CatalogItem) =>
     item.type === 'artist' || item.type === 'album' || item.type === 'playlist' ? (
       <NavigationRow
-        title={item.title}
+        title={item.title} destination={catalogDestination(item)}
         subtitle={item.type === 'artist' ? t('searchPanel.chipArtist') : `${t('searchPanel.chipAlbum')} · ${itemArtist(item)}`}
+        music={item.type === 'album' ? catalogMusic(item) : undefined}
         cover={item.cover}
         round={item.type === 'artist'}
         onClick={() => props.onEntity(item)}
@@ -1081,7 +1098,7 @@ function GlobalSearchView(props: {
     ) : (
       <BrowserTrackRow
         title={item.title}
-        subtitle={item.subtitle || itemArtist(item)}
+        subtitle={item.subtitle || itemArtist(item)} music={catalogMusic(item)}
         cover={item.cover || (item.track_id ? coverUrl(item.track_id, 'thumb') : undefined)}
         seed={item.id}
         active={isPlayingItem(item)}
@@ -1176,7 +1193,7 @@ function CatalogArtistView(props: {
                   {(item) => (
                     <BrowserTrackRow
                       title={item.title}
-                      subtitle={itemArtist(item)}
+                      subtitle={itemArtist(item)} music={catalogMusic(item)}
                       cover={item.cover}
                       seed={item.id}
                       active={isPlayingItem(item)}
@@ -1217,7 +1234,7 @@ function CatalogAlbumView(props: {
     void playCatalogItem(item, queue, { id: `album:${props.view.name}`, kind: 'album', label: props.view.name });
   return (
     <div class={styles.body} data-browser-body>
-      <ViewHeader title={props.view.name} meta={props.view.artist} onBack={props.onBack}>
+      <ViewHeader title={props.view.name} meta={<ArtistLinks music={{ artist: props.view.artist, view: "discover" }} />} onBack={props.onBack}>
         <CollectionActions title={props.view.name} items={profile()?.tracklist ?? []} auto={Boolean(props.inAuto)} onPlay={() => { const tracks = profile()?.tracklist ?? []; if (tracks[0]) play(tracks[0], tracks); }} />
       </ViewHeader>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
@@ -1227,7 +1244,7 @@ function CatalogAlbumView(props: {
               {(item) => (
                 <BrowserTrackRow
                   title={item.title}
-                  subtitle={itemArtist(item)}
+                  subtitle={itemArtist(item)} music={catalogMusic(item)}
                   cover={item.cover || data().cover}
                   seed={item.id}
                   active={isPlayingItem(item)}
@@ -1245,20 +1262,20 @@ function CatalogAlbumView(props: {
   );
 }
 
-function ViewHeader(props: { title: string; meta?: string; onBack?: () => void; children?: JSX.Element }) {
+function ViewHeader(props: { title: string; meta?: JSX.Element; onBack?: () => void; children?: JSX.Element }) {
   return <SharedViewHeader {...props} compact />;
 }
 
-function NavigationRow(props: { title: string; subtitle: string; cover?: string; round?: boolean; onClick: () => void; onMenu?: (event?: MouseEvent) => void }) {
+function NavigationRow(props: { title: string; subtitle: string; music?: MusicMetadata; destination?: string; cover?: string; round?: boolean; onClick: () => void; onMenu?: (event?: MouseEvent) => void }) {
   const tap = createResponsiveTap({ onTap: props.onClick });
   return (
-    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.title} subtitle={props.subtitle} seed={props.title}
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.title} titlePath={props.destination ?? (props.music?.album ? albumDestination(props.music) : undefined)} subtitle={props.subtitle} music={props.music} seed={props.title}
       cover={props.cover} round={props.round} onActivate={props.onClick} onMenu={props.onMenu} />}>
-    <button class={styles.navRow} type="button" data-pressable {...tap}>
+    <div class={styles.navRow}><Show when={props.destination ?? (props.music?.album ? albumDestination(props.music) : undefined)} fallback={<button class={styles.rowActivate} type="button" aria-label={props.title} data-pressable {...tap} />}>{(path) => <MusicLink class={styles.rowActivate} path={path()} label={props.title} onMenu={props.onMenu} />}</Show>
       <span classList={{ [styles.round]: props.round }} style={coverStyle(props.title, props.cover)} />
-      <span><strong>{props.title}</strong><small>{props.subtitle}</small></span>
+      <span><strong>{props.title}</strong><small><Show when={props.music} fallback={props.subtitle}>{(music) => <ArtistLinks music={music()} />}</Show></small></span>
       <ChevronIcon />
-    </button>
+    </div>
     </Show>
   );
 }
@@ -1291,11 +1308,12 @@ function BrowserTrackRow(props: {
   variant?: 'browse' | 'auto';
   onAddToRoute?: () => void;
   track?: Track;
+  music?: MusicMetadata;
   onCarryTrack?: (track: Track) => void;
 }) {
   const auto = () => props.variant === 'auto';
   const track = () => props.track ?? { id: props.seed, title: props.title, artist: props.subtitle, cover: props.cover, source: 'preview' as const };
-  return <SongRow track={track()} cover={props.cover} active={props.active} compact busy={props.resolving}
+  return <SongRow track={track()} music={props.music} cover={props.cover} active={props.active} compact busy={props.resolving}
     actionLabel={auto() ? `${props.primaryLabel ?? t('musicExplorer.request')}: ${props.title}` : undefined}
     onPlay={() => auto() ? props.onAddToRoute?.() : props.onPlay()}
     primaryAction={auto() && props.onAddToRoute ? { label: props.primaryLabel ?? t('musicExplorer.request'), onSelect: props.onAddToRoute } : undefined}

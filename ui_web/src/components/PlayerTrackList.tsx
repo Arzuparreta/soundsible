@@ -1,3 +1,5 @@
+import { ArtistLinks } from './MusicLinks';
+import type { MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
@@ -22,6 +24,7 @@ export interface PlayerTrackListEntry {
   id: string;
   title: string;
   artist: string;
+  music?: MusicMetadata;
   cover?: string;
   position?: string | number;
   current?: boolean;
@@ -300,7 +303,7 @@ function PlayerTrackListRow(props: {
       onDragOver={props.entry.onDragOver}
       onDrop={props.entry.onDrop}
       onPointerDown={(event) => {
-        if (mobileListLayout() || !props.entry.onCarry) return;
+        if ((event.target as Element).closest("a") || mobileListLayout() || !props.entry.onCarry) return;
         cancelCarry();
         carryStart = { x: event.clientX, y: event.clientY };
         // Touch only: a mouse hold has no selection gesture to head off, and
@@ -323,7 +326,7 @@ function PlayerTrackListRow(props: {
       onPointerUp={cancelCarry}
       onPointerCancel={cancelCarry}
     >
-      <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.entry.title} subtitle={props.entry.artist}
+      <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.entry.title} subtitle={props.entry.artist} music={props.entry.music}
         seed={props.entry.id} cover={props.entry.cover} index={props.entry.current ? undefined : props.entry.position}
         active={props.entry.current} disabled={disabled() || props.editing} entry={props.entry.entry}
         annotation={props.entry.current && props.entry.paused ? t('musicList.paused') : props.entry.badge ?? props.entry.annotation}
@@ -334,7 +337,8 @@ function PlayerTrackListRow(props: {
           <button type="button" data-edit-command="down" aria-label={t('musicList.moveDown')} disabled={!props.entry.canMoveDown} onClick={() => props.onMove(1)}>↓</button>
           <button type="button" data-edit-command="done" aria-label={t('musicList.done')} onClick={() => props.onEditingChange(false)}>✓</button>
         </>} />}>
-      <button class={styles.main} type="button" disabled={disabled()} data-pressable {...tap}>
+      <div class={styles.main}>
+        <button class={styles.playButton} type="button" disabled={disabled()} aria-label={`${props.entry.title} — ${props.entry.artist}`} data-pressable {...tap} />
         <span class={styles.position}>
           <Show when={!props.entry.current} fallback={
             <span class={styles.eq} data-paused={props.entry.paused ? '' : undefined} aria-hidden="true"><i /><i /><i /></span>
@@ -349,7 +353,7 @@ function PlayerTrackListRow(props: {
         />
         <span class={styles.meta}>
           <span class={styles.title}>{props.entry.title}</span>
-          <span class={styles.artist}>{props.entry.artist}</span>
+          <ArtistLinks class={styles.artist} music={props.entry.music ?? { artist: props.entry.artist, view: "library" }} />
           <Show when={props.entry.annotation}>
             <small class={styles.annotation}>{props.entry.annotation}</small>
           </Show>
@@ -357,7 +361,7 @@ function PlayerTrackListRow(props: {
             <small class={styles.badge}>{props.entry.badge}</small>
           </Show>
         </span>
-      </button>
+      </div>
       <Show when={props.entry.trailing}>
         <span class={styles.trailing}>{props.entry.trailing}</span>
       </Show>

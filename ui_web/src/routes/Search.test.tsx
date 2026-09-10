@@ -340,7 +340,7 @@ describe('Search route', () => {
       expect(apiMock.peekYouTube).toHaveBeenCalledWith('https://www.youtube.com/watch?v=dQw4w9WgXcQ', expect.any(AbortSignal)),
     );
     expect(await screen.findByText('Detected video')).toBeInTheDocument();
-    expect(screen.getByText('Direct Video')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Direct Video/ })).toBeInTheDocument();
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
   });
 
@@ -358,11 +358,11 @@ describe('Search route', () => {
 
     expect(await screen.findByText('Shared with you')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Shared title — Shared artist')).toBeInTheDocument();
-    expect(screen.getByText('Direct Video')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Direct Video/ })).toBeInTheDocument();
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
     expect(apiMock.searchYouTube).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText('Direct Video'));
+    fireEvent.click(screen.getByRole('button', { name: /Direct Video/ }));
     expect(storeMock.playTrack).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'dQw4w9WgXcQ', source: 'preview' }),
     );
@@ -387,7 +387,7 @@ describe('Search route', () => {
     window.location.hash = `#/search?shared=${encoded}`;
 
     render(() => <Search />);
-    fireEvent.click(await screen.findByText('My local title'));
+    fireEvent.click(await screen.findByRole('button', { name: /My local title/ }));
 
     expect(apiMock.peekYouTube).not.toHaveBeenCalled();
     expect(storeMock.playTrack).toHaveBeenCalledWith(

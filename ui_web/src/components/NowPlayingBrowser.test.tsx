@@ -1,3 +1,4 @@
+import { registerMusicNavigator } from '../lib/musicNavigation';
 import { fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Track } from '../types/music';
@@ -79,6 +80,7 @@ vi.mock('../lib/toast', () => ({
 vi.mock('../stores', async () => {
   const { identityMock } = await import('../lib/identityMock');
   return {
+    setNowPlayingOpen: vi.fn(),
     state: storeMock.state,
     actions: storeMock.actions,
     musicLibrary: () => storeMock.state.library,
@@ -189,34 +191,22 @@ describe('NowPlayingBrowser', () => {
     expect(screen.queryByRole('button', { name: /to the route$/ })).not.toBeInTheDocument();
   });
 
-  it('reaches the route from a catalog artist page too', async () => {
+  it('opens catalog artists in the general page without placing a DJ request', async () => {
     // The two catalog views passed neither a track nor a carry handler, so a
     // song found by browsing an artist could not be dragged or added at all.
     apiMock.searchCatalog.mockResolvedValue({
       items: [{ id: 'deezer:artist:1', type: 'artist', source: 'deezer', title: 'Radiohead', artist: 'Radiohead' }],
       sections: [{ id: 'artists', layout: 'rows', item_ids: ['deezer:artist:1'], total: 1 }],
     });
-    apiMock.getArtistProfile.mockResolvedValue({
-      top_tracks: [{
-        id: 'deezer:track:9', type: 'track', source: 'deezer', title: 'Creep', artist: 'Radiohead',
-        external_ids: { youtube_id: 'ytCreep0001' },
-      }],
-      albums: [],
-    });
-    // A Deezer row is not playable on its own; adding it has to resolve first.
-    apiMock.resolveCatalogItem.mockResolvedValue({ video_id: 'ytCreep0001' });
-
+    const navigate = vi.fn();
+    const unregister = registerMusicNavigator(navigate);
     render(() => <NowPlayingBrowser purpose="auto-neutral" onClose={vi.fn()} />);
     await typeGlobalQuery('radiohead');
-    fireEvent.click(await screen.findByRole('button', { name: /Radiohead/ }));
+    fireEvent.click(await screen.findByRole('link', { name: /Radiohead/ }));
 
-    const add = await screen.findByRole('button', { name: 'Request: Creep' });
-    expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
-    fireEvent.click(add);
-    await waitFor(() => expect(storeMock.actions.placeAutoTrack).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Creep' }),
-      undefined,
-    ));
+    expect(navigate).toHaveBeenCalledWith('/artist/Radiohead?view=discover');
+    expect(storeMock.actions.placeAutoTrack).not.toHaveBeenCalled();
+    unregister();
   });
 
   it('opens favourites as a first-class NORMAL collection', () => {
@@ -225,7 +215,7 @@ describe('NowPlayingBrowser', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
     expect(screen.getByRole('heading', { name: 'Favourites' })).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Local Song'));
+    fireEvent.click(screen.getByRole('button', { name: /Local Song/ }));
     expect(storeMock.actions.playFrom).toHaveBeenCalledWith(
       [storeMock.local],
       0,
@@ -282,7 +272,7 @@ describe('NowPlayingBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search your library' }));
     fireEvent.input(screen.getByPlaceholderText('Search your library'), { target: { value: 'local' } });
 
-    expect(screen.getByText('Local Song')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Local Song/ })).toBeInTheDocument();
     expect(apiMock.searchCatalog).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Search “local” everywhere' }));
@@ -311,9 +301,8 @@ describe('NowPlayingBrowser', () => {
     await typeGlobalQuery('radiohead');
     await screen.findByText('Creep');
 
-    const rendered = screen
-      .getAllByRole('button')
-      .map((el) => el.textContent ?? '')
+    const rendered = Array.from(document.querySelectorAll('button[aria-label], a[aria-label]'))
+      .map((el) => el.getAttribute('aria-label') ?? el.textContent ?? '')
       .filter((text) => /Radiohead|Creep|In Rainbows/.test(text));
     const firstIndexOf = (label: string) => rendered.findIndex((text) => text.includes(label));
 
@@ -350,7 +339,7 @@ describe('NowPlayingBrowser', () => {
 
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
     await typeGlobalQuery('internet live set');
-    fireEvent.click(await screen.findByText('Internet Live Set'));
+    fireEvent.click(await screen.findByRole('button', { name: /Internet Live Set/ }));
 
     await waitFor(() => expect(storeMock.actions.playNow).toHaveBeenCalledWith(
       expect.objectContaining({ id: '98u3AJVEL8Q', source: 'preview' }),

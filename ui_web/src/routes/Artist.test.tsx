@@ -151,7 +151,7 @@ describe('Artist route view mode', () => {
     renderAt('/artist/Mixed?view=discover');
     await waitFor(() => expect(screen.getByText('Fresh Hit')).toBeInTheDocument());
 
-    screen.getByText('Fresh Hit').click();
+    screen.getByRole('button', { name: 'Fresh Hit' }).click();
 
     await waitFor(() => expect(storeMock.playFrom).toHaveBeenCalled());
     const [queue, index] = storeMock.playFrom.mock.calls.at(-1)!;

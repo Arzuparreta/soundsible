@@ -1,3 +1,4 @@
+import { artistDestination, albumDestination, navigateMusic, performerNames, type MusicMetadata } from '../lib/musicNavigation';
 import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys } from '../stores';
 import { savedToTrack, savedVideoId } from '../lib/saved';
 import { t } from '../lib/i18n';
@@ -9,6 +10,7 @@ import type { MenuAction } from './ActionMenu';
 
 export interface EntryMenuContext {
   track?: Track;
+  music?: MusicMetadata;
   onDownload?: () => void;
   onRadio?: () => void;
   busy?: boolean;
@@ -31,7 +33,13 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
     label: t(downloading ? 'collection.downloading' : 'collection.download'), disabled: downloading,
     onSelect: () => { if (ctx.onDownload) ctx.onDownload(); else void actions.downloadSaved(entry); },
   });
-  if (track) list.push(...buildTrackMenu(track, { collection: false, onAddToPlaylist: openPlaylistPicker }));
+  if (track) list.push(...buildTrackMenu(track, { collection: false, onAddToPlaylist: openPlaylistPicker, music: ctx.music }));
+  if (!track && ctx.music?.linkable !== false && ctx.music) {
+    const music = ctx.music;
+    for (const name of performerNames(music)) list.push({ label: `${t('trackActions.goToArtist')}: ${name}`,
+      onSelect: () => navigateMusic(artistDestination(music, name)) });
+    if (music.album?.trim()) list.push({ label: t('musicExplorer.openAlbum'), onSelect: () => navigateMusic(albumDestination(music)) });
+  }
   if (ctx.onRadio) {
     const radio = list.findIndex((action) => action.label === t('trackActions.startRadio') || action.label === t('modeChange.startRadio'));
     const action = { label: t('trackActions.startRadio'), onSelect: ctx.onRadio };

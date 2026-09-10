@@ -27,6 +27,7 @@ export function resultToTrack(result: SearchResult): Track {
     id: result.id,
     title: result.title,
     artist: result.channel ?? '',
+    artist_is_channel: true,
     duration: result.duration,
     cover: result.thumbnail,
     source: 'preview',

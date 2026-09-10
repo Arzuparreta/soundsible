@@ -3,7 +3,7 @@ import { openContextMenu } from '../lib/contextMenu';
 import { actions, state } from '../stores';
 import { api } from '../lib/api';
 import { tracksByIds } from '../lib/catalogTracks';
-import { albumPath } from '../lib/artistRoute';
+import { albumDestination, albumMusic, navigateMusic } from '../lib/musicNavigation';
 import { t } from '../lib/i18n';
 import type { CatalogAlbum, Track } from '../types/music';
 
@@ -26,7 +26,7 @@ function albumContext(album: CatalogAlbum) {
 }
 
 /** Play / shuffle / go-to-album menu definition for a catalog album. */
-export function albumMenuOptions(album: CatalogAlbum, ctx: AlbumMenuContext = {}): ActionMenuOptions {
+export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {}): ActionMenuOptions {
   const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
     {
@@ -48,11 +48,11 @@ export function albumMenuOptions(album: CatalogAlbum, ctx: AlbumMenuContext = {}
         });
       },
     });
-  if (ctx.navigate) {
+  {
     list.push({
       label: t('albumActions.goToAlbum'),
       onSelect: () =>
-        ctx.navigate!(albumPath(album.title, album.album_artist, { view: 'library', albumId: album.id })),
+        navigateMusic(albumDestination(albumMusic(album))),
     });
   }
   return { title: album.title, subtitle: album.album_artist, actions: list };

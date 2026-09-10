@@ -29,6 +29,7 @@ describe('resultToTrack / libraryTrackFor', () => {
       id: 'yt111yt111y',
       title: 'Downloaded Song',
       artist: 'Chan',
+      artist_is_channel: true,
       duration: 200,
       cover: 'x.jpg',
       source: 'preview',

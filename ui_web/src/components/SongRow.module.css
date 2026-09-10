@@ -229,3 +229,11 @@
 .primaryAction { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: var(--text-caption); padding: 0 8px; min-height: 40px; cursor: pointer; }
 .primaryAction:disabled { opacity: 0.5; }
 .row[data-compact] .iconBtn { opacity: 1; }
+
+.titleButton { display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.titleButton .title { display: block; }
+.titleButton:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+
+@media (hover: hover) and (pointer: fine) {
+  .titleButton, .titleButton .title { -webkit-user-select: text; user-select: text; }
+}

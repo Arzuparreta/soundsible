@@ -1,8 +1,9 @@
+import { artistDestination, navigateMusic } from '../lib/musicNavigation';
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import { actions, musicLibrary, state } from '../stores';
 import type { Track } from '../types/music';
-import { artistKey, artistPath } from '../lib/artistRoute';
+import { artistKey } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 
 export interface ArtistMenuContext {
@@ -11,11 +12,12 @@ export interface ArtistMenuContext {
 
 function artistTracks(artist: string): Track[] {
   const key = artistKey(artist);
-  return musicLibrary().filter((t) => artistKey(t.artist) === key || artistKey(t.album_artist) === key);
+  return musicLibrary().filter((t) => artistKey(t.artist) === key || artistKey(t.album_artist) === key
+    || t.artists?.some((name) => artistKey(name) === key));
 }
 
 /** Play / shuffle / go-to-artist menu definition for an artist. */
-export function artistMenuOptions(artist: string, ctx: ArtistMenuContext = {}): ActionMenuOptions {
+export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}): ActionMenuOptions {
   const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
     {
@@ -46,8 +48,7 @@ export function artistMenuOptions(artist: string, ctx: ArtistMenuContext = {}): 
         }
       },
     });
-  if (ctx.navigate)
-    list.push({ label: t('artistActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(artist, { view: 'library' })) });
+  list.push({ label: t('artistActions.goToArtist'), onSelect: () => navigateMusic(artistDestination({ artist, view: 'library' }, artist)) });
   return { title: artist, actions: list };
 }
 

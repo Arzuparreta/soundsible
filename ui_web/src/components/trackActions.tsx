@@ -6,7 +6,7 @@ import { actions, isDownloadingTrack, isFavouriteTrack, isSavedTrack, state } fr
 import { savedFromTrack } from '../lib/saved';
 import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
-import { artistPath } from '../lib/artistRoute';
+import { artistDestination, albumDestination, navigateMusic, performerNames, trackMusic, type MusicMetadata } from '../lib/musicNavigation';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { api } from '../lib/api';
@@ -19,8 +19,7 @@ import { toast } from '../lib/toast';
  */
 export interface TrackMenuContext {
   navigate?: (path: string) => void;
-  onOpenArtist?: () => void;
-  onOpenAlbum?: () => void;
+  music?: MusicMetadata;
   collection?: boolean;
   /** Present when the row lives inside a playlist; enables "remove from playlist". */
   playlistName?: string;
@@ -96,10 +95,13 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
   if (!isPodcast)
     list.push({ icon: icons.radio(), label: inAuto ? t('modeChange.startRadio') : t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
-  if (ctx.onOpenArtist) list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: ctx.onOpenArtist });
-  if (ctx.onOpenAlbum) list.push({ icon: icons.playlist(), label: t('musicExplorer.openAlbum'), onSelect: ctx.onOpenAlbum });
-  if (!ctx.onOpenArtist && ctx.navigate && track.artist && isLibrary && !isPodcast)
-    list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist, { view: 'library' })) });
+  const music = ctx.music ?? trackMusic(track);
+  const performers = performerNames(music);
+  if (music.linkable !== false) for (const name of performers)
+    list.push({ icon: icons.artist(), label: performers.length > 1 ? `${t('trackActions.goToArtist')}: ${name}` : t('trackActions.goToArtist'),
+      onSelect: () => navigateMusic(artistDestination(music, name)) });
+  if (music.linkable !== false && music.album?.trim())
+    list.push({ icon: icons.playlist(), label: t('musicExplorer.openAlbum'), onSelect: () => navigateMusic(albumDestination(music)) });
   // The heart only makes sense over songs you have: it marks some of them out
   // from the others. The menu offers saving instead until then.
   if (ctx.collection !== false && !isPodcast && isSaved)

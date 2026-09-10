@@ -506,3 +506,8 @@
     }
   }
 }
+
+.openArea { position: relative; }
+.openButton { position: absolute; inset: 0; border: 0; border-radius: inherit; background: transparent; color: inherit; cursor: pointer; }
+.openButton:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.meta a { position: relative; z-index: 1; }
