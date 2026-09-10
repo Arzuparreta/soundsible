@@ -10,6 +10,7 @@ const { actions, setNowPlayingOpen, state } = vi.hoisted(() => ({
     setVolume: vi.fn(),
     toggleMute: vi.fn(),
     stopRadio: vi.fn(),
+    dismissPlayback: vi.fn(),
   },
   setNowPlayingOpen: vi.fn(),
   state: {
@@ -94,5 +95,64 @@ describe('OmniBar interaction structure', () => {
     actions.setVolume.mockClear();
     fireEvent.wheel(slider, { deltaY: -1 });
     expect(actions.setVolume).toHaveBeenCalledWith(expect.closeTo(0.1276447, 6));
+  });
+});
+
+function pointer(node: Element, type: string, x: number, y: number, extra = {}) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.assign(event, { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, ...extra });
+  fireEvent(node, event);
+}
+
+describe('mobile deck dismissal', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('dismisses a left swipe and consumes its trailing click', () => {
+    const view = render(() => <OmniBar />);
+    const bar = view.container.querySelector('[data-omni-player]')!;
+    const button = screen.getByRole('button', { name: /A track/ });
+    pointer(button, 'pointerdown', 280, 30);
+    pointer(bar, 'pointermove', 170, 32);
+    // Taking capture from a child bubbles its loss through the bar.
+    pointer(button, 'lostpointercapture', 170, 32);
+    pointer(bar, 'pointerup', 170, 32);
+    fireEvent.click(button);
+    expect(actions.dismissPlayback).toHaveBeenCalledOnce();
+    expect(setNowPlayingOpen).not.toHaveBeenCalled();
+  });
+
+  it.each([[30, 0], [-30, 0], [-100, 120], [0, 100]])('ignores a non-dismiss gesture (%s, %s)', (dx, dy) => {
+    const view = render(() => <OmniBar />);
+    const bar = view.container.querySelector('[data-omni-player]')!;
+    pointer(bar, 'pointerdown', 200, 30);
+    pointer(bar, 'pointermove', 200 + dx, 30 + dy);
+    pointer(bar, 'pointerup', 200 + dx, 30 + dy);
+    expect(actions.dismissPlayback).not.toHaveBeenCalled();
+  });
+
+  it('ignores cancelled gestures and mouse drags', () => {
+    const view = render(() => <OmniBar />);
+    const bar = view.container.querySelector('[data-omni-player]')!;
+    pointer(bar, 'pointerdown', 200, 30);
+    pointer(bar, 'pointermove', 100, 30);
+    pointer(bar, 'pointercancel', 100, 30);
+    pointer(bar, 'pointerup', 100, 30);
+    pointer(bar, 'pointerdown', 200, 30, { pointerType: 'mouse' });
+    pointer(bar, 'pointermove', 100, 30);
+    pointer(bar, 'pointerup', 100, 30);
+    expect(actions.dismissPlayback).not.toHaveBeenCalled();
+  });
+
+  it('does not dismiss on a desktop even with touch input', () => {
+    const original = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+    try {
+      const view = render(() => <OmniBar />);
+      const bar = view.container.querySelector('[data-omni-player]')!;
+      pointer(bar, 'pointerdown', 200, 30);
+      pointer(bar, 'pointermove', 100, 30);
+      pointer(bar, 'pointerup', 100, 30);
+      expect(actions.dismissPlayback).not.toHaveBeenCalled();
+    } finally { window.matchMedia = original; }
   });
 });

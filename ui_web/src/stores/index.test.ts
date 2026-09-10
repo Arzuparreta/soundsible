@@ -3188,3 +3188,50 @@ describe('playback delivery telemetry', () => {
     expect(rowsFor(api, 'ui_attempt_cancelled').length).toBeGreaterThan(0);
   });
 });
+
+describe('dismiss playback', () => {
+  it('empties the session and ignores a late load failure', async () => {
+    let reject!: (error: Error) => void;
+    const pending = new Promise<void>((_resolve, fail) => { reject = fail; });
+    const { actions, state, audioService, api } = await loadStore({}, { load: vi.fn(() => pending) });
+    actions.playTrack(t1);
+    actions.playNext(t2);
+    actions.dismissPlayback();
+    reject(new Error('late failure'));
+    await flush();
+    expect(audioService.stop).toHaveBeenCalledOnce();
+    expect(state.playback).toMatchObject({ currentTrack: null, queue: [], index: -1, phase: 'idle', currentTime: 0, duration: 0, isPlaying: false, isLoading: false, needsGesture: false, previewPreparation: null });
+    expect(api.putPlaybackState).toHaveBeenLastCalledWith(expect.objectContaining({ track: null, track_id: null, is_playing: false, position_sec: 0 }), expect.anything());
+    audioService.load.mockResolvedValue(undefined);
+    actions.playTrack(t2);
+    expect(state.playback.currentTrack?.id).toBe('t2');
+  });
+
+  it('cancels an outstanding DJ plan so it cannot refill the deck', async () => {
+    const pending = deferred<ReturnType<typeof autoPlan>>();
+    const { actions, state } = await loadStore({ planDjQueue: vi.fn(() => pending.promise) });
+    actions.playTrack(t1);
+    actions.enterAutoMode();
+    actions.dismissPlayback();
+    pending.resolve(autoPlan(['next']));
+    await flush();
+    expect(state.playback.currentTrack).toBeNull();
+    expect(state.playback.queue).toEqual([]);
+    expect(state.autoMode).toMatchObject({ active: false, phase: 'idle', sources: [], transition: { status: 'idle' } });
+  });
+
+  it('dismissal retires callbacks from a DJ handoff already in flight', async () => {
+    let callbacks!: { onDominant: () => void; onComplete: (position: number) => void };
+    const { actions, state } = await loadStore({}, {
+      armTransition: vi.fn((_url: string, _plan: unknown, next: typeof callbacks) => { callbacks = next; }),
+    });
+    actions.playTrack(t1);
+    actions.enterAutoMode();
+    actions.playNow(t2);
+    expect(callbacks).toBeDefined();
+    actions.dismissPlayback();
+    callbacks.onDominant();
+    callbacks.onComplete(15);
+    expect(state.playback).toMatchObject({ currentTrack: null, queue: [], phase: 'idle', currentTime: 0 });
+  });
+});

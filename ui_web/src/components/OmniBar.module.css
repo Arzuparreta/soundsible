@@ -36,6 +36,7 @@
      z-index of its own. The room it uncovers is paid for in app.css, where
      every primary scroller gets that much clearance after its last row. */
   .omni {
+    touch-action: pan-y pinch-zoom;
     position: absolute;
     left: var(--mini-player-inset);
     right: var(--mini-player-inset);

@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { libraryTab, setLibraryTab } from '../lib/libraryView';
+import { fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { Route, Router, type RouteSectionProps } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLocale } from '../lib/i18n';
@@ -37,6 +38,15 @@ afterEach(() => {
 });
 
 describe('mobile tab bar', () => {
+  it.each(['/', '/library', '/search', '/artist/example'])('opens Songs from %s even after choosing another view', async (path) => {
+    window.history.replaceState({}, '', path);
+    setLibraryTab('albums');
+    const view = renderTabs();
+    fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
+    await waitFor(() => expect(libraryTab()).toBe('songs'));
+    await waitFor(() => expect(['/', '/library']).toContain(window.location.pathname));
+  });
+
   it('exposes the four default destinations', () => {
     const view = renderTabs();
     expect([...view.container.querySelector('nav')!.children].map((tab) => tab.textContent?.trim()))
@@ -58,6 +68,16 @@ describe('mobile tab bar', () => {
     expect(screen.getByRole('link', { name: 'Descargas' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('resets Library through the mobile drawer after closing it', async () => {
+    setLibraryTab('artists');
+    renderTabs();
+    fireEvent.click(screen.getByRole('button', { name: 'Menú' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('link', { name: 'Biblioteca' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(libraryTab()).toBe('songs');
   });
 
   it('keeps Library independent from the old Favourites preference', async () => {
