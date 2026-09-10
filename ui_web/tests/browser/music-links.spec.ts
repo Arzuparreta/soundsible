@@ -53,6 +53,26 @@ test('full player artist opens the general page while keeping the current song a
   expect(await page.locator('[data-player-surface-open] [data-drag-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-drag-row')))).toEqual(queueBefore);
 });
 
+test('an album card opens the record from the line under its cover', async ({ page, isMobile }) => {
+  // The tile is one target end to end. Only the cover and the title carry text
+  // that reads like a link, so the credit and the song count are where a thumb
+  // lands by accident — and they have to open the record like the rest of it.
+  await page.route('**/api/library/albums**', (route) => route.fulfill({ json: { albums: [{
+    id: 'al-1', title: 'Disco de prueba', album_artist: 'Artista 7', is_compilation: false,
+    track_count: 12, duration: 2400, cover_track_id: null,
+  }] } }));
+  // The albums tab is a persisted preference, and the control that switches it
+  // differs between the phone drawer and the desktop toolbar.
+  await page.addInitScript(() => localStorage.setItem('library:tab', 'albums'));
+  await page.goto('/player/#/');
+  const count = page.getByText('12 pistas', { exact: true });
+  await expect(count).toBeVisible();
+  // Aimed at the count and delivered to whatever is on top of it: the card's
+  // own link is meant to be what catches it.
+  if (isMobile) await count.tap({ force: true }); else await count.click({ force: true });
+  await expect(page).toHaveURL(/#\/album\/Disco%20de%20prueba\?artist=Artista\+7&view=library&album_id=al-1/);
+});
+
 test('desktop artist links support keyboard and a separate tab', async ({ page, isMobile, context }) => {
   test.skip(isMobile, 'Desktop keyboard and modifier behavior');
   await page.goto('/player/#/');

@@ -1,6 +1,6 @@
-import { AlbumLink, ArtistLinks } from './MusicLinks';
-import { albumMusic } from '../lib/musicNavigation';
-import { For } from 'solid-js';
+import { ArtistLinks, MusicLink } from './MusicLinks';
+import { albumDestination, albumMusic } from '../lib/musicNavigation';
+import { For, Show } from 'solid-js';
 import { coverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
 import { openAlbumMenu } from './albumActions';
@@ -25,10 +25,18 @@ export default function AlbumGrid(props: { albums: CatalogAlbum[] }) {
               class={styles.card}
               data-pressable
             >
-              <AlbumLink music={albumMusic(album)} class={styles.albumLink} onMenu={(event) => openAlbumMenu(album, {}, event)}>
+              {/* One link over the whole tile, the way the search cards do it:
+                * the cover, the title, the credit line and the song count are
+                * all the record, so all of them open it. The artist links keep
+                * their own layer above it and stay separately reachable. */}
+              <Show when={album.title.trim()}>
+                <MusicLink class={styles.activate} path={albumDestination(albumMusic(album))} label={album.title}
+                  onMenu={(event) => openAlbumMenu(album, {}, event)} />
+              </Show>
+              <div class={styles.sleeve}>
                 <div class={styles.cover} style={cover(album)} />
                 <span class={styles.title}>{album.title}</span>
-              </AlbumLink>
+              </div>
               <ArtistLinks class={styles.artist} music={albumMusic(album)} />
               <span class={styles.count}>{trackCount(album.track_count)}</span>
             </div>

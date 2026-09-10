@@ -1,4 +1,4 @@
-import { trackMusic } from '../lib/musicNavigation';
+import { libraryTrackMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openArtistMenu } from './artistActions';
@@ -132,7 +132,7 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
                   <Show when={result()?.kind === 'track'}>
                     <SongRow
                       track={(result() as Extract<LibrarySearchResult, { kind: 'track' }>).track}
-                      music={{ ...trackMusic((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track), view: 'library' }}
+                      music={libraryTrackMusic((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
                       // A saved song with no file has no engine-side cover to
                       // ask for; its thumbnail is the only artwork it has.
                       cover={trackCoverUrl((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track, 'thumb')}

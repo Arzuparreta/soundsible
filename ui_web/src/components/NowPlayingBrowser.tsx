@@ -1,5 +1,5 @@
 import { ArtistLinks, MusicLink } from './MusicLinks';
-import { albumMusic, albumDestination, catalogDestination, catalogMusic, trackMusic, navigateMusic, type MusicMetadata } from '../lib/musicNavigation';
+import { albumMusic, albumDestination, catalogDestination, catalogMusic, libraryTrackMusic, navigateMusic, type MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { savedFromTrack, savedFromCatalogItem } from '../lib/saved';
@@ -453,7 +453,7 @@ export function NowPlayingBrowser(props: {
     aborter?.abort();
   });
 
-  const openTrackActions = (track: Track, event?: MouseEvent, music: MusicMetadata = { ...trackMusic(track), view: "library" }) =>
+  const openTrackActions = (track: Track, event?: MouseEvent, music: MusicMetadata = libraryTrackMusic(track)) =>
     openTrackMenu(track, {
       onAddToPlaylist: openPlaylistPicker,
       onEditMetadata: openMetadataEditor,
@@ -518,7 +518,7 @@ export function NowPlayingBrowser(props: {
   ) => (
     <BrowserTrackRow
       title={track.title}
-      subtitle={track.artist} music={{ ...trackMusic(track), view: "library" }}
+      subtitle={track.artist} music={libraryTrackMusic(track)}
       cover={trackCoverUrl(track)}
       seed={track.id}
       active={isPlayingTrack(track)}
@@ -764,7 +764,7 @@ function RootView(props: { autoRow: (track: Track) => AutoRowProps }) {
               return (
                 <BrowserTrackRow
                   title={track.title}
-                  subtitle={track.artist} music={{ ...trackMusic(track), view: "library" }}
+                  subtitle={track.artist} music={libraryTrackMusic(track)}
                   cover={track.cover}
                   seed={track.id}
                   active={isPlayingTrack(track)}

@@ -1,4 +1,4 @@
-import { trackMusic } from '../lib/musicNavigation';
+import { libraryTrackMusic } from '../lib/musicNavigation';
 import { createEffect, createSignal, For, Show, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
@@ -53,7 +53,7 @@ export default function TrackList(props: {
       track,
       {
         navigate,
-        music: { ...trackMusic(track), view: "library" },
+        music: libraryTrackMusic(track),
         onAddToPlaylist: openPlaylistPicker,
         onEditMetadata: openMetadataEditor,
         onPlayOnDevice: openPlayOnDevice,
@@ -157,7 +157,7 @@ export default function TrackList(props: {
                               ? props.onPlay(props.tracks, vi.index)
                               : actions.playFrom(props.tracks, vi.index, { context: props.context })
                           }
-                          music={{ ...trackMusic(track()!), view: "library" }}
+                          music={libraryTrackMusic(track()!)}
                           onMenu={openMenu}
                         />
                       </div>

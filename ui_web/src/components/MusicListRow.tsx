@@ -82,7 +82,7 @@ export function MusicListRow(props: MusicListRowProps) {
           }
         }}>
         <span class={styles.title}>{props.title}</span>
-      </button>}>{(path) => <MusicLink path={path()} class={styles.titleButton} onMenu={props.onMenu}><span class={styles.title}>{props.title}</span></MusicLink>}</Show>
+      </button>}>{(path) => <MusicLink path={path()} class={styles.titleButton} label={label()} onMenu={props.onMenu}><span class={styles.title}>{props.title}</span></MusicLink>}</Show>
         <span class={styles.meta} data-row-meta>
           <span class={styles.subtitle}>
             <span class={styles.detail}><Show when={props.index != null}><span class={styles.index}>{props.index} · </span></Show>

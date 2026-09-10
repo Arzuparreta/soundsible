@@ -1,3 +1,4 @@
+import { createMemo, createRoot } from 'solid-js';
 import type { Navigator } from '@solidjs/router';
 import { setNowPlayingOpen, state } from '../stores';
 import type { CatalogAlbum, CatalogItem, Track } from '../types/music';
@@ -40,6 +41,15 @@ export function trackMusic(track: Track): MusicMetadata {
   };
 }
 
+/** A song shown inside a library list stays in the library. The row can still
+ * hold a preview — a search result the user has not downloaded yet — and its
+ * artist and album have to lead back to the library pages the list belongs to
+ * rather than to Discover. Every such list asks for this instead of correcting
+ * `trackMusic` by hand, so a list added later cannot forget the correction. */
+export function libraryTrackMusic(track: Track): MusicMetadata {
+  return { ...trackMusic(track), view: 'library' };
+}
+
 export function catalogMusic(item: CatalogItem): MusicMetadata {
   const owned = item.track_id ? state.library?.find((track) => track.id === item.track_id) : undefined;
   if (owned) return { ...trackMusic(owned), view: item.type === 'library_track' ? 'library' : 'discover' };
@@ -68,12 +78,24 @@ export function performerNames(meta: MusicMetadata): string[] {
   return [...new Set(structured?.length ? structured : meta.artist?.trim() ? [meta.artist.trim()] : [])];
 }
 
+/** Catalog artist ids by comparison key, rebuilt once per catalog change.
+ * Only a unique catalog match is safe, so a key two artists share resolves to
+ * nothing: never guess between homonyms. A virtualized list can hold hundreds
+ * of artist links at once, and each one asking the catalog directly meant
+ * re-scanning every artist per link on every revision. */
+const catalogArtistIds = createRoot(() => createMemo(() => {
+  const ids = new Map<string, string | undefined>();
+  for (const artist of state.catalog?.artists ?? []) {
+    const key = artistKey(artist.name);
+    ids.set(key, ids.has(key) ? undefined : artist.id);
+  }
+  return ids;
+}));
+
 export function artistDestination(meta: MusicMetadata, name: string): string {
-  // Only a unique catalog match is safe; never guess between homonyms.
-  const matches = (state.catalog?.artists ?? []).filter((artist) => artistKey(artist.name) === artistKey(name));
   const primary = artistKey(name) === artistKey(meta.artist);
   return artistPath(name, { view: meta.view,
-    artistId: (primary ? meta.artistId : undefined) ?? (matches.length === 1 ? matches[0].id : undefined),
+    artistId: (primary ? meta.artistId : undefined) ?? catalogArtistIds().get(artistKey(name)),
     deezerId: primary ? meta.deezerArtistId : undefined });
 }
 

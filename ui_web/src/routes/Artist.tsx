@@ -1,4 +1,4 @@
-import { trackMusic } from '../lib/musicNavigation';
+import { libraryTrackMusic } from '../lib/musicNavigation';
 import { MusicLink } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
@@ -364,7 +364,7 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
       <For each={props.tracks}>
         {(track, i) => (
           <SongRow
-            track={track} music={{ ...trackMusic(track), view: "library" }}
+            track={track} music={libraryTrackMusic(track)}
             index={i() + 1}
             cover={trackCoverUrl(track, 'thumb')}
             onPlay={() => actions.playFrom(props.tracks, i(), {
