@@ -115,7 +115,7 @@
   }
 }
 
-.titleButton { display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.titleButton { min-height: min(25px, calc(var(--row-h) - 28px)); display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .titleButton .title { display: block; }
 .titleButton:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 

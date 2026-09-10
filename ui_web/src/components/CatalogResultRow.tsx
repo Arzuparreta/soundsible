@@ -34,7 +34,7 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
   const busy = () => itemBusy(props.item);
   const tap = createResponsiveTap({ onTap: (event) => { event.stopPropagation(); props.onPlay(); } });
   const rowTap = createResponsiveTap({ onTap: (event) => {
-    if (!(event.target as Element).closest('a, button, input')) props.onPlay();
+    if (!(event.target as Element).closest('a, button, input, [role="button"]')) props.onPlay();
   } });
   const artwork = (): JSX.CSSProperties =>
     coverStyle(
@@ -66,7 +66,9 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
         </Show>
       </span>
       <span class={styles.meta}>
-        <button class={styles.titleButton} type="button"
+        {/* WebKit suppresses text selection inside native buttons. Keep this
+          * selectable title keyboard-operable, separate from the artist links. */}
+        <span class={styles.titleButton} role="button" tabindex="0"
           {...tap}
           onKeyDown={(event) => {
             if (event.target !== event.currentTarget) return;
@@ -75,7 +77,7 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
             props.onPlay();
           }}
           aria-label={props.item.title}
-          ><span class={styles.title}>{props.item.title}</span></button>
+          ><span class={styles.title}>{props.item.title}</span></span>
         <Show when={props.showArtist !== false}>
           <ArtistLinks class={styles.subtitle} music={catalogMusic(props.item)} fallback={props.item.subtitle || itemArtist(props.item)} />
         </Show>

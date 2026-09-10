@@ -301,7 +301,7 @@ describe('NowPlayingBrowser', () => {
     await typeGlobalQuery('radiohead');
     await screen.findByText('Creep');
 
-    const rendered = Array.from(document.querySelectorAll('button[aria-label], a[aria-label]'))
+    const rendered = Array.from(document.querySelectorAll('button[aria-label], [role="button"][aria-label], a[aria-label]'))
       .map((el) => el.getAttribute('aria-label') ?? el.textContent ?? '')
       .filter((text) => /Radiohead|Creep|In Rainbows/.test(text));
     const firstIndexOf = (label: string) => rendered.findIndex((text) => text.includes(label));

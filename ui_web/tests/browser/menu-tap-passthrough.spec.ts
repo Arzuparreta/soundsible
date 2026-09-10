@@ -65,11 +65,13 @@ const row = (page: Page, n: number) =>
  * Null when the menu covers no row — which would make the test prove nothing. */
 async function rowUnder(page: Page, x: number, y: number): Promise<string | null> {
   return page.evaluate(([px, py]) => {
-    const covered = document.elementsFromPoint(px, py).find((element) => {
-      const rowElement = element.closest<HTMLElement>('[role="button"][aria-label^="Play "], [data-row-main][aria-label^="Play "]');
-      return rowElement && !rowElement.closest('[role="dialog"]');
-    });
-    return covered?.closest<HTMLElement>('[role="button"], [data-row-main]')?.getAttribute('aria-label') ?? null;
+    // The desktop row is now a container with independent playback and artist
+    // controls. Find the row first; the point need not land on its title button.
+    const rowSelector = '[data-music-list-row], [data-song-row]';
+    const covered = document.elementsFromPoint(px, py)
+      .map((element) => element.closest<HTMLElement>(rowSelector))
+      .find((element) => element && !element.closest('[role="dialog"], [role="menu"]'));
+    return covered?.querySelector<HTMLElement>('button[aria-label^="Play "], [role="button"][aria-label^="Play "]')?.getAttribute('aria-label') ?? null;
   }, [x, y]);
 }
 

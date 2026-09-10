@@ -72,7 +72,7 @@ export default function SongRow(props: SongRowProps) {
 
   const rowTap = createResponsiveTap({
     onTap: (event) => {
-      if ((event.target as Element).closest('a, button, input')) return;
+      if ((event.target as Element).closest('a, button, input, [role="button"]')) return;
       onRowClick();
     },
     onLongPress: props.onMenu ? () => openMenu() : undefined,
@@ -123,6 +123,7 @@ export default function SongRow(props: SongRowProps) {
             onPlayOnDevice: openPlayOnDevice }, event)} />}>
     <div
       class={styles.row}
+      data-song-row
       data-compact={props.compact ? '' : undefined}
       draggable={Boolean(props.onDragStart)}
       onDragStart={props.onDragStart}
@@ -136,14 +137,16 @@ export default function SongRow(props: SongRowProps) {
       </Show>
       <div class={styles.cover} style={rowCoverStyle(props)} />
       <div class={styles.meta}>
-        <button class={styles.titleButton} type="button"
+        {/* WebKit suppresses text selection inside native buttons. Keep this
+          * selectable title keyboard-operable, separate from the artist links. */}
+        <span class={styles.titleButton} role="button" tabindex="0"
           aria-label={label()}
           // Announces which row is the one currently playing, so a screen-reader
           // user can find "where am I" without listening through the whole list.
           aria-current={props.active ? 'true' : undefined}
           {...tap}
           onKeyDown={onKeyDown}
-          ><span class={styles.title}>{props.track.title}</span></button>
+          ><span class={styles.title}>{props.track.title}</span></span>
         <ArtistLinks class={styles.artist} music={props.music ?? trackMusic(props.track)} />
       </div>
       <Show when={props.badge}>
