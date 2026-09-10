@@ -74,7 +74,8 @@ describe('OmniBar interaction structure', () => {
     const expand = screen.getByRole('button', { name: 'autoMode.label: A track — An artist' });
     expect(expand).toBeInTheDocument();
     expect(screen.getByText('DJ')).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByText('DJ').closest('button')).toBe(expand);
+    expect(expand.parentElement).toContainElement(screen.getByText('DJ'));
+    expect(expand).not.toContainElement(screen.getByRole('link', { name: 'An artist' }));
     dj.unmount();
     state.autoMode.active = false;
   });

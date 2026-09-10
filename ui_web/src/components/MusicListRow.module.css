@@ -90,3 +90,13 @@
   .row:hover { background: var(--bg-hover); }
   .menu:hover, .primary:hover { background: var(--bg-elevated); }
 }
+
+.main { position: relative; flex-direction: column; align-items: stretch; justify-content: center; gap: 1px; }
+.titleButton { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.titleButton::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius-xs); }
+.titleButton:focus-visible { outline: none; }
+.titleButton:focus-visible::after { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.titleButton[aria-disabled="true"] { cursor: default; }
+.titleButton .title { display: block; }
+.meta { flex: none; pointer-events: none; }
+.meta a { position: relative; z-index: 1; pointer-events: auto; }

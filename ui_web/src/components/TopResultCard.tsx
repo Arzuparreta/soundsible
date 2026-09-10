@@ -1,4 +1,6 @@
-import { type JSX } from 'solid-js';
+import { ArtistLinks, MusicLink } from './MusicLinks';
+import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
+import { Show, type JSX } from 'solid-js';
 import { itemArtist } from '../lib/catalogItem';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { t } from '../lib/i18n';
@@ -31,29 +33,23 @@ export interface TopResultCardProps {
 export function TopResultCard(props: TopResultCardProps) {
   const round = () => props.item.type === 'artist';
   const label = () => TYPE_LABEL[props.item.type]?.() ?? '';
-  const subtitle = () => {
-    const artist = itemArtist(props.item);
-    // An artist card would otherwise read "Radiohead / Radiohead".
-    return round() || !artist ? label() : `${label()} · ${artist}`;
-  };
   const tap = createResponsiveTap({ onTap: props.onPick });
 
   return (
-    <button
+    <div
       class={styles.card}
-      type="button"
       data-pressable
       data-now-playing={props.active ? '' : undefined}
-      {...tap}
     >
+      <Show when={catalogDestination(props.item)} fallback={<button class={styles.activate} type="button" aria-label={props.item.title} {...tap} />}>{(path) => <MusicLink class={styles.activate} path={path()} label={props.item.title} />}</Show>
       <span
         classList={{ [styles.cover]: true, [styles.coverRound]: round() }}
         style={props.coverStyle(props.item, round())}
       />
       <span class={styles.meta}>
         <span class={styles.title}>{props.item.title}</span>
-        <span class={styles.subtitle}>{subtitle()}</span>
+        <span class={styles.subtitle}>{label()}<Show when={!round() && itemArtist(props.item)}> · <ArtistLinks music={catalogMusic(props.item)} fallback={itemArtist(props.item)} /></Show></span>
       </span>
-    </button>
+    </div>
   );
 }

@@ -83,3 +83,8 @@
     font-size: var(--text-h3);
   }
 }
+
+.card { position: relative; }
+.activate { position: absolute; inset: 0; background: transparent; border: 0; border-radius: inherit; cursor: pointer; }
+.activate:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.card a:not(.activate) { position: relative; z-index: 1; }

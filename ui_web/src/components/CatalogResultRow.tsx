@@ -1,3 +1,5 @@
+import { ArtistLinks } from './MusicLinks';
+import { catalogMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openEntryMenu } from './entryActions';
@@ -30,7 +32,10 @@ export interface CatalogResultRowProps {
 export function CatalogResultRow(props: CatalogResultRowProps) {
   const entry = createMemo(() => savedFromCatalogItem(props.item));
   const busy = () => itemBusy(props.item);
-  const tap = createResponsiveTap({ onTap: props.onPlay });
+  const tap = createResponsiveTap({ onTap: (event) => { event.stopPropagation(); props.onPlay(); } });
+  const rowTap = createResponsiveTap({ onTap: (event) => {
+    if (!(event.target as Element).closest('a, button, input, [role="button"]')) props.onPlay();
+  } });
   const artwork = (): JSX.CSSProperties =>
     coverStyle(
       props.item.id,
@@ -39,24 +44,16 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
 
   return (
     <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.item.title} subtitle={props.showArtist === false ? undefined : props.item.subtitle || itemArtist(props.item)}
-      seed={props.item.id} cover={props.item.cover || (props.item.track_id ? coverUrl(props.item.track_id, 'thumb') : undefined)}
+      music={props.showArtist === false ? undefined : catalogMusic(props.item)} seed={props.item.id} cover={props.item.cover || (props.item.track_id ? coverUrl(props.item.track_id, 'thumb') : undefined)}
       index={props.index} active={props.active} busy={busy() || props.saving} entry={entry()}
-      onActivate={props.onPlay} onMenu={() => openEntryMenu(entry(), { track: itemToTrack(props.item) ?? undefined,
+      onActivate={props.onPlay} onMenu={() => openEntryMenu(entry(), { music: catalogMusic(props.item), track: itemToTrack(props.item) ?? undefined,
         onDownload: props.onDownload, busy: props.saving })} />}>
     <div
       class={styles.row}
       data-pressable
       data-now-playing={props.active ? '' : undefined}
       aria-busy={busy()}
-      role="button"
-      tabindex="0"
-      {...tap}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        props.onPlay();
-      }}
+      {...rowTap}
     >
       <Show when={props.index != null}>
         <span class={styles.index}>{props.index}</span>
@@ -69,9 +66,20 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
         </Show>
       </span>
       <span class={styles.meta}>
-        <span class={styles.title}>{props.item.title}</span>
+        {/* WebKit suppresses text selection inside native buttons. Keep this
+          * selectable title keyboard-operable, separate from the artist links. */}
+        <span class={styles.titleButton} role="button" tabindex="0"
+          {...tap}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            props.onPlay();
+          }}
+          aria-label={props.item.title}
+          ><span class={styles.title}>{props.item.title}</span></span>
         <Show when={props.showArtist !== false}>
-          <span class={styles.subtitle}>{props.item.subtitle || itemArtist(props.item)}</span>
+          <ArtistLinks class={styles.subtitle} music={catalogMusic(props.item)} fallback={props.item.subtitle || itemArtist(props.item)} />
         </Show>
       </span>
       <Show when={props.showSource}>

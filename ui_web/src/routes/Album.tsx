@@ -1,3 +1,5 @@
+import { libraryTrackMusic } from '../lib/musicNavigation';
+import { ArtistLinks } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { actions, musicLibrary, isPlayingItem, state } from '../stores';
@@ -65,11 +67,11 @@ export default function Album() {
   // named in search — where a name is genuinely all there is.
   const [catalogTracks] = createResource(
     () => viewParams().albumId,
-    (albumId) => api.getLibraryAlbum(albumId).then((res) => res.track_ids ?? []).catch(() => []),
+    (albumId) => api.getLibraryAlbum(albumId).catch(() => null),
   );
 
   const libraryTrackList = createMemo<Track[]>(() => {
-    if (viewParams().albumId) return tracksByIds(catalogTracks() ?? []);
+    if (viewParams().albumId) return tracksByIds(catalogTracks()?.track_ids ?? []);
     // artistKey folds the same Unicode/casing differences on both sides; the
     // album title is matched with it too so the two comparisons stay consistent.
     const tKey = artistKey(title());
@@ -174,11 +176,6 @@ export default function Album() {
     }
   };
 
-  const goArtist = () => {
-    const a = profile()?.artist || artistName();
-    if (a) navigate(artistPath(a, { view: 'discover' }));
-  };
-
   const switchView = (mode: ViewMode) => {
     setViewOverride(mode);
     setSearchParams({ view: mode }, { replace: true });
@@ -213,9 +210,7 @@ export default function Album() {
             </Show>
           </div>
           <h1 class={styles.title}>{profile()?.title || title()}</h1>
-          <button class={styles.artistLink} type="button" onClick={goArtist}>
-            {profile()?.artist || artistName()}
-          </button>
+          <ArtistLinks class={styles.artistLink} music={{ artist: profile()?.artist || artistName(), view: view(), artistId: catalogTracks()?.album?.album_artist_id ?? undefined }} />
           <span class={styles.meta}>
             <Show when={profile()?.year}>{profile()!.year}</Show>
             <Show when={profile()?.year && tracklist().length > 0}> · </Show>
@@ -301,7 +296,7 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
       <For each={props.tracks}>
         {(track, i) => (
           <SongRow
-            track={track}
+            track={track} music={libraryTrackMusic(track)}
             index={i() + 1}
             cover={trackCoverUrl(track, 'thumb')}
             onPlay={() => actions.playFrom(props.tracks, i(), {

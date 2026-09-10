@@ -1,3 +1,5 @@
+import { ArtistLinks, MusicLink } from './MusicLinks';
+import type { MusicMetadata } from '../lib/musicNavigation';
 import { Show, type JSX } from 'solid-js';
 import { coverStyle } from '../lib/cover';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -9,7 +11,9 @@ import styles from './MusicListRow.module.css';
 
 export interface MusicListRowProps {
   title: string;
+  titlePath?: string;
   subtitle?: string;
+  music?: MusicMetadata;
   seed: string;
   cover?: string | null;
   round?: boolean;
@@ -68,7 +72,7 @@ export function MusicListRow(props: MusicListRowProps) {
   return (
     <div class={styles.row} data-music-list-row data-now-playing={props.active ? '' : undefined}
       data-editing={props.editing ? '' : undefined} aria-busy={busy() || undefined}>
-      <button class={styles.main} type="button" data-row-main data-pressable
+      <div class={styles.main}><Show when={props.titlePath} fallback={<button class={styles.titleButton} type="button" data-row-main data-pressable
         aria-label={label()} aria-current={props.active ? 'true' : undefined}
         aria-disabled={props.disabled || !props.onActivate || undefined} {...tap}
         onContextMenu={(event) => { if (props.onMenu) { event.preventDefault(); props.onMenu(event); } }}
@@ -77,15 +81,16 @@ export function MusicListRow(props: MusicListRowProps) {
             event.preventDefault(); props.onMenu();
           }
         }}>
+        <span class={styles.title}>{props.title}</span>
+      </button>}>{(path) => <MusicLink path={path()} class={styles.titleButton} label={label()} onMenu={props.onMenu}><span class={styles.title}>{props.title}</span></MusicLink>}</Show>
         <span class={styles.meta} data-row-meta>
-          <span class={styles.title}>{props.title}</span>
           <span class={styles.subtitle}>
             <span class={styles.detail}><Show when={props.index != null}><span class={styles.index}>{props.index} · </span></Show>
-              {props.subtitle}</span>
+              <Show when={props.music} fallback={props.subtitle}>{(music) => <ArtistLinks music={music()} fallback={props.subtitle} />}</Show></span>
             <Show when={props.annotation}><span class={styles.annotation}>{props.subtitle ? ' · ' : ''}{props.annotation}</span></Show>
           </span>
         </span>
-      </button>
+      </div>
       {/* Named by its own text, the way the desktop row names it. The row
         * itself already announces the same verb against the title, and a second
         * control repeating that name verbatim would leave a screen reader with

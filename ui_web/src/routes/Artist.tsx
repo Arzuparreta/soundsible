@@ -1,3 +1,5 @@
+import { libraryTrackMusic } from '../lib/musicNavigation';
+import { MusicLink } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { actions, musicLibrary, isPlayingItem, state } from '../stores';
@@ -17,7 +19,6 @@ import { EmptyState } from '../components/EmptyState';
 import SongRow from '../components/SongRow';
 import { CatalogResultRow } from '../components/CatalogResultRow';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
-import { createResponsiveTap } from '../lib/responsiveTap';
 
 type ViewMode = 'discover' | 'library';
 
@@ -79,7 +80,8 @@ export default function Artist() {
     const n = artistKey(name());
     if (!n) return [];
     return musicLibrary().filter(
-      (t) => artistKey(t.artist) === n || artistKey(t.album_artist) === n,
+      (t) => artistKey(t.artist) === n || artistKey(t.album_artist) === n
+        || t.artists?.some((artist) => artistKey(artist) === n),
     );
   });
 
@@ -186,14 +188,6 @@ export default function Artist() {
       ? `url("${picture}") center / cover no-repeat`
       : coverGradient(seed),
   });
-
-  const handleAlbumClick = (album: { deezer_id: string; title: string }) => {
-    navigate(albumPath(album.title, name(), { deezerId: album.deezer_id, view: 'discover' }));
-  };
-
-  const handleRelatedClick = (artist: { deezer_id: string; name: string }) => {
-    navigate(artistPath(artist.name, { deezerId: artist.deezer_id, view: 'discover' }));
-  };
 
   const handleCandidateClick = (c: { deezer_id: string; name: string }) => {
     setDisambigOpen(false);
@@ -325,8 +319,7 @@ export default function Artist() {
                     label: name(),
                   })}
                   onSaveItem={saveItem}
-                  onAlbumClick={handleAlbumClick}
-                  onRelatedClick={handleRelatedClick}
+                  artistName={name()}
                 />
               </Show>
             </Show>
@@ -371,7 +364,7 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
       <For each={props.tracks}>
         {(track, i) => (
           <SongRow
-            track={track}
+            track={track} music={libraryTrackMusic(track)}
             index={i() + 1}
             cover={trackCoverUrl(track, 'thumb')}
             onPlay={() => actions.playFrom(props.tracks, i(), {
@@ -393,8 +386,7 @@ function DiscoverView(props: {
   saving: Set<string>;
   onPlayItem: (item: CatalogItem, queue?: CatalogItem[]) => void;
   onSaveItem: (item: CatalogItem) => void;
-  onAlbumClick: (album: { deezer_id: string; title: string }) => void;
-  onRelatedClick: (artist: { deezer_id: string; name: string }) => void;
+  artistName: string;
 }) {
   return (
     <div class={styles.discoverView}>
@@ -424,13 +416,12 @@ function DiscoverView(props: {
           <div class={styles.albumRail} data-horizontal-scroll>
             <For each={props.albums}>
               {(al) => {
-                const tap = createResponsiveTap({ onTap: () => props.onAlbumClick(al) });
                 return (
-                  <button class={styles.albumCard} type="button" data-pressable {...tap}>
+                  <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })}>
                     <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
                     <span class={styles.albumName}>{al.title}</span>
                     <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
-                  </button>
+                  </MusicLink>
                 );
               }}
             </For>
@@ -444,13 +435,12 @@ function DiscoverView(props: {
           <div class={styles.albumRail} data-horizontal-scroll>
             <For each={props.singlesEps}>
               {(al) => {
-                const tap = createResponsiveTap({ onTap: () => props.onAlbumClick(al) });
                 return (
-                  <button class={styles.albumCard} type="button" data-pressable {...tap}>
+                  <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })}>
                     <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
                     <span class={styles.albumName}>{al.title}</span>
                     <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
-                  </button>
+                  </MusicLink>
                 );
               }}
             </For>
@@ -464,13 +454,12 @@ function DiscoverView(props: {
           <div class={styles.albumRail} data-horizontal-scroll>
             <For each={props.related}>
               {(artist) => {
-                const tap = createResponsiveTap({ onTap: () => props.onRelatedClick(artist) });
                 return (
-                  <button class={styles.albumCard} type="button" data-pressable {...tap}>
+                  <MusicLink class={styles.albumCard} path={artistPath(artist.name, { view: "discover", deezerId: artist.deezer_id })}>
                     <span classList={{ [styles.albumCover]: true, [styles.roundCover]: true }} style={coverStyle(artist.name, artist.picture)} />
                     <span class={styles.albumName}>{artist.name}</span>
                     <span class={styles.albumCount}>{formatFans(artist.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}</span>
-                  </button>
+                  </MusicLink>
                 );
               }}
             </For>

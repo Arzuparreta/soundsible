@@ -406,3 +406,8 @@
   .row { display: block; }
   .row[data-current]::before { background: transparent; }
 }
+
+.main { position: relative; }
+.playButton { position: absolute; inset: 0; border: 0; border-radius: inherit; background: transparent; color: inherit; cursor: pointer; }
+.playButton:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.main a { position: relative; z-index: 1; }

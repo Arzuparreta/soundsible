@@ -95,7 +95,7 @@ async function assertGeometry(page: Page, within?: string) {
         && rect.width > 0
         && rect.height > 0;
     };
-    const controls = [...scope.querySelectorAll<HTMLElement>('button, input, select, a[href]')].filter(visible);
+    const controls = [...scope.querySelectorAll<HTMLElement>('button, [role="button"], input, select, a[href]')].filter(visible);
     const outside = controls
       .filter((element) => {
         const rect = element.getBoundingClientRect();
@@ -107,7 +107,10 @@ async function assertGeometry(page: Page, within?: string) {
         const rect = element.getBoundingClientRect();
         return rect.width < 24 || rect.height < 24;
       })
-      .map((element) => `${element.tagName}:${element.getAttribute('aria-label') ?? element.textContent?.trim()}`);
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return `${element.tagName}:${element.getAttribute('aria-label') ?? element.textContent?.trim()} (${rect.width} x ${rect.height})`;
+      });
     const clippedFunctionalText = [...scope.querySelectorAll<HTMLElement>('h1, h2, label, output, button')]
       .filter(visible)
       .filter((element) => Boolean(element.textContent?.trim()))
@@ -185,7 +188,7 @@ test.describe('interface scale geometry', () => {
       // restoration. Setting scrollTop alone can race that initial restore.
       await scroller.dispatchEvent('pointerdown');
       await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-      const lastControl = scroller.locator('button, input, select, a[href]').last();
+      const lastControl = scroller.locator('button, [role="button"], input, select, a[href]').last();
       const lastBox = await lastControl.boundingBox();
       const playerBox = await player.boundingBox();
       expect(lastBox).not.toBeNull();

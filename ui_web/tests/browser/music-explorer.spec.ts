@@ -44,7 +44,7 @@ test.beforeEach(async ({ page }) => {
  * from why a fix that removes a real hang makes the runner less reliable, not
  * from a fresh guess at the symptom.
  */
-test('explores inside the shell, restores search, and separates DJ references below Route', async ({ page }, info) => {
+test('opens general music pages, preserves explorer search, and separates DJ references below Route', async ({ page }, info) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await openMusicPlayer(page);
@@ -53,19 +53,26 @@ test('explores inside the shell, restores search, and separates DJ references be
   let browser = page.locator('[data-now-playing-tile="browser"]');
   await expect(browser.getByText('Canción de biblioteca 320', { exact: true })).toBeVisible();
   await browser.getByRole('searchbox').fill('radiohead');
-  await browser.getByRole('button', { name: /Radiohead/ }).click();
-  await browser.getByRole('button', { name: /In Rainbows/ }).click();
-  await expect(browser.getByText('15 Step', { exact: true })).toBeVisible();
-  await browser.getByRole('button', { name: 'Volver', exact: true }).click();
-  await browser.getByRole('button', { name: 'Volver', exact: true }).click();
+  await browser.getByRole('link', { name: /Radiohead/ }).click();
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/artist\/Radiohead/);
+  await page.getByRole('link', { name: /In Rainbows/ }).click();
+  await expect(page.getByText('15 Step', { exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Radiohead', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^NORMAL:/ }).click();
+  if (mobile) await snapPlayerCarousel(page, 'now-playing', 'browser');
   await expect(browser.getByRole('searchbox')).toHaveValue('radiohead');
   await page.getByRole('tab', { name: 'DJ', exact: true }).click();
   if (mobile) await snapPlayerCarousel(page, 'auto', 'browser');
   browser = page.locator('[data-auto-tile="browser"]');
   await expect(browser.getByRole('searchbox')).toHaveValue('radiohead');
-  await browser.getByRole('button', { name: /Radiohead/ }).click();
-  await browser.getByRole('button', { name: /In Rainbows/ }).click();
-  await expect(browser.getByRole('button', { name: 'Pedir: 15 Step', exact: true })).toBeVisible();
+  await browser.getByRole('link', { name: /Radiohead/ }).click();
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  await page.getByRole('link', { name: /In Rainbows/ }).click();
+  await expect(page.getByText('15 Step', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^DJ:/ }).click();
+  if (mobile) await snapPlayerCarousel(page, 'auto', 'browser');
   await settle(page);
   await page.screenshot({ path: `/tmp/soundsible-music-${info.project.name}.png` });
   if (mobile) await snapPlayerCarousel(page, 'auto', 'route');

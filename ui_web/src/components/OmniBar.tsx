@@ -1,3 +1,5 @@
+import { ArtistLinks } from './MusicLinks';
+import { trackMusic } from '../lib/musicNavigation';
 import { createMemo, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
@@ -82,12 +84,12 @@ export function OmniBar() {
         <div class={styles.progressFill} style={{ '--p': pct() / 100 }} />
       </div>
 
-      <button
-        class={styles.openArea}
+      <div class={styles.openArea}><button
+        class={styles.openButton}
         type="button"
         aria-label={openLabel()}
         onClick={() => (current() || state.autoMode.active) ? setNowPlayingOpen(true) : actions.enterAutoMode()}
-      >
+      />
         <div class={styles.cover} style={coverBg()} data-omni-cover="">
           <Show when={state.autoMode.active}>
             <span class={styles.coverModeBadge} data-omni-mode-badge="" aria-hidden="true">DJ</span>
@@ -106,10 +108,10 @@ export function OmniBar() {
             <span class={styles.title}>
               {current()!.title}
             </span>
-            <span classList={{ [styles.sub]: true, [styles.subAlert]: failed() }}>{subtitle()}</span>
+            <span classList={{ [styles.sub]: true, [styles.subAlert]: failed() }}><Show when={subtitle() === current()!.artist} fallback={subtitle()}><ArtistLinks music={trackMusic(current()!)} /></Show></span>
           </Show>
         </div>
-      </button>
+      </div>
 
       <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
 

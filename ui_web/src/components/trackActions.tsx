@@ -6,7 +6,7 @@ import { actions, isDownloadingTrack, isFavouriteTrack, isSavedTrack, state } fr
 import { savedFromTrack } from '../lib/saved';
 import { shareTrack } from '../lib/share';
 import { confirmDialog } from '../lib/confirm';
-import { artistPath } from '../lib/artistRoute';
+import { artistDestination, albumDestination, navigateMusic, performerNames, trackMusic, type MusicMetadata } from '../lib/musicNavigation';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { api } from '../lib/api';
@@ -19,8 +19,7 @@ import { toast } from '../lib/toast';
  */
 export interface TrackMenuContext {
   navigate?: (path: string) => void;
-  onOpenArtist?: () => void;
-  onOpenAlbum?: () => void;
+  music?: MusicMetadata;
   collection?: boolean;
   /** Present when the row lives inside a playlist; enables "remove from playlist". */
   playlistName?: string;
@@ -70,6 +69,23 @@ const icons = {
   info: () => sw('M12 17v-6M12 7h.01M12 2a10 10 0 100 20 10 10 0 000-20'),
 };
 
+/** The links a menu offers into the music itself: one entry per performer, then
+ * the record it belongs to. Shared, so a saved row that never resolved to a
+ * track offers the same wording and the same icons as the track menu beside it
+ * — including the bare "Go to artist" a single performer reads better as. */
+export function musicLinkActions(music: MusicMetadata): MenuAction[] {
+  if (music.linkable === false) return [];
+  const performers = performerNames(music);
+  const list: MenuAction[] = performers.map((name) => ({
+    icon: icons.artist(),
+    label: performers.length > 1 ? `${t('trackActions.goToArtist')}: ${name}` : t('trackActions.goToArtist'),
+    onSelect: () => navigateMusic(artistDestination(music, name)),
+  }));
+  if (music.album?.trim())
+    list.push({ icon: icons.playlist(), label: t('musicExplorer.openAlbum'), onSelect: () => navigateMusic(albumDestination(music)) });
+  return list;
+}
+
 /** Build the action list for a track, given its context. */
 export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAction[] {
   const isFav = isFavouriteTrack(track);
@@ -96,10 +112,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
   if (!isPodcast)
     list.push({ icon: icons.radio(), label: inAuto ? t('modeChange.startRadio') : t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
-  if (ctx.onOpenArtist) list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: ctx.onOpenArtist });
-  if (ctx.onOpenAlbum) list.push({ icon: icons.playlist(), label: t('musicExplorer.openAlbum'), onSelect: ctx.onOpenAlbum });
-  if (!ctx.onOpenArtist && ctx.navigate && track.artist && isLibrary && !isPodcast)
-    list.push({ icon: icons.artist(), label: t('trackActions.goToArtist'), onSelect: () => ctx.navigate!(artistPath(track.artist, { view: 'library' })) });
+  list.push(...musicLinkActions(ctx.music ?? trackMusic(track)));
   // The heart only makes sense over songs you have: it marks some of them out
   // from the others. The menu offers saving instead until then.
   if (ctx.collection !== false && !isPodcast && isSaved)

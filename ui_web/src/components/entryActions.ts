@@ -1,14 +1,16 @@
+import type { MusicMetadata } from '../lib/musicNavigation';
 import { actions, isDownloadingKeys, isFavouriteKeys, isSavedKeys, ownedTrackForKeys } from '../stores';
 import { savedToTrack, savedVideoId } from '../lib/saved';
 import { t } from '../lib/i18n';
 import { openContextMenu } from '../lib/contextMenu';
 import type { SavedEntry, Track } from '../types/music';
-import { buildTrackMenu } from './trackActions';
+import { buildTrackMenu, musicLinkActions } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import type { MenuAction } from './ActionMenu';
 
 export interface EntryMenuContext {
   track?: Track;
+  music?: MusicMetadata;
   onDownload?: () => void;
   onRadio?: () => void;
   busy?: boolean;
@@ -31,7 +33,8 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
     label: t(downloading ? 'collection.downloading' : 'collection.download'), disabled: downloading,
     onSelect: () => { if (ctx.onDownload) ctx.onDownload(); else void actions.downloadSaved(entry); },
   });
-  if (track) list.push(...buildTrackMenu(track, { collection: false, onAddToPlaylist: openPlaylistPicker }));
+  if (track) list.push(...buildTrackMenu(track, { collection: false, onAddToPlaylist: openPlaylistPicker, music: ctx.music }));
+  if (!track && ctx.music) list.push(...musicLinkActions(ctx.music));
   if (ctx.onRadio) {
     const radio = list.findIndex((action) => action.label === t('trackActions.startRadio') || action.label === t('modeChange.startRadio'));
     const action = { label: t('trackActions.startRadio'), onSelect: ctx.onRadio };

@@ -1,18 +1,15 @@
+import { MusicLink } from './MusicLinks';
 import { For, type JSX } from 'solid-js';
-import { A, useNavigate } from '@solidjs/router';
 import { coverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
-import { attachContextMenu } from '../lib/contextMenu';
 import { artistPath } from '../lib/artistRoute';
-import { artistMenuOptions } from './artistActions';
+import { openArtistMenu } from './artistActions';
 import type { ArtistEntry } from '../lib/libraryView';
 import styles from './ArtistGrid.module.css';
 import { coverBackground } from '../lib/cover';
-import { createResponsiveTap } from '../lib/responsiveTap';
 
 /** Grid of artist cards (round avatars) linking to each artist's detail view. */
 export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
-  const navigate = useNavigate();
   const bg = (a: ArtistEntry): JSX.CSSProperties => ({
     background: coverBackground(a.name, coverUrl(a.coverId, 'thumb')),
   });
@@ -21,24 +18,16 @@ export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
       <For each={props.artists}>
         {(a) => {
           const href = artistPath(a.name, { view: 'library', artistId: a.id });
-          const tap = createResponsiveTap({
-            onTap: (event) => {
-              event.preventDefault();
-              navigate(href);
-            },
-          });
           return (
-            <A
-              href={href}
+            <MusicLink
+              path={href}
               class={styles.card}
-              data-pressable
-              ref={(el) => attachContextMenu(el, () => artistMenuOptions(a.name, { navigate }))}
-              {...tap}
+              onMenu={(event) => openArtistMenu(a.name, {}, event)}
             >
               <div class={styles.avatar} style={bg(a)} />
               <span class={styles.name}>{a.name}</span>
               <span class={styles.count}>{trackCount(a.count)}</span>
-            </A>
+            </MusicLink>
           );
         }}
       </For>

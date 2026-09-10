@@ -1,0 +1,4 @@
+/* Leave room for the existing pressed-state scale while keeping a 24px target. */
+.link { display: inline-block; min-width: 25px; min-height: 25px; max-width: 100%; vertical-align: middle; color: inherit; font: inherit; text-decoration: none; cursor: pointer; border-radius: 2px; }
+.link:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; text-decoration: underline; }
+@media (hover: hover) and (pointer: fine) { .link:hover { text-decoration: underline; } }

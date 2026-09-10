@@ -6,7 +6,7 @@ import styles from './ViewHeader.module.css';
 
 export function ViewHeader(props: {
   title: string;
-  meta?: string;
+  meta?: JSX.Element;
   actions?: JSX.Element;
   children?: JSX.Element;
   compact?: boolean;

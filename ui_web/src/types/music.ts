@@ -2,6 +2,12 @@ export interface Track {
   id: string;
   title: string;
   artist: string;
+  /** The display credit is an uploader, not a musical performer. */
+  artist_is_channel?: boolean;
+  artist_id?: string;
+  album_id?: string;
+  deezer_artist_id?: string;
+  deezer_album_id?: string;
   /** Ordered performers when the source provided real structured credits. */
   artists?: string[] | null;
   album?: string;

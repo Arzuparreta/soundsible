@@ -1,3 +1,4 @@
+import { trackMusic } from '../lib/musicNavigation';
 import { buildTrackMenu } from './trackActions';
 import { savedFromTrack } from '../lib/saved';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
@@ -107,6 +108,7 @@ export function NowPlaying(props: {
       id: entry.queueId,
       title: entry.title,
       artist: entry.artist,
+      music: trackMusic(entry),
       cover: entry.cover ?? coverUrl(entry.id),
       position: ordinal,
       current,

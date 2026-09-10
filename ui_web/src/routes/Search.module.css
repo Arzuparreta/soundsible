@@ -903,3 +903,8 @@
     width: 100%;
   }
 }
+
+.entityCard { position: relative; }
+.entityActivate { position: absolute; inset: 0; background: transparent; border: 0; border-radius: inherit; cursor: pointer; }
+.entityActivate:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.entityCard a:not(.entityActivate) { position: relative; z-index: 1; }

@@ -29,7 +29,7 @@ const album = (over: Partial<CatalogAlbum> = {}): CatalogAlbum => ({
 describe('AlbumGrid', () => {
   it('carries the catalog id in the link, so the page can ask which songs these are', () => {
     render(() => <AlbumGrid albums={[album({ id: 'al-abc' })]} />);
-    const href = screen.getByRole('link').getAttribute('href') ?? '';
+    const href = screen.getByRole('link', { name: 'Album' }).getAttribute('href') ?? '';
     expect(href).toContain('album_id=al-abc');
     expect(href).toContain('view=library');
   });
@@ -64,7 +64,19 @@ describe('AlbumGrid', () => {
   it('renders a record whose artwork the engine could not name', () => {
     // No cover track means no image — the gradient carries the card. Rendering
     // `/cover/undefined` would put a broken request behind every such tile.
-    render(() => <AlbumGrid albums={[album({ cover_track_id: null })]} />);
-    expect(screen.getByRole('link').innerHTML).not.toContain('/cover/');
+    const { container } = render(() => <AlbumGrid albums={[album({ cover_track_id: null })]} />);
+    expect(container.querySelector('[data-pressable]')!.innerHTML).not.toContain('/cover/');
+  });
+
+  it('opens the record from anywhere on the tile, not just its cover and title', () => {
+    // The card used to be one link end to end. Wrapping only the cover and the
+    // title left the credit line and the song count dead to a tap, which on a
+    // phone is most of what a thumb lands on.
+    const { container } = render(() => <AlbumGrid albums={[album()]} />);
+    const card = container.querySelector('[data-pressable]')!;
+    const link = screen.getByRole('link', { name: 'Album' });
+    expect(link.parentElement).toBe(card);
+    expect(link).toBeEmptyDOMElement();
+    expect(card.textContent).toContain('10 songs');
   });
 });

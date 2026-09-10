@@ -1,3 +1,5 @@
+import { ArtistLinks, MusicLink } from '../components/MusicLinks';
+import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
 import { NavigationMenuButton } from '../components/NavigationMenu';
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { useNavigate, useSearchParams } from '@solidjs/router';
@@ -602,6 +604,7 @@ export default function Search() {
       id: result.id,
       title: result.title,
       artist: result.channel ?? '',
+      artist_is_channel: true,
       duration: result.duration,
       source: 'preview',
       cover: result.thumbnail,
@@ -615,6 +618,7 @@ export default function Search() {
     id: rec.id,
     title: rec.title,
     artist: rec.channel ?? '',
+    artist_is_channel: true,
     duration: rec.duration,
     cover: rec.thumbnail,
     source: 'preview',
@@ -1208,14 +1212,15 @@ function EntityCard(props: {
 }) {
   const tap = createResponsiveTap({ onTap: props.onPick });
   return (
-    <button class={styles.entityCard} type="button" data-pressable {...tap}>
+    <div class={styles.entityCard}>
+      <Show when={catalogDestination(props.item)} fallback={<button class={styles.entityActivate} type="button" aria-label={props.item.title} data-pressable {...tap} />}>{(path) => <MusicLink class={styles.entityActivate} path={path()} label={props.item.title} />}</Show>
       <span
         classList={{ [styles.entityCover]: true, [styles.entityCoverRound]: props.round }}
         style={props.coverStyle(props.item, props.round)}
       />
       <span class={styles.entityTitle}>{props.item.title}</span>
-      <span class={styles.entitySub}>{props.item.subtitle || itemArtist(props.item)}</span>
-    </button>
+      <span class={styles.entitySub}><Show when={props.item.type === "album"} fallback={props.item.subtitle || itemArtist(props.item)}><ArtistLinks music={catalogMusic(props.item)} /></Show></span>
+    </div>
   );
 }
 

@@ -1,3 +1,5 @@
+import { ArtistLinks } from './MusicLinks';
+import { trackMusic, type MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openTrackMenu } from './trackActions';
@@ -19,6 +21,7 @@ import { CollectionButton } from './CollectionButton';
 
 export interface SongRowProps {
   track: Track;
+  music?: MusicMetadata;
   /** 1-based list position; omit to hide the index column. */
   index?: number;
   /** Resolved cover URL; falls back to track.cover, then a gradient placeholder. */
@@ -35,8 +38,6 @@ export interface SongRowProps {
   primaryAction?: { label: string; onSelect: () => void };
   busy?: boolean;
   onDragStart?: (event: DragEvent) => void;
-  /** When set, the artist name becomes a tappable link (navigates to the artist). */
-  onArtist?: (artist: string) => void;
   /** When set, exposes the context menu (⋯ button, long-press, right-click).
    * The event (when present) lets the menu anchor a popover at the cursor. */
   onMenu?: (track: Track, ev?: MouseEvent) => void;
@@ -65,7 +66,15 @@ export default function SongRow(props: SongRowProps) {
     props.onPlay?.(props.track);
   };
   const tap = createResponsiveTap({
-    onTap: onRowClick,
+    onTap: (event) => { event.stopPropagation(); onRowClick(); },
+    onLongPress: props.onMenu ? () => openMenu() : undefined,
+  });
+
+  const rowTap = createResponsiveTap({
+    onTap: (event) => {
+      if ((event.target as Element).closest('a, button, input, [role="button"]')) return;
+      onRowClick();
+    },
     onLongPress: props.onMenu ? () => openMenu() : undefined,
   });
 
@@ -101,7 +110,7 @@ export default function SongRow(props: SongRowProps) {
       : props.track.title);
 
   return (
-    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.track.title} subtitle={props.track.artist} seed={props.track.id}
+    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.track.title} subtitle={props.track.artist} music={props.music ?? trackMusic(props.track)} seed={props.track.id}
       cover={props.cover ?? props.track.cover} index={props.index} annotation={props.badge}
       active={props.active} busy={props.busy || (props.active && state.playback.isLoading)}
       // A compact row carries no collection marks — the same trim the desktop
@@ -110,46 +119,35 @@ export default function SongRow(props: SongRowProps) {
       favouritesKnown={props.favouritesKnown} actionLabel={label()} primaryAction={props.primaryAction}
       onActivate={() => props.onPlay?.(props.track)} onMenu={(event) => props.onMenu
         ? props.onMenu(props.track, event)
-        : openTrackMenu(props.track, { onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor,
-            onPlayOnDevice: openPlayOnDevice, onOpenArtist: props.onArtist ? () => props.onArtist!(props.track.artist) : undefined }, event)} />}>
+        : openTrackMenu(props.track, { music: props.music, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor,
+            onPlayOnDevice: openPlayOnDevice }, event)} />}>
     <div
       class={styles.row}
+      data-song-row
       data-compact={props.compact ? '' : undefined}
       draggable={Boolean(props.onDragStart)}
       onDragStart={props.onDragStart}
       data-pressable
       data-now-playing={props.active ? '' : undefined}
-      role="button"
-      tabindex="0"
-      aria-label={label()}
-      // Announces which row is the one currently playing, so a screen-reader
-      // user can find "where am I" without listening through the whole list.
-      aria-current={props.active ? 'true' : undefined}
-      {...tap}
-      onKeyDown={onKeyDown}
       onContextMenu={onContext}
+      {...rowTap}
     >
       <Show when={props.index != null}>
         <span class={styles.index}>{props.index}</span>
       </Show>
       <div class={styles.cover} style={rowCoverStyle(props)} />
       <div class={styles.meta}>
-        <span class={styles.title}>{props.track.title}</span>
-        <Show
-          when={props.onArtist && props.track.artist}
-          fallback={<span class={styles.artist}>{props.track.artist}</span>}
-        >
-          <button
-            class={styles.artistLink}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onArtist!(props.track.artist);
-            }}
-          >
-            {props.track.artist}
-          </button>
-        </Show>
+        {/* WebKit suppresses text selection inside native buttons. Keep this
+          * selectable title keyboard-operable, separate from the artist links. */}
+        <span class={styles.titleButton} role="button" tabindex="0"
+          aria-label={label()}
+          // Announces which row is the one currently playing, so a screen-reader
+          // user can find "where am I" without listening through the whole list.
+          aria-current={props.active ? 'true' : undefined}
+          {...tap}
+          onKeyDown={onKeyDown}
+          ><span class={styles.title}>{props.track.title}</span></span>
+        <ArtistLinks class={styles.artist} music={props.music ?? trackMusic(props.track)} />
       </div>
       <Show when={props.badge}>
         <span class={styles.badge}>{props.badge}</span>

@@ -1,3 +1,4 @@
+import { catalogMusic } from './musicNavigation';
 import { createSignal } from 'solid-js';
 import { api } from './api';
 import { toast } from './toast';
@@ -41,6 +42,7 @@ export function itemToTrack(item: CatalogItem): Track | null {
       id: previewId,
       title: String(raw.title || item.title),
       artist: String(raw.artist || itemArtist(item)),
+      artist_is_channel: true,
       album: typeof raw.album === 'string' ? raw.album : item.album,
       duration: typeof raw.duration === 'number' ? raw.duration : item.duration,
       youtube_id: typeof raw.youtube_id === 'string' ? raw.youtube_id : undefined,
@@ -139,8 +141,11 @@ export async function resolveCatalogTrack(item: CatalogItem, signal?: AbortSigna
   const resolved = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration }, signal);
   if (signal?.aborted || !resolved.video_id) return null;
   actions.linkCatalogItem(item.id, resolved.video_id);
+  const music = catalogMusic(item);
   return {
     id: resolved.video_id, title: item.title, artist, album: item.album,
+    artists: item.raw?.artists, album_artist: item.raw?.album_artist,
+    deezer_artist_id: music.deezerArtistId, deezer_album_id: music.deezerAlbumId,
     duration: item.duration, cover: item.cover, source: 'preview', originKeys: catalogItemKeys(item),
     recommendation: item.raw?.recommendation,
   };

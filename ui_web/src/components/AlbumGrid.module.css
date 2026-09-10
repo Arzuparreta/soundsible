@@ -12,6 +12,7 @@
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
@@ -60,3 +61,13 @@
   font-size: var(--text-caption);
   color: var(--ink-tertiary);
 }
+
+/* Cover and title are one block, so the card's row gap opens below them rather
+   than between the sleeve and the name it carries. */
+.sleeve { display: flex; flex-direction: column; min-width: 0; }
+
+/* The card's own link, stretched over the tile behind its contents. The artist
+   credit is a link of its own, so it is lifted back above this one. */
+.card > .activate { position: absolute; inset: 0; min-width: 0; min-height: 0; border-radius: var(--radius-md); }
+.card > .activate:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; text-decoration: none; }
+.card a:not(.activate) { position: relative; z-index: 1; }

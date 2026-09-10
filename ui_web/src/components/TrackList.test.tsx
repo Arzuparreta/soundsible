@@ -2,7 +2,7 @@ import { createSignal } from 'solid-js';
 import { render, screen } from '@solidjs/testing-library';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
+vi.mock('../lib/i18n', () => ({ t: (key: string, args?: { title?: string }) => args?.title ? `${key}: ${args.title}` : key }));
 vi.mock('../lib/media', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/media')>()),
   coverUrl: (id: string) => `/cover/${id}`,
@@ -85,7 +85,7 @@ describe('TrackList reactivity', () => {
     render(() => <TrackList tracks={tracks()} />);
 
     setTracks((prev) => [track('b', 'Fresh download'), ...prev]);
-    screen.getByText('Fresh download').click();
+    screen.getByRole('button', { name: /Fresh download/ }).click();
 
     const [list, index] = vi.mocked(actions.playFrom).mock.calls.at(-1)!;
     expect((list as Track[])[index as number].title).toBe('Fresh download');

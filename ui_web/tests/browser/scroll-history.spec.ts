@@ -110,7 +110,7 @@ test('back restores an async artist surface without retrying layout', async ({ p
   await page.goto('/player/#/artist/Scroll%20Artist?view=discover&deezer_id=artist-1');
   await expect(page.getByRole('heading', { name: 'Scroll Artist', level: 1 })).toBeVisible();
 
-  const album = page.getByRole('button', { name: /Album 1/ });
+  const album = page.getByRole('link', { name: /Album 1/ });
   await album.scrollIntoViewIfNeeded();
   const expectedTop = await page.locator('[data-primary-scroll]').evaluate((element) => element.scrollTop);
   expect(expectedTop).toBeGreaterThan(100);
