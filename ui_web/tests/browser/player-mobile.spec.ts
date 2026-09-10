@@ -492,3 +492,48 @@ test('NORMAL and DJ share centered desktop Stage geometry through scale reflows'
     expect(Math.abs(auto.transport.centerY - nowPlaying.transport.centerY)).toBeLessThanOrEqual(1);
   }
 });
+
+
+test('left swipe dismisses the mobile deck and another song restores it', async ({ page, context, browserName }) => {
+  test.skip(browserName !== 'chromium' || (page.viewportSize()?.width ?? 1024) > 1023, 'real Chromium touch input');
+  const samples = 8000 * 180;
+  const wav = Buffer.alloc(44 + samples * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
+  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: wav }));
+  await page.goto('/player/#/');
+  const bar = page.locator('[data-omni-player]');
+  await expect(bar).toBeHidden();
+  await page.getByRole('button', { name: /Reproducir Una canción/ }).click();
+  await expect(bar).toBeVisible();
+  const box = (await bar.boundingBox())!;
+  const client = await context.newCDPSession(page);
+  const x = box.x + box.width * 0.65;
+  const y = box.y + box.height * 0.5;
+  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let step = 1; step <= 6; step++) {
+    await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - step * 20, y }] });
+  }
+  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(bar).toBeHidden();
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  await page.getByRole('button', { name: /Reproducir Luz de verano/ }).click();
+  await expect(bar).toBeVisible();
+  await expect(bar).toContainText('Luz de verano');
+});
+
+
+test('desktop keeps its deck visible and ignores touch swipes', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'desktop transport');
+  await page.goto('/player/#/');
+  const bar = page.locator('[data-omni-player]');
+  await expect(bar).toBeVisible();
+  await page.getByRole('button', { name: /Reproducir Una canción/ }).click();
+  for (const [type, x] of [['pointerdown', 280], ['pointermove', 140], ['pointerup', 140]] as const) {
+    await bar.dispatchEvent(type, { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: x, clientY: 30 });
+  }
+  await expect(bar).toBeVisible();
+  await expect(bar).toContainText('Una canción');
+});

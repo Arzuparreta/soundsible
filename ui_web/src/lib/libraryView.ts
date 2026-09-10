@@ -27,7 +27,8 @@ function persisted(key: string, def: string) {
 
 /** Persisted library browse preferences (shared so they survive navigation). */
 export const [librarySort, setLibrarySort] = persisted('library:sort', 'recent');
-export const [libraryTab, setLibraryTab] = persisted('library:tab', 'songs');
+// A browse view survives detail-page visits, but is not a saved preference.
+export const [libraryTab, setLibraryTab] = createSignal('songs');
 export const [libraryFilter, setLibraryFilter] = persisted('library:filter', 'all');
 
 /* The album grid's own two preferences. Stored as text and read back through

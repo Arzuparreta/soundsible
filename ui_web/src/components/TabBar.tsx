@@ -1,5 +1,6 @@
 import { For, Show } from 'solid-js';
 import { A, useLocation, useNavigate } from '@solidjs/router';
+import { setLibraryTab } from '../lib/libraryView';
 import { t } from '../lib/i18n';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
@@ -21,6 +22,7 @@ export function TabBar() {
           const tap = createResponsiveTap({
             onTap: (event) => {
               event.preventDefault();
+              if (href() === '/') setLibraryTab('songs');
               if (location.pathname === href() || (tab.href === '/' && location.pathname === '/library')) {
                 reselectPrimaryTab(href());
               } else navigate(href());

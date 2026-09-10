@@ -1,6 +1,6 @@
 import { ArtistLinks } from './MusicLinks';
 import { trackMusic } from '../lib/musicNavigation';
-import { createMemo, Match, Show, Switch, type JSX } from 'solid-js';
+import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
@@ -13,6 +13,37 @@ import styles from './OmniBar.module.css';
 /** Persistent mini-player. Progress line + tap-to-expand + play/pause + next. */
 export function OmniBar() {
   const current = createMemo(() => state.playback.currentTrack);
+  const [swipeOffset, setSwipeOffset] = createSignal(0);
+  let swipe: { id: number; x: number; y: number; captured: boolean } | null = null;
+  let suppressClick = false;
+  // Match the CSS breakpoint that hides the empty mobile deck.
+  const mobile = () => !window.matchMedia?.('(min-width: 1024px)').matches;
+  const resetSwipe = () => { swipe = null; setSwipeOffset(0); };
+  const startSwipe: JSX.EventHandler<HTMLDivElement, PointerEvent> = event => {
+    suppressClick = false;
+    if (swipe || !event.isPrimary) { resetSwipe(); return; }
+    if (!mobile() || event.pointerType !== 'touch' || !current()) return;
+    swipe = { id: event.pointerId, x: event.clientX, y: event.clientY, captured: false };
+  };
+  const moveSwipe: JSX.EventHandler<HTMLDivElement, PointerEvent> = event => {
+    if (!swipe || event.pointerId !== swipe.id) return;
+    const dx = event.clientX - swipe.x;
+    const dy = Math.abs(event.clientY - swipe.y);
+    if (!swipe.captured) {
+      if (Math.max(Math.abs(dx), dy) < 10) return;
+      if (dx >= 0 || -dx < dy * 1.5) { resetSwipe(); return; }
+      swipe.captured = true;
+      suppressClick = true;
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+    setSwipeOffset(Math.min(0, dx));
+  };
+  const endSwipe: JSX.EventHandler<HTMLDivElement, PointerEvent> = event => {
+    if (!swipe || event.pointerId !== swipe.id) return;
+    const dismiss = swipe.captured && swipeOffset() <= -72 && mobile();
+    resetSwipe();
+    if (dismiss) actions.dismissPlayback();
+  };
   const loading = createMemo(() => state.playback.isLoading);
   const failed = createMemo(() => state.playback.loadError);
   const modeLabel = createMemo(() => state.autoMode.active ? t('autoMode.label') : t('nowPlaying.modeLabel'));
@@ -76,7 +107,21 @@ export function OmniBar() {
   };
 
   return (
-    <div classList={{ [styles.omni]: true, [styles.empty]: !current() }} data-omni-player="">
+    <div classList={{ [styles.omni]: true, [styles.empty]: !current() }} data-omni-player=""
+      style={{ transform: swipeOffset() ? `translateX(${swipeOffset()}px)` : undefined }}
+      onPointerDown={startSwipe} onPointerMove={moveSwipe} onPointerUp={endSwipe}
+      onPointerCancel={resetSwipe}
+      onLostPointerCapture={event => {
+        // A child's implicit touch capture is released when the bar takes over.
+        if (event.target === event.currentTarget) resetSwipe();
+      }}
+      ref={element => {
+        const consumeSwipeClick = (event: MouseEvent) => {
+          if (suppressClick) { event.preventDefault(); event.stopPropagation(); suppressClick = false; }
+        };
+        element.addEventListener('click', consumeSwipeClick, true);
+        onCleanup(() => element.removeEventListener('click', consumeSwipeClick, true));
+      }}>
       {/* The line only ever reports position. Loading is already said by the
           transport spinner and the subtitle, so it stays quiet until there is a
           real position to show. */}

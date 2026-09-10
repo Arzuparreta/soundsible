@@ -17,7 +17,7 @@ export function NavigationLinks(props: { path: string; select?: (href: string, v
         <a href={`#${href}`} class={styles.item}
           classList={{ [styles.active]: mobileNavGroup(props.path) === href }}
           aria-current={mobileNavGroup(props.path) === href ? 'page' : undefined}
-          onClick={event => { if (props.select) { event.preventDefault(); props.select(href); } }}>
+          onClick={event => { if (props.select) { event.preventDefault(); props.select(href, href === '/' ? 'songs' : undefined); } else if (href === '/') setLibraryTab('songs'); }}>
           <span class={styles.icon}>{item.icon()}</span><span>{item.label()}</span>
           <Show when={href === '/downloads' && downloadCounts().active > 0}><span class={styles.badge}>{downloadCounts().active}</span></Show>
         </a>

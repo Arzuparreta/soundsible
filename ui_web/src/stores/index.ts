@@ -2956,6 +2956,45 @@ export const actions = {
     audioService.pause(origin);
   },
 
+  /** End this playback session and release both decks, including pending work. */
+  dismissPlayback(): void {
+    const track = state.playback.currentTrack;
+    const previewId = track?.source === 'preview' ? playbackYoutubeId(track) : null;
+    userPlaybackStartedThisSession = true;
+    beginLoad(); // Late load failures must not revive the dismissed session.
+    cancelActiveAttempt('user_dismiss');
+    commitSeq += 1; // Invalidate callbacks from an in-flight handoff.
+    actions.exitAutoMode();
+    generatedQueue?.stop();
+    runWhenAudible = null;
+    stagedEntry = null;
+    committedTransition = null;
+    consecutiveLoadFailures = 0;
+    audioService.stop();
+    setState('playback', {
+      currentTrack: null,
+      queue: [],
+      index: -1,
+      isPlaying: false,
+      isLoading: false,
+      loadError: false,
+      needsGesture: false,
+      previewPreparation: null,
+      phase: 'idle',
+      currentTime: 0,
+      duration: 0,
+      radioMode: false,
+      radioLoading: false,
+      radioSeedId: null,
+      autoplayLoading: false,
+    });
+    setState('autoMode', { activity: null, transition: { status: 'idle' } });
+    setNowPlayingOpen(false);
+    updateMediaSession(null);
+    pushEmptyPlaybackState();
+    if (previewId) void api.cancelPreview(previewId).catch(() => {});
+  },
+
   /** Re-request the current entry after a failure (transport retry button). */
   retryCurrent(): void {
     const pb = state.playback;

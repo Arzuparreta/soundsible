@@ -1,3 +1,4 @@
+import { libraryTab, setLibraryTab } from '../lib/libraryView';
 import { fireEvent, render, within, waitFor } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -21,6 +22,15 @@ beforeEach(async () => {
 
 
 describe('desktop sidebar', () => {
+  it.each(['/', '/library', '/search', '/artist/example'])('opens Songs from %s even after choosing another view', async (path) => {
+    window.history.replaceState({}, '', path);
+    setLibraryTab('albums');
+    const view = renderSidebar();
+    fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
+    await waitFor(() => expect(libraryTab()).toBe('songs'));
+    await waitFor(() => expect(['/', '/library']).toContain(window.location.pathname));
+  });
+
   it('exposes the complete grouped navigation', () => {
     const view = renderSidebar();
     const groups = view.container.querySelectorAll('nav');
