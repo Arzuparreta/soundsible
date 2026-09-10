@@ -8,6 +8,49 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
+from statistics import median
+
+
+def clock_comparison(rows):
+    """Compare stable source/context clocks, not sound at the physical output."""
+    groups = defaultdict(list)
+    anchor = None
+    previous_sequence = None
+    for row in rows:
+        program = row.get('program', {})
+        source = next((m for m in row['media'] if m.get('deckIndex') == program.get('activeIndex')), None)
+        key = (program.get('outputMode'), row.get('visibility'), program.get('activeIndex'))
+        healthy = (row.get('declaredState') == 'playing' and program.get('contextState') == 'running'
+                   and program.get('mixPhase') == 'idle' and source and not source.get('paused', True)
+                   and source.get('sourceKind') == 'track' and source.get('rate') == 1
+                   and isinstance(program.get('contextTime'), (int, float))
+                   and isinstance(source.get('position'), (int, float)))
+        continuous = previous_sequence is None or row['sequence'] == previous_sequence + 1
+        previous_sequence = row['sequence']
+        # Even an operation between two otherwise healthy samples invalidates
+        # their interval. No averaging across seeks, suspension or deck reuse.
+        if not healthy or not continuous or row['event'] != 'media.timeupdate':
+            anchor = None
+        if not healthy or row['event'] != 'media.timeupdate' or row['facts'].get('node') != source['id']:
+            continue
+        if anchor and key == anchor[0]:
+            _, before, position, context = anchor
+            elapsed = (row['elapsedMs'] - before) / 1000
+            advance = source['position'] - position
+            context_advance = program['contextTime'] - context
+            if 2 <= elapsed <= 8 and abs(advance - elapsed) <= max(0.1, elapsed * 0.02) and context_advance > 0:
+                groups[key[:2]].append((context_advance / elapsed, advance / elapsed))
+        anchor = (key, row['elapsedMs'], source['position'], program['contextTime'])
+    result = []
+    for (mode, visibility), values in sorted(groups.items()):
+        if len(values) < 3:
+            continue
+        context_ratio = median(value[0] for value in values)
+        source_ratio = median(value[1] for value in values)
+        result.append(f'Clocks mode={mode} visibility={visibility} intervals={len(values)} '
+                      f'context/wall={context_ratio:.6f} source/wall={source_ratio:.6f} '
+                      f'context-drift={(context_ratio - 1) * 100:.3f}% (not measured audible pitch)')
+    return result
 
 
 def report(path: Path, since: str | None = None) -> str:
@@ -38,6 +81,7 @@ def report(path: Path, since: str | None = None) -> str:
         output.append(f"\nSession {sid} started={capture['startedAt']} device={capture.get('deviceId', '?')} platform={capture.get('platform', '?')} revision={capture.get('clientRevision', '?')}")
         output.append(f"Events={len(rows)} missing-sequences={gaps} reported-loss={losses[sid]} handoffs={counts['handoff.retirement']}")
         start = datetime.fromisoformat(capture['startedAt']).timestamp()
+        output.extend(clock_comparison([row for row in rows if start + row['elapsedMs'] / 1000 >= cutoff]))
         windows = [row['elapsedMs'] for row in rows if row['event'] in {'handoff.retirement', 'transport.pause', 'transport.resume', 'media_session.action'}]
         previous = None
         for row in rows:

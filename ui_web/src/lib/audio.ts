@@ -42,6 +42,31 @@ function pageHidden(): boolean {
 
 let elements: HTMLAudioElement[] | null = null;
 let activeIndex = 0;
+/** Current/paused programme and sources actually started for a mix. A cued
+ * deck is not a participant; a preroll with zero mix gain is. */
+const participatingDecks = new WeakSet<HTMLAudioElement>();
+let sourcesSettledPending = false;
+
+function applyDeckMute(deck: HTMLAudioElement): void {
+  deck.muted = !participatingDecks.has(deck) || (!(monitorGain && audioContext) && allMuted);
+}
+
+function setDeckParticipation(deck: HTMLAudioElement, participating: boolean): void {
+  if (participating) participatingDecks.add(deck);
+  else participatingDecks.delete(deck);
+  applyDeckMute(deck);
+}
+
+/** A microtask finishes the synchronous ownership/store update first. Unlike
+ * a timer this does not wait for a foreground scheduling opportunity. */
+function notifySourcesSettled(): void {
+  if (sourcesSettledPending) return;
+  sourcesSettledPending = true;
+  queueMicrotask(() => {
+    sourcesSettledPending = false;
+    audioEl().dispatchEvent(new Event('sourcesettled'));
+  });
+}
 /** Shadow of each deck's mix gain, so volume changes can be reapplied without
  * an AudioContext. */
 const mixGains = [1, 0];
@@ -169,6 +194,7 @@ export function onDeckEvent(type: string, handler: (event: Event) => void): void
 
 function createDeck(index: number): HTMLAudioElement {
   const deck = new Audio();
+  deck.muted = true;
   observeDiagnosticMedia(deck, 'deck', index);
   deck.preload = 'auto';
   if ('preservesPitch' in deck) deck.preservesPitch = true;
@@ -205,6 +231,7 @@ export function isActiveDeck(target: EventTarget | null): boolean {
 }
 
 export type ProgramMediaEventName =
+  | 'sourcesettled'
   | 'play'
   | 'pause'
   | 'ended'
@@ -256,13 +283,13 @@ function applyDeckVolume(): void {
     monitorGain.gain.value = allMuted ? 0 : masterVolume;
     for (const deck of elements) {
       deck.volume = 1;
-      deck.muted = false;
+      applyDeckMute(deck);
     }
     return;
   }
   elements.forEach((deck, index) => {
     deck.volume = Math.min(1, Math.max(0, mixGains[index] * masterVolume * fallbackLevel(index)));
-    deck.muted = allMuted;
+    applyDeckMute(deck);
   });
 }
 
@@ -343,6 +370,7 @@ function releaseDeck(index: number): void {
   recordPlaybackDiagnostic('deck.release', { index });
   detach(decks()[index]);
   setDeckLevel(index, 1);
+  notifySourcesSettled();
 }
 
 /**
@@ -513,8 +541,8 @@ function unlockDecks(): void {
     deck.muted = true;
     diagnosticSource(deck, () => { deck.src = SILENT_WAV; });
     const release = () => {
-      deck.muted = graphState === 'ready' ? false : allMuted;
       if (deck.src !== SILENT_WAV) return; // a real track claimed this deck
+      setDeckParticipation(deck, false);
       diagnosticPause(deck);
       diagnosticSource(deck, () => deck.removeAttribute('src'));
       diagnosticLoad(deck);
@@ -606,6 +634,7 @@ function deckIsPlaying(deck: HTMLAudioElement): boolean {
 
 /** Start a source and the stable device carrier in the same activation turn. */
 function playProgramDeck(deck: HTMLAudioElement): Promise<void> {
+  setDeckParticipation(deck, true);
   const started = diagnosticPlay(deck);
   void programCarrier?.play();
   return started;
@@ -1106,6 +1135,9 @@ function scheduleRateReturn(index: number): void {
  * googlevideo stream, so leaving it open keeps the engine streaming bytes nobody
  * is listening to. */
 function detach(deck: HTMLAudioElement): void {
+  // Stop competing for Now Playing before the native pause can publish a
+  // stopped source as the programme. Audio gain alone does not exclude it.
+  setDeckParticipation(deck, false);
   diagnosticPause(deck);
   deck.playbackRate = 1;
   if (deck.getAttribute('src') === null && !deck.currentSrc) return;
@@ -1183,6 +1215,13 @@ function bindLifecycle(): void {
   };
   onDeckEvent('play', rejectOrphanedDeck);
   onDeckEvent('playing', rejectOrphanedDeck);
+  // Native fallout may arrive after the synchronous operation's publication.
+  // Only reconcile inactive sources; active transport keeps its own handlers.
+  for (const type of ['pause', 'emptied', 'loadedmetadata']) {
+    onDeckEvent(type, (event) => {
+      if (!isActiveDeck(event.currentTarget)) notifySourcesSettled();
+    });
+  }
 }
 
 /**
@@ -1464,6 +1503,7 @@ export const audioService = {
     diagnosticPause(a);
     diagnosticSource(a, () => { a.src = url; });
     diagnosticLoad(a);
+    setDeckParticipation(a, true);
     const applyPosition = () => {
       if (token !== loadSeq) return;
       const pos = Math.max(0, positionSec);
@@ -1611,6 +1651,7 @@ export const audioService = {
     const index = 1 - activeIndex;
     const idle = decks()[index];
     pendingDetach.delete(idle);
+    setDeckParticipation(idle, false);
     // Above the early return on purpose: re-staging the same URL is how a
     // track that has only just been measured gets its level onto the silent
     // deck before it is promoted.
@@ -1618,10 +1659,11 @@ export const audioService = {
     if (stagedUrl === url && (idle.getAttribute('src') !== null || idle.currentSrc)) return;
     stagedUrl = url;
     setDeckGain(index, 0);
-    idle.muted = graphReady() ? false : allMuted;
+    if (!idle.paused) diagnosticPause(idle);
     idle.playbackRate = 1;
     diagnosticSource(idle, () => { idle.src = url; });
     diagnosticLoad(idle);
+    notifySourcesSettled();
   },
 
   /** Release the idle deck's stream — the staged track is no longer next. */
@@ -1745,7 +1787,8 @@ export const audioService = {
     setDeckLevel(toIndex, options.level);
     resetDeckEffects(toIndex);
     resetDeckEffects(fromIndex);
-    to.muted = graphReady() ? false : allMuted;
+    setDeckParticipation(to, false);
+    if (!to.paused) diagnosticPause(to);
     diagnosticSource(to, () => { to.src = url; });
     diagnosticLoad(to);
     to.playbackRate = rate;
@@ -1782,6 +1825,7 @@ export const audioService = {
       callbacks,
     };
     callbacks.onArmed?.();
+    notifySourcesSettled();
     stopTicker();
     // A manual skip should not wait a whole tick to become audible. Running it
     // before the ticker starts also means the first interval is picked from the

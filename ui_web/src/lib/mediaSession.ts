@@ -13,6 +13,7 @@ export type MediaSessionSyncReason =
   | 'visibility_resume'
   | 'output_change'
   | 'source_anomaly'
+  | 'sources_settled'
   | 'clear';
 
 export interface MediaSessionSyncEvent {

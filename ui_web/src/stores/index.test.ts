@@ -2555,6 +2555,26 @@ describe('the end of a track', () => {
     expect(audioService.pause).not.toHaveBeenCalledTimes(2);
   });
 
+  it('reconciles settled sources while hidden without issuing a transport command', async () => {
+    const controls = stubMediaSession();
+    const { audioService, deck, fireDeckEvent } = await playing();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    try {
+      audioService.resume.mockClear();
+      audioService.pause.mockClear();
+      controls.mediaSession.playbackState = 'paused';
+      fireDeckEvent('sourcesettled');
+      expect(controls.mediaSession.playbackState).toBe('playing');
+      (deck as unknown as { paused: boolean }).paused = true;
+      fireDeckEvent('sourcesettled');
+      expect(controls.mediaSession.playbackState).toBe('paused');
+      expect(audioService.resume).not.toHaveBeenCalled();
+      expect(audioService.pause).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    }
+  });
+
   it('marks car controls as whole-program transport and republishes after an orphaned deck', async () => {
     const controls = stubMediaSession();
     const { actions, api, audioService, fireDeckEvent, fireProgramTransport, initStore } = await loadStore();
