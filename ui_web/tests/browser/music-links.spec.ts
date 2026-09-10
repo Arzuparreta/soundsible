@@ -61,10 +61,13 @@ test('an album card opens the record from the line under its cover', async ({ pa
     id: 'al-1', title: 'Disco de prueba', album_artist: 'Artista 7', is_compilation: false,
     track_count: 12, duration: 2400, cover_track_id: null,
   }] } }));
-  // The albums tab is a persisted preference, and the control that switches it
-  // differs between the phone drawer and the desktop toolbar.
-  await page.addInitScript(() => localStorage.setItem('library:tab', 'albums'));
   await page.goto('/player/#/');
+  if (isMobile) {
+    await page.getByRole('button', { name: 'Menú', exact: true }).click();
+    await page.getByRole('dialog').getByRole('link', { name: 'Álbumes', exact: true }).click();
+  } else {
+    await page.locator('aside').getByRole('link', { name: 'Álbumes', exact: true }).click();
+  }
   const count = page.getByText('12 pistas', { exact: true });
   await expect(count).toBeVisible();
   // Aimed at the count and delivered to whatever is on top of it: the card's

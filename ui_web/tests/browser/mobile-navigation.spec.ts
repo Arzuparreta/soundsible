@@ -20,7 +20,7 @@ test('complete menu and independent favourites', async ({ page }) => {
   await nav.getByRole('link', { name: 'Favoritos' }).click();
   await expect(nav.getByRole('link', { name: 'Favoritos' })).toHaveAttribute('aria-current', 'page');
   await nav.getByRole('link', { name: 'Biblioteca' }).click();
-  await expect(page.getByRole('heading', { name: 'Álbumes', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Canciones', exact: true })).toBeVisible();
 });
 
 test('drawer closes on Back and Escape and restores focus', async ({ page }) => {
