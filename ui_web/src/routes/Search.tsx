@@ -164,6 +164,12 @@ export default function Search() {
   let debounce: number | undefined;
   let suggestDebounce: number | undefined;
   let requestId = 0;
+  let suggestionId = 0;
+  let explicitDomain: SearchDomain = initialDomain;
+  const inputDomain = (value: string): SearchDomain => {
+    const { query, forceYt } = parseSearchInput(value);
+    return forceYt || parseYouTubeInput(query) ? 'youtube' : explicitDomain;
+  };
   let searchInput: HTMLInputElement | undefined;
 
   // One response, laid out by the server. The tabs slice it rather than each
@@ -272,7 +278,8 @@ export default function Search() {
       setSharedInvalid(true);
     }
     else if (initialQuery.trim().length >= 2) {
-      runSearch(parseSearchInput(initialQuery).query, initialDomain, initialTab);
+      setDomain(inputDomain(initialQuery));
+      runSearch(parseSearchInput(initialQuery).query, inputDomain(initialQuery), initialTab);
     }
     // Mobile navigation should land on Search without summoning the keyboard.
     // Fine pointers retain the fast desktop workflow.
@@ -352,7 +359,8 @@ export default function Search() {
     setLoading(false);
     setItems([]);
     setSections([]);
-    const direct = parseYouTubeInput(query);
+    const direct = parseYouTubeInput(query, { allowVideoId: true });
+    setYoutubeDirect(null);
     if (direct) {
       aborter = new AbortController();
       setYoutubeLoading(true);
@@ -409,7 +417,7 @@ export default function Search() {
     setSearchParams(
       {
         q: q().trim() || query.trim() || undefined,
-        domain: nextDomain === 'youtube' ? 'youtube' : undefined,
+        domain: explicitDomain === 'youtube' ? 'youtube' : undefined,
         tab: nextDomain === 'music' && nextTab !== 'all' ? nextTab : undefined,
       },
       { replace: true },
@@ -458,19 +466,37 @@ export default function Search() {
 
   const runSuggest = (query: string) => {
     query = query.trim();
+    const current = ++suggestionId;
     suggestAborter?.abort();
     if (query.length < 2 || parseYouTubeInput(query)) {
       setSuggestions([]);
       return;
     }
     suggestAborter = new AbortController();
-    api.suggest(query, suggestAborter.signal).then((s) => setSuggestions(s)).catch(() => {});
+    api.suggest(query, suggestAborter.signal).then((s) => {
+      if (current === suggestionId) setSuggestions(s);
+    }).catch(() => {});
+  };
+
+  const invalidatePending = () => {
+    ++requestId;
+    ++suggestionId;
+    aborter?.abort();
+    suggestAborter?.abort();
+    clearTimeout(debounce);
+    clearTimeout(suggestDebounce);
+    setSuggestions([]);
+    setLoading(false);
+    setYoutubeLoading(false);
+    setYoutubeDirect(null);
+    setYoutubeResults([]);
   };
 
   const commit = (value: string) => {
-    const { query: parsed, forceYt } = parseSearchInput(value.trim());
+    invalidatePending();
+    const { query: parsed } = parseSearchInput(value.trim());
     const query = parsed.trim();
-    const nextDomain = forceYt || parseYouTubeInput(query) ? 'youtube' : domain();
+    const nextDomain = inputDomain(value);
     if (nextDomain !== domain()) setDomain(nextDomain);
     setQ(value.trim());
     setShowSuggest(false);
@@ -486,6 +512,11 @@ export default function Search() {
   };
 
   const onInput = (value: string) => {
+    invalidatePending();
+    setItems([]);
+    setSections([]);
+    setSearchError(false);
+    setInterpretedAs('');
     if (sharedCapsule() || sharedInvalid()) {
       setSharedCapsule(null);
       setSharedItem(null);
@@ -494,8 +525,8 @@ export default function Search() {
       setSharedLoading(false);
       setSearchParams({ shared: undefined }, { replace: true });
     }
-    const { query: parsed, forceYt } = parseSearchInput(value);
-    const nextDomain = forceYt || parseYouTubeInput(parsed) ? 'youtube' : domain();
+    const { query: parsed } = parseSearchInput(value);
+    const nextDomain = inputDomain(value);
     if (nextDomain !== domain()) {
       setDomain(nextDomain);
       setRecents(loadRecents(nextDomain));
@@ -514,6 +545,10 @@ export default function Search() {
       // results are the prediction.
       setShowSuggest(false);
       setSuggestions([]);
+      if (parsed.trim().length >= 2) {
+        if (nextDomain === 'music') setLoading(true);
+        else setYoutubeLoading(true);
+      }
       debounce = window.setTimeout(() => runSearch(parsed, nextDomain), 220);
     }
   };
@@ -530,6 +565,8 @@ export default function Search() {
   };
 
   const setActiveDomain = (next: SearchDomain) => {
+    invalidatePending();
+    explicitDomain = next;
     setDomain(next);
     setRecents(loadRecents(next));
     setShowSuggest(false);

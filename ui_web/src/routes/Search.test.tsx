@@ -106,6 +106,112 @@ describe('Search route', () => {
     vi.clearAllMocks();
   });
 
+  it.each(['resolve', 'reject'])('keeps the Artists filter through an Extremoduro search: %s', async (outcome) => {
+    let resolve!: (value: unknown) => void;
+    let reject!: (error: Error) => void;
+    apiMock.searchCatalog.mockImplementation(() => new Promise((yes, no) => { resolve = yes; reject = no; }));
+    render(() => <Search />);
+    fireEvent.input(screen.getByPlaceholderText('What do you want to play?'), { target: { value: 'Extremoduro' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Artists' }));
+    await vi.advanceTimersByTimeAsync(230);
+    expect(apiMock.searchCatalog).toHaveBeenCalledWith('Extremoduro', expect.any(AbortSignal));
+    expect(apiMock.peekYouTube).not.toHaveBeenCalled();
+    if (outcome === 'resolve') resolve({ items: [], sections: [] });
+    else reject(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByRole('tab', { name: 'Artists' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    expect(apiMock.searchCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores an old response during debounce and after the next response or clearing', async () => {
+    const pending: Array<(value: unknown) => void> = [];
+    apiMock.searchCatalog.mockImplementation(() => new Promise((resolve) => pending.push(resolve)));
+    render(() => <Search />);
+    const input = screen.getByPlaceholderText('What do you want to play?');
+    const response = (title: string) => ({ items: [{ id: title, type: 'artist', source: 'deezer', title, artist: title }], sections: [] });
+    fireEvent.input(input, { target: { value: 'previous' } });
+    await vi.advanceTimersByTimeAsync(230);
+    fireEvent.input(input, { target: { value: 'Extremoduro' } });
+    pending[0](response('Stale artist'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.queryByText('Stale artist')).not.toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(230);
+    pending[1](response('Extremoduro'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getAllByText('Extremoduro').length).toBeGreaterThan(0);
+    fireEvent.input(input, { target: { value: 'another query' } });
+    await vi.advanceTimersByTimeAsync(230);
+    fireEvent.input(input, { target: { value: '' } });
+    pending[2](response('Cleared artist'));
+    await vi.advanceTimersByTimeAsync(230);
+    expect(screen.queryByText('Cleared artist')).not.toBeInTheDocument();
+  });
+
+  it('keeps the newest result when requests finish in reverse order', async () => {
+    const pending: Array<(value: unknown) => void> = [];
+    apiMock.searchCatalog.mockImplementation(() => new Promise((resolve) => pending.push(resolve)));
+    render(() => <Search />);
+    const input = screen.getByPlaceholderText('What do you want to play?');
+    for (const value of ['previous', 'Extremoduro']) {
+      fireEvent.input(input, { target: { value } });
+      await vi.advanceTimersByTimeAsync(230);
+    }
+    pending[1]({ items: [{ id: 'new', type: 'artist', source: 'deezer', title: 'Current artist' }], sections: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    pending[0]({ items: [{ id: 'old', type: 'artist', source: 'deezer', title: 'Old artist' }], sections: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getAllByText('Current artist').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Old artist')).not.toBeInTheDocument();
+  });
+
+  it('preserves explicit YouTube IDs and drops stale suggestions when returning to intelligent search', async () => {
+    let resolve!: (value: string[]) => void;
+    apiMock.suggest.mockImplementation(() => new Promise((yes) => { resolve = yes; }));
+    render(() => <Search />);
+    const input = screen.getByPlaceholderText('What do you want to play?');
+    fireEvent.input(input, { target: { value: 'yt: old query' } });
+    await vi.advanceTimersByTimeAsync(130);
+    fireEvent.input(input, { target: { value: 'Extremoduro' } });
+    resolve(['Stale suggestion']);
+    await vi.advanceTimersByTimeAsync(230);
+    expect(screen.queryByText('Stale suggestion')).not.toBeInTheDocument();
+    expect(apiMock.searchCatalog).toHaveBeenCalledWith('Extremoduro', expect.any(AbortSignal));
+    fireEvent.input(input, { target: { value: 'yt: dQw4w9WgXcQ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await vi.advanceTimersByTimeAsync(230);
+    expect(apiMock.peekYouTube).toHaveBeenCalledWith('https://www.youtube.com/watch?v=dQw4w9WgXcQ', expect.any(AbortSignal));
+  });
+
+  it('returns to intelligent search after replacing a link and keeps longer typed queries there', async () => {
+    render(() => <Search />);
+    const input = screen.getByPlaceholderText('What do you want to play?');
+    fireEvent.input(input, { target: { value: 'https://youtu.be/dQw4w9WgXcQ' } });
+    await vi.advanceTimersByTimeAsync(230);
+    for (const value of ['Extremoduro', 'Extremoduro canciones']) {
+      fireEvent.input(input, { target: { value } });
+      await vi.advanceTimersByTimeAsync(230);
+      expect(apiMock.searchCatalog).toHaveBeenCalledWith(value, expect.any(AbortSignal));
+      expect(screen.getAllByRole('tab')).toHaveLength(4);
+    }
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(apiMock.peekYouTube).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['Extremoduro', 'https://youtu.be/dQw4w9WgXcQ'])('classifies restored input %s consistently', async (q) => {
+    routerMock.params = { q };
+    render(() => <Search />);
+    await vi.advanceTimersByTimeAsync(0);
+    if (q === 'Extremoduro') {
+      expect(apiMock.searchCatalog).toHaveBeenCalledWith(q, expect.any(AbortSignal));
+      expect(apiMock.peekYouTube).not.toHaveBeenCalled();
+    } else {
+      expect(apiMock.peekYouTube).toHaveBeenCalled();
+      expect(apiMock.searchCatalog).not.toHaveBeenCalled();
+    }
+  });
+
   it('bridges empty Musica results into YouTube search', async () => {
     render(() => <Search />);
 
