@@ -52,6 +52,11 @@ at most two concurrent transforms.
 
 The shared image component measures its slot, lets the browser choose density,
 and lazy-loads offscreen artwork. NORMAL and DJ share the same rendering path.
+It is reserved for large surfaces (player stage, album/artist/playlist grids,
+search cards). List rows stay a CSS background on the 320 px `thumb` variant:
+their cover is at most 60 CSS px, which that variant already covers at 3x, and
+queue lanes are not virtualized — one measured `<img>` per row there was enough
+to starve WebKit of frames on a mobile runner.
 External catalog pictures keep their provider-supplied URLs; no arbitrary URL
 proxy or speculative URL rewriting is introduced.
 

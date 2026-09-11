@@ -1,8 +1,7 @@
 import { ArtistLinks, MusicLink } from './MusicLinks';
 import type { MusicMetadata } from '../lib/musicNavigation';
 import { Show, type JSX } from 'solid-js';
-import { coverGradient } from '../lib/cover';
-import { CoverImage } from './CoverImage';
+import { coverStyle } from '../lib/cover';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { t } from '../lib/i18n';
 import { isDownloadingKeys, isFavouriteKeys } from '../stores';
@@ -114,8 +113,7 @@ export function MusicListRow(props: MusicListRowProps) {
       {/* Last in the row and hard against the screen edge, so the covers line
         * up as one column down the list. */}
       <span class={styles.cover} data-row-cover data-round={props.round ? '' : undefined}
-        style={{ position: 'relative', background: coverGradient(props.seed) }} aria-hidden="true" {...coverTap}>
-        <CoverImage src={props.cover} />
+        style={coverStyle(props.seed, props.cover)} aria-hidden="true" {...coverTap}>
         <Show when={busy()} fallback={<Show when={favourite()}>
           <span class={styles.mark} data-row-favourite>
             <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z" /></svg>
