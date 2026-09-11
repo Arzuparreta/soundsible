@@ -255,6 +255,8 @@ export function NowPlayingBrowser(props: {
     aborter?.abort();
     aborter = undefined;
     setFailed(false);
+    setLoading(false);
+    setYtLoading(false);
     setItems([]);
     setSections([]);
     setYtResults([]);
@@ -464,6 +466,8 @@ export function NowPlayingBrowser(props: {
 
   createEffect(() => {
     const value = query(); const searchScope = scope(); const active = props.active !== false;
+    ++requestId;
+    aborter?.abort();
     clearTimeout(debounce);
     if (!active) { aborter?.abort(); return; }
     debounce = window.setTimeout(() => { untrack(() => runSearch(value)); }, value ? 230 : 0);

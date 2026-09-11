@@ -134,6 +134,13 @@ describe('NowPlayingBrowser', () => {
     vi.clearAllMocks();
   });
 
+  it('searches eleven-character artist names through the intelligent catalog', async () => {
+    render(() => <NowPlayingBrowser onClose={vi.fn()} />);
+    await typeGlobalQuery('Extremoduro');
+    expect(apiMock.searchCatalog).toHaveBeenCalledWith('Extremoduro', expect.any(AbortSignal));
+    expect(apiMock.peekYouTube).not.toHaveBeenCalled();
+  });
+
   it('opens as a music-only root with the global search always present', () => {
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
 

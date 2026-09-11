@@ -10,11 +10,12 @@ export interface YouTubeInput {
   url: string;
 }
 
-export function parseYouTubeInput(value: string): YouTubeInput | null {
+export function parseYouTubeInput(value: string, options: { allowVideoId?: boolean } = {}): YouTubeInput | null {
   const raw = value.trim();
   if (!raw) return null;
 
-  const directId = validVideoId(raw);
+  // Bare IDs are ambiguous with artist names. Only explicit YouTube tools opt in.
+  const directId = options.allowVideoId ? validVideoId(raw) : null;
   if (directId) {
     return { videoId: directId, url: `https://www.youtube.com/watch?v=${directId}` };
   }
@@ -26,15 +27,17 @@ export function parseYouTubeInput(value: string): YouTubeInput | null {
     return null;
   }
 
+  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return null;
+
   const host = url.hostname.replace(/^www\./, '').toLowerCase();
   let videoId: string | null = null;
 
   if (host === 'youtu.be') {
-    videoId = validVideoId(url.pathname.split('/').filter(Boolean)[0]);
+    videoId = validVideoId(url.pathname.match(/^\/([^/]+)\/?$/)?.[1]);
   } else if (host === 'youtube.com' || host === 'music.youtube.com' || host === 'm.youtube.com') {
     videoId =
-      validVideoId(url.searchParams.get('v')) ||
-      validVideoId(url.pathname.match(/^\/(?:shorts|embed|live)\/([^/?#]+)/)?.[1]);
+      (url.pathname === '/watch' ? validVideoId(url.searchParams.get('v')) : null) ||
+      validVideoId(url.pathname.match(/^\/(?:shorts|embed|live)\/([^/?#]+)\/?$/)?.[1]);
   }
 
   if (!videoId) return null;
