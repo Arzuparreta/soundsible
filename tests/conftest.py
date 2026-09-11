@@ -43,6 +43,10 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
         "OUTPUT_DIR": runtime.music_dir,
     }.items():
         monkeypatch.setenv(name, str(path))
+    # A real API boot in a test must not start network recovery against later
+    # tests' runtimes. Recovery itself is exercised with an explicit worker.
+    from shared.artwork_recovery import recovery
+    monkeypatch.setattr(recovery, "start", lambda: None)
     configure_runtime(runtime)
     for path in (runtime.config_dir, runtime.data_dir, runtime.cache_dir, runtime.log_dir, runtime.music_dir):
         path.mkdir(parents=True, exist_ok=True)

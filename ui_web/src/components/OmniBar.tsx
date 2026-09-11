@@ -2,7 +2,7 @@ import { ArtistLinks } from './MusicLinks';
 import { trackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
-import { coverUrl } from '../lib/media';
+import { trackCoverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import { linkFits, linkReading, mbps, trackKbps } from '../lib/linkQuality';
 import { gainToVolumePosition, nudgeVolumeGain, volumePositionToGain } from '../lib/volumeScale';
@@ -94,7 +94,7 @@ export function OmniBar() {
   const coverBg = (): JSX.CSSProperties | undefined => {
     const c = current();
     if (!c) return undefined;
-    const url = c.cover ?? coverUrl(c.id, 'thumb');
+    const url = trackCoverUrl(c, 'thumb');
     return { background: `url("${url}") center / cover no-repeat, var(--bg-raised)` };
   };
 

@@ -1,4 +1,7 @@
 export interface Track {
+  artwork_revision?: string;
+  artwork_width?: number;
+  artwork_height?: number;
   id: string;
   title: string;
   artist: string;

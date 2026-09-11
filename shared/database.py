@@ -979,6 +979,9 @@ class DatabaseManager:
         id_replacements: Optional[Dict[str, str]] = None,
     ) -> int:
         """Atomically replace the canonical library and return its revision."""
+        if id_replacements:
+            from shared.artwork import artwork_store
+            artwork_store().remap(id_replacements)
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:

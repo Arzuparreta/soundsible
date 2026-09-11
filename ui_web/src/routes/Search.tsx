@@ -1,3 +1,4 @@
+import { CoverImage } from '../components/CoverImage';
 import { ArtistLinks, MusicLink } from '../components/MusicLinks';
 import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
 import { NavigationMenuButton } from '../components/NavigationMenu';
@@ -1253,8 +1254,8 @@ function EntityCard(props: {
       <Show when={catalogDestination(props.item)} fallback={<button class={styles.entityActivate} type="button" aria-label={props.item.title} data-pressable {...tap} />}>{(path) => <MusicLink class={styles.entityActivate} path={path()} label={props.item.title} />}</Show>
       <span
         classList={{ [styles.entityCover]: true, [styles.entityCoverRound]: props.round }}
-        style={props.coverStyle(props.item, props.round)}
-      />
+        style={{ position: 'relative', background: 'var(--bg-raised)' }}
+      ><CoverImage src={props.item.track_id ? coverUrl(props.item.track_id) : props.item.cover} /></span>
       <span class={styles.entityTitle}>{props.item.title}</span>
       <span class={styles.entitySub}><Show when={props.item.type === "album"} fallback={props.item.subtitle || itemArtist(props.item)}><ArtistLinks music={catalogMusic(props.item)} /></Show></span>
     </div>

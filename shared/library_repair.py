@@ -260,6 +260,17 @@ def repair_file(
         return None
 
     cover = extract_cover(source)
+    # Preserve before any destructive reduction, even for pre-registration downloads.
+    from shared.artwork import artwork_store
+    original_art = None
+    if cover:
+        try:
+            from setup_tool.audio import AudioProcessor
+            original_ref = artwork_store().ref(AudioProcessor.calculate_hash(str(source)))
+            original_art = (original_ref['hash'] if original_ref else None) or artwork_store().put(cover)
+        except Exception as exc:
+            logger.warning("Cannot preserve artwork; leaving audio untouched: %s", exc)
+            return None
     smaller = shrink_cover(cover, max_edge=cover_max_edge, max_bytes=cover_max_bytes) if cover else None
     before = _audio_fingerprint(source) if verify else None
 
@@ -298,6 +309,13 @@ def repair_file(
         if repaired_size >= shape.size_bytes and target == source:
             # Nothing gained. Not an error, just not worth rewriting a file for.
             return None
+        if original_art:
+            try:
+                artwork_store().bind(AudioProcessor.calculate_hash(str(temp_path)), original_art,
+                                     original_ref["source"] if original_ref else "embedded", only_missing=True)
+            except Exception as exc:
+                logger.warning("Cannot publish preserved artwork; leaving audio untouched: %s", exc)
+                return None
         # A scanned external library is borrowed, never owned. Its repaired copy
         # may cross filesystems into Soundsible's pool, so use shutil there and
         # deliberately preserve the source. Managed files remain an atomic local

@@ -1237,6 +1237,9 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
         return False
     if cover_source is not None:
         track.cover_source = cover_source
+    if cover_source == "none":
+        from shared.artwork import artwork_store
+        artwork_store().bind(track_id, None, "none")
     track.metadata_modified_by_user = True
     lib._save_metadata()
     _mirror_track_into_odst_downloader(track)
@@ -1764,6 +1767,8 @@ def stop_api() -> None:
         _api_shutdown_done = True
 
     logger.info("API: Shutting down...")
+    from shared.artwork_recovery import recovery
+    recovery.stop()
 
     try:
         wsgi_server = getattr(socketio, "wsgi_server", None)
@@ -1923,6 +1928,8 @@ def start_api(
         # for loading a manifest. Everyone else's is built on demand.
         _initialize_admin_core()
         logger.info("API: Core services initialized successfully.")
+        from shared.artwork_recovery import recovery
+        recovery.start()
 
         # Keep the network-facing download tools current when their respective
         # admin settings are enabled. They share one pip transaction so startup

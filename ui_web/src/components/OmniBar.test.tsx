@@ -32,7 +32,7 @@ const { actions, setNowPlayingOpen, state } = vi.hoisted(() => ({
 }));
 
 vi.mock('../stores', () => ({ actions, setNowPlayingOpen, state }));
-vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
+vi.mock('../lib/config', () => ({ apiOrigin: () => '' }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 
 import { OmniBar } from './OmniBar';

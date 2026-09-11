@@ -286,6 +286,7 @@ async function loadStore(
       track.source === 'preview' ? track.id : track.youtube_id || null,
     podcastStreamUrl: (id: string, ...rest: unknown[]) => `/podcast/${id}${extra(rest)}`,
     coverUrl: (id: string) => `/cover/${id}`,
+    trackCoverUrl: (track: { id: string; source?: string; cover?: string }) => track.source === 'preview' ? track.cover : `/cover/${track.id}`,
     bustCovers: vi.fn(),
   }));
   const previewPreparationState = (

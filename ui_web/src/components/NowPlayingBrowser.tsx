@@ -523,7 +523,7 @@ export function NowPlayingBrowser(props: {
     <BrowserTrackRow
       title={track.title}
       subtitle={track.artist} music={libraryTrackMusic(track)}
-      cover={trackCoverUrl(track)}
+      cover={trackCoverUrl(track, 'thumb')}
       seed={track.id}
       active={isPlayingTrack(track)}
       queued={isQueuedTrack(track)}

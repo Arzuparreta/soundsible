@@ -1,3 +1,4 @@
+from pathlib import Path
 """
 Library, metadata, playlists, favourites, and cover routes.
 """
@@ -92,6 +93,8 @@ def get_library():
         # Loudness rides the library the player already fetches, so levelling
         # costs no extra request and is available before the first track loads.
         annotate_tracks(payload.get("tracks") or [])
+        from shared.artwork import artwork_store
+        artwork_store().annotate(payload.get("tracks") or [])
         return jsonify(payload)
     return jsonify({"error": "Library not loaded"}), 404
 
@@ -415,12 +418,14 @@ def copy_track_cover(track_id):
     source_track = api["get_track_by_id"](lib, source_track_id)
     if not source_track:
         return jsonify({"error": "Source track not found"}), 404
+    from shared.artwork import artwork_store
+    master = artwork_store().path(source_track.id)
     source_local_path = resolve_local_track_path(source_track)
-    if not source_local_path:
+    if not master and not source_local_path:
         return jsonify({"error": "Source track file not found"}), 404
     try:
         from setup_tool.audio import AudioProcessor
-        cover_data = AudioProcessor.extract_cover_art(source_local_path)
+        cover_data = Path(master).read_bytes() if master else AudioProcessor.extract_cover_art(source_local_path)
         if not cover_data:
             return jsonify({"error": "No cover art found in source track"}), 404
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:

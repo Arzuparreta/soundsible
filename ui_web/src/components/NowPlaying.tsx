@@ -3,7 +3,7 @@ import { buildTrackMenu } from './trackActions';
 import { savedFromTrack } from '../lib/saved';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { actions, state } from '../stores';
-import { coverUrl } from '../lib/media';
+import { trackCoverUrl } from '../lib/media';
 import {
   DEFAULT_NOW_PLAYING_LAYOUT,
   layoutFromPreset,
@@ -109,7 +109,7 @@ export function NowPlaying(props: {
       title: entry.title,
       artist: entry.artist,
       music: trackMusic(entry),
-      cover: entry.cover ?? coverUrl(entry.id),
+      cover: trackCoverUrl(entry, 'thumb'),
       position: ordinal,
       current,
       paused: current && !state.playback.isPlaying,

@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { actions, nowPlayingOpen, setNowPlayingOpen, state } from '../stores';
-import { coverUrl } from '../lib/media';
+import { trackCoverUrl } from '../lib/media';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
@@ -63,7 +63,7 @@ export function PlayerSurface() {
   const autoAvailable = createMemo(() => !current() || !isPodcastTrack(current()!));
   const art = createMemo(() => {
     const track = current();
-    return track ? track.cover ?? coverUrl(track.id) : '';
+    return track ? trackCoverUrl(track, 'thumb') ?? '' : '';
   });
   const [mobilePanel, setMobilePanel] = createSignal<PlayerPanel>('stage');
   /* Fractional carousel position, fed by the scroller itself. The pager marker

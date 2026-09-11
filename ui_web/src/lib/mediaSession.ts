@@ -1,4 +1,4 @@
-import { coverUrl } from './media';
+import { trackCoverUrl } from './media';
 import { recordPlaybackDiagnostic } from './playbackDiagnostics';
 import type { ProgramPlaybackSnapshot } from './audio';
 import type { Track } from '../types/music';
@@ -87,7 +87,7 @@ export class ProgramMediaSession {
     if (forceMetadata || nextKey !== this.trackKey || !session.metadata) {
       this.trackKey = nextKey;
       this.revision += 1;
-      const artwork = track.cover ?? coverUrl(track.id);
+      const artwork = trackCoverUrl(track);
       session.metadata = new MediaMetadata({
         title: track.title,
         artist: track.artist,

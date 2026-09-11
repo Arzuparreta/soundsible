@@ -3,7 +3,8 @@ import { trackMusic } from '../lib/musicNavigation';
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { actions, isSavedTrack, state } from '../stores';
 import { clockTime } from '../lib/format';
-import { coverUrl } from '../lib/media';
+import { trackCoverUrl } from '../lib/media';
+import { CoverImage } from './CoverImage';
 import {
   initialMobileVisualState,
   toggleMobileLyrics,
@@ -98,13 +99,7 @@ export function PlayerStage(props: {
     return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;
   };
   const volPct = () => Math.round(gainToVolumePosition(state.playback.muted ? 0 : state.playback.volume) * 100);
-  const artBg = (): JSX.CSSProperties => {
-    const current = track();
-    const url = current ? (current.cover ?? coverUrl(current.id)) : '';
-    return url
-      ? { background: `url("${url}") center / cover no-repeat, var(--bg-raised)` }
-      : { background: 'var(--bg-raised)' };
-  };
+
 
   createEffect(() => {
     if (!props.surfaceOpen || podcast()) setMobileVisual(initialMobileVisualState);
@@ -226,7 +221,7 @@ export function PlayerStage(props: {
                 >
                   <div
                     class={styles.art}
-                    style={artBg()}
+                    style={{ position: 'relative', background: 'var(--bg-raised)' }}
                     role="img"
                     aria-label={current().title}
                     draggable={Boolean(props.onTrackDragStart)}
@@ -240,7 +235,9 @@ export function PlayerStage(props: {
                     onPointerMove={trackCarry}
                     onPointerUp={cancelCarry}
                     onPointerCancel={cancelCarry}
-                  />
+                  >
+                    <CoverImage src={trackCoverUrl(current())} eager={props.surfaceOpen} />
+                  </div>
                   <Show when={!podcast() && mobileVisual().content === 'lyrics'}>
                     <div class={styles.mobileLyrics}>
                       <Suspense fallback={

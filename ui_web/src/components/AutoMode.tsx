@@ -17,7 +17,7 @@ import {
 import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { isNoopMove } from '../lib/dragReorder';
 import { queueIdentity } from '../lib/queueDiscovery';
-import { coverUrl } from '../lib/media';
+import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
 import { NowPlayingBrowser } from './NowPlayingBrowser';
@@ -128,7 +128,7 @@ export function AutoMode(props: {
       title: track.title,
       artist: track.artist,
       music: trackMusic(track),
-      cover: track.cover ?? coverUrl(track.id, 'thumb'),
+      cover: trackCoverUrl(track, 'thumb'),
       position: index + 1,
       locked: committed,
       // A committed handoff is loaded and cued: whatever the route did around

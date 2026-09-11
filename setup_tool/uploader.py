@@ -196,6 +196,14 @@ class UploadEngine:
             # Note: Determine active cover source
             active_cover_path = cover_image_path or fetched_cover_path
             
+            from shared.artwork import artwork_store
+            original_cover = (Path(active_cover_path).read_bytes() if active_cover_path
+                              else AudioProcessor.extract_cover_art(str(file_path)))
+            previous_art = artwork_store().ref(file_hash)
+            original_art = (previous_art['hash'] if previous_art and not active_cover_path else None)
+            if not original_art and original_cover:
+                original_art = artwork_store().put(original_cover)
+
             # Note: Logic if we need to embed art we might need a temp copy
             working_file_path = file_path
             is_temp_copy = False
@@ -245,6 +253,8 @@ class UploadEngine:
             remote_key = f"tracks/{track_id}.{metadata['format']}"
             
             uploaded = self.storage.upload_file(str(final_file_path), remote_key)
+            if uploaded and original_art:
+                artwork_store().bind(track_id, original_art, "manual" if active_cover_path else (previous_art["source"] if previous_art else "embedded"), only_missing=True)
             
             # Note: For local providers, we want the absolute path to the file in the "bucket"
             final_local_path = None

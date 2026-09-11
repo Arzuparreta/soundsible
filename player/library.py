@@ -542,6 +542,15 @@ class LibraryManager:
         from player.cover_manager import CoverFetchManager
         manager = CoverFetchManager.get_instance()
         
+        from shared.artwork import artwork_store
+        store = artwork_store()
+        ref = store.ref(track.id)
+        if getattr(track, "cover_source", None) == "none" or (ref and ref["source"] == "none"):
+            return None
+        original = store.path(track.id)
+        if original:
+            return original
+
         # Note: 1. Check if already cached for THIS track
         path = manager.get_cached_path(track.id)
         if path and os.path.exists(path):
@@ -693,6 +702,10 @@ class LibraryManager:
             if not local_path:
                 return False
                 
+            from shared.artwork import artwork_store
+            artwork = artwork_store()
+            new_art = artwork.put(Path(cover_path).read_bytes()) if cover_path else None
+
             # Note: 2. Modify file
             changes_made = False
             
@@ -734,6 +747,12 @@ class LibraryManager:
             
             if new_track:
                 preserve_track_identity(track, new_track)
+                if new_art:
+                    artwork.bind(new_track.id, new_art, "manual")
+                else:
+                    original_ref = artwork.ref(track.id)
+                    if original_ref:
+                        artwork.bind(new_track.id, original_ref['hash'], original_ref['source'])
                 # Note: Add the manually set album_artist if it was passed in new_metadata
                 if 'album_artist' in new_metadata:
                     new_track.album_artist = new_metadata['album_artist']

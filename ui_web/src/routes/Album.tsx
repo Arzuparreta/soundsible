@@ -1,6 +1,7 @@
+import { CoverImage } from '../components/CoverImage';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { ArtistLinks } from '../components/MusicLinks';
-import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, For, on, Show, onCleanup } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { actions, musicLibrary, isPlayingItem, state } from '../stores';
 import { api } from '../lib/api';
@@ -102,14 +103,6 @@ export default function Album() {
     resolveViewMode({ urlView: viewParams().view, override: viewOverride(), canToggle: showToggle() }),
   );
 
-  // Named apart from the shared `coverStyle` helper: this is the page hero,
-  // which fills edge to edge with no gradient underlay.
-  const heroCoverStyle = (): JSX.CSSProperties => {
-    const cover = profile()?.cover;
-    if (cover) return { background: `url("${cover}") center / cover no-repeat` };
-    return { background: coverGradient(title()) };
-  };
-
   const playAll = () => {
     const context = { id: `album:${title()}`, kind: 'album' as const, label: title() };
     if (state.autoMode.active) {
@@ -204,7 +197,8 @@ export default function Album() {
         </button>
 
         <div class={styles.hero}>
-          <div class={styles.cover} style={heroCoverStyle()}>
+          <div class={styles.cover} style={{ position: 'relative', background: coverGradient(title()) }}>
+            <CoverImage src={profile()?.cover} eager />
             <Show when={!profile()?.cover}>
               <span class={styles.initial}>{(title()[0] ?? '?').toUpperCase()}</span>
             </Show>

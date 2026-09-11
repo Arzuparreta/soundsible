@@ -592,7 +592,7 @@ def _planner_artist_candidates(seed_artist: str, user_id: str | None, limit: int
             "artist": artist,
             "album": str(album_row.get("title") or ""),
             "duration": int(row.get("duration") or 0),
-            "cover": str(album_row.get("cover_medium") or album_row.get("cover") or ""),
+            "cover": str(album_row.get("cover_xl") or album_row.get("cover_big") or album_row.get("cover_medium") or album_row.get("cover") or ""),
             "score": max(0.1, float(row.get("rank") or 0) / 1_000_000),
             "reason": f"More from {seed_artist}.",
             "reason_code": "seed_artist",

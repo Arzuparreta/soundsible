@@ -650,7 +650,7 @@ class YouTubeDownloader:
                 AudioProcessor.embed_metadata(
                     str(temp_file),
                     clean_meta,
-                    _yt_thumbnail_url(video_id),
+                    None,  # Keep the downloaded artwork; mqdefault would replace it.
                 )
             except Exception as e:
                 logger.warning("Could not re-embed metadata on downloaded file: %s", e)
