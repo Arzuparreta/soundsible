@@ -21,35 +21,21 @@ test.beforeEach(async ({ page }) => {
   } }));
 });
 
-/**
- * KNOWN FLAKE — fails roughly once per full-suite run on webkit-mobile, and has
- * done since before this test was written. It passes twelve times in twelve on
- * its own, however hard it is repeated; only whole-suite contention brings it
- * out, which points at the runner rather than at the app.
- *
- * The symptom moves — a search box reported missing, a button that never
- * settles, the snap helper's own `evaluate` timing out at thirty seconds — and
- * that last one is the tell: `snapPlayerCarousel` awaits a single
- * `requestAnimationFrame`, and WebKit stops delivering frames to a window it
- * considers occluded. Every symptom is then whatever the test reached for after
- * the hang.
- *
- * Four fixes have been measured against it and none held. Racing that frame
- * against a timer reads as the obvious answer and made the suite worse — eleven
- * failures in five runs against seven in four, and it pushed the scroll-restore
- * test below to four failures in five. Re-snapping until the tile aligns was
- * worse still: twelve of twelve on main became three failures in twelve.
- *
- * Written down rather than papered over: whoever picks this up should start
- * from why a fix that removes a real hang makes the runner less reliable, not
- * from a fresh guess at the symptom.
- */
+// Navigation is exercised through the user's pager controls. Programmatically
+// scrolling immediately after a mode switch races the workspace's initial
+// stage alignment and can leave the destination inert despite its visible DOM.
+async function choosePanel(page: import('@playwright/test').Page, scope: 'now-playing' | 'auto', panel: 'browser' | 'route') {
+  const pager = page.locator('[data-player-surface-open] nav[data-no-surface-swipe]');
+  await pager.locator('button').nth(panel === 'browser' ? 0 : 2).click();
+  await expect(page.locator(`[data-${scope}-tile="${panel}"]`)).not.toHaveAttribute('inert', '');
+}
+
 test('opens general music pages, preserves explorer search, and separates DJ references below Route', async ({ page }, info) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await openMusicPlayer(page);
   const mobile = (page.viewportSize()?.width ?? 0) < 1024;
-  if (mobile) await snapPlayerCarousel(page, 'now-playing', 'browser');
+  if (mobile) await choosePanel(page, 'now-playing', 'browser');
   let browser = page.locator('[data-now-playing-tile="browser"]');
   await expect(browser.getByText('Canción de biblioteca 320', { exact: true })).toBeVisible();
   await browser.getByRole('searchbox').fill('radiohead');
@@ -61,10 +47,10 @@ test('opens general music pages, preserves explorer search, and separates DJ ref
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'Radiohead', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /^NORMAL:/ }).click();
-  if (mobile) await snapPlayerCarousel(page, 'now-playing', 'browser');
+  if (mobile) await choosePanel(page, 'now-playing', 'browser');
   await expect(browser.getByRole('searchbox')).toHaveValue('radiohead');
   await page.getByRole('tab', { name: 'DJ', exact: true }).click();
-  if (mobile) await snapPlayerCarousel(page, 'auto', 'browser');
+  if (mobile) await choosePanel(page, 'auto', 'browser');
   browser = page.locator('[data-auto-tile="browser"]');
   await expect(browser.getByRole('searchbox')).toHaveValue('radiohead');
   await browser.getByRole('link', { name: /Radiohead/ }).click();
@@ -72,10 +58,10 @@ test('opens general music pages, preserves explorer search, and separates DJ ref
   await page.getByRole('link', { name: /In Rainbows/ }).click();
   await expect(page.getByText('15 Step', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /^DJ:/ }).click();
-  if (mobile) await snapPlayerCarousel(page, 'auto', 'browser');
+  if (mobile) await choosePanel(page, 'auto', 'browser');
   await settle(page);
   await page.screenshot({ path: `/tmp/soundsible-music-${info.project.name}.png` });
-  if (mobile) await snapPlayerCarousel(page, 'auto', 'route');
+  if (mobile) await choosePanel(page, 'auto', 'route');
   const route = page.locator('[data-auto-tile="route"]');
   const references = route.getByRole('region', { name: 'Referencias de la sesión' });
   await expect(references).toBeVisible();
@@ -88,7 +74,7 @@ test('opens general music pages, preserves explorer search, and separates DJ ref
   await expect(browser.getByText('Elige música para orientar la sesión')).toBeVisible();
   await browser.getByRole('button', { name: 'Cancelar selección', exact: true }).click();
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
-  if (mobile) await snapPlayerCarousel(page, 'auto', 'route');
+  if (mobile) await choosePanel(page, 'auto', 'route');
   await settle(page);
   expect(errors).toEqual([]);
   await page.screenshot({ path: `/tmp/soundsible-route-${info.project.name}.png` });

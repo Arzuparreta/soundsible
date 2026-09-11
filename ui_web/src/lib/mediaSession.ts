@@ -87,12 +87,17 @@ export class ProgramMediaSession {
     if (forceMetadata || nextKey !== this.trackKey || !session.metadata) {
       this.trackKey = nextKey;
       this.revision += 1;
-      const artwork = trackCoverUrl(track);
+      const source = trackCoverUrl(track);
+      // WebKit fetches Media Session artwork even when the UI already loaded
+      // its responsive variant. Give system controls a bounded square too.
+      const artwork = source && track.source !== 'preview'
+        ? `${source}${source.includes('?') ? '&' : '?'}size=640&fit=square`
+        : source;
       session.metadata = new MediaMetadata({
         title: track.title,
         artist: track.artist,
         album: track.album ?? '',
-        artwork: artwork ? [{ src: artwork, sizes: '512x512' }] : [],
+        artwork: artwork ? [{ src: artwork }] : [],
       });
     }
     setPosition(session, snapshot);

@@ -30,6 +30,14 @@ describe('responsive artwork', () => {
     setSrc('/api/static/cover/two');
     expect(container.querySelector('img')!.src).toContain('/cover/two');
   });
+  it('never exposes the unbounded original as the native image fallback', () => {
+    const { container } = render(() => <div><CoverImage src="/api/static/cover/owned" eager /></div>);
+    const image = container.querySelector('img')!;
+    const fallback = new URL(image.src);
+    expect(fallback.searchParams.get('size')).toBe('160');
+    expect(fallback.searchParams.get('fit')).toBe('square');
+    expect(image.getAttribute('srcset')).toContain(`${image.getAttribute('src')} 160w`);
+  });
   it('does not invent variants for external images', () => {
     expect(artworkCandidates('https://example.com/image.jpg')).toBeUndefined();
     const { container } = render(() => <div><CoverImage src="https://example.com/image.jpg" /></div>);
