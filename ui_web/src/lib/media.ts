@@ -1,6 +1,39 @@
 import { createSignal } from 'solid-js';
 import { apiOrigin } from './config';
 
+interface ArtworkMetadata {
+  id: string;
+  artwork_revision?: string;
+  artwork_width?: number;
+  artwork_height?: number;
+}
+const [artworkMetadata, setArtworkMetadata] = createSignal<Record<string, ArtworkMetadata>>({});
+export function registerArtworkMetadata(tracks: ArtworkMetadata[]): void {
+  setArtworkMetadata(Object.fromEntries(tracks.map(track => [track.id, track])));
+}
+
+export function artworkCandidates(src?: string | null): string | undefined {
+  if (!src) return undefined;
+  const base = `${apiOrigin()}/api/static/cover/`;
+  if (!src.startsWith(base)) return undefined;
+  const [identity, query = ''] = src.slice(base.length).split('?');
+  const id = decodeURIComponent(identity);
+  const meta = artworkMetadata()[id];
+  const cap = meta?.artwork_width && meta?.artwork_height
+    ? Math.min(meta.artwork_width, meta.artwork_height) : 1280;
+  const seen = new Set<number>();
+  return [160, 320, 640, 960, 1280].flatMap(size => {
+    const actual = Math.min(size, cap);
+    if (seen.has(actual)) return [];
+    seen.add(actual);
+    const params = new URLSearchParams(query);
+    params.set('size', String(size));
+    params.set('fit', 'square');
+    if (meta?.artwork_revision) params.set('rev', meta.artwork_revision);
+    return [`${base}${identity}?${params} ${actual}w`];
+  }).join(', ');
+}
+
 interface TrackMediaIdentity {
   id: string;
   youtube_id?: string | null;
@@ -20,7 +53,8 @@ export const bustCovers = (): void => {
  * now-playing/edit views. */
 export const coverUrl = (id: string, size?: 'thumb'): string => {
   const v = coverVersion();
-  const params = [size ? `size=${size}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&');
+  const revision = artworkMetadata()[id]?.artwork_revision;
+  const params = [size ? `size=${size}` : '', revision ? `rev=${revision}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&');
   return `${apiOrigin()}/api/static/cover/${encodeURIComponent(id)}${params ? `?${params}` : ''}`;
 };
 

@@ -860,40 +860,54 @@ def get_track_cover(track_id):
     from player.cover_manager import CoverFetchManager
 
     manager = CoverFetchManager.get_instance()
-    path = lib.get_cover_url(track) if track else None
-    if track and not path:
+    from shared.artwork import SIZES, artwork_store
+    from PIL import Image
+    store = artwork_store()
+    size = request.args.get("size")
+    fit = request.args.get("fit", "original")
+    if size not in (None, "thumb", *(str(n) for n in SIZES)) or fit not in ("original", "square"):
+        return jsonify({"error": "Invalid artwork variant"}), 400
+    ref = store.ref(track_id) if track else None
+    removed = track and (getattr(track, "cover_source", None) == "none" or (ref and ref["source"] == "none"))
+    path = None if removed else (lib.get_cover_url(track) if track else None)
+    if track and not path and not removed:
         try:
             path = manager.extract_now(track, resolve_local_track_path(track))
-        except Exception as e:
-            logger.warning("[Cover] Failed for %s: %s", track_id, e)
-    # List/grid rows ask for the resized variant instead of the (often
-    # multi-MB) embedded original. Generated alongside the original whenever
-    # it's freshly extracted; for a cover cached before thumbnails existed,
-    # this backfills it once from the already-cached original — no re-parse
-    # of the audio file, same lazy pattern as the fallback above.
-    if request.args.get("size") == "thumb" and path and os.path.exists(path):
-        thumb_path = manager.get_cached_thumb_path(track_id) or manager.extract_thumb_now(track_id, path)
-        if thumb_path:
-            path = thumb_path
-    if path and os.path.exists(path):
-        is_trusted = api["is_trusted_network"](request.remote_addr)
-        if not api["is_safe_path"](path, is_trusted=is_trusted):
-            return jsonify({"error": "Unauthorized path"}), 403
-        response = send_file(path, mimetype="image/jpeg", conditional=True)
-        # Artwork is the most-requested thing in the app: one row of a library
-        # list is one cover, so scrolling a few thousand tracks and scrolling
-        # back is thousands of requests. Without a max-age every one of them is
-        # a revalidation round trip — cheap on localhost, painful on a phone
-        # over Tailscale, where six-connection limits turn it into a stall.
-        #
-        # The window can stay long because artwork edits no longer rely on it
-        # expiring: the editing device bumps its own cache-buster immediately,
-        # and every other connected device gets a `library_updated` socket
-        # event carrying `cover_changed`, busting theirs too (see
-        # `_mark_track_metadata_updated` and `stores/index.ts`'s listener). This
-        # header only bounds staleness for a client that missed that event.
-        response.headers["Cache-Control"] = f"private, max-age={COVER_CACHE_SEC}"
-        return response
+        except Exception as exc:
+            logger.warning("[Cover] Failed for %s: %s", track_id, exc)
+    try:
+        if path and os.path.isfile(path):
+            # Only local legacy extraction is allowed in the request path. A master
+            # generated here is durable; future variants never re-parse the audio.
+            if not store.path(track_id):
+                if not api["is_safe_path"](path, is_trusted=api["is_trusted_network"](request.remote_addr)):
+                    return jsonify({"error": "Unauthorized path"}), 403
+                with open(path, "rb") as handle:
+                    store.bind(track_id, store.put(handle.read()), getattr(track, "cover_source", None), only_missing=True)
+            ref = store.ref(track_id)
+            if ref and ref["hash"]:
+                revision = f"{ref['hash']}-{ref['revision']}"
+                requested_revision = request.args.get("rev")
+                if requested_revision and requested_revision != revision:
+                    from urllib.parse import urlencode
+                    params = request.args.to_dict()
+                    params['rev'] = revision
+                    response = redirect(request.path + '?' + urlencode(params), code=302)
+                    response.headers['Cache-Control'] = 'private, no-cache'
+                    return response
+                path = store.path(track_id)
+                if size:
+                    path = str(store.variant(ref['hash'], 320 if size == 'thumb' else int(size), fit == 'square'))
+                with Image.open(path) as artwork:
+                    mimetype = Image.MIME.get(artwork.format, 'application/octet-stream')
+                response = send_file(path, mimetype=mimetype, conditional=True)
+                response.headers['Cache-Control'] = (
+                    'private, max-age=31536000, immutable' if requested_revision == revision
+                    else f'private, max-age={COVER_CACHE_SEC}'
+                )
+                return response
+    except (OSError, ValueError) as exc:
+        logger.warning("[Cover] Unreadable artwork for %s: %s", track_id, exc)
     placeholder = os.path.join(api["WEB_UI_PATH"], "assets/icons/icon-192.png")
     if os.path.exists(placeholder):
         response = send_file(placeholder, mimetype="image/png", conditional=True)

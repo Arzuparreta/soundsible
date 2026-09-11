@@ -54,7 +54,8 @@ def _cover_response(client, cover_path, *, known=True):
 
 def test_cover_is_cacheable_and_revalidates(client, tmp_path):
     cover = tmp_path / "cover.jpg"
-    cover.write_bytes(b"\xff\xd8\xff\xe0 not really a jpeg")
+    from PIL import Image
+    Image.new("RGB", (32, 32), "red").save(cover)
 
     response = _cover_response(client, str(cover))
 

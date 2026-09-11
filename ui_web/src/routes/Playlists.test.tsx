@@ -74,9 +74,11 @@ describe('the playlists grid draws a cover whenever any song in the list has one
     expect(html).not.toContain('/cover/no-art');
   });
 
-  it('asks for the thumbnail variant, not the multi-megabyte original', () => {
+  it('offers sized variants for the browser instead of one thumbnail for every screen', () => {
     const html = show({ mix: ['owned'] }, [lib('owned')]);
-    expect(html).toContain('size=thumb');
+    expect(html).toContain('srcset=');
+    expect(html).toContain('size=640');
+    expect(html).toContain('loading="lazy"');
   });
 
   it('draws the neutral placeholder alone when nothing in the list has artwork', () => {

@@ -154,11 +154,16 @@ def test_repairing_moves_the_audio_without_touching_it(tmp_path):
     """The whole justification for a remux over a re-encode."""
     path = _music_video(tmp_path)
     before = _decoded_audio_md5(path)
+    original_cover = extract_cover(path)
 
     result = repair_file(path)
 
     assert result is not None
     assert result.dropped_video
+    from shared.artwork import artwork_store
+    from setup_tool.audio import AudioProcessor
+    from pathlib import Path
+    assert Path(artwork_store().path(AudioProcessor.calculate_hash(result.path))).read_bytes() == original_cover
     assert _decoded_audio_md5(result.path) == before
     assert result.size_after < result.size_before
 

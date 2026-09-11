@@ -6,7 +6,8 @@ import { trackCount } from '../lib/format';
 import { openAlbumMenu } from './albumActions';
 import type { CatalogAlbum } from '../types/music';
 import styles from './AlbumGrid.module.css';
-import { coverStyle } from '../lib/cover';
+import { coverGradient } from '../lib/cover';
+import { CoverImage } from './CoverImage';
 
 /** Grid of album cards (square covers) linking to each record's detail view.
  *
@@ -14,8 +15,6 @@ import { coverStyle } from '../lib/cover';
  * title: two albums that happen to share a name are two cards, and a
  * compilation is credited to Various Artists. */
 export default function AlbumGrid(props: { albums: CatalogAlbum[] }) {
-  const cover = (album: CatalogAlbum) =>
-    coverStyle(album.title, album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined);
   return (
     <div class={styles.grid}>
       <For each={props.albums}>
@@ -34,7 +33,9 @@ export default function AlbumGrid(props: { albums: CatalogAlbum[] }) {
                   onMenu={(event) => openAlbumMenu(album, {}, event)} />
               </Show>
               <div class={styles.sleeve}>
-                <div class={styles.cover} style={cover(album)} />
+                <div class={styles.cover} style={{ position: 'relative', background: coverGradient(album.title) }}>
+                  <CoverImage src={album.cover_track_id ? coverUrl(album.cover_track_id) : undefined} />
+                </div>
                 <span class={styles.title}>{album.title}</span>
               </div>
               <ArtistLinks class={styles.artist} music={albumMusic(album)} />

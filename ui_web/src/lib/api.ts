@@ -1,3 +1,4 @@
+import { registerArtworkMetadata } from './media';
 import { apiOrigin, ownerToken } from './config';
 import type {
   CatalogAlbum,
@@ -726,7 +727,10 @@ export const api = {
       playlists?: PlaylistMap;
       settings?: LibrarySettings;
       podcast_subscriptions?: PodcastSubscription[];
-    }>(`/api/library?t=${Date.now()}`, { timeoutMs: 30000 }),
+    }>(`/api/library?t=${Date.now()}`, { timeoutMs: 30000 }).then(payload => {
+      registerArtworkMetadata(payload.tracks ?? []);
+      return payload;
+    }),
   /** The songs in the library that have no file of their own — identity plus
    * snapshot, newest first, each carrying whether it is marked a favourite. */
   getSaved: () =>

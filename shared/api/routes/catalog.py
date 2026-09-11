@@ -166,7 +166,8 @@ def _track_dict(track) -> dict[str, Any]:
 
 
 def _cover_from_track(track) -> str:
-    return getattr(track, "cover_art_key", None) or ""
+    from urllib.parse import quote
+    return f"/api/static/cover/{quote(str(track.id), safe='')}"
 
 
 def _catalog_item(

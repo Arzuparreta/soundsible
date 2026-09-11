@@ -59,10 +59,23 @@ class AudioProcessor:
         Embed ID3 tags/metadata into the file.
         Supports MP3 and FLAC. Uses download_image for cover so YouTube thumbnails work (User-Agent).
         """
+        from shared.artwork import artwork_store
+        from setup_tool.audio import AudioProcessor as EmbeddedAudio
+        from shared.library_repair import shrink_cover
+        store = artwork_store()
+        before_hash = AudioProcessor.calculate_hash(file_path)
+        previous = store.ref(before_hash)
+        original = previous['hash'] if previous else None
+        if not original:
+            embedded = EmbeddedAudio.extract_cover_art(file_path)
+            original = store.put(embedded) if embedded else None
         cover_data = None
         if cover_url:
             try:
-                cover_data = download_image(cover_url)
+                downloaded = download_image(cover_url)
+                if downloaded:
+                    original = store.put(downloaded)
+                    cover_data = shrink_cover(downloaded)
             except Exception:
                 pass
         path = Path(file_path)
@@ -70,6 +83,9 @@ class AudioProcessor:
             AudioProcessor._embed_mp3(str(path), metadata, cover_data)
         elif path.suffix.lower() == '.flac':
             AudioProcessor._embed_flac(str(path), metadata, cover_data)
+        if original:
+            store.bind(AudioProcessor.calculate_hash(file_path), original,
+                       'manual' if cover_url else (previous['source'] if previous else 'embedded'), only_missing=True)
 
     @staticmethod
     def _embed_flac(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]):

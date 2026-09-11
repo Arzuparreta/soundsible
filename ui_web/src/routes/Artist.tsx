@@ -1,3 +1,4 @@
+import { CoverImage } from '../components/CoverImage';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { MusicLink } from '../components/MusicLinks';
 import { createEffect, createMemo, createResource, createSignal, For, on, Show, type JSX, onCleanup } from 'solid-js';
@@ -13,7 +14,7 @@ import type { ArtistProfile, CatalogItem, Track } from '../types/music';
 import { addCatalogItemsAsAutoSource, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
-import { coverGradient, coverStyle } from '../lib/cover';
+import { coverGradient } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import SongRow from '../components/SongRow';
@@ -92,11 +93,7 @@ export default function Artist() {
   const candidates = createMemo(() => profile()?.candidates ?? []);
   const inLibrary = createMemo(() => profile()?.in_library ?? libraryTrackList().length > 0);
 
-  const avatar = (): JSX.CSSProperties => {
-    const pic = profile()?.metadata?.picture;
-    if (pic) return { background: `url("${pic}") center / cover no-repeat` };
-    return { background: coverGradient(name()) };
-  };
+
 
   const showToggle = createMemo(() => inLibrary());
 
@@ -214,7 +211,8 @@ export default function Artist() {
         </button>
 
         <div class={styles.hero}>
-          <div class={styles.avatar} style={avatar()}>
+          <div class={styles.avatar} style={{ position: 'relative', background: coverGradient(name()) }}>
+            <CoverImage src={profile()?.metadata?.picture} eager />
             <Show when={!profile()?.metadata?.picture}>
               <span class={styles.initial}>{(name()[0] ?? '?').toUpperCase()}</span>
             </Show>
@@ -418,7 +416,7 @@ function DiscoverView(props: {
               {(al) => {
                 return (
                   <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })}>
-                    <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
+                    <span class={styles.albumCover} style={{ position: 'relative', background: coverGradient(al.title) }}><CoverImage src={al.cover} /></span>
                     <span class={styles.albumName}>{al.title}</span>
                     <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
                   </MusicLink>
@@ -437,7 +435,7 @@ function DiscoverView(props: {
               {(al) => {
                 return (
                   <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })}>
-                    <span class={styles.albumCover} style={coverStyle(al.title, al.cover)} />
+                    <span class={styles.albumCover} style={{ position: 'relative', background: coverGradient(al.title) }}><CoverImage src={al.cover} /></span>
                     <span class={styles.albumName}>{al.title}</span>
                     <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
                   </MusicLink>
@@ -456,7 +454,7 @@ function DiscoverView(props: {
               {(artist) => {
                 return (
                   <MusicLink class={styles.albumCard} path={artistPath(artist.name, { view: "discover", deezerId: artist.deezer_id })}>
-                    <span classList={{ [styles.albumCover]: true, [styles.roundCover]: true }} style={coverStyle(artist.name, artist.picture)} />
+                    <span classList={{ [styles.albumCover]: true, [styles.roundCover]: true }} style={{ position: 'relative', background: coverGradient(artist.name) }}><CoverImage src={artist.picture} /></span>
                     <span class={styles.albumName}>{artist.name}</span>
                     <span class={styles.albumCount}>{formatFans(artist.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}</span>
                   </MusicLink>

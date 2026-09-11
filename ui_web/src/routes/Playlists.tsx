@@ -1,10 +1,11 @@
-import { createMemo, For, Show, type JSX } from 'solid-js';
+import { NEUTRAL_COVER } from '../lib/cover';
+import { createMemo, For, Show } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
 import { state, musicLibrary } from '../stores';
 import { ViewHeader } from '../components/ViewHeader';
 import { trackCoverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
-import { neutralCoverStyle } from '../lib/cover';
+import { CoverImage } from '../components/CoverImage';
 import { pickPlaylistCoverTrack } from '../lib/playlists';
 import { createPlaylistDialog, openPlaylistMenu, playlistMenuOptions } from '../components/playlistActions';
 import { attachContextMenu } from '../lib/contextMenu';
@@ -19,9 +20,9 @@ export default function Playlists() {
   const byId = createMemo(() => new Map(musicLibrary().map((t) => [t.id, t] as const)));
   const names = createMemo(() => Object.keys(state.playlists));
 
-  const coverBg = (name: string, ids: string[]): JSX.CSSProperties => {
+  const cover = (name: string, ids: string[]) => {
     const track = pickPlaylistCoverTrack(name, ids, byId(), state.librarySettings);
-    return neutralCoverStyle(track ? trackCoverUrl(track, 'thumb') : null);
+    return track ? trackCoverUrl(track) : undefined;
   };
 
   const createNew = () => void createPlaylistDialog();
@@ -57,7 +58,7 @@ export default function Playlists() {
                 return (
                   <div class={styles.cardWrap} ref={(el) => attachContextMenu(el, () => playlistMenuOptions(name))}>
                     <A href={href} class={styles.card} data-pressable {...tap}>
-                      <div class={styles.cover} style={coverBg(name, ids())} />
+                      <div class={styles.cover} style={{ position: 'relative', background: NEUTRAL_COVER }}><CoverImage src={cover(name, ids())} /></div>
                       <span class={styles.name}>{name}</span>
                       <span class={styles.count}>{trackCount(ids().length)}</span>
                     </A>

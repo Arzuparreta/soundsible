@@ -32,6 +32,11 @@ class CoverFetchManager:
         self.submitted_tracks = set() # Note: Track ids currently in pool
 
     def get_cached_path(self, track_id):
+        from shared.artwork import artwork_store
+        store = artwork_store()
+        ref = store.ref(track_id)
+        if ref:
+            return store.path(track_id)
         path = os.path.join(self.covers_dir, f"{track_id}.jpg")
         if os.path.exists(path):
             return path
@@ -157,6 +162,11 @@ class CoverFetchManager:
         one cover cannot return "later", so it comes through here instead —
         same directory, same filename, so whichever runs first serves both.
         """
+        from shared.artwork import artwork_store
+        store = artwork_store()
+        ref = store.ref(track.id)
+        if ref or getattr(track, "cover_source", None) == "none":
+            return store.path(track.id)
         if not source_path or str(source_path).startswith("http"):
             return None
         dest_path = os.path.join(self.covers_dir, f"{track.id}.jpg")
@@ -166,6 +176,7 @@ class CoverFetchManager:
             cover_data = AudioProcessor.extract_cover_art(str(source_path))
             if not cover_data:
                 return None
+            store.bind(track.id, store.put(cover_data), getattr(track, "cover_source", None), only_missing=True)
             with open(dest_path, "wb") as handle:
                 handle.write(cover_data)
             self._write_thumbnail(cover_data, os.path.join(self.covers_dir, f"{track.id}_thumb.jpg"))

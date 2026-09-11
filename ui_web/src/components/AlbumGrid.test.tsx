@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('../lib/format', () => ({ trackCount: (n: number) => `${n} songs` }));
-vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
+vi.mock('../lib/config', () => ({ apiOrigin: () => '' }));
 vi.mock('../lib/contextMenu', () => ({ attachContextMenu: vi.fn() }));
 vi.mock('./albumActions', () => ({ albumMenuOptions: vi.fn() }));
 vi.mock('@solidjs/router', () => ({

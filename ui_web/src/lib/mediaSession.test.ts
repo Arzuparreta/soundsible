@@ -45,6 +45,21 @@ beforeEach(() => {
 });
 
 describe('programme Media Session projection', () => {
+  it('gives system controls a bounded square without claiming an invented resolution', () => {
+    const session = controls();
+    new ProgramMediaSession().sync(track, snapshot(true), 'track');
+    const artwork = session.metadata!.artwork[0];
+    const url = new URL(artwork.src, 'http://localhost');
+    expect(url.searchParams.get('size')).toBe('640');
+    expect(url.searchParams.get('fit')).toBe('square');
+    expect(artwork.sizes).toBeUndefined();
+  });
+
+  it('keeps external preview artwork URLs intact', () => {
+    const session = controls();
+    new ProgramMediaSession().sync({ ...track, source: 'preview', cover: 'https://example.com/art.jpg' }, snapshot(true), 'track');
+    expect(session.metadata!.artwork[0].src).toBe('https://example.com/art.jpg');
+  });
   it('records the previous declaration before overwriting it with the expected state', () => {
     const session = controls();
     session.playbackState = 'paused';
