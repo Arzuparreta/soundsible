@@ -904,7 +904,8 @@ class YouTubeDownloader:
         return difflib.SequenceMatcher(None, a, b).ratio()
 
     def _download_audio(
-        self, url: str, progress_callback: Optional[Callable[..., None]] = None
+        self, url: str, progress_callback: Optional[Callable[..., None]] = None,
+        *, ignore_config: bool = False,
     ) -> Optional[Path]:
         """Download via yt-dlp CLI (subprocess).
 
@@ -922,6 +923,8 @@ class YouTubeDownloader:
                 get_subprocess_python(), "-u", "-m", "yt_dlp",
                 "-f", YDL_FORMAT_AUDIO,
             ]
+            if ignore_config:
+                args.append("--ignore-config")
             if not native:
                 codec = profile['format'] if profile['format'] != 'best' else 'flac'
                 args.extend(["-x", "--audio-format", codec])

@@ -66,6 +66,7 @@ The catalog depends on yt-dlp working against YouTube, and YouTube changes.
 
 - [ ] yt-dlp updates itself in the container
 - [ ] A scheduled CI canary that fails loudly when extraction breaks
+      — [workflow and diagnostics](ACQUISITION_CANARY.md)
 - [ ] A pluggable source layer, so YouTube is one provider and not an assumption
 
 ### Sharpen what is already unique

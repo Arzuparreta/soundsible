@@ -1,0 +1,73 @@
+name: Acquisition canary
+
+on:
+  schedule:
+    - cron: '43 5 * * *'
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: 'YouTube control video ID (eleven characters)'
+        default: 'YE7VzlLtp-4'
+        type: string
+  # Exercise the monitor itself before merging changes to it. This live check
+  # is deliberately not a required branch-protection check.
+  pull_request:
+    paths:
+      - '.github/workflows/acquisition-canary.yml'
+      - 'scripts/acquisition_canary.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acquisition-canary-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  acquisition_canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build --tag soundsible-canary .
+      - name: Acquire and decode control audio
+        env:
+          VIDEO_ID: ${{ inputs.video_id || 'YE7VzlLtp-4' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/canary-reports"
+          chmod 777 "$RUNNER_TEMP/canary-reports"
+          docker run --rm --init \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/scripts/acquisition_canary.py,target=/app/scripts/acquisition_canary.py,readonly" \
+            --mount "type=bind,source=$RUNNER_TEMP/canary-reports,target=/reports" \
+            --entrypoint python soundsible-canary \
+            /app/scripts/acquisition_canary.py --video-id "$VIDEO_ID" \
+            --commit "$(git rev-parse HEAD)" --report /reports/acquisition-canary.json
+      - name: Summarize evidence
+        if: always()
+        env:
+          REPORT: ${{ runner.temp }}/canary-reports/acquisition-canary.json
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = Path(os.environ['REPORT'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Acquisition canary\n\n')
+              if not report.exists():
+                  summary.write('No acquisition report was produced. Inspect image-build or runner logs.\n')
+              else:
+                  data = json.loads(report.read_text())
+                  summary.write(f"Result: **{'PASS' if data['ok'] else 'FAIL'}**\n\n")
+                  summary.write(f"Recovered on retry: {data['recovered_on_retry']}\n\n")
+                  for number, attempt in enumerate(data['attempts'], 1):
+                      summary.write(f"- Attempt {number}: {attempt.get('category', 'valid audio')} ({attempt['elapsed_seconds']}s)\n")
+                  summary.write('\nDownload the JSON artifact for sanitized diagnostics. A failure describes this runner, not every installation.\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acquisition-canary-report
+          path: ${{ runner.temp }}/canary-reports/*.json
+          if-no-files-found: warn
+          retention-days: 14
