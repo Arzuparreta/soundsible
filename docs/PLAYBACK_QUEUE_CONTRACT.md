@@ -68,10 +68,17 @@ continuation. Reordering cannot cross lane or generator boundaries.
   make a route longer; filler never is. A repair answering for a route that has
   since changed is discarded rather than applied, and one that came back missing
   a user occurrence is refused outright.
-- Requests with `source_policy: explicit` use only active influences as roots
-  for planning and bridge retrieval. `heard` excludes repetitions; `seed` anchors
+- Requests with `source_policy: explicit` use active influences as the roots for
+  planning and bridge retrieval. `heard` excludes repetitions; `seed` anchors
   the audio transition. Neither silently changes musical direction. Older
   clients without the field retain their previous planning contract.
+- A source walk is finite and the client excludes everything it already holds,
+  so an influence pool does run out. When it can no longer fill the requested
+  route — or leaves a seam with no bridge material — recently heard music is
+  walked as a fallback retrieval root, weighted below every influence and
+  reported as `degraded`. It never becomes a visible influence and never
+  reorders what the listener chose. A session must not go quiet because its
+  pool is empty.
 - A session change prepares a replacement before committing it. New selections
   invalidate older catalogue work and plans. Failed preparation retains the
   previous direction and route. A moving playback anchor causes replanning.

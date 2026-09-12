@@ -3364,6 +3364,30 @@ describe('DJ direction transition boundaries', () => {
     actions.exitAutoMode();
   });
 
+  it('gives up a change that never settles instead of freezing the DJ', async () => {
+    // A queue that moves under every round trip used to spin this loop for
+    // good, with planning suspended and the change stuck on "working" — which
+    // gates every DJ handoff too.
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old']));
+    const store = await loadStore({ planDjQueue });
+    const { actions, state } = store;
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    let churn = 0;
+    planDjQueue.mockImplementation(async () => {
+      churn += 1;
+      actions.enqueue({ ...t2, id: `churn-${churn}` });
+      return autoPlan([`new-${churn}`]);
+    });
+
+    expect(await actions.changeAutoSession([t2], 'New direction')).toBe(false);
+
+    expect(churn).toBe(6);
+    expect(state.autoMode.sessionChange?.status).toBe('error');
+    expect(state.autoMode.sources[0].tracks[0].id).toBe(t1.id);
+    actions.exitAutoMode();
+  });
+
   it('waits for an audible blend instead of cancelling it', async () => {
     let phase = 'idle';
     const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old'])).mockResolvedValue(autoPlan(['new']));

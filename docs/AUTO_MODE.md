@@ -94,8 +94,11 @@ finishes and the most recent selection is mixed next.
 
 DJ recommendations come from the active session influences. Previously heard
 music helps avoid repetitions; it does not become an influence automatically.
-DJ also considers whether tracks can form a credible transition and performs
-that transition in the browser's two-deck audio engine.
+When the influences run out of unheard material, DJ falls back to searching
+around what has recently played rather than stopping — as a last resort, never
+as a new direction, and never as an entry in **Session**. DJ also considers
+whether tracks can form a credible transition and performs that transition in
+the browser's two-deck audio engine.
 
 ## Broadcast the result
 

@@ -183,6 +183,7 @@ export class GeneratedQueueController {
   private retryStep = 0;
   private recent: string[] = [];
   private suspended = false;
+  private retryPending = false;
 
   constructor(private readonly deps: GeneratedQueueDeps) {}
 
@@ -253,11 +254,30 @@ export class GeneratedQueueController {
     this.aborter?.abort();
     this.aborter = null;
     this.inFlight = null;
-    if (this.retryTimer) clearTimeout(this.retryTimer);
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryPending = true;
+    }
     this.retryTimer = null;
   }
 
-  resumePlanning(): void { this.suspended = false; }
+  /** Hand the runway back to the planner.
+   *
+   * `suspendPlanning` throws the pending retry away, so simply clearing the
+   * flag used to leave a starved session with no scheduled work at all: nothing
+   * planned again until a track boundary, and if playback had already run out
+   * there is no boundary left to wait for. Re-arm the chain the change
+   * interrupted, from the first backoff step rather than the minute-long one it
+   * had climbed to.
+   */
+  resumePlanning(): void {
+    if (!this.suspended) return;
+    this.suspended = false;
+    this.retryStep = 0;
+    if (!this.retryPending) return;
+    this.retryPending = false;
+    this.scheduleRetry();
+  }
 
   applyReplacement(response: ListeningPlanResponse, anchor: Track): boolean {
     const accepted = this.deps.applyPlan('auto_mode', response, true, anchor);
@@ -268,6 +288,8 @@ export class GeneratedQueueController {
       this.session.segmentIndex = 1;
     }
     this.suspended = false;
+    this.retryStep = 0;
+    this.retryPending = false;
     this.deps.onStatus('auto_mode', 'ready', response, true);
     return true;
   }
@@ -275,6 +297,7 @@ export class GeneratedQueueController {
   stop(intent?: ListeningPlanIntent): void {
     if (intent && this.session?.intent !== intent) return;
     this.suspended = false;
+    this.retryPending = false;
     const stoppedIntent = this.session?.intent;
     this.generation += 1;
     this.aborter?.abort();
@@ -450,6 +473,7 @@ export class GeneratedQueueController {
       for (const item of response.items) this.remember(item.recommendation_identity || item.id);
       if (session.intent === 'auto_mode') session.segmentIndex += 1;
       this.retryStep = 0;
+      this.retryPending = false;
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = null;
       // `degraded` means one or more source pools were unavailable. If the
