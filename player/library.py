@@ -54,7 +54,7 @@ def _music_dir_manifest_is_shared() -> bool:
         return False
 from setup_tool.audio import AudioProcessor
 from setup_tool.uploader import UploadEngine
-from shared.database import USER_DB_FILENAME, DatabaseManager
+from shared.database import USER_DB_FILENAME, DatabaseManager, StaleLibraryWrite
 from shared.user_context import user_config_dir
 import shutil
 import tempfile
@@ -227,6 +227,14 @@ class LibraryManager:
     def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None) -> bool:
         """
         Commit the canonical SQLite snapshot, then refresh portable exports.
+
+        The write is pinned to the revision this manager last saw. A snapshot
+        that predates somebody else's commit is refused rather than written:
+        this saves the *whole* library, so committing it would silently undo
+        their change — a renamed playlist reverting to its old name, a song
+        someone else added dropping out of the list. On refusal the canonical
+        state is reloaded (so the next attempt builds on it) and the caller is
+        told the change did not land, which is the honest answer.
         """
         if not self.metadata:
             return False
@@ -234,12 +242,20 @@ class LibraryManager:
         with self._lock:
             try:
                 self._library_revision = self.db.replace_library(
-                    self.metadata, id_replacements=id_replacements
+                    self.metadata,
+                    id_replacements=id_replacements,
+                    expected_revision=self._library_revision,
                 )
                 # replace_library is also the alias-normalization boundary, so
                 # serialize only after it has moved every durable reference.
                 self._export_metadata(self.metadata.to_json())
                 return True
+            except StaleLibraryWrite as e:
+                self._log(f"Library changed underneath this save, not writing: {e}")
+                # Adopt what is actually there. Without this the manager keeps
+                # a revision nothing matches and every later save fails too.
+                self.refresh_if_stale()
+                return False
             except Exception as e:
                 self._log(f"Error saving metadata: {e}")
                 return False

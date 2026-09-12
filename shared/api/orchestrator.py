@@ -105,6 +105,9 @@ class JobOrchestrator:
         self.last_commit_time = 0.0
         self.commit_debounce_sec = 2.0
         self.commit_timer: Optional[threading.Timer] = None
+        #: The commit the timer is waiting to run, claimed by whoever gets
+        #: there first — the timer or `flush_metadata_commit`.
+        self._pending_commit: Optional[tuple[Callable, Optional[Callable]]] = None
 
         # Downloader pump supervisor — owned by orchestrator so shutdown
         # can join it and double-start is rejected (plan 5A).
@@ -216,32 +219,59 @@ class JobOrchestrator:
         """
         with self.state_lock:
             self.pending_commits = True
-
+            self._pending_commit = (commit_func, emit_func)
             if self.commit_timer:
                 self.commit_timer.cancel()
-
-            def _do_commit():
-                # Fires from a bare threading.Timer thread, outside any Flask
-                # request — without an explicit scope, any DB connection
-                # commit_func() acquires would never be returned to the pool
-                # (see request_scope.on_end).
-                with request_scope.request_scope(), self.commit_lock:
-                    logger.info("Orchestrator: Executing coalesced metadata commit...")
-                    try:
-                        commit_func()
-                        if emit_func:
-                            emit_func()
-                    except Exception as e:
-                        logger.error(f"Orchestrator: Metadata commit failed: {e}")
-                    finally:
-                        with self.state_lock:
-                            self.pending_commits = False
-                            self.last_commit_time = time.time()
-                            self.commit_timer = None
-
-            self.commit_timer = threading.Timer(self.commit_debounce_sec, _do_commit)
+            self.commit_timer = threading.Timer(
+                self.commit_debounce_sec, self._run_pending_commit
+            )
             self.commit_timer.start()
             logger.debug("Orchestrator: Metadata commit scheduled (debounced).")
+
+    def _claim_pending_commit(self):
+        """Take the scheduled commit, so exactly one caller runs it."""
+        with self.state_lock:
+            pending = self._pending_commit
+            self._pending_commit = None
+            if self.commit_timer is not None:
+                self.commit_timer.cancel()
+                self.commit_timer = None
+            return pending
+
+    def _run_pending_commit(self) -> bool:
+        pending = self._claim_pending_commit()
+        if pending is None:
+            return False
+        commit_func, emit_func = pending
+        # May fire from a bare threading.Timer thread, outside any Flask
+        # request — without an explicit scope, any DB connection commit_func()
+        # acquires would never be returned to the pool (see
+        # request_scope.on_end). Nesting one inside a request is safe: the
+        # inner scope only owns what this commit opens.
+        with request_scope.request_scope(), self.commit_lock:
+            logger.info("Orchestrator: Executing coalesced metadata commit...")
+            try:
+                commit_func()
+                if emit_func:
+                    emit_func()
+            except Exception as e:
+                logger.error(f"Orchestrator: Metadata commit failed: {e}")
+            finally:
+                with self.state_lock:
+                    self.pending_commits = False
+                    self.last_commit_time = time.time()
+        return True
+
+    def flush_metadata_commit(self) -> bool:
+        """Run a debounced metadata commit now instead of in a second or two.
+
+        Called before anything reloads the canonical library. The deferred
+        commit holds changes that exist only in the in-memory snapshot — the
+        tracks a finished download just added — and a reload would drop them
+        on the floor, to be written back out by the commit as an absence.
+        Returns whether there was anything to commit.
+        """
+        return self._run_pending_commit()
 
     # ----- Downloader pump supervision (plan 5A) -----
 
