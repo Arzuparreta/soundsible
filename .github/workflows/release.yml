@@ -145,3 +145,34 @@ jobs:
             ---
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The landing site reads `releases/latest` at build time, and nothing used to
+  # tell it a new one existed: it only rebuilt on its own daily schedule, so a
+  # release cut just after that build went unannounced until the next one.
+  # v0.8.1 landed 68 minutes late to that party and the site said 0.8.0 for a
+  # day. This is the missing edge, and it is its own job so a failed ping is
+  # legible as "the site was not refreshed" rather than as a failed release —
+  # by this point the release itself is published and cannot be undone.
+  refresh_site:
+    needs: publish
+    # A pre-release is not documentation: `sync-docs.mjs` refuses one outright,
+    # so pinging for an `-rc.` tag would only turn the site's build red.
+    if: ${{ !contains(github.ref_name, '-rc.') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # `GITHUB_TOKEN` cannot start a workflow in another repository, so this
+      # needs a PAT with Actions: write on the site repo.
+      - name: Tell the landing site there is a new release
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::SITE_DISPATCH_TOKEN is unset, so the site was not told about $GITHUB_REF_NAME. It will catch up on its next scheduled build."
+            exit 1
+          fi
+          gh api "repos/${{ github.repository_owner }}/soundsible.github.io/dispatches" \
+            --input - <<JSON
+          {"event_type":"upstream-release","client_payload":{"tag":"${GITHUB_REF_NAME}"}}
+          JSON
