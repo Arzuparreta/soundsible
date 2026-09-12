@@ -1782,13 +1782,21 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
   setState('autoMode', { repairing: false, sessionChange: { label: source.label, status: 'working' } });
   const current = () => !aborter.signal.aborted && state.autoMode.active && autoSessionEpoch === epoch;
   const signature = () => `${state.playback.index}:${state.playback.queue.map((row) => row.queueId).join('|')}`;
+  // Both loop exits are bounded. A blend that never settles, or a queue that
+  // changes on every round trip, would otherwise spin here for good with
+  // planning suspended and `sessionChange` stuck on 'working' — which gates
+  // every DJ handoff too. Failing lands in the error state, which offers Retry.
+  const deadline = Date.now() + 60_000;
+  let planAttempts = 0;
   try {
     while (current()) {
+      if (Date.now() > deadline) throw new Error('change did not settle');
       // An audible blend belongs to the two sounding decks. Wait for it to settle.
       if (audioService.mixPhase() === 'crossfading') {
         await new Promise<void>((resolve) => setTimeout(resolve, 100));
         continue;
       }
+      if (planAttempts++ >= 6) throw new Error('change did not settle');
       const anchor = state.playback.currentTrack;
       const before = signature();
       const explicit = state.playback.queue.slice(state.playback.index + 1).filter((row) => row.queueLane === 'manual' || row.autoRoute?.kind === 'user');
@@ -1820,8 +1828,12 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
         if (controller.activeIntent() !== 'auto_mode') {
           controller.adopt('auto_mode', anchor, state.autoMode.profile);
         }
+        const previous = state.autoMode.sources;
         setState('autoMode', 'sources', [source]);
-        if (!controller.applyReplacement(response, anchor)) throw new Error('no replacement');
+        if (!controller.applyReplacement(response, anchor)) {
+          setState('autoMode', 'sources', previous);
+          throw new Error('no replacement');
+        }
         // Preserved requests change adjacency. Never reuse a cue for another seam.
         const queue = state.playback.queue;
         const plan = { ...state.autoMode.plan };

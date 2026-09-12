@@ -215,6 +215,35 @@ describe('GeneratedQueueController', () => {
     h.controller.stop();
   });
 
+  it('re-arms a starved runway when a session change hands planning back', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    await h.controller.start('auto_mode', seed);
+    h.setIndex(6);
+    h.applyPlan.mockReturnValueOnce(0);
+
+    await h.controller.ensureRunway();
+
+    expect(h.requestPlan).toHaveBeenCalledTimes(2);
+    expect(h.onStatus).toHaveBeenLastCalledWith('auto_mode', 'degraded', expect.any(Object), false);
+
+    // Preparing a replacement direction throws the pending retry away.
+    h.controller.suspendPlanning();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(h.requestPlan).toHaveBeenCalledTimes(2);
+
+    // Handing the runway back must re-arm the chain the change interrupted:
+    // there may be no track boundary left to wait for. It comes back at the
+    // first backoff step, not the minute-long one the abandoned chain had
+    // already climbed to.
+    h.controller.resumePlanning();
+    await vi.advanceTimersByTimeAsync(14_000);
+    expect(h.requestPlan).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(h.requestPlan).toHaveBeenCalledTimes(3);
+    h.controller.stop();
+  });
+
   it('does not attach a plan after the session is stopped', async () => {
     let resolvePlan!: (value: ListeningPlanResponse) => void;
     const h = harness();

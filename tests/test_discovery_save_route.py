@@ -1438,7 +1438,23 @@ def test_dj_collection_keeps_a_selected_seam_beyond_the_analysis_window(tmp_path
     ]
 
 
+def _house_related(count: int = 8) -> list[dict]:
+    return [{
+        "id": f"house{index:03d}", "track_id": f"house{index:03d}",
+        "title": f"Deep {index}", "artist": "Oliver Heldens",
+        "source": "library", "source_pool": "local",
+        "recommendation_identity": f"music:track:house{index:03d}",
+    } for index in range(count)]
+
+
 def test_explicit_dj_direction_never_uses_heard_requests_as_graph_roots(tmp_path):
+    """While the influences can still fill the route, heard music is not a root.
+
+    A song the listener requested sounds, and so joins `heard`. It must not
+    thereby steer the set: ask for one house track in a rock session and the
+    rock session stays. Recent listening only comes back as a root once the
+    influence pool can no longer fill a route at all — covered separately below.
+    """
     _make_runtime(tmp_path)
     mock_api = _mock_api()
     mock_api["get_core"].return_value = (
@@ -1451,16 +1467,120 @@ def test_explicit_dj_direction_never_uses_heard_requests_as_graph_roots(tmp_path
     body = {"source_policy": "explicit", "seed": seed, "sources": [source], "heard": [seed]}
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)) as graph,
+        patch.object(_auto_mode, "_planner_context_related", return_value=(_house_related(), False)) as graph,
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-plan", json=body)
         assert response.status_code == 200
         assert graph.call_count == 1
         assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens"]
+        assert all(item["recommendation_identity"] != "music:track:rock" for item in response.get_json()["items"])
         graph.reset_mock()
-        _auto_mode._dj_place_bridge_pool(None, body, set())
+        bridges = _auto_mode._dj_place_bridge_pool(None, body, set())
+        assert bridges
         assert graph.call_count == 1
         assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens"]
+
+
+def test_explicit_dj_route_falls_back_to_heard_once_the_influence_pool_is_spent(tmp_path):
+    """An exhausted pool continues the set instead of returning nothing.
+
+    A source walk is finite and the client excludes everything it already holds,
+    so a long session drains the pool. Before this fallback the route came back
+    empty, the client discarded it, and DJ sat on "searching for another route"
+    for good.
+    """
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    heard = {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"}
+    source = {"id": "house", "label": "Oliver Heldens", "tracks": [
+        {"id": "oliver", "track_id": "oliver", "title": "Gecko", "artist": "Oliver Heldens"},
+    ]}
+    recovered = [{
+        "id": "rescue", "track_id": "rescue", "title": "Rescue", "artist": "Extremoduro",
+        "source": "library", "source_pool": "local", "recommendation_identity": "music:track:rescue",
+    }]
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(
+            _auto_mode, "_planner_context_related",
+            side_effect=[([], False), (recovered, False)],
+        ) as graph,
+    ):
+        response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
+            "source_policy": "explicit", "seed": heard, "sources": [source], "heard": [heard],
+            # Everything the influence could reach is already queued.
+            "exclude": ["music:track:oliver"],
+        })
+    assert response.status_code == 200
+    body = response.get_json()
+    assert graph.call_count == 2
+    assert [row["artist"] for row in graph.call_args_list[1].args[1]] == ["Extremoduro"]
+    assert [item["recommendation_identity"] for item in body["items"]] == ["music:track:rescue"]
+    # Recovered material is declared: it sounds, but the pool was not healthy.
+    assert body["degraded"] is True
+    assert body["items"][0]["source_weight"] == 0.3
+
+
+def test_explicit_dj_bridges_fall_back_to_heard_when_the_influence_walk_is_empty(tmp_path):
+    """A seam with no bridge material is a raw cut, so heard music may bridge it."""
+    _make_runtime(tmp_path)
+    heard = {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"}
+    source = {"id": "house", "label": "Oliver Heldens", "tracks": [
+        {"id": "oliver", "track_id": "oliver", "title": "Gecko", "artist": "Oliver Heldens"},
+    ]}
+    bridge = [{
+        "id": "seam", "track_id": "seam", "title": "Seam", "artist": "Extremoduro",
+        "source": "library", "source_pool": "local", "recommendation_identity": "music:track:seam",
+    }]
+    body = {"source_policy": "explicit", "sources": [source], "heard": [heard]}
+    with patch.object(
+        _auto_mode, "_planner_context_related",
+        side_effect=[([], False), (bridge, False)],
+    ) as graph:
+        candidates = _auto_mode._dj_place_bridge_pool(None, body, set())
+    assert graph.call_count == 2
+    assert [row["artist"] for row in graph.call_args_list[1].args[1]] == ["Extremoduro"]
+    assert [item["recommendation_identity"] for item, _ in candidates] == ["music:track:seam"]
+
+
+def test_explicit_dj_arc_follows_the_recent_window_not_the_whole_history(tmp_path):
+    """Energy pacing reads the last few songs, however long the session has run.
+
+    The arc is a six-phase cycle. Feeding it the whole `heard` list — which the
+    client grows to forty entries — would walk the session's energy target
+    around the table by session length instead of by segment.
+    """
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    long_history = [
+        {"id": f"h{index:02d}", "track_id": f"h{index:02d}", "title": f"H{index}", "artist": "Extremoduro"}
+        for index in range(40)
+    ]
+    source = {"id": "house", "label": "Oliver Heldens", "tracks": [
+        {"id": "oliver", "track_id": "oliver", "title": "Gecko", "artist": "Oliver Heldens"},
+    ]}
+
+    def arc_for(heard: list[dict]) -> dict:
+        with (
+            patch.object(_auto_mode, "_get_api", return_value=mock_api),
+            patch.object(_auto_mode, "_planner_context_related", return_value=(_house_related(), False)),
+        ):
+            response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
+                "source_policy": "explicit", "session_id": "session-arc", "segment_index": 0,
+                "seed": {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"},
+                "sources": [source], "heard": heard,
+            })
+        assert response.status_code == 200
+        return response.get_json()["arc"]
+
+    assert arc_for(long_history) == arc_for(long_history[-4:])
+    assert arc_for(long_history) != arc_for(long_history[-1:])
 
 
 def test_explicit_dj_mix_keeps_both_sources_but_excludes_heard_music(tmp_path):
@@ -1480,6 +1600,11 @@ def test_explicit_dj_mix_keeps_both_sources_but_excludes_heard_music(tmp_path):
             "sources": [{"id": "rock", "tracks": [rock]}, {"id": "house", "tracks": [house]}],
         })
     assert response.status_code == 200
-    assert graph.call_count == 2
-    assert {call.args[1][0]["artist"] for call in graph.call_args_list} == {"Extremoduro", "Oliver Heldens"}
+    # Both influences are walked; the heard one is still excluded from the route
+    # even though it is also a source. Two single tracks that reach nothing else
+    # cannot fill a route of eight, so the heard fallback is tried as well — and
+    # here it reaches nothing either, which is a short route, not a silent one.
+    assert graph.call_count == 3
+    assert {call.args[1][0]["artist"] for call in graph.call_args_list[:2]} == {"Extremoduro", "Oliver Heldens"}
+    assert [row["artist"] for row in graph.call_args_list[2].args[1]] == ["Extremoduro"]
     assert [item["id"] for item in response.get_json()["items"]] == ["house"]
