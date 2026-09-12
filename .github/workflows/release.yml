@@ -145,3 +145,46 @@ jobs:
             ---
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The landing site reads `releases/latest` at build time, and nothing used to
+  # tell it a new one existed: it only rebuilt on its own daily schedule, so a
+  # release cut just after that build went unannounced until the next one.
+  # v0.8.1 landed 68 minutes late to that party and the site said 0.8.0 for a
+  # day. This is the missing edge, and it is its own job so a failed ping is
+  # legible as "the site was not refreshed" rather than as a failed release —
+  # by this point the release itself is published and cannot be undone.
+  refresh_site:
+    needs: publish
+    # A pre-release is not documentation: `sync-docs.mjs` refuses one outright,
+    # so asking for a build of an `-rc.` tag would only turn the site's red.
+    if: ${{ !contains(github.ref_name, '-rc.') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Running the site's own workflow, rather than sending it a
+      # `repository_dispatch`, is the narrower of the two doors: this needs a
+      # token with Actions: write, while a dispatch needs Contents: write —
+      # push access to the site's source, to ask it to rebuild. It also needs
+      # nothing added on the far side, since `deploy.yml` already takes a
+      # `source_tag`, which pins the build to the release that triggered it
+      # instead of re-asking for "latest" and possibly getting a newer answer.
+      #
+      # `GITHUB_TOKEN` cannot start a workflow in another repository at all,
+      # hence the PAT.
+      - name: Ask the landing site to rebuild
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          # No token is the normal state, not a broken one: creating a PAT is
+          # a manual act nobody has had to perform yet, and the site's own
+          # hourly schedule already keeps it within an hour of the truth. Say
+          # so and stop, rather than painting a finished release red. The day
+          # a token appears this starts working with no further change.
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::SITE_DISPATCH_TOKEN is unset, so the site was not told about $GITHUB_REF_NAME directly. Its hourly build will pick it up within the hour."
+            exit 0
+          fi
+          gh workflow run deploy.yml \
+            --repo "${{ github.repository_owner }}/soundsible.github.io" \
+            -f source_tag="$GITHUB_REF_NAME"
