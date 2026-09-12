@@ -50,9 +50,10 @@ Soundsible brings the whole listening journey together:
   Autoplay, and endless Radio learn from listening history held on your server.
 - 📻 **Broadcast the whole program live** — share the actual two-deck output,
   including DJ transitions and effects, through a browser listening room.
-- 📱 **Soundsible on your devices** — web/PWA, desktop beta and native iOS
-  connect to your server. Capabilities and validation differ by surface; see
-  [iOS](docs/IOS.md) and [car integration](docs/CAR_INTEGRATION.md).
+- 📱 **Soundsible on your devices** — web/PWA and desktop beta connect to your
+  server. [Native iOS](docs/IOS.md) code exists but has never been installed or
+  run on a device; its playback, offline and car behaviour are unverified. See
+  [car integration](docs/CAR_INTEGRATION.md) for the separate web media controls.
 - 🔐 **Private by design** — self-hosted and multi-user, with no ads, tracking,
   subscription, or cloud listening profile.
 
@@ -253,13 +254,10 @@ Legacy paths (`/player/app.html`, `/player/mobile/`, …) redirect to `/player/`
 ### Listen everywhere
 
 - **On your phone (PWA)** — open the player on your phone, then *Share → Add to Home Screen* (iOS) or *Menu → Install app* (Android).
-- **iPhone and iPad (native app)** — the PWA stops playing when Safari goes to
-  the background, which on a phone is most of the time. The native app keeps
-  playing with the screen locked, downloads music for offline listening, and
-  shows title, artwork and working controls on a car's screen. It is not on the
-  App Store; it installs through [SideStore](https://sidestore.io) and needs iOS
-  26 or newer. See
-  [iOS](docs/IOS.md).
+- **iPhone and iPad (native code, unverified)** — an IPA is built, but nobody
+  has installed or run the app on a device. Background playback, offline
+  downloads and car controls are intended capabilities, not verified behaviour.
+  The proposed installation procedure and limitations are in [iOS](docs/IOS.md).
 - **From anywhere** — publish the station with `tailscale serve --bg --yes --https=443 5005`
   and open the HTTPS `.ts.net/player/` URL it prints. HTTPS also enables Live
   broadcasting from remote browsers. Already publishing something else from that

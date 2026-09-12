@@ -19,9 +19,9 @@ commitments to offline listening, cars or watches on its own.
   whole product.
 - NORMAL playback and the editable two-deck [DJ workflow](AUTO_MODE.md),
   currently in beta, with local recommendations, Autoplay and Radio.
-- Web/PWA, desktop beta and an [iOS client](IOS.md). iOS already contains offline
-  download and storage management; this is a foundation for broader offline
-  support, not evidence of equivalent support across clients.
+- Web/PWA and desktop beta. [Native iOS code](IOS.md) includes offline download
+  and storage management, but nobody has installed or run the app on a device.
+  Its behaviour remains theoretical; producing an IPA does not validate it.
 - [Live](LIVE.md) broadcasts the program to a browser listening room.
 - [OpenSubsonic](OPENSUBSONIC.md) exposes the music library to compatible clients,
   including library search, playlists and streaming with transcoding.
@@ -82,14 +82,15 @@ ready to leave beta.
 
 ### 4. Soundsible on your devices
 
-Consolidate web/PWA, desktop and iOS first. Our long-term direction includes our
+Consolidate web/PWA and desktop, and install and validate iOS for the first time,
+before expanding coverage. Our long-term direction includes our
 own Android client, car interfaces and watch experience, with interactions suited
 to each device. A watch need not reproduce the desktop DJ workspace.
 
 Extend offline listening across our own clients: download music from your
 Soundsible server, listen while disconnected, then synchronise on reconnection.
 The server remains part of the product even when a client is temporarily offline.
-Build on the existing iOS implementation and validate downloads, storage limits,
+Treat the existing iOS code as unvalidated and check downloads, storage limits,
 disconnected playback and reconnection on each supported client.
 
 [Car integration](CAR_INTEGRATION.md) distinguishes existing media controls from
