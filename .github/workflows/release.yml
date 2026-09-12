@@ -156,14 +156,22 @@ jobs:
   refresh_site:
     needs: publish
     # A pre-release is not documentation: `sync-docs.mjs` refuses one outright,
-    # so pinging for an `-rc.` tag would only turn the site's build red.
+    # so asking for a build of an `-rc.` tag would only turn the site's red.
     if: ${{ !contains(github.ref_name, '-rc.') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # `GITHUB_TOKEN` cannot start a workflow in another repository, so this
-      # needs a PAT with Actions: write on the site repo.
-      - name: Tell the landing site there is a new release
+      # Running the site's own workflow, rather than sending it a
+      # `repository_dispatch`, is the narrower of the two doors: this needs a
+      # token with Actions: write, while a dispatch needs Contents: write —
+      # push access to the site's source, to ask it to rebuild. It also needs
+      # nothing added on the far side, since `deploy.yml` already takes a
+      # `source_tag`, which pins the build to the release that triggered it
+      # instead of re-asking for "latest" and possibly getting a newer answer.
+      #
+      # `GITHUB_TOKEN` cannot start a workflow in another repository at all,
+      # hence the PAT.
+      - name: Ask the landing site to rebuild
         env:
           GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
         run: |
@@ -172,7 +180,6 @@ jobs:
             echo "::error::SITE_DISPATCH_TOKEN is unset, so the site was not told about $GITHUB_REF_NAME. It will catch up on its next scheduled build."
             exit 1
           fi
-          gh api "repos/${{ github.repository_owner }}/soundsible.github.io/dispatches" \
-            --input - <<JSON
-          {"event_type":"upstream-release","client_payload":{"tag":"${GITHUB_REF_NAME}"}}
-          JSON
+          gh workflow run deploy.yml \
+            --repo "${{ github.repository_owner }}/soundsible.github.io" \
+            -f source_tag="$GITHUB_REF_NAME"
