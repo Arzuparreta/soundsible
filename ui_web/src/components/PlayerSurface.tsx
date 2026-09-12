@@ -385,11 +385,13 @@ export function PlayerSurface() {
         <div
           classList={{ [styles.backdrop]: true, [styles.backdropActive]: backdrops().active === 'first' }}
           style={{ 'background-image': backdrops().first ? `url("${backdrops().first}")` : undefined }}
+          data-player-backdrop={backdrops().active === 'first' ? 'active' : 'inactive'}
           aria-hidden="true"
         />
         <div
           classList={{ [styles.backdrop]: true, [styles.backdropActive]: backdrops().active === 'second' }}
           style={{ 'background-image': backdrops().second ? `url("${backdrops().second}")` : undefined }}
+          data-player-backdrop={backdrops().active === 'second' ? 'active' : 'inactive'}
           aria-hidden="true"
         />
         <div class={styles.wash} aria-hidden="true" />

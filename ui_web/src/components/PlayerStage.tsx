@@ -3,6 +3,7 @@ import { trackMusic } from '../lib/musicNavigation';
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
 import { actions, isSavedTrack, state } from '../stores';
 import { clockTime } from '../lib/format';
+import { pageVisible } from '../lib/pageVisibility';
 import { trackCoverUrl } from '../lib/media';
 import { CoverImage } from './CoverImage';
 import {
@@ -91,9 +92,10 @@ export function PlayerStage(props: {
   const desktopLyricsActive = createMemo(() => desktopLyrics() && !podcast());
   const loading = createMemo(() => state.playback.isLoading);
   const loadFailed = createMemo(() => state.playback.loadError);
-  const position = createMemo(() => (
-    props.surfaceOpen ? state.playback.currentTime : untrack(() => state.playback.currentTime)
-  ));
+  const position = createMemo<number>((previous) => {
+    if (!pageVisible()) return previous ?? untrack(() => state.playback.currentTime);
+    return props.surfaceOpen ? state.playback.currentTime : untrack(() => state.playback.currentTime);
+  });
   const seekPct = () => {
     const duration = state.playback.duration;
     return duration > 0 ? Math.min(100, (position() / duration) * 100) : 0;

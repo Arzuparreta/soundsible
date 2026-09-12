@@ -149,6 +149,7 @@
   content: '';
   background: var(--accent);
   animation: search-loading 1s var(--ease-in-out) infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 .loadingBar span {
@@ -213,6 +214,7 @@
 
 .spinning {
   animation: refreshSpin 0.8s linear infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 @keyframes refreshSpin {

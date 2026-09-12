@@ -97,6 +97,7 @@
   background: var(--stage-panel);
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 24%, transparent);
   animation: routeLoadingStep 1.35s ease-in-out infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 .routeLoadingMark i:nth-child(2) { animation-delay: 180ms; }

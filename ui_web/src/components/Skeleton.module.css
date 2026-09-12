@@ -23,6 +23,7 @@
   width: 100%;
   padding: 0 var(--space-md) var(--space-lg);
   animation: skeleton-breathe 1.65s var(--ease-in-out) infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 .row {
@@ -92,6 +93,7 @@
   gap: var(--space-md);
   width: 100%;
   animation: skeleton-breathe 1.65s var(--ease-in-out) infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 .card {

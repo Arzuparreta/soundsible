@@ -12,6 +12,7 @@ import json
 import math
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Iterable, Mapping
@@ -187,10 +188,9 @@ _pending_lock = threading.Lock()
 
 def _analysis_pool() -> ThreadPoolExecutor:
     global _pool
-    if _pool is None:
-        # Two at a time: enough to keep a session's runway warm, few enough that
-        # analysis never competes with the streaming the listener can hear.
-        _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dj-analysis")
+    with _pending_lock:
+        if _pool is None:
+            _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dj-analysis")
     return _pool
 
 
@@ -285,12 +285,28 @@ def _analyse_pcm(path: Path, *, duration_hint: float) -> dict[str, Any]:
         tail = _decode(path, sample_rate, start=tail_start, length=TAIL_WINDOW_SECONDS)
         if tail is None or tail.size < sample_rate * 4:
             return _fallback(duration)
-        return _compose(tail, head, sample_rate, duration=duration, tail_start=tail_start)
+        return _compose_off_loop(tail, head, sample_rate, duration=duration, tail_start=tail_start)
 
     samples = _decode(path, sample_rate)
     if samples is None or samples.size < sample_rate * 4:
         return _fallback(duration or (0.0 if samples is None else samples.size / sample_rate))
-    return _compose(samples, samples, sample_rate, duration=samples.size / sample_rate, tail_start=0.0)
+    return _compose_off_loop(samples, samples, sample_rate, duration=samples.size / sample_rate, tail_start=0.0)
+
+
+def _compose_off_loop(tail, head, sample_rate: int, *, duration: float, tail_start: float):
+    # The daemon monkey-patches threading: its concurrent.futures workers are
+    # greenlets, so NumPy on those workers otherwise stalls every HTTP request.
+    # Offload only pure PCM computation. SQLite and cooperative subprocess I/O
+    # stay on their owning thread; the two analysis jobs still bound concurrency.
+    args = (tail, head, sample_rate)
+    kwargs = {"duration": duration, "tail_start": tail_start}
+    # Plain CLI/desktop analyses do not need to initialize gevent at all.
+    monkey = sys.modules.get("gevent.monkey")
+    if monkey is not None and monkey.is_module_patched("threading"):
+        from gevent import get_hub
+
+        return get_hub().threadpool.apply(_compose, args, kwargs)
+    return _compose(*args, **kwargs)
 
 
 def _compose(
@@ -463,18 +479,18 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
         strides=(usable.strides[0] * hop, usable.strides[0]),
         writeable=False,
     )
-    windowed = frames * np.hanning(frame)
-    rms = np.sqrt(np.mean(frames * frames, axis=1) + 1e-12)
+    # Only the mean spectrum and adjacent-frame flux survive this calculation.
+    # Keep a small FFT working set instead of several full-song matrices (over
+    # 400 MiB for an eight-minute track, multiplied by concurrent analyses).
+    rms, mean_spectrum, flux = _spectral_features(frames)
     energy = rms / max(float(np.percentile(rms, 95)), 1e-7)
-    spectrum = np.abs(np.fft.rfft(windowed, axis=1))
-    flux = np.maximum(0.0, np.diff(spectrum, axis=0)).sum(axis=1)
     flux /= max(float(np.percentile(flux, 95)), 1e-7)
 
     min_lag = max(1, round(60 * sample_rate / (190 * hop)))
     max_lag = max(min_lag + 1, round(60 * sample_rate / (65 * hop)))
     centred = flux - np.mean(flux)
     correlations = np.array(
-        [float(np.dot(centred[:-lag], centred[lag:])) if lag < centred.size else 0.0 for lag in range(min_lag, max_lag + 1)]
+        [float(np.sum(centred[:-lag] * centred[lag:])) if lag < centred.size else 0.0 for lag in range(min_lag, max_lag + 1)]
     )
     # A broad 120 BPM prior only breaks ties between strong autocorrelation
     # peaks; the recording remains authoritative.
@@ -500,7 +516,7 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     valid = frequencies > 55
     midi = np.rint(69 + 12 * np.log2(np.maximum(frequencies[valid], 1e-6) / 440)).astype(int)
     bins = np.mod(midi, 12)
-    mean_spectrum = np.mean(spectrum[:, valid], axis=0)
+    mean_spectrum = mean_spectrum[valid]
     for pitch_class in range(12):
         chroma[pitch_class] = float(mean_spectrum[bins == pitch_class].sum())
     chroma /= max(float(chroma.sum()), 1e-9)
@@ -518,7 +534,9 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
     intro = float(active_frames[0] * hop / sample_rate) if active_frames.size else 0.0
     last_active = float(active_frames[-1] * hop / sample_rate) if active_frames.size else window_seconds
     loudness_db = 20 * math.log10(max(float(np.sqrt(np.mean(samples * samples))), 1e-8))
-    periodicity = float(max(0.0, correlations.max()) / (np.dot(centred, centred) + 1e-9))
+    # Small vector reductions should not start a BLAS worker team alongside
+    # the station's own analysis workers.
+    periodicity = float(max(0.0, correlations.max()) / (np.sum(centred * centred) + 1e-9))
 
     return {
         "bpm": float(bpm),
@@ -539,6 +557,29 @@ def _window_features(samples, sample_rate: int) -> dict[str, Any] | None:
         "frame_energy": energy.tolist(),
         "flux": flux.tolist(),
     }
+
+
+def _spectral_features(frames):
+    """Same per-frame measures as a whole-matrix FFT, with bounded scratch space."""
+    import numpy as np
+
+    count, frame_size = frames.shape
+    rms = np.empty(count, dtype=frames.dtype if frames.dtype.kind == "f" else float)
+    flux = np.empty(max(0, count - 1), dtype=float)
+    spectrum_sum = np.zeros(frame_size // 2 + 1, dtype=float)
+    window = np.hanning(frame_size)
+    previous = None
+    for start in range(0, count, 256):
+        block = frames[start:start + 256]
+        end = start + len(block)
+        rms[start:end] = np.sqrt(np.mean(block * block, axis=1) + 1e-12)
+        spectrum = np.abs(np.fft.rfft(block * window, axis=1))
+        spectrum_sum += spectrum.sum(axis=0)
+        if previous is not None:
+            flux[start - 1] = np.maximum(0.0, spectrum[0] - previous).sum()
+        flux[start:end - 1] = np.maximum(0.0, np.diff(spectrum, axis=0)).sum(axis=1)
+        previous = spectrum[-1].copy()
+    return rms, spectrum_sum / count, flux
 
 
 def _snap_beat_frames(flux, seed: int, lag: int) -> list[int]:

@@ -81,4 +81,26 @@ describe('automatic trace delivery', () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(send).toHaveBeenCalledOnce();
   });
+
+  it('preserves event sequences across size-limited diagnostic batches', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('indexedDB', undefined);
+    const sent: TraceBatch[] = [];
+    cleanups.push(startAutomaticPlaybackDiagnostics(setup, async (b) => {
+      sent.push(b);
+      return { id: b.id, enabled: true };
+    }));
+    await vi.advanceTimersByTimeAsync(1);
+    for (let index = 0; index < 30; index++) {
+      recordPlaybackDiagnostic('large-sample', { index, padding: 'x'.repeat(7000) });
+    }
+    await vi.advanceTimersByTimeAsync(15_000);
+    const samples = sent.flatMap(b => b.events).filter(row => (row as { event: string }).event === 'large-sample');
+    // Upload order can differ for batches with the same timestamp; sequence
+    // numbers are the recorder/server's authoritative reconstruction order.
+    samples.sort((a, b) => (a as { sequence: number }).sequence - (b as { sequence: number }).sequence);
+    expect(samples.map(row => (row as { facts: { index: number } }).facts.index)).toEqual(Array.from({ length: 30 }, (_, i) => i));
+    expect(sent.every(b => JSON.stringify(b.events).length <= 40_000)).toBe(true);
+  });
+
 });

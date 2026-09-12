@@ -38,6 +38,12 @@ body {
   background: var(--accent-glow);
 }
 
+/* Only hidden pages park decorative motion. A visible player on another
+   monitor keeps animating, even when another application owns the keyboard. */
+html[data-page-hidden] {
+  --decorative-animation-state: paused;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--hairline-strong) transparent;

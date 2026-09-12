@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Track } from '../types/music';
+import { installPageVisibility } from '../lib/pageVisibility';
 
 const { actions, api, state } = vi.hoisted(() => ({
   actions: {
@@ -142,6 +143,22 @@ describe('LyricsPanel', () => {
     // Line 5 sits at 200; centring it in a 200px box lands the scroller at 120.
     expect(scrollTop).toBe(120);
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    let visibility: DocumentVisibilityState = 'hidden';
+    const visible = vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
+    const stop = installPageVisibility();
+    try {
+      scrollTop = 0;
+      state.playback.currentTime = 15;
+      for (const reveal of reveals) reveal();
+      expect(scrollTop).toBe(0);
+      visibility = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+      // Catch up to line 3 immediately, without restarting an old scroll tween.
+      expect(scrollTop).toBe(40);
+    } finally {
+      stop();
+      visible.mockRestore();
+    }
   });
 
   it('never asks the lyrics API for a podcast episode', () => {

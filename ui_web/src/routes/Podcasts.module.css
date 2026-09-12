@@ -31,6 +31,7 @@
   content: '';
   background: var(--accent);
   animation: podcast-loading 1s var(--ease-in-out) infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 .loadingBar span {

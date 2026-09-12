@@ -59,6 +59,7 @@ html[data-booting] #app { visibility: hidden; }
   background: var(--startup-accent);
   transform: scaleY(0.3);
   animation: startup-wave 1100ms ease-in-out infinite alternate;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 #startup-screen .startup-waves span:nth-child(2) { animation-delay: -640ms; height: 19px; }
 #startup-screen .startup-waves span:nth-child(3) { animation-delay: -280ms; }
