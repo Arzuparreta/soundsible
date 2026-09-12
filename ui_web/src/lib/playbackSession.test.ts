@@ -92,6 +92,7 @@ describe('playback session snapshots', () => {
 
     expect(snapshot.mode).toBe('auto');
     expect(snapshot.auto).toEqual({
+      sourcePolicy: 'explicit',
       profile: 'explore',
       djProfile: 'long_blend',
       direction: auto.direction,
@@ -193,14 +194,29 @@ describe('playback session snapshots', () => {
     })!;
 
     expect(restored.auto).toEqual({
+      sourcePolicy: 'explicit',
       profile: 'balanced',
       djProfile: 'adaptive',
       direction: { energy: 0, familiarity: 0, prompt: '', include: [], exclude: [] },
-      sources: [],
+      sources: [{ id: 'initial:b', label: 'B', tracks: [restored.queue[restored.index]], activation: 1 }],
       heard: [],
       avoidedIdentities: ['music:youtube:zzz'],
       plan: {},
       staleSeams: ['q-c'],
     });
+  });
+});
+
+
+describe('session direction persistence', () => {
+  it('restores the chosen direction without resurrecting heard requests as influences', () => {
+    const chosen = { id: 'house', label: 'Oliver Heldens', tracks: [track('house')], activation: 1 };
+    const snapshot = buildPlaybackSession(input({ auto: autoSession({
+      sources: [chosen], heard: [track('rock'), track('requested-rock')],
+    }) }))!;
+    const restored = readPlaybackSession(JSON.parse(JSON.stringify(snapshot)))!;
+    expect(restored.auto?.sourcePolicy).toBe('explicit');
+    expect(restored.auto?.sources).toEqual([chosen]);
+    expect(restored.auto?.heard.map((row) => row.id)).toEqual(['rock', 'requested-rock']);
   });
 });

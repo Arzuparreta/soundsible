@@ -1,3 +1,4 @@
+import { CollectionActions } from '../components/CollectionActions';
 import { CoverImage } from '../components/CoverImage';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { MusicLink } from '../components/MusicLinks';
@@ -11,7 +12,7 @@ import { toast } from '../lib/toast';
 import { artistKey, artistPath, albumPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { ArtistProfile, CatalogItem, Track } from '../types/music';
-import { addCatalogItemsAsAutoSource, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import { coverGradient } from '../lib/cover';
@@ -117,8 +118,8 @@ export default function Artist() {
   const playAll = () => {
     const context = { id: `artist:${name()}`, kind: 'artist' as const, label: name() };
     if (state.autoMode.active) {
-      if (view() === 'library') actions.addAutoSource(libraryTrackList(), name());
-      else void addCatalogItemsAsAutoSource(topTracks(), name());
+      if (view() === 'library') void actions.placeAutoTracks(libraryTrackList());
+      else void useCatalogCollection(topTracks(), name(), 'request');
       return;
     }
     if (view() === 'library') {
@@ -134,8 +135,8 @@ export default function Artist() {
   const shuffle = () => {
     const context = { id: `artist:${name()}`, kind: 'artist' as const, label: name() };
     if (state.autoMode.active) {
-      if (view() === 'library') actions.addAutoSource(libraryTrackList(), name());
-      else void addCatalogItemsAsAutoSource(topTracks(), name());
+      if (view() === 'library') void actions.placeAutoTracks(libraryTrackList());
+      else void useCatalogCollection(topTracks(), name(), 'request');
       return;
     }
     if (view() === 'library') {
@@ -262,9 +263,15 @@ export default function Artist() {
             </Show>
           </span>
           <div class={styles.actions}>
+            <Show when={state.autoMode.active} fallback={
             <Button onClick={playAll} disabled={view() === 'library' ? libraryTrackList().length === 0 : topTracks().length === 0}>
-              {state.autoMode.active ? t('autoMode.source.add') : t('artist.play')}
+              {t('artist.play')}
             </Button>
+            }>
+              <CollectionActions title={name()} auto buttonClass={styles.btnPrimary}
+                tracks={view() === 'library' ? libraryTrackList() : undefined}
+                items={view() === 'library' ? undefined : topTracks()} />
+            </Show>
             <Show when={!state.autoMode.active}>
               <Button variant="secondary" onClick={shuffle} disabled={view() === 'library' ? libraryTrackList().length === 0 : topTracks().length === 0}>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style={{ 'margin-right': '6px' }}>

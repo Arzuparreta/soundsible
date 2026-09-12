@@ -17,7 +17,7 @@ import { t } from '../lib/i18n';
 import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
-import { KaraokeMicIcon, SourceIcon } from './icons';
+import { KaraokeMicIcon } from './icons';
 import { LyricsPanel } from './LyricsPanel';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
@@ -424,17 +424,7 @@ export function PlayerStage(props: {
                     </button>
                   </Show>
 
-                  <Show when={props.mode === 'auto' && !podcast()}>
-                    <button
-                      class={styles.actBtn}
-                      type="button"
-                      aria-label={t('autoMode.route.useAsSource')}
-                      title={t('autoMode.route.useAsSource')}
-                      onClick={() => actions.useAutoTrackAsSource(current())}
-                    >
-                      <SourceIcon size={20} />
-                    </button>
-                  </Show>
+
 
                   <Show when={!podcast() && isSavedTrack(current())}>
                     <FavouriteButton favourite={savedFromTrack(current())} class={styles.actBtn} tooltip />

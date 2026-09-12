@@ -51,7 +51,7 @@ describe('buildTrackMenu — podcast coherence', () => {
     const l = labels(song, { ...ctx, auto: true });
     expect(l).toContain('Play now');
     expect(l).toContain('Add to route');
-    expect(l).toContain('Use as reference');
+    expect(l).toContain('Mix into session');
     expect(l).not.toContain('Play next');
     expect(l).not.toContain('Add to queue');
   });

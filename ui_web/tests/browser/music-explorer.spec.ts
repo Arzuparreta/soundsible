@@ -77,15 +77,15 @@ test('opens general music pages, preserves explorer search, and separates DJ ref
   await page.screenshot({ path: `/tmp/soundsible-music-${info.project.name}.png` });
   if (mobile) await snapPlayerCarousel(page, 'auto', 'route');
   const route = page.locator('[data-auto-tile="route"]');
-  const references = route.getByRole('region', { name: 'Referencias de la sesión' });
+  const references = route.getByRole('region', { name: 'Sesión' });
   await expect(references).toBeVisible();
   const refBox = await references.boundingBox();
   const routeBox = await route.boundingBox();
   expect(refBox!.height).toBeGreaterThan(70);
   expect(refBox!.y).toBeGreaterThan(routeBox!.y + routeBox!.height / 2);
-  await references.getByRole('button', { name: 'Añadir referencia', exact: true }).click();
+  await references.getByRole('button', { name: 'Mezclar con…', exact: true }).click();
   if (mobile) await expect(browser).not.toHaveAttribute('inert', '');
-  await expect(browser.getByText('Elige música para orientar la sesión')).toBeVisible();
+  await expect(browser.getByText('Mezclar con la sesión', { exact: true }).first()).toBeVisible();
   await browser.getByRole('button', { name: 'Cancelar selección', exact: true }).click();
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
   if (mobile) await snapPlayerCarousel(page, 'auto', 'route');

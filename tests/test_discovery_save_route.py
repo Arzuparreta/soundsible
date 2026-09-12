@@ -1436,3 +1436,50 @@ def test_dj_collection_keeps_a_selected_seam_beyond_the_analysis_window(tmp_path
     assert [row["queue_id"] for row in route] == [
         *(f"q-{index}" for index in range(23)), *(f"wanted-{index}" for index in range(24)), "q-23",
     ]
+
+
+def test_explicit_dj_direction_never_uses_heard_requests_as_graph_roots(tmp_path):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    seed = {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"}
+    source = {"id": "house", "label": "Oliver Heldens", "tracks": [
+        {"id": "oliver", "track_id": "oliver", "title": "Gecko", "artist": "Oliver Heldens"},
+    ]}
+    body = {"source_policy": "explicit", "seed": seed, "sources": [source], "heard": [seed]}
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)) as graph,
+    ):
+        response = _make_app().test_client().post("/api/discovery/music/dj-plan", json=body)
+        assert response.status_code == 200
+        assert graph.call_count == 1
+        assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens"]
+        graph.reset_mock()
+        _auto_mode._dj_place_bridge_pool(None, body, set())
+        assert graph.call_count == 1
+        assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens"]
+
+
+def test_explicit_dj_mix_keeps_both_sources_but_excludes_heard_music(tmp_path):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    rock = {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"}
+    house = {"id": "house", "track_id": "house", "title": "Gecko", "artist": "Oliver Heldens"}
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)) as graph,
+    ):
+        response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
+            "source_policy": "explicit", "seed": rock, "heard": [rock],
+            "sources": [{"id": "rock", "tracks": [rock]}, {"id": "house", "tracks": [house]}],
+        })
+    assert response.status_code == 200
+    assert graph.call_count == 2
+    assert {call.args[1][0]["artist"] for call in graph.call_args_list} == {"Extremoduro", "Oliver Heldens"}
+    assert [item["id"] for item in response.get_json()["items"]] == ["house"]

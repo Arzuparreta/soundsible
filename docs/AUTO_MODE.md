@@ -15,19 +15,18 @@ planning and interface are still being refined.
 ## Start a set
 
 - With nothing playing, press **Start a DJ session** in the bottom player, then
-  choose a source. The DJ chooses an opening from that collection and starts
+  choose music. The DJ chooses an opening from that selection and starts
   the route there.
 - With a track playing, open the player and switch from **NORMAL** to **DJ**.
-  The current track becomes the start of the set.
-- Use **Sources** to steer the session with a track, artist, album, playlist,
-  favourites, or another selection. Sources influence what DJ generates;
-  adding one does not abruptly replace what is playing.
+  The current track becomes the first visible influence in **Session**.
+- In **Session**, use **Mix with…** to add an influence or **Change…** to
+  choose a new direction using the same music browser.
 
 The three parts of the workspace have separate jobs:
 
 | Part | What it controls |
 | --- | --- |
-| **Sources** | The musical material and direction DJ should draw from |
+| **Session** | The musical material and direction DJ should draw from |
 | **Stage / Booth** | What is on air, what comes next, energy, depth, and DJ style |
 | **Route** | The actual upcoming order, including your fixed tracks and DJ's generated bridges |
 
@@ -50,9 +49,14 @@ program path, so a transition does not need a sudden volume jump to feel alive.
 
 ## Make the set yours
 
-- **Steer, do not restart.** Add or remove Sources at any time. The handoff
-  already loaded on the second deck stays intact; DJ redraws the runway after
-  it.
+- **Add to session** requests specific songs without changing the musical direction.
+- **Mix into session** adds an influence alongside the existing ones.
+- **Change session** replaces the influences and automatic recommendations while
+  preserving your requested songs and their relative order. The current song
+  continues; an already audible blend finishes. Preparation failures leave the
+  previous session intact and offer **Retry** in the Session block.
+- The Session block shows the active influences. Remove an influence while
+  another remains, or use **Change…** to replace the last one.
 - **Place a must-play track.** Add a song to the Route or drop it into a
   particular gap. Soundsible may insert a bridge when that produces a safer
   path to the request.
@@ -64,10 +68,10 @@ program path, so a transition does not need a sudden volume jump to feel alive.
   their chosen order and depth.
 - **Skip without leaving DJ.** Next asks the DJ for a short handoff to the next
   route item instead of dropping back to ordinary playback.
-- **Choose music from anywhere.** While the **DJ** badge is active, playing an
-  individual song means **Mix now** and uses a short musical handoff. Choosing
-  an album, artist, playlist, favourites, or another collection means **Use as
-  source**. These actions never switch the mode back to **NORMAL**.
+- **Choose music from anywhere.** Song and collection menus offer the same
+  session actions. **Play now** remains an explicit immediate handoff.
+  Choosing a musical influence does not also request that exact song.
+
 
 DJ keeps explicit requests ahead of generated music. Leaving DJ removes its
 generated branches and bridges, but tracks you explicitly placed survive as a
@@ -86,11 +90,12 @@ finishes and the most recent selection is mixed next.
 | --- | --- | --- |
 | **Autoplay** | A small, invisible continuation after an album or playlist ends | An account preference; no separate workspace |
 | **Radio** | Endless music related to one seed | Start or stop the generated stream |
-| **DJ** | A continuous set with deliberate transitions | Sources, route, exact requests, energy, depth, DJ style, and repairs |
+| **DJ** | A continuous set with deliberate transitions | Session influences, route, exact requests, and transitions |
 
-All three use Soundsible's local listening signals. DJ additionally considers
-whether tracks can form a credible transition and performs that transition in
-the browser's two-deck audio engine.
+DJ recommendations come from the active session influences. Previously heard
+music helps avoid repetitions; it does not become an influence automatically.
+DJ also considers whether tracks can form a credible transition and performs
+that transition in the browser's two-deck audio engine.
 
 ## Broadcast the result
 

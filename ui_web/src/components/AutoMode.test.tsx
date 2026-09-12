@@ -5,7 +5,7 @@ const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
   actions: {
     removeAutoSource: vi.fn(), useAutoTrackAsSource: vi.fn(), placeAutoTrack: vi.fn(),
     removeAutoRouteOccurrence: vi.fn(), avoidAutoTrackForSession: vi.fn(), moveAutoRoute: vi.fn(),
-    repairAutoRoute: vi.fn(),
+    repairAutoRoute: vi.fn(), changeAutoSession: vi.fn(), cancelAutoSessionChange: vi.fn(),
   },
   openActionMenu: vi.fn(),
   openContextMenu: vi.fn(),
@@ -83,16 +83,17 @@ describe('AutoMode workspace', () => {
     expect(screen.queryByRole('button', { name: 'autoMode.source.title' })).not.toBeInTheDocument();
   });
 
-  it('shows lineage and puts both route actions one press away, with no menu', () => {
+  it('keeps session actions in one route menu', () => {
     renderAuto('route');
     expect(screen.getAllByText(/Warehouse techno/)).toHaveLength(2);
-    expect(screen.getByRole('button', { name: 'autoMode.route.insertBefore:Next song' })).toBeInTheDocument();
-    expect(screen.queryByText('···')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'autoMode.route.actions:Next song' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.useAsSource' }));
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.remove' }));
-    expect(openActionMenu).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'autoMode.route.useAsSource' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.actions:Next song' }));
+    const options = openActionMenu.mock.calls.at(-1)![0];
+    expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
+      'musicExplorer.reference', 'musicExplorer.change', 'autoMode.route.remove',
+    ]);
+    options.actions[0].onSelect();
+    options.actions[2].onSelect();
     expect(actions.useAutoTrackAsSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'next' }));
     expect(actions.removeAutoRouteOccurrence).toHaveBeenCalledWith('q-next');
   });

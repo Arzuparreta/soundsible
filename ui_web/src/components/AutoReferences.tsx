@@ -8,7 +8,7 @@ import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import styles from './AutoMode.module.css';
 
-export function AutoReferences(props: { carried?: Track; onUse: (track: Track) => void; onAdd: () => void }) {
+export function AutoReferences(props: { carried?: Track; onUse: (track: Track) => void; onAdd: () => void; onChange: () => void }) {
   const [over, setOver] = createSignal(false);
   const armed = () => Boolean(autoTrackDragging() || props.carried);
   let depth = 0;
@@ -16,7 +16,7 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
     draggable={source.tracks.length === 1} onDragStart={(event) => source.tracks[0] && writeAutoTrackTransfer(event, { track: source.tracks[0] })}>
     <span class={styles.referenceCover} style={coverStyle(source.label, source.tracks[0] ? trackCoverUrl(source.tracks[0], 'thumb') : undefined)} />
     <span class={styles.referenceName} title={source.label}>{source.label}</span><small>{source.tracks.length}</small>
-    <button type="button" aria-label={t('autoMode.source.remove', { title: source.label })} onClick={() => actions.removeAutoSource(source.id)}>×</button>
+    <Show when={state.autoMode.sources.length > 1}><button type="button" aria-label={t('autoMode.source.remove', { title: source.label })} onClick={() => actions.removeAutoSource(source.id)}>×</button></Show>
   </div>}</For>;
   return <section class={styles.references} aria-label={t('musicExplorer.references')}
     data-target={armed() ? '' : undefined} data-over={over() ? '' : undefined}
@@ -24,9 +24,15 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
     onDragLeave={() => { depth = Math.max(0, depth - 1); if (!depth) setOver(false); }}
     onDragOver={(event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'; }}
     onDrop={(event) => { event.preventDefault(); event.stopPropagation(); depth = 0; setOver(false); const transfer = readAutoTrackTransfer(event); if (transfer) props.onUse(transfer.track); }}>
-    <header><strong>{t('musicExplorer.references')}</strong><button type="button" aria-label={t('musicExplorer.addReference')} onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}>＋</button></header>
+    <header><strong>{t('musicExplorer.references')}</strong><Show when={state.autoMode.sources.length}>
+      <button type="button" onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}>{t('musicExplorer.mixWith')}</button>
+      <button type="button" onClick={props.onChange}>{t('musicExplorer.changeShort')}</button>
+    </Show></header>
+    <Show when={state.autoMode.sessionChange}>{(change) => <div role="status" aria-live="polite">
+      <span>{t(change().status === 'working' ? 'musicExplorer.changing' : 'musicExplorer.changeFailed', { title: change().label })}</span>
+      <Show when={change().status === 'error'}><button type="button" onClick={() => actions.retryAutoSessionChange()}>{t('musicExplorer.retryChange')}</button></Show>
+    </div>}</Show>
     <Show when={state.autoMode.sources.length} fallback={<button type="button" class={styles.referenceEmpty} onClick={props.onAdd}>{t('musicExplorer.referenceEmpty')}</button>}>
-      <p>{t('musicExplorer.referenceHint')}</p>
       <div class={styles.referenceRows}>{rows()}</div>
       <Show when={state.autoMode.sources.length > 2}><button type="button" class={styles.referenceMore} onClick={() => openOverlay(() => <section class={styles.referenceSheet}><h2>{t('musicExplorer.references')}</h2>{rows()}</section>, { ariaLabel: () => t('musicExplorer.references') })}>{t('musicExplorer.viewReferences')} ({state.autoMode.sources.length})</button></Show>
     </Show>

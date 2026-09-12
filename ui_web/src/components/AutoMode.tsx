@@ -27,6 +27,7 @@ import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
 import { AutoReferences } from './AutoReferences';
 import { SourceIcon } from './icons';
+import { openActionMenu } from './ActionMenu';
 import styles from './AutoMode.module.css';
 
 const AUTO_MINIMUMS = { browser: 280, stage: 390, route: 280 };
@@ -53,9 +54,11 @@ export function AutoMode(props: {
   const [layout, setLayout] = createSignal(readLayout());
   // Explicit picker intent distinguishes requesting a song at a seam from
   // adding reference material; ordinary browsing remains free of either task.
-  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'route' | 'reference'; beforeQueueId?: string }>({ kind: 'neutral' });
+  const [destination, setDestination] = createSignal<{ kind: 'neutral' | 'route' | 'reference' | 'change'; beforeQueueId?: string }>({ kind: 'neutral' });
   const [carriedTrack, setCarriedTrack] = createSignal<CarriedTrack | null>(null);
-  const openDestination = (kind: 'route' | 'reference', beforeQueueId?: string) => {
+  let destinationOrigin: AutoModePanelId = props.panel;
+  const openDestination = (kind: 'route' | 'reference' | 'change', beforeQueueId?: string) => {
+    destinationOrigin = props.panel;
     setDestination({ kind, beforeQueueId });
     props.onPanelChange('browser');
   };
@@ -123,6 +126,11 @@ export function AutoMode(props: {
         onClick={() => carriedTrack() ? placeCarriedInRoute(track.queueId) : openDestination('route', track.queueId)}
       ><span>＋</span></button>
     );
+    const menu = () => [
+      { label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
+      { label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) },
+      { label: t('autoMode.route.remove'), danger: true, onSelect: () => actions.removeAutoRouteOccurrence(track.queueId) },
+    ];
     return {
       id: track.queueId,
       title: track.title,
@@ -145,29 +153,11 @@ export function AutoMode(props: {
       onDragStart: (event) => writeAutoTrackTransfer(event, { track, queueId: track.queueId }),
       entry: savedFromTrack(track),
       onCarry: committed ? undefined : () => setCarriedTrack({ track, queueId: track.queueId }),
-      menu: committed ? undefined : () => [
-        { label: t('autoMode.route.useAsSource'), onSelect: () => actions.useAutoTrackAsSource(track) },
-        { label: t('autoMode.route.remove'), danger: true, onSelect: () => actions.removeAutoRouteOccurrence(track.queueId) },
-      ],
-      // Two things worth doing to a queued song, both one press away. Removing
-      // carries the stronger reading — "and don't bring it back" — on its toast.
+      menu: committed ? undefined : menu,
       trailing: committed ? undefined : (
-        <>
-          <button
-            class={styles.routeAction}
-            type="button"
-            aria-label={t('autoMode.route.useAsSource')}
-            title={t('autoMode.route.useAsSource')}
-            onClick={() => actions.useAutoTrackAsSource(track)}
-          ><SourceIcon /></button>
-          <button
-            class={styles.routeAction}
-            type="button"
-            aria-label={t('autoMode.route.remove')}
-            title={t('autoMode.route.remove')}
-            onClick={() => actions.removeAutoRouteOccurrence(track.queueId)}
-          ><RemoveIcon /></button>
-        </>
+        <button class={styles.routeAction} type="button"
+          aria-label={t('autoMode.route.actions', { title: track.title })}
+          onClick={() => openActionMenu({ title: track.title, actions: menu() })}>⋯</button>
       ),
     };
   }));
@@ -215,11 +205,12 @@ export function AutoMode(props: {
         <NowPlayingBrowser
           dragHandle={dragHandle}
           active={props.surfaceOpen}
-          purpose={destination().kind === 'reference' ? 'auto-reference' : destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
+          purpose={destination().kind === 'change' ? 'auto-change' : destination().kind === 'reference' ? 'auto-reference' : destination().kind === 'route' ? 'auto-route' : 'auto-neutral'}
           routeBeforeQueueId={destination().beforeQueueId}
           onPlaced={() => finishDestination('route')}
           onCarryTrack={(track) => setCarriedTrack({ track })}
-          onClose={() => finishDestination('stage')}
+          onCancelPlacement={() => { actions.cancelAutoSessionChange(); finishDestination(destinationOrigin); }}
+          onClose={() => { if (destination().kind !== 'neutral') actions.cancelAutoSessionChange(); finishDestination(destination().kind === 'neutral' ? 'stage' : destinationOrigin); }}
         />
       </div>
     </section>
@@ -286,7 +277,7 @@ export function AutoMode(props: {
         actions.moveAutoRoute(transfer.queueId, slot.beforeId);
       }}
       sections={[{ id: 'route', entries: routeEntries() }]}
-    /></div><AutoReferences carried={carriedTrack()?.track} onUse={addToSources} onAdd={() => openDestination('reference')} /></section>
+    /></div><AutoReferences carried={carriedTrack()?.track} onUse={addToSources} onAdd={() => openDestination('reference')} onChange={() => openDestination('change')} /></section>
   );
 
   return (
@@ -342,11 +333,5 @@ export function AutoMode(props: {
     </div>
   );
 }
-
-const RemoveIcon = () => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="m7 7 10 10M17 7 7 17" />
-  </svg>
-);
 
 export { titleFit } from '../lib/titleFit';

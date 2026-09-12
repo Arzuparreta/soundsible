@@ -41,6 +41,8 @@ export interface SongRowProps {
   /** When set, exposes the context menu (⋯ button, long-press, right-click).
    * The event (when present) lets the menu anchor a popover at the cursor. */
   onMenu?: (track: Track, ev?: MouseEvent) => void;
+  /** Pickers have one action and must suppress the default mobile menu too. */
+  hideMenu?: boolean;
 }
 
 /** Layered background: cover on top, deterministic gradient underneath, so a
@@ -117,7 +119,7 @@ export default function SongRow(props: SongRowProps) {
       // row makes — so the shared row is told there is no entry to mark.
       entry={props.compact || props.favouritable === false ? undefined : entry()}
       favouritesKnown={props.favouritesKnown} actionLabel={label()} primaryAction={props.primaryAction}
-      onActivate={() => props.onPlay?.(props.track)} onMenu={(event) => props.onMenu
+      onActivate={() => props.onPlay?.(props.track)} onMenu={props.hideMenu ? undefined : (event) => props.onMenu
         ? props.onMenu(props.track, event)
         : openTrackMenu(props.track, { music: props.music, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor,
             onPlayOnDevice: openPlayOnDevice }, event)} />}>

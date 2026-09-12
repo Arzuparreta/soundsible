@@ -1,3 +1,4 @@
+import { CollectionActions } from '../components/CollectionActions';
 import { CoverImage } from '../components/CoverImage';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { ArtistLinks } from '../components/MusicLinks';
@@ -12,7 +13,7 @@ import { toast } from '../lib/toast';
 import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { AlbumProfile, CatalogItem, Track } from '../types/music';
-import { addCatalogItemsAsAutoSource, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Album.module.css';
 import { coverGradient } from '../lib/cover';
@@ -106,8 +107,8 @@ export default function Album() {
   const playAll = () => {
     const context = { id: `album:${title()}`, kind: 'album' as const, label: title() };
     if (state.autoMode.active) {
-      if (view() === 'library') actions.addAutoSource(libraryTrackList(), title());
-      else void addCatalogItemsAsAutoSource(tracklist(), title());
+      if (view() === 'library') void actions.placeAutoTracks(libraryTrackList());
+      else void useCatalogCollection(tracklist(), title(), 'request');
       return;
     }
     if (view() === 'library') {
@@ -123,8 +124,8 @@ export default function Album() {
   const shuffle = () => {
     const context = { id: `album:${title()}`, kind: 'album' as const, label: title() };
     if (state.autoMode.active) {
-      if (view() === 'library') actions.addAutoSource(libraryTrackList(), title());
-      else void addCatalogItemsAsAutoSource(tracklist(), title());
+      if (view() === 'library') void actions.placeAutoTracks(libraryTrackList());
+      else void useCatalogCollection(tracklist(), title(), 'request');
       return;
     }
     if (view() === 'library') {
@@ -211,9 +212,15 @@ export default function Album() {
             <Show when={tracklist().length > 0}>{trackCount(tracklist().length)}</Show>
           </span>
           <div class={styles.actions}>
+            <Show when={state.autoMode.active} fallback={
             <button class={styles.btnPrimary} type="button" disabled={view() === 'library' ? libraryTrackList().length === 0 : tracklist().length === 0} onClick={playAll}>
-              {state.autoMode.active ? t('autoMode.source.add') : t('album.play')}
+              {t('album.play')}
             </button>
+            }>
+              <CollectionActions title={title()} auto buttonClass={styles.btnPrimary}
+                tracks={view() === 'library' ? libraryTrackList() : undefined}
+                items={view() === 'library' ? undefined : tracklist()} />
+            </Show>
             <Show when={!state.autoMode.active}>
               <button class={styles.btnSecondary} type="button" disabled={view() === 'library' ? libraryTrackList().length === 0 : tracklist().length === 0} onClick={shuffle}>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style={{ 'margin-right': '6px' }}>

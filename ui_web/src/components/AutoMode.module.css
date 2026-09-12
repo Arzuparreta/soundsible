@@ -283,7 +283,9 @@
 .routePanel { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
 .routeList { flex: 1; min-height: 0; }
 .references { flex: 0 0 auto; max-height: 35%; overflow: auto; padding: 8px 12px max(10px, var(--player-mobile-footer-clearance, 10px)); border-top: 1px solid var(--stage-line); background: var(--stage-material-quiet); }
-.references header { display: flex; align-items: center; gap: 8px; }
+.references header { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.references header button { font-size: var(--text-caption); }
+.references [role="status"] { font-size: var(--text-caption); overflow-wrap: anywhere; }
 .references header strong { flex: 1; font-size: var(--text-label); }
 .references button { color: var(--ink-secondary); font: inherit; background: none; border: 0; min-width: 36px; min-height: 36px; cursor: pointer; }
 .references p { margin: 0 0 4px; font-size: var(--text-caption); color: var(--ink-secondary); }

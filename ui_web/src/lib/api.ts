@@ -1049,6 +1049,7 @@ export const api = {
         album?: string;
         duration?: number;
       };
+      source_policy?: 'explicit';
       sources?: DjMusicSetSource[];
       heard?: Track[];
       exclude?: string[];
@@ -1072,6 +1073,7 @@ export const api = {
       track: Track;
       requested_queue_id: string;
       before_queue_id?: string;
+      source_policy?: 'explicit';
       sources?: DjMusicSetSource[];
       heard?: Track[];
       exclude?: string[];
@@ -1086,6 +1088,7 @@ export const api = {
   placeDjTracks: (
     body: {
       dj_profile: DjProfile; seed: DjItemRef; route: DjRouteRef[];
+      source_policy?: 'explicit';
       before_queue_id?: string; sources?: DjMusicSetSource[]; heard?: Track[]; exclude?: string[];
       requests: Array<{ track: Track; requested_queue_id: string }>;
     },
@@ -1100,6 +1103,7 @@ export const api = {
       dj_profile: DjProfile;
       seed: DjItemRef;
       route: DjRouteRef[];
+      source_policy?: 'explicit';
       sources?: DjMusicSetSource[];
       heard?: Track[];
       exclude?: string[];

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   resolve: vi.fn(),
   request: vi.fn(),
   reference: vi.fn(),
+  change: vi.fn().mockResolvedValue(true),
   error: vi.fn(),
   dismiss: vi.fn(),
 }));
@@ -16,6 +17,8 @@ vi.mock('../stores', () => ({
   isPlayingItem: () => false,
   actions: {
     autoSessionToken: () => mocks.epoch,
+    beginAutoSessionChange: () => ++mocks.epoch,
+    changeAutoSession: mocks.change,
     linkCatalogItem: vi.fn(),
     placeAutoTracks: mocks.request,
     addAutoSource: mocks.reference,
@@ -65,5 +68,36 @@ describe('catalog collection commands', () => {
     expect(mocks.reference).not.toHaveBeenCalled();
     expect(mocks.request).not.toHaveBeenCalled();
     expect(mocks.dismiss).toHaveBeenCalledOnce();
+  });
+});
+
+
+describe('catalogue direction changes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.epoch = 1;
+    mocks.state.autoMode.active = true;
+  });
+
+  it('does not change the session if the collection cannot be resolved', async () => {
+    mocks.resolve.mockRejectedValue(new Error('unavailable'));
+    expect(await useCatalogCollection([item(1)], 'Unavailable', 'change')).toBe(false);
+    expect(mocks.change).not.toHaveBeenCalled();
+  });
+
+  it('reserves the latest selection before resolution and discards the older result', async () => {
+    let finishOld!: (value: { video_id: string }) => void;
+    mocks.resolve.mockReturnValueOnce(new Promise((resolve) => { finishOld = resolve; }))
+      .mockResolvedValueOnce({ video_id: 'new' });
+    const old = useCatalogCollection([item(1)], 'Old', 'change');
+    const started = vi.fn();
+    expect(await useCatalogCollection([item(2)], 'Latest', 'change', undefined, () => true, undefined, started)).toBe(true);
+    finishOld({ video_id: 'old' });
+    expect(await old).toBe(false);
+    expect(mocks.change).toHaveBeenCalledOnce();
+    expect(mocks.change).toHaveBeenCalledWith([expect.objectContaining({ id: 'new' })], 'Latest');
+    expect(started).toHaveBeenCalledOnce();
+    expect(mocks.reference).not.toHaveBeenCalled();
+    expect(mocks.request).not.toHaveBeenCalled();
   });
 });
