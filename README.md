@@ -4,7 +4,7 @@
 
 # Soundsible
 
-**The self-hosted music service that goes beyond serving files.**
+**Discover, listen, keep, mix and share music on your own server.**
 
 [![Website](https://img.shields.io/badge/website-soundsible-E0BC00?style=for-the-badge)](https://arzuparreta.github.io/soundsible.github.io)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
@@ -23,13 +23,12 @@ Soundsible is a music service you run on your **own** machine. It searches far
 beyond the files you already have, turns a find into a properly tagged library
 track, and can mix the result into a continuous set with its built-in **DJ**.
 YouTube, YouTube Music, podcasts, your existing collection, recommendations,
-lyrics, Live broadcasting, and every playback surface live in one player. No
-ads, no tracking, no subscription.
+lyrics and Live broadcasting are part of that experience. No ads, no tracking,
+no subscription.
 
-Most self-hosted music servers begin after you have found, downloaded, and
-organized the music. Soundsible handles that missing journey:
+Soundsible brings the whole listening journey together:
 
-> **discover → listen now → acquire and tag → keep in your library → mix the set in DJ → play anywhere**
+> **discover → listen now → acquire and tag → keep and organise → mix with DJ → share**
 
 | Source | What it gives you |
 | ------------------- | ------------------------------------ |
@@ -51,33 +50,33 @@ organized the music. Soundsible handles that missing journey:
   Autoplay, and endless Radio learn from listening history held on your server.
 - 📻 **Broadcast the whole program live** — share the actual two-deck output,
   including DJ transitions and effects, through a browser listening room.
-- 📱 **One polished player everywhere** — web, PWA, desktop beta, native iOS,
-  car controls, and OpenSubsonic clients all connect to the same library.
+- 📱 **Soundsible on your devices** — web/PWA, desktop beta and native iOS
+  connect to your server. Capabilities and validation differ by surface; see
+  [iOS](docs/IOS.md) and [car integration](docs/CAR_INTEGRATION.md).
 - 🔐 **Private by design** — self-hosted and multi-user, with no ads, tracking,
   subscription, or cloud listening profile.
 
-### Soundsible or Navidrome?
+### One service, connected clients
 
-[Navidrome](https://www.navidrome.org/docs/overview/) is a mature, lightweight
-choice for serving a large, carefully prepared music collection. Soundsible is
-for the other question: **what if the self-hosted service also helped you find,
-acquire, understand, mix, and share the music?**
+Your Soundsible server holds the library and listening profile. Its own clients
+are the focus for the complete experience, from discovery to playback and DJ;
+sharing a library does not mean every client already offers every feature.
 
-| | A library server such as Navidrome | Soundsible |
-| --- | --- | --- |
-| **Music you do not own yet** | Bring a file to the server first | Search YouTube/YouTube Music alongside your library, preview it, then acquire it from the player |
-| **From result to library** | An external downloader and tagging workflow | Resolve the best match, download, tag with catalog metadata, and add it to the library in one flow |
-| **Automatic listening** | Shuffle, smart playlists, or radio over the collection | Local recommendations, Autoplay, endless Radio, plus an editable route in DJ mode |
-| **Transitions** | Normal player handoff or configurable client behavior | A two-deck engine with analysis-driven cueing, beatmatching, EQ/filter blends, cuts, fades, and loudness levelling |
-| **Going live** | Share files or public links | Broadcast the program output and its transitions to a browser room with chat |
-| **Spoken requests and automation** | General API/client ecosystem | A scoped agent API that can search, queue, play, and target a specific device |
-| **What both do well** | Self-hosting, multi-user libraries, metadata, playlists, web playback, and Subsonic clients | The same foundations, with acquisition and creation built on top |
+The [roadmap](docs/ROADMAP.md) commits to extending that experience to Android,
+car interfaces and watches, and broadening offline listening across our clients.
+These are future commitments, not a claim of current coverage. Offline means
+downloading from your server and synchronising when you reconnect; a standalone
+player that needs no Soundsible server is outside scope. The desktop app can run
+the engine on the same machine.
 
-This is not a claim that Soundsible is a drop-in replacement for every mature
-Navidrome feature. It is a different product boundary. If your library is
-already perfect and you only want to serve it with very low resource use,
-Navidrome may be the better fit. If you want the path from discovery to a mixed,
-owned, private collection inside one app, that is the reason Soundsible exists.
+[OpenSubsonic](docs/OPENSUBSONIC.md) lets you choose another compatible app to
+browse and play your music library. That interface does not expose Soundsible's
+external search, acquisition or DJ workflow. Third-party offline, car and watch
+features depend on the chosen app and do not replace our own device roadmap.
+
+For users comparing Soundsible with Navidrome, the defining focus here is the
+integrated journey: discovering, acquiring, organising, mixing and sharing music.
+OpenSubsonic compatibility does not imply feature parity with another server.
 
 See [DJ](docs/AUTO_MODE.md) for the DJ workflow and
 [Moving from Spotify or Apple Music](docs/MUSIC_MIGRATION.md) for bringing an
