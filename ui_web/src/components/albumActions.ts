@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { tracksByIds } from '../lib/catalogTracks';
 import { albumDestination, albumMusic, navigateMusic } from '../lib/musicNavigation';
 import { t } from '../lib/i18n';
+import { toast } from '../lib/toast';
 import type { CatalogAlbum, Track } from '../types/music';
 
 export interface AlbumMenuContext {
@@ -17,8 +18,13 @@ export interface AlbumMenuContext {
  * songs are on a record is the catalog's answer, and matching on a name here is
  * how two records that share one end up playing as a single mixed-up album. */
 async function albumTracks(album: CatalogAlbum): Promise<Track[]> {
-  const { track_ids } = await api.getLibraryAlbum(album.id);
-  return tracksByIds(track_ids ?? []);
+  try {
+    const { track_ids } = await api.getLibraryAlbum(album.id);
+    return tracksByIds(track_ids ?? []);
+  } catch {
+    toast.error(t('searchPanel.noResolve'));
+    return [];
+  }
 }
 
 function albumContext(album: CatalogAlbum) {
@@ -30,16 +36,27 @@ export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {
   const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
     {
-      label: inAuto ? t('autoMode.source.add') : t('albumActions.play'),
+      label: inAuto ? t('musicExplorer.requestAll') : t('albumActions.play'),
       onSelect: () => {
+        const epoch = actions.autoSessionToken();
         void albumTracks(album).then((tracks) => {
-          if (!tracks.length) return;
-          if (state.autoMode.active) actions.addAutoSource(tracks, album.title);
+          if (!tracks.length || actions.autoSessionToken() !== epoch || inAuto !== state.autoMode.active) return;
+          if (state.autoMode.active) void actions.placeAutoTracks(tracks);
           else actions.playFrom(tracks, 0, { context: albumContext(album) });
         });
       },
     },
   ];
+  if (inAuto) list.push({ label: t('musicExplorer.reference'), onSelect: async () => {
+    const epoch = actions.autoSessionToken();
+    const tracks = await albumTracks(album);
+    if (actions.autoSessionToken() === epoch) actions.addAutoSource(tracks, album.title);
+  } });
+  if (inAuto) list.push({ label: t('musicExplorer.change'), onSelect: async () => {
+    const epoch = actions.beginAutoSessionChange();
+    const tracks = await albumTracks(album);
+    if (actions.autoSessionToken() === epoch) await actions.changeAutoSession(tracks, album.title);
+  } });
   if (!inAuto) list.push({
       label: t('albumActions.shuffle'),
       onSelect: () => {

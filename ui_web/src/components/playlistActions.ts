@@ -48,6 +48,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
         },
       },
       ...(inAuto ? [{ label: t('musicExplorer.reference'), onSelect: () => { actions.addAutoSource(playlistTracks(name), name); hooks.onPlaced?.(); } }] : []),
+      ...(inAuto ? [{ label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(playlistTracks(name), name) }] : []),
       ...(!inAuto ? [{
         label: t('playlistActions.shuffle'),
         onSelect: () => {

@@ -21,11 +21,11 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
   const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
     {
-      label: inAuto ? t('autoMode.source.add') : t('artistActions.play'),
+      label: inAuto ? t('musicExplorer.requestAll') : t('artistActions.play'),
       onSelect: () => {
         const t = artistTracks(artist);
         if (t.length) {
-          if (state.autoMode.active) actions.addAutoSource(t, artist);
+          if (state.autoMode.active) void actions.placeAutoTracks(t);
           else {
             actions.playFrom(t, 0, {
               context: { id: `artist:${artist}`, kind: 'artist', label: artist },
@@ -35,6 +35,8 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
       },
     },
   ];
+  if (inAuto) list.push({ label: t('musicExplorer.reference'), onSelect: () => actions.addAutoSource(artistTracks(artist), artist) });
+  if (inAuto) list.push({ label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(artistTracks(artist), artist) });
   if (!inAuto) list.push({
       label: t('artistActions.shuffle'),
       onSelect: () => {

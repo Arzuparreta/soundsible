@@ -104,6 +104,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.playNext(), label: t('musicExplorer.playNow'), onSelect: () => actions.playNow(track) });
     list.push({ icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: () => void actions.placeAutoTrack(track) });
     list.push({ icon: icons.radio(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) });
+    list.push({ label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) });
   } else if (queueable) {
     list.push({ icon: icons.playNext(), label: t('trackActions.playNext'), onSelect: () => actions.playNext(track) });
     list.push({ icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => actions.enqueue(track) });

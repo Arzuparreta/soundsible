@@ -145,7 +145,8 @@ const RESTORE_GRACE_MS = 1500;
 export function NowPlayingBrowser(props: {
   onClose: () => void;
   dragHandle?: JSX.Element;
-  purpose?: 'browse' | 'auto-neutral' | 'auto-route' | 'auto-reference';
+  purpose?: 'browse' | 'auto-neutral' | 'auto-route' | 'auto-reference' | 'auto-change';
+  onCancelPlacement?: () => void;
   active?: boolean;
   routeBeforeQueueId?: string;
   onPlaced?: () => void;
@@ -161,7 +162,9 @@ export function NowPlayingBrowser(props: {
   const setQuery = (value: string) => navigation.update({ query: value, scroll: 0 });
   const filter = createMemo(() => navigation.current().filter);
   const [partial, setPartial] = createSignal(false);
-  const referenceMode = () => props.purpose === 'auto-reference';
+  const changeMode = () => props.purpose === 'auto-change';
+  const referenceMode = () => props.purpose === 'auto-reference' || changeMode();
+  const sourceLabel = () => t(changeMode() ? 'musicExplorer.change' : 'musicExplorer.reference');
   let panelEl: HTMLElement | undefined;
   let restoringScroll = false;
   const [items, setItems] = createSignal<CatalogItem[]>([]);
@@ -387,7 +390,7 @@ export function NowPlayingBrowser(props: {
     if (resolving().has(item.id)) return;
     const purpose = props.purpose;
     const before = props.routeBeforeQueueId;
-    const epoch = inAuto() ? actions.autoSessionToken() : null;
+    const epoch = inAuto() ? (changeMode() ? actions.beginAutoSessionChange() : actions.autoSessionToken()) : null;
     markResolving(item.id, true);
     try {
       const track = await resolveCatalogTrack(item);
@@ -401,7 +404,13 @@ export function NowPlayingBrowser(props: {
     }
   };
 
-  const placeTrack = (track: Track) => {
+  const placeTrack = async (track: Track) => {
+    if (changeMode()) {
+      const changing = actions.changeAutoSession([track], track.title);
+      props.onPlaced?.();
+      await changing;
+      return;
+    }
     if (referenceMode()) actions.useAutoTrackAsSource(track);
     else void actions.placeAutoTrack(track, props.routeBeforeQueueId);
     // Only a placement aimed at a seam is a finished errand. Adding from
@@ -428,13 +437,13 @@ export function NowPlayingBrowser(props: {
       entry: item ? savedFromCatalogItem(item) : track ? savedFromTrack(track) : undefined,
       favouritesKnown: !query().trim() && currentView().kind === 'favourites',
       variant: auto ? 'auto' : 'browse',
-      primaryLabel: referenceMode() ? t('musicExplorer.reference') : auto ? t('musicExplorer.request') : undefined,
+      primaryLabel: referenceMode() ? sourceLabel() : auto ? t('musicExplorer.request') : undefined,
       onAddToRoute: auto && target
         ? () => item ? void useItem(item, placeTrack) : placeTrack(target as Track)
         : undefined,
-      onMenu: target ? (event) => item ? void useItem(item, (resolved) => openTrackActions(resolved, event, catalogMusic(item))) : openTrackActions(target as Track, event) : undefined,
+      onMenu: target && !referenceMode() && !routeMode() ? (event) => item ? void useItem(item, (resolved) => openTrackActions(resolved, event, catalogMusic(item))) : openTrackActions(target as Track, event) : undefined,
       track: track ?? undefined,
-      onCarryTrack: props.onCarryTrack,
+      onCarryTrack: referenceMode() || routeMode() ? undefined : props.onCarryTrack,
     };
   };
 
@@ -529,7 +538,6 @@ export function NowPlayingBrowser(props: {
       queued={isQueuedTrack(track)}
       onPlay={inAuto() ? () => placeTrack(track) : onPlay}
       onQueue={onQueue}
-      onMenu={(event) => openTrackActions(track, event)}
       {...autoRow(track)}
     />
   );
@@ -538,6 +546,7 @@ export function NowPlayingBrowser(props: {
     <CollectionPlacementContext.Provider value={{
       get beforeQueueId() { return props.routeBeforeQueueId; },
       get referenceOnly() { return referenceMode(); },
+      get changeSession() { return changeMode(); },
       get intent() { return props.purpose; },
       onCompleted: () => { if (routeMode() || referenceMode()) props.onPlaced?.(); },
     }}><aside
@@ -597,7 +606,7 @@ export function NowPlayingBrowser(props: {
         }</For>
       </nav>
       <Show when={routeMode() || referenceMode()}>
-        <div class={styles.intent}><span>{t(referenceMode() ? 'musicExplorer.referencePicking' : 'musicExplorer.placing')}</span><button type="button" onClick={props.onPlaced}>{t('musicExplorer.cancelPlacement')}</button></div>
+        <div class={styles.intent}><span>{changeMode() ? t('musicExplorer.change') : t(referenceMode() ? 'musicExplorer.referencePicking' : 'musicExplorer.placing')}</span><button type="button" onClick={props.onCancelPlacement ?? props.onPlaced}>{t('musicExplorer.cancelPlacement')}</button></div>
       </Show>
       <Show when={query().trim() || scope() !== 'global'}><div class={styles.searchFilters}>
         <select aria-label={t('musicExplorer.allMusic')} value={scope()} onChange={(event) => { clearSearchState(); setScope(event.currentTarget.value as SearchScope); }}>
@@ -639,7 +648,7 @@ export function NowPlayingBrowser(props: {
             failed={failed()}
             resolving={resolving()}
             onRetry={() => runSearch(query())}
-            primaryLabel={inAuto() ? t(referenceMode() ? 'musicExplorer.reference' : 'musicExplorer.request') : undefined}
+            primaryLabel={inAuto() ? referenceMode() ? sourceLabel() : t('musicExplorer.request') : undefined}
             autoRow={autoRow}
             onTrack={(item) => void useItem(item, inAuto() ? placeTrack : actions.playNow)}
             onQueue={(item) => void useItem(item, actions.enqueue)}
@@ -775,7 +784,6 @@ function RootView(props: { autoRow: (track: Track) => AutoRowProps }) {
                   queued={isQueuedTrack(track)}
                   onPlay={() => actions.playNow(track)}
                   onQueue={() => actions.enqueue(track)}
-                  onMenu={(event) => openTrackMenu(track, {}, event)}
                   {...props.autoRow(track)}
                 />
               );
@@ -975,16 +983,20 @@ function PlaylistsView(props: {
   onBack: () => void;
   onOpen: (name: string) => void;
 }) {
+  const placement = useContext(CollectionPlacementContext);
+  const picking = () => Boolean(placement.intent && placement.intent !== 'auto-neutral' && placement.intent !== 'browse');
   const [editing, setEditing] = createSignal(false);
   const createNew = async () => { const name = await createPlaylistDialog(); if (name) props.onOpen(name); };
 
   return (
     <div class={styles.body} data-browser-body>
       <ViewHeader title={t('nav.playlists')} meta={`${props.names.length}`}>
-        <button type="button" onClick={() => void createNew()}>{t('musicExplorer.newPlaylist')}</button>
-        <button type="button" onClick={() => setEditing(!editing())}>{t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit')}</button>
+        <Show when={!picking()}>
+          <button type="button" onClick={() => void createNew()}>{t('musicExplorer.newPlaylist')}</button>
+          <button type="button" onClick={() => setEditing(!editing())}>{t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit')}</button>
+        </Show>
       </ViewHeader>
-      <Show when={editing()} fallback={
+      <Show when={editing() && !picking()} fallback={
       <For each={props.names}>
         {(name) => {
           const ids = () => state.playlists[name] ?? [];
@@ -992,7 +1004,7 @@ function PlaylistsView(props: {
             const track = pickPlaylistCoverTrack(name, ids(), props.byId, state.librarySettings);
             return track ? trackCoverUrl(track, 'thumb') : undefined;
           };
-          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onMenu={(event) => openPlaylistMenu(name, {}, event)} onClick={() => props.onOpen(name)} />;
+          return <NavigationRow title={name} subtitle={`${ids().length}`} cover={cover()} onMenu={picking() ? undefined : (event) => openPlaylistMenu(name, {}, event)} onClick={() => props.onOpen(name)} />;
         }}
       </For>}>
         <MusicReorderList items={props.names} label={(name) => name} render={(name) => <span>{name}</span>} onChange={actions.reorderPlaylists} />
@@ -1159,7 +1171,6 @@ function YoutubeRow(props: {
       primaryLabel={props.primaryLabel}
       onPlay={props.onPlay}
       onQueue={() => actions.enqueue(track())}
-      onMenu={(event) => openTrackMenu(track(), {}, event)}
       {...props.autoRow(track())}
     />
   );
@@ -1321,8 +1332,9 @@ function BrowserTrackRow(props: {
     actionLabel={auto() ? `${props.primaryLabel ?? t('musicExplorer.request')}: ${props.title}` : undefined}
     onPlay={() => auto() ? props.onAddToRoute?.() : props.onPlay()}
     primaryAction={auto() && props.onAddToRoute ? { label: props.primaryLabel ?? t('musicExplorer.request'), onSelect: props.onAddToRoute } : undefined}
+    hideMenu={auto() && !props.onMenu}
     onMenu={props.onMenu ? (_track, event) => props.onMenu?.(event) : undefined}
-    onDragStart={props.track ? (event) => writeAutoTrackTransfer(event, { track: props.track! }) : undefined}
+    onDragStart={props.track && props.onMenu ? (event) => writeAutoTrackTransfer(event, { track: props.track! }) : undefined}
   />;
 }
 

@@ -1335,7 +1335,7 @@ describe('Auto Mode store contract', () => {
 
     mixCallbacks!.onDominant();
     expect(state.playback.currentTrack?.id).toBe('now');
-    expect(state.autoMode.sources).toEqual([]);
+    expect(state.autoMode.sources.flatMap((source) => source.tracks.map((track) => track.id))).toEqual(['current']);
     expect(state.autoMode.heard.at(-1)).toMatchObject(now);
     mixCallbacks!.onComplete(0);
   });
@@ -1487,7 +1487,7 @@ describe('Auto Mode store contract', () => {
 
     expect(state.playback.currentTrack?.id).toBe('placed');
     expect(state.playback.queue[0].autoRoute).toMatchObject({ kind: 'user', placement: 'dj' });
-    expect(state.autoMode.sources).toEqual([]);
+    expect(state.autoMode.sources.flatMap((source) => source.tracks.map((track) => track.id))).toEqual(['placed']);
   });
 
   it('adds a running source and replans generated music without implying playback', async () => {
@@ -1501,7 +1501,7 @@ describe('Auto Mode store contract', () => {
 
     actions.useAutoTrackAsSource(state.playback.queue[2]);
 
-    expect(state.autoMode.sources.at(-1)).toMatchObject({ activation: 1, tracks: [expect.objectContaining({ id: 'route-1' })] });
+    expect(state.autoMode.sources.at(-1)).toMatchObject({ activation: 2, tracks: [expect.objectContaining({ id: 'route-1' })] });
     await vi.waitFor(() => expect(planDjQueue).toHaveBeenCalledTimes(2));
     expect(state.playback.queue[0].queueId).toBe(routeBefore[0]);
   });
@@ -1519,7 +1519,7 @@ describe('Auto Mode store contract', () => {
 
     const placed = state.playback.queue.find((entry) => entry.id === 'wanted');
     expect(placed?.autoRoute).toMatchObject({ kind: 'user', placement: 'dj' });
-    expect(state.autoMode.sources).toEqual([]);
+    expect(state.autoMode.sources.flatMap((source) => source.tracks.map((track) => track.id))).toEqual(['current']);
     expect(state.playback.queue.slice(1).filter((entry) => entry.id !== 'wanted').map((entry) => entry.queueId)).toEqual(neighbours);
     expect(planDjQueue).toHaveBeenCalledTimes(1);
   });
@@ -2795,7 +2795,7 @@ describe('cross-device sessions', () => {
     const { body } = await publishedAutoSession();
 
     expect(body.session.mode).toBe('auto');
-    expect(body.session.auto.sources.map((source: { label: string }) => source.label)).toEqual(['Björk']);
+    expect(body.session.auto.sources.map((source: { label: string }) => source.label)).toEqual(['Björk', 'Current']);
     expect(body.session.auto.direction).toMatchObject({ energy: 2, prompt: 'darker' });
     expect(body.session.queue.length).toBeGreaterThan(1);
     expect(body.session.queue[body.session.index].id).toBe('current');
@@ -2851,7 +2851,7 @@ describe('cross-device sessions', () => {
     actions.resumeHere();
 
     expect(state.autoMode.active).toBe(true);
-    expect(state.autoMode.sources.map((source) => source.label)).toEqual(['Björk']);
+    expect(state.autoMode.sources.map((source) => source.label)).toEqual(['Björk', 'Current']);
     expect(state.autoMode.direction).toMatchObject({ energy: 2, prompt: 'darker' });
     expect(state.playback.queue.map((entry) => entry.id)).toEqual(queue);
     expect(state.playback.currentTrack?.id).toBe('current');
@@ -3234,5 +3234,183 @@ describe('dismiss playback', () => {
     callbacks.onDominant();
     callbacks.onComplete(15);
     expect(state.playback).toMatchObject({ currentTrack: null, queue: [], phase: 'idle', currentTime: 0 });
+  });
+});
+
+describe('DJ session direction replacement', () => {
+  const oliver: Track = { id: 'oliver', title: 'Gecko', artist: 'Oliver Heldens' };
+
+  it('replaces roots and automatic music atomically while preserving paused playback and requested occurrences', async () => {
+    const gate = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old-1', 'old-2'])).mockReturnValueOnce(gate.promise);
+    const { actions, state, audioService } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
+    await actions.placeAutoTrack({ id: 'request', title: 'Old rock request', artist: 'Extremoduro' });
+    const request = state.playback.queue.find((row) => row.id === 'request')!;
+    const previous = state.playback.queue.map((row) => row.queueId);
+    const wasPlaying = state.playback.isPlaying;
+    audioService.load.mockClear();
+    audioService.resume.mockClear();
+
+    const changing = actions.changeAutoSession([oliver], 'Oliver Heldens');
+    expect(state.autoMode.sessionChange?.status).toBe('working');
+    expect(state.autoMode.sources[0].tracks[0].id).toBe(t1.id);
+    expect(state.playback.queue.map((row) => row.queueId)).toEqual(previous);
+    expect(planDjQueue.mock.calls.at(-1)![0]).toMatchObject({ source_policy: 'explicit', sources: [{ label: 'Oliver Heldens' }] });
+    gate.resolve(autoPlan(['new-1', 'new-2']));
+    expect(await changing).toBe(true);
+    expect(state.autoMode.sources.map((source) => source.label)).toEqual(['Oliver Heldens']);
+    expect(state.autoMode.heard.map((track) => track.id)).toContain(t1.id);
+    expect(state.playback.queue.map((row) => row.id)).toEqual(['t1', 'new-1', 'request', 'new-2']);
+    expect(state.playback.queue.find((row) => row.id === 'request')?.queueId).toBe(request.queueId);
+    expect(state.playback.currentTrack?.id).toBe(t1.id);
+    expect(state.playback.isPlaying).toBe(wasPlaying);
+    expect(audioService.load).not.toHaveBeenCalled();
+    expect(audioService.resume).not.toHaveBeenCalled();
+    actions.next();
+    actions.next();
+    expect(state.playback.currentTrack?.id).toBe('request');
+    expect(state.autoMode.sources.map((source) => source.label)).toEqual(['Oliver Heldens']);
+    actions.exitAutoMode();
+  });
+
+  it('keeps the previous direction and queue on failure and can retry', async () => {
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old-1', 'old-2']))
+      .mockRejectedValueOnce(new Error('offline')).mockResolvedValue(autoPlan(['new-1']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
+    const previous = state.playback.queue.map((row) => row.queueId);
+    expect(await actions.changeAutoSession([oliver], 'Oliver')).toBe(false);
+    expect(state.autoMode.sources[0].tracks[0].id).toBe(t1.id);
+    expect(state.playback.queue.map((row) => row.queueId)).toEqual(previous);
+    expect(state.autoMode.sessionChange?.status).toBe('error');
+    actions.retryAutoSessionChange();
+    await vi.waitFor(() => expect(state.autoMode.sources[0].label).toBe('Oliver'));
+    actions.exitAutoMode();
+  });
+
+  it('only applies the latest change even if the first request ignores cancellation', async () => {
+    const first = deferred<ReturnType<typeof autoPlan>>();
+    const latest = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old']))
+      .mockReturnValueOnce(first.promise).mockReturnValueOnce(latest.promise);
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    const a = actions.changeAutoSession([oliver], 'Oliver');
+    const b = actions.changeAutoSession([t2], 'Latest');
+    latest.resolve(autoPlan(['latest-song']));
+    expect(await b).toBe(true);
+    first.resolve(autoPlan(['obsolete-song']));
+    expect(await a).toBe(false);
+    expect(state.autoMode.sources[0].label).toBe('Latest');
+    expect(state.playback.queue.map((row) => row.id)).toEqual(['t1', 'latest-song']);
+    actions.exitAutoMode();
+  });
+
+  it('replans against the live song if playback advances during preparation', async () => {
+    const first = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old-1', 'old-2']))
+      .mockReturnValueOnce(first.promise).mockResolvedValue(autoPlan(['new-1']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
+    const changing = actions.changeAutoSession([oliver], 'Oliver');
+    actions.next();
+    first.resolve(autoPlan(['obsolete-anchor']));
+    expect(await changing).toBe(true);
+    expect(planDjQueue.mock.calls.at(-1)![0].seed.id).toBe('old-1');
+    expect(state.playback.currentTrack?.id).toBe('old-1');
+    expect(state.playback.queue.at(-1)?.id).toBe('new-1');
+    actions.exitAutoMode();
+  });
+
+  it('does not apply a pending change after leaving DJ or accept podcasts as direction', async () => {
+    const gate = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old'])).mockReturnValueOnce(gate.promise);
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    expect(await actions.changeAutoSession([{ ...oliver, media_kind: 'podcast_episode' }], 'Podcast')).toBe(false);
+    expect(planDjQueue).toHaveBeenCalledTimes(1);
+    const changing = actions.changeAutoSession([oliver], 'Oliver');
+    actions.exitAutoMode();
+    gate.resolve(autoPlan(['new']));
+    expect(await changing).toBe(false);
+    expect(state.autoMode.active).toBe(false);
+    expect(state.autoMode.sources).toEqual([]);
+  });
+});
+
+describe('DJ direction transition boundaries', () => {
+  it('cancels a prepared silent handoff only when the replacement is ready', async () => {
+    let phase = 'armed';
+    const gate = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old'])).mockReturnValueOnce(gate.promise);
+    const cancelMix = vi.fn(() => { phase = 'idle'; });
+    const { actions, state } = await loadStore({ planDjQueue }, { mixPhase: () => phase, cancelMix });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    phase = 'armed'; cancelMix.mockClear();
+    const changing = actions.changeAutoSession([t2], 'New direction');
+    expect(cancelMix).not.toHaveBeenCalled();
+    gate.resolve(autoPlan(['new']));
+    expect(await changing).toBe(true);
+    expect(cancelMix).toHaveBeenCalledWith('superseded');
+    expect(state.playback.currentTrack?.id).toBe(t1.id);
+    actions.exitAutoMode();
+  });
+
+  it('waits for an audible blend instead of cancelling it', async () => {
+    let phase = 'idle';
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old'])).mockResolvedValue(autoPlan(['new']));
+    const { actions, state, audioService } = await loadStore({ planDjQueue }, { mixPhase: () => phase });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    phase = 'crossfading'; audioService.cancelMix.mockClear();
+    const changing = actions.changeAutoSession([t2], 'New direction');
+    expect(planDjQueue).toHaveBeenCalledTimes(1);
+    expect(audioService.cancelMix).not.toHaveBeenCalled();
+    phase = 'idle';
+    expect(await changing).toBe(true);
+    expect(audioService.cancelMix).not.toHaveBeenCalled();
+    actions.exitAutoMode();
+  });
+
+  it('invalidates a prepared change as soon as another catalogue selection begins resolving', async () => {
+    const gate = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old'])).mockReturnValueOnce(gate.promise);
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    const changing = actions.changeAutoSession([t2], 'Old selection');
+    const token = actions.beginAutoSessionChange();
+    gate.resolve(autoPlan(['obsolete']));
+    expect(await changing).toBe(false);
+    expect(actions.autoSessionToken()).toBe(token);
+    expect(state.autoMode.sources[0].tracks[0].id).toBe(t1.id);
+    expect(state.playback.queue.at(-1)?.id).toBe('old');
+    actions.exitAutoMode();
+  });
+});
+
+describe('DJ direction generation ownership', () => {
+  it('rejects an older automatic plan that completes after a session change', async () => {
+    const old = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockReturnValueOnce(old.promise).mockResolvedValue(autoPlan(['new']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(planDjQueue).toHaveBeenCalledTimes(1));
+    expect(await actions.changeAutoSession([t2], 'House')).toBe(true);
+    old.resolve(autoPlan(['old']));
+    await flush();
+    expect(state.playback.queue.map((row) => row.id)).toEqual(['t1', 'new']);
+    const onlySource = state.autoMode.sources[0];
+    actions.removeAutoSource(onlySource.id);
+    expect(state.autoMode.sources.map((source) => source.id)).toEqual([onlySource.id]);
+    actions.exitAutoMode();
   });
 });

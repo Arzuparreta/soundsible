@@ -53,6 +53,7 @@ export interface AutoPlanItem {
 
 export interface AutoModeState {
   active: boolean;
+  sessionChange?: { label: string; status: 'working' | 'error' };
   profile: AutoProfile;
   djProfile: DjProfile;
   direction: DjDirection;
@@ -181,6 +182,7 @@ export class GeneratedQueueController {
   private generation = 0;
   private retryStep = 0;
   private recent: string[] = [];
+  private suspended = false;
 
   constructor(private readonly deps: GeneratedQueueDeps) {}
 
@@ -244,8 +246,35 @@ export class GeneratedQueueController {
     return this.sync(force);
   }
 
+  /** Freeze planner writes while a replacement is prepared independently. */
+  suspendPlanning(): void {
+    this.suspended = true;
+    this.generation += 1;
+    this.aborter?.abort();
+    this.aborter = null;
+    this.inFlight = null;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  resumePlanning(): void { this.suspended = false; }
+
+  applyReplacement(response: ListeningPlanResponse, anchor: Track): boolean {
+    const accepted = this.deps.applyPlan('auto_mode', response, true, anchor);
+    if (!accepted) return false;
+    if (this.session) {
+      this.session.seed = anchor;
+      this.session.id = response.session_id || sessionId();
+      this.session.segmentIndex = 1;
+    }
+    this.suspended = false;
+    this.deps.onStatus('auto_mode', 'ready', response, true);
+    return true;
+  }
+
   stop(intent?: ListeningPlanIntent): void {
     if (intent && this.session?.intent !== intent) return;
+    this.suspended = false;
     const stoppedIntent = this.session?.intent;
     this.generation += 1;
     this.aborter?.abort();
@@ -373,7 +402,7 @@ export class GeneratedQueueController {
 
   private sync(force = false, replace = false): Promise<boolean> {
     const session = this.session;
-    if (!session) return Promise.resolve(false);
+    if (!session || this.suspended) return Promise.resolve(false);
     if (this.inFlight) return this.inFlight;
     const remaining = this.generatedRemaining(session.intent);
     if (!force && remaining >= REFILL_THRESHOLD[session.intent]) {

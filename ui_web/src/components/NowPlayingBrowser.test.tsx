@@ -5,6 +5,9 @@ import type { Track } from '../types/music';
 import { clearSearchCache, writeSearchCache } from '../lib/searchCache';
 import { CATALOG_CACHE_NS } from '../lib/searchSections';
 
+const listLayoutMock = vi.hoisted(() => ({ mobile: false }));
+vi.mock('../lib/listLayout', () => ({ mobileListLayout: () => listLayoutMock.mobile }));
+
 const apiMock = vi.hoisted(() => ({
   searchCatalog: vi.fn(),
   searchYouTube: vi.fn(),
@@ -57,6 +60,8 @@ const storeMock = vi.hoisted(() => {
       placeAutoTracks: vi.fn(),
       autoSessionToken: vi.fn(() => 1),
       addAutoSource: vi.fn(),
+      changeAutoSession: vi.fn().mockResolvedValue(true),
+      beginAutoSessionChange: vi.fn(() => 1),
       useAutoTrackAsSource: vi.fn(),
     },
   };
@@ -112,28 +117,29 @@ async function typeGlobalQuery(value: string) {
   vi.useRealTimers();
 }
 
+beforeEach(() => {
+  listLayoutMock.mobile = false;
+  setLocale('en');
+  navigation.reset();
+  setLibraryTab('songs');
+  setLibraryFilter('all');
+  // Shared with the Search route and with every other test in this file.
+  clearSearchCache();
+  apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
+  apiMock.searchYouTube.mockResolvedValue([]);
+  apiMock.peekYouTube.mockResolvedValue(null);
+  apiMock.resolveCatalogItem.mockResolvedValue({});
+  nodeMock.items = [];
+  nodeMock.loading = false;
+  storeMock.state.favorites = [];
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.clearAllMocks();
+});
+
 describe('NowPlayingBrowser', () => {
-  beforeEach(() => {
-    setLocale('en');
-    navigation.reset();
-    setLibraryTab('songs');
-    setLibraryFilter('all');
-    // Shared with the Search route and with every other test in this file.
-    clearSearchCache();
-    apiMock.searchCatalog.mockResolvedValue({ items: [], sections: [] });
-    apiMock.searchYouTube.mockResolvedValue([]);
-    apiMock.peekYouTube.mockResolvedValue(null);
-    apiMock.resolveCatalogItem.mockResolvedValue({});
-    nodeMock.items = [];
-    nodeMock.loading = false;
-    storeMock.state.favorites = [];
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.clearAllMocks();
-  });
-
   it('searches eleven-character artist names through the intelligent catalog', async () => {
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
     await typeGlobalQuery('Extremoduro');
@@ -175,11 +181,12 @@ describe('NowPlayingBrowser', () => {
       // The discover rail sits on the root view and used to keep both browse
       // controls in DJ Mode, because it never received the flag that hid them.
       expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Request: Node Song' })).toBeInTheDocument();
+      if (purpose === 'auto-neutral') expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
+      else expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Add to session: Node Song' })).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
-      const add = await screen.findByRole('button', { name: 'Request: Local Song' });
+      const add = await screen.findByRole('button', { name: 'Add to session: Local Song' });
       expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
       fireEvent.click(add);
       expect(storeMock.actions.placeAutoTrack).toHaveBeenCalledWith(
@@ -237,7 +244,7 @@ describe('NowPlayingBrowser', () => {
     render(() => <NowPlayingBrowser purpose="auto-neutral" onClose={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Use as reference' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Favourites' }));
     const options = vi.mocked(openActionMenu).mock.calls.at(-1)![0];
     options.actions![0].onSelect();
     expect(storeMock.actions.addAutoSource).toHaveBeenCalledWith([storeMock.local], 'Favourites');
@@ -248,7 +255,7 @@ describe('NowPlayingBrowser', () => {
     const onPlaced = vi.fn();
     render(() => <NowPlayingBrowser purpose="auto-route" routeBeforeQueueId="chosen-seam" onPlaced={onPlaced} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Request all' }));
+    fireEvent.click(within(screen.getByRole('heading', { name: 'Favourites' }).closest('header')!).getByRole('button', { name: 'Add to session' }));
     await waitFor(() => expect(storeMock.actions.placeAutoTracks).toHaveBeenCalledWith([storeMock.local], 'chosen-seam'));
     expect(onPlaced).toHaveBeenCalledOnce();
   });
@@ -258,8 +265,8 @@ describe('NowPlayingBrowser', () => {
     const onPlaced = vi.fn();
     render(() => <NowPlayingBrowser purpose="auto-reference" onPlaced={onPlaced} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
-    expect(screen.queryByRole('button', { name: 'Request all' })).not.toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole('heading', { name: 'Favourites' }).closest('header')!).getByRole('button', { name: 'Use as reference' }));
+    expect(screen.queryByRole('button', { name: 'Add to session' })).not.toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('heading', { name: 'Favourites' }).closest('header')!).getByRole('button', { name: 'Mix into session' }));
     expect(storeMock.actions.addAutoSource).toHaveBeenCalledWith([storeMock.local], 'Favourites');
     expect(storeMock.actions.placeAutoTracks).not.toHaveBeenCalled();
     expect(onPlaced).toHaveBeenCalledOnce();
@@ -379,7 +386,7 @@ describe('NowPlayingBrowser', () => {
     fireEvent.input(screen.getByPlaceholderText('Track or artist'), { target: { value: 'requested song' } });
     await vi.advanceTimersByTimeAsync(260);
     vi.useRealTimers();
-    fireEvent.click(await screen.findByRole('button', { name: 'Request: Requested Song' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to session: Requested Song' }));
 
     await waitFor(() => expect(storeMock.actions.placeAutoTrack).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'yt-requested', source: 'preview' }),
@@ -388,5 +395,46 @@ describe('NowPlayingBrowser', () => {
     expect(storeMock.actions.playNow).not.toHaveBeenCalled();
     expect(onPlaced).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
+  });
+});
+
+describe('DJ direction picker', () => {
+  it('changes from a collection with one primary action and returns to the route when preparation begins', async () => {
+    storeMock.state.favorites = ['local-1'];
+    const onPlaced = vi.fn();
+    render(() => <NowPlayingBrowser purpose="auto-change" onPlaced={onPlaced} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
+    const header = within(screen.getByRole('heading', { name: 'Favourites' }).closest('header')!);
+    expect(header.queryByRole('button', { name: 'Add to session' })).not.toBeInTheDocument();
+    expect(header.queryByRole('button', { name: 'Mix into session' })).not.toBeInTheDocument();
+    fireEvent.click(header.getByRole('button', { name: 'Change session' }));
+    expect(storeMock.actions.beginAutoSessionChange).toHaveBeenCalledOnce();
+    expect(storeMock.actions.changeAutoSession).toHaveBeenCalledWith([storeMock.local], 'Favourites');
+    expect(onPlaced).toHaveBeenCalledOnce();
+    expect(storeMock.actions.placeAutoTracks).not.toHaveBeenCalled();
+    expect(storeMock.actions.addAutoSource).not.toHaveBeenCalled();
+  });
+
+  it('cancels the picker without changing music', () => {
+    const cancel = vi.fn();
+    render(() => <NowPlayingBrowser purpose="auto-change" onCancelPlacement={cancel} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel selection' }));
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(storeMock.actions.changeAutoSession).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('direction picker on mobile and desktop', () => {
+  it.each([true, false])('offers only the selected song action (mobile=%s)', (mobile) => {
+    listLayoutMock.mobile = mobile;
+    storeMock.state.favorites = ['local-1'];
+    const { container } = render(() => <NowPlayingBrowser purpose="auto-change" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
+    expect(container.querySelector('[data-row-menu]')).toBeNull();
+    expect(screen.queryByRole('button', { name: /More options/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mix into session' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Change session: Local Song' }));
+    expect(storeMock.actions.changeAutoSession).toHaveBeenCalledWith([storeMock.local], 'Local Song');
   });
 });

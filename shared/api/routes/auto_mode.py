@@ -1046,7 +1046,7 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
 
     heard: set[str] = set()
     heard_roots = []
-    for raw in raw_heard[-4:]:
+    for raw in (raw_heard[-4:] if data.get("source_policy") != "explicit" else []):
         if not isinstance(raw, dict):
             continue
         normalised = _music_set_item(raw, source_id="heard", label="Heard", weight=0.3)
@@ -1068,6 +1068,12 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
             })
             item["score"] = float(item.get("score") or 0.5) * 0.3
         candidates.extend(related)
+    if data.get("source_policy") == "explicit":
+        for raw in raw_heard:
+            if isinstance(raw, dict):
+                item = _music_set_item(raw, source_id="heard", label="Heard")
+                if item:
+                    heard.add(str(item["recommendation_identity"]))
     excluded = {str(value) for value in data.get("exclude", []) if str(value)}
     unique: dict[str, dict] = {}
     for item in candidates:
@@ -1368,7 +1374,7 @@ def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tupl
             if item:
                 roots.append(item)
     heard = data.get("heard") if isinstance(data.get("heard"), list) else []
-    for raw in heard[-4:]:
+    for raw in (heard[-4:] if data.get("source_policy") != "explicit" else []):
         if not isinstance(raw, dict):
             continue
         item = _music_set_item(raw, source_id="heard", label="Heard", weight=0.3)

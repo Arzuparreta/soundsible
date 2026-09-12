@@ -49,6 +49,7 @@ export interface PlaybackSessionAuto {
   profile: AutoProfile;
   djProfile: DjProfile;
   direction: DjDirection;
+  sourcePolicy?: 'explicit';
   sources: AutoMusicSet[];
   heard: Track[];
   avoidedIdentities: string[];
@@ -176,6 +177,7 @@ export function buildPlaybackSession(input: PlaybackSessionInput): PlaybackSessi
           profile: auto.profile,
           djProfile: auto.djProfile,
           direction: auto.direction,
+          sourcePolicy: 'explicit',
           sources: sources(auto.sources),
           heard: auto.heard.slice(-MAX_HEARD),
           avoidedIdentities: auto.avoidedIdentities.slice(-MAX_AVOIDED),
@@ -234,7 +236,13 @@ export function readPlaybackSession(value: unknown): PlaybackSessionSnapshot | n
             include: stringList(direction?.include, MAX_AVOIDED),
             exclude: stringList(direction?.exclude, MAX_AVOIDED),
           },
-          sources: readSources(rawAuto.sources),
+          sourcePolicy: 'explicit',
+          sources: (() => {
+            const saved = readSources(rawAuto.sources);
+            if (saved.length) return saved;
+            const seed = queue[index] ?? trackList(rawAuto.heard, MAX_HEARD).at(-1);
+            return seed ? [{ id: `initial:${seed.id}`, label: seed.title, tracks: [seed], activation: 1 }] : [];
+          })(),
           heard: trackList(rawAuto.heard, MAX_HEARD),
           avoidedIdentities: stringList(rawAuto.avoidedIdentities, MAX_AVOIDED),
           plan: readPlan(rawAuto.plan, queueIds),

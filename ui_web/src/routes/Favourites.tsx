@@ -12,7 +12,7 @@ import { toast } from '../lib/toast';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import { EmptyState } from '../components/EmptyState';
-import Button from '../components/Button';
+import { CollectionActions } from '../components/CollectionActions';
 
 const context = () => ({ id: 'favourites', kind: 'favourites' as const, label: t('favourites.title') });
 
@@ -73,9 +73,7 @@ export default function Favourites() {
         title={t('favourites.title')}
         meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
         actions={state.autoMode.active ? (
-          <Button onClick={() => actions.addAutoSource(favTracks(), t('favourites.title'))} disabled={favTracks().length === 0}>
-            {t('autoMode.source.add')}
-          </Button>
+          <CollectionActions title={t('favourites.title')} tracks={favTracks()} auto />
         ) : undefined}
       />
       }>
@@ -83,8 +81,11 @@ export default function Favourites() {
           <Show when={state.autoMode.active}>
             <button type="button" aria-label={t('nav.more')} aria-haspopup="dialog" onClick={() => openActionMenu({
               title: t('nav.favourites'),
-              actions: [{ label: t('autoMode.source.add'), disabled: favTracks().length === 0,
-                onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) }],
+              actions: [
+                { label: t('musicExplorer.requestAll'), disabled: !favTracks().length, onSelect: () => void actions.placeAutoTracks(favTracks()) },
+                { label: t('musicExplorer.reference'), disabled: !favTracks().length, onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) },
+                { label: t('musicExplorer.change'), disabled: !favTracks().length, onSelect: () => void actions.changeAutoSession(favTracks(), t('favourites.title')) },
+              ],
             })}>⋯</button>
           </Show>
         } />

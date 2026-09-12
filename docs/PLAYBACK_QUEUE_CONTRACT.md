@@ -38,21 +38,17 @@ continuation. Reordering cannot cross lane or generator boundaries.
   the listener stops Radio. Starting a new context or stopping Radio aborts
   in-flight generation.
 - **DJ** has two independent, composable facts. A route occurrence will
-  sound; an ephemeral source steers generation. The same song may participate
+  sound; a persisted session influence steers generation. The same song may participate
   in both without either fact implying the other. Sources may be tracks,
   selections, filtered views, favourites, playlists, albums or artists.
-- DJ may be entered empty. Music that actually sounds joins rolling context,
-  but never becomes a visible source implicitly. The first source added to a
-  silent session asks the server to choose an opening from that source and
-  starts the returned route. Later sources only steer the runway. Playing a
-  different song while DJ is active is a short immediate mix, not an exit;
-  if a blend is already audible, it finishes and only the latest pending request
-  is chained after it.
-- Mode is an explicit session state. Individual music actions mean **Mix now**
-  or placement while DJ owns the session; collection primary actions add a
-  source. Podcast and Radio requests require confirmation before switching to
-  ordinary playback. Generated-queue lifecycle statuses never select or clear
-  the mode implicitly.
+- DJ may be entered empty. Its first selected music starts playback and becomes
+  the initial visible influence; entering over a current track uses that track.
+  **Add to session** creates requested occurrences, **Mix into session** adds
+  influences, and **Change session** replaces influences and generated runway.
+  Requested occurrences retain their IDs and relative order across a change.
+- Mode is explicit session state. **Play now** is an immediate mix. Collection
+  primary actions request songs; mixing and changing live in the action menu.
+  Podcast and Radio requests require confirmation before leaving DJ.
 - A song dropped into the route inlet is placed by the DJ among editable gaps;
   a song dropped into a concrete gap is fixed there. Both are real queue
   occurrences, not requests or waypoints. Local placement preserves existing
@@ -64,7 +60,7 @@ continuation. Reordering cannot cross lane or generator boundaries.
   entry it can no longer honour, so the seams it disturbed fall back to a plain
   fade. This is the safe reading, not a defect: a listener rearranging their set
   is not asking for the runway to be rewritten underneath them.
-- **Repair is the only rebuild, and only on request.** `dj-repair` re-seams the
+- **Repair rebuilds manually edited seams, only on request.** `dj-repair` re-seams the
   route around the songs the listener placed: every user occurrence — including
   a `manual` entry, which is as explicit a request as a dragged one — keeps its
   order *and its depth*, while generated and bridge occurrences between them may
@@ -72,12 +68,21 @@ continuation. Reordering cannot cross lane or generator boundaries.
   make a route longer; filler never is. A repair answering for a route that has
   since changed is discarded rather than applied, and one that came back missing
   a user occurrence is refused outright.
-- Only explicit sources and tracks that actually sounded may seed one-hop
-  related retrieval. Unplayed recommendations never become graph roots.
+- Requests with `source_policy: explicit` use only active influences as roots
+  for planning and bridge retrieval. `heard` excludes repetitions; `seed` anchors
+  the audio transition. Neither silently changes musical direction. Older
+  clients without the field retain their previous planning contract.
+- A session change prepares a replacement before committing it. New selections
+  invalidate older catalogue work and plans. Failed preparation retains the
+  previous direction and route. A moving playback anchor causes replanning.
+  Preserved requests receive cues for their actual new neighbours, with safe
+  fades until live-pair refinement is available.
+- Snapshots persist `sourcePolicy` and the active influences. Legacy snapshots
+  without influences use the current track, then the last heard track as fallback.
 - Leaving DJ discards generated branches and bridges. User route occurrences
   survive as ordinary manual queue entries.
 - **The committed handoff** is the one upcoming entry DJ has already
-  loaded and cued. It survives every replan, and manual insertions land behind
+  loaded and cued. It survives additive replans, and manual insertions land behind
   it rather than in front of it. DJ, direction and request changes are debounced
   and source changes rewrite only the runway past that point — a session can be steered at any
   moment without disturbing the mix that is already prepared.
@@ -94,3 +99,6 @@ session after cancellation.
 This queue is deliberately client-session state. Account settings such as
 Autoplay are persisted by the Station API, but queue occurrences are not synced
 between browsers or restored as a server queue.
+
+A full **Change session** may cancel a prepared, still silent handoff once its
+replacement is ready. It never cancels an audible blend or resumes paused audio.
