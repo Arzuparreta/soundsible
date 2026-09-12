@@ -2,6 +2,7 @@ import { ArtistLinks } from './MusicLinks';
 import type { MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
+import { VirtualRows } from './VirtualRows';
 import { openContextMenu } from '../lib/contextMenu';
 import { t } from '../lib/i18n';
 import type { MenuAction } from './ActionMenu';
@@ -77,6 +78,8 @@ export function PlayerTrackList(props: {
   title: string;
   count: number;
   sections: PlayerTrackListSection[];
+  /** Finite queues can contain the whole library; DJ seams retain their natural layout. */
+  virtualize?: boolean;
   /** Plain copy for ordinary empty queues, or a richer status when emptiness
    * itself is a live state such as the DJ building its first route. */
   empty: JSX.Element;
@@ -231,22 +234,16 @@ export function PlayerTrackList(props: {
                       </Show>
                     </div>
                   </Show>
-                  <div class={styles.sectionRows} data-section-rows>
-                    <For each={section.entries}>
-                      {(entry, index) => (
-                        <>
-                          {entry.before}
-                          <PlayerTrackListRow entry={entry} seam={slot()?.index === index()}
-                            editing={editingId() === entry.id}
-                            onEditingChange={(editing) => { setEditingId(editing ? entry.id : null); focusRowControl(entry.id); }}
-                            onMove={(direction) => { entry.onMove?.(direction); focusRowControl(entry.id, direction < 0 ? 'up' : 'down'); }} />
-                        </>
-                      )}
-                    </For>
-                    <Show when={slot() && slot()!.index === section.entries.length}>
-                      <div class={styles.seamTail} aria-hidden="true" />
-                    </Show>
-                  </div>
+                  <PlayerLane virtualize={props.virtualize} entries={section.entries} editingId={editingId()}
+                    tail={<Show when={slot() && slot()!.index === section.entries.length}><div class={styles.seamTail} aria-hidden="true" /></Show>}>
+                    {(entry, index) => <>
+                      {entry().before}
+                      <PlayerTrackListRow entry={entry()} seam={slot()?.index === index()}
+                        editing={editingId() === entry().id}
+                        onEditingChange={(editing) => { const id = entry().id; setEditingId(editing ? id : null); focusRowControl(id); }}
+                        onMove={(direction) => { const row = entry(); row.onMove?.(direction); focusRowControl(row.id, direction < 0 ? 'up' : 'down'); }} />
+                    </>}
+                  </PlayerLane>
                 </section>
               </Show>
             )}
@@ -255,6 +252,26 @@ export function PlayerTrackList(props: {
       </div>
     </div>
   );
+}
+
+function PlayerLane(props: {
+  virtualize?: boolean;
+  entries: PlayerTrackListEntry[];
+  editingId: string | null;
+  tail: JSX.Element;
+  children: (entry: () => PlayerTrackListEntry, index: () => number) => JSX.Element;
+}) {
+  const [scroller, setScroller] = createSignal<HTMLDivElement | null>(null);
+  return <div ref={setScroller} class={styles.sectionRows} data-section-rows>
+    <Show when={props.virtualize} fallback={<For each={props.entries}>{(entry, index) => props.children(() => entry, index)}</For>}>
+      <VirtualRows items={props.entries} scrollElement={scroller}
+        rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows
+        keepMountedIndex={props.entries.findIndex((entry) => entry.id === props.editingId)}>
+        {(entry, index) => <Show when={entry()}>{(current) => props.children(current, () => index)}</Show>}
+      </VirtualRows>
+    </Show>
+    {props.tail}
+  </div>;
 }
 
 function PlayerTrackListRow(props: {
@@ -326,7 +343,7 @@ function PlayerTrackListRow(props: {
       onPointerUp={cancelCarry}
       onPointerCancel={cancelCarry}
     >
-      <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.entry.title} subtitle={props.entry.artist} music={props.entry.music}
+      <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.entry.title} subtitle={props.entry.artist} music={props.entry.music}
         seed={props.entry.id} cover={props.entry.cover} index={props.entry.current ? undefined : props.entry.position}
         active={props.entry.current} disabled={disabled() || props.editing} entry={props.entry.entry}
         annotation={props.entry.current && props.entry.paused ? t('musicList.paused') : props.entry.badge ?? props.entry.annotation}

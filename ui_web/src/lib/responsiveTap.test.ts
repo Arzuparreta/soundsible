@@ -154,6 +154,27 @@ describe('responsive touch activation', () => {
     expect(onTap).not.toHaveBeenCalled();
   });
 
+  it('clears press feedback on a pan, cancellation and long press without activating', () => {
+    vi.useFakeTimers();
+    const target = document.createElement('button');
+    const onTap = vi.fn();
+    const onPressChange = vi.fn();
+    const handlers = createResponsiveTap({ onTap, onPressChange, onLongPress: vi.fn() });
+    handlers.onPointerDown(pointerEvent(target));
+    expect(onPressChange).toHaveBeenLastCalledWith(true);
+    handlers.onPointerMove(pointerEvent(target, { clientY: 100 }));
+    expect(onPressChange).toHaveBeenLastCalledWith(false);
+    handlers.onPointerUp(pointerEvent(target));
+    handlers.onPointerDown(pointerEvent(target));
+    handlers.onPointerCancel(pointerEvent(target));
+    expect(onPressChange).toHaveBeenLastCalledWith(false);
+    handlers.onPointerDown(pointerEvent(target));
+    vi.advanceTimersByTime(responsiveTapConstants.LONG_PRESS_MS);
+    expect(onPressChange).toHaveBeenLastCalledWith(false);
+    handlers.onPointerUp(pointerEvent(target));
+    expect(onTap).not.toHaveBeenCalled();
+  });
+
   it('drops a candidate when the browser cancels the pointer', () => {
     const onTap = vi.fn();
     const target = document.createElement('div');

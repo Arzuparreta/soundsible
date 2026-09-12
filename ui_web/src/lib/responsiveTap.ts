@@ -8,6 +8,7 @@ const LONG_PRESS_MS = 450;
 export interface ResponsiveTapOptions {
   onTap: (event: PointerEvent | MouseEvent) => void;
   onLongPress?: (event: PointerEvent) => void;
+  onPressChange?: (pressed: boolean) => void;
   disabled?: () => boolean;
 }
 
@@ -47,6 +48,7 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
   };
 
   const reset = () => {
+    options.onPressChange?.(false);
     clearLongPress();
     endHold();
     pointerId = null;
@@ -76,6 +78,7 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
       return;
     }
     pointerId = event.pointerId;
+    options.onPressChange?.(true);
     startX = event.clientX;
     startY = event.clientY;
     cancelled = false;
@@ -90,6 +93,7 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
       longPressTimer = window.setTimeout(() => {
         if (pointerId !== event.pointerId || cancelled) return;
         longPressed = true;
+        options.onPressChange?.(false);
         clearTextSelection();
         options.onLongPress?.(event);
       }, LONG_PRESS_MS);
@@ -103,6 +107,7 @@ export function createResponsiveTap(options: ResponsiveTapOptions) {
       Math.abs(event.clientY - startY) > TAP_SLOP
     ) {
       cancelled = true;
+      options.onPressChange?.(false);
       clearLongPress();
       // A pan is not a hold. Releasing here, rather than waiting for the lift,
       // keeps a scroll that started on a row from holding selection hostage

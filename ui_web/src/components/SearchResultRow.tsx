@@ -44,7 +44,7 @@ export default function SearchResultRow(props: SearchResultRowProps) {
       : { background: 'var(--bg-raised)' };
 
   return (
-    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.r.title} subtitle={props.r.channel} seed={props.r.id} cover={props.r.thumbnail}
+    <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.r.title} subtitle={props.r.channel} seed={props.r.id} cover={props.r.thumbnail}
       active={props.active} entry={entry()} onActivate={props.onPreview}
       onMenu={() => openEntryMenu(entry(), { onRadio: props.onRadio })} />}>
     <div

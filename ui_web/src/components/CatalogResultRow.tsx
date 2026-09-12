@@ -43,7 +43,7 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
     );
 
   return (
-    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.item.title} subtitle={props.showArtist === false ? undefined : props.item.subtitle || itemArtist(props.item)}
+    <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.item.title} subtitle={props.showArtist === false ? undefined : props.item.subtitle || itemArtist(props.item)}
       music={props.showArtist === false ? undefined : catalogMusic(props.item)} seed={props.item.id} cover={props.item.cover || (props.item.track_id ? coverUrl(props.item.track_id, 'thumb') : undefined)}
       index={props.index} active={props.active} busy={busy() || props.saving} entry={entry()}
       onActivate={props.onPlay} onMenu={() => openEntryMenu(entry(), { music: catalogMusic(props.item), track: itemToTrack(props.item) ?? undefined,

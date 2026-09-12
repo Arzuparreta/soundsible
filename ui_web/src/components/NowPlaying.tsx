@@ -43,6 +43,8 @@ export function NowPlaying(props: {
   let desktopQueueEl: HTMLDivElement | undefined;
   let dragFrom: number | null = null;
 
+  // One lookup per queue change, rather than two full scans for every row.
+  const queuePositions = createMemo(() => new Map(state.playback.queue.map((entry, index) => [entry.queueId, index])));
   const currentQueueEntry = createMemo(() => state.playback.queue[state.playback.index]);
   const manualQueue = createMemo(() =>
     state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'manual'),
@@ -103,26 +105,27 @@ export function NowPlaying(props: {
     ordinal?: number,
     current = false,
   ): PlayerTrackListEntry => {
-    const queueIndex = () => state.playback.queue.findIndex((item) => item.queueId === entry.queueId);
+    const queueIndex = () => queuePositions().get(entry.queueId) ?? -1;
     return {
       id: entry.queueId,
       title: entry.title,
       artist: entry.artist,
-      music: trackMusic(entry),
-      cover: trackCoverUrl(entry, 'thumb'),
+      get music() { return trackMusic(entry); },
+      get cover() { return trackCoverUrl(entry, 'thumb'); },
       position: ordinal,
       current,
-      paused: current && !state.playback.isPlaying,
+      // Transport state belongs to the current row, not the whole queue memo.
+      get paused() { return current && !state.playback.isPlaying; },
       onActivate: current ? undefined : () => actions.playQueueEntry(entry.queueId),
-      trailing: current ? undefined : removeButton(entry),
-      entry: savedFromTrack(entry),
+      get trailing() { return current ? undefined : removeButton(entry); },
+      get entry() { return savedFromTrack(entry); },
       menu: () => [
         ...buildTrackMenu(entry),
         ...(!current ? [{ label: t('nowPlaying.removeFromQueue'), danger: true,
           onSelect: () => actions.removeQueueEntry(entry.queueId) }] : []),
       ],
-      canMoveUp: !current && queueIndex() > state.playback.index + 1,
-      canMoveDown: !current && queueIndex() < state.playback.queue.length - 1,
+      get canMoveUp() { return !current && queueIndex() > state.playback.index + 1; },
+      get canMoveDown() { return !current && queueIndex() < state.playback.queue.length - 1; },
       onMove: current ? undefined : (direction) => {
         const from = queueIndex(); const to = from + direction;
         if (from > state.playback.index && to > state.playback.index && to < state.playback.queue.length) actions.moveInQueue(from, to);
@@ -239,6 +242,7 @@ export function NowPlaying(props: {
                 title={t('nowPlaying.queue')}
                 count={state.playback.queue.length}
                 sections={queueSections()}
+                virtualize
                 empty={t('nowPlaying.queueEmpty')}
                 dragHandle={dragHandle}
                 headAction={{

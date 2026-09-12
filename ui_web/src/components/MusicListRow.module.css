@@ -35,7 +35,7 @@
 .detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .index { font-variant-numeric: tabular-nums; }
 .annotation { flex-shrink: 0; max-width: 55%; overflow: hidden; text-overflow: ellipsis; color: var(--accent-ink); }
-.row[data-now-playing] .title { color: var(--accent-ink); }
+.row[data-now-playing] .title, .row[data-playback-selected] .title { color: var(--accent-ink); }
 .cover {
   position: relative;
   flex: none;
