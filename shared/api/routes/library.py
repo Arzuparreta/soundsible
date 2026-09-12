@@ -51,6 +51,24 @@ def _playlist_mutation_response(metadata, status: str = "success"):
     return jsonify({"status": status, "playlists": metadata.playlists, "settings": metadata.settings})
 
 
+def _commit_playlists(api, lib, metadata):
+    """Persist a playlist change and answer with the map the engine now holds.
+
+    A save can be refused — the canonical library moved under this snapshot, so
+    writing it would undo somebody else's change. Echoing the mutated map back
+    after that is worse than an error: the client renders a playlist the engine
+    will not serve, and the next library sync quietly takes the song away
+    again. Say it did not happen, so the client can say so too and retry.
+    """
+    if not lib._save_metadata():
+        return jsonify({
+            "error": "The library changed while saving; nothing was written. Try again.",
+            "code": "library_conflict",
+        }), 409
+    api["emit_to_user"]("library_updated")
+    return _playlist_mutation_response(metadata)
+
+
 def _get_api():
     """Lazy import from shared.api to avoid circular imports; returns a dict of core helpers and singletons."""
     from shared.api import (
@@ -629,9 +647,7 @@ def create_playlist():
     if name in metadata.playlists:
         return jsonify({"error": "Playlist already exists"}), 409
     metadata.create_playlist(name)
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
+    return _commit_playlists(api, lib, metadata)
 
 
 @library_bp.route("/api/library/playlists", methods=["PATCH"])
@@ -647,9 +663,7 @@ def reorder_playlists():
     if not isinstance(order, list):
         return jsonify({"error": "order must be a list of playlist names"}), 400
     metadata.reorder_playlists(order)
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
+    return _commit_playlists(api, lib, metadata)
 
 
 @library_bp.route("/api/library/playlists/<path:name>/tracks", methods=["POST"])
@@ -669,9 +683,7 @@ def add_track_to_playlist(name):
         return jsonify({"error": "track_id is required"}), 400
     if not metadata.add_to_playlist(name, track_id):
         return jsonify({"error": "Add to playlist failed"}), 500
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
+    return _commit_playlists(api, lib, metadata)
 
 
 @library_bp.route("/api/library/playlists/<path:name>/tracks/<track_id>", methods=["DELETE"])
@@ -687,9 +699,7 @@ def remove_track_from_playlist(name, track_id):
         return jsonify({"error": "Playlist not found"}), 404
     if not metadata.remove_from_playlist(name, track_id):
         return jsonify({"error": "Remove from playlist failed"}), 500
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
+    return _commit_playlists(api, lib, metadata)
 
 
 @library_bp.route("/api/library/playlists/<path:name>", methods=["PATCH"])
@@ -723,9 +733,7 @@ def update_playlist(name):
         cover_tid = (raw_cover or "").strip() or None
         if not metadata.set_playlist_cover_track_id(name, cover_tid):
             return jsonify({"error": "Invalid cover_track_id (not in playlist)"}), 400
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
+    return _commit_playlists(api, lib, metadata)
 
 
 @library_bp.route("/api/library/playlists/<path:name>", methods=["DELETE"])
@@ -739,9 +747,7 @@ def delete_playlist(name):
         return jsonify({"error": "Library not loaded"}), 404
     if not metadata.delete_playlist(name):
         return jsonify({"error": "Playlist not found"}), 404
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
+    return _commit_playlists(api, lib, metadata)
 
 
 @library_bp.route("/api/library/repair", methods=["POST"])

@@ -118,6 +118,24 @@ _AUTH_TOKEN_COLUMNS = {
 _MUSIC_ONLY = "(t.media_kind IS NULL OR t.media_kind != 'podcast_episode')"
 
 
+class StaleLibraryWrite(RuntimeError):
+    """A whole-library write was refused because the canonical state moved on.
+
+    ``replace_library`` rewrites everything — every track, playlist and setting
+    — from one in-memory snapshot. A writer holding a snapshot taken before
+    somebody else's commit would therefore not merely lose its own change: it
+    would silently undo theirs. Callers that know which revision their snapshot
+    came from say so, and get this instead of a quiet revert.
+    """
+
+    def __init__(self, expected: int, actual: int):
+        super().__init__(
+            f"canonical library moved from revision {expected} to {actual}; write refused"
+        )
+        self.expected = expected
+        self.actual = actual
+
+
 #: Hard ceiling on live connections per `DatabaseManager` (there are only two
 #: files: instance.db and one library.db per user). Not a concurrency target —
 #: this app serves a handful of people at once — it exists so a burst of
@@ -977,14 +995,36 @@ class DatabaseManager:
         metadata: LibraryMetadata,
         *,
         id_replacements: Optional[Dict[str, str]] = None,
+        expected_revision: Optional[int] = None,
     ) -> int:
-        """Atomically replace the canonical library and return its revision."""
+        """Atomically replace the canonical library and return its revision.
+
+        ``expected_revision`` is the revision the caller's snapshot was built
+        from. When it no longer matches, nothing is written and
+        :class:`StaleLibraryWrite` is raised: this call replaces the whole
+        library, so committing a snapshot that predates somebody else's write
+        would erase it. Omit it only when the snapshot *is* the library (a
+        migration, a repair that just reloaded it).
+        """
+        if expected_revision is not None:
+            # Cheap pre-check so the common rejection costs no side effects;
+            # the authoritative one happens inside the transaction below.
+            current = self.get_library_revision()
+            if current != expected_revision:
+                raise StaleLibraryWrite(expected_revision, current)
         if id_replacements:
             from shared.artwork import artwork_store
             artwork_store().remap(id_replacements)
         with self._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
+                if expected_revision is not None:
+                    row = conn.execute(
+                        "SELECT revision FROM library_state WHERE singleton = 1"
+                    ).fetchone()
+                    current = int(row[0]) if row else 0
+                    if current != expected_revision:
+                        raise StaleLibraryWrite(expected_revision, current)
                 aliases = self._track_id_aliases(conn, id_replacements)
                 # This is the persistence boundary for a complete library
                 # snapshot.  Normalize here as a final invariant even when a

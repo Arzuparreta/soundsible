@@ -1248,10 +1248,27 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
 
 
 def _ensure_lib_metadata():
-    """Ensure library and metadata are loaded; return (lib, metadata) or (None, None)."""
+    """The library and metadata a write is about to change, as they are *now*.
+
+    Every caller of this mutates the snapshot it gets back and then saves the
+    whole library from it, so it has to be the current one. Reads already
+    reconcile (`GET /api/library` refreshes before answering); writes used to
+    trust whatever this process last loaded, which is how a playlist could be
+    renamed on one snapshot and a song added to another — the later save
+    reverting the earlier change, and the client being told both succeeded.
+
+    Pending work is committed first: a finished download lives only in the
+    in-memory snapshot until its debounced commit runs, and reloading over it
+    would drop those tracks.
+
+    Returns (lib, metadata) or (None, None).
+    """
+    orchestrator.flush_metadata_commit()
     lib, _, _ = get_core()
     if not lib.metadata:
         lib.sync_library()
+    else:
+        lib.refresh_if_stale()
     return lib, lib.metadata if lib else None
 
 

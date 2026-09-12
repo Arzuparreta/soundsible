@@ -317,6 +317,56 @@ def test_export_failure_does_not_roll_back_canonical_write(monkeypatch):
     assert [track.id for track in manager.db.load_library_metadata().tracks] == ["committed"]
 
 
+def test_a_stale_snapshot_is_refused_instead_of_reverting_the_library(monkeypatch):
+    """A whole-library write rewrites everybody's changes, not only its own.
+
+    Two managers, both holding the library as it was. One commits. The other
+    now has a snapshot that predates that commit, and saving it would put the
+    library back the way it was — the rename undone, the song gone from the
+    playlist, and nothing anywhere saying so.
+    """
+    monkeypatch.setattr("player.library._output_dir_for_library", lambda: None)
+    first = LibraryManager(silent=True)
+    second = LibraryManager(silent=True)
+    first.metadata = _library(_track("one"))
+    second.metadata = _library(_track("one"))
+    assert first._save_metadata() is True
+
+    first.metadata.playlists["Arma Reforger"] = ["one"]
+    assert first._save_metadata() is True
+
+    second.metadata.playlists["Later"] = []
+    assert second._save_metadata() is False
+    assert "Arma Reforger" in second.db.load_library_metadata().playlists
+
+
+def test_a_refused_save_leaves_the_manager_on_the_current_library(monkeypatch):
+    """One refusal must not wedge every later save for that manager."""
+    monkeypatch.setattr("player.library._output_dir_for_library", lambda: None)
+    first = LibraryManager(silent=True)
+    second = LibraryManager(silent=True)
+    first.metadata = _library(_track("one"))
+    assert first._save_metadata() is True
+
+    second.metadata = _library(_track("stale"))
+    assert second._save_metadata() is False
+
+    # It adopted what is actually there, so the next change builds on it.
+    assert [track.id for track in second.metadata.tracks] == ["one"]
+    second.metadata.playlists["Halo"] = []
+    assert second._save_metadata() is True
+    assert "Halo" in second.db.load_library_metadata().playlists
+
+
+def test_an_unpinned_write_still_replaces_the_library(tmp_path):
+    """Migrations and repairs hand over a snapshot that *is* the library."""
+    db = DatabaseManager(str(tmp_path / "library.db"))
+    db.replace_library(_library(_track("before")))
+
+    assert db.replace_library(_library(_track("after"))) == 2
+    assert [track.id for track in db.load_library_metadata().tracks] == ["after"]
+
+
 def test_refresh_uses_sqlite_revision_not_manifest_mtime(monkeypatch):
     monkeypatch.setattr("player.library._output_dir_for_library", lambda: None)
     first = LibraryManager(silent=True)
