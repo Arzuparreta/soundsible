@@ -176,9 +176,14 @@ jobs:
           GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
         run: |
           set -euo pipefail
+          # No token is the normal state, not a broken one: creating a PAT is
+          # a manual act nobody has had to perform yet, and the site's own
+          # hourly schedule already keeps it within an hour of the truth. Say
+          # so and stop, rather than painting a finished release red. The day
+          # a token appears this starts working with no further change.
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::SITE_DISPATCH_TOKEN is unset, so the site was not told about $GITHUB_REF_NAME. It will catch up on its next scheduled build."
-            exit 1
+            echo "::warning::SITE_DISPATCH_TOKEN is unset, so the site was not told about $GITHUB_REF_NAME directly. Its hourly build will pick it up within the hour."
+            exit 0
           fi
           gh workflow run deploy.yml \
             --repo "${{ github.repository_owner }}/soundsible.github.io" \
