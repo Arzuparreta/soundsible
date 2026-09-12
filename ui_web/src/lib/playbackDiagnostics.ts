@@ -166,6 +166,7 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
   if (stopAutomatic) return stopAutomatic;
   const outbox = new PlaybackTraceOutbox(options.userId);
   let pending: Array<ReturnType<typeof entry>> = [];
+  let pendingSize = 2; // JSON array brackets, then one comma between rows.
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let chain = Promise.resolve();
   let busy = false;
@@ -178,6 +179,7 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
     if (!pending.length || !setup) return;
     const rows = pending;
     pending = [];
+    pendingSize = 2;
     const batch: TraceBatch = { id: `${setup.id}:${rows[0].sequence}`, userId: options.userId,
       createdAt: Date.now(), capture: { ...setup }, dropped: dropped + outbox.lost, events: rows };
     chain = chain.then(() => outbox.put(batch));
@@ -213,7 +215,9 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
   collect = (row) => {
     if (!stillSameUser() || stopped) return;
     // A batch stays below the browser keepalive and server body limits.
-    if (pending.length && JSON.stringify(pending).length + JSON.stringify(row).length > 40_000) persist();
+    const rowSize = JSON.stringify(row).length;
+    if (pending.length && pendingSize + 1 + rowSize > 40_000) persist();
+    pendingSize += rowSize + (pending.length ? 1 : 0);
     pending.push(row);
     if (pending.length >= 24) persist();
     else if (persistTimer === null) persistTimer = setTimeout(persist, 1000);

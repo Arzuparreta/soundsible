@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createResource, For, on, onCleanup, onMount, Show } from 'solid-js';
 import { api } from '../lib/api';
 import { actions, state } from '../stores';
+import { pageVisible } from '../lib/pageVisibility';
 import { activeLineIndex, parseLrc } from '../lib/lrc';
 import { isPodcastTrack } from '../lib/track';
 import { createResponsiveTap } from '../lib/responsiveTap';
@@ -66,7 +67,8 @@ export function LyricsPanel(props: {
     const synced = lyrics()?.synced;
     return synced ? parseLrc(synced) : [];
   });
-  const activeIdx = createMemo(() => activeLineIndex(parsed(), state.playback.currentTime));
+  const activeIdx = createMemo<number>((previous) => pageVisible()
+    ? activeLineIndex(parsed(), state.playback.currentTime) : previous ?? -1);
 
   // ── Auto-scroll: keep the active line centred, but yield to the user ──
   //
@@ -116,7 +118,7 @@ export function LyricsPanel(props: {
 
   const follow = (smooth: boolean) => {
     const el = bodyEl;
-    if (!el || Date.now() < holdUntil) return;
+    if (!pageVisible() || !el || Date.now() < holdUntil) return;
     const idx = activeIdx();
     if (idx < 0) return;
     const line = el.querySelector<HTMLElement>(`[data-line="${idx}"]`);
@@ -158,6 +160,7 @@ export function LyricsPanel(props: {
   }));
 
   createEffect(() => {
+    if (!pageVisible()) { stopFollow(); aligned = false; return; }
     parsed();
     activeIdx();
     follow(true);

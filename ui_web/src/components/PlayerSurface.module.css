@@ -102,19 +102,8 @@
   pointer-events: none;
 }
 
-/* The most expensive surface in the app: a full-viewport 62px blur. Without GPU
-   compositing that convolution is CPU work, so what matters is how often it has
-   to be redone. Two things keep it to once per track:
-
-   - The scale is constant (see `surfaceDrift`). A blurred layer whose scale
-     animates has to be re-rasterised as the raster scale moves; one that only
-     translates is rasterised once and re-composited at an offset.
-   - `will-change` states that up front, so the layer is kept rather than
-     rediscovered.
-
-   There are two of these, a crossfade pair, and only one is ever on screen —
-   hence the visibility below: an `opacity: 0` layer is still a layer, and this
-   one would still be blurred. */
+/* Keep the inactive half of the wallpaper crossfade out of rendering.
+   The active layer retains the original artwork filter and slow pan. */
 .backdrop {
   z-index: -3;
   inset: -9%;
@@ -138,7 +127,10 @@
 }
 
 .open .backdropActive {
-  animation: surfaceDrift 38s ease-in-out infinite alternate;
+  /* Each step moves the blurred artwork by less than a CSS pixel even at
+     4K. Avoid recompositing the entire stage for subpixel motion every frame. */
+  animation: surfaceDrift 38s steps(380, end) infinite alternate;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 .wash {

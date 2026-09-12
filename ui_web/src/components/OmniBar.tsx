@@ -3,6 +3,7 @@ import { trackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { trackCoverUrl } from '../lib/media';
+import { pageVisible } from '../lib/pageVisibility';
 import { t } from '../lib/i18n';
 import { linkFits, linkReading, mbps, trackKbps } from '../lib/linkQuality';
 import { gainToVolumePosition, nudgeVolumeGain, volumePositionToGain } from '../lib/volumeScale';
@@ -86,7 +87,8 @@ export function OmniBar() {
   };
   const audibleVolume = createMemo(() => (state.playback.muted ? 0 : state.playback.volume));
   const volumePct = createMemo(() => Math.round(gainToVolumePosition(audibleVolume()) * 100));
-  const pct = createMemo(() => {
+  const pct = createMemo<number>((previous) => {
+    if (!pageVisible()) return previous ?? 0;
     const d = state.playback.duration;
     return d > 0 ? Math.min(100, (state.playback.currentTime / d) * 100) : 0;
   });

@@ -310,6 +310,7 @@
 .spinning {
   display: grid;
   animation: spin 0.8s linear infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 @keyframes spin {

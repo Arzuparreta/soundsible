@@ -66,6 +66,7 @@
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
   animation: lyricsSpin 0.8s linear infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 @keyframes lyricsSpin {

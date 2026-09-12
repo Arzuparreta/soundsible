@@ -360,6 +360,7 @@
   background: var(--accent);
   border-radius: 2px;
   animation: playerTrackEq 0.9s ease-in-out infinite alternate;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 .eq i:nth-child(1) { height: 45%; }

@@ -217,6 +217,7 @@
 .indeterminate {
   width: 40% !important;
   animation: slide 1.2s var(--ease-in-out) infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 .status {

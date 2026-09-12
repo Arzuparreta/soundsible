@@ -201,6 +201,7 @@
 
 .radioBadgeLoading {
   animation: radioBadgePulse 1.2s var(--ease-out) infinite;
+  animation-play-state: var(--decorative-animation-state, running);
 }
 
 @keyframes radioBadgePulse {
