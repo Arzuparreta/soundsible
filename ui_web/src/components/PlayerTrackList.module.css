@@ -96,7 +96,8 @@
   flex: 1;
   flex-direction: column;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
+  overscroll-behavior-y: contain;
   padding: 8px 8px max(24px, var(--player-mobile-footer-clearance, 24px));
 }
 
@@ -129,7 +130,8 @@
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
+  overscroll-behavior-y: contain;
 }
 
 /* Sticky for the fallback above, where `.rows` is the one scrolling and a lane
