@@ -1,6 +1,11 @@
 # Car Integration
 
-Soundsible has three car-facing layers:
+Soundsible has three car-facing layers in its implementation and plans:
+
+> The native iOS app has never been installed or run on a device. Its car
+> behaviour is theoretical. IPA builds and code tests do not validate native
+> playback or car controls; the web Media Session implementation is a separate
+> path.
 
 1. **Phone native player surfaces**: Bluetooth, USB, lock screen, and car media screens that mirror the phone's Now Playing state.
 2. **Native companion apps**: iOS first, Android later.
@@ -62,10 +67,11 @@ Root collections:
 
 Playlist IDs are encoded as `playlist:<url-encoded-name>`.
 
-## iOS Companion — built
+## iOS Companion — code only, never run on a device
 
 The native iOS client lives in [`ios/`](../ios) and is documented in
-[IOS.md](IOS.md). It does what this document specified:
+[IOS.md](IOS.md). Its code is intended to implement the following; none has
+been validated on a device:
 
 - Pairs through the existing flow and keeps the paired-device token in the Keychain.
 - Browses `/api/car/home` and `/api/car/items/<item_id>`.
@@ -98,7 +104,8 @@ This costs less than it sounds. A CarPlay app would add **browsing your library
 on the car screen**. Everything else a car shows — title, artist, artwork, a
 progress bar that tracks, transport buttons on the wheel, and Soundsible's Now
 Playing screen inside CarPlay itself — comes from `MPNowPlayingInfoCenter` and
-`MPRemoteCommandCenter`, needs no entitlement, and already works.
+`MPRemoteCommandCenter`, is implemented without that entitlement, but has never been tested in the
+native Soundsible app on a device.
 
 If Soundsible ever ships through **AltStore PAL** (EU marketplaces, 99 €/year,
 Notarization checks security rather than content) that is still not the App
