@@ -1,4 +1,4 @@
-import { snapCarousel, snapPlayerCarousel, holdCarousel, releaseCarousel } from './playerGestures';
+import { snapCarousel, snapPlayerCarousel, holdCarousel, releaseCarousel, holdForMenu } from './playerGestures';
 import { expect, test, type Page } from '@playwright/test';
 import { settle } from './settle';
 import AxeBuilder from '@axe-core/playwright';
@@ -293,12 +293,12 @@ test('the compact mini-player overlays DJ state without taking title width', asy
   expect(accessibility.violations).toEqual([]);
 });
 
-/* Row one of the route used to be the only one without a ⋯, and so the only one
- * wide enough to print a whole artist name; every row below it truncated. That
- * every row now carries the control is locked in by AutoMode.test.tsx, and the
- * width priority behind it by layoutStyles.test.ts. What only a real viewport
- * can say is the part the user actually reported: at 390px the name fits. */
-test('the route prints its artist whole and gives every row the same control', async ({ page }) => {
+/* The route panel is 280px of a phone. Every badge on a row — which session it
+ * came from, that it is cued, that it was placed by hand — was the same answer
+ * as the row above it, and between them and a 44px ⋯ there was no width left
+ * for the artist's name. The row is the song now: number, artwork, title,
+ * artist. The menu it still has answers a hold. */
+test('a route row is the song and nothing else, and its menu answers a hold', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);
   await page.getByRole('tab', { name: 'DJ' }).click();
@@ -309,7 +309,6 @@ test('the route prints its artist whole and gives every row the same control', a
   await releaseCarousel(page, '[data-auto-carousel]');
   await expect(route).not.toHaveAttribute('inert', '');
 
-  // The route starts empty in this fixture.
   const browser = page.locator('[data-auto-tile="browser"]');
   await route.getByRole('button', { name: 'Añadir', exact: true }).click();
   await expect(browser).not.toHaveAttribute('inert', '');
@@ -317,15 +316,20 @@ test('the route prints its artist whole and gives every row the same control', a
   await browser.getByRole('button', { name: /Luz de verano/ }).first().click();
   await expect(route).not.toHaveAttribute('inert', '');
 
-  const rows = route.locator('[data-music-list-row]');
-  await expect(rows.first()).toBeVisible();
-  await expect(route.locator('[data-row-menu]')).toHaveCount(await rows.count());
+  const row = route.locator('[data-music-list-row]').first();
+  await expect(row).toBeVisible();
+  await expect(route.locator('[data-row-menu]')).toHaveCount(0);
+  // Number, then the artist, and nothing appended to either.
+  await expect(row.locator('[data-row-detail]')).toHaveText(/^\d+ · \S/);
 
-  const clipped = await rows.locator('[data-row-detail]').evaluateAll(
-    (nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth + 1)
-      .map((node) => node.textContent),
+  const clipped = await route.locator('[data-music-list-row] [data-row-detail]').evaluateAll(
+    (nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent),
   );
-  expect(clipped, 'the artist must fit beside the overflow control').toEqual([]);
+  expect(clipped, 'the artist must fit now that nothing is queuing beside it').toEqual([]);
+
+  await holdForMenu(page, row);
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Quitar de la ruta' })).toBeVisible();
 });
 
 test('mobile route insertion targets stay contextual and aligned', async ({ page }) => {
@@ -356,7 +360,7 @@ test('mobile route insertion targets stay contextual and aligned', async ({ page
   await expect(insertionTargets.last()).toBeHidden();
 
   const carriedRow = route.locator('[draggable="true"]').first();
-  await carriedRow.locator('[data-row-menu]').click();
+  await holdForMenu(page, carriedRow);
   await page.getByRole('dialog').getByRole('button', { name: 'Mover', exact: true }).click();
   await expect(insertionTargets.first()).toHaveAttribute('data-placement-active', '');
   await expect(insertionTargets.first()).toBeVisible();

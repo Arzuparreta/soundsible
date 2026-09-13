@@ -1,3 +1,4 @@
+import { holdForMenu } from './playerGestures';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
@@ -224,7 +225,8 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   await expect(queue).not.toHaveAttribute('inert', '');
   const second = queue.locator('[data-drag-row]').nth(1);
   const id = await second.getAttribute('data-drag-row');
-  await second.locator('[data-row-menu]').click();
+  // The panels draw no ⋯; a hold is how the menu opens there.
+  await holdForMenu(page, second);
   await page.getByRole('dialog').getByRole('button', { name: 'Mover', exact: true }).click();
   const editing = queue.locator(`[data-drag-row="${id}"]`);
   await editing.getByRole('button', { name: 'Bajar', exact: true }).click();
@@ -233,5 +235,6 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   await editing.getByRole('button', { name: 'Subir', exact: true }).click();
   await expect(queue.locator('[data-drag-row]').nth(1)).toHaveAttribute('data-drag-row', id!);
   await editing.getByRole('button', { name: 'Listo', exact: true }).click();
-  await expect(editing.locator('[data-row-menu]')).toBeFocused();
+  // Left on the song that was being moved, rather than on nothing.
+  await expect(editing.locator('[data-row-main]')).toBeFocused();
 });

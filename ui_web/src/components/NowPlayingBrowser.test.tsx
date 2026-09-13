@@ -139,6 +139,20 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/* A panel row draws no ⋯ — the browser is shell chrome, where a 44px control
+ * costs more width than it gives. Whether a row has a menu at all still shows:
+ * it claims the right-click, and only claims it when there is one to open. */
+function rowClaimsMenu(name: string | RegExp): boolean {
+  const rows = [...document.querySelectorAll<HTMLElement>('[data-song-row], [data-music-list-row]')];
+  const row = rows.find((node) => (typeof name === 'string'
+    ? node.textContent?.includes(name)
+    : name.test(node.textContent ?? '')))!;
+  expect(row, `no row matching ${name}`).toBeTruthy();
+  const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+  row.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 describe('NowPlayingBrowser', () => {
   it('searches eleven-character artist names through the intelligent catalog', async () => {
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
@@ -181,9 +195,11 @@ describe('NowPlayingBrowser', () => {
       // The discover rail sits on the root view and used to keep both browse
       // controls in DJ Mode, because it never received the flag that hid them.
       expect(screen.queryByRole('button', { name: 'Add to queue' })).not.toBeInTheDocument();
-      if (purpose === 'auto-neutral') expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
-      else expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+      expect(rowClaimsMenu(/Node Song/)).toBe(purpose === 'auto-neutral');
       expect(screen.getByRole('button', { name: 'Add to session: Node Song' })).toBeInTheDocument();
+      // The verb is enough on the button; the row still announces the whole of it.
+      expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
       const add = await screen.findByRole('button', { name: 'Add to session: Local Song' });
@@ -201,7 +217,8 @@ describe('NowPlayingBrowser', () => {
     render(() => <NowPlayingBrowser onClose={vi.fn()} />);
 
     expect(screen.queryByRole('button', { name: 'Request' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+    expect(rowClaimsMenu(/Local Song/)).toBe(true);
     expect(screen.queryByRole('button', { name: /to the route$/ })).not.toBeInTheDocument();
   });
 

@@ -13,6 +13,7 @@ export const fr: Dict = {
     explore: 'Explorer',
     request: 'Ajouter à la session',
     requestAll: 'Ajouter à la session',
+    requestShort: 'Ajouter',
     reference: 'Mélanger à la session',
     references: 'Session',
     referenceHint: 'La musique qui guide les prochains choix du DJ.',

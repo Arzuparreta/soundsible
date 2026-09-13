@@ -88,6 +88,10 @@ interface AutoRowProps {
   favouritesKnown?: boolean;
   variant: 'browse' | 'auto';
   primaryLabel?: string;
+  /** What the button says, when the full phrase is more than a button needs.
+   * `primaryLabel` stays the whole thing, because that is what the row
+   * announces — a screen reader gets "Add to session: <song>" either way. */
+  primaryShort?: string;
   onAddToRoute?: () => void;
   onMenu?: (event?: MouseEvent) => void;
   track?: Track;
@@ -438,6 +442,10 @@ export function NowPlayingBrowser(props: {
       favouritesKnown: !query().trim() && currentView().kind === 'favourites',
       variant: auto ? 'auto' : 'browse',
       primaryLabel: referenceMode() ? sourceLabel() : auto ? t('musicExplorer.request') : undefined,
+      // The verb alone on the button. Inside the session browser "to the
+      // session" is the one thing every row has in common, and spelling it out
+      // on each of them took 43% of a 350px row from the title and the artist.
+      primaryShort: referenceMode() || !auto ? undefined : t('musicExplorer.requestShort'),
       onAddToRoute: auto && target
         ? () => item ? void useItem(item, placeTrack) : placeTrack(target as Track)
         : undefined,
@@ -660,6 +668,7 @@ export function NowPlayingBrowser(props: {
             resolving={resolving()}
             onRetry={() => runSearch(query())}
             primaryLabel={inAuto() ? referenceMode() ? sourceLabel() : t('musicExplorer.request') : undefined}
+            primaryShort={inAuto() && !referenceMode() ? t('musicExplorer.requestShort') : undefined}
             autoRow={autoRow}
             onTrack={(item) => void useItem(item, inAuto() ? placeTrack : actions.playNow)}
             onQueue={(item) => void useItem(item, actions.enqueue)}
@@ -1107,6 +1116,7 @@ function GlobalSearchView(props: {
   onEntity: (item: CatalogItem) => void;
   onYoutube: (result: SearchResult) => void;
   primaryLabel?: string;
+  primaryShort?: string;
   autoRow: (target: Track | CatalogItem) => AutoRowProps;
 }) {
   const empty = () => !props.top && props.playlists.length === 0 && props.sections.every((section) => section.items.length === 0);
@@ -1133,6 +1143,7 @@ function GlobalSearchView(props: {
         resolving={props.resolving.has(item.id)}
         owned={item.type === 'library_track' || !!ownedTrackForItem(item)}
         primaryLabel={props.primaryLabel}
+        primaryShort={props.primaryShort}
         onPlay={() => props.onTrack(item)}
         onQueue={() => props.onQueue(item)}
         {...props.autoRow(item)}
@@ -1331,6 +1342,7 @@ function BrowserTrackRow(props: {
   onQueue: () => void;
   onMenu?: (event?: MouseEvent) => void;
   primaryLabel?: string;
+  primaryShort?: string;
   variant?: 'browse' | 'auto';
   onAddToRoute?: () => void;
   track?: Track;
@@ -1342,7 +1354,9 @@ function BrowserTrackRow(props: {
   return <SongRow track={track()} music={props.music} cover={props.cover} active={props.active} compact busy={props.resolving}
     actionLabel={auto() ? `${props.primaryLabel ?? t('musicExplorer.request')}: ${props.title}` : undefined}
     onPlay={() => auto() ? props.onAddToRoute?.() : props.onPlay()}
-    primaryAction={auto() && props.onAddToRoute ? { label: props.primaryLabel ?? t('musicExplorer.request'), onSelect: props.onAddToRoute } : undefined}
+    primaryAction={auto() && props.onAddToRoute
+      ? { label: props.primaryShort ?? props.primaryLabel ?? t('musicExplorer.request'), onSelect: props.onAddToRoute }
+      : undefined}
     hideMenu={auto() && !props.onMenu}
     onMenu={props.onMenu ? (_track, event) => props.onMenu?.(event) : undefined}
     onDragStart={props.track && props.onMenu ? (event) => writeAutoTrackTransfer(event, { track: props.track! }) : undefined}

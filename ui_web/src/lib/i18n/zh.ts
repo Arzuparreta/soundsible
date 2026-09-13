@@ -13,6 +13,7 @@ export const zh: Dict = {
     explore: '探索',
     request: '添加到会话',
     requestAll: '添加到会话',
+    requestShort: '添加',
     reference: '融入当前会话',
     references: '会话',
     referenceHint: '引导 DJ 后续选曲的音乐。',
