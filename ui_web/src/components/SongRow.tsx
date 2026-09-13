@@ -113,7 +113,8 @@ export default function SongRow(props: SongRowProps) {
 
   return (
     <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.track.title} subtitle={props.track.artist} music={props.music ?? trackMusic(props.track)} seed={props.track.id}
-      cover={props.cover ?? props.track.cover} index={props.index} annotation={props.badge}
+      cover={props.cover ?? props.track.cover} index={props.index} annotation={props.compact ? undefined : props.badge}
+      menuOnHold={props.compact}
       active={props.active} busy={props.busy || (props.active && state.playback.isLoading)}
       // A compact row carries no collection marks — the same trim the desktop
       // row makes — so the shared row is told there is no entry to mark.
@@ -151,7 +152,7 @@ export default function SongRow(props: SongRowProps) {
           ><span class={styles.title}>{props.track.title}</span></span>
         <ArtistLinks class={styles.artist} music={props.music ?? trackMusic(props.track)} />
       </div>
-      <Show when={props.badge}>
+      <Show when={props.badge && !props.compact}>
         <span class={styles.badge}>{props.badge}</span>
       </Show>
       {/* The one row control that changes state: an arrow while the song has no
@@ -173,7 +174,10 @@ export default function SongRow(props: SongRowProps) {
         <Show when={!props.compact && props.favouritable !== false && isSavedTrack(props.track)}>
           <FavouriteButton favourite={entry()} class={styles.rowHeart} />
         </Show>
-        <Show when={props.onMenu}>
+        {/* A panel row answers a right-click and a hold like every other row;
+          * what it does without is the button, which in a 280px panel costs
+          * more width than the artist name it was crowding out. */}
+        <Show when={props.onMenu && !props.compact}>
           <button
             class={styles.iconBtn}
             aria-label={t('songRow.ariaMore')}

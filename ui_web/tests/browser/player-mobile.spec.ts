@@ -1,4 +1,4 @@
-import { snapCarousel, snapPlayerCarousel, holdCarousel, releaseCarousel } from './playerGestures';
+import { snapCarousel, snapPlayerCarousel, holdCarousel, releaseCarousel, holdForMenu } from './playerGestures';
 import { expect, test, type Page } from '@playwright/test';
 import { settle } from './settle';
 import AxeBuilder from '@axe-core/playwright';
@@ -293,13 +293,12 @@ test('the compact mini-player overlays DJ state without taking title width', asy
   expect(accessibility.violations).toEqual([]);
 });
 
-/* Row one of the route used to be the only one without a ⋯, and so the only one
- * wide enough to print a whole artist name. Giving every row the control was
- * half the fix; the other half is who yields when the line is still too narrow.
- * The first version of this test used the fixture's own short labels, which fit
- * either way — so it passed while the route on a real phone read "1 · …". It
- * drives the widths itself now. */
-test('the route never lets a note beside the artist take room the name needs', async ({ page }) => {
+/* The route panel is 280px of a phone. Every badge on a row — which session it
+ * came from, that it is cued, that it was placed by hand — was the same answer
+ * as the row above it, and between them and a 44px ⋯ there was no width left
+ * for the artist's name. The row is the song now: number, artwork, title,
+ * artist. The menu it still has answers a hold. */
+test('a route row is the song and nothing else, and its menu answers a hold', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);
   await page.getByRole('tab', { name: 'DJ' }).click();
@@ -310,7 +309,6 @@ test('the route never lets a note beside the artist take room the name needs', a
   await releaseCarousel(page, '[data-auto-carousel]');
   await expect(route).not.toHaveAttribute('inert', '');
 
-  // The route starts empty in this fixture.
   const browser = page.locator('[data-auto-tile="browser"]');
   await route.getByRole('button', { name: 'Añadir', exact: true }).click();
   await expect(browser).not.toHaveAttribute('inert', '');
@@ -320,38 +318,18 @@ test('the route never lets a note beside the artist take room the name needs', a
 
   const row = route.locator('[data-music-list-row]').first();
   await expect(row).toBeVisible();
-  await expect(route.locator('[data-row-menu]')).toHaveCount(await route.locator('[data-music-list-row]').count());
+  await expect(route.locator('[data-row-menu]')).toHaveCount(0);
+  // Number, then the artist, and nothing appended to either.
+  await expect(row.locator('[data-row-detail]')).toHaveText(/^\d+ · \S/);
 
-  const measured = await row.evaluate((node) => {
-    const detail = node.querySelector<HTMLElement>('[data-row-detail]')!;
-    const note = detail.nextElementSibling as HTMLElement | null;
-    const link = detail.querySelector('a');
-    const read = (artist: string, annotation: string) => {
-      if (link) link.textContent = artist;
-      if (note) note.textContent = annotation;
-      return {
-        detailClipped: detail.scrollWidth > detail.clientWidth + 1,
-        linkWidth: link ? Math.round(link.getBoundingClientRect().width) : 0,
-        linkClipsItsOwnText: link ? link.scrollWidth > link.clientWidth + 1 : false,
-        noteWidth: note ? Math.round(note.getBoundingClientRect().width) : 0,
-      };
-    };
-    return {
-      // An ordinary name beside the kind of source label the DJ actually writes.
-      ordinary: read('Extremoduro', ' · Sesión: Cabezabajo'),
-      // A name with no hope of fitting: the note must be gone, not the name.
-      overlong: read('Extremoduro y los Compañeros del Silencio', ' · Sesión: Cabezabajo'),
-    };
-  });
+  const clipped = await route.locator('[data-music-list-row] [data-row-detail]').evaluateAll(
+    (nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent),
+  );
+  expect(clipped, 'the artist must fit now that nothing is queuing beside it').toEqual([]);
 
-  expect(measured.ordinary.detailClipped, 'an ordinary artist must survive a long source label').toBe(false);
-  expect(measured.ordinary.noteWidth).toBeGreaterThan(0);
-
-  // The artist carries its own touch target, so it is an inline-block: without
-  // clipping its own text it is dropped whole and the line reads "N · …".
-  expect(measured.overlong.linkClipsItsOwnText, 'the name must lose letters, not vanish').toBe(true);
-  expect(measured.overlong.linkWidth).toBeGreaterThan(measured.ordinary.linkWidth);
-  expect(measured.overlong.noteWidth, 'the note yields everything before the name gives up a letter').toBe(0);
+  await holdForMenu(page, row);
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Quitar de la ruta' })).toBeVisible();
 });
 
 test('mobile route insertion targets stay contextual and aligned', async ({ page }) => {
@@ -382,7 +360,7 @@ test('mobile route insertion targets stay contextual and aligned', async ({ page
   await expect(insertionTargets.last()).toBeHidden();
 
   const carriedRow = route.locator('[draggable="true"]').first();
-  await carriedRow.locator('[data-row-menu]').click();
+  await holdForMenu(page, carriedRow);
   await page.getByRole('dialog').getByRole('button', { name: 'Mover', exact: true }).click();
   await expect(insertionTargets.first()).toHaveAttribute('data-placement-active', '');
   await expect(insertionTargets.first()).toBeVisible();

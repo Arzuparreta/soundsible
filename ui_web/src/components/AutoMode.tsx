@@ -16,7 +16,6 @@ import {
 } from '../lib/autoModeLayout';
 import { readAutoTrackTransfer, writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { isNoopMove } from '../lib/dragReorder';
-import { queueIdentity } from '../lib/queueDiscovery';
 import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
@@ -27,7 +26,6 @@ import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
 import { AutoReferences } from './AutoReferences';
 import { SourceIcon } from './icons';
-import { openActionMenu } from './ActionMenu';
 import styles from './AutoMode.module.css';
 
 const AUTO_MINIMUMS = { browser: 280, stage: 390, route: 280 };
@@ -108,13 +106,7 @@ export function AutoMode(props: {
     return block.length ? block : [queueId];
   };
   const routeEntries = createMemo<PlayerTrackListEntry[]>(() => upcoming().map((track, index) => {
-    const plan = state.autoMode.plan[track.queueId];
     const committed = index === 0 && state.autoMode.transition.status !== 'idle';
-    const userPlaced = track.autoRoute?.kind === 'user';
-    const bridge = track.autoRoute?.kind === 'bridge';
-    const source = state.autoMode.sources.find((item) => item.tracks.some((candidate) => (
-      queueIdentity(candidate) === queueIdentity(track)
-    )));
     // Tapping a seam is the touch path: drops are handled by the list itself,
     // which can aim at the nearest seam instead of asking for a hit on this.
     const gap = (
@@ -126,10 +118,10 @@ export function AutoMode(props: {
         onClick={() => carriedTrack() ? placeCarriedInRoute(track.queueId) : openDestination('route', track.queueId)}
       ><span>＋</span></button>
     );
-    // A cued handoff is already loaded and mixing: taking it out of the route
-    // is the one thing that no longer applies to it. Everything else still
-    // does, and withholding the whole menu was what made the first row the only
-    // one without a ⋯ — and so the only one whose artist name had room.
+    // A cued handoff is already loaded and mixing: taking it out of the route is
+    // the one thing that no longer applies to it. The rest still does, and the
+    // menu is reached the same way on every row — by holding it, or by
+    // right-clicking it with a pointer.
     const menu = () => [
       { label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
       { label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) },
@@ -145,31 +137,20 @@ export function AutoMode(props: {
       music: trackMusic(track),
       cover: trackCoverUrl(track, 'thumb'),
       position: index + 1,
-      locked: committed,
       // A committed handoff is loaded and cued: whatever the route did around
-      // it, the blend it will actually play is the planned one.
+      // it, the blend it will actually play is the planned one. The row says so
+      // with its own material rather than with a badge — no route row carries
+      // one now, because on a 280px panel a label naming the session it came
+      // from, the same session as the row above it, was taking the width of the
+      // artist's name.
+      locked: committed,
       stale: !committed && staleSeams().has(track.queueId),
       draggable: !committed,
-      annotation: source?.label ?? plan?.sourceSetLabel,
-      badge: committed
-        ? t('autoMode.dj.cued')
-        : userPlaced
-          ? track.autoRoute?.placement === 'fixed' ? t('autoMode.route.fixed') : t('autoMode.route.placed')
-          : bridge ? t('autoMode.route.bridge') : undefined,
       before: gap,
       onDragStart: (event) => writeAutoTrackTransfer(event, { track, queueId: track.queueId }),
       entry: savedFromTrack(track),
       onCarry: committed ? undefined : () => setCarriedTrack({ track, queueId: track.queueId }),
       menu,
-      // Every row carries the same control, so every row has the same width
-      // left for its title and artist. What the cued row still cannot do — be
-      // dragged, be moved, have anything inserted in front of it — is said by
-      // `locked`, `draggable` and `onCarry`, not by a missing button.
-      trailing: (
-        <button class={styles.routeAction} type="button"
-          aria-label={t('autoMode.route.actions', { title: track.title })}
-          onClick={() => openActionMenu({ title: track.title, actions: menu() })}>⋯</button>
-      ),
     };
   }));
 

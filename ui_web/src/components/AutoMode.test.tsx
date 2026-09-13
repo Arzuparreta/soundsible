@@ -77,23 +77,29 @@ describe('AutoMode workspace', () => {
     renderAuto('browser');
     expect(screen.getByTestId('shared-stage')).toHaveAttribute('data-mode', 'auto');
     expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-neutral');
-    expect(screen.getAllByText('Warehouse techno')).toHaveLength(2);
+    // Once, in the references tray. The route rows used to repeat it under every
+    // song, which on a 280px panel cost the artist its name.
+    expect(screen.getAllByText('Warehouse techno')).toHaveLength(1);
     // The Sources ＋ armed a mode whose whole payload was deferred until you
     // navigated into a collection, so pressing it looked like pressing nothing.
     expect(screen.queryByRole('button', { name: 'autoMode.source.title' })).not.toBeInTheDocument();
   });
 
-  it('keeps session actions in one route menu', () => {
-    renderAuto('route');
-    expect(screen.getAllByText(/Warehouse techno/)).toHaveLength(2);
+  /* The route draws no ⋯ any more: a 44px control on a 280px panel cost more
+   * width than it gave, and the row already opens its menu on a hold and on a
+   * right-click. */
+  it('keeps session actions in one route menu, reached without a button', () => {
+    const { container } = renderAuto('route');
+    expect(screen.queryByRole('button', { name: /^autoMode.route.actions/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'autoMode.route.useAsSource' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.actions:Next song' }));
-    const options = openActionMenu.mock.calls.at(-1)![0];
+
+    fireEvent.contextMenu(container.querySelector('[data-drag-row="q-next"]')!);
+    const options = openContextMenu.mock.calls.at(-1)![0];
     expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
-      'musicExplorer.reference', 'musicExplorer.change', 'autoMode.route.remove',
+      'musicList.move', 'musicExplorer.reference', 'musicExplorer.change', 'autoMode.route.remove',
     ]);
-    options.actions[0].onSelect();
-    options.actions[2].onSelect();
+    options.actions[1].onSelect();
+    options.actions[3].onSelect();
     expect(actions.useAutoTrackAsSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'next' }));
     expect(actions.removeAutoRouteOccurrence).toHaveBeenCalledWith('q-next');
   });
@@ -240,12 +246,14 @@ describe('AutoMode workspace', () => {
   /* The cued row used to be the only one without a ⋯, and so the only one with
    * room for a full artist name — a layout difference nobody chose, produced by
    * withholding a menu. It keeps the actions that still apply instead. */
-  it('gives a cued handoff the same menu, minus the one action it cannot take', () => {
+  it('gives a cued handoff the same menu, minus the actions it cannot take', () => {
     state.autoMode.transition.status = 'armed';
     try {
-      renderAuto('route');
-      fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.actions:Next song' }));
-      const options = openActionMenu.mock.calls.at(-1)![0];
+      const { container } = renderAuto('route');
+      fireEvent.contextMenu(container.querySelector('[data-drag-row="q-next"]')!);
+      const options = openContextMenu.mock.calls.at(-1)![0];
+      // Loaded and mixing: it cannot be moved, and taking it out of the route
+      // no longer means anything. Everything else still applies.
       expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
         'musicExplorer.reference', 'musicExplorer.change',
       ]);

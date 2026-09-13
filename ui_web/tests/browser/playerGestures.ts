@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 export async function snapCarousel(page: Page, panel: 'queue' | 'stage' | 'browser') {
   await page.locator('[data-now-playing-carousel]').evaluate(async (element, destination) => {
@@ -78,4 +78,25 @@ export async function dragTouch(
   }
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await session.detach();
+}
+
+/**
+ * Hold a row until its menu opens.
+ *
+ * The shell's panels draw no ⋯ — a 44px control costs more width there than it
+ * gives — so this is the gesture that reaches the menu on a touch screen.
+ * `lib/responsiveTap` activates on pointer events and only for a primary touch,
+ * so that is the shape this sends, and it waits out the long-press timer before
+ * lifting.
+ */
+export async function holdForMenu(page: Page, row: Locator) {
+  const target = row.locator('[data-row-main]').first();
+  const box = (await target.boundingBox())!;
+  const point = {
+    pointerId: 1, pointerType: 'touch', isPrimary: true, bubbles: true,
+    clientX: box.x + box.width / 2, clientY: box.y + box.height / 2,
+  };
+  await target.dispatchEvent('pointerdown', point);
+  await page.waitForTimeout(600);
+  await target.dispatchEvent('pointerup', point);
 }

@@ -114,7 +114,16 @@ export function PlayerTrackList(props: {
     const row = [...(rowsEl?.querySelectorAll<HTMLElement>('[data-drag-row]') ?? [])]
       .find((row) => row.dataset.dragRow === id);
     const preferred = command ? row?.querySelector<HTMLButtonElement>(`[data-edit-command="${command}"]:not(:disabled)`) : null;
-    (preferred ?? row?.querySelector<HTMLButtonElement>('[data-edit-command]:not(:disabled), [data-row-menu]'))?.focus();
+    // Tried in this order, one selector at a time: a selector list would answer
+    // in document order instead, and the row's own button comes before its edit
+    // controls. Last of them is the row itself — the panels draw no ⋯ any more,
+    // and the song being moved is a better place to be left than nothing.
+    const fallback = ['[data-edit-command]:not(:disabled)', '[data-row-menu]', '[data-row-main]']
+      .reduce<HTMLButtonElement | null>(
+        (found, selector) => found ?? row?.querySelector<HTMLButtonElement>(selector) ?? null,
+        null,
+      );
+    (preferred ?? fallback)?.focus();
   });
   let depth = 0;
   let scrollFrame: number | undefined;
@@ -319,6 +328,14 @@ function PlayerTrackListRow(props: {
       onDragStart={props.entry.onDragStart}
       onDragOver={props.entry.onDragOver}
       onDrop={props.entry.onDrop}
+      // The panel draws no ⋯, so this is the pointer's way in. The mobile row
+      // carries its own (MusicListRow wires hold, right-click and the menu key
+      // against the same `onMenu`), which is why this only answers on desktop.
+      onContextMenu={(event) => {
+        if (mobileListLayout()) return;
+        event.preventDefault();
+        openMenu();
+      }}
       onPointerDown={(event) => {
         if ((event.target as Element).closest("a") || mobileListLayout() || !props.entry.onCarry) return;
         cancelCarry();
@@ -343,7 +360,7 @@ function PlayerTrackListRow(props: {
       onPointerUp={cancelCarry}
       onPointerCancel={cancelCarry}
     >
-      <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.entry.title} subtitle={props.entry.artist} music={props.entry.music}
+      <Show when={!mobileListLayout()} fallback={<MusicListRow playback menuOnHold title={props.entry.title} subtitle={props.entry.artist} music={props.entry.music}
         seed={props.entry.id} cover={props.entry.cover} index={props.entry.current ? undefined : props.entry.position}
         active={props.entry.current} disabled={disabled() || props.editing} entry={props.entry.entry}
         annotation={props.entry.current && props.entry.paused ? t('musicList.paused') : props.entry.badge ?? props.entry.annotation}

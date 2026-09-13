@@ -65,7 +65,9 @@ describe('content-first mobile rows', () => {
       { id: 'second', title: 'Repeated song', artist: 'Artist', onMove: move, canMoveUp: true,
         menu: () => [{ label: 'Remove', onSelect: secondRemove }] },
     ] }]} />);
-    fireEvent.click(screen.getAllByRole('button', { name: 'songRow.ariaMore: Repeated song' })[1]);
+    // A panel row draws no ⋯; the menu answers a right-click, a hold and the
+    // menu key against the same handler.
+    fireEvent.contextMenu(screen.getAllByRole('button', { name: /Repeated song/ })[1]);
     const options = menu.open.mock.calls[0][0];
     options.actions.find((action: { label: string }) => action.label === 'Remove').onSelect();
     expect(secondRemove).toHaveBeenCalledOnce(); expect(firstRemove).not.toHaveBeenCalled();
@@ -87,7 +89,7 @@ describe('content-first mobile rows', () => {
         }),
       })),
     }]} />);
-    fireEvent.click(screen.getByRole('button', { name: 'songRow.ariaMore: b' }));
+    fireEvent.contextMenu(screen.getByRole('button', { name: /^b/ }));
     menu.open.mock.calls[0][0].actions[0].onSelect();
     fireEvent.click(screen.getByRole('button', { name: 'musicList.moveUp' }));
     await Promise.resolve();

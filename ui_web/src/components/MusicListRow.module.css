@@ -73,12 +73,18 @@
   color: var(--ink-secondary);
   cursor: pointer;
 }
+/* A named action, not a paragraph. The cap is a backstop for the source names
+   the reference mode puts here; the ordinary labels are verbs and never reach
+   it. Whatever sits here, the song keeps most of its own row. */
 .primary {
-  flex: none;
+  flex: 0 1 auto;
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
   height: max(44px, var(--control-h, 44px));
-  padding-inline: 12px;
+  padding-inline: 8px;
   background: transparent;
   border: 1px solid var(--hairline-soft);
   border-radius: var(--radius-full);

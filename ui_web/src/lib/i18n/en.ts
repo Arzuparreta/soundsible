@@ -12,6 +12,7 @@ export const en = {
     explore: 'Explore',
     request: 'Add to session',
     requestAll: 'Add to session',
+    requestShort: 'Add',
     reference: 'Mix into session',
     references: 'Session',
     referenceHint: 'Music that guides the DJ’s next selections.',

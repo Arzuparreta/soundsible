@@ -40,6 +40,11 @@ export interface MusicListRowProps {
   disabled?: boolean;
   onActivate?: () => void;
   onMenu?: (event?: MouseEvent) => void;
+  /** Reach the menu by holding the row, right-clicking it or pressing the menu
+   * key — but draw no button for it. In the shell's panels a 44px control is a
+   * quarter of the line, and it was buying a second way to open a menu the row
+   * already opens. The name and the artist are worth more than that. */
+  menuOnHold?: boolean;
   /** Visible controls are reserved for explicit edit/placement mode. */
   editing?: boolean;
   editControls?: JSX.Element;
@@ -118,7 +123,7 @@ export function MusicListRow(props: MusicListRowProps) {
           aria-disabled={props.disabled || busy() || undefined}
           {...primaryTap}>{action().label}</button>
       )}</Show>
-      <Show when={props.editing && props.editControls} fallback={<Show when={props.onMenu}>
+      <Show when={props.editing && props.editControls} fallback={<Show when={props.onMenu && !props.menuOnHold}>
         <button class={styles.menu} type="button" data-row-menu data-pressable
           aria-label={`${t('songRow.ariaMore')}: ${props.title}`} aria-haspopup="dialog" {...menuTap}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
