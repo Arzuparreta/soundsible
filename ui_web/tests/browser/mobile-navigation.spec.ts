@@ -46,7 +46,8 @@ test('drawer closes on Back and Escape and restores focus', async ({ page }) => 
 test('custom bar persists and settings remain accessible after removal', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Navegación principal' });
   await nav.getByRole('link', { name: 'Ajustes' }).click();
-  await page.getByRole('button', { name: /Apariencia/ }).click();
+  await page.getByRole('button', { name: /Accesibilidad/ }).click();
+  await page.locator('summary').filter({ hasText: 'Barra inferior' }).click();
   await expect(page.getByLabel('Posición 2')).toHaveValue('/search');
   await page.getByLabel('Posición 4').selectOption('/live');
   await expect(page.getByLabel('Posición 4')).toHaveValue('/live');
@@ -58,7 +59,8 @@ test('custom bar persists and settings remain accessible after removal', async (
   await nav.getByRole('link', { name: 'Biblioteca' }).click();
   await page.getByRole('button', { name: 'Menú', exact: true }).click();
   await page.getByRole('dialog').getByRole('link', { name: 'Ajustes' }).click();
-  await page.getByRole('button', { name: /Apariencia/ }).click();
+  await page.getByRole('button', { name: /Accesibilidad/ }).click();
+  await page.locator('summary').filter({ hasText: 'Barra inferior' }).click();
   await page.getByRole('button', { name: 'Restablecer predeterminados' }).click();
   await expect(nav.getByRole('link')).toHaveCount(4);
   await expect(nav.getByRole('link', { name: 'Ajustes' })).toBeVisible();
@@ -98,7 +100,8 @@ test('drawer traps focus and yields to desktop navigation on resize', async ({ p
 
 test('five custom destinations fit a narrow viewport and preserve order', async ({ page }) => {
   await page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }).click();
-  await page.getByRole('button', { name: /Apariencia/ }).click();
+  await page.getByRole('button', { name: /Accesibilidad/ }).click();
+  await page.locator('summary').filter({ hasText: 'Barra inferior' }).click();
   await page.getByRole('button', { name: 'Añadir destino' }).click();
   await page.getByLabel('Posición 1').selectOption('/settings');
   await expect(page.getByLabel('Posición 4')).toHaveValue('/');

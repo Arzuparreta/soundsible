@@ -11,3 +11,40 @@
 .editor button { cursor: pointer; }
 .editor button:disabled { opacity: .4; cursor: default; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+
+.disclosure {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.disclosure summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.disclosure summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure summary:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -3px;
+}
+.disclosure[open] summary svg {
+  transform: rotate(90deg);
+}
+.disclosure .editor {
+  padding: 16px;
+}
+.note {
+  margin: 0;
+  padding: 0 16px;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+}

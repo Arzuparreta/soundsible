@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { themeBootScript } from '../boot/plugin';
+import { THEME_COLORS } from '../boot/themes';
+import type { ResolvedTheme } from './core';
+
 type Listener = (event: MediaQueryListEvent) => void;
 
 /** Controllable prefers-color-scheme stub — jsdom ships no matchMedia at all. */
@@ -100,5 +104,51 @@ describe('system theme', () => {
 
     os.set(false);
     expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+});
+
+
+describe('additional themes', () => {
+  it.each([['slate', '#252d38'], ['pure-black', '#000000']] as const)('applies %s before the app boots', (theme, color) => {
+    installMatchMedia(false);
+    localStorage.setItem('theme', theme);
+    new Function(themeBootScript())();
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(color);
+  });
+  it.each([['slate', '#252d38'], ['pure-black', '#000000']] as const)('persists %s independently of the OS', async (theme, color) => {
+    const os = installMatchMedia(false);
+    const { actions, state, applyTheme } = await loadTheme(theme);
+    expect(state.theme).toBe(theme);
+    applyTheme(state.theme);
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(color);
+    os.set(true);
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    actions.setTheme('system');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    actions.setTheme(theme);
+    expect(localStorage.getItem('theme')).toBe(theme);
+    expect(os.listenerCount()).toBe(0);
+  });
+});
+
+describe('pre-paint boot script', () => {
+  // One palette table, stamped from two sides of hydration: the inline script
+  // before first paint and the store once Solid mounts. A theme that reaches
+  // only one of them is a status bar that changes colour a beat after launch.
+  it.each(Object.keys(THEME_COLORS) as ResolvedTheme[])('agrees with the running app on %s', async theme => {
+    installMatchMedia(false);
+    localStorage.setItem('theme', theme);
+
+    new Function(themeBootScript())();
+    const booted = document.querySelector('meta[name="theme-color"]')?.getAttribute('content');
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    expect(booted).toBe(THEME_COLORS[theme]);
+
+    const { applyTheme } = await loadTheme(theme);
+    applyTheme(theme);
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(booted);
   });
 });

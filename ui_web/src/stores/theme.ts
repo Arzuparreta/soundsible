@@ -6,6 +6,7 @@
  * else — which is why it is the first domain to leave `index.ts`.
  */
 
+import { THEME_COLORS } from '../boot/themes';
 import { state } from './core';
 import type { ResolvedTheme, Theme } from './core';
 
@@ -14,7 +15,7 @@ export function systemPrefersDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-/** Resolve a stored preference to the concrete dark/light tokens to apply. */
+/** Resolve a stored preference to the concrete palette tokens to apply. */
 export function resolveTheme(theme: Theme): ResolvedTheme {
   if (theme === 'system') return systemPrefersDark() ? 'dark' : 'light';
   return theme;
@@ -93,7 +94,7 @@ function applyResolvedTheme(resolved: ResolvedTheme, animate = false): void {
 
   root.dataset.theme = resolved;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', resolved === 'light' ? '#f6f6f7' : '#0c0c0e');
+  if (meta) meta.setAttribute('content', THEME_COLORS[resolved]);
 }
 
 /** Apply the theme to the document (token overrides live in tokens.css) and

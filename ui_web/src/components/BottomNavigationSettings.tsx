@@ -2,7 +2,7 @@ import { For, Index, Show } from 'solid-js';
 import { t } from '../lib/i18n';
 import { bottomNavigation, setBottomNavigation } from '../lib/bottomNavigation';
 import { defaultBottomNavigation, navigationItems } from './primaryNavigation';
-import { SettingsGroup } from './SettingsRows';
+import { Chevron } from './SettingsRows';
 import styles from './BottomNavigationSettings.module.css';
 
 export function BottomNavigationSettings() {
@@ -13,7 +13,9 @@ export function BottomNavigationSettings() {
     next[index] = href;
     setBottomNavigation(next);
   };
-  return <SettingsGroup label={t('nav.bottomBar')} note={t('nav.bottomBarHint')}>
+  return <details class={styles.disclosure}>
+    <summary>{t('nav.bottomBar')}<Chevron /></summary>
+    <p class={styles.note}>{t('nav.bottomBarHint')}</p>
     <div class={styles.editor}>
       <div class={styles.preview} aria-hidden="true"><For each={bottomNavigation()}>{href => {
         const item = navigationItems.find(item => item.href === href)!;
@@ -33,5 +35,5 @@ export function BottomNavigationSettings() {
         <button type="button" onClick={() => setBottomNavigation([...defaultBottomNavigation])}>{t('nav.restoreDefaults')}</button>
       </div>
     </div>
-  </SettingsGroup>;
+  </details>;
 }

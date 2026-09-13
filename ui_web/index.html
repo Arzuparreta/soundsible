@@ -16,25 +16,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Soundsible" />
     <title>Soundsible</title>
-    <!-- Apply stored theme before paint (incl. system → prefers-color-scheme). -->
-    <script>
-      (function () {
-        try {
-          var stored = localStorage.getItem('theme');
-          var preference =
-            stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
-          var resolved =
-            preference === 'system'
-              ? window.matchMedia('(prefers-color-scheme: dark)').matches
-                ? 'dark'
-                : 'light'
-              : preference;
-          document.documentElement.dataset.theme = resolved;
-          var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', resolved === 'light' ? '#f6f6f7' : '#0c0c0e');
-        } catch (e) {}
-      })();
-    </script>
+    <!-- Applies the stored theme before paint (incl. system → prefers-color-scheme).
+         Injected by the boot plugin from src/boot/theme.js, so the palette it
+         stamps is the same table the running app uses. -->
+    <!-- soundsible:boot-theme -->
     <!-- soundsible:boot-head -->
   </head>
   <body>

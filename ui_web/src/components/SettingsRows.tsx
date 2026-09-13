@@ -186,7 +186,7 @@ export function SegmentedRow<T extends string>(props: {
   label: string;
   hint?: string;
   options: SegmentOption<T>[];
-  value: T;
+  value: T | undefined;
   onChange: (value: T) => void;
 }) {
   return (

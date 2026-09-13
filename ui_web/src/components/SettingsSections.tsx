@@ -204,7 +204,7 @@ function themeLabel(theme: (typeof THEMES)[number]): string {
 
 function AppearanceSection() {
   return (
-    <><SettingsGroup label={t('settings.appearance')} note={t('settings.note.theme')}>
+    <SettingsGroup label={t('settings.appearance')} note={t('settings.note.theme')}>
       <SegmentedRow
         label={t('settings.theme')}
         options={THEMES.map((theme) => ({
@@ -212,9 +212,20 @@ function AppearanceSection() {
           icon: themeIcon(theme),
           aria: themeLabel(theme),
         }))}
-        value={state.theme as (typeof THEMES)[number]}
+        value={THEMES.find(theme => theme === state.theme)}
         onChange={(theme) => actions.setTheme(theme)}
       />
+      <SelectRow
+        label={t('settings.otherThemes')}
+        value={state.theme === 'slate' || state.theme === 'pure-black' ? state.theme : ''}
+        onChange={(value) => {
+          if (value === 'slate' || value === 'pure-black') actions.setTheme(value);
+        }}
+      >
+        <option value="" disabled>{t('settings.selectTheme')}</option>
+        <option value="slate">{t('settings.themeSlate')}</option>
+        <option value="pure-black">{t('settings.themePureBlack')}</option>
+      </SelectRow>
       <SelectRow
         label={t('settings.language')}
         value={locale()}
@@ -222,7 +233,7 @@ function AppearanceSection() {
       >
         <For each={LOCALES}>{(l) => <option value={l.code}>{l.native}</option>}</For>
       </SelectRow>
-    </SettingsGroup><BottomNavigationSettings /></>
+    </SettingsGroup>
   );
 }
 
@@ -234,6 +245,7 @@ function AccessibilitySection() {
       <SettingsGroup label={t('accessibility.title')} note={t('accessibility.intro')} plain>
         <DisplayPreferences />
       </SettingsGroup>
+      <BottomNavigationSettings />
       <SettingsGroup label={t('settings.group.feedback')} note={t('settings.note.haptics')}>
         <SwitchRow
           label={t('settings.haptics')}
@@ -729,7 +741,9 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       t('settings.themeLight'),
       t('settings.themeSystem'),
       t('settings.language'),
-      t('nav.bottomBar'),
+      t('settings.otherThemes'),
+      t('settings.themeSlate'),
+      t('settings.themePureBlack'),
     ],
     content: () => <AppearanceSection />,
   },
@@ -746,6 +760,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         </>,
       ),
     keywords: () => [
+      t('nav.bottomBar'),
       t('accessibility.interfaceSize'),
       t('accessibility.highContrast'),
       t('settings.haptics'),

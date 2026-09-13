@@ -1,7 +1,17 @@
 import { readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 
+import { THEME_COLORS, THEMES } from './themes';
+
 const read = (name: string) => readFileSync(new URL(name, import.meta.url), 'utf8');
+
+/** The pre-paint theme script, with the one palette table inlined into it.
+ *  Exported so the store's tests can run the very script the page gets. */
+export function themeBootScript(): string {
+  return read('./theme.js')
+    .replace('__THEMES__', JSON.stringify(THEMES))
+    .replace('__THEME_COLORS__', JSON.stringify(THEME_COLORS));
+}
 
 /** Inline the tiny launch surface in both dev and production. It must not need
  * another request, the Solid runtime, or a locale chunk to paint. Keep these
@@ -26,11 +36,16 @@ export function startupScreen(): Plugin {
           return `${preload}\n${deferred}`;
         });
 
+        const themeBackgrounds = Object.entries(THEME_COLORS)
+          .map(([theme, background]) =>
+            `html[data-booting][data-theme='${theme}'], html[data-booting][data-theme='${theme}'] body { background: ${background}; }`)
+          .join('\n');
         const logo = Buffer.from(read('../../../branding/logo-mark.svg')).toString('base64');
         const script = read('./startup.js').replace('__BOOT_STYLE_COUNT__', String(styles));
         return html
+          .replace('<!-- soundsible:boot-theme -->', `<script>${themeBootScript()}</script>`)
           .replace('<!-- soundsible:boot-head -->',
-            `<style>${read('./startup.css')}</style>\n<script>${script}</script>`)
+            `<style>${read('./startup.css').replace('/* __THEME_BACKGROUNDS__ */', themeBackgrounds)}</style>\n<script>${script}</script>`)
           .replace('<!-- soundsible:boot-screen -->',
             read('./startup.html').replace('__BOOT_LOGO__', `data:image/svg+xml;base64,${logo}`));
       },

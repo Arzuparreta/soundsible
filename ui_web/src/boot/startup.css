@@ -4,11 +4,11 @@ html[data-booting], html[data-booting] body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #0c0c0e;
 }
-html[data-booting][data-theme='light'], html[data-booting][data-theme='light'] body {
-  background: #f6f6f7;
-}
+/* One rule per palette, written in by the boot plugin from the same table the
+   status bar and the app read. <html> always carries a data-theme: the document
+   ships with one and the pre-paint script rewrites it. */
+/* __THEME_BACKGROUNDS__ */
 html[data-booting] #app { visibility: hidden; }
 #startup-screen {
   --startup-bg: #0c0c0e;
@@ -93,3 +93,7 @@ html[data-booting] #app { visibility: hidden; }
 @media (forced-colors: active) {
   #startup-screen .startup-waves span { background: CanvasText; }
 }
+
+[data-theme='slate'] #startup-screen { --startup-bg: #252d38; --startup-muted: #d3dbe5; }
+/* Flat, not the orange wash the other palettes get: nothing glows on the OLED theme. */
+[data-theme='pure-black'] #startup-screen { --startup-bg: #000000; --startup-muted: #d6d6d6; background: var(--startup-bg); }

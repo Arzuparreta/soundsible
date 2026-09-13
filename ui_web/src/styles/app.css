@@ -35,7 +35,7 @@ body {
 
 ::selection {
   color: var(--ink-primary);
-  background: var(--accent-glow);
+  background: var(--selection-bg);
 }
 
 /* Only hidden pages park decorative motion. A visible player on another
