@@ -6,6 +6,7 @@
  * else — which is why it is the first domain to leave `index.ts`.
  */
 
+import { THEME_COLORS } from '../boot/themes';
 import { state } from './core';
 import type { ResolvedTheme, Theme } from './core';
 
@@ -93,7 +94,7 @@ function applyResolvedTheme(resolved: ResolvedTheme, animate = false): void {
 
   root.dataset.theme = resolved;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', ({ light: '#f6f6f7', dark: '#0c0c0e', slate: '#252d38', 'pure-black': '#000000' })[resolved]);
+  if (meta) meta.setAttribute('content', THEME_COLORS[resolved]);
 }
 
 /** Apply the theme to the document (token overrides live in tokens.css) and
