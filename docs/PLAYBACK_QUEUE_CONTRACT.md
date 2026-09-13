@@ -68,24 +68,26 @@ continuation. Reordering cannot cross lane or generator boundaries.
   make a route longer; filler never is. A repair answering for a route that has
   since changed is discarded rather than applied, and one that came back missing
   a user occurrence is refused outright.
-- Requests with `source_policy: explicit` use active influences as the roots for
-  planning and bridge retrieval. `heard` excludes repetitions; `seed` anchors
-  the audio transition. Neither silently changes musical direction. Older
-  clients without the field retain their previous planning contract.
-- A source walk is finite and the client excludes everything it already holds,
-  so an influence pool does run out. When it can no longer fill the requested
-  route — or leaves a seam with no bridge material — recently heard music is
-  walked as a fallback retrieval root, weighted below every influence and
-  reported as `degraded`. It never becomes a visible influence and never
-  reorders what the listener chose. A session must not go quiet because its
-  pool is empty.
-- A session change prepares a replacement before committing it. New selections
-  invalidate older catalogue work and plans. Failed preparation retains the
-  previous direction and route. A moving playback anchor causes replanning.
-  Preserved requests receive cues for their actual new neighbours, with safe
-  fades until live-pair refinement is available.
-- Snapshots persist `sourcePolicy` and the active influences. Legacy snapshots
-  without influences use the current track, then the last heard track as fallback.
+- Requests with `source_policy: explicit` walk active influences and the separate
+  `exploration` context on every plan and bridge lookup. `heard` serves repeat
+  avoidance; `seed` anchors the transition. Legacy non-explicit clients keep
+  their heard-context behaviour.
+- Exploration contains at most four automatic songs that started playing in
+  the current `directionRevision`. Pending recommendations, exact requests and
+  bridges never become roots merely by being queued or heard.
+- **Mix with…** retains exploration. **Change…** prepares with empty exploration
+  and the next direction revision while existing playback and refills continue.
+  It commits influences, revision, exploration and replacement route together,
+  invalidating old planner writes. Failures preserve the previous direction.
+  A moving playback anchor causes bounded replanning. Audible blends finish;
+  preserved requests receive cues for their actual neighbours.
+- Empty plans identify `empty_reason` as `temporary_failure` or `exhausted`.
+  Temporary failures retry with backoff. Exhaustion and entirely duplicate
+  plans stop retrying identical inputs, including automatic runway checks.
+  Changed planning inputs or an explicit Retry permit a new attempt.
+- Snapshots persist influences, exploration and direction revision. Legacy
+  snapshots without influences use the current track, then the last heard track.
+  Missing exploration starts empty; unproven historical tracks are not promoted.
 - Leaving DJ discards generated branches and bridges. User route occurrences
   survive as ordinary manual queue entries.
 - **The committed handoff** is the one upcoming entry DJ has already

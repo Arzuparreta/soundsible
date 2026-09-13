@@ -92,13 +92,37 @@ finishes and the most recent selection is mixed next.
 | **Radio** | Endless music related to one seed | Start or stop the generated stream |
 | **DJ** | A continuous set with deliberate transitions | Session influences, route, exact requests, and transitions |
 
-DJ recommendations come from the active session influences. Previously heard
-music helps avoid repetitions; it does not become an influence automatically.
-When the influences run out of unheard material, DJ falls back to searching
-around what has recently played rather than stopping — as a last resort, never
-as a new direction, and never as an entry in **Session**. DJ also considers
-whether tracks can form a credible transition and performs that transition in
-the browser's two-deck audio engine.
+DJ explores the active influences together with the last four automatic songs
+that actually started playing in the current direction. A pending recommendation
+is not a discovery root. Exact requests and bridges do not become roots just
+because they played. **Mix with…** retains this exploration; **Change…** clears
+it when the new direction is committed, without promoting the outgoing song.
+These discovery roots do not appear as additional influences in **Session**.
+
+Changing direction prepares a replacement while the existing session continues
+playing and refilling. The new influences, exploration revision and automatic
+route take effect together. Failed preparation retains the previous session.
+
+If a provider request fails temporarily, DJ retries with increasing delays. If
+no new candidates remain, DJ stops repeating the same search and offers **Retry**.
+New influences, exploration roots or exclusions make planning eligible again.
+Existing playable route entries continue normally in either case.
+
+Session snapshots preserve exploration separately from repeat history. Older
+snapshots keep their queue and requests, but history without reliable direction
+provenance is not promoted to exploration.
+
+### Continuity validation
+
+A deterministic regression exercises thirty successive routes with overlapping
+recommendation neighbourhoods, plus independent tests for direction changes,
+request isolation, interrupted preparation and exhausted-input retry behaviour.
+A read-only local replay across 204 library tracks and cached related results
+produced 1,090 route extensions with both the repaired selector and the baseline
+at `2b5a365`, compared with 972 at `34d95f1`. Four tracks had no initial route in
+all three runs. Missing cache entries were treated as empty; no live provider
+requests or audio playback were performed. This checks selection continuity,
+not audible transition quality or physical-device playback.
 
 ## Broadcast the result
 

@@ -288,7 +288,8 @@ export const zh: Dict = {
       preparingWhilePlaying: '歌曲会继续播放，DJ 正在衔接后续曲目。',
       preparingHint: '混音准备好后，路线会显示在这里。',
       retrying: '正在寻找另一条路线',
-      retryingHint: 'DJ 会继续尝试，直到找到合适的混音衔接。',
+      exhausted: '没有可用于继续此会话的新歌曲。',
+      retryingHint: '搜索未能完成。DJ 将重试。',
     },
     workspace: {
       aria: 'DJ 面板',

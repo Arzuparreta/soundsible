@@ -171,7 +171,9 @@ export function AutoMode(props: {
   const routeEmpty = () => (
     <Show
       when={routeWaiting()}
-      fallback={state.autoMode.sources.length ? t('autoMode.mobile.routeEmpty') : t('autoMode.source.routeEmpty')}
+      fallback={state.autoMode.phase === 'exhausted'
+        ? <div role="status"><p>{t('autoMode.route.exhausted')}</p><button type="button" onClick={() => actions.retryAutoRoute()}>{t('common.retry')}</button></div>
+        : state.autoMode.sources.length ? t('autoMode.mobile.routeEmpty') : t('autoMode.source.routeEmpty')}
     >
       <div
         class={styles.routeLoading}

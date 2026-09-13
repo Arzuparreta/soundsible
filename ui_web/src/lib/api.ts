@@ -286,6 +286,8 @@ export interface ListeningPlanResponse {
   seed_identity: string;
   items: ListeningPlanItem[];
   degraded: boolean;
+  empty_reason?: 'exhausted' | 'temporary_failure' | null;
+  direction_revision?: number;
   pool_counts: Record<'local' | 'related' | 'discovery', number>;
   generated_at: number;
   session_id?: string | null;
@@ -1050,6 +1052,8 @@ export const api = {
         duration?: number;
       };
       source_policy?: 'explicit';
+      exploration?: Track[];
+      direction_revision?: number;
       sources?: DjMusicSetSource[];
       heard?: Track[];
       exclude?: string[];
@@ -1074,6 +1078,8 @@ export const api = {
       requested_queue_id: string;
       before_queue_id?: string;
       source_policy?: 'explicit';
+      exploration?: Track[];
+      direction_revision?: number;
       sources?: DjMusicSetSource[];
       heard?: Track[];
       exclude?: string[];
@@ -1089,6 +1095,8 @@ export const api = {
     body: {
       dj_profile: DjProfile; seed: DjItemRef; route: DjRouteRef[];
       source_policy?: 'explicit';
+      exploration?: Track[];
+      direction_revision?: number;
       before_queue_id?: string; sources?: DjMusicSetSource[]; heard?: Track[]; exclude?: string[];
       requests: Array<{ track: Track; requested_queue_id: string }>;
     },
@@ -1104,6 +1112,8 @@ export const api = {
       seed: DjItemRef;
       route: DjRouteRef[];
       source_policy?: 'explicit';
+      exploration?: Track[];
+      direction_revision?: number;
       sources?: DjMusicSetSource[];
       heard?: Track[];
       exclude?: string[];

@@ -288,7 +288,8 @@ export const en = {
       preparingWhilePlaying: 'The track keeps playing while the DJ fits what comes next.',
       preparingHint: 'The route will appear here as soon as the mix is ready.',
       retrying: 'Looking for another route',
-      retryingHint: 'The DJ will keep trying until it finds a mix that fits.',
+      exhausted: 'No new tracks are available to continue this session.',
+      retryingHint: 'The search could not complete. The DJ will try again.',
     },
     workspace: {
       aria: 'DJ panels',

@@ -52,6 +52,8 @@ export interface PlaybackSessionAuto {
   sourcePolicy?: 'explicit';
   sources: AutoMusicSet[];
   heard: Track[];
+  exploration?: Track[];
+  directionRevision?: number;
   avoidedIdentities: string[];
   plan: Record<string, AutoPlanItem>;
   staleSeams: string[];
@@ -180,6 +182,8 @@ export function buildPlaybackSession(input: PlaybackSessionInput): PlaybackSessi
           sourcePolicy: 'explicit',
           sources: sources(auto.sources),
           heard: auto.heard.slice(-MAX_HEARD),
+          exploration: (auto.exploration ?? []).slice(-4),
+          directionRevision: auto.directionRevision ?? 0,
           avoidedIdentities: auto.avoidedIdentities.slice(-MAX_AVOIDED),
           plan: planFor(auto.plan, queueIds),
           staleSeams: auto.staleSeams.filter((queueId) => queueIds.has(queueId)),
@@ -244,6 +248,8 @@ export function readPlaybackSession(value: unknown): PlaybackSessionSnapshot | n
             return seed ? [{ id: `initial:${seed.id}`, label: seed.title, tracks: [seed], activation: 1 }] : [];
           })(),
           heard: trackList(rawAuto.heard, MAX_HEARD),
+          exploration: trackList(rawAuto.exploration, 4),
+          directionRevision: Number.isSafeInteger(rawAuto.directionRevision) && Number(rawAuto.directionRevision) >= 0 ? Number(rawAuto.directionRevision) : 0,
           avoidedIdentities: stringList(rawAuto.avoidedIdentities, MAX_AVOIDED),
           plan: readPlan(rawAuto.plan, queueIds),
           staleSeams: stringList(rawAuto.staleSeams, queue.length).filter((id) => queueIds.has(id)),

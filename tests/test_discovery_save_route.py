@@ -1452,8 +1452,7 @@ def test_explicit_dj_direction_never_uses_heard_requests_as_graph_roots(tmp_path
 
     A song the listener requested sounds, and so joins `heard`. It must not
     thereby steer the set: ask for one house track in a rock session and the
-    rock session stays. Recent listening only comes back as a root once the
-    influence pool can no longer fill a route at all — covered separately below.
+    rock session stays. Only confirmed automatic playback opens new roots.
     """
     _make_runtime(tmp_path)
     mock_api = _mock_api()
@@ -1481,7 +1480,7 @@ def test_explicit_dj_direction_never_uses_heard_requests_as_graph_roots(tmp_path
         assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens"]
 
 
-def test_explicit_dj_route_falls_back_to_heard_once_the_influence_pool_is_spent(tmp_path):
+def test_explicit_dj_route_continues_from_confirmed_exploration(tmp_path):
     """An exhausted pool continues the set instead of returning nothing.
 
     A source walk is finite and the client excludes everything it already holds,
@@ -1510,7 +1509,7 @@ def test_explicit_dj_route_falls_back_to_heard_once_the_influence_pool_is_spent(
         ) as graph,
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
-            "source_policy": "explicit", "seed": heard, "sources": [source], "heard": [heard],
+            "source_policy": "explicit", "seed": heard, "sources": [source], "heard": [heard], "exploration": [heard],
             # Everything the influence could reach is already queued.
             "exclude": ["music:track:oliver"],
         })
@@ -1519,12 +1518,12 @@ def test_explicit_dj_route_falls_back_to_heard_once_the_influence_pool_is_spent(
     assert graph.call_count == 2
     assert [row["artist"] for row in graph.call_args_list[1].args[1]] == ["Extremoduro"]
     assert [item["recommendation_identity"] for item in body["items"]] == ["music:track:rescue"]
-    # Recovered material is declared: it sounds, but the pool was not healthy.
-    assert body["degraded"] is True
+    # Exploration is an ordinary healthy source of continuation.
+    assert body["degraded"] is False
     assert body["items"][0]["source_weight"] == 0.3
 
 
-def test_explicit_dj_bridges_fall_back_to_heard_when_the_influence_walk_is_empty(tmp_path):
+def test_explicit_dj_bridges_use_sources_and_confirmed_exploration(tmp_path):
     """A seam with no bridge material is a raw cut, so heard music may bridge it."""
     _make_runtime(tmp_path)
     heard = {"id": "rock", "track_id": "rock", "title": "Rock", "artist": "Extremoduro"}
@@ -1535,14 +1534,14 @@ def test_explicit_dj_bridges_fall_back_to_heard_when_the_influence_walk_is_empty
         "id": "seam", "track_id": "seam", "title": "Seam", "artist": "Extremoduro",
         "source": "library", "source_pool": "local", "recommendation_identity": "music:track:seam",
     }]
-    body = {"source_policy": "explicit", "sources": [source], "heard": [heard]}
+    body = {"source_policy": "explicit", "sources": [source], "heard": [heard], "exploration": [heard]}
     with patch.object(
         _auto_mode, "_planner_context_related",
-        side_effect=[([], False), (bridge, False)],
+        return_value=(bridge, False),
     ) as graph:
         candidates = _auto_mode._dj_place_bridge_pool(None, body, set())
-    assert graph.call_count == 2
-    assert [row["artist"] for row in graph.call_args_list[1].args[1]] == ["Extremoduro"]
+    assert graph.call_count == 1
+    assert [row["artist"] for row in graph.call_args.args[1]] == ["Oliver Heldens", "Extremoduro"]
     assert [item["recommendation_identity"] for item, _ in candidates] == ["music:track:seam"]
 
 
@@ -1600,11 +1599,94 @@ def test_explicit_dj_mix_keeps_both_sources_but_excludes_heard_music(tmp_path):
             "sources": [{"id": "rock", "tracks": [rock]}, {"id": "house", "tracks": [house]}],
         })
     assert response.status_code == 200
-    # Both influences are walked; the heard one is still excluded from the route
-    # even though it is also a source. Two single tracks that reach nothing else
-    # cannot fill a route of eight, so the heard fallback is tried as well — and
-    # here it reaches nothing either, which is a short route, not a silent one.
-    assert graph.call_count == 3
+    # Both influences are walked; unrelated heard requests never become roots.
+    assert graph.call_count == 2
     assert {call.args[1][0]["artist"] for call in graph.call_args_list[:2]} == {"Extremoduro", "Oliver Heldens"}
-    assert [row["artist"] for row in graph.call_args_list[2].args[1]] == ["Extremoduro"]
     assert [item["id"] for item in response.get_json()["items"]] == ["house"]
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_dj_empty_result_distinguishes_exhaustion_from_provider_failure(tmp_path, failed):
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    track = {"id": "one", "title": "One", "artist": "Artist"}
+    with patch.object(_auto_mode, "_get_api", return_value=api), patch.object(
+        _auto_mode, "_planner_context_related", return_value=([], failed),
+    ):
+        body, status = _auto_mode._build_music_set_route({
+            "seed": track, "sources": [{"tracks": [track]}], "source_policy": "explicit",
+            "exclude": ["music:track:one"], "exploration": [], "direction_revision": 4,
+        })
+    assert status == 200
+    assert body["items"] == []
+    assert body["empty_reason"] == ("temporary_failure" if failed else "exhausted")
+    assert body["direction_revision"] == 4
+
+
+def test_dj_explores_even_before_sources_run_out_and_continues_thirty_routes(tmp_path):
+    """Differential regression: the old explicit policy skips the moving roots
+    whenever eight static candidates survive, eventually draining its graph.
+    Every provider result here overlaps the existing queue except its next hop.
+    """
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+
+    def track(number):
+        return {"id": f"t{number}", "track_id": f"t{number}", "title": f"Track {number}",
+                "artist": "Session artist", "source": "library", "source_pool": "local",
+                "recommendation_identity": f"music:track:t{number}"}
+
+    def graph(_metadata, roots, **_kwargs):
+        rows = {row["id"]: row for root in roots
+                for row in [track(0), track(int(root["id"][1:]) + 1)]}
+        return list(rows.values()), False
+
+    data = {"seed": track(0), "sources": [{"id": "source", "tracks": [track(0)]}],
+            "source_policy": "explicit", "heard": [track(0)], "exploration": [],
+            "exclude": ["music:track:t0"], "session_id": "continuity"}
+    with patch.object(_auto_mode, "_get_api", return_value=api), patch.object(
+        _auto_mode, "_planner_context_related", side_effect=graph,
+    ) as walk:
+        for segment in range(30):
+            data["segment_index"] = segment
+            body, status = _auto_mode._build_music_set_route(data)
+            assert status == 200
+            assert body["items"], segment
+            played = body["items"][-1]
+            data["seed"] = played
+            data["heard"] = [*data["heard"], played][-40:]
+            data["exploration"] = [*data["exploration"], played][-4:]
+            data["exclude"].extend(row["recommendation_identity"] for row in body["items"])
+        # With a full influence pool the moving roots must still be queried.
+        walk.reset_mock()
+        walk.side_effect = None
+        walk.return_value = (_house_related(), False)
+        _auto_mode._build_music_set_route({**data, "exclude": []})
+        assert walk.call_count == 2
+
+
+def test_partial_graph_failure_is_not_reported_as_exhaustion(tmp_path):
+    """An empty cached neighbour must not hide another root's provider failure."""
+    from concurrent.futures import Future
+
+    _make_runtime(tmp_path)
+    failed = Future()
+    failed.set_exception(RuntimeError('provider unavailable'))
+    database = MagicMock()
+    database.get_related_mixes.return_value = {'cached': []}
+    with (
+        patch.object(_auto_mode, 'instance_db', return_value=database),
+        patch.object(_auto_mode, '_planner_video_id', side_effect=lambda _, row: row['id']),
+        patch.object(_auto_mode._PLAN_RESOLVE_EXECUTOR, 'submit', return_value=failed),
+    ):
+        items, degraded = _auto_mode._planner_context_related(
+            None, [{'id': 'cached'}, {'id': 'uncached'}], personalise=False,
+        )
+    assert items == []
+    assert degraded is True

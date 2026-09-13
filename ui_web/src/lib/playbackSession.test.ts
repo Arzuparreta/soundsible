@@ -93,6 +93,8 @@ describe('playback session snapshots', () => {
     expect(snapshot.mode).toBe('auto');
     expect(snapshot.auto).toEqual({
       sourcePolicy: 'explicit',
+      exploration: [],
+      directionRevision: 0,
       profile: 'explore',
       djProfile: 'long_blend',
       direction: auto.direction,
@@ -195,6 +197,8 @@ describe('playback session snapshots', () => {
 
     expect(restored.auto).toEqual({
       sourcePolicy: 'explicit',
+      exploration: [],
+      directionRevision: 0,
       profile: 'balanced',
       djProfile: 'adaptive',
       direction: { energy: 0, familiarity: 0, prompt: '', include: [], exclude: [] },
@@ -219,4 +223,19 @@ describe('session direction persistence', () => {
     expect(restored.auto?.sources).toEqual([chosen]);
     expect(restored.auto?.heard.map((row) => row.id)).toEqual(['rock', 'requested-rock']);
   });
+});
+
+
+it('persists the direction and exploration without promoting legacy heard requests', () => {
+  const snapshot = buildPlaybackSession(input({ auto: autoSession({ exploration: [track('automatic')], directionRevision: 7 }) }))!;
+  const restored = readPlaybackSession(JSON.parse(JSON.stringify(snapshot)))!;
+  expect(restored.auto?.exploration?.map((row) => row.id)).toEqual(['automatic']);
+  expect(restored.auto?.directionRevision).toBe(7);
+  const legacy = JSON.parse(JSON.stringify(snapshot));
+  delete legacy.auto.exploration;
+  delete legacy.auto.directionRevision;
+  const migrated = readPlaybackSession(legacy)!;
+  expect(migrated.auto?.exploration).toEqual([]);
+  expect(migrated.auto?.heard).toEqual(snapshot.auto?.heard);
+  expect(migrated.queue).toEqual(snapshot.queue);
 });

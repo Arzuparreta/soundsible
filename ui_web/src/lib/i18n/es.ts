@@ -288,7 +288,8 @@ export const es: Dict = {
       preparingWhilePlaying: 'La canción sigue sonando mientras el DJ encaja lo siguiente.',
       preparingHint: 'La ruta aparecerá aquí en cuanto la mezcla esté lista.',
       retrying: 'Buscando otra ruta',
-      retryingHint: 'El DJ volverá a intentarlo hasta encontrar una mezcla que encaje.',
+      exhausted: 'No hay canciones nuevas disponibles para continuar esta sesión.',
+      retryingHint: 'No se pudo completar la búsqueda. El DJ volverá a intentarlo.',
     },
     workspace: {
       aria: 'Paneles de DJ',

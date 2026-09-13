@@ -67,6 +67,7 @@ function harness() {
     identity: (track) => track.youtube_id || track.id,
   };
   return {
+    deps,
     controller: new GeneratedQueueController(deps),
     requestPlan,
     applyPlan,
@@ -170,7 +171,7 @@ describe('GeneratedQueueController', () => {
     h.applyPlan.mockReturnValueOnce(0);
     await h.controller.replan('balanced');
     const rejected = h.requestPlan.mock.calls[1][6]!;
-    await h.controller.replan('balanced');
+    await h.controller.replan('explore');
     const retry = h.requestPlan.mock.calls[2][6]!;
 
     expect(firstSession.id).toBe(rejected.id);
@@ -220,7 +221,7 @@ describe('GeneratedQueueController', () => {
     const h = harness();
     await h.controller.start('auto_mode', seed);
     h.setIndex(6);
-    h.applyPlan.mockReturnValueOnce(0);
+    h.requestPlan.mockResolvedValueOnce({ ...response('auto_mode', 0), empty_reason: 'temporary_failure' });
 
     await h.controller.ensureRunway();
 
@@ -257,5 +258,43 @@ describe('GeneratedQueueController', () => {
     await starting;
 
     expect(h.applyPlan).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('exhausted DJ input', () => {
+  it('does not retry an unchanged exhausted pool, but resumes on exploration changes and manual retry', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    let context = 'initial';
+    h.deps.planningContext = () => context;
+    h.requestPlan.mockResolvedValue({ ...response('auto_mode', 0), empty_reason: 'exhausted' });
+    await h.controller.start('auto_mode', seed);
+    // The current song is already excluded in both paths.
+    await h.controller.refillNow();
+    const attempts = h.requestPlan.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    await h.controller.refillNow();
+    await h.controller.ensureRunway();
+    expect(h.requestPlan).toHaveBeenCalledTimes(attempts);
+    expect(h.onStatus).toHaveBeenLastCalledWith('auto_mode', 'exhausted', expect.any(Object), false);
+    context = 'heard-automatic-track';
+    await h.controller.ensureRunway();
+    expect(h.requestPlan).toHaveBeenCalledTimes(attempts + 1);
+    await h.controller.retry();
+    expect(h.requestPlan).toHaveBeenCalledTimes(attempts + 2);
+    h.controller.stop();
+  });
+
+  it('stops repeating nonempty plans rejected entirely as duplicates', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    h.applyPlan.mockReturnValue(0);
+    await h.controller.start('auto_mode', seed);
+    await vi.advanceTimersByTimeAsync(180_000);
+    await h.controller.ensureRunway();
+    expect(h.requestPlan).toHaveBeenCalledTimes(1);
+    expect(h.onStatus).toHaveBeenLastCalledWith('auto_mode', 'exhausted', expect.any(Object), false);
+    h.controller.stop();
   });
 });
