@@ -4,7 +4,8 @@
   min-height: 0;
   overflow-y: auto;
   padding: var(--space-md) var(--lyrics-overlay-clearance, var(--space-sm)) var(--space-xl) var(--space-md);
-  overscroll-behavior: contain;
+  /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
+  overscroll-behavior-y: contain;
 }
 
 .stage {

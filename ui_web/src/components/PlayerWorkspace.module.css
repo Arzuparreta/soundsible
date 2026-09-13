@@ -58,6 +58,11 @@
     overflow-y: hidden;
     scroll-snap-type: x mandatory;
     scroll-behavior: smooth;
+    /* The pager owns the horizontal axis and stops there: nothing sideways
+       reaches the page behind it. Its panels contain their own scrolling on y
+       alone, deliberately — a list that contained x too would swallow every
+       swipe that started on it, and the card it fills could not be left by the
+       gesture that reached it. */
     overscroll-behavior-x: contain;
     scrollbar-width: none;
   }

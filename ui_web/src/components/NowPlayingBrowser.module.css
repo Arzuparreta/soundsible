@@ -100,7 +100,8 @@
   min-height: 0;
   overflow: auto;
   padding: var(--space-sm) var(--space-sm) max(28px, var(--player-mobile-footer-clearance, 28px));
-  overscroll-behavior: contain;
+  /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
+  overscroll-behavior-y: contain;
 }
 
 @media (min-width:1024px) {
