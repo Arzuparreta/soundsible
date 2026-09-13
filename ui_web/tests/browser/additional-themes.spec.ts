@@ -8,6 +8,10 @@ for (const theme of ['slate', 'pure-black']) {
     await mockMusicEngine(page);
     const bytes = Buffer.from(readFileSync(new URL('./fixtures/progressive-preview.mp3.b64', import.meta.url), 'utf8'), 'base64');
     await page.route('**/api/static/stream/**', route => route.fulfill({ contentType: 'audio/mpeg', body: bytes }));
+    await page.route('**/api/static/cover/**', route => route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="720"><defs><linearGradient id="cover"><stop stop-color="#ff4010"/><stop offset="0.5" stop-color="#c020e0"/><stop offset="1" stop-color="#0080ff"/></linearGradient></defs><rect width="720" height="720" fill="url(#cover)"/></svg>',
+    }));
     await page.goto('/player/#/settings/appearance');
     const select = page.getByRole('combobox', { name: 'Otros temas' });
     await select.selectOption(theme);
@@ -36,6 +40,7 @@ for (const theme of ['slate', 'pure-black']) {
     await page.getByRole('checkbox').first().check();
     await page.getByRole('button', { name: 'Grande', exact: true }).click();
     expect((await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa']).analyze()).violations).toEqual([]);
+    await page.getByRole('checkbox').first().uncheck();
     await openMusicPlayer(page);
     await expect(page.locator('[data-player-stage]').first()).toBeVisible();
     await expect.poll(() => page.locator('[data-player-surface-open]').evaluate(el => Math.round(el.getBoundingClientRect().top))).toBe(0);

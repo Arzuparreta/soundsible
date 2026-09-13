@@ -595,22 +595,37 @@
 
 /* Extra themes own stage materials as well as the surrounding shell. */
 :root[data-theme='slate'] [data-player-stage] {
+  /* Slate is the foundation, not an opaque coat over the artwork. Keep the
+     wallpaper chromatic; bound its brightness so pale covers remain readable. */
   --stage-base: #252d38;
-  --stage-wash: linear-gradient(#252d38e8, #252d38f5);
+  --stage-backdrop: blur(62px) saturate(1.7) brightness(0.42);
+  --stage-backdrop-opacity: 0.9;
+  --stage-wash: linear-gradient(180deg, #252d382e, #252d381f 48%, #252d3866);
   --stage-wash-auto: var(--stage-wash);
-  --stage-wash-auto-wide: var(--stage-wash);
-  --stage-material-quiet: #29323e;
-  --stage-material: #2d3744;
-  --stage-material-hover: #3a4757;
-  --stage-material-active: #404e60;
-  --stage-panel: #2d3744;
+  --stage-wash-auto-wide: linear-gradient(96deg, #252d382e, #252d381f 46%, #252d3866);
+  --ink-tertiary: #d3dbe5;
+  --stage-material-quiet: rgba(41, 50, 62, 0.25);
+  --stage-material: rgba(45, 55, 68, 0.38);
+  --stage-material-hover: rgba(58, 71, 87, 0.58);
+  --stage-material-active: rgba(64, 78, 96, 0.72);
+  --stage-panel: rgba(45, 55, 68, 0.48);
   --stage-panel-opaque: #2d3744;
-  --stage-sheet: #354150;
-  --stage-chrome: #2d3744;
-  --stage-chrome-active: #404e60;
+  --stage-sheet: rgba(53, 65, 80, 0.94);
+  --stage-chrome: rgba(45, 55, 68, 0.55);
+  --stage-chrome-active: rgba(64, 78, 96, 0.82);
   --stage-line: var(--hairline);
   --stage-line-strong: var(--hairline-strong);
-  --stage-media-veil: linear-gradient(#252d38ee, #252d38ee);
+  --stage-media-filter: blur(30px) saturate(1.7) brightness(0.42);
+  --stage-media-veil: linear-gradient(#252d3840, #252d3866);
+}
+
+:root[data-theme='slate'][data-high-contrast='true'] [data-player-stage] {
+  --stage-material-quiet: rgba(41, 50, 62, 0.65);
+  --stage-material: rgba(45, 55, 68, 0.78);
+  --stage-material-hover: #3a4757;
+  --stage-material-active: #404e60;
+  --stage-panel: rgba(45, 55, 68, 0.85);
+  --stage-chrome: rgba(45, 55, 68, 0.9);
 }
 
 :root[data-theme='pure-black'] [data-player-stage] {
