@@ -32,15 +32,19 @@
 .title, .subtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title { font-size: var(--text-body); font-weight: var(--fw-medium); }
 .subtitle { display: flex; gap: 4px; min-width: 0; color: var(--ink-secondary); font-size: var(--text-label); }
-.detail { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.detail { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .index { font-variant-numeric: tabular-nums; }
 /* Who gives way when the line is too narrow. The artist is the song's identity
-   and the annotation is a note about it, so the note yields first — four times
-   as fast per pixel of overflow — down to a floor that still reads as a word
-   rather than as a bare ellipsis. Held at `flex-shrink: 0` it did the opposite:
-   a long source label in the DJ's route kept every pixel it asked for and
-   truncated the artist behind it. */
-.annotation { flex: 0 4 auto; min-width: 4ch; max-width: 55%; overflow: hidden; text-overflow: ellipsis; color: var(--accent-ink); }
+   and the note beside it is a remark about it, so the note gets the room that
+   is left over and never a pixel the name still needs: a zero basis is what
+   says that, where competing shrink factors only ever slow the theft down. */
+.annotation { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--accent-ink); }
+/* The artist carries its own touch target, which makes it an inline-block —
+   and an inline-block truncates all or nothing: too narrow, and the whole name
+   is replaced by the line's ellipsis rather than losing its last letters. That
+   is how a route row came to read "1 · …". Clipping its own text keeps as much
+   of the name as there is room for. */
+.detail a { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .row[data-now-playing] .title, .row[data-playback-selected] .title { color: var(--accent-ink); }
 .cover {
   position: relative;

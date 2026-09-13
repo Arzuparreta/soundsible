@@ -129,18 +129,26 @@ describe('list row metadata priority', () => {
   const row = path.resolve(process.cwd(), 'src/components/MusicListRow.module.css');
   const omni = path.resolve(process.cwd(), 'src/components/OmniBar.module.css');
 
-  it('lets the annotation yield its width to the artist, not the other way round', () => {
+  it('gives the note only what is left over, never what the artist still needs', () => {
     const detail = declarations(row, '.detail');
     const annotation = declarations(row, '.annotation');
 
-    expect(detail).toMatchObject({ flex: '1 1 auto', 'min-width': '0' });
-    // A shrink factor above the detail's 1 is the whole mechanism: the note
-    // gives up width faster per pixel of overflow, down to a readable floor.
-    const [, shrink] = annotation.flex.split(' ');
-    expect(Number(shrink)).toBeGreaterThan(1);
-    expect(annotation['min-width']).toBe('4ch');
-    expect(annotation['text-overflow']).toBe('ellipsis');
+    // The mechanism is the zero basis, not a shrink factor. Competing shrink
+    // factors only slow the theft down — they still take a slice of the name on
+    // every overflowing line, which is exactly how the route came to read "N · …".
+    expect(annotation.flex).toBe('1 1 0');
+    expect(annotation['min-width']).toBe('0');
+    expect(detail).toMatchObject({ flex: '0 1 auto', 'min-width': '0' });
     expect(declarations(row, '.subtitle')['min-width']).toBe('0');
+  });
+
+  it('lets the artist clip its own text instead of being dropped whole', () => {
+    // It is an inline-block, because it carries its own touch target, and an
+    // inline-block that does not fit is replaced by the line's ellipsis rather
+    // than losing its last letters.
+    expect(declarations(row, '.detail a')).toMatchObject({
+      'max-width': '100%', overflow: 'hidden', 'text-overflow': 'ellipsis',
+    });
   });
 
   it('keeps the compact pill open target above its artwork and below a real link', () => {
