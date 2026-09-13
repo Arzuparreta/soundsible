@@ -22,7 +22,7 @@
         try {
           var stored = localStorage.getItem('theme');
           var preference =
-            stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+            stored === 'light' || stored === 'dark' || stored === 'system' || stored === 'slate' || stored === 'pure-black' ? stored : 'system';
           var resolved =
             preference === 'system'
               ? window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -31,7 +31,7 @@
               : preference;
           document.documentElement.dataset.theme = resolved;
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', resolved === 'light' ? '#f6f6f7' : '#0c0c0e');
+          if (meta) meta.setAttribute('content', ({ light: '#f6f6f7', dark: '#0c0c0e', slate: '#252d38', 'pure-black': '#000000' })[resolved]);
         } catch (e) {}
       })();
     </script>

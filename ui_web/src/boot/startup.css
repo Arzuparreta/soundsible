@@ -93,3 +93,8 @@ html[data-booting] #app { visibility: hidden; }
 @media (forced-colors: active) {
   #startup-screen .startup-waves span { background: CanvasText; }
 }
+
+html[data-booting][data-theme='slate'], html[data-booting][data-theme='slate'] body { background: #252d38; }
+[data-theme='slate'] #startup-screen { --startup-bg: #252d38; --startup-muted: #d3dbe5; }
+html[data-booting][data-theme='pure-black'], html[data-booting][data-theme='pure-black'] body { background: #000000; }
+[data-theme='pure-black'] #startup-screen { --startup-bg: #000000; --startup-muted: #d6d6d6; background: #000000; }

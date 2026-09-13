@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Listener = (event: MediaQueryListEvent) => void;
@@ -100,5 +101,32 @@ describe('system theme', () => {
 
     os.set(false);
     expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+});
+
+
+describe('additional themes', () => {
+  it.each([['slate', '#252d38'], ['pure-black', '#000000']] as const)('applies %s before the app boots', (theme, color) => {
+    installMatchMedia(false);
+    localStorage.setItem('theme', theme);
+    const bootScript = readFileSync('index.html', 'utf8').match(/<script>([\s\S]*?)<\/script>/)![1];
+    new Function(bootScript)();
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(color);
+  });
+  it.each([['slate', '#252d38'], ['pure-black', '#000000']] as const)('persists %s independently of the OS', async (theme, color) => {
+    const os = installMatchMedia(false);
+    const { actions, state, applyTheme } = await loadTheme(theme);
+    expect(state.theme).toBe(theme);
+    applyTheme(state.theme);
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(color);
+    os.set(true);
+    expect(document.documentElement.dataset.theme).toBe(theme);
+    actions.setTheme('system');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    actions.setTheme(theme);
+    expect(localStorage.getItem('theme')).toBe(theme);
+    expect(os.listenerCount()).toBe(0);
   });
 });

@@ -306,6 +306,61 @@
   --shadow-accent: 0 8px 22px rgba(249, 122, 18, 0.16);
 }
 
+:root[data-theme='slate'] {
+  color-scheme: dark;
+  --bg-base: #252d38;
+  --bg-raised: #2d3744;
+  --bg-elevated: #354150;
+  --bg-inset: #202731;
+  --bg-hover: #3a4757;
+  --bg-active: #404e60;
+  --ink-primary: #f4f6fa;
+  --ink-secondary: #d3dbe5;
+  --ink-tertiary: #bdcadb;
+  --hairline: #64778d;
+  --hairline-strong: #91a4bb;
+  --hairline-soft: #526378;
+  --accent-ink: #ffad69;
+  --accent-ink-hover: #ffc18f;
+  --info: #8bc4ff;
+  --success: #76e695;
+  --warning: #f5ce70;
+  --danger: #ffaaa5;
+  --skeleton-base: #2d3744;
+  --skeleton-highlight: #404e60;
+  --glass-fill: #2d3744;
+  --glass-line: #64778d;
+  --glass-rim: #526378;
+}
+
+:root[data-theme='pure-black'] {
+  color-scheme: dark;
+  --bg-base: #000000;
+  --bg-raised: #000000;
+  --bg-elevated: #0a0a0a;
+  --bg-inset: #000000;
+  --bg-hover: #171717;
+  --bg-active: #242424;
+  --ink-primary: #ffffff;
+  --ink-secondary: #d6d6d6;
+  --ink-tertiary: #b5b5b5;
+  --hairline: #666666;
+  --hairline-strong: #909090;
+  --hairline-soft: #444444;
+  --info: #78baff;
+  --ambient-accent: transparent;
+  --ambient-highlight: transparent;
+  --accent-glow: transparent;
+  --shadow-accent: none;
+  --skeleton-base: #0a0a0a;
+  --skeleton-highlight: #242424;
+  --glass-fill: #000000;
+  --glass-gloss: transparent;
+  --glass-line: #666666;
+  --glass-rim: transparent;
+  --glass-filter: none;
+}
+
 /* Explicit low-vision palette. The regular themes remain visually untouched;
    this mode spends subtlety on stronger text, control and focus separation. */
 :root[data-high-contrast='true'] {
@@ -538,6 +593,71 @@
   --stage-chrome: rgba(255, 255, 255, 0.94);
 }
 
+/* Extra themes own stage materials as well as the surrounding shell. */
+:root[data-theme='slate'] [data-player-stage] {
+  --stage-base: #252d38;
+  --stage-wash: linear-gradient(#252d38e8, #252d38f5);
+  --stage-wash-auto: var(--stage-wash);
+  --stage-wash-auto-wide: var(--stage-wash);
+  --stage-material-quiet: #29323e;
+  --stage-material: #2d3744;
+  --stage-material-hover: #3a4757;
+  --stage-material-active: #404e60;
+  --stage-panel: #2d3744;
+  --stage-panel-opaque: #2d3744;
+  --stage-sheet: #354150;
+  --stage-chrome: #2d3744;
+  --stage-chrome-active: #404e60;
+  --stage-line: var(--hairline);
+  --stage-line-strong: var(--hairline-strong);
+  --stage-media-veil: linear-gradient(#252d38ee, #252d38ee);
+}
+
+:root[data-theme='pure-black'] [data-player-stage] {
+  --stage-base: #000000;
+  --stage-backdrop: none;
+  --stage-backdrop-opacity: 0;
+  --stage-wash: linear-gradient(#000000, #000000);
+  --stage-wash-auto: var(--stage-wash);
+  --stage-wash-auto-wide: var(--stage-wash);
+  --stage-grain-opacity: 0;
+  --stage-media-filter: opacity(0);
+  --stage-media-veil: linear-gradient(#000000, #000000);
+  --stage-material-quiet: #000000;
+  --stage-material: #000000;
+  --stage-material-hover: #171717;
+  --stage-material-active: #242424;
+  --stage-material-filter: none;
+  --stage-panel: #000000;
+  --stage-panel-opaque: #000000;
+  --stage-sheet: #0a0a0a;
+  --stage-chrome: #000000;
+  --stage-chrome-active: #242424;
+  --stage-well: #000000;
+  --stage-line: var(--hairline);
+  --stage-line-soft: var(--hairline-soft);
+  --stage-line-strong: var(--hairline-strong);
+  --stage-rim: transparent;
+  --stage-text-halo: none;
+  --stage-gloss: transparent;
+}
+
+:root[data-theme='slate'][data-high-contrast='true'] {
+  --ink-secondary: #e3eaf3;
+  --ink-tertiary: #d3dbe5;
+  --hairline: #a0b3ca;
+  --hairline-strong: #c0cfe2;
+  --hairline-soft: #91a4bb;
+  --glass-fill: #2d3744;
+  --glass-line: #a0b3ca;
+  --glass-rim: #91a4bb;
+}
+
+:root[data-theme='pure-black'][data-high-contrast='true'] {
+  --glass-fill: #000000;
+  --glass-rim: transparent;
+}
+
 /* Theme cross-fade. `data-theme-transition` is set on <html> for the duration of a
    theme flip — manual or driven by the OS switching light/dark — so every surface
    eases between the two token sets instead of snapping. Uses --dur-short, which
@@ -596,18 +716,23 @@
 }
 
 @media (forced-colors: active) {
-  :root {
+  :root,
+  :root[data-theme],
+  :root[data-theme][data-high-contrast] {
     --bg-base: Canvas;
     --bg-raised: Canvas;
     --bg-elevated: Canvas;
     --bg-inset: Canvas;
     --bg-hover: Highlight;
+    --bg-active: Highlight;
     --ink-primary: CanvasText;
     --ink-secondary: CanvasText;
     --ink-tertiary: CanvasText;
     --hairline: CanvasText;
     --hairline-strong: CanvasText;
     --accent: Highlight;
+    --accent-ink: LinkText;
+    --accent-ink-hover: LinkText;
     --ink-on-accent: HighlightText;
   }
 }
