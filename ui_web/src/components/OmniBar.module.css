@@ -34,7 +34,18 @@
      scrolling list behind it to bite on. `.dock` is the positioned ancestor and
      already owns --z-omni, so this rides its stacking context and needs no
      z-index of its own. The room it uncovers is paid for in app.css, where
-     every primary scroller gets that much clearance after its last row. */
+     every primary scroller gets that much clearance after its last row.
+
+     The blur is an enhancement and nothing rests on it. Two of the three
+     engines do not paint it here — Chromium skips the backdrop blur over this
+     composition while honouring other backdrop functions on the same element,
+     and Gecko declares support and paints none of it — and on WebKit, where it
+     does work, it arrives a beat late after the player surface closes, because
+     the shell it lives in stops rendering while that surface is up (app.css).
+     A pill whose legibility depended on it read as a pane of glass with the
+     library's text straight through it in every one of those cases. So the
+     fill carries the contrast on its own (tokens.css), and the filter is left
+     to add the artwork's colour where an engine will do it. */
   .omni {
     touch-action: pan-y pinch-zoom;
     position: absolute;
@@ -498,16 +509,11 @@
   height: 56px;
 }
 
-/* Without a backdrop-filter the fill is the only thing between a title and the
-   list scrolling behind it, and 0.66 alpha is not enough to read against album
-   art. Fall back to the opaque surface, as the stage does for its own glass. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  @media (max-width: 1023px) {
-    .omni {
-      background: var(--bg-elevated);
-    }
-  }
-}
+/* There was a `@supports not (backdrop-filter)` fallback here, swapping the
+   fill for an opaque surface. It never fired for the engines that actually fail
+   — both of them declare the property and then skip the blur — and now that the
+   fill stands on its own it has nothing left to fix. Declared support was never
+   the question; painted support was, and a stylesheet cannot ask. */
 
 .openArea { position: relative; }
 /* The open target is a transparent overlay rather than a wrapper, so the cover

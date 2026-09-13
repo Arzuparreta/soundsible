@@ -122,10 +122,20 @@
      the room it opens: a translucent surface over a blur, a gloss down from the
      top edge, a rim of light along it, and a hairline around.
 
-     The blur is real here — the pill floats over the scrolling library, not
-     over the dock's flat plate — so the fill is what keeps a title legible no
-     matter which album art passes underneath. */
-  --glass-fill: rgba(16, 16, 20, 0.66);
+     The fill is measured against the blur NOT arriving. Chromium drops the
+     backdrop blur over this composition (it honours other backdrop functions on
+     the same element, so the backdrop is reached — the blur alone is skipped),
+     Gecko declares the property and paints nothing, and WebKit does it properly.
+     One engine of three is not something a title's legibility can rest on, so
+     the fill alone has to suppress whatever passes underneath and the blur is
+     left to do what it can on top of that: tint the surface with the artwork.
+
+     0.90 is where a worst-case backdrop stops reading as text, with a little of
+     the backdrop still coming through. Measured through the pill over 6px
+     black-on-white stripes, the residual swing is 88/255 at the old 0.66 and 26
+     here; real album art and list rows are far gentler than that pattern. High
+     contrast goes further still, below. */
+  --glass-fill: rgba(16, 16, 20, 0.9);
   --glass-gloss: rgba(255, 255, 255, 0.055);
   --glass-line: rgba(255, 255, 255, 0.09);
   --glass-rim: rgba(255, 255, 255, 0.08);
@@ -283,7 +293,7 @@
   /* Same inversion the light stage makes with --stage-material: a high-alpha
      white, so dark ink stays readable over whatever scrolls past, and a dark
      hairline instead of a light one to hold the edge against a pale page. */
-  --glass-fill: rgba(255, 255, 255, 0.74);
+  --glass-fill: rgba(255, 255, 255, 0.92);
   --glass-gloss: rgba(255, 255, 255, 0.55);
   --glass-line: rgba(15, 15, 22, 0.1);
   --glass-rim: rgba(255, 255, 255, 0.9);
