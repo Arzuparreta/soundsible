@@ -36,6 +36,9 @@
   --accent-soft: rgba(249, 122, 18, 0.14); /* tints, active row wash */
   --accent-faint: rgba(249, 122, 18, 0.075);
   --accent-glow: rgba(249, 122, 18, 0.24);
+  /* The wash behind selected text. Its own token, not --accent-glow: a theme
+     that drops every decorative glow still has to show what is selected. */
+  --selection-bg: rgba(249, 122, 18, 0.24);
   --brand-gold: #e0bc00; /* badge/mark only — never a primary fill */
 
   /* ── Status ── */
@@ -280,6 +283,7 @@
   --accent-soft: rgba(249, 122, 18, 0.12);
   --accent-faint: rgba(249, 122, 18, 0.065);
   --accent-glow: rgba(249, 122, 18, 0.18);
+  --selection-bg: rgba(249, 122, 18, 0.18);
   /* 6.2:1 on white, 4.5:1 on the palest player glass — the same hue family,
      burnt down until it is readable as text. */
   --accent-ink: #9c4a08;
@@ -350,6 +354,8 @@
   --info: #78baff;
   --ambient-accent: transparent;
   --ambient-highlight: transparent;
+  /* No glow anywhere on the OLED palette; --selection-bg is inherited, so
+     selected text keeps its wash. */
   --accent-glow: transparent;
   --shadow-accent: none;
   --skeleton-base: #0a0a0a;
