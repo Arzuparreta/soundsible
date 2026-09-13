@@ -235,10 +235,10 @@ export function PlayerSurface() {
     actions.enterAutoMode();
   };
 
-  const browserAction = () => {
-    if (auto()) actions.exitAutoMode();
-    setPanel('browser');
-  };
+  /* The same action in both modes: the first panel of either carousel is the
+     music browser, so the search affordance means "go there" and never "leave
+     DJ" — Auto's own browser is where a session picks up its sources. */
+  const browserAction = () => setPanel('browser');
 
   /** Drop the gesture and every trace of it. Every bail-out goes through here:
       a leftover `data-swiping` pins `transition: none` on the surface forever. */
@@ -383,7 +383,7 @@ export function PlayerSurface() {
         <div class={styles.grain} aria-hidden="true" />
 
         <div class={styles.floatingChrome} data-no-surface-swipe="">
-          <Show when={mobileLayout() && !auto()}>
+          <Show when={mobileLayout()}>
             <button
               classList={{ [styles.chromeButton]: true, [styles.browserButton]: true }}
               type="button"

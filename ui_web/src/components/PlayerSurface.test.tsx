@@ -369,6 +369,22 @@ describe('PlayerSurface', () => {
     expect(screen.getByTestId('now-playing-view')).toHaveTextContent('browser');
   });
 
+  it('keeps the search action in DJ mode, where it opens DJ\'s own browser', async () => {
+    // The DJ carousel opens on a music browser exactly like Normal's, so the
+    // affordance that reaches it belongs in both modes — and pressing it must
+    // move between DJ's panels, never drop the listener out of the session.
+    harness.mobileViewport = true;
+    render(() => <PlayerSurface />);
+    fireEvent.click(screen.getByRole('tab', { name: 'autoMode.label' }));
+    // Auto Mode is loaded lazily; its panel only reads back once it is there.
+    await screen.findByTestId('auto-mode-view');
+
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.openSearch' }));
+
+    expect(screen.getByTestId('auto-mode-view')).toHaveTextContent('browser');
+    expect(harness.actions.exitAutoMode).not.toHaveBeenCalled();
+  });
+
   it('does not expose the mobile search action in the desktop chrome', () => {
     render(() => <PlayerSurface />);
 

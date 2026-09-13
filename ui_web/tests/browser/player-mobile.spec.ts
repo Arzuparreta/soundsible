@@ -428,11 +428,12 @@ test('the shared mode pill and DJ workspace stay contained in compact viewports'
       expect(pillBox!.x + pillBox!.width, `${mode} pill must not overlap close`)
         .toBeLessThanOrEqual(closeBox!.x);
 
-      if (mode === 'now-playing') {
-        const searchBox = await page.getByRole('button', { name: /Abrir búsqueda/ }).boundingBox();
-        expect(searchBox).not.toBeNull();
-        expect(searchBox!.x + searchBox!.width, 'pill must not overlap search').toBeLessThanOrEqual(pillBox!.x);
-      }
+      // In both modes now: DJ's first panel is a music browser too, so the
+      // search action sits in the same corner and has to clear the pill there.
+      const searchBox = await page.getByRole('button', { name: /Abrir búsqueda/ }).boundingBox();
+      expect(searchBox, `${mode} search action`).not.toBeNull();
+      expect(searchBox!.x + searchBox!.width, `${mode} pill must not overlap search`)
+        .toBeLessThanOrEqual(pillBox!.x);
 
       const workspace = page.locator(`[data-player-workspace="${mode}"]`);
       await expect(workspace).toBeVisible();
