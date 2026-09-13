@@ -1,91 +1,144 @@
 # Roadmap
 
-Where Soundsible is going and why. This is the user-facing plan; the documents
-under "internals" are working notes and may be stale or abandoned.
+Soundsible is a self-hosted music service for discovering, listening to,
+keeping, organising, mixing and sharing music through its own connected
+clients. The server holds your library and listening profile; the clients
+bring that experience to your devices.
 
-Nothing here has a date. Items ship when they are ready, in roughly the order
-below, because each one depends on the one before it.
+> **discover → listen → keep and organise → mix with DJ → share**
 
-## What Soundsible is
+OpenSubsonic gives you another way to use your library. Compatibility with
+other apps complements Soundsible's own experience; it does not fulfil our
+commitments to offline listening, cars or watches on its own.
 
-Most self-hosted music tools solved *serving* music and never solved *getting*
-it. Navidrome is excellent at playing a library you already have. Lidarr fetches
-whole albums. Between "I heard this track" and "it is in my library, tagged, on
-every device" there is a gap that people still cross with several tools.
+## Available foundations
 
-Soundsible closes that gap:
+- Unified library and external search, acquisition and tagging, folder import,
+  and album, artist, genre and year browsing. SQLite is the canonical library;
+  JSON is an export. Catalog metadata and artist/title resolution support the
+  whole product.
+- NORMAL playback and the editable two-deck [DJ workflow](AUTO_MODE.md),
+  currently in beta, with local recommendations, Autoplay and Radio.
+- Web/PWA and desktop beta. [Native iOS code](IOS.md) includes offline download
+  and storage management, but nobody has installed or run the app on a device.
+  Its behaviour remains theoretical; producing an IPA does not validate it.
+- [Live](LIVE.md) broadcasts the program to a browser listening room.
+- [OpenSubsonic](OPENSUBSONIC.md) exposes the music library to compatible clients,
+  including library search, playlists and streaming with transcoding.
 
-> **discover → acquire the track → land it tagged in your library → play it
-> anywhere.**
+These are implemented capabilities, not a claim that every device combination
+has been validated. Client guides describe their specific limits; physical
+phone, car and watch behaviour needs evidence on those devices.
 
-Search reaches your library, Deezer, MusicBrainz and YouTube at once and returns
-one ranked list. Saving something resolves it, scores the match, downloads it,
-tags it and adds it. [DJ](AUTO_MODE.md) then plays it as an editable,
-analysis-driven DJ set rather than a shuffled queue.
+## Priorities and direction
 
-## Where it is going
+The immediate priority is dependable everyday use on existing surfaces, followed
+by acquisition resilience and DJ refinement. New device coverage is a long-term
+commitment. Work can proceed independently where dependencies allow; these
+sections are not a sequence in which every item blocks the next. There are no
+promised delivery dates.
 
-### Serve any client, not just ours
+### 1. Reliable everyday listening
 
-Soundsible has its own responsive player, desktop beta, and native iOS client.
-It also speaks the **OpenSubsonic API**, so Symfonium, Feishin, DSub, Amperfy,
-Tempo, play:Sub and the rest can use the same library — including their offline,
-Android Auto, CarPlay, and watch surfaces where supported.
+Make playback, seeking, pause/resume, library navigation and search dependable
+across the existing web/PWA, desktop and iOS surfaces. Keep playback state and
+controls understandable through interruptions, background use and reconnection.
 
-That needs a real library schema first: first-class album and artist tables,
-disc numbers, compilations, multiple artists per track, play counts, ratings and
-last-played. And SQLite as the source of truth rather than an index rebuilt from
-JSON.
+Acceptance requires reproducible checks for those journeys on each affected
+surface. Browser automation alone does not establish locked-phone or car
+reliability. Resolve failures in existing listening journeys before expanding
+device coverage.
 
-- [x] Library schema: albums, artists, disc numbers, compilations, play counts, ratings
-- [x] SQLite canonical; `library.json` becomes an export format
-- [x] `POST /api/library/scan` — point Soundsible at a folder you already have
-- [ ] Read ReplayGain / R128 tags when a file carries them
-- [x] Write MusicBrainz IDs on acquisition
-- [x] Decide artist/title orientation by lookup, not by position. A YouTube
-      title is split on the first separator and the left side is taken as the
-      artist, unverified. Uploads titled "Song - Artist" therefore land
-      reversed, which files the track under the wrong name and makes it
-      unfindable. The providers that could settle it — Deezer, MusicBrainz —
-      are already wired in for search, and `shared/resolution_confidence.py`
-      already scores a pair.
-- [x] OpenSubsonic API with on-the-fly transcoding — see [OpenSubsonic](OPENSUBSONIC.md)
-- [x] Album, genre and year browsing in the player
+### 2. Discover and keep music
 
-### Join the open music web
+Make the path from a search result to a correctly identified, playable library
+track resilient to provider failures, with clear progress and recoverable errors.
+A durable library serves listening, discovery and DJ as well as external clients.
 
-- [ ] Scrobbling to ListenBrainz, Last.fm and Maloja
-- [ ] ListenBrainz as a recommendation input alongside local signals
-- [ ] Artist biographies and images from MusicBrainz / Wikidata
-- [ ] Smart playlists over play counts, ratings, year, genre and BPM
-- [ ] M3U and OPML import / export
+Next work:
 
-### Make acquisition durable
+- Read existing ReplayGain / R128 file tags alongside engine loudness analysis.
+- Keep yt-dlp current in containers and add a scheduled extraction canary that
+  reports upstream breakage.
+- Extend acquisition source selection so YouTube is replaceable. Existing
+  search provider modules and the lossless provider layer are useful foundations;
+  they do not yet make the main acquisition journey independent of YouTube.
 
-The catalog depends on yt-dlp working against YouTube, and YouTube changes.
+Later improvements include smart playlists over listening history, ratings,
+year, genre and BPM, plus richer artist biographies and images.
 
-- [ ] yt-dlp updates itself in the container
-- [ ] A scheduled CI canary that fails loudly when extraction breaks
-- [ ] A pluggable source layer, so YouTube is one provider and not an assumption
+### 3. An integrated DJ
 
-### Sharpen what is already unique
+Refine musical direction, requests, route editing and transitions as part of
+normal Soundsible use. Leaving beta requires evidence that requested tracks
+survive direction changes, route edits produce predictable playback, exhausted
+candidate pools recover, and preparation failures preserve the audible session
+and offer recovery. Evaluate transition quality through listening as well as
+automated checks, including conservative handoffs when analysis is unavailable.
 
-- [x] DJ documented as the product's two-deck, editable DJ workflow
-- [ ] DJ out of beta
-- [ ] Live becomes explicitly opt-in, with self-hosting the relay documented
-- [ ] Federated Live relays
+The [DJ guide](AUTO_MODE.md) describes what is available today. These acceptance
+conditions do not imply that the existing workflow is missing or already proven
+ready to leave beta.
 
-## Deliberately not planned
+### 4. Soundsible on your devices
 
-- **Video.** Soundsible is a music server. Use Jellyfin.
-- **Browsing by folder structure.** Metadata is the organising principle.
-- **Being a general-purpose downloader.** Acquisition serves the library.
-- **A hosted service.** You run it. That is the whole point.
+Consolidate web/PWA and desktop, and install and validate iOS for the first time,
+before expanding coverage. Our long-term direction includes our
+own Android client, car interfaces and watch experience, with interactions suited
+to each device. A watch need not reproduce the desktop DJ workspace.
+
+Extend offline listening across our own clients: download music from your
+Soundsible server, listen while disconnected, then synchronise on reconnection.
+The server remains part of the product even when a client is temporarily offline.
+Treat the existing iOS code as unvalidated and check downloads, storage limits,
+disconnected playback and reconnection on each supported client.
+
+[Car integration](CAR_INTEGRATION.md) distinguishes existing media controls from
+future library browsing on car displays. Platform permissions, distribution and
+physical-device validation remain delivery dependencies. The iOS AltStore PAL
+path is still **not verified**; see [iOS distribution](IOS.md).
+
+### 5. Share the listening experience
+
+Live already broadcasts the actual program, including DJ transitions. Next,
+make participation explicitly opt-in and make relay choice clear. It is currently
+on by default; [Live](LIVE.md) documents that behaviour and links to the existing
+self-hosted relay instructions.
+
+Federated Live relays remain exploratory, with no delivery commitment.
+
+### 6. Interoperability and portability
+
+Maintain OpenSubsonic as another way to browse and play the same library,
+without requiring it for the complete Soundsible journey. Its standard library
+surface does not expose Soundsible's external search, acquisition or DJ session.
+
+Planned additions:
+
+- External scrobbling to ListenBrainz, Last.fm and Maloja. The existing Subsonic
+  `scrobble` endpoint records local plays; it is not external scrobbling.
+- ListenBrainz recommendations alongside local signals.
+- M3U and OPML import / export, alongside the existing
+  [music migration](MUSIC_MIGRATION.md) workflow.
+
+Offline, car or watch features in third-party apps depend on those apps and
+need client-specific validation. They are useful options, not substitutes for
+Soundsible's own device roadmap.
+
+## Product boundaries
+
+- **Server-based service.** A standalone client that needs no Soundsible server
+  is outside scope. The server may run on the same machine as the player.
+- **Self-hosted.** A hosted Soundsible subscription service is not planned.
+- **Music and existing podcast support.** Video is outside scope.
+- **Metadata-led organisation.** Folder-tree browsing is not planned.
+- **Acquisition for listening and the library.** A general-purpose downloader
+  is outside scope.
 
 ## Shipped
 
-See the [releases](https://github.com/Arzuparreta/soundsible/releases) and the
-commit history.
+See the [releases](https://github.com/Arzuparreta/soundsible/releases) and commit
+history for delivered changes. Future commitments above are not release claims.
 
 ## Internals
 

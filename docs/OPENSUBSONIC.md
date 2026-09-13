@@ -1,10 +1,30 @@
 # OpenSubsonic
 
-Soundsible speaks the **OpenSubsonic API** at `/rest`. Apps built for it —
-Symfonium, Feishin, Amperfy, DSub, Tempo, play:Sub and the rest — browse and
-play your library without knowing anything about Soundsible, which is also how
-the project gets offline mobile playback, Android Auto and a watch app without
-writing any of them.
+OpenSubsonic is Soundsible's optional compatibility interface for other music
+apps. It serves the same music library through `/rest`, while Soundsible's own
+clients remain the focus for discovery, listening, acquisition and DJ.
+
+Apps in the OpenSubsonic ecosystem include Symfonium, Feishin, Amperfy, DSub,
+Tempo and play:Sub. This list is not a certification that every app or device
+combination has been tested against Soundsible.
+
+## What this connection gives you
+
+| Through this interface | Boundary |
+| --- | --- |
+| Browse and search artists, albums and songs | Searches your music library, not external catalogs |
+| Stream or download tracks | Requires a local music file on the server; does not acquire a missing track |
+| Playlists, favourites, ratings and play counts | Uses the same account library state as Soundsible |
+| Playback in the app you choose | The app controls its player; this does not expose Soundsible's DJ session or Live program |
+| Offline, car and watch features offered by a client | Depend on that app and need validation for the specific client and device |
+
+Use Soundsible's own player for external discovery, acquisition and the editable
+DJ workflow. Sharing the library does not make a third-party player equivalent
+to the complete Soundsible experience. The [roadmap](ROADMAP.md) includes our
+own device coverage and offline listening; external apps are additional options.
+Offline listening still uses a Soundsible server to download music and
+synchronise when reconnected. A standalone client without a server is outside
+that roadmap.
 
 The surface is served by the same engine on the same port. There is nothing to
 enable: an account becomes reachable the moment it has a credential, and stops
@@ -132,6 +152,7 @@ an error.
 
 Video, jukebox, chat, shares, bookmarks, internet radio, user administration,
 and podcasts over this API. Soundsible has its own podcast surface under
-`/api/podcasts`, and the rest are outside what a music server for one household
-needs. Calls to them answer with the protocol's generic error rather than an
-HTML 404, so a client reports one missing feature instead of a dead server.
+`/api/podcasts`. These omissions describe this compatibility interface, not the
+boundaries of Soundsible as a whole. Calls to them answer with the protocol's
+generic error rather than an HTML 404, so a client reports one missing feature
+instead of a dead server.
