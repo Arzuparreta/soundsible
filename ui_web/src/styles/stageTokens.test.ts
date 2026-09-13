@@ -3,6 +3,8 @@ import path from 'node:path';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
+import { contrast, declarations, over, rgb } from './testing/tokens';
+
 /*
  * The player stage is one room rendered in two materials. Dark glass is white
  * alpha over a darkened cover; light glass is white at high alpha over a cover
@@ -17,7 +19,6 @@ import { describe, expect, it } from 'vitest';
  */
 
 const src = process.cwd();
-const tokensFile = path.resolve(src, 'src/styles/tokens.css');
 const playerFiles = [
   'src/components/PlayerSurface.module.css',
   'src/components/NowPlaying.module.css',
@@ -25,18 +26,6 @@ const playerFiles = [
   'src/components/AutoMode.module.css',
   'src/components/LyricsPanel.module.css',
 ].map((file) => path.resolve(src, file));
-
-function declarations(selectorMatch: (selector: string) => boolean): Record<string, string> {
-  const root = postcss.parse(fs.readFileSync(tokensFile, 'utf8'), { from: tokensFile });
-  const out: Record<string, string> = {};
-  root.walkRules((rule) => {
-    if (!selectorMatch(rule.selector.replace(/\s+/g, ' '))) return;
-    rule.walkDecls((decl) => {
-      out[decl.prop] = decl.value.trim();
-    });
-  });
-  return out;
-}
 
 const stageDark = () => declarations((selector) => selector === '[data-player-stage]');
 const stageLight = () =>
@@ -52,33 +41,6 @@ const SHARED_STAGE_TOKENS = new Set([
   '--stage-on-art-scrim',
   '--stage-gloss',
 ]);
-
-function channel(value: number): number {
-  const c = value / 255;
-  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-}
-
-function luminance([r, g, b]: number[]): number {
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-}
-
-function contrast(ink: number[], surface: number[]): number {
-  const a = luminance(ink);
-  const b = luminance(surface);
-  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-}
-
-function hex(value: string): number[] {
-  const match = /#([0-9a-f]{6})/i.exec(value);
-  if (!match) throw new Error(`not a hex colour: ${value}`);
-  const n = parseInt(match[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-/** Lay `alpha` of `over` on `under`, the way the browser composites them. */
-function over(overColor: number[], alpha: number, under: number[]): number[] {
-  return under.map((c, i) => overColor[i] * alpha + c * (1 - alpha));
-}
 
 describe('player stage tokens', () => {
   it('declares both materials for every token', () => {
@@ -122,21 +84,21 @@ describe('player stage tokens', () => {
     const black = [0, 0, 0]; // a pitch-black cover: brightness() cannot lift it
     const white = [255, 255, 255];
 
-    const base = hex(light['--stage-base']);
+    const base = rgb(light['--stage-base']);
     const backdropOpacity = Number(light['--stage-backdrop-opacity']);
     const veil = Number(light['--stage-veil-floor']);
     const materialAlpha = Number(/,\s*([\d.]+)\s*\)/.exec(light['--stage-material'])![1]);
 
     // wallpaper → veil → glass, exactly the order the browser paints them.
-    const wallpaper = over(black, backdropOpacity, base);
-    const wash = over(white, veil, wallpaper);
-    const glass = over(white, materialAlpha, wash);
+    const wallpaper = over({ rgb: black, alpha: backdropOpacity }, base);
+    const wash = over({ rgb: white, alpha: veil }, wallpaper);
+    const glass = over({ rgb: white, alpha: materialAlpha }, wash);
 
     const inks = {
-      primary: hex(light['--ink-primary']),
-      secondary: hex(light['--ink-secondary']),
-      tertiary: hex(light['--ink-tertiary']),
-      accent: hex(light['--accent-ink']),
+      primary: rgb(light['--ink-primary']),
+      secondary: rgb(light['--ink-secondary']),
+      tertiary: rgb(light['--ink-tertiary']),
+      accent: rgb(light['--accent-ink']),
     };
 
     // Body text and the accent as ink: AA on bare stage and on glass.

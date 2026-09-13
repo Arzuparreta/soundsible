@@ -3,6 +3,8 @@ import path from 'node:path';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
+import { colour, contrast, declarations, over, rgb } from './testing/tokens';
+
 /*
  * The mini-player pill is the app's one piece of glass: a fill over a blurred
  * backdrop, floating above the library that scrolls under it.
@@ -20,71 +22,18 @@ import { describe, expect, it } from 'vitest';
  */
 
 const src = process.cwd();
-const tokensFile = path.resolve(src, 'src/styles/tokens.css');
 const pillFile = path.resolve(src, 'src/components/OmniBar.module.css');
-
-function declarations(selectorMatch: (selector: string) => boolean): Record<string, string> {
-  const root = postcss.parse(fs.readFileSync(tokensFile, 'utf8'), { from: tokensFile });
-  const out: Record<string, string> = {};
-  root.walkRules((rule) => {
-    // Top-level only: the forced-colors block redeclares the same custom
-    // properties as system keywords, which are not colours we can composite.
-    if (rule.parent?.type !== 'root') return;
-    if (!selectorMatch(rule.selector.replace(/\s+/g, ' '))) return;
-    rule.walkDecls((decl) => {
-      out[decl.prop] = decl.value.trim();
-    });
-  });
-  return out;
-}
 
 const darkTheme = () => declarations((selector) => selector === ':root');
 const lightTheme = () => declarations((selector) => selector === ":root[data-theme='light']");
 const highContrast = () => declarations((selector) => selector === ":root[data-high-contrast='true']");
-
-function channel(value: number): number {
-  const c = value / 255;
-  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-}
-
-function luminance([r, g, b]: number[]): number {
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-}
-
-function contrast(a: number[], b: number[]): number {
-  const first = luminance(a);
-  const second = luminance(b);
-  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
-}
-
-function hex(value: string): number[] {
-  const match = /#([0-9a-f]{6})/i.exec(value);
-  if (!match) throw new Error(`not a hex colour: ${value}`);
-  const n = parseInt(match[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function rgba(value: string): { colour: number[]; alpha: number } {
-  const match = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?\s*\)/.exec(value);
-  if (!match) throw new Error(`not an rgba colour: ${value}`);
-  return {
-    colour: match.slice(1, 4).map(Number),
-    alpha: match[4] === undefined ? 1 : Number(match[4]),
-  };
-}
-
-/** Lay `alpha` of `colour` on `under`, the way the browser composites them. */
-function over(colour: number[], alpha: number, under: number[]): number[] {
-  return under.map((c, index) => colour[index] * alpha + c * (1 - alpha));
-}
 
 const BLACK = [0, 0, 0];
 const WHITE = [255, 255, 255];
 
 /** The pill's surface over the two extremes an unblurred backdrop can hand it. */
 function extremes(fill: string) {
-  const { colour, alpha } = rgba(fill);
-  return { onBlack: over(colour, alpha, BLACK), onWhite: over(colour, alpha, WHITE) };
+  return { onBlack: over(fill, BLACK), onWhite: over(fill, WHITE) };
 }
 
 describe('mini-player glass', () => {
@@ -103,19 +52,19 @@ describe('mini-player glass', () => {
     const dark = darkTheme();
     const darkGlass = extremes(dark['--glass-fill']);
     // White ink, so the bright backdrop is the hard case.
-    expect(contrast(hex(dark['--ink-primary']), darkGlass.onWhite)).toBeGreaterThanOrEqual(7);
-    expect(contrast(hex(dark['--ink-secondary']), darkGlass.onWhite)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(rgb(dark['--ink-primary']), darkGlass.onWhite)).toBeGreaterThanOrEqual(7);
+    expect(contrast(rgb(dark['--ink-secondary']), darkGlass.onWhite)).toBeGreaterThanOrEqual(4.5);
 
     const light = lightTheme();
     const lightGlass = extremes(light['--glass-fill']);
     // Dark ink, so the black backdrop is the hard case.
-    expect(contrast(hex(light['--ink-primary']), lightGlass.onBlack)).toBeGreaterThanOrEqual(7);
-    expect(contrast(hex(light['--ink-secondary']), lightGlass.onBlack)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(rgb(light['--ink-primary']), lightGlass.onBlack)).toBeGreaterThanOrEqual(7);
+    expect(contrast(rgb(light['--ink-secondary']), lightGlass.onBlack)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('spends high contrast on going further, never less far', () => {
-    expect(rgba(highContrast()['--glass-fill']).alpha)
-      .toBeGreaterThanOrEqual(rgba(darkTheme()['--glass-fill']).alpha);
+    expect(colour(highContrast()['--glass-fill']).alpha)
+      .toBeGreaterThanOrEqual(colour(darkTheme()['--glass-fill']).alpha);
   });
 
   it('still asks for the blur, for the engine that paints it', () => {
