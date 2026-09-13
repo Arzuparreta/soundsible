@@ -5,7 +5,7 @@ const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
   actions: {
     removeAutoSource: vi.fn(), useAutoTrackAsSource: vi.fn(), placeAutoTrack: vi.fn(),
     removeAutoRouteOccurrence: vi.fn(), avoidAutoTrackForSession: vi.fn(), moveAutoRoute: vi.fn(),
-    repairAutoRoute: vi.fn(), changeAutoSession: vi.fn(), cancelAutoSessionChange: vi.fn(),
+    retryAutoRoute: vi.fn(), repairAutoRoute: vi.fn(), changeAutoSession: vi.fn(), cancelAutoSessionChange: vi.fn(),
   },
   openActionMenu: vi.fn(),
   openContextMenu: vi.fn(),
@@ -23,7 +23,7 @@ const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
       transition: { status: 'idle' as 'idle' | 'armed' },
       repairing: false,
       pendingDirection: false,
-      phase: 'ready' as 'idle' | 'following_queue' | 'planning' | 'ready' | 'degraded',
+      phase: 'ready' as 'idle' | 'following_queue' | 'planning' | 'ready' | 'exhausted' | 'degraded',
       staleSeams: [] as string[],
       plan: { 'q-next': { trackId: 'next', fromKey: 'current', source: 'related' as const, reasonKey: '', sourceSetLabel: 'Warehouse techno', lineage: ['root', 'next'] } },
     },
@@ -265,4 +265,20 @@ describe('AutoMode workspace', () => {
     expect(titleFit('Redbone')).toBe('lg');
     expect(titleFit('Ain’t No Mountain High Enough')).toBe('md');
   });
+});
+
+
+it('offers a manual retry without an endless loading indicator when candidates are exhausted', () => {
+  const next = state.playback.queue.pop()!;
+  state.autoMode.phase = 'exhausted';
+  try {
+    const { container } = renderAuto('route');
+    expect(screen.getByRole('status')).toHaveTextContent('autoMode.route.exhausted');
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'common.retry' }));
+    expect(actions.retryAutoRoute).toHaveBeenCalledTimes(1);
+  } finally {
+    state.autoMode.phase = 'ready';
+    state.playback.queue.push(next);
+  }
 });

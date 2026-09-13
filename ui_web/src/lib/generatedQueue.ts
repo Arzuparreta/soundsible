@@ -20,7 +20,7 @@ export interface AutoMusicSet {
   activation: number;
 }
 
-export type AutoPhase = 'idle' | 'following_queue' | 'planning' | 'ready' | 'degraded';
+export type AutoPhase = 'idle' | 'following_queue' | 'planning' | 'ready' | 'exhausted' | 'degraded';
 
 export interface AutoActivity {
   id: number;
@@ -59,6 +59,8 @@ export interface AutoModeState {
   direction: DjDirection;
   sources: AutoMusicSet[];
   heard: Track[];
+  exploration?: Track[];
+  directionRevision?: number;
   avoidedIdentities: string[];
   transition: {
     /** `armed`: the next track is loaded, cued and no longer replannable.
@@ -121,11 +123,12 @@ export interface GeneratedQueueDeps {
   ) => number;
   onStatus: (
     intent: ListeningPlanIntent,
-    status: 'planning' | 'ready' | 'degraded' | 'idle',
+    status: 'planning' | 'ready' | 'exhausted' | 'degraded' | 'idle',
     response?: ListeningPlanResponse,
     replacing?: boolean,
   ) => void;
   identity: (track: Track) => string;
+  planningContext?: () => string;
   /** True for the one queue entry whose handoff is already loaded and cued. A
    * replan may rewrite everything after it, never it. */
   isCommitted?: (entry: PlaybackQueueEntry) => boolean;
@@ -184,6 +187,7 @@ export class GeneratedQueueController {
   private recent: string[] = [];
   private suspended = false;
   private retryPending = false;
+  private exhaustedInput: string | null = null;
 
   constructor(private readonly deps: GeneratedQueueDeps) {}
 
@@ -307,6 +311,7 @@ export class GeneratedQueueController {
     this.inFlight = null;
     this.retryStep = 0;
     this.recent = [];
+    this.exhaustedInput = null;
     this.session = null;
     if (stoppedIntent) this.deps.onStatus(stoppedIntent, 'idle');
   }
@@ -335,6 +340,11 @@ export class GeneratedQueueController {
     if (track.recommendation?.identity) this.remember(track.recommendation.identity);
     if (track.youtube_id) this.remember(track.youtube_id);
     if (track.id) this.remember(track.id);
+  }
+
+  retry(): Promise<boolean> {
+    this.exhaustedInput = null;
+    return this.refillNow();
   }
 
   async refillNow(): Promise<boolean> {
@@ -437,6 +447,8 @@ export class GeneratedQueueController {
     const needed = replace ? TARGET_LOOKAHEAD : Math.max(0, TARGET_LOOKAHEAD - remaining);
     if (needed === 0) return Promise.resolve(true);
 
+    const input = JSON.stringify([replace, session.profile, this.deps.planningContext?.(), this.exclusions(replace), this.deps.identity(this.anchor(replace))]);
+    if (session.intent === 'auto_mode' && this.exhaustedInput === input) return Promise.resolve(false);
     const generation = ++this.generation;
     this.aborter?.abort();
     const aborter = new AbortController();
@@ -466,10 +478,19 @@ export class GeneratedQueueController {
       if (generation !== this.generation || aborter.signal.aborted || this.session !== session) return false;
       const accepted = this.deps.applyPlan(session.intent, response, replace, seed);
       if (accepted === 0) {
-        this.deps.onStatus(session.intent, 'degraded', response, replace);
-        this.scheduleRetry();
+        const exhausted = session.intent === 'auto_mode'
+          && (response.empty_reason === 'exhausted' || (response.items.length > 0 && response.empty_reason !== 'temporary_failure'));
+        if (exhausted) {
+          this.exhaustedInput = input;
+          if (this.retryTimer) clearTimeout(this.retryTimer);
+          this.retryTimer = null;
+          this.retryPending = false;
+        }
+        this.deps.onStatus(session.intent, exhausted ? 'exhausted' : 'degraded', response, replace);
+        if (!exhausted) this.scheduleRetry();
         return false;
       }
+      this.exhaustedInput = null;
       for (const item of response.items) this.remember(item.recommendation_identity || item.id);
       if (session.intent === 'auto_mode') session.segmentIndex += 1;
       this.retryStep = 0;

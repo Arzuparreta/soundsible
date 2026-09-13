@@ -3438,3 +3438,57 @@ describe('DJ direction generation ownership', () => {
     actions.exitAutoMode();
   });
 });
+
+
+describe('DJ exploration provenance', () => {
+  it('only explores automatic tracks once sounding, and resets exploration on Change', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['auto-1', 'auto-2', 'auto-3', 'auto-4']));
+    const store = await loadStore({ planDjQueue });
+    const { actions, state, fireDeckEvent } = store;
+    store.initStore();
+    actions.playFrom([t1], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(5));
+    expect(state.autoMode.exploration).toEqual([]);
+    actions.next();
+    expect(state.autoMode.exploration).toEqual([]);
+    fireDeckEvent('playing');
+    expect(state.autoMode.exploration?.map((track) => track.id)).toEqual(['auto-1']);
+    await actions.placeAutoTrack({ id: 'request', title: 'Unrelated request', artist: 'Other' });
+    while (state.playback.currentTrack?.id !== 'request') actions.next();
+    fireDeckEvent('playing');
+    expect(state.autoMode.exploration?.some((track) => track.id === 'request')).toBe(false);
+    const revision = state.autoMode.directionRevision;
+    const exploration = state.autoMode.exploration?.map((track) => track.id);
+    actions.addAutoSource([t2], 'Additional influence');
+    expect(state.autoMode.exploration?.map((track) => track.id)).toEqual(exploration);
+    expect(state.autoMode.directionRevision).toBe(revision);
+    planDjQueue.mockResolvedValue(autoPlan(['new-1', 'new-2']));
+    expect(await actions.changeAutoSession([t2], 'New direction')).toBe(true);
+    expect(state.autoMode.exploration).toEqual([]);
+    expect(state.autoMode.directionRevision).toBe(revision! + 1);
+    expect(planDjQueue.mock.calls.some(([body]) => body.direction_revision === revision! + 1 && body.exploration.length === 0)).toBe(true);
+    fireDeckEvent('playing');
+    expect(state.autoMode.exploration).toEqual([]);
+    actions.next();
+    fireDeckEvent('playing');
+    expect(state.autoMode.exploration?.map((track) => track.id)).toEqual(['new-1']);
+    actions.exitAutoMode();
+  });
+
+  it('keeps ordinary automatic refills alive while a new direction is prepared', async () => {
+    const gate = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old-1', 'old-2']))
+      .mockReturnValueOnce(gate.promise).mockResolvedValue(autoPlan(['continued-old']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
+    const changing = actions.changeAutoSession([t2], 'New direction');
+    actions.next();
+    await vi.waitFor(() => expect(state.playback.queue.some((row) => row.id === 'continued-old')).toBe(true));
+    expect(state.autoMode.sessionChange?.status).toBe('working');
+    gate.resolve(autoPlan(['new']));
+    await changing;
+    actions.exitAutoMode();
+  });
+});

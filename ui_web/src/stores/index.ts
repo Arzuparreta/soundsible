@@ -1097,6 +1097,8 @@ function applySessionSnapshot(
       direction: auto.direction,
       sources: auto.sources,
       heard: auto.heard,
+      exploration: auto.exploration ?? [],
+      directionRevision: auto.directionRevision ?? 0,
       avoidedIdentities: auto.avoidedIdentities,
       plan: auto.plan,
       staleSeams: auto.staleSeams,
@@ -1444,7 +1446,7 @@ function maybeRefineTransition(current: Track, next: PlaybackQueueEntry, fromKey
 
 /** Watch the runway from `timeupdate` and commit when the moment arrives. */
 function evaluateDjRunway(): void {
-  if (!state.autoMode.active || state.autoMode.sessionChange?.status === 'working' || committedTransition || audioService.mixPhase() !== 'idle') return;
+  if (!state.autoMode.active || committedTransition || audioService.mixPhase() !== 'idle') return;
   if (performance.now() < autoHandoffCooldownUntil) return;
   const pb = state.playback;
   const current = pb.currentTrack;
@@ -1579,20 +1581,33 @@ function mixAutoTrackNow(track: Track): void {
   void ensureGeneratedQueue().start('auto_mode', requested, state.autoMode.profile);
 }
 
+/** Only a sounding automatic occurrence from this direction opens new paths. */
+function rememberDjExploration(): void {
+  if (!state.autoMode.active) return;
+  const entry = state.playback.queue[state.playback.index];
+  if (entry?.autoRoute?.kind !== 'generated'
+    || entry.autoRoute.directionRevision !== (state.autoMode.directionRevision ?? 0)) return;
+  const roots = state.autoMode.exploration ?? [];
+  const identity = queueIdentity(entry);
+  if (roots.some((track) => queueIdentity(track) === identity)) return;
+  setState('autoMode', 'exploration', [...roots, entry].slice(-4));
+  void generatedQueue?.ensureRunway();
+}
+
 /** Apply the first route returned by a source-only DJ plan. */
 function startAutoFromSourcePlan(response: DjPlanResponse): boolean {
   if (!response.opening) return false;
   const opening = planItemTrack(response.opening);
   const openingEntry = {
     ...createQueueEntry(opening, 'generated', 'auto_mode'),
-    autoRoute: { kind: 'generated' as const },
+    autoRoute: { kind: 'generated' as const, directionRevision: state.autoMode.directionRevision ?? 0 },
   };
   const candidates = response.items
     .map((item) => ({ item, track: planItemTrack(item) }))
     .filter(({ track }) => queueIndexOf([openingEntry], track) === -1);
   const entries = candidates.map(({ track }) => ({
     ...createQueueEntry(track, 'generated', 'auto_mode'),
-    autoRoute: { kind: 'generated' as const },
+    autoRoute: { kind: 'generated' as const, directionRevision: state.autoMode.directionRevision ?? 0 },
   }));
   const plan: Record<string, AutoPlanItem> = {};
   let fromKey = queueIdentity(openingEntry);
@@ -1660,6 +1675,8 @@ async function startAutoFromSources(): Promise<void> {
       session_id: randomId(),
       segment_index: 0,
       source_policy: 'explicit',
+      exploration: state.autoMode.exploration ?? [],
+      direction_revision: state.autoMode.directionRevision ?? 0,
       sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
       heard: [],
       exclude: state.autoMode.avoidedIdentities,
@@ -1778,14 +1795,17 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
   sessionChangeAborter = aborter;
   const source: AutoMusicSet = { id: randomId(), label: label.trim() || usable[0].title, tracks: usable, activation: 1 };
   const controller = ensureGeneratedQueue();
-  controller.suspendPlanning();
   setState('autoMode', { repairing: false, sessionChange: { label: source.label, status: 'working' } });
   const current = () => !aborter.signal.aborted && state.autoMode.active && autoSessionEpoch === epoch;
-  const signature = () => `${state.playback.index}:${state.playback.queue.map((row) => row.queueId).join('|')}`;
-  // Both loop exits are bounded. A blend that never settles, or a queue that
-  // changes on every round trip, would otherwise spin here for good with
-  // planning suspended and `sessionChange` stuck on 'working' — which gates
-  // every DJ handoff too. Failing lands in the error state, which offers Retry.
+  const signature = () => JSON.stringify([
+    state.playback.queue[state.playback.index]?.queueId,
+    state.playback.queue.slice(state.playback.index + 1)
+      .filter((row) => row.queueLane === 'manual' || row.autoRoute?.kind === 'user')
+      .map((row) => row.queueId),
+  ]);
+  const revision = (state.autoMode.directionRevision ?? 0) + 1;
+  // Keep ordinary refills running during preparation. A blend that never
+  // settles or a changing anchor must still reach an actionable error.
   const deadline = Date.now() + 60_000;
   let planAttempts = 0;
   try {
@@ -1802,20 +1822,27 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
       const explicit = state.playback.queue.slice(state.playback.index + 1).filter((row) => row.queueLane === 'manual' || row.autoRoute?.kind === 'user');
       const response = await api.planDjQueue({
         dj_profile: state.autoMode.djProfile, direction: state.autoMode.direction,
-        source_policy: 'explicit', sources: [source], heard: state.autoMode.heard,
+        source_policy: 'explicit',
+        exploration: [],
+        direction_revision: revision,
+        sources: [source], heard: state.autoMode.heard,
         seed: anchor ? djItemRef(anchor) : undefined,
         session_id: randomId(), segment_index: 0,
         exclude: [...state.autoMode.avoidedIdentities, ...explicit.flatMap((row) => [queueIdentity(row), row.id, row.youtube_id ?? ''])],
         limit: 8,
       }, aborter.signal);
       if (!current()) return false;
+      if (Date.now() > deadline) throw new Error('change did not settle');
+      if (response.direction_revision != null && response.direction_revision !== revision) throw new Error('stale direction');
       if (before !== signature() || audioService.mixPhase() === 'crossfading') continue;
+      controller.suspendPlanning();
+      const previousContext = { exploration: state.autoMode.exploration ?? [], directionRevision: state.autoMode.directionRevision ?? 0 };
       if (!anchor) {
         if (!response.opening) throw new Error('no opening');
         const previous = state.autoMode.sources;
-        setState('autoMode', 'sources', [source]);
+        setState('autoMode', { sources: [source], exploration: [], directionRevision: revision });
         if (!startAutoFromSourcePlan(response)) {
-          setState('autoMode', 'sources', previous);
+          setState('autoMode', { sources: previous, ...previousContext });
           throw new Error('no playable opening');
         }
       } else {
@@ -1829,9 +1856,9 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
           controller.adopt('auto_mode', anchor, state.autoMode.profile);
         }
         const previous = state.autoMode.sources;
-        setState('autoMode', 'sources', [source]);
+        setState('autoMode', { sources: [source], exploration: [], directionRevision: revision });
         if (!controller.applyReplacement(response, anchor)) {
-          setState('autoMode', 'sources', previous);
+          setState('autoMode', { sources: previous, ...previousContext });
           throw new Error('no replacement');
         }
         // Preserved requests change adjacency. Never reuse a cue for another seam.
@@ -1851,6 +1878,7 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
         setState('autoMode', { plan, staleSeams: [] });
       }
       setState('autoMode', 'sessionChange', undefined);
+      controller.resumePlanning();
       sessionChangeAborter = null;
       pushPlaybackState();
       return true;
@@ -2302,6 +2330,8 @@ export const actions = {
       plan: {},
       sources: current ? [{ id: randomId(), label: current.title, tracks: [current], activation: 1 }] : [],
       heard: current ? [current] : [],
+      exploration: [],
+      directionRevision: (state.autoMode.directionRevision ?? 0) + 1,
       avoidedIdentities: [],
       transition: { status: 'idle' },
       pendingDirection: false,
@@ -2359,6 +2389,7 @@ export const actions = {
       phase: 'idle',
       sources: [],
       heard: [],
+      exploration: [],
       avoidedIdentities: [],
       plan: {},
       pendingDirection: false,
@@ -2396,6 +2427,10 @@ export const actions = {
   },
 
   cancelAutoSessionChange(): void { cancelSessionChange(); },
+
+  retryAutoRoute(): void {
+    void generatedQueue?.retry();
+  },
 
   retryAutoSessionChange(): void {
     if (failedSessionChange) void changeAutoSession(failedSessionChange.tracks, failedSessionChange.label);
@@ -2521,6 +2556,8 @@ export const actions = {
         requests: occurrences.map((row) => ({ track: row, requested_queue_id: row.queueId })),
         before_queue_id: beforeQueueId,
         source_policy: 'explicit',
+        exploration: state.autoMode.exploration ?? [],
+        direction_revision: state.autoMode.directionRevision ?? 0,
         sources: state.autoMode.sources, heard: state.autoMode.heard, exclude: state.autoMode.avoidedIdentities,
       });
       if (!state.autoMode.active || epoch !== autoSessionEpoch) { progress.dismiss(); return; }
@@ -2605,6 +2642,8 @@ export const actions = {
         requested_queue_id: occurrence.queueId,
         before_queue_id: beforeQueueId,
         source_policy: 'explicit',
+        exploration: state.autoMode.exploration ?? [],
+        direction_revision: state.autoMode.directionRevision ?? 0,
         sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
         heard: state.autoMode.heard,
         exclude: state.autoMode.avoidedIdentities,
@@ -2748,6 +2787,8 @@ export const actions = {
           route_kind: autoRouteKind(entry),
         })),
         source_policy: 'explicit',
+        exploration: state.autoMode.exploration ?? [],
+        direction_revision: state.autoMode.directionRevision ?? 0,
         sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
         heard: state.autoMode.heard,
         exclude: state.autoMode.avoidedIdentities,
@@ -2781,7 +2822,7 @@ export const actions = {
         const kept = item.queue_id ? byQueueId.get(item.queue_id) : undefined;
         const autoRoute = item.route_kind === 'bridge'
           ? { kind: 'bridge' as const, ownerQueueId: item.owner_queue_id }
-          : { kind: 'generated' as const };
+          : { kind: 'generated' as const, directionRevision: state.autoMode.directionRevision ?? 0 };
         // Spreading the kept entry preserves its lane and context, which is how
         // an explicitly queued song stays an explicit request through a repair.
         if (kept) return item.route_kind === 'user' ? kept : { ...kept, autoRoute };
@@ -4098,6 +4139,13 @@ function ensureGeneratedQueue(): GeneratedQueueController {
       index: state.playback.index,
     }),
     identity: queueIdentity,
+    planningContext: () => JSON.stringify([
+      state.autoMode.directionRevision,
+      state.autoMode.sources.map((source) => [source.id, source.activation, source.tracks.map(queueIdentity)]),
+      (state.autoMode.exploration ?? []).map(queueIdentity),
+      state.autoMode.avoidedIdentities,
+      state.autoMode.direction,
+    ]),
     isCommitted: (entry) => committedTransition?.queueId === entry.queueId,
     requestPlan: (intent, profile, seed, limit, exclude, signal, generatedSession) => {
       const seedBody = {
@@ -4120,6 +4168,8 @@ function ensureGeneratedQueue(): GeneratedQueueController {
           context: state.autoMode.heard.slice(-8).map(djItemRef),
           seed: seedBody,
           source_policy: 'explicit',
+          exploration: state.autoMode.exploration ?? [],
+          direction_revision: state.autoMode.directionRevision ?? 0,
           sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
           heard: state.autoMode.heard,
           exclude: [...new Set([...exclude, ...state.autoMode.avoidedIdentities])],
@@ -4129,6 +4179,8 @@ function ensureGeneratedQueue(): GeneratedQueueController {
       return api.planMusicQueue({ intent, profile, seed: seedBody, exclude, limit }, signal);
     },
     applyPlan: (intent, response, replace, anchor) => {
+      if (intent === 'auto_mode' && response.direction_revision != null
+        && response.direction_revision !== (state.autoMode.directionRevision ?? 0)) return 0;
       // What a replacing plan keeps: everything already played, every explicit
       // request, and the one handoff that is already loaded and cued.
       const previousUpcoming = replace
@@ -4150,7 +4202,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
       if (candidates.length === 0) return 0;
       const entries = candidates.map(({ track }) => ({
         ...createQueueEntry(track, 'generated', intent),
-        autoRoute: intent === 'auto_mode' ? { kind: 'generated' as const } : undefined,
+        autoRoute: intent === 'auto_mode' ? { kind: 'generated' as const, directionRevision: state.autoMode.directionRevision ?? 0 } : undefined,
       }));
       if (replace) {
         let generatedIndex = 0;
@@ -4254,13 +4306,14 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         return;
       }
       const counts = response?.pool_counts ?? { local: 0, related: 0, discovery: 0 };
-      const degraded = status === 'degraded';
+      const exhausted = status === 'exhausted';
+      const degraded = status === 'degraded' || exhausted;
       setState('autoMode', {
-        phase: degraded ? 'degraded' : 'ready',
+        phase: exhausted ? 'exhausted' : degraded ? 'degraded' : 'ready',
         activity: {
           id: ++generatedActivityId,
           status: degraded ? 'error' : 'done',
-          key: degraded
+          key: exhausted ? 'autoMode.route.exhausted' : degraded
             ? 'autoMode.agent.retrying'
             : replacing
               ? 'autoMode.agent.steered'
@@ -4509,6 +4562,7 @@ export function initStore(): void {
   });
   // First 'playing' after a user-initiated load → click-to-sound latency.
   a.addEventListener('playing', (snapshot) => {
+    rememberDjExploration();
     clearStallTimer();
     setState('playback', { isLoading: false, loadError: false, phase: 'playing' });
     updateMediaSession(state.playback.currentTrack, 'playing');
@@ -4558,6 +4612,7 @@ export function initStore(): void {
     const position = snapshot.position;
     setState('playback', 'currentTime', position);
     listeningLearning.update(state.playback.currentTrack, position, snapshot.playing);
+    if (snapshot.playing) rememberDjExploration();
     evaluateDjRunway();
     watchRunway(snapshot);
   });

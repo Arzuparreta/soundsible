@@ -366,7 +366,7 @@ def _planner_context_related(
                 break
         if len(candidates) >= _AUTO_RAW_LIMIT:
             break
-    return list(candidates.values()), bool(misses and not mixes)
+    return list(candidates.values()), any(video_id not in mixes for video_id, _ in anchors)
 
 
 def _planner_related_artist_pool(
@@ -986,18 +986,18 @@ def _auto_set_arc_position(heard_count: int, segment_index: int) -> float:
     return phases[(heard_count + segment_index) % len(phases)]
 
 
-def _heard_context_related(metadata, heard_roots: list[dict]) -> tuple[list[dict], bool]:
-    """One hop out of recent listening, weighted so it never outranks a source."""
+def _exploration_related(metadata, heard_roots: list[dict]) -> tuple[list[dict], bool]:
+    """One hop out of confirmed automatic playback in the current direction."""
     if not heard_roots:
         return [], False
     related, graph_degraded = _planner_context_related(metadata, heard_roots, personalise=False)
     for item in related:
         item.update({
-            "source_set_id": "heard",
-            "source_set_label": "Heard",
+            "source_set_id": "exploration",
+            "source_set_label": "Session",
             "source_weight": 0.3,
-            "lineage": ["heard", item["recommendation_identity"]],
-            "reason": "Reached from music already heard",
+            "lineage": ["exploration", item["recommendation_identity"]],
+            "reason": "Reached from this DJ session",
             "reason_code": "heard_context",
             "recommendation_source": "auto_mode",
         })
@@ -1008,7 +1008,7 @@ def _heard_context_related(metadata, heard_roots: list[dict]) -> tuple[list[dict
 def _build_music_set_route(data: dict) -> tuple[dict, int]:
     """Auto v6: conduct accumulating sources without semantic fences.
 
-    Explicit sources and music that actually sounded are the only graph roots.
+    Explicit sources and confirmed automatic playback are the only graph roots.
     Candidates never become roots merely because a previous plan recommended
     them, which prevents self-reinforcing recommendation walks.
     """
@@ -1063,60 +1063,30 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
             item["score"] = float(item.get("score") or 0.5) * weight
         candidates.extend(related)
 
-    explicit = data.get("source_policy") == "explicit"
-    heard: set[str] = set()
-    heard_roots = []
-    for raw in raw_heard[-4:]:
-        if not isinstance(raw, dict):
-            continue
-        normalised = _music_set_item(raw, source_id="heard", label="Heard", weight=0.3)
-        if normalised:
-            if not explicit:
-                heard.add(str(normalised["recommendation_identity"]))
-            heard_roots.append(normalised)
-    if explicit:
-        # Every track that sounded excludes a repeat of itself. None of them
-        # steers the session: under an explicit policy the walk out of recent
-        # listening is held back as a fallback, below.
-        for raw in raw_heard:
-            if isinstance(raw, dict):
-                item = _music_set_item(raw, source_id="heard", label="Heard", weight=0.3)
-                if item:
-                    heard.add(str(item["recommendation_identity"]))
-    else:
-        related, graph_degraded = _heard_context_related(metadata, heard_roots)
-        degraded = degraded or graph_degraded
-        candidates.extend(related)
-
+    # Exploration is supplied separately from repeat history. Legacy clients
+    # have no provenance, so only their non-explicit policy uses heard roots.
+    raw_exploration = data.get("exploration")
+    if not isinstance(raw_exploration, list):
+        raw_exploration = raw_heard if data.get("source_policy") != "explicit" else []
+    exploration_roots = [
+        item for raw in raw_exploration[-4:] if isinstance(raw, dict)
+        and (item := _music_set_item(raw, source_id="exploration", label="Session", weight=0.3))
+    ]
+    related, graph_degraded = _exploration_related(metadata, exploration_roots)
+    degraded = degraded or graph_degraded
+    candidates.extend(related)
+    heard = {
+        item["recommendation_identity"] for raw in raw_heard[-4:]
+        if isinstance(raw, dict)
+        and (item := _music_set_item(raw, source_id="heard", label="Heard"))
+    }
     excluded = {str(value) for value in data.get("exclude", []) if str(value)}
     unique: dict[str, dict] = {}
-
-    def collect() -> list[dict]:
-        unique.clear()
-        for item in candidates:
-            identity = str(item.get("recommendation_identity") or item.get("id") or "")
-            if not identity or identity in excluded:
-                continue
+    for item in candidates:
+        identity = str(item.get("recommendation_identity") or item.get("id") or "")
+        if identity and identity not in excluded:
             unique.setdefault(identity, item)
-        return [item for key, item in unique.items() if key not in heard]
-
-    available = collect()
-    if explicit and len(available) < limit:
-        # A source walk is finite and deterministic, while the client excludes
-        # everything it has already queued, so a long session drains the pool to
-        # nothing and the route comes back empty for good. Recent listening is
-        # the only material left: it may refill the pool, but it stays at 0.3 and
-        # never becomes a visible influence, so the direction the listener chose
-        # still decides what is played first.
-        # Already degraded whatever the walk reports: the influence pool alone
-        # could not fill this route.
-        degraded = True
-        related, _ = _heard_context_related(metadata, heard_roots)
-        if related:
-            candidates.extend(related)
-            available = collect()
-    # Exact repeat exclusion is not a semantic fence. It may relax only when
-    # the available pool is exhausted.
+    available = [item for key, item in unique.items() if key not in heard]
     if not available:
         available = list(unique.values())
 
@@ -1128,7 +1098,7 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     measured_energies = sorted(
         float(analysis.get("energy") or 0.5) for _, analysis in analysed if analysis.get("analysed")
     )
-    arc = _auto_set_arc_position(len(heard_roots), segment_index)
+    arc = _auto_set_arc_position(len(heard), segment_index)
     if measured_energies:
         target = measured_energies[min(len(measured_energies) - 1, int(arc * len(measured_energies)))]
         analysed.sort(key=lambda pair: abs(float(pair[1].get("energy") or 0.5) - target))
@@ -1185,6 +1155,8 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         **({"opening": opening} if opening else {}),
         "items": route,
         "degraded": degraded or not route,
+        "empty_reason": ("temporary_failure" if degraded else "exhausted") if not route else None,
+        "direction_revision": data.get("direction_revision"),
         "pool_counts": {
             "local": sum(1 for item in unique.values() if item.get("source_pool") == "local"),
             "related": sum(1 for item in unique.values() if item.get("source_pool") == "related"),
@@ -1193,7 +1165,7 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         "generated_at": int(time.time()),
         "session_id": data.get("session_id"),
         "segment_index": segment_index,
-        "arc": {"target": arc, "phase": (len(heard_roots) + segment_index) % 6},
+        "arc": {"target": arc, "phase": (len(heard) + segment_index) % 6},
     }, 200
 
 
@@ -1406,7 +1378,11 @@ def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tupl
             )
             if item:
                 source_roots.append(item)
-    heard = data.get("heard") if isinstance(data.get("heard"), list) else []
+    heard = data.get("exploration")
+    if not isinstance(heard, list):
+        heard = data.get("heard", []) if data.get("source_policy") != "explicit" else []
+    if not isinstance(heard, list):
+        heard = []
     heard_roots = []
     for raw in heard[-4:]:
         if not isinstance(raw, dict):
@@ -1414,8 +1390,6 @@ def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tupl
         item = _music_set_item(raw, source_id="heard", label="Heard", weight=0.3)
         if item:
             heard_roots.append(item)
-    explicit = data.get("source_policy") == "explicit"
-
     def walk(roots: list[dict]) -> list[tuple[dict, dict]]:
         if not roots:
             return []
@@ -1431,12 +1405,7 @@ def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tupl
                 break
         return candidates
 
-    candidates = walk(source_roots if explicit else [*source_roots, *heard_roots])
-    # A seam with no bridge material is a raw cut. Recent listening is bridge
-    # material and nothing more: it connects two songs, it does not choose them.
-    if explicit and not candidates:
-        candidates = walk(heard_roots)
-    return candidates
+    return walk([*source_roots, *heard_roots])
 
 
 @discovery_bp.route("/api/discovery/music/dj-place", methods=["POST"])

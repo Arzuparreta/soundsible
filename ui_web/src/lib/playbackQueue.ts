@@ -49,6 +49,7 @@ export interface PlaybackQueueEntry extends Track {
    * be present in the source tray and as one or more route occurrences. */
   autoRoute?: {
     kind: 'generated' | 'user' | 'bridge';
+    directionRevision?: number;
     placement?: 'dj' | 'fixed';
     /** queueId of the user occurrence this bridge exists for. */
     ownerQueueId?: string;
