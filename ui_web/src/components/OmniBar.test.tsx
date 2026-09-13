@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setMediaQuery } from '../test-setup';
 
 const { actions, setNowPlayingOpen, state } = vi.hoisted(() => ({
   actions: {
@@ -104,8 +105,12 @@ function pointer(node: Element, type: string, x: number, y: number, extra = {}) 
   fireEvent(node, event);
 }
 
+/** The breakpoint listLayout watches, and the one OmniBar's CSS switches on. */
+const MOBILE = '(max-width: 1023px)';
+
 describe('mobile deck dismissal', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => { vi.clearAllMocks(); setMediaQuery(MOBILE, true); });
+  afterEach(() => setMediaQuery(MOBILE, false));
 
   it('dismisses a left swipe and consumes its trailing click', () => {
     const view = render(() => <OmniBar />);
@@ -144,15 +149,50 @@ describe('mobile deck dismissal', () => {
   });
 
   it('does not dismiss on a desktop even with touch input', () => {
-    const original = window.matchMedia;
-    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
-    try {
-      const view = render(() => <OmniBar />);
-      const bar = view.container.querySelector('[data-omni-player]')!;
-      pointer(bar, 'pointerdown', 200, 30);
-      pointer(bar, 'pointermove', 100, 30);
-      pointer(bar, 'pointerup', 100, 30);
-      expect(actions.dismissPlayback).not.toHaveBeenCalled();
-    } finally { window.matchMedia = original; }
+    setMediaQuery(MOBILE, false);
+    const view = render(() => <OmniBar />);
+    const bar = view.container.querySelector('[data-omni-player]')!;
+    pointer(bar, 'pointerdown', 200, 30);
+    pointer(bar, 'pointermove', 100, 30);
+    pointer(bar, 'pointerup', 100, 30);
+    expect(actions.dismissPlayback).not.toHaveBeenCalled();
+  });
+});
+
+/* The pill is one press to open the player. Anything inside it that is not a
+   transport control has to lead there too — a link that took the tap to an
+   artist page, or artwork that swallowed it and did nothing, both broke the
+   only promise the bar makes on a phone. */
+describe('what the compact pill does with a tap', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  afterEach(() => setMediaQuery(MOBILE, false));
+
+  it('says the artist without offering a second destination on a phone', () => {
+    setMediaQuery(MOBILE, true);
+    render(() => <OmniBar />);
+
+    expect(screen.queryByRole('link', { name: 'An artist' })).toBeNull();
+    // Still said, and still inside the area the open button covers.
+    const said = screen.getByText('An artist');
+    expect(screen.getByRole('button', { name: /A track/ }).parentElement).toContainElement(said);
+  });
+
+  it('keeps the artist a link on a desktop, where the bar has room for both', () => {
+    setMediaQuery(MOBILE, false);
+    render(() => <OmniBar />);
+
+    expect(screen.getByRole('link', { name: 'An artist' })).toBeInTheDocument();
+  });
+
+  it('leaves the artwork to the open button instead of taking the tap itself', () => {
+    setMediaQuery(MOBILE, true);
+    const view = render(() => <OmniBar />);
+
+    // The cover is decoration with no handler of its own; what must not happen
+    // is it sitting above the open button and eating the press, which is what
+    // being positioned and later in the DOM made it do.
+    const cover = view.container.querySelector<HTMLElement>('[data-omni-cover]')!;
+    expect(cover).not.toHaveAttribute('role', 'button');
+    expect(cover.querySelector('button, a')).toBeNull();
   });
 });

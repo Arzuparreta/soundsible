@@ -3,6 +3,7 @@ import { trackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { trackCoverUrl } from '../lib/media';
+import { mobileListLayout } from '../lib/listLayout';
 import { pageVisible } from '../lib/pageVisibility';
 import { t } from '../lib/i18n';
 import { linkFits, linkReading, mbps, trackKbps } from '../lib/linkQuality';
@@ -17,8 +18,10 @@ export function OmniBar() {
   const [swipeOffset, setSwipeOffset] = createSignal(0);
   let swipe: { id: number; x: number; y: number; captured: boolean } | null = null;
   let suppressClick = false;
-  // Match the CSS breakpoint that hides the empty mobile deck.
-  const mobile = () => !window.matchMedia?.('(min-width: 1024px)').matches;
+  // The same breakpoint the stylesheet uses to hide the empty mobile deck.
+  // Reactive, because it no longer only arms a gesture: below it the artist is
+  // rendered as text rather than as a link, and a rotation has to re-render.
+  const mobile = mobileListLayout;
   const resetSwipe = () => { swipe = null; setSwipeOffset(0); };
   const startSwipe: JSX.EventHandler<HTMLDivElement, PointerEvent> = event => {
     suppressClick = false;
@@ -93,6 +96,21 @@ export function OmniBar() {
     return d > 0 ? Math.min(100, (state.playback.currentTime / d) * 100) : 0;
   });
 
+  /**
+   * On a phone the pill is one thing you press to open the player, so nothing
+   * inside it may quietly be a second destination: an artist link there took
+   * taps aimed at the pill and sent them to a page nobody asked for. Telling
+   * `ArtistLinks` the metadata is not linkable makes it render plain text, which
+   * keeps the accessibility tree honest too — no link that does not navigate.
+   * The desktop bar is wide enough to hold both, and keeps the link.
+   */
+  const subtitleMusic = createMemo(() => {
+    const track = current();
+    if (!track) return undefined;
+    const music = trackMusic(track);
+    return mobile() ? { ...music, linkable: false } : music;
+  });
+
   const coverBg = (): JSX.CSSProperties | undefined => {
     const c = current();
     if (!c) return undefined;
@@ -155,7 +173,7 @@ export function OmniBar() {
             <span class={styles.title}>
               {current()!.title}
             </span>
-            <span classList={{ [styles.sub]: true, [styles.subAlert]: failed() }}><Show when={subtitle() === current()!.artist} fallback={subtitle()}><ArtistLinks music={trackMusic(current()!)} /></Show></span>
+            <span classList={{ [styles.sub]: true, [styles.subAlert]: failed() }}><Show when={subtitle() === current()!.artist} fallback={subtitle()}><ArtistLinks music={subtitleMusic()!} /></Show></span>
           </Show>
         </div>
       </div>

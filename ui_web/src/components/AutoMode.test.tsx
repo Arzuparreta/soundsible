@@ -237,6 +237,26 @@ describe('AutoMode workspace', () => {
     }
   });
 
+  /* The cued row used to be the only one without a ⋯, and so the only one with
+   * room for a full artist name — a layout difference nobody chose, produced by
+   * withholding a menu. It keeps the actions that still apply instead. */
+  it('gives a cued handoff the same menu, minus the one action it cannot take', () => {
+    state.autoMode.transition.status = 'armed';
+    try {
+      renderAuto('route');
+      fireEvent.click(screen.getByRole('button', { name: 'autoMode.route.actions:Next song' }));
+      const options = openActionMenu.mock.calls.at(-1)![0];
+      expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
+        'musicExplorer.reference', 'musicExplorer.change',
+      ]);
+      options.actions[0].onSelect();
+      expect(actions.useAutoTrackAsSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'next' }));
+      expect(actions.removeAutoRouteOccurrence).not.toHaveBeenCalled();
+    } finally {
+      state.autoMode.transition.status = 'idle';
+    }
+  });
+
   it('never offers to insert in front of a handoff that is already cued', () => {
     state.autoMode.transition.status = 'armed';
     try {

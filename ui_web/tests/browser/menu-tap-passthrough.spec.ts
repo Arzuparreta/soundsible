@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { dragTouch } from './playerGestures';
 
 /**
  * The bug this covers: choosing an action in a song's ⋯ menu also activated
@@ -135,4 +136,30 @@ test('the same choice on a pointer leaves the row under the popover alone', asyn
 
   await expect(menu).toHaveCount(0);
   await expect(page.locator('[data-now-playing]')).toHaveCount(0);
+});
+
+/* The grabber the sheet draws now means something. Dismissing by hand runs the
+   same risk the menu items do — the sheet is sitting on top of a song row, and
+   the compatibility click this touch still owes would land there. */
+test('swiping the song menu away closes it without playing what it covered', async ({ page }, info) => {
+  test.skip(info.project.name !== 'chromium-mobile', 'Native touch injection uses CDP');
+  await openLibrary(page);
+
+  await page.locator('[data-music-list-row]').filter({ has: row(page, 12) })
+    .getByRole('button', { name: /^More options/ }).tap();
+  const sheet = page.getByRole('dialog');
+  await expect(sheet).toBeVisible();
+
+  const box = (await sheet.boundingBox())!;
+  const covered = await rowUnder(page, box.x + box.width / 2, box.y + box.height / 2);
+  expect(covered, 'the sheet must cover a song row for this to test anything').not.toBeNull();
+
+  // Not far enough to commit: the sheet comes back rather than closing.
+  await dragTouch(page, '[role="dialog"]', { dy: 24 });
+  await expect(sheet).toBeVisible();
+
+  await dragTouch(page, '[role="dialog"]', { dy: 260 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-now-playing]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: covered! })).not.toHaveAttribute('data-now-playing');
 });

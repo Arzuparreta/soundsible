@@ -51,3 +51,31 @@ export async function snapPlayerCarousel(
     carousel.style.scrollBehavior = previousBehavior;
   }, { scope, panel });
 }
+
+/**
+ * A touch drag across an element, in the shape a gesture actually reads:
+ * several moves rather than one jump, so the axis arbitration sees the
+ * direction before the distance.
+ */
+export async function dragTouch(
+  page: Page,
+  selector: string,
+  delta: { dx?: number; dy?: number },
+  steps = 8,
+) {
+  const box = (await page.locator(selector).boundingBox())!;
+  const dx = delta.dx ?? 0;
+  const dy = delta.dy ?? 0;
+  const x = box.x + box.width / 2;
+  const y = box.y + Math.min(box.height / 2, 60);
+  const session = await page.context().newCDPSession(page);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let step = 1; step <= steps; step += 1) {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: x + (dx * step) / steps, y: y + (dy * step) / steps }],
+    });
+  }
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await session.detach();
+}

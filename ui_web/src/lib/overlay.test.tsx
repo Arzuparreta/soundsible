@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library';
 import { OverlayOutlet, openOverlay } from './overlay';
+import { setMediaQuery } from '../test-setup';
 
 // The reason this whole rewrite exists: overlays must leave zero orphaned DOM
 // when closed. The legacy player document.body.appendChild'd modals and forgot
@@ -105,5 +106,100 @@ describe('overlay manager (anti-leak)', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(trigger).toHaveFocus());
     trigger.remove();
+  });
+});
+
+/** jsdom has no touch input, so the gesture is fed the shape it reads: an
+    identified touch on `touches`, and the same one on `changedTouches`. */
+function touch(type: 'touchstart' | 'touchmove' | 'touchend', x: number, y: number) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  const point = { clientX: x, clientY: y, identifier: 1 };
+  const list = { length: 1, item: () => point };
+  Object.defineProperty(event, 'touches', {
+    value: type === 'touchend' ? { length: 0, item: () => null } : list,
+  });
+  Object.defineProperty(event, 'changedTouches', { value: list });
+  return event;
+}
+
+function drag(target: Element, dx: number, dy: number) {
+  target.dispatchEvent(touch('touchstart', 200, 200));
+  target.dispatchEvent(touch('touchmove', 200 + dx / 4, 200 + dy / 4));
+  target.dispatchEvent(touch('touchmove', 200 + dx, 200 + dy));
+  target.dispatchEvent(touch('touchend', 200 + dx, 200 + dy));
+}
+
+const sheet = () => document.querySelector('[role="dialog"]')!;
+const MOBILE = '(max-width: 1023px)';
+
+/* The sheet has always drawn a grabber. These lock in that it now means
+   something — and, just as importantly, that it means nothing where the surface
+   is not against an edge or is not dismissable at all. */
+describe('drag to dismiss', () => {
+  afterEach(() => setMediaQuery(MOBILE, false));
+
+  it('closes a bottom sheet dragged downwards', async () => {
+    setMediaQuery(MOBILE, true);
+    render(() => <OverlayOutlet />);
+    openOverlay(() => <p>Swipe me</p>);
+    expect(await screen.findByText('Swipe me')).toBeInTheDocument();
+
+    drag(sheet(), 0, 160);
+    await waitFor(() => expect(screen.queryByText('Swipe me')).toBeNull());
+  });
+
+  it('closes a left drawer dragged towards the edge it came from', async () => {
+    setMediaQuery(MOBILE, true);
+    render(() => <OverlayOutlet />);
+    openOverlay(() => <p>Drawer</p>, { variant: 'drawer' });
+    expect(await screen.findByText('Drawer')).toBeInTheDocument();
+
+    drag(sheet(), -160, 0);
+    await waitFor(() => expect(screen.queryByText('Drawer')).toBeNull());
+  });
+
+  it('keeps a drawer dragged further open, and a sheet dragged upwards', async () => {
+    setMediaQuery(MOBILE, true);
+    render(() => <OverlayOutlet />);
+    const closeDrawer = openOverlay(() => <p>Drawer</p>, { variant: 'drawer' });
+    expect(await screen.findByText('Drawer')).toBeInTheDocument();
+    drag(sheet(), 160, 0);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('Drawer')).toBeInTheDocument();
+    closeDrawer();
+
+    openOverlay(() => <p>Upwards</p>);
+    expect(await screen.findByText('Upwards')).toBeInTheDocument();
+    drag(sheet(), 0, -160);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('Upwards')).toBeInTheDocument();
+  });
+
+  it('leaves a full-screen window and a non-dismissable sheet alone', async () => {
+    setMediaQuery(MOBILE, true);
+    render(() => <OverlayOutlet />);
+    const closeWindow = openOverlay(() => <p>Settings</p>, { variant: 'window' });
+    expect(await screen.findByText('Settings')).toBeInTheDocument();
+    drag(sheet(), 0, 160);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('Settings')).toBeInTheDocument();
+    closeWindow();
+
+    openOverlay(() => <p>Sticky</p>, { dismissable: false });
+    expect(await screen.findByText('Sticky')).toBeInTheDocument();
+    drag(sheet(), 0, 160);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('Sticky')).toBeInTheDocument();
+  });
+
+  it('does not arm where the sheet is a centred card', async () => {
+    setMediaQuery(MOBILE, false);
+    render(() => <OverlayOutlet />);
+    openOverlay(() => <p>Desktop card</p>);
+    expect(await screen.findByText('Desktop card')).toBeInTheDocument();
+
+    drag(sheet(), 0, 160);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('Desktop card')).toBeInTheDocument();
   });
 });

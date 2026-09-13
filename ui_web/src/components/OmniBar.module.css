@@ -510,6 +510,14 @@
 }
 
 .openArea { position: relative; }
-.openButton { position: absolute; inset: 0; border: 0; border-radius: inherit; background: transparent; color: inherit; cursor: pointer; }
+/* The open target is a transparent overlay rather than a wrapper, so the cover
+   and the meta are its siblings — and both paint above it by default, `.cover`
+   because it is positioned and later in the DOM. Without a layer of its own the
+   overlay only ever received the taps that fell on the unpositioned title, which
+   is why pressing the artwork did nothing at all. */
+.openButton { position: absolute; inset: 0; z-index: 1; border: 0; border-radius: inherit; background: transparent; color: inherit; cursor: pointer; }
 .openButton:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
-.meta a { position: relative; z-index: 1; }
+/* One step above the overlay, so an artist link still wins where there is one.
+   On touch there is none: OmniBar renders the artist as plain text below the
+   desktop breakpoint, because the whole pill is one press to open the player. */
+.meta a { position: relative; z-index: 2; }

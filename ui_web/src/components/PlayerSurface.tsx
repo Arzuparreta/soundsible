@@ -5,6 +5,7 @@ import { trackCoverUrl } from '../lib/media';
 import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
+import { scrollableAncestor } from '../lib/scrollableAncestor';
 import { NowPlaying, type NowPlayingMobilePanel } from './NowPlaying';
 import styles from './PlayerSurface.module.css';
 
@@ -39,22 +40,6 @@ type BackdropState = {
   second: string;
   active: 'first' | 'second';
 };
-
-/** Nearest scrolling ancestor below `boundary`, or null when there is none. */
-function scrollableAncestor(target: EventTarget | null, boundary?: HTMLElement): HTMLElement | null {
-  let element = target instanceof HTMLElement ? target : target instanceof Node ? target.parentElement : null;
-  while (element && element !== boundary) {
-    const style = getComputedStyle(element);
-    if (
-      /(auto|scroll)/.test(style.overflowY)
-      && element.scrollHeight > element.clientHeight + 1
-    ) {
-      return element;
-    }
-    element = element.parentElement;
-  }
-  return null;
-}
 
 /** One fullscreen player environment shared by Now Playing and Auto Mode. */
 export function PlayerSurface() {

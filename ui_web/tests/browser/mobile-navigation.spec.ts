@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { mockMusicEngine } from './music-browser-fixture';
+import { dragTouch } from './playerGestures';
 
 test.beforeEach(async ({ page }, info) => {
   test.skip(!info.project.name.includes('mobile'));
@@ -131,3 +132,25 @@ for (const width of [320, 390, 430]) {
     });
   }
 }
+
+/* The drawer slides in from the left edge. Dragging it back at that edge is the
+   gesture its own entrance promises, and it was the one way out the drawer did
+   not have — Back, Escape and the scrim all worked, the obvious one did not. */
+test('the drawer closes when it is dragged back off the edge it came from', async ({ page }, info) => {
+  test.skip(info.project.name !== 'chromium-mobile', 'Native touch injection uses CDP');
+  const menu = page.getByRole('button', { name: 'Menú', exact: true });
+  await menu.click();
+  const panel = page.getByRole('dialog', { name: 'Menú' });
+  await expect(panel).toBeVisible();
+
+  // Dragging it further open is not dismissing it.
+  await dragTouch(page, '[role="dialog"]', { dx: 120 });
+  await expect(panel).toBeVisible();
+
+  await dragTouch(page, '[role="dialog"]', { dx: -220 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // Closed through the overlay's own handle, so the history entry it pushed was
+  // consumed rather than left behind for the next Back to trip over.
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(menu).toBeFocused();
+});

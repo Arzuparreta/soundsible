@@ -103,7 +103,7 @@ export function MusicListRow(props: MusicListRowProps) {
       </button>}>{(path) => <MusicLink path={path()} class={styles.titleButton} label={label()} onMenu={props.onMenu}><span class={styles.title}>{props.title}</span></MusicLink>}</Show>
         <span class={styles.meta} data-row-meta>
           <span class={styles.subtitle}>
-            <span class={styles.detail}><Show when={props.index != null}><span class={styles.index}>{props.index} · </span></Show>
+            <span class={styles.detail} data-row-detail><Show when={props.index != null}><span class={styles.index}>{props.index} · </span></Show>
               <Show when={props.music} fallback={props.subtitle}>{(music) => <ArtistLinks music={music()} fallback={props.subtitle} />}</Show></span>
             <Show when={props.annotation}><span class={styles.annotation}>{props.subtitle ? ' · ' : ''}{props.annotation}</span></Show>
           </span>

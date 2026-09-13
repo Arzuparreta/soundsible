@@ -120,3 +120,36 @@ describe('unified player geometry', () => {
     expect(Number(z['--z-popover'])).toBeLessThan(Number(z['--z-toast']));
   });
 });
+
+/* Two rows in the DJ's route differed only in whether they carried a ⋯, and the
+   one without it was the only one whose artist name fitted. The control is back
+   on every row; these lock in the other half of the fix — that when the line is
+   still too narrow, the note gives way before the name does. */
+describe('list row metadata priority', () => {
+  const row = path.resolve(process.cwd(), 'src/components/MusicListRow.module.css');
+  const omni = path.resolve(process.cwd(), 'src/components/OmniBar.module.css');
+
+  it('lets the annotation yield its width to the artist, not the other way round', () => {
+    const detail = declarations(row, '.detail');
+    const annotation = declarations(row, '.annotation');
+
+    expect(detail).toMatchObject({ flex: '1 1 auto', 'min-width': '0' });
+    // A shrink factor above the detail's 1 is the whole mechanism: the note
+    // gives up width faster per pixel of overflow, down to a readable floor.
+    const [, shrink] = annotation.flex.split(' ');
+    expect(Number(shrink)).toBeGreaterThan(1);
+    expect(annotation['min-width']).toBe('4ch');
+    expect(annotation['text-overflow']).toBe('ellipsis');
+    expect(declarations(row, '.subtitle')['min-width']).toBe('0');
+  });
+
+  it('keeps the compact pill open target above its artwork and below a real link', () => {
+    const open = Number(declarations(omni, '.openButton')['z-index']);
+    const link = Number(declarations(omni, '.meta a')['z-index']);
+
+    // `.cover` is positioned and later in the DOM, so without a layer of its
+    // own the open button never received a press aimed at the artwork.
+    expect(open).toBeGreaterThan(0);
+    expect(link).toBeGreaterThan(open);
+  });
+});
