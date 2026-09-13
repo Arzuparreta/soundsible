@@ -165,4 +165,48 @@
 .sheet[data-variant='drawer'] { background: var(--bg-elevated); width: min(320px, calc(100vw - 40px)); max-height: none; height: 100%; padding: 0; border-radius: 0 var(--radius-lg) var(--radius-lg) 0; animation: drawer-in var(--dur-medium) var(--ease-out); }
 .sheet[data-variant='drawer']::before { display: none; }
 @keyframes drawer-in { from { transform: translateX(-100%); } }
-@media (prefers-reduced-motion: reduce) { .scrim, .sheet, .sheet[data-variant='drawer'] { animation: none; } }
+
+/* ── Drag to dismiss ───────────────────────────────────────────────────────
+   While the finger owns the sheet its position is an inline transform, so the
+   entrance keyframe and the settle transition both have to get out of the way:
+   an animation outranks an inline style, and a transition would fight the
+   finger for every frame. */
+.sheet[data-swiping] {
+  animation: none;
+  transition: none;
+  will-change: transform;
+}
+
+/* Released without going far enough, the sheet takes itself home. */
+.sheet:not([data-swiping]):not([data-dismissing]) {
+  transition: transform var(--dur-short) var(--ease-out);
+}
+
+/* The exit is an animation, not that transition: animations outrank the inline
+   transform the gesture left behind, and do not need the browser to have
+   observed a starting value. `--overlay-exit-from` is where the finger let go
+   and `--overlay-exit-duration` the time the remaining travel is worth at the
+   speed it had, so the surface carries on instead of restarting. */
+.scrim[data-dismissing] {
+  pointer-events: none;
+}
+
+.sheet[data-dismissing] {
+  animation: sheet-dismiss-down var(--overlay-exit-duration, 220ms) var(--ease-out) forwards;
+}
+
+.sheet[data-variant='drawer'][data-dismissing] {
+  animation-name: sheet-dismiss-left;
+}
+
+@keyframes sheet-dismiss-down {
+  from { transform: translateY(var(--overlay-exit-from, 0px)); }
+  to { transform: translateY(100%); }
+}
+
+@keyframes sheet-dismiss-left {
+  from { transform: translateX(calc(var(--overlay-exit-from, 0px) * -1)); }
+  to { transform: translateX(-100%); }
+}
+
+@media (prefers-reduced-motion: reduce) { .scrim, .sheet, .sheet[data-variant='drawer'], .sheet[data-dismissing] { animation: none; } .sheet:not([data-swiping]):not([data-dismissing]) { transition: none; } }

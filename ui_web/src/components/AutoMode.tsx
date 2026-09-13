@@ -126,10 +126,17 @@ export function AutoMode(props: {
         onClick={() => carriedTrack() ? placeCarriedInRoute(track.queueId) : openDestination('route', track.queueId)}
       ><span>＋</span></button>
     );
+    // A cued handoff is already loaded and mixing: taking it out of the route
+    // is the one thing that no longer applies to it. Everything else still
+    // does, and withholding the whole menu was what made the first row the only
+    // one without a ⋯ — and so the only one whose artist name had room.
     const menu = () => [
       { label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
       { label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) },
-      { label: t('autoMode.route.remove'), danger: true, onSelect: () => actions.removeAutoRouteOccurrence(track.queueId) },
+      ...(committed ? [] : [{
+        label: t('autoMode.route.remove'), danger: true,
+        onSelect: () => actions.removeAutoRouteOccurrence(track.queueId),
+      }]),
     ];
     return {
       id: track.queueId,
@@ -153,8 +160,12 @@ export function AutoMode(props: {
       onDragStart: (event) => writeAutoTrackTransfer(event, { track, queueId: track.queueId }),
       entry: savedFromTrack(track),
       onCarry: committed ? undefined : () => setCarriedTrack({ track, queueId: track.queueId }),
-      menu: committed ? undefined : menu,
-      trailing: committed ? undefined : (
+      menu,
+      // Every row carries the same control, so every row has the same width
+      // left for its title and artist. What the cued row still cannot do — be
+      // dragged, be moved, have anything inserted in front of it — is said by
+      // `locked`, `draggable` and `onCarry`, not by a missing button.
+      trailing: (
         <button class={styles.routeAction} type="button"
           aria-label={t('autoMode.route.actions', { title: track.title })}
           onClick={() => openActionMenu({ title: track.title, actions: menu() })}>⋯</button>

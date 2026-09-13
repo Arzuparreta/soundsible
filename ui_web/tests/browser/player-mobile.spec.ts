@@ -293,6 +293,41 @@ test('the compact mini-player overlays DJ state without taking title width', asy
   expect(accessibility.violations).toEqual([]);
 });
 
+/* Row one of the route used to be the only one without a ⋯, and so the only one
+ * wide enough to print a whole artist name; every row below it truncated. That
+ * every row now carries the control is locked in by AutoMode.test.tsx, and the
+ * width priority behind it by layoutStyles.test.ts. What only a real viewport
+ * can say is the part the user actually reported: at 390px the name fits. */
+test('the route prints its artist whole and gives every row the same control', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
+  await openNowPlaying(page);
+  await page.getByRole('tab', { name: 'DJ' }).click();
+
+  const route = page.locator('[data-auto-tile="route"]');
+  await holdCarousel(page, '[data-auto-carousel]');
+  await snapPlayerCarousel(page, 'auto', 'route');
+  await releaseCarousel(page, '[data-auto-carousel]');
+  await expect(route).not.toHaveAttribute('inert', '');
+
+  // The route starts empty in this fixture.
+  const browser = page.locator('[data-auto-tile="browser"]');
+  await route.getByRole('button', { name: 'Añadir', exact: true }).click();
+  await expect(browser).not.toHaveAttribute('inert', '');
+  await browser.getByRole('button', { name: /^Biblioteca/ }).click();
+  await browser.getByRole('button', { name: /Luz de verano/ }).first().click();
+  await expect(route).not.toHaveAttribute('inert', '');
+
+  const rows = route.locator('[data-music-list-row]');
+  await expect(rows.first()).toBeVisible();
+  await expect(route.locator('[data-row-menu]')).toHaveCount(await rows.count());
+
+  const clipped = await rows.locator('[data-row-detail]').evaluateAll(
+    (nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth + 1)
+      .map((node) => node.textContent),
+  );
+  expect(clipped, 'the artist must fit beside the overflow control').toEqual([]);
+});
+
 test('mobile route insertion targets stay contextual and aligned', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);

@@ -1,6 +1,24 @@
 import { createSignal, For, onCleanup, onMount, type JSX, type Component } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { createDismissSwipe, dismissExitTiming, type DismissAxis } from './dismissSwipe';
+import { shieldGhostClicks } from './ghostClick';
+import { scrollableAncestor, scrollOffset } from './scrollableAncestor';
 import styles from './overlay.module.css';
+
+/* Controls that own the touch themselves. Plain buttons are deliberately
+   absent: a sheet is mostly a stack of full-width buttons, so excluding them
+   would leave nothing to drag. A tap never captures the gesture anyway. */
+const SWIPE_EXCLUDED = 'input, textarea, select, [role="slider"], [data-rail], [data-no-overlay-swipe]';
+
+/* The breakpoint the stylesheet uses to put the sheet against an edge. Asked
+   once per touch rather than subscribed to: a gesture only needs the answer at
+   the moment a finger lands, and a module-level subscription here would put a
+   `matchMedia` listener into the store's import graph for nothing. */
+const MOBILE_QUERY = '(max-width: 1023px)';
+
+function mobileComposition(): boolean {
+  return typeof window !== 'undefined' && !!window.matchMedia?.(MOBILE_QUERY).matches;
+}
 
 type OverlayRender = (close: (afterClose?: () => void) => void) => JSX.Element;
 
@@ -102,6 +120,140 @@ export function openOverlay(
   return () => remove(id);
 }
 
+/**
+ * Drag the surface out by hand: a bottom sheet downwards, a left drawer to the
+ * left — each leaving the way it came in, which is what its own shape already
+ * promises. The `sheet` even draws a grabber for it, and until now that pill
+ * was decoration with nothing behind it.
+ *
+ * Touch only, and only in the mobile composition: on a desktop the sheet is a
+ * centred card that is nowhere near an edge, and there is a pointer for the
+ * scrim. Everything else about dismissal is left exactly as it was — this
+ * always leaves through the entry's own `close`, so the history entry a drawer
+ * pushed is still popped and focus still returns to whatever opened it.
+ */
+function attachDismissSwipe(
+  element: HTMLElement,
+  axis: DismissAxis,
+  armed: () => boolean,
+  close: () => void,
+): void {
+  const gesture = createDismissSwipe(axis, axis === 'left' ? { distance: 64 } : {});
+  const scrollAxis = axis === 'down' ? 'y' : 'x';
+  let active = false;
+  let touchId: number | null = null;
+  let scroller: HTMLElement | null = null;
+  let exitTimer: number | undefined;
+
+  const paint = (offset: number) => {
+    element.style.transform = axis === 'down'
+      ? `translateY(${offset}px)`
+      : `translateX(${-offset}px)`;
+  };
+
+  const release = () => {
+    active = false;
+    touchId = null;
+    scroller = null;
+    delete element.dataset.swiping;
+    element.style.transform = '';
+  };
+
+  const touchById = (touches: TouchList) => {
+    if (touchId === null) return null;
+    for (let index = 0; index < touches.length; index += 1) {
+      const touch = touches.item(index);
+      if (touch?.identifier === touchId) return touch;
+    }
+    return null;
+  };
+
+  const onStart = (event: TouchEvent) => {
+    release();
+    if (event.touches.length !== 1) return;
+    const touch = event.touches.item(0);
+    if (!touch) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(SWIPE_EXCLUDED)) return;
+    // Resolved once, here: walking the ancestors with getComputedStyle on every
+    // move is a layout read per frame, mid-gesture. The scrim is the boundary
+    // so the sheet itself counts — it is its own scroller.
+    scroller = scrollableAncestor(event.target, element.parentElement ?? undefined, scrollAxis);
+    touchId = touch.identifier;
+    gesture.begin(touch.clientX, touch.clientY, event.timeStamp, {
+      enabled: armed(),
+      scrolled: scrollOffset(scroller, scrollAxis) > 1,
+    });
+  };
+
+  const onMove = (event: TouchEvent) => {
+    const touch = touchById(event.touches);
+    if (!touch) return;
+    const frame = gesture.move(touch.clientX, touch.clientY, event.timeStamp);
+    if (!frame.captured) return;
+    // Re-checked at the moment of capture, as the list may have settled since.
+    if (!active) {
+      if (scrollOffset(scroller, scrollAxis) > 1) {
+        gesture.cancel();
+        release();
+        return;
+      }
+      active = true;
+      element.dataset.swiping = '';
+    }
+    if (event.cancelable) event.preventDefault();
+    paint(frame.offset);
+  };
+
+  const onEnd = (event: TouchEvent) => {
+    const touch = touchById(event.changedTouches);
+    if (!touch) return;
+    const result = gesture.end(event.timeStamp);
+    if (!result.dismiss) {
+      release();
+      return;
+    }
+    // The sheet was covering the row the finger is over, and every row in this
+    // app activates on pointerup. The compatibility click this touch still owes
+    // would land there and play it; lib/ghostClick swallows it first.
+    shieldGhostClicks();
+    const extent = axis === 'down'
+      ? element.getBoundingClientRect().height
+      : element.getBoundingClientRect().width;
+    const exit = dismissExitTiming(result.offset, extent, result.velocity);
+    release();
+    if (typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      close();
+      return;
+    }
+    element.style.setProperty('--overlay-exit-from', `${exit.from}px`);
+    element.style.setProperty('--overlay-exit-duration', `${exit.duration}ms`);
+    element.dataset.dismissing = '';
+    const scrim = element.parentElement;
+    if (scrim) scrim.dataset.dismissing = '';
+    exitTimer = window.setTimeout(close, exit.duration);
+  };
+
+  const onCancel = () => {
+    gesture.cancel();
+    release();
+  };
+
+  element.addEventListener('touchstart', onStart, { passive: true });
+  // Non-passive: claiming the drag means preventing the scroll behind it.
+  element.addEventListener('touchmove', onMove, { passive: false });
+  element.addEventListener('touchend', onEnd, { passive: true });
+  element.addEventListener('touchcancel', onCancel, { passive: true });
+  onCleanup(() => {
+    window.clearTimeout(exitTimer);
+    element.removeEventListener('touchstart', onStart);
+    element.removeEventListener('touchmove', onMove);
+    element.removeEventListener('touchend', onEnd);
+    element.removeEventListener('touchcancel', onCancel);
+  });
+}
+
 /** Mounted once by the app shell. */
 export const OverlayOutlet: Component = () => {
   onMount(() => {
@@ -165,6 +317,15 @@ export const OverlayOutlet: Component = () => {
                     );
                     (first ?? element).focus();
                   });
+                  // `window` is full screen and owns its own header and close
+                  // button; there is no edge to throw it at.
+                  if (entry.variant === 'window') return;
+                  attachDismissSwipe(
+                    element,
+                    entry.variant === 'drawer' ? 'left' : 'down',
+                    () => entry.dismissable && mobileComposition(),
+                    () => close(),
+                  );
                 }}
                 onClick={(e) => e.stopPropagation()}
               >

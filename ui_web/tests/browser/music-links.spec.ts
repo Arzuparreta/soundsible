@@ -94,6 +94,7 @@ test('desktop artist links support keyboard and a separate tab', async ({ page, 
 
 
 test('miniplayer artist navigates independently from expansion', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'the compact pill is one press to open the player; see the mobile case below');
   await page.goto('/player/#/');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   const mini = page.locator('[data-omni-player]');
@@ -103,6 +104,32 @@ test('miniplayer artist navigates independently from expansion', async ({ page, 
   await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
   await expect(mini).toContainText('Canción de biblioteca 320');
+});
+
+/* On a phone the pill is one press to open the player. Every part of it that is
+   not a transport control leads there — including the artist, which used to be
+   a link that stole the tap, and the artwork, which used to swallow it and do
+   nothing at all because it painted over the open button. */
+test('every inert part of the compact pill opens the player on a phone', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'the desktop bar keeps the artist link');
+  await page.goto('/player/#/');
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  const mini = page.locator('[data-omni-player]');
+  const surface = page.locator('[data-player-surface-open]');
+  await expect(mini).toContainText('Artista 7');
+  await expect(mini.getByRole('link', { name: 'Artista 7', exact: true })).toHaveCount(0);
+
+  // Tapped by coordinate on purpose: `locator.tap()` now refuses these, because
+  // the transparent open button covers them — which is the whole fix. What the
+  // finger lands on has to reach that button, not what the DOM node would.
+  for (const part of ['[data-omni-cover]', '[data-omni-meta]']) {
+    const box = (await mini.locator(part).boundingBox())!;
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(surface).toHaveCount(1);
+    await expect(page).toHaveURL(/#\/$/);
+    await page.keyboard.press('Escape');
+    await expect(surface).toHaveCount(0);
+  }
 });
 
 test('a native scroll starting on an artist link does not navigate or play', async ({ page, context }, info) => {
