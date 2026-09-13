@@ -21,6 +21,21 @@ describe('content-first mobile rows', () => {
     expect(play).toHaveBeenCalledOnce();
   });
 
+  it('acknowledges playback before resolution without declaring the song current', () => {
+    let row: Element;
+    const play = vi.fn(() => {
+      expect(row).toHaveAttribute('data-playback-selected');
+      expect(row.querySelector('[data-row-main]')).not.toHaveAttribute('aria-current');
+    });
+    const { container } = render(() => <MusicListRow playback title="Pending" seed="pending" onActivate={play} onMenu={() => {}} />);
+    row = container.querySelector('[data-music-list-row]')!;
+    fireEvent.click(row.querySelector('[data-row-menu]')!);
+    expect(row).not.toHaveAttribute('data-playback-selected');
+    fireEvent.click(row.querySelector('[data-row-main]')!);
+    expect(play).toHaveBeenCalledOnce();
+    expect(row).toHaveAttribute('data-playback-selected');
+  });
+
   it('suppresses redundant favourites and lets active work take precedence without another control', () => {
     const [known, setKnown] = createSignal(false); const [busy, setBusy] = createSignal(false);
     const { container } = render(() => <MusicListRow title="Song" seed="a" favourite favouritesKnown={known()} busy={busy()} />);

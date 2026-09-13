@@ -1,15 +1,19 @@
 import { ArtistLinks, MusicLink } from './MusicLinks';
 import type { MusicMetadata } from '../lib/musicNavigation';
-import { Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, on, onCleanup, Show, type JSX } from 'solid-js';
 import { coverStyle } from '../lib/cover';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { t } from '../lib/i18n';
-import { isDownloadingKeys, isFavouriteKeys } from '../stores';
+import { isDownloadingKeys, isFavouriteKeys, state } from '../stores';
 import type { SavedEntry } from '../types/music';
 import { Spinner } from './Spinner';
 import styles from './MusicListRow.module.css';
 
+// Selection acknowledges a request; it does not claim that audio is audible.
+const [requestedRow, setRequestedRow] = createSignal<symbol | null>(null);
+
 export interface MusicListRowProps {
+  playback?: boolean;
   title: string;
   titlePath?: string;
   subtitle?: string;
@@ -44,6 +48,17 @@ export interface MusicListRowProps {
 /** Shared content-first row. Primary action and overflow are sibling buttons,
  * so tapping or keyboard-activating a menu can never also play its song. */
 export function MusicListRow(props: MusicListRowProps) {
+  const token = Symbol();
+  const [pressed, setPressed] = createSignal(false);
+  const clearRequest = () => { if (requestedRow() === token) setRequestedRow(null); };
+  createEffect(on(() => [state.playback.currentTrack, props.seed], clearRequest, { defer: true }));
+  onCleanup(clearRequest);
+  const activate = () => {
+    if (props.disabled || !props.onActivate) return;
+    if (props.playback) setRequestedRow(token);
+    props.onActivate();
+  };
+  const pressChanged = (value: boolean) => setPressed(Boolean(value && props.playback && !props.disabled && props.onActivate));
   const downloading = () => Boolean(props.entry && isDownloadingKeys(props.entry.keys));
   const busy = () => props.busy || downloading();
   const favourite = () => !props.favouritesKnown
@@ -52,7 +67,8 @@ export function MusicListRow(props: MusicListRowProps) {
   const label = () => [props.actionLabel ?? [props.title, props.subtitle].filter(Boolean).join(' — '),
     props.annotation, busy() ? busyLabel() : favourite() ? t('nav.favourites') : undefined].filter(Boolean).join(' · ');
   const tap = createResponsiveTap({
-    onTap: (event) => { event.stopPropagation(); if (!props.disabled) props.onActivate?.(); },
+    onTap: (event) => { event.stopPropagation(); activate(); },
+    onPressChange: pressChanged,
     onLongPress: props.onMenu ? () => props.onMenu?.() : undefined,
   });
   const menuTap = createResponsiveTap({ onTap: (event) => { event.stopPropagation(); props.onMenu?.(); } });
@@ -63,7 +79,8 @@ export function MusicListRow(props: MusicListRowProps) {
   // carries the name and the action, and announcing the picture again would
   // only add a second way to say the same thing.
   const coverTap = createResponsiveTap({
-    onTap: (event) => { event.stopPropagation(); if (!props.disabled) props.onActivate?.(); },
+    onTap: (event) => { event.stopPropagation(); activate(); },
+    onPressChange: pressChanged,
     onLongPress: props.onMenu ? () => props.onMenu?.() : undefined,
   });
   const primaryTap = createResponsiveTap({
@@ -71,6 +88,7 @@ export function MusicListRow(props: MusicListRowProps) {
   });
   return (
     <div class={styles.row} data-music-list-row data-now-playing={props.active ? '' : undefined}
+      data-playback-selected={props.playback && (pressed() || requestedRow() === token) ? '' : undefined}
       data-editing={props.editing ? '' : undefined} aria-busy={busy() || undefined}>
       <div class={styles.main}><Show when={props.titlePath} fallback={<button class={styles.titleButton} type="button" data-row-main data-pressable
         aria-label={label()} aria-current={props.active ? 'true' : undefined}

@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
-import { createVirtualizer } from '@tanstack/solid-virtual';
+import { createVirtualizer, defaultRangeExtractor } from '@tanstack/solid-virtual';
 import { state } from '../stores';
 
 /**
@@ -19,6 +19,10 @@ export function VirtualRows<T>(props: {
   /** Row height in pixels, or a CSS custom property to read it from. */
   rowHeight: number | { cssVar: string; fallback: number };
   overscan?: number;
+  /** Measure variable-height queue editing controls. */
+  measureRows?: boolean;
+  /** Keep the edited occurrence mounted while it moves. */
+  keepMountedIndex?: number;
   children: (item: () => T | undefined, index: number) => JSX.Element;
 }) {
   const [layoutEpoch, setLayoutEpoch] = createSignal(1);
@@ -58,6 +62,10 @@ function Rows<T>(props: {
   scrollElement: () => HTMLElement | null;
   rowHeight: number | { cssVar: string; fallback: number };
   overscan?: number;
+  /** Measure variable-height queue editing controls. */
+  measureRows?: boolean;
+  /** Keep the edited occurrence mounted while it moves. */
+  keepMountedIndex?: number;
   children: (item: () => T | undefined, index: number) => JSX.Element;
 }) {
   const initialRect = () => {
@@ -110,6 +118,18 @@ function Rows<T>(props: {
     // Recreating the virtual window after layout must preserve a restored
     // browser position instead of scrolling the shared list back to zero.
     initialOffset: () => props.scrollElement()?.scrollTop ?? 0,
+    get rangeExtractor() {
+      const pinned = props.keepMountedIndex;
+      const count = props.items.length;
+      return (range: Parameters<typeof defaultRangeExtractor>[0]) => {
+        const indexes = defaultRangeExtractor(range);
+        if (pinned != null && pinned >= 0 && pinned < count && !indexes.includes(pinned)) {
+          indexes.push(pinned);
+          indexes.sort((a, b) => a - b);
+        }
+        return indexes;
+      };
+    },
     get overscan() {
       return props.overscan ?? 10;
     },
@@ -126,6 +146,10 @@ function Rows<T>(props: {
       <For each={virtualizer.getVirtualItems()}>
         {(vi) => (
           <div
+            data-index={vi.index}
+            ref={(element) => {
+              onMount(() => { if (props.measureRows) virtualizer.measureElement(element); });
+            }}
             style={{
               position: 'absolute',
               top: 0,

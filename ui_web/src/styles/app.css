@@ -256,13 +256,13 @@ html[data-hold-gesture] *:not(input):not(textarea) {
    `data-now-playing`, instead of each stylesheet inventing its own accent —
    which is how the search list ended up with a wash so faint it read as
    "nothing is playing here". */
-[data-now-playing] {
+[data-now-playing], [data-playback-selected] {
   position: relative;
   background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
   border-color: rgba(249, 122, 18, 0.16);
 }
 
-[data-now-playing]::before {
+[data-now-playing]::before, [data-playback-selected]::before {
   position: absolute;
   top: 20%;
   bottom: 20%;
@@ -277,12 +277,18 @@ html[data-hold-gesture] *:not(input):not(textarea) {
 /* Phones render the rows edge to edge, so the marker rail would sit against the
    screen border. The wash alone carries it there. */
 @media (max-width: 1023px) {
-  [data-now-playing] {
+  [data-now-playing], [data-playback-selected] {
     background: var(--accent-faint);
     border-color: transparent;
   }
 
-  [data-now-playing]::before {
+  [data-now-playing]::before, [data-playback-selected]::before {
     display: none;
   }
+}
+
+/* Playback acknowledges a press with the same orange treatment as selection. */
+[data-playback-selected] [data-row-main]:active,
+[data-playback-selected] [data-row-cover]:active {
+  opacity: 1;
 }

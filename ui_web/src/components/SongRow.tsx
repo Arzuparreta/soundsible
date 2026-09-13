@@ -112,7 +112,7 @@ export default function SongRow(props: SongRowProps) {
       : props.track.title);
 
   return (
-    <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.track.title} subtitle={props.track.artist} music={props.music ?? trackMusic(props.track)} seed={props.track.id}
+    <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.track.title} subtitle={props.track.artist} music={props.music ?? trackMusic(props.track)} seed={props.track.id}
       cover={props.cover ?? props.track.cover} index={props.index} annotation={props.badge}
       active={props.active} busy={props.busy || (props.active && state.playback.isLoading)}
       // A compact row carries no collection marks — the same trim the desktop
