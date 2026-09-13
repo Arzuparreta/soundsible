@@ -502,12 +502,19 @@ export function NowPlayingBrowser(props: {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(restore);
     });
-    const finish = () => { restoringScroll = false; observer.disconnect(); };
+    let finished = false;
+    const finish = () => {
+      finished = true;
+      restoringScroll = false;
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
     // And a position this view can never reach — a shorter list than the one
     // the offset was taken from — must not hold the restore open for good.
     const expiry = window.setTimeout(finish, RESTORE_GRACE_MS);
     onCleanup(() => window.clearTimeout(expiry));
     const restore = () => {
+      if (finished) return;
       const el = body();
       if (!el) return;
       el.scrollTop = offset;
@@ -519,7 +526,11 @@ export function NowPlayingBrowser(props: {
     observer.observe(panelEl, { childList: true, subtree: true });
     panelEl.addEventListener('wheel', finish, { once: true, passive: true });
     panelEl.addEventListener('pointerdown', finish, { once: true, passive: true });
-    frame = requestAnimationFrame(restore);
+    // No restore is needed when the mounted view already has its position.
+    // Deferring even that case leaves a stale frame that can overwrite the
+    // user's next scroll while the virtual window finishes mounting.
+    if (atOffset()) finish();
+    else frame = requestAnimationFrame(restore);
     onCleanup(() => { cancelAnimationFrame(frame); observer.disconnect(); panelEl?.removeEventListener('wheel', finish); panelEl?.removeEventListener('pointerdown', finish); });
     void view; void q; void type;
   });
