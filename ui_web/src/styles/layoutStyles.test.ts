@@ -68,6 +68,7 @@ describe('unified player geometry', () => {
   const browser = path.resolve(process.cwd(), 'src/components/NowPlayingBrowser.module.css');
   const surface = path.resolve(process.cwd(), 'src/components/PlayerSurface.module.css');
   const tokens = path.resolve(process.cwd(), 'src/styles/tokens.css');
+  const trackList = path.resolve(process.cwd(), 'src/components/PlayerTrackList.module.css');
 
   it('uses the visual viewport and reserves both device safe areas through shared geometry', () => {
     const surfaceGeometry = scopedDeclarations(surface, '.surface');
@@ -89,6 +90,22 @@ describe('unified player geometry', () => {
         'calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap))',
       'padding-bottom': 'var(--player-mobile-safe-bottom)',
     });
+  });
+
+  it('reserves the footer clearance once, with no lane gap left standing on top of it', () => {
+    // The queue's lanes each scroll themselves, so nothing under the last one
+    // is ever scrolled away: a trailing `margin-bottom` there is permanent
+    // blank panel, and it stopped the queue a lane gap short of the line the
+    // browser's list reaches. The air between lanes belongs to the box.
+    expect(scopedDeclarations(trackList, '.rows')).toMatchObject({
+      gap: 'var(--space-lg)',
+      padding: '8px 8px max(24px, var(--player-mobile-footer-clearance, 24px))',
+    });
+    expect(scopedDeclarations(trackList, '.section')['margin-bottom']).toBeUndefined();
+    // The panel it is measured against reserves the same band, once.
+    expect(scopedDeclarations(browser, '.body').padding).toContain(
+      'var(--player-mobile-footer-clearance',
+    );
   });
 
   it('never hides a rendered browser tile behind a second CSS visibility contract', () => {
