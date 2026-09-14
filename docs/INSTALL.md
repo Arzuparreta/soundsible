@@ -1,10 +1,10 @@
 # Install & Deployment
 
-This guide covers running Soundsible **beyond the basic local setup** in the [README](../README.md) — on a server, kept running in the background, or exposed across your network.
+Run Soundsible on your computer or a server, then listen in your browser.
+For containers, use the [Docker guide](DOCKER.md). For a bundled app, see
+[Desktop beta](DESKTOP_BETA.md).
 
-> **Just want to run it on your own machine?** Follow [Install in the README](../README.md#install). For a containerized server, use the [Docker deployment](DOCKER.md). This page covers manual self-hosting (server, NAS, Tailscale, reverse proxy, systemd).
-
-The supported entry point everywhere is `python3 run.py`. It creates the project virtualenv, repairs a broken one, installs requirements, and then starts the launcher / engine. Server and SSH workflows use the legacy daemon on a fixed port (`:5005`); the desktop appliance runtime (`--desktop-engine`) binds loopback on a random port and is covered in the [README](../README.md) and [ARCHITECTURE.md](./ARCHITECTURE.md).
+For source installations, the supported entry point is `python3 run.py`. It creates the project virtualenv, repairs a broken one, installs requirements, and then starts the launcher / engine. Server and SSH workflows use the legacy daemon on a fixed port (`:5005`); the desktop appliance runtime (`--desktop-engine`) binds loopback on a random port and is covered in [Desktop beta](DESKTOP_BETA.md) and [Architecture](ARCHITECTURE.md).
 
 ---
 
@@ -23,7 +23,102 @@ Optional: a modern browser for the Station UI, Tailscale for remote access, and 
 
 ---
 
-## 2. Headless server (SSH)
+## 2. Install on your computer
+
+<details>
+<summary><b>🐧 &nbsp; Linux</b></summary>
+<br>
+
+```bash
+# 1. Install prerequisites (Debian / Ubuntu)
+sudo apt install -y git ffmpeg python3 python3-venv python3-pip nodejs npm
+
+# 2. Get Soundsible
+git clone https://github.com/Arzuparreta/soundsible.git
+cd soundsible
+
+# 3. Install web player deps (one-time; dist builds on engine start)
+cd ui_web && npm ci && cd ..
+
+# 4. Run it
+python3 run.py
+```
+
+Check `node --version`: you need Node.js 22 or newer. If your distribution
+ships an older version, install a current Node.js release before `npm ci`.
+
+**Other distros** — swap step 1:
+
+- **Arch:** `sudo pacman -S git ffmpeg python python-pip nodejs npm`
+- **Fedora:** `sudo dnf install git ffmpeg python3 python3-pip nodejs npm`
+
+</details>
+
+<details>
+<summary><b>🍎 &nbsp; macOS</b></summary>
+<br>
+
+Requires [Homebrew](https://brew.sh).
+
+```bash
+# 1. Install prerequisites
+brew install git ffmpeg python node
+
+# 2. Get Soundsible
+git clone https://github.com/Arzuparreta/soundsible.git
+cd soundsible
+
+# 3. Install web player deps (one-time; dist builds on engine start)
+cd ui_web && npm ci && cd ..
+
+# 4. Run it
+python3 run.py
+```
+
+</details>
+
+<details>
+<summary><b>🪟 &nbsp; Windows</b></summary>
+<br>
+
+In **PowerShell**:
+
+```powershell
+# 1. Install prerequisites
+winget install Git.Git Python.Python.3.12 Gyan.FFmpeg OpenJS.NodeJS.LTS
+
+# 2. Close and reopen PowerShell so the new tools are on PATH, then:
+git clone https://github.com/Arzuparreta/soundsible.git
+cd soundsible
+
+# 3. Install web player deps (one-time; dist builds on engine start)
+cd ui_web; npm ci; cd ..
+
+# 4. Run it
+python run.py
+```
+
+No `winget`? Install [Git](https://git-scm.com/download/win), [Python](https://www.python.org/downloads/) (tick *"Add to PATH"*), [Node.js](https://nodejs.org/) (LTS), and [FFmpeg](https://ffmpeg.org/download.html) manually.
+
+</details>
+
+### First run
+
+The first `python3 run.py` creates the project virtualenv, installs Python dependencies, and — if you have not configured storage yet — starts the **setup wizard** at **<http://localhost:5099/setup>** (no terminal menu yet). Complete setup in the browser, then click **Launch** on the launcher page to start the engine.
+
+On later runs you get a terminal menu. Start listening with:
+
+```bash
+python3 run.py          # choose "Start Station Engine & Open Station"
+```
+
+That starts the engine and opens **<http://localhost:5005/player/>**. Keep the terminal open while you play; closing it stops the engine.
+
+Prefer a browser panel to the terminal menu? Run `./venv/bin/python start_launcher.py`, open **<http://localhost:5099>** and click **Launch**. To reopen first-time setup on its own: `python3 run.py --setup`.
+
+---
+
+## 3. Headless server (SSH)
 
 Same as a local install, run over SSH:
 
@@ -55,7 +150,7 @@ python3 run.py --daemon   # fixed port 5005, reachable on the LAN
 
 ---
 
-## 3. Remote access over Tailscale
+## 4. Remote access over Tailscale
 
 [Tailscale](https://tailscale.com/) gives you secure remote access without port forwarding or VPN config.
 
@@ -73,7 +168,8 @@ python3 run.py --daemon   # fixed port 5005, reachable on the LAN
    broadcasting in browsers — see [Live](LIVE.md#5-broadcasting-needs-https).
 5. If the `.ts.net` name does not resolve on a client, enable Tailscale DNS
    there with `sudo tailscale set --accept-dns=true`.
-6. Optionally install the web player as a PWA (see the [README](../README.md#listen-everywhere)).
+6. Optionally add the player to your home screen: **Share → Add to Home Screen**
+   on iOS, or **Menu → Install app** on Android.
 
 ### Sharing the node with other services
 
@@ -138,7 +234,7 @@ systemctl --user enable --now tailscale-funnel-soundsible.service
 
 ---
 
-## 4. Reverse proxy (optional)
+## 5. Reverse proxy (optional)
 
 Serve Soundsible behind Nginx, Caddy, or Traefik:
 
@@ -150,7 +246,7 @@ Reverse-proxy the **legacy daemon** port, not the desktop-sidecar's random loopb
 
 ---
 
-## 5. VPS with residential YouTube relay
+## 6. VPS with residential YouTube relay
 
 If YouTube classifies the VPS address as automated traffic, Soundsible can use
 an official Tailscale-only relay on a trusted Linux PC. This preserves a VPS
@@ -162,7 +258,7 @@ open proxy.
 
 ---
 
-## 6. Storage
+## 7. Storage
 
 By default Soundsible uses local disk on the host. For larger or shared libraries:
 
@@ -173,7 +269,7 @@ See [CONFIGURATION.md](./CONFIGURATION.md) for storage options.
 
 ---
 
-## 7. Security baseline
+## 8. Security baseline
 
 Soundsible is designed for trusted **LAN / Tailscale** use. For anything beyond a single machine:
 
