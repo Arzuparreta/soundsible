@@ -4,12 +4,14 @@
   --player-chrome-gap: 14px;
   --player-mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
   --player-carousel-height: 30px;
-  --player-carousel-bottom: max(10px, var(--player-mobile-safe-bottom));
-  --player-mobile-footer-clearance:
-    calc(
-      var(--player-carousel-height) + 8px
-      + max(0px, calc(var(--player-carousel-bottom) - var(--player-mobile-safe-bottom)))
-    );
+  /* The band the pager pill floats in: the same air above it (to the last row
+     of panel content) as below it (to the card's bottom edge), on every device.
+     Anchoring it to the safe area alone — max(10px, inset) — let a 34px home
+     indicator swallow the gap whole, and the pill's bottom edge came to rest
+     exactly on the card's. */
+  --player-carousel-inset: 20px;
+  --player-carousel-bottom: calc(var(--player-mobile-safe-bottom) + var(--player-carousel-inset));
+  --player-mobile-footer-clearance: calc(var(--player-carousel-height) + var(--player-carousel-inset) * 2);
   /* Deliberately not --ease-out: that curve spends 85% of its travel in the
      first third of the duration, which on a phone is four frames and reads as
      the sheet vanishing rather than leaving. This one commits hard enough to
