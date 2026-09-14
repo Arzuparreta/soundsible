@@ -9,28 +9,28 @@
 A music service on your own server, with YouTube search, a built-in DJ and live broadcasting.
 Free and open source. No ads or subscription.
 
-[**Get started**](#install) · [**Features**](#at-a-glance) · [**Docs**](docs/README.md) · [**Website**](https://arzuparreta.github.io/soundsible.github.io)
+[**Get started**](#install) · [**Features**](#features) · [**Docs**](docs/README.md) · [**Website**](https://arzuparreta.github.io/soundsible.github.io)
 
 </div>
 
-## From a song to a whole evening
+## What Soundsible does
 
-**Find it, play it, keep it.** Search beyond your existing files, listen to a
-result and save what you like. Soundsible downloads the audio, adds track
-information and artwork, and puts it in your library alongside music you already own.
+**Search beyond the files you already have.** Listen to a result first, then
+save what you like. Soundsible downloads the audio, adds track information and
+artwork, and files it in your library next to music you already own.
 
-**Give the DJ a direction.** Choose the music to start from and let it build a
-continuous set. It analyses tempo, key and energy to choose songs and mix between
-them on two decks. Add an influence, change direction or place a song you want
-to hear next. You can edit the upcoming order while the music plays. DJ is in beta —
-[what it can do →](docs/AUTO_MODE.md)
+**Mix a continuous set with the built-in DJ.** Choose the music to start from
+and it builds the set, analysing tempo, key and energy to pick songs and mix
+between them on two decks. Add an influence, change direction or place a song
+you want to hear next; the upcoming order stays editable while the music plays.
+DJ is in beta — [what it can do →](docs/AUTO_MODE.md)
 
-**Let others tune in.** Live broadcasts what the player is mixing, including
-transitions and effects. Share a listening room that opens in a browser;
-listeners need no account or app. Broadcasting uses the Community relay and
-needs an open browser tab. [How Live works →](docs/LIVE.md)
+**Broadcast what you are playing.** Live carries the player output, transitions
+and effects included, to a listening room that opens in a browser; listeners
+need no account or app. It uses the Community relay and an open browser tab.
+[How Live works →](docs/LIVE.md)
 
-## At a glance
+## Features
 
 | | What you can do |
 | --- | --- |
@@ -55,7 +55,7 @@ needs an open browser tab. [How Live works →](docs/LIVE.md)
 
 </details>
 
-## Listen everywhere
+## Clients and devices
 
 Open Soundsible in a desktop or mobile browser, or add it to your home screen as
 an installable web app (PWA). Your server holds your collection and listening
