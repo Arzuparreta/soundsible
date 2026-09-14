@@ -75,11 +75,15 @@ describe('unified player geometry', () => {
       height: 'var(--app-viewport-height, 100dvh)',
       '--player-chrome-top': 'max(14px, env(safe-area-inset-top, 0px))',
       '--player-mobile-safe-bottom': 'env(safe-area-inset-bottom, 0px)',
-      '--player-carousel-bottom': 'max(10px, var(--player-mobile-safe-bottom))',
+      // The pager pill keeps this margin on both sides — below it to the card's
+      // bottom edge, above it to the last row of panel content — whatever the
+      // device's home indicator costs.
+      '--player-carousel-inset': '20px',
+      '--player-carousel-bottom':
+        'calc(var(--player-mobile-safe-bottom) + var(--player-carousel-inset))',
+      '--player-mobile-footer-clearance':
+        'calc(var(--player-carousel-height) + var(--player-carousel-inset) * 2)',
     });
-    expect(surfaceGeometry['--player-mobile-footer-clearance'].replace(/\s+/g, ' ')).toBe(
-      'calc( var(--player-carousel-height) + 8px + max(0px, calc(var(--player-carousel-bottom) - var(--player-mobile-safe-bottom))) )',
-    );
     expect(scopedDeclarations(workspace, '.workspace', 'max-width: 1023px')).toMatchObject({
       'padding-top':
         'calc(var(--player-chrome-top) + var(--player-chrome-size) + var(--player-chrome-gap))',

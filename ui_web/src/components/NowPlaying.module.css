@@ -961,10 +961,14 @@
   :global([data-player-workspace] [data-player-tile='stage']) > .body {
     max-width: none;
     margin: 0;
+    /* Exactly the clearance, nothing on top of it: the contract already carries
+       the pager pill's own margin on both sides, and the extra clamp that used
+       to sit here was what pushed the action row up and left the pill low in
+       its band. */
     padding:
       clamp(10px, 2vh, 20px)
       clamp(14px, 4vw, 34px)
-      calc(var(--player-mobile-footer-clearance) + clamp(8px, 1.5vh, 16px));
+      var(--player-mobile-footer-clearance);
     overflow-y: auto;
   }
 
