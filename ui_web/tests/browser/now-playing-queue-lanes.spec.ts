@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { settle } from './settle';
+import { snapPlayerCarousel } from './playerGestures';
 
 /**
  * Playing one song out of a large library is what exposed this: the context
@@ -119,4 +120,62 @@ test('the context lane names where it came from', async ({ page }) => {
 
   // `text-transform: uppercase` is CSS only, so the DOM keeps the real casing.
   await expect(queue.getByText('De Tu biblioteca', { exact: true })).toBeVisible();
+});
+
+/**
+ * On a phone the queue is one card of the pager, and its lanes each scroll
+ * themselves — so unlike the browser panel beside it, nothing about the
+ * bottom of the list is scrolled through. Whatever sits below the last lane
+ * is permanent: the footer clearance the pager pill floats in, and, until
+ * this was fixed, a lane gap on top of it. The list stopped short of the
+ * card and left a strip of empty panel the search tab never showed.
+ */
+test('the queue ends on the same line the browser list does', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'mobile-only regression');
+  await openQueuePanel(page);
+  await snapPlayerCarousel(page, 'now-playing', 'queue');
+  await settle(page, '[data-now-playing-tile="queue"]');
+
+  const lanes = page.locator('[data-now-playing-tile="queue"] [data-section-rows]');
+  await expect.poll(() => lanes.count()).toBeGreaterThan(0);
+  // A lane scrolls itself only once it has been squeezed, which is the state
+  // this measures: a short queue leaves room below it for honest reasons.
+  await expect
+    .poll(async () => {
+      const room = await lanes.evaluateAll((nodes) =>
+        nodes.map((node) => node.scrollHeight - node.clientHeight),
+      );
+      return Math.max(...room);
+    }, { message: 'the queue must be long enough to scroll' })
+    .toBeGreaterThan(0);
+
+  const queueEnd = await lanes.last().evaluate((lane) => {
+    const rows = lane.closest('section')!.parentElement!;
+    const style = getComputedStyle(rows);
+    return {
+      lane: lane.getBoundingClientRect().bottom,
+      // Where the list box itself stops, clearance excluded. The lanes have to
+      // reach it; anything left over is the gap this test exists for.
+      content: rows.getBoundingClientRect().bottom - parseFloat(style.paddingBottom),
+    };
+  });
+  expect(Math.abs(queueEnd.lane - queueEnd.content)).toBeLessThanOrEqual(1);
+
+  await snapPlayerCarousel(page, 'now-playing', 'browser');
+  await settle(page, '[data-now-playing-tile="browser"]');
+  const browserEnd = await page
+    .locator('[data-now-playing-tile="browser"] [data-browser-body]')
+    .first()
+    .evaluate((body) =>
+      body.getBoundingClientRect().bottom - parseFloat(getComputedStyle(body).paddingBottom),
+    );
+
+  // Both cards are the same size and both reserve the same clearance, so the
+  // last song of either list belongs on the same line.
+  expect(Math.abs(queueEnd.lane - browserEnd)).toBeLessThanOrEqual(1);
+
+  // And that line is the clearance: the pill keeps its own air above it.
+  const pill = (await page.locator('nav[aria-label="Paneles de NORMAL"]').boundingBox())!;
+  expect(pill.y - queueEnd.lane).toBeGreaterThan(0);
+  expect(pill.y - queueEnd.lane).toBeLessThanOrEqual(24);
 });

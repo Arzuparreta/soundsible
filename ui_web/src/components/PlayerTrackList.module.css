@@ -95,6 +95,12 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  /* The air between lanes belongs to the box, not to the lanes: as a
+   * `margin-bottom` on each one the last lane carried it too, and that trailing
+   * band sat on top of the footer clearance and never scrolled away. The lanes
+   * stopped a lane-gap short of the line the browser panel's list reaches, and
+   * the bottom of the card showed it as a strip of empty panel. */
+  gap: var(--space-lg);
   overflow-y: auto;
   /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
   overscroll-behavior-y: contain;
@@ -112,7 +118,6 @@
   min-height: calc(var(--lane-head) + var(--lane-rows) * max(var(--row-h), 48px));
   flex: 0 1 auto;
   flex-direction: column;
-  margin-bottom: var(--space-lg);
 }
 
 /* A lane with no label — the Auto Mode route — reserves no band for one. */
