@@ -2,7 +2,7 @@
 
 [Back to Soundsible](../README.md)
 
-## Start listening
+## Install and set up
 
 | Guide | Use it to… |
 | --- | --- |
@@ -12,7 +12,7 @@
 | [Settings & sources](CONFIGURATION.md) | Configure accounts, search, downloads and YouTube cookies. |
 | [Bring your music](MUSIC_MIGRATION.md) | Import Spotify and Apple Music exports. |
 
-## Explore Soundsible
+## Feature guides
 
 | Guide | What's inside |
 | --- | --- |
@@ -25,7 +25,7 @@
 | [Privacy](TELEMETRY_PRIVACY.md) | What listening data stays on your server and how to turn learning off. |
 | [Legal & acceptable use](LEGAL.md) | Responsibilities when downloading and sharing music. |
 
-## Troubleshoot or contribute
+## Troubleshooting and development
 
 - [YouTube download troubleshooting](troubleshooting-yt-dlp-formats.md) · [Playback diagnosis](PLAYBACK_DIAGNOSIS.md)
 - [VPS YouTube relay](VPS_RELAY.md) · [Performance](PERFORMANCE.md)
