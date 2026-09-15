@@ -3493,7 +3493,29 @@ describe('DJ exploration provenance', () => {
   });
 });
 
-describe('system pause during loading', () => {
+describe('output recovery state', () => {
+  it('shows a recoverable pause without resuming from an unrelated page gesture', async () => {
+    let health = 'recovering';
+    const { initStore, actions, state, audioService, fireDeckEvent } = await loadStore({}, {
+      outputHealth: () => health,
+    });
+    initStore();
+    actions.playFrom([t1], 0);
+    fireDeckEvent('playing');
+    fireDeckEvent('outputhealth');
+    expect(state.playback.phase).toBe('recovering');
+    expect(state.playback.isPlaying).toBe(false);
+    health = 'needs_play';
+    fireDeckEvent('outputhealth');
+    expect(state.playback.phase).toBe('paused');
+    expect(state.playback.needsGesture).toBe(true);
+    window.dispatchEvent(new Event('pointerdown'));
+    expect(audioService.resume).not.toHaveBeenCalled();
+    actions.resumePlayback('media_session');
+    expect(audioService.resume).toHaveBeenCalledWith('media_session');
+    expect(state.playback.needsGesture).toBe(false);
+  });
+
   it('retires pending load failures when the system pauses the programme', async () => {
     let reject!: (error: Error) => void;
     const pending = new Promise<void>((_, fail) => { reject = fail; });

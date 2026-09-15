@@ -4498,6 +4498,19 @@ export function initStore(): void {
     // Reconcile after ownership changes, even while hidden, without play().
     updateMediaSession(state.playback.currentTrack, 'sources_settled');
   });
+  a.addEventListener('outputhealth', () => {
+    const health = audioService.outputHealth();
+    if (health === 'healthy') return;
+    clearStallTimer();
+    if (health === 'recovering') {
+      setState('playback', { isPlaying: false, isLoading: true, phase: 'recovering' });
+    } else {
+      cancelActiveAttempt('output_recovery_failed');
+      setState('playback', { isPlaying: false, isLoading: false, phase: 'paused', needsGesture: true });
+    }
+    updateMediaSession(state.playback.currentTrack, 'output_change');
+    pushPlaybackState();
+  });
   a.addEventListener('play', () => {
     setState('playback', 'isPlaying', true);
     pushPlaybackState();
