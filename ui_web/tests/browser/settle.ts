@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * Wait for a surface to stop moving before measuring or auditing it.
@@ -44,4 +44,34 @@ export async function settle(page: Page, selector?: string, capMs = 2_000): Prom
     },
     { sel: selector ?? null, cap: capMs },
   );
+}
+
+/**
+ * A box worth touching: the element has stopped moving, and the point the tap
+ * or drag will land on is on screen.
+ *
+ * `settle()` above is not enough for this. It gives up after 2s and skips the
+ * looping animations these surfaces keep running, so a rect read straight after
+ * it can still be a rect of something in flight — `player-panel-swipe` measured
+ * its lane at y=905 in an 844px viewport, below the fold, and the drag then
+ * landed on nothing at all. Raw `touchscreen.tap` and CDP touch events run no
+ * actionability checks of their own, so the wait has to be here.
+ *
+ * `probe` names the point the caller is about to touch; the centre by default.
+ */
+export async function settledBox(
+  page: Page,
+  target: Locator,
+  probe: (box: { x: number; y: number; width: number; height: number }) => number =
+    (box) => box.y + box.height / 2,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  let previous: { x: number; y: number } | null = null;
+  await expect.poll(async () => {
+    const box = await target.boundingBox();
+    const viewport = page.viewportSize()!;
+    const still = !!box && !!previous && box.x === previous.x && box.y === previous.y;
+    previous = box && { x: box.x, y: box.y };
+    return !!box && still && probe(box) >= 0 && probe(box) < viewport.height;
+  }, { message: 'the touch point must stop moving and be on screen' }).toBe(true);
+  return (await target.boundingBox())!;
 }

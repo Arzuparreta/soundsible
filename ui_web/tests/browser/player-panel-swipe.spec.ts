@@ -1,5 +1,6 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { openMiniPlayer, silentStream } from './music-browser-fixture';
+import { settledBox } from './settle';
 import { snapCarousel } from './playerGestures';
 
 /* A library long enough for the queue's context lane to scroll: the bug only
@@ -61,34 +62,6 @@ async function touchDrag(
   await session.detach();
 }
 
-/**
- * A box worth dragging from: the element has stopped moving, and the point the
- * drag will touch is on screen.
- *
- * Snapping the carousel settles it sideways, but the surface around it is still
- * entering. Measured inside that entrance the lane reports y=905 in an 844px
- * viewport — below the fold — so `elementFromPoint` at the drag coordinates
- * returns null, the touch lands on nothing, and "scrollTop stayed 0" reads as
- * exactly the scroll-chaining regression this test exists to catch. It failed
- * on the first attempt every time and passed on the retry, where the browser
- * was warm enough to have finished the entrance first.
- *
- * `settle()` is not enough here: it gives up after 2s and skips the looping
- * animations the surface keeps running. Waiting on the geometry itself is what
- * the drag actually depends on.
- */
-async function settledBox(page: Page, target: Locator, offsetY: number) {
-  let previous: { x: number; y: number } | null = null;
-  await expect.poll(async () => {
-    const box = await target.boundingBox();
-    const viewport = page.viewportSize()!;
-    const still = !!box && !!previous && box.x === previous.x && box.y === previous.y;
-    previous = box && { x: box.x, y: box.y };
-    return !!box && still && box.y + offsetY < viewport.height;
-  }, { message: 'the drag point must stop moving and be on screen' }).toBe(true);
-  return (await target.boundingBox())!;
-}
-
 test.beforeEach(async ({ page }) => { await mockEngine(page); });
 
 test('a scrolled player panel still hands a sideways swipe to the pager', async ({ page, browserName }) => {
@@ -107,7 +80,7 @@ test('a scrolled player panel still hands a sideways swipe to the pager', async 
   await snapCarousel(page, 'queue');
   await expect(queue).not.toHaveAttribute('inert', '');
   const lane = queue.locator('[data-section-rows]').last();
-  const laneBox = await settledBox(page, lane, 120);
+  const laneBox = await settledBox(page, lane, (box) => box.y + 120);
   await touchDrag(page, { x: laneBox.x + laneBox.width / 2, y: laneBox.y + 120 }, { dy: -120 }, 10);
   await expect.poll(() => lane.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 

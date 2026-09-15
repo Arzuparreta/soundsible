@@ -21,7 +21,9 @@ export default defineConfig({
     // timeout` line above it tells them apart, and the trace says which element
     // never became actionable, which is the part no log line carries. Traces
     // ride in the HTML report the job already uploads.
-    trace: 'on-first-retry',
+    // Not `on-first-retry`: these fail on the first attempt in a cold context
+    // and pass on the retry, so tracing the retry records the run that worked.
+    trace: 'retain-on-failure',
     baseURL: `http://127.0.0.1:${port}`,
     locale: 'es-ES',
     colorScheme: 'dark',

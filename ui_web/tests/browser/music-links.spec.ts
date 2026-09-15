@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { settledBox } from './settle';
 
 async function activate(page: Page, link: ReturnType<Page['getByRole']>, mobile: boolean) {
   if (mobile) await link.tap(); else await link.click();
@@ -115,7 +116,9 @@ test('every inert part of the compact pill opens the player on a phone', async (
   // the transparent open button covers them — which is the whole fix. What the
   // finger lands on has to reach that button, not what the DOM node would.
   for (const part of ['[data-omni-cover]', '[data-omni-meta]']) {
-    const box = (await mini.locator(part).boundingBox())!;
+    // Measured once the pill is still: the previous turn of this loop closed the
+    // surface, and a box read during that exit is a box the finger misses.
+    const box = await settledBox(page, mini.locator(part));
     await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
     await expect(surface).toHaveCount(1);
     await expect(page).toHaveURL(/#\/$/);
