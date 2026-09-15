@@ -149,33 +149,23 @@ test('the queue ends on the same line the browser list does', async ({ page }) =
     }, { message: 'the queue must be long enough to scroll' })
     .toBeGreaterThan(0);
 
-  const queueEnd = await lanes.last().evaluate((lane) => {
-    const rows = lane.closest('section')!.parentElement!;
-    const style = getComputedStyle(rows);
-    return {
-      lane: lane.getBoundingClientRect().bottom,
-      // Where the list box itself stops, clearance excluded. The lanes have to
-      // reach it; anything left over is the gap this test exists for.
-      content: rows.getBoundingClientRect().bottom - parseFloat(style.paddingBottom),
-    };
-  });
-  expect(Math.abs(queueEnd.lane - queueEnd.content)).toBeLessThanOrEqual(1);
-
   await snapPlayerCarousel(page, 'now-playing', 'browser');
-  await settle(page, '[data-now-playing-tile="browser"]');
-  const browserEnd = await page
-    .locator('[data-now-playing-tile="browser"] [data-browser-body]')
-    .first()
-    .evaluate((body) =>
-      body.getBoundingClientRect().bottom - parseFloat(getComputedStyle(body).paddingBottom),
-    );
-
-  // Both cards are the same size and both reserve the same clearance, so the
-  // last song of either list belongs on the same line.
-  expect(Math.abs(queueEnd.lane - browserEnd)).toBeLessThanOrEqual(1);
-
-  // And that line is the clearance: the pill keeps its own air above it.
-  const pill = (await page.locator('nav[aria-label="Paneles de NORMAL"]').boundingBox())!;
-  expect(pill.y - queueEnd.lane).toBeGreaterThan(0);
-  expect(pill.y - queueEnd.lane).toBeLessThanOrEqual(24);
+  // The enclosing player surface can still be entering. Measure both cards
+  // and the pill in one frame rather than comparing rects from different times.
+  await expect.poll(() => page.evaluate(() => {
+    const lanes = document.querySelectorAll<HTMLElement>('[data-now-playing-tile="queue"] [data-section-rows]');
+    const lane = lanes[lanes.length - 1];
+    const rows = lane.closest('section')!.parentElement!;
+    const body = document.querySelector<HTMLElement>('[data-now-playing-tile="browser"] [data-browser-body]')!;
+    const pill = document.querySelector<HTMLElement>('nav[aria-label="Paneles de NORMAL"]')!;
+    const end = lane.getBoundingClientRect().bottom;
+    const content = rows.getBoundingClientRect().bottom - parseFloat(getComputedStyle(rows).paddingBottom);
+    const browserEnd = body.getBoundingClientRect().bottom - parseFloat(getComputedStyle(body).paddingBottom);
+    const clearance = pill.getBoundingClientRect().top - end;
+    return {
+      fillsLane: Math.abs(end - content) <= 1,
+      alignsWithBrowser: Math.abs(end - browserEnd) <= 1,
+      clearsPill: clearance > 0 && clearance <= 24,
+    };
+  })).toEqual({ fillsLane: true, alignsWithBrowser: true, clearsPill: true });
 });

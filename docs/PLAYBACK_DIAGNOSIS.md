@@ -4,6 +4,51 @@ Status: candidate iOS output and source-retirement correction, **not a device-ve
 proves what Now Playing, CarPlay or the head unit displays, or that sound reaches
 the speakers. Device acceptance is still required.
 
+## CarPlay cable disconnect/reconnect recovery
+
+Status: candidate correction; physical iPhone/PWA/CarPlay acceptance is pending.
+The listener reports Safari PWA on iOS 27 with wired CarPlay. The user-agent
+version in the traces is not an independently verified OS version.
+
+On September 13 (Europe/Madrid), the same capture paused at 14:54:24 and received
+Media Session Play at 14:59:22. The source advanced from 162.301 to 171.729 seconds,
+while the AudioContext clock remained exactly 191.147 seconds despite reporting
+`running`. In-page pause/play did not move the context clock. A new capture began
+at 15:00:53. This fits the reported stop-and-reconnect failure; the traces cannot
+identify the physical route or measure the speakers.
+
+At 15:32:01 a native pause and Media Session pause were followed by native
+play/playing without an intervening application play call. On September 15 at
+14:24:19 a separate sequence included Media Session pause followed by Play.
+Media Session does not identify whether Play came from a physical button or
+platform behavior. The correction continues to accept those commands; there is
+no arbitrary suppression window for car controls.
+
+Playback permission is now separate from native element state. A native programme
+pause stops all DJ participants and invalidates pending transport work. Native
+play without permission is stopped. Context state changes, page restoration and
+generic touch events cannot lift a pause. Existing playback permission still
+allows interrupted playback to continue, including with the screen locked.
+
+A supervisor compares source progress with the context clock. One second of
+continuous observations with a frozen context and an advancing source starts
+one in-place suspend/resume cycle. Observation gaps above one second, seeks,
+source changes and unavailable source data reset the measurement. Signal level
+is not used, so musical silence is not a failure. The cycle preserves the graph,
+Live tap and current programme owner; failed recovery leaves playback paused
+with the existing Play prompt. Async recovery is limited to five seconds when
+JavaScript can execute, and a new explicit Play permits another attempt.
+The `output.health` trace records recovering/healthy/needs_play; spontaneous
+source revivals are recorded as `transport.rejected_native_play`. Both use the
+existing trace envelope and field allowlist.
+
+The in-place cycle is a candidate informed by the measured frozen clock and
+[WebKit reports](https://bugs.webkit.org/show_bug.cgi?id=276016#c7), not proof of
+recovery on the affected iPhone. Acceptance requires both unplug/power-off orders,
+no sound when opening/unlocking outside the car, and reconnection without closing
+the PWA from both paused and playing states. Check car Play/Pause, locked-screen
+playback, DJ transitions, and that sound reaches the car without restarting.
+
 ## Evidence and hypothesis
 
 The September 9 trip confirmed by the listener (21:14–21:20 Europe/Madrid)

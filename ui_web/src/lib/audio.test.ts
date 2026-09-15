@@ -849,7 +849,7 @@ describe('two-deck mixer', () => {
     expect(created).toEqual(before);
   });
 
-  it('resumes an interrupted context without replacing its graph or decks', async () => {
+  it('resumes an interrupted playing context without replacing its graph or decks', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
     expect(module.audioService.unlockAudio()).toBe(true);
@@ -858,6 +858,8 @@ describe('two-deck mixer', () => {
     const stateHandler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')?.[1];
     expect(stateHandler).toBeTypeOf('function');
 
+    await module.audioService.load('/playing', 1);
+    context.resume.mockClear();
     context.state = 'suspended';
     stateHandler();
     await Promise.resolve();
@@ -1091,5 +1093,198 @@ describe('volume levelling', () => {
     expect(module.audioService.graphReady()).toBe(true);
     expect(module.audioEl()).toBe(deck);
     expect(levelValue(contexts.at(-1)!, 0)).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe('CarPlay interruption recovery', () => {
+  async function setup() {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    await module.audioService.load('/carplay-track', 1);
+    const context = contexts.at(-1)!;
+    const deck = module.audioEl() as unknown as FakeAudio;
+    return { ...module, context, deck };
+  }
+
+  async function advanceSource(deck: FakeAudio, milliseconds: number) {
+    for (let i = 0; i < milliseconds; i += 250) {
+      if (!deck.paused) deck.currentTime += 0.25;
+      await vi.advanceTimersByTimeAsync(250);
+    }
+  }
+
+  it('keeps a system pause through unlock, generic gestures and spontaneous native play', async () => {
+    const { audioService, context, deck } = await setup();
+    deck.pause(); // native pause, not an app transport operation
+    context.resume.mockClear();
+    context.state = 'suspended';
+    const stateHandler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')![1];
+    stateHandler();
+    hide();
+    reveal();
+    audioService.unlockAudio();
+    expect(context.resume).not.toHaveBeenCalled();
+    await deck.play(); // WebKit revives the source without a Media Session command
+    expect(deck.paused).toBe(true);
+    expect(audioService.snapshot().playing).toBe(false);
+    await audioService.resume('media_session');
+    expect(deck.paused).toBe(false);
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    audioService.stop();
+  });
+
+  it('retains legitimate Media Session pause/play while hidden', async () => {
+    const { audioService, deck } = await setup();
+    hide();
+    audioService.pause('media_session');
+    await audioService.resume('media_session');
+    expect(deck.paused).toBe(false);
+    audioService.stop();
+  });
+
+  it('recovers a running context with a frozen clock without replacing its graph or decks', async () => {
+    const { audioService, context, deck } = await setup();
+    const before = [...created];
+    let frozen = true;
+    vi.spyOn(context, 'currentTime', 'get').mockImplementation(() => frozen ? 191.147 : Date.now() / 1000);
+    context.resume.mockImplementation(async () => { context.state = 'running'; frozen = false; });
+    await advanceSource(deck, 2000);
+    expect(context.suspend).toHaveBeenCalledTimes(1);
+    expect(audioService.outputHealth()).toBe('healthy');
+    expect(deck.paused).toBe(false);
+    expect(created).toEqual(before);
+    expect(context.close).not.toHaveBeenCalled();
+    audioService.stop();
+  });
+
+
+  it('allows a route clock to start after resume resolves, within the recovery deadline', async () => {
+    const { audioService, context, deck } = await setup();
+    let readyAt = Infinity;
+    vi.spyOn(context, 'currentTime', 'get').mockImplementation(() => Date.now() < readyAt ? 191.147 : Date.now() / 1000);
+    context.resume.mockImplementation(async () => { context.state = 'running'; readyAt = Date.now() + 1000; });
+    await advanceSource(deck, 2000);
+    expect(audioService.outputHealth()).toBe('recovering');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(audioService.outputHealth()).toBe('healthy');
+    expect(deck.paused).toBe(false);
+    expect(context.suspend).toHaveBeenCalledTimes(1);
+    audioService.stop();
+  });
+
+  it('does not mistake a stalled source, seek, or healthy context for a frozen output', async () => {
+    const { audioService, context, deck } = await setup();
+    await advanceSource(deck, 2000);
+    expect(context.suspend).not.toHaveBeenCalled();
+    vi.spyOn(context, 'currentTime', 'get').mockReturnValue(191.147);
+    await vi.advanceTimersByTimeAsync(2000); // buffering: neither clock moves
+    expect(context.suspend).not.toHaveBeenCalled();
+    deck.currentTime += 100;
+    await vi.advanceTimersByTimeAsync(250);
+    expect(context.suspend).not.toHaveBeenCalled();
+    audioService.pause();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(context.suspend).not.toHaveBeenCalled();
+    audioService.stop();
+  });
+
+  it('leaves an unrecoverable clock paused and permits an explicit retry', async () => {
+    const { audioService, context, deck } = await setup();
+    vi.spyOn(context, 'currentTime', 'get').mockReturnValue(191.147);
+    await advanceSource(deck, 6500);
+    expect(context.suspend).toHaveBeenCalledTimes(1);
+    expect(audioService.outputHealth()).toBe('needs_play');
+    expect(deck.paused).toBe(true);
+    reveal();
+    audioService.unlockAudio();
+    await advanceSource(deck, 6500);
+    expect(context.suspend).toHaveBeenCalledTimes(1);
+    await audioService.resume('media_session');
+    await advanceSource(deck, 6500);
+    expect(context.suspend).toHaveBeenCalledTimes(2);
+    audioService.stop();
+  });
+
+  it.each(['pause', 'stop', 'load'] as const)('invalidates a pending recovery on %s', async (action) => {
+    const { audioService, context, deck } = await setup();
+    vi.spyOn(context, 'currentTime', 'get').mockReturnValue(191.147);
+    let finishSuspend!: () => void;
+    context.suspend.mockImplementation(() => new Promise<void>((resolve) => { finishSuspend = resolve; }));
+    await advanceSource(deck, 1500);
+    expect(audioService.outputHealth()).toBe('recovering');
+    if (action === 'load') await audioService.load('/new-track', 1);
+    else audioService[action]();
+    const starts = deck.play.mock.calls.length;
+    const resumes = context.resume.mock.calls.length;
+    finishSuspend();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(context.resume).toHaveBeenCalledTimes(resumes);
+    expect(deck.play).toHaveBeenCalledTimes(starts);
+    if (action !== 'load') expect(deck.paused).toBe(true);
+    else expect(deck.src).toBe('/new-track');
+    audioService.stop();
+  });
+
+
+  it('stops both DJ participants on a native pause of the incoming deck', async () => {
+    const { audioService, outgoing, incoming } = await armed();
+    audioService.startMixNow();
+    await play(incoming, 2);
+    incoming.pause();
+    expect(incoming.paused).toBe(true);
+    expect(outgoing.paused).toBe(true);
+    expect(audioService.mixPhase()).toBe('idle');
+    await incoming.play();
+    expect(incoming.paused).toBe(true);
+    expect(outgoing.muted).toBe(true);
+    audioService.stop();
+  });
+
+  it('preserves the Live tap and user seek during in-place output recovery', async () => {
+    const { audioService, context, deck } = await setup();
+    const capture = audioService.acquireBroadcastCapture();
+    const track = context.broadcastTrack;
+    let frozen = true;
+    vi.spyOn(context, 'currentTime', 'get').mockImplementation(() => frozen ? 191.147 : Date.now() / 1000);
+    let finishSuspend!: () => void;
+    context.suspend.mockImplementation(() => new Promise<void>((resolve) => { finishSuspend = resolve; }));
+    context.resume.mockImplementation(async () => { context.state = 'running'; frozen = false; });
+    await advanceSource(deck, 1500);
+    audioService.seek(42);
+    finishSuspend();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(deck.currentTime).toBe(42);
+    expect(deck.paused).toBe(false);
+    expect(audioService.acquireBroadcastCapture()).toBe(capture);
+    expect(track.stop).not.toHaveBeenCalled();
+    audioService.stop();
+    audioService.releaseBroadcastStream();
+  });
+
+  it('resets clock evidence across a frozen page instead of treating the gap as a stall', async () => {
+    const { audioService, context, deck } = await setup();
+    vi.spyOn(context, 'currentTime', 'get').mockReturnValue(191.147);
+    await advanceSource(deck, 500);
+    hide();
+    vi.setSystemTime(Date.now() + 60_000);
+    reveal();
+    await advanceSource(deck, 500);
+    expect(context.suspend).not.toHaveBeenCalled();
+    audioService.stop();
+  });
+
+  it('bounds a never-settling recovery and coalesces duplicate Play commands', async () => {
+    const { audioService, context, deck } = await setup();
+    vi.spyOn(context, 'currentTime', 'get').mockReturnValue(191.147);
+    context.suspend.mockImplementation(() => new Promise<void>(() => {}));
+    await advanceSource(deck, 1500);
+    await audioService.resume('media_session');
+    await audioService.resume('media_session');
+    expect(context.suspend).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(audioService.outputHealth()).toBe('needs_play');
+    expect(deck.paused).toBe(true);
+    audioService.stop();
   });
 });
