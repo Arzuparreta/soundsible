@@ -125,49 +125,92 @@ test('the context lane names where it came from', async ({ page }) => {
 });
 
 /**
- * On a phone the queue is one card of the pager, and its lanes each scroll
- * themselves — so unlike the browser panel beside it, nothing about the
- * bottom of the list is scrolled through. Whatever sits below the last lane
- * is permanent: the footer clearance the pager pill floats in, and, until
- * this was fixed, a lane gap on top of it. The list stopped short of the
- * card and left a strip of empty panel the search tab never showed.
+ * On a phone the queue is one card of the pager, and the box holding its lanes
+ * fills with them and then almost never scrolls — so unlike the browser panel
+ * beside it, whose body always overflows, a bottom padding there is not a band
+ * the list is scrolled past. It is permanent empty panel, and reserving the
+ * pager pill's clearance that way held the queue a whole clearance short of
+ * the card's edge: the search tab painted its rows down to the bottom, the
+ * queue stopped above it and showed the difference as a dead strip.
+ *
+ * Two things have to hold at once, and it is the pair that pins the fix: the
+ * lanes reach the bottom of the card, *and* the last song still comes to rest
+ * above the pill rather than under it. Either one alone is satisfied by the
+ * bug — the old padding bought the second by giving up the first.
  */
-test('the queue ends on the same line the browser list does', async ({ page }) => {
+test('the queue fills its card the way the browser does, and still clears the pill', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'mobile-only regression');
   await openQueuePanel(page);
   await snapPlayerCarousel(page, 'now-playing', 'queue');
   await settle(page, '[data-now-playing-tile="queue"]');
 
-  const lanes = page.locator('[data-now-playing-tile="queue"] [data-section-rows]');
+  const queue = page.locator('[data-now-playing-tile="queue"]');
+  const lanes = queue.locator('[data-section-rows]');
   await expect.poll(() => lanes.count()).toBeGreaterThan(0);
   // A lane scrolls itself only once it has been squeezed, which is the state
   // this measures: a short queue leaves room below it for honest reasons.
   await expect
-    .poll(async () => {
-      const room = await lanes.evaluateAll((nodes) =>
-        nodes.map((node) => node.scrollHeight - node.clientHeight),
-      );
-      return Math.max(...room);
-    }, { message: 'the queue must be long enough to scroll' })
+    .poll(() => lanes.last().evaluate((lane) => lane.scrollHeight - lane.clientHeight),
+      { message: 'the queue must be long enough to scroll' })
     .toBeGreaterThan(0);
 
+  // How far the painted list stops short of the card it sits in. For the queue
+  // that is the bottom lane's own box; for the browser it is the body's
+  // padding edge, which is where its overflowing rows are clipped. Both are
+  // polled rather than read once: a panel measured while it is still coming in
+  // is a panel still growing, and the shortfall of one is the whole assertion.
+  await expect
+    .poll(() => queue.evaluate((tile) => {
+      const laneNodes = [...tile.querySelectorAll('[data-section-rows]')];
+      const last = laneNodes[laneNodes.length - 1] as HTMLElement;
+      return tile.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom;
+    }), { message: 'the queue left a strip of empty panel under its bottom lane' })
+    .toBeLessThanOrEqual(1);
+
   await snapPlayerCarousel(page, 'now-playing', 'browser');
-  // The enclosing player surface can still be entering. Measure both cards
-  // and the pill in one frame rather than comparing rects from different times.
-  await expect.poll(() => page.evaluate(() => {
-    const lanes = document.querySelectorAll<HTMLElement>('[data-now-playing-tile="queue"] [data-section-rows]');
-    const lane = lanes[lanes.length - 1];
-    const rows = lane.closest('section')!.parentElement!;
-    const body = document.querySelector<HTMLElement>('[data-now-playing-tile="browser"] [data-browser-body]')!;
-    const pill = document.querySelector<HTMLElement>('nav[aria-label="Paneles de NORMAL"]')!;
-    const end = lane.getBoundingClientRect().bottom;
-    const content = rows.getBoundingClientRect().bottom - parseFloat(getComputedStyle(rows).paddingBottom);
-    const browserEnd = body.getBoundingClientRect().bottom - parseFloat(getComputedStyle(body).paddingBottom);
-    const clearance = pill.getBoundingClientRect().top - end;
-    return {
-      fillsLane: Math.abs(end - content) <= 1,
-      alignsWithBrowser: Math.abs(end - browserEnd) <= 1,
-      clearsPill: clearance > 0 && clearance <= 24,
-    };
-  })).toEqual({ fillsLane: true, alignsWithBrowser: true, clearsPill: true });
+  await settle(page, '[data-now-playing-tile="browser"]');
+  // The same line, measured the same way on the panel that always reached it.
+  await expect
+    .poll(() => page.locator('[data-now-playing-tile="browser"]').evaluate((tile) => {
+      const body = tile.querySelector('[data-browser-body]') as HTMLElement;
+      return tile.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom;
+    }), { message: 'the browser panel no longer reaches the bottom of its card' })
+    .toBeLessThanOrEqual(1);
+
+  // And the clearance is still doing its job, one scrollport further in: at the
+  // end of the bottom lane the last song rests above the pill, not beneath it.
+  await snapPlayerCarousel(page, 'now-playing', 'queue');
+  await settle(page, '[data-now-playing-tile="queue"]');
+
+  // Row and pill are read in the same frame, and the lane is only measured
+  // once it reports itself at its end. It is virtualized, so the frame after a
+  // scroll still holds the rows of the range it left — and the pill, read back
+  // on its own after a trip across the pager, can be caught still travelling.
+  const airAbovePill = async () => {
+    await lanes.last().evaluate((lane) => { lane.scrollTop = lane.scrollHeight; });
+    return page.evaluate(() => {
+      const all = [...document.querySelectorAll('[data-now-playing-tile="queue"] [data-section-rows]')];
+      const lane = all[all.length - 1] as HTMLElement | undefined;
+      const pill = document.querySelector('nav[aria-label="Paneles de NORMAL"]');
+      if (!lane || !pill) return null;
+      if (Math.abs(lane.scrollTop + lane.clientHeight - lane.scrollHeight) > 1) return null;
+      const rows = [...lane.querySelectorAll('[data-drag-row]')] as HTMLElement[];
+      if (!rows.length) return null;
+      const bottom = Math.max(...rows.map((row) => row.getBoundingClientRect().bottom));
+      return Math.round(pill.getBoundingClientRect().top - bottom);
+    });
+  };
+
+  const rests = 'the last song rests just above the pager pill';
+  await expect
+    .poll(async () => {
+      const air = await airAbovePill();
+      if (air === null) return 'the bottom lane has not settled at its end';
+      if (air < 0) return `the last song sits ${-air}px under the pager pill`;
+      // The band the bug left behind arrives from the other side: air wide
+      // enough to read as empty panel is as wrong as no air at all.
+      if (air > 24) return `${air}px of empty panel stands above the pager pill`;
+      return rests;
+    }, { message: 'the bottom lane must end on the pill, with its clearance and no more' })
+    .toBe(rests);
 });

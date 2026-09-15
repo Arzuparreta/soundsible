@@ -95,16 +95,21 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  /* The air between lanes belongs to the box, not to the lanes: as a
-   * `margin-bottom` on each one the last lane carried it too, and that trailing
-   * band sat on top of the footer clearance and never scrolled away. The lanes
-   * stopped a lane-gap short of the line the browser panel's list reaches, and
-   * the bottom of the card showed it as a strip of empty panel. */
+  /* The air between lanes belongs to the box, not to the lanes: carried as a
+   * `margin-bottom` on each one, the last lane's trailing copy had nothing
+   * below it to separate and simply pushed the list up off the card. */
   gap: var(--space-lg);
   overflow-y: auto;
   /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
   overscroll-behavior-y: contain;
-  padding: 8px 8px max(24px, var(--player-mobile-footer-clearance, 24px));
+  /* No footer clearance down here. This box hands its whole height to the
+   * lanes and then almost never scrolls itself, so padding at its bottom is
+   * not a band the list is scrolled past — it is permanent empty panel. It
+   * held the queue a full clearance short of the card's edge while the search
+   * panel beside it, whose body always overflows, painted its rows right down
+   * to that edge. The clearance belongs at the end of the bottom lane's own
+   * scroller, where it is content rather than a floor. */
+  padding: 8px 8px 0;
 }
 
 /* Every lane keeps its label and at least one row. Shrinking proportionally
@@ -137,6 +142,18 @@
   overflow-y: auto;
   /* y only: x belongs to the pager (PlayerWorkspace.module.css). */
   overscroll-behavior-y: contain;
+}
+
+/* The bottom lane is the one whose last song would otherwise come to rest
+ * under the pager pill, so it is the one that carries the footer clearance —
+ * and it carries it inside its scroller, as content to be scrolled past. The
+ * lane's own box still reaches the bottom of the card, so the queue fills it
+ * the way the browser panel does, and the pill still gets its air once the
+ * lane is scrolled to the end. Moving the band from the box above to the
+ * content here leaves a queue that fits without scrolling laid out exactly as
+ * it was: the pixels only changed which side of the scrollport they sit on. */
+.section:last-child .sectionRows {
+  padding-bottom: max(24px, var(--player-mobile-footer-clearance, 24px));
 }
 
 /* Sticky for the fallback above, where `.rows` is the one scrolling and a lane
@@ -394,7 +411,7 @@
 }
 
 @media (min-width: 1024px) {
-  .rows {
+  .section:last-child .sectionRows {
     padding-bottom: 24px;
   }
 }
