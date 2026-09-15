@@ -9,7 +9,7 @@
 A music service on your own server, with YouTube search, a built-in DJ and live broadcasting.
 Free and open source. No ads or subscription.
 
-[**Get started**](#install) · [**Features**](#features) · [**Docs**](docs/README.md) · [**Website**](https://arzuparreta.github.io/soundsible.github.io)
+[**Get started**](#install) · [**Features**](#features) · [**Docs**](https://arzuparreta.github.io/soundsible.github.io/docs/native-installation/) · [**Website**](https://arzuparreta.github.io/soundsible.github.io)
 
 </div>
 
