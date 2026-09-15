@@ -22,11 +22,18 @@ export function isMusicTrack(track: Pick<Track, 'media_kind' | 'podcast_episode_
  * no music-queue operations (its stream is a minted token, not a `previewUrl`,
  * so the generic queue cannot re-load it). The id mirrors the episode key used
  * by {@link PodcastShow} so the "now playing" highlight lines up.
+ *
+ * `showImage` is the artwork of last resort. A streamed episode is a preview
+ * track, so `trackCoverUrl` has nothing but `cover` to go on — no engine row to
+ * ask — and an episode that carries no art of its own would otherwise reach the
+ * player, the queue and the lock screen blank. The show's cover is what a
+ * podcast app shows there anyway.
  */
 export function podcastEpisodeToTrack(
   ep: PodcastEpisode,
   showTitle?: string,
   feedId?: string,
+  showImage?: string | null,
 ): Track {
   const key = ep.guid || ep.enclosure_url;
   return {
@@ -34,7 +41,7 @@ export function podcastEpisodeToTrack(
     title: ep.title,
     artist: showTitle ?? '',
     duration: ep.duration_sec,
-    cover: ep.image,
+    cover: ep.image || showImage || undefined,
     source: 'preview',
     media_kind: 'podcast_episode',
     podcast_episode_guid: key,

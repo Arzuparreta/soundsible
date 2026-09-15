@@ -77,7 +77,7 @@ def subscribe():
     image_guess = (data.get("image_url") or "").strip()
     itunes_id = (data.get("itunes_collection_id") or "").strip()
 
-    from shared.podcast_rss import fetch_feed_body, parse_feed_episodes
+    from shared.podcast_rss import fetch_feed_body, parse_feed_episodes, parse_feed_image
 
     try:
         body = fetch_feed_body(rss_url)
@@ -98,10 +98,8 @@ def subscribe():
                 feed_title = (getattr(fd, "title", None) or "").strip() or "Podcast"
             if not feed_author:
                 feed_author = (getattr(fd, "author", None) or getattr(fd, "subtitle", None) or "").strip()
-            if not feed_image and getattr(fd, "image", None):
-                href = getattr(fd.image, "href", None)
-                if href:
-                    feed_image = str(href).strip()
+            if not feed_image:
+                feed_image = parse_feed_image(fd, rss_url)
     except Exception as e:
         logger.warning("Podcast subscribe fetch failed: %s", e)
         return jsonify({"error": f"Could not load feed: {e}"}), 400
