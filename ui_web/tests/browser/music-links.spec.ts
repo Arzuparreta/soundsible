@@ -8,14 +8,6 @@ async function activate(page: Page, link: ReturnType<Page['getByRole']>, mobile:
 
 test.beforeEach(async ({ page }) => {
   await mockMusicEngine(page);
-  // A real, long silent WAV keeps the engine from auto-skipping invalid fixture audio.
-  const samples = 8000 * 180;
-  const wav = Buffer.alloc(44 + samples * 2);
-  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
-  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
-  wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32);
-  wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
-  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: wav }));
   await page.route('**/api/catalog/artist**', (route) => route.fulfill({ json: {
     artist: 'Artista 7', resolved: true, in_library: true,
     top_tracks: [], albums: [], singles_eps: [], related_artists: [], candidates: [],

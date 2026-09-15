@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { openMiniPlayer, silentStream } from './music-browser-fixture';
 import { snapCarousel } from './playerGestures';
 
 /* A library long enough for the queue's context lane to scroll: the bug only
@@ -29,15 +30,7 @@ async function mockEngine(page: Page) {
     if (['/api/devices', '/api/paired-devices', '/api/pairing/sessions'].includes(path)) body = { devices: [], sessions: [] };
     await route.fulfill({ json: body });
   });
-  /* Real audio behind the stream URL: a failed load skips to the next track,
-     and the song the mini-player names would then be a race. */
-  const samples = 8000 * 180;
-  const wav = Buffer.alloc(44 + samples * 2);
-  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
-  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
-  wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32);
-  wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
-  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: wav }));
+  await silentStream(page);
   await page.addInitScript(() => {
     localStorage.clear();
     localStorage.setItem('lang', 'es');
@@ -68,15 +61,41 @@ async function touchDrag(
   await session.detach();
 }
 
+/**
+ * A box worth dragging from: the element has stopped moving, and the point the
+ * drag will touch is on screen.
+ *
+ * Snapping the carousel settles it sideways, but the surface around it is still
+ * entering. Measured inside that entrance the lane reports y=905 in an 844px
+ * viewport — below the fold — so `elementFromPoint` at the drag coordinates
+ * returns null, the touch lands on nothing, and "scrollTop stayed 0" reads as
+ * exactly the scroll-chaining regression this test exists to catch. It failed
+ * on the first attempt every time and passed on the retry, where the browser
+ * was warm enough to have finished the entrance first.
+ *
+ * `settle()` is not enough here: it gives up after 2s and skips the looping
+ * animations the surface keeps running. Waiting on the geometry itself is what
+ * the drag actually depends on.
+ */
+async function settledBox(page: Page, target: Locator, offsetY: number) {
+  let previous: { x: number; y: number } | null = null;
+  await expect.poll(async () => {
+    const box = await target.boundingBox();
+    const viewport = page.viewportSize()!;
+    const still = !!box && !!previous && box.x === previous.x && box.y === previous.y;
+    previous = box && { x: box.x, y: box.y };
+    return !!box && still && box.y + offsetY < viewport.height;
+  }, { message: 'the drag point must stop moving and be on screen' }).toBe(true);
+  return (await target.boundingBox())!;
+}
+
 test.beforeEach(async ({ page }) => { await mockEngine(page); });
 
 test('a scrolled player panel still hands a sideways swipe to the pager', async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium' || (page.viewportSize()?.width ?? 1024) > 1023, 'real Chromium touch input');
   await page.goto('/player/#/');
   await page.getByRole('button', { name: /Reproducir Canción 79/ }).click();
-  const miniPlayer = page.locator('[data-omni-player]');
-  await expect(miniPlayer).toBeVisible();
-  await miniPlayer.getByRole('button', { name: /Canción 79/ }).click();
+  await openMiniPlayer(page, /Canción 79/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
 
   const stage = page.locator('[data-now-playing-tile="stage"]');
@@ -88,7 +107,7 @@ test('a scrolled player panel still hands a sideways swipe to the pager', async 
   await snapCarousel(page, 'queue');
   await expect(queue).not.toHaveAttribute('inert', '');
   const lane = queue.locator('[data-section-rows]').last();
-  const laneBox = (await lane.boundingBox())!;
+  const laneBox = await settledBox(page, lane, 120);
   await touchDrag(page, { x: laneBox.x + laneBox.width / 2, y: laneBox.y + 120 }, { dy: -120 }, 10);
   await expect.poll(() => lane.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 

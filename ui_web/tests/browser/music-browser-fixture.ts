@@ -36,6 +36,7 @@ export async function mockMusicEngine(page: Page) {
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
+  await silentStream(page);
   await page.addInitScript(() => {
     if (!sessionStorage.getItem('music-fixture-initialized')) {
       localStorage.clear();
@@ -46,9 +47,48 @@ export async function mockMusicEngine(page: Page) {
   });
 }
 
+/**
+ * Serve every track as a long, real, silent WAV.
+ *
+ * Without this the engine gets audio it cannot play, treats each track as
+ * finished and walks the queue: three seconds after pressing play on track 320
+ * the mini player reads 317, then 316. That moves the player's own title text,
+ * so the pill it lives in changes width about once a second, forever.
+ *
+ * Playwright will not click a moving target — `click()` waits for the element
+ * to be "visible, enabled and stable" — so a click on the pill never becomes
+ * actionable, spends the full 30s test budget, and the teardown that follows
+ * makes the pending click report "Target page, context or browser has been
+ * closed". That reads like a browser crash and is not one. It is why
+ * additional-themes, music-explorer and player-panel-swipe all flake in the
+ * same place.
+ *
+ * Three minutes of silence outlasts any test, so playback simply stays put.
+ * Register it before a spec's own stream route, which then takes precedence.
+ */
+export async function silentStream(page: Page): Promise<void> {
+  const samples = 8000 * 180;
+  const wav = Buffer.alloc(44 + samples * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
+  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: wav }));
+}
+
+/**
+ * Open the player from its mini-player pill. Scoped to the pill so it names the
+ * one button it means, rather than picking it out of the page by position.
+ */
+export async function openMiniPlayer(page: Page, name: RegExp): Promise<void> {
+  const pill = page.locator('[data-omni-player]');
+  await expect(pill).toBeVisible();
+  await pill.getByRole('button', { name }).click();
+}
+
 export async function openMusicPlayer(page: Page) {
   await page.goto('/player/#/');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
-  await page.getByRole('button', { name: /^NORMAL:/ }).click();
+  await openMiniPlayer(page, /^NORMAL:/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
 }
