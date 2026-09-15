@@ -607,6 +607,14 @@ function albumQuery(params?: AlbumBrowseQuery): string {
 /** Endpoint methods over the engine REST contract. */
 export const api = {
   health: () => request<{ status?: string }>('/api/health'),
+  /** Hand the desktop shell the palette it has to paint its own screens with.
+   *  Only reachable with an owner token, which only /player/desktop/ injects. */
+  setDesktopAppearance: (theme: string, colors: Record<string, string>) =>
+    request<{ status?: string }>('/api/desktop/appearance', {
+      method: 'PUT',
+      body: { theme, colors },
+      timeoutMs: 5000,
+    }),
   registerDevice: (d: DeviceRegistration) =>
     request<void>('/api/devices/register', { method: 'POST', body: d }),
   /** Devices registered for playback in this scope (for remote control). */

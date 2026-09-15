@@ -152,3 +152,68 @@ describe('pre-paint boot script', () => {
     expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(booted);
   });
 });
+
+
+describe('telling the desktop shell', () => {
+  /*
+   * The shell is on screen before the player is, in another origin, painting
+   * from a file the engine writes. This is the only moment that file is ever
+   * written — and it must not fire in a browser, where there is no shell to
+   * hear it and no owner token to authorise it.
+   */
+  async function loadWithApi(preference: string, token: string | null) {
+    vi.resetModules();
+    localStorage.clear();
+    localStorage.setItem('theme', preference);
+    const setDesktopAppearance = vi.fn().mockResolvedValue({ status: 'updated' });
+    vi.doMock('../lib/config', async () => ({
+      ...(await vi.importActual<object>('../lib/config')),
+      ownerToken: () => token,
+    }));
+    vi.doMock('../lib/api', async () => {
+      const actual = await vi.importActual<{ api: object }>('../lib/api');
+      return { ...actual, api: { ...actual.api, setDesktopAppearance } };
+    });
+    return { store: await import('./index'), setDesktopAppearance };
+  }
+
+  afterEach(() => vi.doUnmock('../lib/api'));
+
+  it('hands the shell the whole palette table, not just the colour', async () => {
+    installMatchMedia(false);
+    const { store, setDesktopAppearance } = await loadWithApi('dark', 'owner-token');
+
+    store.actions.setTheme('forest-green');
+
+    expect(setDesktopAppearance).toHaveBeenCalledWith('forest-green', THEME_COLORS);
+  });
+
+  it('sends the preference, so the shell resolves `system` against its own desktop', async () => {
+    installMatchMedia(false);
+    const { store, setDesktopAppearance } = await loadWithApi('dark', 'owner-token');
+
+    store.actions.setTheme('system');
+
+    expect(setDesktopAppearance).toHaveBeenCalledWith('system', THEME_COLORS);
+  });
+
+  it('stays quiet in a browser, where there is no shell', async () => {
+    installMatchMedia(false);
+    const { store, setDesktopAppearance } = await loadWithApi('dark', null);
+
+    store.actions.setTheme('forest-green');
+
+    expect(setDesktopAppearance).not.toHaveBeenCalled();
+  });
+
+  it('still changes the theme when the engine refuses the news', async () => {
+    installMatchMedia(false);
+    const { store, setDesktopAppearance } = await loadWithApi('dark', 'owner-token');
+    setDesktopAppearance.mockRejectedValue(new Error('offline'));
+
+    store.actions.setTheme('forest-green');
+
+    expect(document.documentElement.dataset.theme).toBe('forest-green');
+    expect(localStorage.getItem('theme')).toBe('forest-green');
+  });
+});

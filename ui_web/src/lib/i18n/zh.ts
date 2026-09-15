@@ -561,6 +561,7 @@ export const zh: Dict = {
     selectTheme: '选择…',
     themeSlate: '石板灰',
     themePureBlack: '纯黑',
+    themeForestGreen: '森林绿',
     themeDark: '深色',
     themeLight: '浅色',
     themeSystem: '系统',

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { EXTRA_THEMES } from '../boot/themes';
 import { contrast, palette, resolve } from './testing/tokens';
 
 const SURFACES = ['--bg-base', '--bg-raised', '--bg-elevated', '--bg-inset', '--bg-hover', '--bg-active'];
 const INKS = ['--ink-primary', '--ink-secondary', '--ink-tertiary', '--accent-ink', '--info', '--success', '--warning', '--danger'];
 
-describe.each(['slate', 'pure-black'])('%s palette', theme => {
+describe.each(EXTRA_THEMES)('%s palette', theme => {
   it.each([false, true])('keeps text and essential indicators legible (high contrast: %s)', highContrast => {
     const values = palette([':root', `:root[data-theme='${theme}']`, ...(highContrast ? [":root[data-high-contrast='true']", `:root[data-theme='${theme}'][data-high-contrast='true']`] : [])]);
     for (const surface of SURFACES) {

@@ -7,7 +7,8 @@ use engine::{EnginePhase, EngineSupervisor};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
+use tauri::window::Color;
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, Theme, WindowEvent};
 #[cfg(desktop)]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
@@ -29,6 +30,46 @@ struct FolderPreview {
     scan_ms: u64,
     inaccessible_entries: u64,
     writable: bool,
+}
+
+/// The desktop's own light/dark preference, which is what `system` resolves to
+/// here — the shell has no prefers-color-scheme to read, but Tauri knows.
+fn os_prefers_dark(app: &AppHandle) -> bool {
+    app.get_webview_window("main")
+        .and_then(|window| window.theme().ok())
+        .map(|theme| theme != Theme::Light)
+        .unwrap_or(true)
+}
+
+fn parse_hex_color(value: &str) -> Option<Color> {
+    let hex = value.strip_prefix('#')?;
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let channel = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).ok();
+    Some(Color(channel(0)?, channel(2)?, channel(4)?, 255))
+}
+
+/// Paint the window itself, then tell the shell UI which palette it is in.
+///
+/// The background colour is the half that cannot be done in CSS: without it the
+/// webview paints its platform default — white — for a frame on launch and on
+/// every navigation between the shell and the player.
+fn apply_window_appearance(app: &AppHandle) {
+    let appearance = state::load_appearance(os_prefers_dark(app));
+    if let Some(window) = app.get_webview_window("main") {
+        if let Some(color) = appearance.color.as_deref().and_then(parse_hex_color) {
+            let _ = window.set_background_color(Some(color));
+        }
+    }
+    let _ = app.emit("shell://appearance", &appearance.theme);
+}
+
+/// Kept apart from `get_startup_profile`, which consumes the skip-autostart
+/// flag and so must be called exactly once.
+#[tauri::command]
+fn get_shell_theme(app: AppHandle) -> String {
+    state::load_appearance(os_prefers_dark(&app)).theme
 }
 
 #[tauri::command]
@@ -394,6 +435,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_startup_profile,
+            get_shell_theme,
             start_configured_engine,
             stop_engine,
             set_autostart,
@@ -437,15 +479,21 @@ pub fn run() {
                 }
             }
 
+            apply_window_appearance(app.handle());
+
             if let Some(window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
-                window.on_window_event(move |event| {
-                    if let WindowEvent::CloseRequested { api, .. } = event {
+                window.on_window_event(move |event| match event {
+                    WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
                         if let Some(window) = app_handle.get_webview_window("main") {
                             let _ = window.hide();
                         }
                     }
+                    // Only matters while the stored preference is `system`;
+                    // load_appearance decides that, so this just re-asks.
+                    WindowEvent::ThemeChanged(_) => apply_window_appearance(&app_handle),
+                    _ => {}
                 });
             }
 

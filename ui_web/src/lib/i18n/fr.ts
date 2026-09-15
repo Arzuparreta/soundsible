@@ -565,6 +565,7 @@ export const fr: Dict = {
     selectTheme: 'Sélectionner…',
     themeSlate: 'Ardoise',
     themePureBlack: 'Noir pur',
+    themeForestGreen: 'Vert forêt',
     themeDark: 'Sombre',
     themeLight: 'Clair',
     themeSystem: 'Système',

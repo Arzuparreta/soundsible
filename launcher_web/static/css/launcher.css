@@ -1,0 +1,113 @@
+/*
+ * The launcher's palette and page reset, shared by index.html and setup.html.
+ *
+ * Both pages carried their own copy of this block, so every colour change had
+ * to be made twice and the two drifted apart by a token. Layout stays in each
+ * template; only what they agreed on moved here.
+ *
+ * These pages run before anyone has signed in and outside the player's origin,
+ * so they cannot read the chosen theme. They follow the desktop instead.
+ */
+:root {
+  color-scheme: light dark;
+  --bg: #1c1c1e;
+  --glass-bg: rgba(0, 0, 0, 0.25);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --text: #f5f5f7;
+  --text-dim: rgba(245, 245, 247, 0.72);
+  --accent: #0a84ff;
+  --danger: #ff453a;
+  --ready: #32d74b;
+  --on-accent: #fff;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f2f2f5;
+    /* The dark page floats black glass on a dark ground; inverted, the same
+       depth cue is white glass with a dark hairline to hold its edge. */
+    --glass-bg: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(0, 0, 0, 0.1);
+    --text: #16161a;
+    --text-dim: rgba(22, 22, 26, 0.68);
+    /* #0a84ff is 3.0:1 on a pale ground — under AA for text. */
+    --accent: #0062cc;
+    --danger: #c9251b;
+    --ready: #1c7c36;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+/* The language picker is built in JS (static/js/i18n.js). Its look lives here
+   so it follows the palette instead of carrying a third copy of it in a
+   cssText string. */
+#launcher-lang-picker {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 9999;
+  font-family: var(--font);
+  font-size: 14px;
+}
+
+#launcher-lang-picker > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  min-height: 36px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+
+#launcher-lang-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  min-width: 140px;
+  background: var(--bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+}
+
+#launcher-lang-dropdown button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+#launcher-lang-dropdown button:hover,
+#launcher-lang-dropdown button:focus-visible {
+  background: var(--glass-border);
+}

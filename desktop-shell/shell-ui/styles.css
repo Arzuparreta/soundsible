@@ -1,5 +1,5 @@
 :root {
-  --bg-base: #0d0d0f;
+  --bg-base: #0c0c0e;
   --bg-elevated: #16161a;
   --bg-inset: #0a0a0c;
   --hairline: #2a2a2e;
@@ -8,12 +8,85 @@
   --ink-tertiary: #636366;
   --accent: #f97a12;
   --accent-hover: #ff8d2e;
+  --ink-on-accent: #1a0e02;
   --brand-gold: #E0BC00;
+  --brand-gold-ink: var(--brand-gold);
   --status-error: #ff453a;
+  --status-warning: #e0a72b;
   --status-ready: #34c759;
+  --danger-fill: rgba(255, 69, 58, 0.12);
+  --danger-line: rgba(255, 69, 58, 0.35);
   --font-display: "Fraunces", "Plus Jakarta Sans", serif;
   --font-ui: "Plus Jakarta Sans", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/*
+ * One block per palette the player ships, stamped on <html> by app.js from the
+ * theme the engine wrote to the shared config directory. Dark is :root above.
+ *
+ * Surface and ink values track the player's tokens.css so the handoff into the
+ * webview is not a colour change; the status and danger colours are the shell's
+ * own, because its token names are (--status-error/-ready, not --danger/-success).
+ */
+[data-theme="light"] {
+  --bg-base: #f6f6f7;
+  --bg-elevated: #ffffff;
+  --bg-inset: #ececee;
+  --hairline: #e3e3e7;
+  --ink-primary: #16161a;
+  --ink-secondary: #55555f;
+  --ink-tertiary: #6f6f78;
+  /* Fills keep the signature orange; everything that has to be *read* on a pale
+     surface burns down, the way the player's --accent-ink does. */
+  --brand-gold-ink: #7a6600;
+  --status-error: #c9251b;
+  --status-warning: #8a6400;
+  --status-ready: #1c7c36;
+  --danger-fill: rgba(201, 37, 27, 0.1);
+  --danger-line: rgba(201, 37, 27, 0.4);
+}
+
+[data-theme="slate"] {
+  --bg-base: #252d38;
+  --bg-elevated: #354150;
+  --bg-inset: #202731;
+  --hairline: #64778d;
+  --ink-primary: #f4f6fa;
+  --ink-secondary: #d3dbe5;
+  --ink-tertiary: #bdcadb;
+  --status-error: #ffaaa5;
+  --status-warning: #f5ce70;
+  --status-ready: #76e695;
+  --danger-fill: rgba(255, 170, 165, 0.14);
+  --danger-line: rgba(255, 170, 165, 0.4);
+}
+
+[data-theme="pure-black"] {
+  --bg-base: #000000;
+  --bg-elevated: #0a0a0a;
+  --bg-inset: #000000;
+  --hairline: #666666;
+  --ink-primary: #ffffff;
+  --ink-secondary: #d6d6d6;
+  --ink-tertiary: #b5b5b5;
+}
+
+[data-theme="forest-green"] {
+  --bg-base: #0b110d;
+  --bg-elevated: #17241b;
+  --bg-inset: #070c09;
+  --hairline: #27342b;
+  --ink-primary: #f2f5f3;
+  --ink-secondary: #a3b0a7;
+  --ink-tertiary: #9aa89e;
+  /* The one palette that does not wear the signature orange. */
+  --accent: #f2a43a;
+  --accent-hover: #ffba5e;
+  --ink-on-accent: #1a1004;
+  --status-error: #ffaaa5;
+  --danger-fill: rgba(255, 170, 165, 0.14);
+  --danger-line: rgba(255, 170, 165, 0.4);
 }
 
 * { box-sizing: border-box; }
@@ -58,7 +131,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--brand-gold);
+  color: var(--brand-gold-ink);
   margin-bottom: 12px;
 }
 
@@ -132,7 +205,7 @@ body {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--ink-on-accent);
 }
 
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
@@ -294,7 +367,7 @@ body {
 }
 
 .pairing-warning {
-  color: #e0a72b;
+  color: var(--status-warning);
   font-size: 0.85rem;
   margin: 0 0 12px;
 }
@@ -311,6 +384,8 @@ body {
 }
 
 .qr-box {
+  /* Deliberately literal in every palette: a QR code is read by a camera, and
+     its quiet zone has to stay white however dark the room around it is. */
   background: #fff;
   border: 1px solid var(--hairline);
   border-radius: 14px;
@@ -396,9 +471,9 @@ body {
 }
 
 .btn-danger {
-  background: rgba(255, 69, 58, 0.12);
-  color: #ff453a;
-  border: 1px solid rgba(255, 69, 58, 0.35);
+  background: var(--danger-fill);
+  color: var(--status-error);
+  border: 1px solid var(--danger-line);
 }
 
 .btn-inline {

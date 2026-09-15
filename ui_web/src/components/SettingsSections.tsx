@@ -1,4 +1,5 @@
 import { BottomNavigationSettings } from './BottomNavigationSettings';
+import { EXTRA_THEMES } from '../boot/themes';
 import { createSignal, onMount, For, Show, type JSX } from 'solid-js';
 import { state, actions } from '../stores';
 import { api } from '../lib/api';
@@ -202,6 +203,18 @@ function themeLabel(theme: (typeof THEMES)[number]): string {
   return t('settings.themeSystem');
 }
 
+/* The palettes the segmented control has no room for. Keyed on the shared list,
+   so a theme added to it does not compile until it has a label here. */
+const EXTRA_THEME_LABELS: Record<(typeof EXTRA_THEMES)[number], () => string> = {
+  slate: () => t('settings.themeSlate'),
+  'pure-black': () => t('settings.themePureBlack'),
+  'forest-green': () => t('settings.themeForestGreen'),
+};
+
+function extraTheme(theme: string): (typeof EXTRA_THEMES)[number] | undefined {
+  return EXTRA_THEMES.find((candidate) => candidate === theme);
+}
+
 function AppearanceSection() {
   return (
     <SettingsGroup label={t('settings.appearance')} note={t('settings.note.theme')}>
@@ -217,14 +230,16 @@ function AppearanceSection() {
       />
       <SelectRow
         label={t('settings.otherThemes')}
-        value={state.theme === 'slate' || state.theme === 'pure-black' ? state.theme : ''}
+        value={extraTheme(state.theme) ?? ''}
         onChange={(value) => {
-          if (value === 'slate' || value === 'pure-black') actions.setTheme(value);
+          const theme = extraTheme(value);
+          if (theme) actions.setTheme(theme);
         }}
       >
         <option value="" disabled>{t('settings.selectTheme')}</option>
-        <option value="slate">{t('settings.themeSlate')}</option>
-        <option value="pure-black">{t('settings.themePureBlack')}</option>
+        <For each={EXTRA_THEMES}>
+          {(theme) => <option value={theme}>{EXTRA_THEME_LABELS[theme]()}</option>}
+        </For>
       </SelectRow>
       <SelectRow
         label={t('settings.language')}
@@ -742,8 +757,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       t('settings.themeSystem'),
       t('settings.language'),
       t('settings.otherThemes'),
-      t('settings.themeSlate'),
-      t('settings.themePureBlack'),
+      ...EXTRA_THEMES.map((theme) => EXTRA_THEME_LABELS[theme]()),
     ],
     content: () => <AppearanceSection />,
   },

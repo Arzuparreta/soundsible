@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub const STATE_FILENAME: &str = "desktop-engine-state.json";
@@ -83,6 +84,58 @@ pub fn load_persisted_music_dir() -> Option<PathBuf> {
         .or(data.music_dir)
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
+}
+
+/// What the player last chose, written by the engine into the shared config
+/// directory (see `/api/desktop/appearance`). The shell and the player live in
+/// different origins, so this file is the only channel between them — and the
+/// only one that is readable before the engine is even running, which is
+/// exactly when the shell is on screen alone.
+///
+/// The player sends the whole colour table so the shell never carries a second
+/// copy of the palette: a theme added to the player arrives here for free.
+#[derive(Debug, Clone, Deserialize)]
+struct AppearancePrefs {
+    theme: Option<String>,
+    #[serde(default)]
+    colors: HashMap<String, String>,
+}
+
+/// A palette resolved for painting: the name to stamp on `<html>`, and the
+/// window background that stops the webview flashing white behind it.
+#[derive(Debug, Clone, Serialize)]
+pub struct Appearance {
+    pub theme: String,
+    pub color: Option<String>,
+}
+
+pub const APPEARANCE_FILENAME: &str = "theme.json";
+
+/// Resolve the stored preference against the OS, the way the player's pre-paint
+/// script does. `system` — and an absent, unreadable or unknown file — follow
+/// the desktop; anything else is the listener overriding it.
+pub fn resolve_appearance(raw: Option<&str>, os_prefers_dark: bool) -> Appearance {
+    let fallback = if os_prefers_dark { "dark" } else { "light" };
+    let prefs = raw.and_then(|raw| serde_json::from_str::<AppearancePrefs>(raw).ok());
+
+    let Some(prefs) = prefs else {
+        return Appearance { theme: fallback.to_string(), color: None };
+    };
+    let theme = match prefs.theme.as_deref() {
+        None | Some("system") => fallback,
+        // A palette the shell has never heard of is not one it can paint.
+        Some(stored) if prefs.colors.contains_key(stored) => stored,
+        Some(_) => fallback,
+    };
+    Appearance {
+        theme: theme.to_string(),
+        color: prefs.colors.get(theme).cloned(),
+    }
+}
+
+pub fn load_appearance(os_prefers_dark: bool) -> Appearance {
+    let raw = std::fs::read_to_string(config_dir().join(APPEARANCE_FILENAME)).ok();
+    resolve_appearance(raw.as_deref(), os_prefers_dark)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -180,4 +233,55 @@ pub fn sidecar_binary() -> Option<PathBuf> {
 
     let legacy = manifest.join("resources/soundsible-engine");
     legacy.is_file().then_some(legacy)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_appearance;
+
+    // r##..##: the colours contain `"#`, which closes a single-hash raw string.
+    const TABLE: &str = r##"{"light":"#f6f6f7","dark":"#0c0c0e","forest-green":"#0b110d"}"##;
+
+    fn stored(theme: &str) -> String {
+        format!(r#"{{"theme":"{theme}","colors":{TABLE}}}"#)
+    }
+
+    #[test]
+    fn paints_the_palette_the_player_chose() {
+        let appearance = resolve_appearance(Some(&stored("forest-green")), true);
+        assert_eq!(appearance.theme, "forest-green");
+        assert_eq!(appearance.color.as_deref(), Some("#0b110d"));
+    }
+
+    #[test]
+    fn an_explicit_palette_ignores_the_desktop() {
+        for os_prefers_dark in [true, false] {
+            assert_eq!(
+                resolve_appearance(Some(&stored("forest-green")), os_prefers_dark).theme,
+                "forest-green"
+            );
+        }
+    }
+
+    #[test]
+    fn system_follows_the_desktop() {
+        assert_eq!(resolve_appearance(Some(&stored("system")), true).theme, "dark");
+        assert_eq!(resolve_appearance(Some(&stored("system")), false).theme, "light");
+    }
+
+    #[test]
+    fn falls_back_before_the_player_has_ever_run() {
+        // No file on a first launch, and no reason to fail over it.
+        assert_eq!(resolve_appearance(None, true).theme, "dark");
+        assert_eq!(resolve_appearance(None, false).theme, "light");
+        assert_eq!(resolve_appearance(Some("{ not json"), false).theme, "light");
+    }
+
+    #[test]
+    fn refuses_a_palette_it_was_given_no_colour_for() {
+        // A theme the player shipped and this build of the shell has not: the
+        // colour table is the only thing that says the shell can paint it.
+        let orphan = r##"{"theme":"midnight","colors":{"dark":"#0c0c0e"}}"##;
+        assert_eq!(resolve_appearance(Some(orphan), true).theme, "dark");
+    }
 }

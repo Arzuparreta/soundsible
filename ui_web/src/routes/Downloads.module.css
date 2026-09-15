@@ -89,7 +89,7 @@
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   background: var(--accent-soft);
-  border: 1px solid rgba(249, 122, 18, 0.14);
+  border: 1px solid var(--accent-soft);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-1);
   animation: fadeIn var(--dur-medium) var(--ease-out);

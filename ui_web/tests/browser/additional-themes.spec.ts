@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { EXTRA_THEMES } from '../../src/boot/themes';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 
-for (const theme of ['slate', 'pure-black']) {
+/* The shared list, so a palette cannot ship without being walked end to end. */
+for (const theme of EXTRA_THEMES) {
   test(`${theme}: selection, persistence, accessibility and player`, async ({ page }, info) => {
     await mockMusicEngine(page);
     await page.route('**/api/static/cover/**', route => route.fulfill({

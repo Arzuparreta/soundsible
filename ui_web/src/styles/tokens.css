@@ -367,6 +367,45 @@
   --glass-filter: none;
 }
 
+/* Deep forest: a near-black sibling of the dark palette, tinted green, and the
+   one theme that does not wear the signature orange. Amber (38° hue) instead —
+   far enough from --brand-gold (50°) that a gold badge never reads as a button.
+   Every accent alpha is restated because the base ones are orange literals. */
+:root[data-theme='forest-green'] {
+  color-scheme: dark;
+  --bg-base: #0b110d;
+  --bg-raised: #111a14;
+  --bg-elevated: #17241b;
+  --bg-inset: #070c09;
+  --bg-hover: #1d2c22;
+  --bg-active: #243729;
+  --hairline: #27342b;
+  --hairline-strong: #72857a;
+  --hairline-soft: #1d2c22;
+  --ink-primary: #f2f5f3;
+  --ink-secondary: #a3b0a7;
+  --ink-tertiary: #9aa89e;
+  --accent: #f2a43a;
+  --accent-hover: #ffba5e;
+  --accent-press: #d88a22;
+  --ink-on-accent: #1a1004;
+  --accent-soft: rgba(242, 164, 58, 0.14);
+  --accent-faint: rgba(242, 164, 58, 0.075);
+  --accent-glow: rgba(242, 164, 58, 0.24);
+  --selection-bg: rgba(242, 164, 58, 0.24);
+  --ambient-accent: rgba(242, 164, 58, 0.055);
+  --shadow-accent: 0 8px 24px rgba(242, 164, 58, 0.2);
+  /* The dark palette's blue and red sit on darker surfaces than this one has:
+     both fall under 4.5:1 on --bg-active here. Green and amber clear it. */
+  --info: #8fc6ff;
+  --danger: #ffaaa5;
+  --skeleton-base: #111a14;
+  --skeleton-highlight: #243729;
+  --glass-fill: #111a14;
+  --glass-line: #3a4c40;
+  --glass-rim: #27342b;
+}
+
 /* Explicit low-vision palette. The regular themes remain visually untouched;
    this mode spends subtlety on stronger text, control and focus separation. */
 :root[data-high-contrast='true'] {
@@ -663,6 +702,44 @@
   --stage-gloss: transparent;
 }
 
+/* Same contract as slate: the record stays the wallpaper, the room stays the
+   colour of the theme. Brightness is bounded so a pale cover cannot wash the
+   glass out from underneath the ink. */
+:root[data-theme='forest-green'] [data-player-stage] {
+  --stage-base: #0b110d;
+  /* The veil is greener and lighter than --bg-base on purpose. A near-black
+     wash has no chroma to give, so over a saturated cover it only greys the
+     room down; #12301f has enough green in it to actually tint. */
+  --stage-backdrop: blur(62px) saturate(1.3) brightness(0.26);
+  --stage-backdrop-opacity: 0.9;
+  --stage-wash: linear-gradient(180deg, #12301fc7, #12301f9e 48%, #0b110deb);
+  --stage-wash-auto: var(--stage-wash);
+  --stage-wash-auto-wide: linear-gradient(96deg, #12301fc7, #12301f9e 46%, #0b110deb);
+  --ink-tertiary: #b2c0b7;
+  --stage-material-quiet: rgba(17, 26, 20, 0.3);
+  --stage-material: rgba(23, 36, 27, 0.42);
+  --stage-material-hover: rgba(29, 44, 34, 0.6);
+  --stage-material-active: rgba(36, 55, 41, 0.74);
+  --stage-panel: rgba(17, 26, 20, 0.52);
+  --stage-panel-opaque: #111a14;
+  --stage-sheet: rgba(23, 36, 27, 0.94);
+  --stage-chrome: rgba(17, 26, 20, 0.55);
+  --stage-chrome-active: rgba(36, 55, 41, 0.82);
+  --stage-line: var(--hairline);
+  --stage-line-strong: var(--hairline-strong);
+  --stage-media-filter: blur(30px) saturate(1.25) brightness(0.24);
+  --stage-media-veil: linear-gradient(#12301fb3, #0b110dd9);
+}
+
+:root[data-theme='forest-green'][data-high-contrast='true'] [data-player-stage] {
+  --stage-material-quiet: rgba(17, 26, 20, 0.7);
+  --stage-material: rgba(23, 36, 27, 0.82);
+  --stage-material-hover: #1d2c22;
+  --stage-material-active: #243729;
+  --stage-panel: rgba(17, 26, 20, 0.88);
+  --stage-chrome: rgba(17, 26, 20, 0.92);
+}
+
 :root[data-theme='slate'][data-high-contrast='true'] {
   --ink-secondary: #e3eaf3;
   --ink-tertiary: #d3dbe5;
@@ -677,6 +754,17 @@
 :root[data-theme='pure-black'][data-high-contrast='true'] {
   --glass-fill: #000000;
   --glass-rim: transparent;
+}
+
+:root[data-theme='forest-green'][data-high-contrast='true'] {
+  --ink-secondary: #cfdad3;
+  --ink-tertiary: #b2c0b7;
+  --hairline: #5c7066;
+  --hairline-strong: #8fa396;
+  --hairline-soft: #3a4c40;
+  --glass-fill: #111a14;
+  --glass-line: #5c7066;
+  --glass-rim: #3a4c40;
 }
 
 /* Theme cross-fade. `data-theme-transition` is set on <html> for the duration of a

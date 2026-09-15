@@ -15,6 +15,9 @@ html[data-booting] #app { visibility: hidden; }
   --startup-ink: #f2f2f5;
   --startup-muted: #a0a0a8;
   --startup-accent: #f97a12;
+  /* The wash behind the mark. Its own token so a palette can retint it, or
+     drop it, without restating the whole background shorthand. */
+  --startup-glow: rgba(249, 122, 18, 0.055);
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -23,7 +26,7 @@ html[data-booting] #app { visibility: hidden; }
   box-sizing: border-box;
   padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
     max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
-  background: radial-gradient(ellipse 240px 210px at 50% 46%, rgba(249, 122, 18, 0.055), transparent), var(--startup-bg);
+  background: radial-gradient(ellipse 240px 210px at 50% 46%, var(--startup-glow), transparent), var(--startup-bg);
   color: var(--startup-ink);
   font-family: system-ui, -apple-system, sans-serif;
   text-align: center;
@@ -96,4 +99,11 @@ html[data-booting] #app { visibility: hidden; }
 
 [data-theme='slate'] #startup-screen { --startup-bg: #252d38; --startup-muted: #d3dbe5; }
 /* Flat, not the orange wash the other palettes get: nothing glows on the OLED theme. */
-[data-theme='pure-black'] #startup-screen { --startup-bg: #000000; --startup-muted: #d6d6d6; background: var(--startup-bg); }
+[data-theme='pure-black'] #startup-screen { --startup-bg: #000000; --startup-muted: #d6d6d6; --startup-glow: transparent; }
+/* Amber, not the signature orange: the forest palette carries its own accent. */
+[data-theme='forest-green'] #startup-screen {
+  --startup-bg: #0b110d;
+  --startup-muted: #a3b0a7;
+  --startup-accent: #f2a43a;
+  --startup-glow: rgba(242, 164, 58, 0.06);
+}

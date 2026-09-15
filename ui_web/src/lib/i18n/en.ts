@@ -564,6 +564,7 @@ export const en = {
     selectTheme: 'Select…',
     themeSlate: 'Slate',
     themePureBlack: 'Pure black',
+    themeForestGreen: 'Forest green',
     themeDark: 'Dark',
     themeLight: 'Light',
     themeSystem: 'System',

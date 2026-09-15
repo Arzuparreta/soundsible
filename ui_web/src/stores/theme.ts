@@ -7,6 +7,8 @@
  */
 
 import { THEME_COLORS } from '../boot/themes';
+import { api } from '../lib/api';
+import { ownerToken } from '../lib/config';
 import { state } from './core';
 import type { ResolvedTheme, Theme } from './core';
 
@@ -95,6 +97,24 @@ function applyResolvedTheme(resolved: ResolvedTheme, animate = false): void {
   root.dataset.theme = resolved;
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', THEME_COLORS[resolved]);
+}
+
+/**
+ * Tell the desktop shell which palette to paint.
+ *
+ * The shell owns the window before the player does — first run, engine
+ * starting, engine failed — and it lives at another origin, so it can see
+ * neither this localStorage nor this document. The engine writes the answer to
+ * a file both sides can reach. An owner token is only injected into
+ * /player/desktop/, so its presence *is* "I am inside the shell"; everywhere
+ * else this is a no-op.
+ *
+ * Best-effort on purpose: a preference the shell never hears about is a stale
+ * splash screen, not a reason to refuse the theme the listener just chose.
+ */
+export function announceTheme(theme: Theme): void {
+  if (!ownerToken()) return;
+  void api.setDesktopAppearance(theme, THEME_COLORS).catch(() => {});
 }
 
 /** Apply the theme to the document (token overrides live in tokens.css) and
