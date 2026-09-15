@@ -1158,6 +1158,21 @@ describe('CarPlay interruption recovery', () => {
     audioService.stop();
   });
 
+
+  it('allows a route clock to start after resume resolves, within the recovery deadline', async () => {
+    const { audioService, context, deck } = await setup();
+    let readyAt = Infinity;
+    vi.spyOn(context, 'currentTime', 'get').mockImplementation(() => Date.now() < readyAt ? 191.147 : Date.now() / 1000);
+    context.resume.mockImplementation(async () => { context.state = 'running'; readyAt = Date.now() + 1000; });
+    await advanceSource(deck, 2000);
+    expect(audioService.outputHealth()).toBe('recovering');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(audioService.outputHealth()).toBe('healthy');
+    expect(deck.paused).toBe(false);
+    expect(context.suspend).toHaveBeenCalledTimes(1);
+    audioService.stop();
+  });
+
   it('does not mistake a stalled source, seek, or healthy context for a frozen output', async () => {
     const { audioService, context, deck } = await setup();
     await advanceSource(deck, 2000);
@@ -1177,16 +1192,16 @@ describe('CarPlay interruption recovery', () => {
   it('leaves an unrecoverable clock paused and permits an explicit retry', async () => {
     const { audioService, context, deck } = await setup();
     vi.spyOn(context, 'currentTime', 'get').mockReturnValue(191.147);
-    await advanceSource(deck, 2000);
+    await advanceSource(deck, 6500);
     expect(context.suspend).toHaveBeenCalledTimes(1);
     expect(audioService.outputHealth()).toBe('needs_play');
     expect(deck.paused).toBe(true);
     reveal();
     audioService.unlockAudio();
-    await advanceSource(deck, 2000);
+    await advanceSource(deck, 6500);
     expect(context.suspend).toHaveBeenCalledTimes(1);
     await audioService.resume('media_session');
-    await advanceSource(deck, 2000);
+    await advanceSource(deck, 6500);
     expect(context.suspend).toHaveBeenCalledTimes(2);
     audioService.stop();
   });

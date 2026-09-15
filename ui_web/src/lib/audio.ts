@@ -708,9 +708,12 @@ async function recoverOutputClock(): Promise<void> {
         await context.resume();
         if (!current()) return;
         const before = context.currentTime;
-        await new Promise<void>((resolve) => setTimeout(resolve, 250));
+        // Route activation may settle after resume() resolves. The shared
+        // deadline bounds this wait without mistaking a slow restart for death.
+        while (current() && (context.state !== 'running' || context.currentTime <= before)) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 250));
+        }
         if (!current()) return;
-        if (context.state !== 'running' || context.currentTime <= before) throw new Error('clock_stalled');
         if (seek === seekGeneration) deck.currentTime = position;
         outputRecovering = false;
         resetClockSample();
