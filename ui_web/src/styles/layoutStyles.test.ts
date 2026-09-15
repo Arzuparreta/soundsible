@@ -92,17 +92,29 @@ describe('unified player geometry', () => {
     });
   });
 
-  it('reserves the footer clearance once, with no lane gap left standing on top of it', () => {
-    // The queue's lanes each scroll themselves, so nothing under the last one
-    // is ever scrolled away: a trailing `margin-bottom` there is permanent
-    // blank panel, and it stopped the queue a lane gap short of the line the
-    // browser's list reaches. The air between lanes belongs to the box.
+  it('hangs the footer clearance off the bottom lane, not off the box that holds the lanes', () => {
+    // The lanes fill this box and then it almost never scrolls, so a bottom
+    // padding on it is never a band the list is scrolled past: it is permanent
+    // empty panel, and it is what held the queue a whole clearance short of the
+    // card's edge. It belongs at the end of the bottom lane's own scroller,
+    // where the rows can be scrolled through it. The lanes keep no trailing
+    // margin of their own either — the air between them is the box's `gap`.
     expect(scopedDeclarations(trackList, '.rows')).toMatchObject({
       gap: 'var(--space-lg)',
-      padding: '8px 8px max(24px, var(--player-mobile-footer-clearance, 24px))',
+      padding: '8px 8px 0',
     });
     expect(scopedDeclarations(trackList, '.section')['margin-bottom']).toBeUndefined();
-    // The panel it is measured against reserves the same band, once.
+    expect(scopedDeclarations(trackList, '.section:last-child .sectionRows')).toMatchObject({
+      'padding-bottom': 'max(24px, var(--player-mobile-footer-clearance, 24px))',
+    });
+    // Desktop trades the pill's band for plain air, and it moves with it.
+    expect(scopedDeclarations(trackList, '.rows', 'min-width: 1024px')['padding-bottom'])
+      .toBeUndefined();
+    expect(
+      scopedDeclarations(trackList, '.section:last-child .sectionRows', 'min-width: 1024px'),
+    ).toMatchObject({ 'padding-bottom': '24px' });
+    // The panel the queue is measured against reserves the same band, and can
+    // leave it as padding because its body always overflows.
     expect(scopedDeclarations(browser, '.body').padding).toContain(
       'var(--player-mobile-footer-clearance',
     );
