@@ -9,38 +9,31 @@
 A music service on your own server, with YouTube search, a built-in DJ and live broadcasting.
 Free and open source. No ads or subscription.
 
-[**Get started**](#install) · [**Features**](#features) · [**Docs**](docs/README.md) · [**Website**](https://arzuparreta.github.io/soundsible.github.io)
+[**Get started**](#install) · [**Features**](#features) · [**Docs**](docs/https://arzuparreta.github.io/soundsible.github.io/docs/native-installation/) · [**Website**](https://arzuparreta.github.io/soundsible.github.io)
 
 </div>
 
 ## What Soundsible does
 
-**Search beyond the files you already have.** Listen to a result first, then
-save what you like. Soundsible downloads the audio, adds track information and
-artwork, and files it in your library next to music you already own.
+**Search the whole internet.** Listen, save, download and manage everything in one place.
 
-**Mix a continuous set with the built-in DJ.** Choose the music to start from
-and it builds the set, analysing tempo, key and energy to pick songs and mix
-between them on two decks. Add an influence, change direction or place a song
-you want to hear next; the upcoming order stays editable while the music plays.
+**Enjoy endless playback, infinite autoplay, radio mode, and auto DJ sessions.** Choose where to start and soundsible builds the set. DJ mode analyses tempo, key and energy to pick songs and mixes between them on two decks. You can influence, change direction or request a song on a certain spot of the route.
 DJ is in beta — [what it can do →](docs/AUTO_MODE.md)
 
-**Broadcast what you are playing.** Live carries the player output, transitions
-and effects included, to a listening room that opens in a browser; listeners
-need no account or app. It uses the Community relay and an open browser tab.
+**Broadcast what you are playing.** We host a little listening room for users to stream their DJ sessions to the world!
 [How Live works →](docs/LIVE.md)
 
 ## Features
 
-| | What you can do |
-| --- | --- |
-| **YouTube & YouTube Music** | Search for music or paste a YouTube video link. Listen before saving it to your library. Availability depends on YouTube; some servers need cookies or a relay. [Source settings](docs/CONFIGURATION.md) |
-| **Your music** | Import existing audio files. Browse by artist, album, genre or year; make playlists and save favourites. |
-| **Lyrics** | Follow time-synced lyrics, or read plain lyrics when those are available. |
-| **Discovery** | Get recommendations from your listening history, start a Radio from a song or let Autoplay continue after your queue ends. Recommendation learning stays on your server. |
-| **Bring your playlists** | Import Spotify or Apple Music exports. Soundsible finds matching recordings; the export itself contains no audio. [Import guide](docs/MUSIC_MIGRATION.md) |
-| **Podcasts** | Find podcasts, subscribe and play episodes in the same app. |
-| **Separate accounts** | Each person has their own library, playlists, favourites and listening history. |
+What you can do
+
+- **Search the complete Youtube Music cataloge or paste a link.** You can listen on the go, save without downloading, or download the song to the server. Availability depends on YouTube.
+- **Your music**: Browse by artist, album, genre or year; make playlists and save favourites. You can also upload your own audio files.
+- **Lyrics**: Real-time synced lyrics, or read plain lyrics when available.
+- **Discovery**: Get recommendations from your listening history, start a Radio from a song or let Autoplay and DJ continue after your queue ends. Recommendation learning is **optional**, **private** and always stays on your server.
+- **Import music**: Import Spotify or Apple Music exports. Soundsible finds matching recordings; the export itself contains no audio. [Import guide](docs/MUSIC_MIGRATION.md)
+- **Podcasts**: Find podcasts, subscribe and play episodes in the same app.
+- **Multi-user support**: Each person has their own library, playlists, favourites and listening history.
 
 <img src="docs/images/desktop-now-playing.png" alt="Soundsible web player with album artwork, library navigation and the upcoming queue" width="100%">
 
