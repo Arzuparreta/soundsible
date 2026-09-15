@@ -41,7 +41,7 @@ Created by `/design-consultation` on 2026-05-19. Unblocks T4/T6 (Tauri consumer 
 
 | Token | Hex | Usage |
 |-------|-----|-------|
-| `--bg-base` | `#0d0d0f` | Shell window background; **must match** player theme-color for seamless webview handoff |
+| `--bg-base` | `#0c0c0e` | Shell window background; **must match** player theme-color for seamless webview handoff. Now enforced by `desktop-shell/shell-ui/theme.test.js`, which reads both sides |
 | `--bg-elevated` | `#16161a` | Cards, first-run panel (matches player `--bg-card`) |
 | `--bg-inset` | `#0a0a0c` | Path display, log panes |
 | `--hairline` | `#2a2a2e` | Visible borders (not rgba white 5%) |
@@ -60,8 +60,12 @@ Created by `/design-consultation` on 2026-05-19. Unblocks T4/T6 (Tauri consumer 
 | `--status-ready` | `#34c759` | Engine healthy |
 | `--status-error` | `#ff453a` | Engine failed |
 
-- **Dark mode:** Default. Shell is dark-only for v1 (Win/Linux consumer path).
-- **Light mode:** Player supports light via `[data-theme="light"]`; shell light mode deferred to post-beta.
+- **Dark mode:** Default, and the bare `:root` of both surfaces.
+- **Every other palette:** The shell carries the same set as the player — `light`,
+  `slate`, `pure-black`, `forest-green` — as `[data-theme]` blocks over its own
+  eleven tokens. The listener chooses in the player; the engine writes the choice
+  to `theme.json` in the config directory and Rust reads it before first paint.
+  The table above is therefore the dark palette, not the only one.
 
 ## Spacing
 
@@ -167,7 +171,19 @@ Implementation target: `desktop-shell/` (T4, T6, DT2–DT5).
 
 ## Relationship to Existing Player
 
-The webview player (`ui_web/`) keeps its existing tokens in `tailwind-compiled.css` / `_mobile_custom.css`. Shell hands off to `#0d0d0f` background and `#f97a12` accent — **do not** introduce a third accent color on shell CTAs. Brand gold appears only on badge/accent bar, not buttons.
+The webview player (`ui_web/`) owns its tokens in `src/styles/tokens.css`. The two
+surfaces hand off at `#0c0c0e` and, in every palette but one, `#f97a12`.
+
+**Accent is a palette's to choose, not a surface's.** The original rule — no third
+accent on shell CTAs — was written when shell and player were one palette, and it
+still holds *within* a palette: shell and player must never disagree about the
+accent at the moment the webview navigates. What a palette may do is carry its own,
+as `forest-green` carries amber `#f2a43a`. A palette that moves `--accent` moves
+everything derived from it in the same breath; `src/styles/accentTokens.test.ts`
+refuses the half-move, and refuses the literal anywhere but `tokens.css`.
+
+Brand gold appears only on badge/accent bar, never on buttons. On a pale palette the
+badge *label* burns down through `--brand-gold-ink`; the mark keeps `#E0BC00`.
 
 ## Preview Artifact
 
@@ -254,3 +270,12 @@ preference migration and WCAG AA checks for the accessibility dialog.
 | 2026-07-28 | Normal is the default; Compact preserves the previous player exactly | Improve readability for ordinary and low-vision users without removing the established dense option |
 | 2026-07-28 | Semantic three-recipe scaling instead of CSS zoom | Allows layout reflow and prevents magnified overflow |
 | 2026-07-28 | Enhanced contrast is independent and opt-in | Size and contrast solve different needs; users control each explicitly |
+
+### Themes across surfaces
+
+| Date | Decision | Rationale |
+| --- | --- | --- |
+| 2026-09-15 | Every player palette exists on the desktop shell too | The shell owns the window during first run, engine boot and engine failure; staying dark-only meant the theme a listener chose was ignored for exactly the screens they meet first |
+| 2026-09-15 | The palette crosses through a file in the config directory | Shell and player are different origins, so no `localStorage` is shared, and the shell paints before the engine exists, so no API can answer in time; both sides already read that directory |
+| 2026-09-15 | A palette may carry its own accent | `forest-green` is amber, not the signature orange; the no-third-accent rule was about shell and player disagreeing, which is still forbidden |
+| 2026-09-15 | Launcher and setup follow the OS only | They run before sign-in and outside the player's origin, so they cannot know the preference; light/dark is what they can honestly offer |

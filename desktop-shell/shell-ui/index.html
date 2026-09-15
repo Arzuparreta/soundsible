@@ -94,7 +94,7 @@
         if (!el) return;
         el.textContent = msg;
         el.classList.add('filled');
-        el.style.color = '#ff453a';
+        el.style.color = 'var(--status-error)';
       }
       var t = window.__TAURI__;
       if (!t || !t.core || typeof t.core.invoke !== 'function') {

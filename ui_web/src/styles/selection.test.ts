@@ -3,6 +3,7 @@ import path from 'node:path';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
+import { EXTRA_THEMES } from '../boot/themes';
 import { colour, contrast, over, palette, resolve, rgb } from './testing/tokens';
 
 /*
@@ -40,11 +41,12 @@ function painted(values: Record<string, string>, declaration: string): string {
   return resolve(values, token![1]);
 }
 
+/* Dark is bare :root; every other palette is an override block, and the extra
+   ones come from the shared list so a new theme is measured without an edit. */
 describe.each([
-  ['dark', []],
+  ['dark', [] as string[]],
   ['light', [":root[data-theme='light']"]],
-  ['slate', [":root[data-theme='slate']"]],
-  ['pure-black', [":root[data-theme='pure-black']"]],
+  ...EXTRA_THEMES.map(theme => [theme, [`:root[data-theme='${theme}']`]] as const),
 ] as const)('%s selection', (theme, themeSelectors) => {
   it.each([false, true])('stays visible over every surface (high contrast: %s)', highContrast => {
     const selectors = [':root', ...themeSelectors];

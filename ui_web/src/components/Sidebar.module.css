@@ -106,7 +106,7 @@
 .active {
   color: var(--ink-primary);
   background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
-  box-shadow: 0 0 0 1px rgba(249, 122, 18, 0.08) inset;
+  box-shadow: 0 0 0 1px var(--accent-faint) inset;
 }
 
 .active::before {

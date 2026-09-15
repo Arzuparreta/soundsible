@@ -259,7 +259,7 @@ html[data-hold-gesture] *:not(input):not(textarea) {
 [data-now-playing], [data-playback-selected] {
   position: relative;
   background: linear-gradient(90deg, var(--accent-soft), var(--accent-faint));
-  border-color: rgba(249, 122, 18, 0.16);
+  border-color: var(--accent-soft);
 }
 
 [data-now-playing]::before, [data-playback-selected]::before {

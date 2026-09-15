@@ -215,7 +215,7 @@ network. From then on everyone signs in.
 
 | Setting | Who controls it |
 |---------|-----------------|
-| Library, playlists, favourites, queue, podcasts, history, theme, language | Each person, for themselves |
+| Library, playlists, favourites, queue, podcasts, history, theme, language | Each person, for themselves. On the desktop app the theme is also handed to the app's own first-run, loading and error screens, so the whole window matches |
 | Music folder, storage backend, download quality, yt-dlp cookies and auto-update, library optimization, cloud sync, accounts | Admin only |
 
 **Adding people remotely.** Settings → Account → People → *Create invite link*

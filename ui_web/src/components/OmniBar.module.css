@@ -355,7 +355,7 @@
     transform: translateY(-50%);
     background: linear-gradient(90deg, var(--accent-press), var(--accent-hover));
     border-radius: var(--radius-full);
-    box-shadow: 0 0 12px rgba(249, 122, 18, 0.24);
+    box-shadow: 0 0 12px var(--accent-glow);
     pointer-events: none;
     transition: width var(--dur-micro) linear;
   }

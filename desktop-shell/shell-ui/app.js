@@ -11,6 +11,21 @@ import {
 
 applyStaticTranslations();
 
+/*
+ * Which palette this window is in.
+ *
+ * The listener chooses a theme in the player, which lives at the engine's
+ * origin; the engine writes it where Rust can read it, and Rust hands it over
+ * here. The window background is already painted by then — that is the half
+ * that stops the webview flashing white — so this only has to dress the DOM.
+ */
+function applyShellTheme(theme) {
+  if (typeof theme === 'string' && theme) document.documentElement.dataset.theme = theme;
+}
+
+listen('shell://appearance', (event) => applyShellTheme(event.payload));
+invoke('get_shell_theme').then(applyShellTheme).catch(() => {});
+
 const pathDisplay = document.getElementById('path-display');
 const scanPreview = document.getElementById('scan-preview');
 const btnChoose = document.getElementById('btn-choose');

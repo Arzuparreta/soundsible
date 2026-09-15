@@ -35,12 +35,13 @@ import type {
 } from '../types/music';
 import type { PodcastSubscription } from '../types/podcast';
 import type { CompletedDownload, DownloadQueueItem } from '../types/download';
+import { isTheme, type Theme } from '../boot/themes';
 
 
-/** User preference: an explicit palette, or follow the OS via prefers-color-scheme. */
-export type Theme = 'dark' | 'light' | 'system' | 'slate' | 'pure-black';
-/** Concrete appearance applied to the document (never `system`). */
-export type ResolvedTheme = Exclude<Theme, 'system'>;
+/** The theme vocabulary lives with the boot palette table, which has to stay
+ *  import-free; re-exported here because most of the app reaches for it from
+ *  the store. */
+export type { Theme, ResolvedTheme } from '../boot/themes';
 export type RepeatMode = 'off' | 'all' | 'one';
 /**
  * `starved` is the end of the queue with nothing to follow *yet* — the generated
@@ -215,8 +216,7 @@ function loadDevice(): DeviceRegistration {
 
 function loadTheme(): Theme {
   const raw = localStorage.getItem('theme');
-  if (raw === 'dark' || raw === 'light' || raw === 'system' || raw === 'slate' || raw === 'pure-black') return raw;
-  return 'system';
+  return isTheme(raw) ? raw : 'system';
 }
 
 /** Volume levelling, read synchronously so the first track of a session is

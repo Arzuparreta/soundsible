@@ -56,26 +56,20 @@
     var container = document.createElement('div');
     container.id = 'launcher-lang-picker';
     container.setAttribute('aria-label', 'Language');
-    container.style.cssText = 'position:fixed;top:12px;right:12px;z-index:9999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;';
 
     var button = document.createElement('button');
     button.type = 'button';
     button.setAttribute('aria-haspopup', 'true');
     button.setAttribute('aria-expanded', 'false');
-    button.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 12px;min-height:36px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:12px;color:#f5f5f7;cursor:pointer;';
     button.innerHTML = '<span aria-hidden="true" style="font-size:1.1em;">🌐</span><span id="launcher-lang-label">EN</span><span aria-hidden="true">▾</span>';
 
     var dropdown = document.createElement('div');
     dropdown.id = 'launcher-lang-dropdown';
-    dropdown.style.cssText = 'display:none;position:absolute;top:100%;right:0;margin-top:6px;min-width:140px;background:rgba(28,28,30,0.98);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);color:#f5f5f7;';
 
     ['en', 'es', 'fr', 'zh'].forEach(function (code) {
       var opt = document.createElement('button');
       opt.type = 'button';
       opt.dataset.lang = code;
-      opt.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 12px;border:none;border-radius:8px;background:transparent;color:#f5f5f7;cursor:pointer;font-size:14px;';
-      opt.addEventListener('mouseenter', function () { this.style.background = 'rgba(255,255,255,0.1)'; });
-      opt.addEventListener('mouseleave', function () { this.style.background = 'transparent'; });
       opt.textContent = t('lang.' + code);
       opt.addEventListener('click', function () {
         setLang(code);

@@ -4,28 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Setup — Soundsible</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/launcher.css') }}">
   <style>
-    :root {
-      --bg: #1c1c1e;
-      --glass-bg: rgba(0, 0, 0, 0.25);
-      --glass-border: rgba(255, 255, 255, 0.08);
-      --text: #f5f5f7;
-      --text-dim: rgba(245, 245, 247, 0.72);
-      --accent: #0a84ff;
-      --radius: 16px;
-      --radius-sm: 12px;
-      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-      color-scheme: dark;
-    }
-    * { box-sizing: border-box; }
+    /* Palette and reset come from css/launcher.css; this is the page's layout. */
     body {
-      margin: 0;
-      min-height: 100vh;
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font);
-      font-size: 17px;
-      line-height: 1.45;
       padding: 24px 16px 48px;
     }
     .setup-header {
@@ -199,7 +181,7 @@
     }
     .btn-primary {
       background: var(--accent);
-      color: #fff;
+      color: var(--on-accent);
       border-color: var(--accent);
     }
     .btn-primary:hover { filter: brightness(1.1); }
@@ -241,14 +223,14 @@
       transform: translateX(-50%) translateY(0);
       opacity: 1;
     }
-    #toast.error { color: #ff453a; }
+    #toast.error { color: var(--danger); }
     .conn-status {
       font-size: 14px;
       color: var(--text-dim);
       margin-top: 12px;
     }
-    .conn-status.ok { color: #32d74b; }
-    .conn-status.err { color: #ff453a; }
+    .conn-status.ok { color: var(--ready); }
+    .conn-status.err { color: var(--danger); }
     .options-toggle {
       background: none;
       border: none;

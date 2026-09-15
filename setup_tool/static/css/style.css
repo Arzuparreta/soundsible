@@ -1,7 +1,27 @@
 /* Custom styles for the setup tool web interface */
 
+/*
+ * The page is painted with Tailwind v2 utility classes from a CDN build, so
+ * there is no token layer and no config to extend. What it does have is a small,
+ * fixed set of greys — so the palette lives here as custom properties, the five
+ * literals below read them, and the light block re-points the handful of
+ * utilities the template actually uses.
+ *
+ * Setup runs before anyone has signed in and outside the player's origin, so it
+ * cannot know the chosen theme. It follows the desktop instead.
+ */
+:root {
+    color-scheme: light dark;
+    --surface: #111827;      /* page */
+    --surface-raised: #1f2937;
+    --surface-sunken: #374151;
+    --scroll-thumb: #4b5563;
+    --scroll-thumb-hover: #6b7280;
+    --pulse: #3b82f6;
+}
+
 body {
-    background-color: #111827; /* Tailwind gray-900 */
+    background-color: var(--surface);
 }
 
 /* Scrollbar styling for log */
@@ -10,25 +30,76 @@ body {
 }
 
 #activity-log::-webkit-scrollbar-track {
-    background: #1f2937; 
+    background: var(--surface-raised);
 }
 
 #activity-log::-webkit-scrollbar-thumb {
-    background: #4b5563; 
+    background: var(--scroll-thumb);
     border-radius: 4px;
 }
 
 #activity-log::-webkit-scrollbar-thumb:hover {
-    background: #6b7280; 
+    background: var(--scroll-thumb-hover);
 }
 
 /* Animations */
 @keyframes pulse-border {
-    0% { border-color: #374151; }
-    50% { border-color: #3b82f6; }
-    100% { border-color: #374151; }
+    0% { border-color: var(--surface-sunken); }
+    50% { border-color: var(--pulse); }
+    100% { border-color: var(--surface-sunken); }
 }
 
 .uploading-active {
     animation: pulse-border 2s infinite;
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --surface: #f3f4f6;
+        --surface-raised: #e5e7eb;
+        --surface-sunken: #d1d5db;
+        --scroll-thumb: #9ca3af;
+        --scroll-thumb-hover: #6b7280;
+    }
+
+    /* Only the utilities the template uses, inverted along Tailwind's own grey
+       ramp so the depth order of the page survives. Loaded after the CDN sheet,
+       so equal specificity resolves in this file's favour. */
+    .bg-gray-900 { background-color: #f3f4f6; }
+    .bg-gray-800 { background-color: #ffffff; }
+    .bg-gray-700 { background-color: #e5e7eb; }
+    .bg-gray-700\/50 { background-color: rgba(229, 231, 235, 0.5); }
+    .border-gray-700 { border-color: #d1d5db; }
+    .border-gray-600 { border-color: #9ca3af; }
+
+    .text-white { color: #111827; }
+    .text-gray-200 { color: #1f2937; }
+    .text-gray-300 { color: #374151; }
+    .text-gray-400 { color: #4b5563; }
+    .text-gray-500 { color: #4b5563; }
+    .text-gray-600 { color: #6b7280; }
+
+    /* The bright accents are legible on near-black and are not on near-white:
+       blue-400 is 2.6:1 and cyan-400 1.9:1 on #f3f4f6. Both burn down. */
+    .text-blue-400 { color: #1d4ed8; }
+    .text-blue-500 { color: #1d4ed8; }
+    .text-cyan-400 { color: #0e7490; }
+    .text-green-400 { color: #15803d; }
+    .text-red-400 { color: #b91c1c; }
+    .text-red-500 { color: #b91c1c; }
+    .text-red-100 { color: #7f1d1d; }
+
+    .bg-red-900 { background-color: #fee2e2; }
+    .bg-red-900\/20 { background-color: rgba(254, 226, 226, 0.6); }
+    .bg-red-900\/30 { background-color: rgba(254, 226, 226, 0.75); }
+    .bg-red-900\/40 { background-color: rgba(254, 226, 226, 0.9); }
+    .border-red-900\/50 { border-color: rgba(185, 28, 28, 0.4); }
+    .border-red-800 { border-color: #dc2626; }
+    .border-red-700 { border-color: #dc2626; }
+
+    /* The headline is gradient-clipped text. Its stops are chosen against a
+       near-black page and land at 2.6:1 and 3.6:1 on a pale one; deepened so
+       both ends clear 3:1 for large text. */
+    .from-blue-400 { --tw-gradient-from: #2563eb; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(37, 99, 235, 0)); }
+    .to-purple-500 { --tw-gradient-to: #7e22ce; }
 }

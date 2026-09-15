@@ -3985,6 +3985,7 @@ export const actions = {
     setState('theme', theme);
     localStorage.setItem('theme', theme);
     applyTheme(theme, true);
+    announceTheme(theme);
   },
 
   setInterfaceSize(interfaceSize: InterfaceSize): void {
@@ -4343,8 +4344,8 @@ function ensureGeneratedQueue(): GeneratedQueueController {
  * Universal across desktop and mobile (iOS Safari, Android Chrome, etc.)
  * via the CSS media query `prefers-color-scheme`. Falls back to dark when
  * matchMedia is unavailable. */
-export { applyTheme, resolveTheme, systemPrefersDark } from './theme';
-import { applyTheme } from './theme';
+export { announceTheme, applyTheme, resolveTheme, systemPrefersDark } from './theme';
+import { announceTheme, applyTheme } from './theme';
 
 let socket: AppSocket | null = null;
 let _warmTimer: ReturnType<typeof setTimeout> | null = null;
@@ -4469,6 +4470,9 @@ export function initStore(): void {
     highContrast: state.highContrast,
   });
   applyTheme(state.theme);
+  // Catch the shell up on a preference chosen before it could be told — an
+  // upgrade, or a theme set in a browser and first met on the desktop.
+  announceTheme(state.theme);
   try {
     void api
       .getDiscoverySettings()
