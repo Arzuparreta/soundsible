@@ -849,7 +849,7 @@ describe('two-deck mixer', () => {
     expect(created).toEqual(before);
   });
 
-  it('resumes an interrupted context without replacing its graph or decks', async () => {
+  it('resumes an interrupted playing context without replacing its graph or decks', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
     expect(module.audioService.unlockAudio()).toBe(true);
@@ -858,6 +858,8 @@ describe('two-deck mixer', () => {
     const stateHandler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')?.[1];
     expect(stateHandler).toBeTypeOf('function');
 
+    await module.audioService.load('/playing', 1);
+    context.resume.mockClear();
     context.state = 'suspended';
     stateHandler();
     await Promise.resolve();
@@ -1092,4 +1094,60 @@ describe('volume levelling', () => {
     expect(module.audioEl()).toBe(deck);
     expect(levelValue(contexts.at(-1)!, 0)).toBeCloseTo(0.5, 5);
   });
+});
+
+describe('CarPlay interruption recovery', () => {
+  async function setup() {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    module.audioService.unlockAudio();
+    await module.audioService.load('/carplay-track', 1);
+    const context = contexts.at(-1)!;
+    const deck = module.audioEl() as unknown as FakeAudio;
+    return { ...module, context, deck };
+  }
+
+  it('keeps a system pause through unlock, generic gestures and spontaneous native play', async () => {
+    const { audioService, context, deck } = await setup();
+    deck.pause(); // native pause, not an app transport operation
+    context.resume.mockClear();
+    context.state = 'suspended';
+    const stateHandler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')![1];
+    stateHandler();
+    hide();
+    reveal();
+    audioService.unlockAudio();
+    expect(context.resume).not.toHaveBeenCalled();
+    await deck.play(); // WebKit revives the source without a Media Session command
+    expect(deck.paused).toBe(true);
+    expect(audioService.snapshot().playing).toBe(false);
+    await audioService.resume('media_session');
+    expect(deck.paused).toBe(false);
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    audioService.stop();
+  });
+
+  it('retains legitimate Media Session pause/play while hidden', async () => {
+    const { audioService, deck } = await setup();
+    hide();
+    audioService.pause('media_session');
+    await audioService.resume('media_session');
+    expect(deck.paused).toBe(false);
+    audioService.stop();
+  });
+
+  it('stops both DJ participants on a native pause of the incoming deck', async () => {
+    const { audioService, outgoing, incoming } = await armed();
+    audioService.startMixNow();
+    await play(incoming, 2);
+    incoming.pause();
+    expect(incoming.paused).toBe(true);
+    expect(outgoing.paused).toBe(true);
+    expect(audioService.mixPhase()).toBe('idle');
+    await incoming.play();
+    expect(incoming.paused).toBe(true);
+    expect(outgoing.muted).toBe(true);
+    audioService.stop();
+  });
+
 });

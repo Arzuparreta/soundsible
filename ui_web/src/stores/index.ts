@@ -3091,6 +3091,7 @@ export const actions = {
   resumePlayback(origin: ProgramTransportOrigin = 'ui'): void {
     const pb = state.playback;
     if (!pb.currentTrack) return;
+    setState('playback', 'needsGesture', false);
     userPlaybackStartedThisSession = true;
     vibrate();
     // A failed track's transport button is a retry, not a play button.
@@ -3127,6 +3128,8 @@ export const actions = {
   pausePlayback(origin: ProgramTransportOrigin = 'ui'): void {
     const pb = state.playback;
     if (!pb.currentTrack) return;
+    setState('playback', 'needsGesture', false);
+    beginLoad();
     vibrate();
     if (pb.loadError) return;
     if (pb.phase === 'loading' || pb.phase === 'recovering') {
@@ -4371,14 +4374,7 @@ function installAudioUnlock(): void {
   const unlock = () => {
     recordPlaybackDiagnostic('gesture.audio_unlock');
     audioService.unlockAudio();
-    // Carrying on from an interruption, never starting something nobody asked
-    // for: this fires on any tap on the page, so the only thing it may act on is
-    // music that was playing until the platform took the audio session away.
-    // `needsGesture` is set from exactly that and nothing else.
-    if (state.playback.needsGesture && state.playback.currentTrack) {
-      setState('playback', 'needsGesture', false);
-      void audioService.resume().catch(() => {});
-    }
+    // A generic tap may initialize audio, but only Play may lift a pause.
   };
   // Capture, so it runs ahead of the click handler that starts the first track.
   window.addEventListener('pointerdown', unlock, { capture: true });
@@ -4507,10 +4503,10 @@ export function initStore(): void {
     pushPlaybackState();
   });
   a.addEventListener('pause', () => {
+    beginLoad();
     clearStallTimer();
-    if (state.playback.phase !== 'loading' && state.playback.phase !== 'recovering') {
-      setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
-    }
+    if (state.playback.phase === 'loading' || state.playback.phase === 'recovering') cancelActiveAttempt('program_pause');
+    setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
     updateMediaSession(state.playback.currentTrack, 'paused');
     pushPlaybackState();
   });

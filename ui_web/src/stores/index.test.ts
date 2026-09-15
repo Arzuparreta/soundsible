@@ -3492,3 +3492,22 @@ describe('DJ exploration provenance', () => {
     actions.exitAutoMode();
   });
 });
+
+describe('system pause during loading', () => {
+  it('retires pending load failures when the system pauses the programme', async () => {
+    let reject!: (error: Error) => void;
+    const pending = new Promise<void>((_, fail) => { reject = fail; });
+    const { initStore, actions, state, audioService, fireDeckEvent } = await loadStore({}, {
+      load: vi.fn(() => pending),
+    });
+    initStore();
+    actions.playFrom([t1, t2], 0);
+    fireDeckEvent('pause');
+    reject(new Error('late load failure'));
+    await flush();
+    expect(state.playback.phase).toBe('paused');
+    expect(state.playback.currentTrack?.id).toBe('t1');
+    expect(audioService.recover).not.toHaveBeenCalled();
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+  });
+});

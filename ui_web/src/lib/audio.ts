@@ -42,6 +42,14 @@ function pageHidden(): boolean {
 
 let elements: HTMLAudioElement[] | null = null;
 let activeIndex = 0;
+/** Permission to play is independent of WebKit's native element state. */
+let playbackRequested = false;
+const expectedPauses = new WeakSet<HTMLAudioElement>();
+
+function pauseDeck(deck: HTMLAudioElement): void {
+  if (!deck.paused) expectedPauses.add(deck);
+  diagnosticPause(deck);
+}
 /** Current/paused programme and sources actually started for a mix. A cued
  * deck is not a participant; a preroll with zero mix gain is. */
 const participatingDecks = new WeakSet<HTMLAudioElement>();
@@ -273,6 +281,11 @@ export function onProgramEvent(
 ): void {
   onDeckEvent(type, (event) => {
     if (!isActiveDeck(event.currentTarget)) return;
+    if (type === 'pause' && !audioEl().paused) return;
+    if ((type === 'play' || type === 'playing') && !playbackRequested && !holdsUnlockSample(audioEl())) {
+      pauseDeck(audioEl());
+      return;
+    }
     handler(programPlaybackSnapshot(), event);
   });
 }
@@ -400,6 +413,7 @@ function releaseDeck(index: number): void {
  */
 export function unlockAudio(): boolean {
   if (graphState !== 'untested') {
+    if (!playbackRequested) return graphState === 'ready';
     resumeContext();
     unlockDecks();
     if (graphState === 'ready') {
@@ -543,7 +557,7 @@ function unlockDecks(): void {
     const release = () => {
       if (deck.src !== SILENT_WAV) return; // a real track claimed this deck
       setDeckParticipation(deck, false);
-      diagnosticPause(deck);
+      pauseDeck(deck);
       diagnosticSource(deck, () => deck.removeAttribute('src'));
       diagnosticLoad(deck);
     };
@@ -578,21 +592,19 @@ function primeAudioSession(context: AudioContext): void {
 
 /** Ask an interrupted context to continue without rebuilding its graph. */
 function resumeContext(): void {
-  if (audioContext && audioContext.state !== 'running') {
+  if (playbackRequested && audioContext && audioContext.state !== 'running') {
     void audioContext.resume?.().catch(() => {});
   }
 }
 
-/** A context can be interrupted behind our back — a call, Siri, a Bluetooth
- * route change on the way into a car. Resume the same context and preserve the
- * media-element sources: replacing either deck outside a gesture is not a safe
- * recovery on iOS. */
+/** Observe platform interruptions without undoing a system pause. */
 function watchContextState(context: AudioContext): void {
   if (typeof context.addEventListener !== 'function') return;
   context.addEventListener('statechange', () => {
     recordPlaybackDiagnostic('context.statechange', { state: context.state });
     if (audioContext !== context || graphState !== 'ready') return;
-    if (context.state !== 'running') void context.resume?.().catch(() => {});
+    // Only existing playback permission permits recovery; a pause revokes it.
+    if (playbackRequested) resumeContext();
   });
 }
 
@@ -634,6 +646,8 @@ function deckIsPlaying(deck: HTMLAudioElement): boolean {
 
 /** Start a source and the stable device carrier in the same activation turn. */
 function playProgramDeck(deck: HTMLAudioElement): Promise<void> {
+  if (!playbackRequested) return Promise.resolve();
+  resumeContext();
   setDeckParticipation(deck, true);
   const started = diagnosticPlay(deck);
   void programCarrier?.play();
@@ -1138,7 +1152,7 @@ function detach(deck: HTMLAudioElement): void {
   // Stop competing for Now Playing before the native pause can publish a
   // stopped source as the programme. Audio gain alone does not exclude it.
   setDeckParticipation(deck, false);
-  diagnosticPause(deck);
+  pauseDeck(deck);
   deck.playbackRate = 1;
   if (deck.getAttribute('src') === null && !deck.currentSrc) return;
   // Not while the page is in the background. This runs the instant a handoff
@@ -1181,7 +1195,10 @@ function bindLifecycle(): void {
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
       recordPlaybackDiagnostic('lifecycle.visibility');
-      if (document.visibilityState !== 'hidden') flushDeferredWork();
+      if (document.visibilityState !== 'hidden') {
+        flushDeferredWork();
+        if (playbackRequested) resumeContext();
+      }
     });
   }
   // A blend is driven by a chain of timeouts, and a backgrounded page does not
@@ -1200,9 +1217,21 @@ function bindLifecycle(): void {
       if (!mix && !deckIsPlaying(audioEl())) programCarrier?.pause();
     });
   });
+  onDeckEvent('pause', (event) => {
+    const deck = event.currentTarget as HTMLAudioElement;
+    if (expectedPauses.delete(deck) || !deck.paused || deck.ended
+      || holdsUnlockSample(deck) || !participatingDecks.has(deck) || !playbackRequested) return;
+    audioService.pause('media_session');
+  });
   const rejectOrphanedDeck = (event: Event) => {
     const deck = event.currentTarget as HTMLAudioElement | null;
-    if (!deck || holdsUnlockSample(deck) || isActiveDeck(deck) || !deckIsPlaying(deck)) return;
+    if (!deck || holdsUnlockSample(deck) || !deckIsPlaying(deck)) return;
+    if (!playbackRequested) {
+      pauseDeck(deck);
+      recordPlaybackDiagnostic('transport.rejected_native_play');
+      return;
+    }
+    if (isActiveDeck(deck)) return;
     // Both decks are legitimate programme sources only while one live mix owns
     // them. Outside it, a non-active play is WebKit reviving an old media
     // session (most often after a Bluetooth/lock-screen command), never music
@@ -1298,6 +1327,7 @@ function failMix(error: unknown): void {
  * exactly where it was.
  */
 function tick(): void {
+  if (!playbackRequested) return;
   const current = mix;
   if (!current) {
     stopTicker();
@@ -1400,6 +1430,7 @@ export const audioService = {
    * before any of them starts — resolves quietly instead.
    */
   load(url: string, level: number): Promise<void> {
+    playbackRequested = true;
     cancelMix('load');
     const a = audioEl();
     const token = ++loadSeq;
@@ -1422,6 +1453,7 @@ export const audioService = {
   },
   /** Reload a stalled stream and resume from the last audible position. */
   recover(url: string, positionSec: number, level: number): Promise<void> {
+    if (!playbackRequested) return Promise.resolve();
     cancelMix('load');
     const fromIndex = activeIndex;
     const toIndex = 1 - fromIndex;
@@ -1491,6 +1523,7 @@ export const audioService = {
   // `level` last, matching `recover`: with it second, an existing two-argument
   // call would still typecheck and quietly pass a seek position as a gain.
   prime(url: string, positionSec: number, level: number): void {
+    playbackRequested = false;
     cancelMix('load');
     const a = audioEl();
     const token = ++loadSeq;
@@ -1500,7 +1533,7 @@ export const audioService = {
     // from `unlockDecks` — the silent sample every gesture spends on an empty
     // deck — would otherwise carry that play straight into the track being
     // primed, and a session put back on boot would start sounding on its own.
-    diagnosticPause(a);
+    pauseDeck(a);
     diagnosticSource(a, () => { a.src = url; });
     diagnosticLoad(a);
     setDeckParticipation(a, true);
@@ -1517,10 +1550,11 @@ export const audioService = {
   /** Resume the one deck that owns the programme. */
   resume(origin: ProgramTransportOrigin = 'ui'): Promise<void> {
     recordPlaybackDiagnostic('transport.resume', { origin });
+    playbackRequested = true;
     // Once the decks are routed through the graph, their output only exists
     // inside it. Resuming here costs nothing and means any play gesture can
     // recover a context the browser suspended behind our back.
-    if (audioContext?.state === 'suspended') void audioContext.resume().catch(() => {});
+    resumeContext();
     const current = mix;
     const phase = current?.phase ?? 'idle';
     const dominant = current?.dominant ?? false;
@@ -1545,17 +1579,20 @@ export const audioService = {
    */
   pause(origin: ProgramTransportOrigin = 'ui'): void {
     recordPlaybackDiagnostic('transport.pause', { origin });
+    playbackRequested = false;
+    loadSeq += 1;
     const current = mix;
     const phase = current?.phase ?? 'idle';
     const dominant = current?.dominant ?? false;
     programCarrier?.pause();
     if (current && current.phase !== 'armed') cancelMix('transport_pause');
-    diagnosticPause(audioEl());
+    pauseDeck(audioEl());
     reportProgramTransport('pause', origin, phase, dominant);
   },
   /** Stop and release the stream — for teardown (track deleted, queue emptied),
    * not for pausing. */
   stop(): void {
+    playbackRequested = false;
     loadSeq += 1;
     programCarrier?.pause();
     cancelMix('stop');
@@ -1659,7 +1696,7 @@ export const audioService = {
     if (stagedUrl === url && (idle.getAttribute('src') !== null || idle.currentSrc)) return;
     stagedUrl = url;
     setDeckGain(index, 0);
-    if (!idle.paused) diagnosticPause(idle);
+    if (!idle.paused) pauseDeck(idle);
     idle.playbackRate = 1;
     diagnosticSource(idle, () => { idle.src = url; });
     diagnosticLoad(idle);
@@ -1693,6 +1730,7 @@ export const audioService = {
     // it still needs, and the fallback would make the same request from scratch
     // and throw away everything this one already has.
     if (to.networkState === NETWORK_NO_SOURCE) return null;
+    playbackRequested = true;
     const fromIndex = activeIndex;
     const token = ++loadSeq;
     stagedUrl = '';
@@ -1762,7 +1800,7 @@ export const audioService = {
     // place it must never happen. `unlockAudio` owns that, from a gesture.
     // Deliberately not awaited: the mix has to be armed before this function
     // returns, or the caller's own "is a handoff prepared?" check races it.
-    if (audioContext && audioContext.state !== 'running') void audioContext.resume?.().catch(() => {});
+    resumeContext();
     stagedUrl = '';
 
     const fromIndex = activeIndex;
