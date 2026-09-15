@@ -45,6 +45,18 @@ describe('podcastEpisodeToTrack', () => {
     expect(t.id).toBe('ep-guid');
   });
 
+  it('keeps the episode artwork when it has its own', () => {
+    expect(podcastEpisodeToTrack(ep, 'My Show', 'feed-1', 'https://cdn.example/show.jpg').cover)
+      .toBe('https://cdn.example/cover.jpg');
+  });
+
+  it('falls back to the show artwork, so an episode never plays blank', () => {
+    const noArt: PodcastEpisode = { ...ep, image: '' };
+    expect(podcastEpisodeToTrack(noArt, 'My Show', 'feed-1', 'https://cdn.example/show.jpg').cover)
+      .toBe('https://cdn.example/show.jpg');
+    expect(podcastEpisodeToTrack(noArt, 'My Show', 'feed-1', null).cover).toBeUndefined();
+  });
+
   it('falls back to the enclosure url when the episode has no guid', () => {
     const noGuid: PodcastEpisode = { ...ep, guid: '' };
     const t = podcastEpisodeToTrack(noGuid);

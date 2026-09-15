@@ -3003,14 +3003,14 @@ export const actions = {
   },
 
   /** Play a podcast episode: queue = just this episode; stream via a minted token. */
-  async playEpisode(ep: PodcastEpisode, showTitle?: string, feedId?: string): Promise<void> {
+  async playEpisode(ep: PodcastEpisode, showTitle?: string, feedId?: string, showImage?: string | null): Promise<void> {
     if (state.autoMode.active) {
-      await confirmNormalMode('podcast', () => actions.playEpisode(ep, showTitle, feedId));
+      await confirmNormalMode('podcast', () => actions.playEpisode(ep, showTitle, feedId, showImage));
       return;
     }
     discardFutureAutoplay();
     cancelPendingRadio();
-    const track = podcastEpisodeToTrack(ep, showTitle, feedId);
+    const track = podcastEpisodeToTrack(ep, showTitle, feedId, showImage);
     // Tapping the same episode again while its token is still being minted must
     // not mint a second one.
     const pb = state.playback;
@@ -3055,7 +3055,10 @@ export const actions = {
         guid: ep.guid,
         title: ep.title,
         show_title: sub?.title,
-        thumbnail_url: ep.image,
+        // The episode's own art when it has any, else the show's: the engine
+        // embeds this into the downloaded file, and a cover missed here is one
+        // the library never gets back without a manual edit.
+        thumbnail_url: ep.image || sub?.image_url || undefined,
         duration_sec: ep.duration_sec,
         podcast_feed_id: sub?.id,
         podcast_rss_url: sub?.rss_url,

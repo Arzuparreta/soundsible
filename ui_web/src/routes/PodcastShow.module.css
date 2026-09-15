@@ -150,6 +150,14 @@
 }
 }
 
+.epCover {
+  width: var(--cover-sm);
+  height: var(--cover-sm);
+  flex-shrink: 0;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--hairline-soft), var(--shadow-1);
+}
+
 .epPlay {
   display: inline-flex;
   align-items: center;

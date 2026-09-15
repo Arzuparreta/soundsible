@@ -9,7 +9,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import feedparser
 import requests
@@ -78,6 +78,45 @@ def _first_audio_enclosure(entry: Any) -> Optional[str]:
     return None
 
 
+def _artwork_url(value: Any, feed_url: str) -> str:
+    """An absolute, fetchable http(s) artwork URL, or "" when there is none.
+
+    Feeds publish relative hrefs, and every URL that survives here is fetched by
+    the Station when an episode is downloaded, so artwork goes through the same
+    SSRF check as an enclosure rather than being trusted because it is "just an
+    image".
+    """
+    url = str(value or "").strip()
+    if not url:
+        return ""
+    if feed_url and not urlparse(url).scheme:
+        url = urljoin(feed_url, url)
+    try:
+        assert_safe_http_url(url)
+    except ValueError:
+        return ""
+    return url[:2048]
+
+
+def parse_feed_image(feed: Any, feed_url: str = "") -> str:
+    """The show's artwork. feedparser folds `<itunes:image href>` and the RSS
+    `<image><url>` into the same `feed.image.href`, so one lookup covers both."""
+    return _artwork_url(getattr(getattr(feed, "image", None), "href", None), feed_url)
+
+
+def _entry_image(entry: Any, feed_url: str) -> str:
+    """Artwork an episode carries of its own, if any."""
+    own = _artwork_url(getattr(getattr(entry, "image", None), "href", None), feed_url)
+    if own:
+        return own
+    for thumbnail in getattr(entry, "media_thumbnail", None) or []:
+        if isinstance(thumbnail, dict):
+            url = _artwork_url(thumbnail.get("url"), feed_url)
+            if url:
+                return url
+    return ""
+
+
 def _parse_duration(val: Any) -> int:
     if val is None:
         return 0
@@ -104,6 +143,12 @@ def _parse_duration(val: Any) -> int:
 def parse_feed_episodes(feed_xml: bytes, feed_url: str) -> List[Dict[str, Any]]:
     """Parse RSS/Atom; return episode dicts for UI and download queue."""
     parsed = feedparser.parse(feed_xml)
+    # Per-episode artwork is optional and most shows never set it, so an episode
+    # without its own inherits the show's. Nothing downstream has another source
+    # to fall back to: the episode dict is the only artwork the player, the
+    # queue, the lock screen and the downloaded file's cover ever see, and "" at
+    # this point is a blank cover on all of them.
+    show_image = parse_feed_image(getattr(parsed, "feed", None), feed_url)
     out: List[Dict[str, Any]] = []
     for entry in getattr(parsed, "entries", []) or []:
         title = (getattr(entry, "title", None) or "").strip() or "Untitled"
@@ -134,11 +179,7 @@ def parse_feed_episodes(feed_xml: bytes, feed_url: str) -> List[Dict[str, Any]]:
         if hasattr(entry, "itunes_duration"):
             duration_sec = _parse_duration(entry.itunes_duration)
 
-        image = ""
-        if hasattr(entry, "image") and getattr(entry.image, "href", None):
-            image = str(entry.image.href).strip()
-        elif hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
-            image = str(entry.media_thumbnail[0].get("url", "")).strip()
+        image = _entry_image(entry, feed_url) or show_image
 
         out.append(
             {

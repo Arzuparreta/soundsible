@@ -35,8 +35,11 @@ export default function PodcastShow() {
     (id) => api.getPodcastEpisodes(id),
   );
 
-  const title = () => sub()?.title ?? data()?.subscription?.title ?? t('podcastShow.fallbackTitle');
-  const image = () => sub()?.image_url ?? data()?.subscription?.image_url ?? null;
+  /** The subscription as the library knows it, or as the feed response reports
+   * it while the library list is still syncing. */
+  const show = () => sub() ?? data()?.subscription ?? null;
+  const title = () => show()?.title ?? t('podcastShow.fallbackTitle');
+  const image = () => show()?.image_url ?? null;
 
   const [onlyDownloaded, setOnlyDownloaded] = createSignal(false);
   const localByGuid = createMemo(
@@ -57,7 +60,7 @@ export default function PodcastShow() {
   const playEp = (ep: PodcastEpisode) => {
     const local = localByGuid().get(ep.guid);
     if (local) actions.playTrack(local);
-    else void actions.playEpisode(ep, sub()?.title, sub()?.id);
+    else void actions.playEpisode(ep, show()?.title, show()?.id, image());
   };
 
   const unsubscribe = async () => {
@@ -79,7 +82,7 @@ export default function PodcastShow() {
         <div class={styles.cover} style={neutralCoverStyle(image())} />
         <div class={styles.info}>
           <h1 class={styles.title}>{title()}</h1>
-          <span class={styles.author}>{sub()?.author ?? data()?.subscription?.author}</span>
+          <span class={styles.author}>{show()?.author}</span>
         </div>
         <Show when={sub()}>
           <button class={styles.unsub} type="button" onClick={unsubscribe}>
@@ -123,7 +126,7 @@ export default function PodcastShow() {
                   onMenu={() => openContextMenu({ title: ep.title, subtitle: title(), actions: [
                     { label: t('podcastShow.ariaPlay'), onSelect: () => playEp(ep) },
                     { label: t(downloaded() ? 'podcastShow.ariaDownloaded' : downloading() ? 'collection.downloading' : 'podcastShow.ariaDownload'), disabled: downloaded() || downloading(),
-                      onSelect: () => void actions.downloadEpisode(ep, sub()) },
+                      onSelect: () => void actions.downloadEpisode(ep, show()) },
                   ] })} />}>
                 <div
                   class={styles.ep}
@@ -153,6 +156,11 @@ export default function PodcastShow() {
                       <path fill="currentColor" d="M8 5v14l11-7z" />
                     </svg>
                   </button>
+                  {/* The same artwork the mobile row draws. Every other desktop
+                    * list in the app shows a thumbnail beside the title; this
+                    * row was the one that did not, so a show's episodes read as
+                    * a wall of text next to an album of the same length. */}
+                  <div class={styles.epCover} style={neutralCoverStyle(ep.image || image())} />
                   <div class={styles.epMeta}>
                     <span class={styles.epTitle}>{ep.title}</span>
                     <span class={styles.epSub}>
@@ -168,7 +176,7 @@ export default function PodcastShow() {
                         aria-label={t('podcastShow.ariaDownload')}
                         onClick={(e) => {
                           e.stopPropagation();
-                          void actions.downloadEpisode(ep, sub());
+                          void actions.downloadEpisode(ep, show());
                         }}
                       >
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
