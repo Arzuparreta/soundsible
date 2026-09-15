@@ -65,15 +65,27 @@ export async function mockMusicEngine(page: Page) {
  *
  * Three minutes of silence outlasts any test, so playback simply stays put.
  * Register it before a spec's own stream route, which then takes precedence.
+ *
+ * It is also the only audio the Linux WebKit builds survive. Handed the MP3
+ * fixture instead, the WebProcess dies outright the first time the transport
+ * pauses: reproduced in the `mcr.microsoft.com/playwright:v1.62.0-noble`
+ * image, 5 of 8 runs of `playback-feedback` against MP3 versus 0 of 8 against
+ * this WAV, and the same 3 of 8 when the MP3 is served with `Accept-Ranges`
+ * and 206s, which rules the transport out and leaves the GStreamer decode
+ * path. Only reach for the MP3 where the format is the thing under test.
  */
-export async function silentStream(page: Page): Promise<void> {
+export const silentWav = (() => {
   const samples = 8000 * 180;
   const wav = Buffer.alloc(44 + samples * 2);
   wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
   wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
   wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32);
   wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
-  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: wav }));
+  return wav;
+})();
+
+export async function silentStream(page: Page): Promise<void> {
+  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: silentWav }));
 }
 
 /**
