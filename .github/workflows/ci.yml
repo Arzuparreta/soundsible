@@ -333,8 +333,35 @@ jobs:
         run: npm ci
       - name: Install browser engines
         run: npx playwright install --with-deps chromium webkit
+      # WebKit dies mid-test on this runner — never Chromium, only in the specs
+      # that start the audio graph, and at any position in the run (once on the
+      # second test of the WebKit block). Every death reads the same from the
+      # test side: "Target page, context or browser has been closed", which says
+      # the process went away and nothing about why.
+      #
+      # Playwright's WebKit renders media through GStreamer, and a GitHub runner
+      # has no sound server for it to open. A dummy PulseAudio gives it one.
+      # This is the current suspect, not a confirmed cure: the logging below is
+      # what will say whether it was right. Best-effort on purpose — a runner
+      # that will not give us a sound server must not cost us the run we are
+      # collecting the evidence from.
+      - name: Give WebKit an audio sink
+        continue-on-error: true
+        run: |
+          set -x
+          sudo apt-get update
+          sudo apt-get install -y pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=soundsible
+          pactl set-default-sink soundsible
+      # `pw:browser` puts the browser's own stderr in the job log, so the next
+      # death arrives with the signal or assertion that caused it. Drop this
+      # once the crash is understood — it is evidence collection, not a setting
+      # worth keeping.
       - name: Validate interface scaling
         run: npm run test:ui-scale
+        env:
+          DEBUG: pw:browser
       - name: Upload browser report
         if: always()
         uses: actions/upload-artifact@v4

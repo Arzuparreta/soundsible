@@ -12,6 +12,12 @@ export default defineConfig({
   // been closed" — an infrastructure death, not a failed assertion, and it took
   // `main` red twice. One worker on CI trades wall time for a run whose red
   // means something. Locally the default stays.
+  //
+  // It thinned them out; it did not end them. What is left is WebKit's alone,
+  // only in the specs that start the audio graph, and at any point in the run —
+  // one landed on the second test of the WebKit block, which no amount of
+  // accumulated memory explains. `ci.yml` carries the current suspect and the
+  // logging that will confirm or kill it.
   workers: process.env.CI ? 1 : undefined,
   // A crash that survives being the only thing running is worth reporting.
   // Anything that passes on the retry is still called out as flaky.
