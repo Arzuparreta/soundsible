@@ -1,13 +1,13 @@
-import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 
 test.use({ reducedMotion: 'no-preference' });
 
-const bytes = Buffer.from(readFileSync(new URL('./fixtures/progressive-preview.mp3.b64', import.meta.url), 'utf8'), 'base64');
+// The fixture's silent WAV advances for three minutes, which is all "real
+// audio keeps advancing" below needs. The MP3 fixture kills the Linux WebKit
+// WebProcess when the transport pauses.
 test.beforeEach(async ({ page }) => {
   await mockMusicEngine(page);
-  await page.route('**/api/static/stream/**', route => route.fulfill({ contentType: 'audio/mpeg', body: bytes }));
 });
 
 test('wallpaper retains artwork and themes and parks only when hidden', async ({ page }) => {

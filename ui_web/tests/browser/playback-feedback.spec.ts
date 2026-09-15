@@ -1,12 +1,11 @@
-import { readFileSync } from 'node:fs';
 import { expect, test, type Locator } from '@playwright/test';
-import { mockMusicEngine } from './music-browser-fixture';
+import { mockMusicEngine, silentWav } from './music-browser-fixture';
 
-const bytes = Buffer.from(readFileSync(new URL('./fixtures/progressive-preview.mp3.b64', import.meta.url), 'utf8'), 'base64');
-
+// The fixture's silent WAV is the audio here on purpose. These tests are about
+// the transport and the queue, not about a format, and the MP3 fixture kills
+// the Linux WebKit WebProcess the moment the transport pauses.
 test.beforeEach(async ({ page }) => {
   await mockMusicEngine(page);
-  await page.route('**/api/static/stream/**', route => route.fulfill({ contentType: 'audio/mpeg', body: bytes }));
 });
 
 test('a large queue remains bounded and transport updates preserve its rows in the pill, NORMAL and DJ', async ({ page }) => {
@@ -49,7 +48,7 @@ test('touch selection uses the orange treatment before audio loads and scrolling
   const held = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/static/stream/**', async route => {
     await held;
-    await route.fulfill({ contentType: 'audio/mpeg', body: bytes });
+    await route.fulfill({ contentType: 'audio/wav', body: silentWav });
   });
   try {
     await page.goto('/player/#/');
