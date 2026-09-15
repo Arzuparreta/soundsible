@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openMiniPlayer, silentStream } from './music-browser-fixture';
+import { settledBox } from './settle';
 import { snapCarousel } from './playerGestures';
 
 /* A library long enough for the queue's context lane to scroll: the bug only
@@ -29,15 +31,7 @@ async function mockEngine(page: Page) {
     if (['/api/devices', '/api/paired-devices', '/api/pairing/sessions'].includes(path)) body = { devices: [], sessions: [] };
     await route.fulfill({ json: body });
   });
-  /* Real audio behind the stream URL: a failed load skips to the next track,
-     and the song the mini-player names would then be a race. */
-  const samples = 8000 * 180;
-  const wav = Buffer.alloc(44 + samples * 2);
-  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
-  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
-  wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32);
-  wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
-  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: wav }));
+  await silentStream(page);
   await page.addInitScript(() => {
     localStorage.clear();
     localStorage.setItem('lang', 'es');
@@ -74,9 +68,7 @@ test('a scrolled player panel still hands a sideways swipe to the pager', async 
   test.skip(browserName !== 'chromium' || (page.viewportSize()?.width ?? 1024) > 1023, 'real Chromium touch input');
   await page.goto('/player/#/');
   await page.getByRole('button', { name: /Reproducir Canción 79/ }).click();
-  const miniPlayer = page.locator('[data-omni-player]');
-  await expect(miniPlayer).toBeVisible();
-  await miniPlayer.getByRole('button', { name: /Canción 79/ }).click();
+  await openMiniPlayer(page, /Canción 79/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
 
   const stage = page.locator('[data-now-playing-tile="stage"]');
@@ -88,7 +80,7 @@ test('a scrolled player panel still hands a sideways swipe to the pager', async 
   await snapCarousel(page, 'queue');
   await expect(queue).not.toHaveAttribute('inert', '');
   const lane = queue.locator('[data-section-rows]').last();
-  const laneBox = (await lane.boundingBox())!;
+  const laneBox = await settledBox(page, lane, (box) => box.y + 120);
   await touchDrag(page, { x: laneBox.x + laneBox.width / 2, y: laneBox.y + 120 }, { dy: -120 }, 10);
   await expect.poll(() => lane.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 

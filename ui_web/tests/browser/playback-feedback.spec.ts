@@ -12,7 +12,11 @@ test.beforeEach(async ({ page }) => {
 test('a large queue remains bounded and transport updates preserve its rows in the pill, NORMAL and DJ', async ({ page }) => {
   await page.goto('/player/#/');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
-  const pill = page.locator('[data-omni-player] button[aria-busy]');
+  // Named by what it does. Keyed off `aria-busy` the locator described a state
+  // rather than a control, so it stopped matching the moment the state changed
+  // and the next click waited out the whole test budget.
+  const pill = page.locator('[data-omni-player]')
+    .getByRole('button', { name: /^(Pausar|Reproducir|Cancelar|Reintentar)$/ });
   await expect(pill).toHaveAttribute('aria-label', 'Pausar');
   const rows = page.locator('[data-now-playing-tile="queue"] [data-drag-row]');
   await expect(rows.first()).toBeAttached();

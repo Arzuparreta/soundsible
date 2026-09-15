@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
+import { settledBox } from './settle';
 
 async function activate(page: Page, link: ReturnType<Page['getByRole']>, mobile: boolean) {
   if (mobile) await link.tap(); else await link.click();
@@ -8,14 +9,6 @@ async function activate(page: Page, link: ReturnType<Page['getByRole']>, mobile:
 
 test.beforeEach(async ({ page }) => {
   await mockMusicEngine(page);
-  // A real, long silent WAV keeps the engine from auto-skipping invalid fixture audio.
-  const samples = 8000 * 180;
-  const wav = Buffer.alloc(44 + samples * 2);
-  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
-  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
-  wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32);
-  wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
-  await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: wav }));
   await page.route('**/api/catalog/artist**', (route) => route.fulfill({ json: {
     artist: 'Artista 7', resolved: true, in_library: true,
     top_tracks: [], albums: [], singles_eps: [], related_artists: [], candidates: [],
@@ -123,7 +116,9 @@ test('every inert part of the compact pill opens the player on a phone', async (
   // the transparent open button covers them — which is the whole fix. What the
   // finger lands on has to reach that button, not what the DOM node would.
   for (const part of ['[data-omni-cover]', '[data-omni-meta]']) {
-    const box = (await mini.locator(part).boundingBox())!;
+    // Measured once the pill is still: the previous turn of this loop closed the
+    // surface, and a box read during that exit is a box the finger misses.
+    const box = await settledBox(page, mini.locator(part));
     await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
     await expect(surface).toHaveCount(1);
     await expect(page).toHaveURL(/#\/$/);

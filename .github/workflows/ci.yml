@@ -333,6 +333,21 @@ jobs:
         run: npm ci
       - name: Install browser engines
         run: npx playwright install --with-deps chromium webkit
+      # Playwright's WebKit renders media through GStreamer, and a GitHub runner
+      # has no sound server for it to open, which killed the browser outright in
+      # the specs that play audio. `playback-feedback` used to fail all three of
+      # its attempts after ~20s each; with a sink it passes in five seconds.
+      # Best-effort on purpose — a runner that will not give us one must not
+      # cost us the whole job.
+      - name: Give WebKit an audio sink
+        continue-on-error: true
+        run: |
+          set -x
+          sudo apt-get update
+          sudo apt-get install -y pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=soundsible
+          pactl set-default-sink soundsible
       - name: Validate interface scaling
         run: npm run test:ui-scale
       - name: Upload browser report

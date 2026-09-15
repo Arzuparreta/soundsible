@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
@@ -6,8 +5,6 @@ import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 for (const theme of ['slate', 'pure-black']) {
   test(`${theme}: selection, persistence, accessibility and player`, async ({ page }, info) => {
     await mockMusicEngine(page);
-    const bytes = Buffer.from(readFileSync(new URL('./fixtures/progressive-preview.mp3.b64', import.meta.url), 'utf8'), 'base64');
-    await page.route('**/api/static/stream/**', route => route.fulfill({ contentType: 'audio/mpeg', body: bytes }));
     await page.route('**/api/static/cover/**', route => route.fulfill({
       contentType: 'image/svg+xml',
       body: '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="720"><defs><linearGradient id="cover"><stop stop-color="#ff4010"/><stop offset="0.5" stop-color="#c020e0"/><stop offset="1" stop-color="#0080ff"/></linearGradient></defs><rect width="720" height="720" fill="url(#cover)"/></svg>',

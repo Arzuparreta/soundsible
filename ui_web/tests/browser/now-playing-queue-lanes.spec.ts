@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openMiniPlayer, silentStream } from './music-browser-fixture';
 import { settle } from './settle';
 import { snapPlayerCarousel } from './playerGestures';
 
@@ -46,6 +47,7 @@ async function mockEngine(page: Page) {
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
+  await silentStream(page);
   await page.addInitScript(() => {
     localStorage.clear();
     localStorage.setItem('lang', 'es');
@@ -60,7 +62,7 @@ async function mockEngine(page: Page) {
 async function openQueuePanel(page: Page) {
   await page.goto('/player/#/');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
-  await page.getByRole('button', { name: /Canción de biblioteca 320/ }).last().click();
+  await openMiniPlayer(page, /Canción de biblioteca 320/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
   const queue = page.locator('[data-now-playing-tile="queue"]');
   await expect(queue).toBeVisible();
