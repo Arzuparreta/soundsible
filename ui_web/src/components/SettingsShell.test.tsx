@@ -1,6 +1,6 @@
-import { createSignal } from 'solid-js';
-import { fireEvent, render, screen } from '@solidjs/testing-library';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSignal, Show, type JSX } from 'solid-js';
+import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { setLocale } from '../lib/i18n';
 import { setMediaQuery } from '../test-setup';
 import SettingsShell from './SettingsShell';
@@ -9,7 +9,8 @@ import SettingsShell from './SettingsShell';
  * The registry is stubbed on purpose. What is under test here is the shell —
  * how it pushes, splits, searches and recovers from a dead id — and the real
  * registry drags the whole app in to prove none of that. Its own rules are
- * covered by lib/settingsIndex.test.ts.
+ * covered by lib/settingsIndex.test.ts; the search reads the real catalog, so
+ * these two stand-ins find the real settings of the submenus they stand for.
  */
 const { sections } = vi.hoisted(() => ({
   sections: [
@@ -19,8 +20,7 @@ const { sections } = vi.hoisted(() => ({
       blurb: () => 'Tu perfil',
       tone: 'accent',
       icon: () => null,
-      keywords: () => ['contraseña'],
-      content: () => 'panel de cuenta',
+      content: (): unknown => 'panel de cuenta',
     },
     {
       id: 'playback',
@@ -28,8 +28,7 @@ const { sections } = vi.hoisted(() => ({
       blurb: () => 'Cómo suena',
       tone: 'neutral',
       icon: () => null,
-      keywords: () => ['crossfade'],
-      content: () => 'panel de reproducción',
+      content: (): unknown => 'panel de reproducción',
     },
   ],
 }));
@@ -41,16 +40,42 @@ vi.mock('./SettingsSections', () => ({
   ],
   visibleSections: () => sections,
   findSection: (id?: string) => sections.find((section) => section.id === id),
+  settingsCapabilities: () => ({ admin: true, sharedLinks: false }),
 }));
 
 const DESKTOP = '(min-width: 1024px)';
 
-function renderShell(initial: string | null = null) {
+function renderShell(initial: string | null = null, landing: string | null = null) {
   const [section, setSection] = createSignal<string | null>(initial);
+  const [setting, setSetting] = createSignal<string | null>(landing);
+  const [query, setQuery] = createSignal('');
   const view = render(() => (
-    <SettingsShell section={section()} onSectionChange={setSection} />
+    <SettingsShell
+      section={section()}
+      setting={setting()}
+      query={query()}
+      onQueryChange={setQuery}
+      onSectionChange={(id, anchor) => {
+        setSection(id);
+        setSetting(anchor ?? null);
+      }}
+    />
   ));
-  return { ...view, section };
+  return { ...view, section, setting, query };
+}
+
+/** Swap what a stand-in submenu draws, for one test. */
+function drawing(id: string, content: () => JSX.Element) {
+  const section = sections.find((candidate) => candidate.id === id)!;
+  const original = section.content;
+  section.content = content;
+  onTestFinished(() => {
+    section.content = original;
+  });
+}
+
+function search(value: string) {
+  fireEvent.input(screen.getByPlaceholderText('Buscar en ajustes'), { target: { value } });
 }
 
 beforeEach(async () => {
@@ -87,15 +112,104 @@ describe('settings shell on mobile', () => {
     expect(screen.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeInTheDocument();
   });
 
-  it('filters the index by a label living inside a submenu', () => {
+  it('lists the settings inside every submenu, with where each one lives', () => {
     renderShell();
 
-    fireEvent.input(screen.getByPlaceholderText('Buscar en ajustes'), {
-      target: { value: 'crossfade' },
-    });
+    search('igualar volumen');
 
-    expect(screen.getByRole('button', { name: /Reproducción/ })).toBeInTheDocument();
+    const result = screen.getByRole('button', { name: /Igualar el volumen entre canciones/ });
+    expect(result).toHaveTextContent('Reproducción');
+    expect([...result.querySelectorAll('mark')].map((mark) => mark.textContent)).toEqual([
+      'Igualar',
+      'volumen',
+    ]);
+    // The grouped index gives way to the results.
     expect(screen.queryByRole('button', { name: /Cuenta/ })).toBeNull();
+    expect(screen.getByText('1 resultado')).toBeInTheDocument();
+  });
+
+  it('says so when nothing matches', () => {
+    renderShell();
+
+    search('podcasts');
+
+    expect(screen.getByText('Nada coincide con «podcasts»')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cuenta/ })).toBeNull();
+  });
+
+  it('opens the submenu a result lives in, aimed at its row', () => {
+    const { section, setting, query } = renderShell();
+
+    search('contraseña');
+    fireEvent.click(screen.getByRole('button', { name: /Cambiar contraseña/ }));
+
+    expect(section()).toBe('account');
+    expect(setting()).toBe('change-password');
+    // The search survives the trip, so coming back finds the results.
+    expect(query()).toBe('contraseña');
+  });
+
+  it('opens the best result from the keyboard, and walks the list with the arrows', () => {
+    const { section, setting } = renderShell();
+    const field = screen.getByPlaceholderText('Buscar en ajustes');
+
+    search('cuenta');
+    const results = screen.getAllByRole('button').filter((button) => button.hasAttribute('data-settings-result'));
+    expect(results.length).toBeGreaterThan(1);
+
+    fireEvent.keyDown(field, { key: 'ArrowDown' });
+    expect(results[0]).toHaveFocus();
+    fireEvent.keyDown(results[0], { key: 'ArrowDown' });
+    expect(results[1]).toHaveFocus();
+    fireEvent.keyDown(results[1], { key: 'ArrowUp' });
+    fireEvent.keyDown(results[0], { key: 'ArrowUp' });
+    expect(field).toHaveFocus();
+
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(section()).toBe('account');
+    expect(setting()).toBeNull();
+  });
+
+  it('marks the row it landed on', () => {
+    drawing('playback', () => <div data-setting="volume-leveling">Igualar el volumen</div>);
+    renderShell('playback', 'volume-leveling');
+
+    expect(screen.getByText('Igualar el volumen')).toHaveAttribute('data-setting-flash');
+  });
+
+  it('waits for a row that its submenu loads late', async () => {
+    const [loaded, setLoaded] = createSignal(false);
+    drawing('playback', () => (
+      <Show when={loaded()}>
+        <div data-setting="autoplay">Reproducción automática</div>
+      </Show>
+    ));
+    renderShell('playback', 'autoplay');
+
+    setLoaded(true);
+
+    await waitFor(() =>
+      expect(screen.getByText('Reproducción automática')).toHaveAttribute('data-setting-flash'),
+    );
+  });
+
+  it('opens the disclosure that hides the row', () => {
+    drawing('account', () => (
+      <details data-setting="sign-out">
+        <summary>Más</summary>
+        Cerrar sesión
+      </details>
+    ));
+    const view = renderShell('account', 'sign-out');
+
+    expect(view.container.querySelector('details')).toHaveProperty('open', true);
+  });
+
+  it('ignores an anchor that is not there', () => {
+    drawing('playback', () => <div data-setting="autoplay">Reproducción automática</div>);
+    renderShell('playback', 'nope"]');
+
+    expect(screen.getByText('Reproducción automática')).not.toHaveAttribute('data-setting-flash');
   });
 
   it('has no modal close control and registers the index scroller', () => {
@@ -131,6 +245,28 @@ describe('settings shell on desktop', () => {
 
     expect(screen.getByRole('button', { name: /Cuenta/ })).toBeInTheDocument();
     expect(screen.queryByText('Tu perfil')).toBeNull();
+  });
+
+  it('keeps the results beside the submenu a result opened', () => {
+    const { section } = renderShell();
+
+    search('contraseña');
+    fireEvent.click(screen.getByRole('button', { name: /Cambiar contraseña/ }));
+
+    expect(section()).toBe('account');
+    expect(screen.getByRole('button', { name: /Cambiar contraseña/ })).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('puts focus on the control it landed on', () => {
+    drawing('playback', () => (
+      <div data-setting="volume-leveling">
+        Igualar el volumen
+        <button type="button" role="switch" aria-checked="false">interruptor</button>
+      </div>
+    ));
+    renderShell('playback', 'volume-leveling');
+
+    expect(screen.getByRole('switch')).toHaveFocus();
   });
 
   it('reveals the index again when the window narrows', () => {

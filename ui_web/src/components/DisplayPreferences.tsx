@@ -3,6 +3,7 @@ import { actions, state } from '../stores';
 import { t } from '../lib/i18n';
 import { openOverlay } from '../lib/overlay';
 import type { InterfaceSize } from '../lib/visualPreferences';
+import { settingAnchor } from './SettingsRows';
 import styles from './DisplayPreferences.module.css';
 
 const SIZES: InterfaceSize[] = ['compact', 'normal', 'large'];
@@ -41,7 +42,7 @@ export function DisplayPreferences(props: { heading?: boolean; onClose?: () => v
         </div>
       ) : null}
 
-      <div class={styles.sizeBlock}>
+      <div class={styles.sizeBlock} {...settingAnchor('interface-size')}>
         <div class={styles.fieldHead}>
           <span class={styles.label} id="interface-size-label">
             {t('accessibility.interfaceSize')}
@@ -87,7 +88,7 @@ export function DisplayPreferences(props: { heading?: boolean; onClose?: () => v
         </div>
       </div>
 
-      <label class={styles.contrastRow}>
+      <label class={styles.contrastRow} {...settingAnchor('high-contrast')}>
         <span>
           <span class={styles.label}>{t('accessibility.highContrast')}</span>
           <span class={styles.note}>{t('accessibility.highContrastNote')}</span>

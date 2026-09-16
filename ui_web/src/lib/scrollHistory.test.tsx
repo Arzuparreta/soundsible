@@ -181,6 +181,106 @@ describe('scroll history', () => {
     expect(fresh.scrollTop).toBe(0);
   });
 
+  it('lands a fresh visit where the page asks, and a return where it was left', async () => {
+    const [ready, setReady] = createSignal(false);
+
+    function A() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button onClick={() => navigate('/b')}>Open B</button>
+          <button onClick={() => navigate(-1)}>Back to B</button>
+          <div data-testid="scroll-a" ref={(element) => registerPrimaryScroll(element)} />
+        </>
+      );
+    }
+
+    function B() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button onClick={() => navigate('/a')}>Open A</button>
+          <div
+            data-testid="scroll-b"
+            ref={(element) => registerPrimaryScroll(element, ready, () => 320)}
+          />
+        </>
+      );
+    }
+
+    render(() => (
+      <HashRouter root={RouterShell}>
+        <Route path="/a" component={A} />
+        <Route path="/b" component={B} />
+      </HashRouter>
+    ));
+
+    await screen.findByTestId('scroll-a');
+    await frames.flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Open B' }));
+    const landed = await screen.findByTestId('scroll-b');
+    await frames.flush();
+    // The landing waits for the page, like any restore.
+    expect(landed.scrollTop).toBe(0);
+
+    setReady(true);
+    await frames.flush();
+    expect(landed.scrollTop).toBe(320);
+
+    landed.scrollTop = 500;
+    fireEvent.scroll(landed);
+    fireEvent.click(screen.getByRole('button', { name: 'Open A' }));
+    await screen.findByTestId('scroll-a');
+    await frames.flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to B' }));
+    const returned = await screen.findByTestId('scroll-b');
+    await frames.flush();
+    expect(returned.scrollTop).toBe(500);
+  });
+
+  it('lands the first page of a session, and leaves any other one alone', async () => {
+    window.history.replaceState(null, '', '/#/b');
+
+    function A() {
+      return <div data-testid="scroll-a" ref={(element) => registerPrimaryScroll(element)} />;
+    }
+
+    function B() {
+      return (
+        <div
+          data-testid="scroll-b"
+          ref={(element) => registerPrimaryScroll(element, () => true, () => 320)}
+        />
+      );
+    }
+
+    const view = render(() => (
+      <HashRouter root={RouterShell}>
+        <Route path="/a" component={A} />
+        <Route path="/b" component={B} />
+      </HashRouter>
+    ));
+
+    const deepLink = await screen.findByTestId('scroll-b');
+    await frames.flush();
+    expect(deepLink.scrollTop).toBe(320);
+
+    view.unmount();
+    resetScrollHistoryForTests();
+    window.history.replaceState(null, '', '/#/a');
+    render(() => (
+      <HashRouter root={RouterShell}>
+        <Route path="/a" component={A} />
+        <Route path="/b" component={B} />
+      </HashRouter>
+    ));
+
+    const plain = await screen.findByTestId('scroll-a');
+    plain.scrollTop = 75;
+    await frames.flush();
+    expect(plain.scrollTop).toBe(75);
+  });
+
   it('uses a canonical fallback only for a directly opened detail', async () => {
     const navigate = vi.fn();
     navigateBackOr(navigate, '/search');

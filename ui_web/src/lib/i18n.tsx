@@ -132,3 +132,12 @@ export function t(key: string, params?: Record<string, string | number>): string
   const dict = dictionaries()[current()] ?? en;
   return interpolate(resolve(dict, key), params);
 }
+
+/**
+ * The English wording of a key, whatever the active locale. Search uses it so
+ * the technical terms people carry across languages ("password", "dark mode")
+ * still find their setting. English ships in the entry chunk, so this is free.
+ */
+export function tEn(key: string, params?: Record<string, string | number>): string {
+  return interpolate(resolve(en, key), params);
+}

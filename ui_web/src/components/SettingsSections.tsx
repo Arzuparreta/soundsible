@@ -14,6 +14,11 @@ import { changePassword, isAdmin, logout, updateProfile, user } from '../lib/ses
 import { associationUrl } from '../lib/trackShare';
 import { communityConfig, loadCommunityConfig } from '../lib/community';
 import { accessibleSections, findSectionById } from '../lib/settingsIndex';
+import {
+  SETTINGS_CATALOG,
+  type SettingCapabilities,
+  type SettingsSectionId,
+} from '../lib/settingsCatalog';
 import { DevicesPanel } from './DeviceSheet';
 import { PairedDevicesPanel } from './PairDevice';
 import { DisplayPreferences } from './DisplayPreferences';
@@ -39,15 +44,13 @@ import styles from './SettingsSections.module.css';
  * index only ever needs the static descriptor above `content`.
  */
 export interface SettingsSection {
-  id: string;
+  id: SettingsSectionId;
   title: () => string;
   blurb: () => string;
   tone: 'accent' | 'info' | 'success' | 'warning' | 'danger' | 'neutral';
   icon: () => JSX.Element;
   /** Admin-only sections act on the shared server, not on this account. */
   adminOnly?: boolean;
-  /** Extra words the settings search should match — the labels living inside. */
-  keywords: () => string[];
   content: () => JSX.Element;
 }
 
@@ -158,9 +161,14 @@ function AccountSection() {
           </div>
 
           <SettingsGroup label={t('settings.group.profile')} note={t('account.usernameHint')}>
-            <ActionRow label={t('account.changeName')} onClick={editName} />
-            <ActionRow label={t('account.changeUsername')} onClick={editUsername} />
+            <ActionRow anchor="change-name" label={t('account.changeName')} onClick={editName} />
             <ActionRow
+              anchor="change-username"
+              label={t('account.changeUsername')}
+              onClick={editUsername}
+            />
+            <ActionRow
+              anchor="change-password"
               label={t('account.changePassword')}
               hint={me().has_password ? undefined : t('settings.note.noPassword')}
               onClick={updatePassword}
@@ -168,7 +176,7 @@ function AccountSection() {
           </SettingsGroup>
 
           <SettingsGroup>
-            <ActionRow label={t('account.signOut')} onClick={signOut} danger />
+            <ActionRow anchor="sign-out" label={t('account.signOut')} onClick={signOut} danger />
           </SettingsGroup>
         </>
       )}
@@ -219,6 +227,7 @@ function AppearanceSection() {
   return (
     <SettingsGroup label={t('settings.appearance')} note={t('settings.note.theme')}>
       <SegmentedRow
+        anchor="theme"
         label={t('settings.theme')}
         options={THEMES.map((theme) => ({
           value: theme,
@@ -229,6 +238,7 @@ function AppearanceSection() {
         onChange={(theme) => actions.setTheme(theme)}
       />
       <SelectRow
+        anchor="other-themes"
         label={t('settings.otherThemes')}
         value={extraTheme(state.theme) ?? ''}
         onChange={(value) => {
@@ -242,6 +252,7 @@ function AppearanceSection() {
         </For>
       </SelectRow>
       <SelectRow
+        anchor="language"
         label={t('settings.language')}
         value={locale()}
         onChange={(value) => setLocale(value as Locale)}
@@ -263,6 +274,7 @@ function AccessibilitySection() {
       <BottomNavigationSettings />
       <SettingsGroup label={t('settings.group.feedback')} note={t('settings.note.haptics')}>
         <SwitchRow
+          anchor="haptics"
           label={t('settings.haptics')}
           checked={state.haptics}
           onChange={() => actions.setHaptics(!state.haptics)}
@@ -342,11 +354,12 @@ function PlaybackSection() {
   return (
     <>
       <SettingsGroup label={t('settings.group.connection')} note={t('settings.note.connection')}>
-        <ValueRow label={t('settings.link.label')} value={connection()} />
+        <ValueRow anchor="delivery" label={t('settings.link.label')} value={connection()} />
       </SettingsGroup>
 
       <SettingsGroup label={t('settings.playback')} note={t('settings.note.volumeLeveling')}>
         <SwitchRow
+          anchor="volume-leveling"
           label={t('settings.volumeLeveling')}
           checked={leveling()}
           onChange={toggleLeveling}
@@ -354,12 +367,22 @@ function PlaybackSection() {
       </SettingsGroup>
 
       <SettingsGroup label={t('settings.group.upNext')} note={t('settings.note.autoplay')}>
-        <SwitchRow label={t('settings.autoplay')} checked={autoplay()} onChange={toggleAutoplay} />
+        <SwitchRow
+          anchor="autoplay"
+          label={t('settings.autoplay')}
+          checked={autoplay()}
+          onChange={toggleAutoplay}
+        />
       </SettingsGroup>
 
       <SettingsGroup label={t('settings.group.recommendations')} note={t('settings.learnActivityNote')}>
-        <SwitchRow label={t('settings.learnActivity')} checked={learning()} onChange={toggleLearning} />
-        <ActionRow label={t('settings.resetLearning')} onClick={resetLearning} />
+        <SwitchRow
+          anchor="learn-activity"
+          label={t('settings.learnActivity')}
+          checked={learning()}
+          onChange={toggleLearning}
+        />
+        <ActionRow anchor="reset-learning" label={t('settings.resetLearning')} onClick={resetLearning} />
       </SettingsGroup>
     </>
   );
@@ -492,29 +515,29 @@ function LibrarySection() {
   return (
     <>
       <SettingsGroup>
-        <ValueRow label={t('settings.tracks')} value={String(state.library.length)} />
+        <ValueRow anchor="track-count" label={t('settings.tracks')} value={String(state.library.length)} />
       </SettingsGroup>
 
       <SettingsGroup label={t('settings.group.sync')} note={t('settings.note.sync')}>
-        <ActionRow label={t('settings.reload')} onClick={reload} disabled={busy()} />
-        <ActionRow label={t('settings.rescan')} onClick={rescan} disabled={busy()} />
+        <ActionRow anchor="reload" label={t('settings.reload')} onClick={reload} disabled={busy()} />
+        <ActionRow anchor="rescan" label={t('settings.rescan')} onClick={rescan} disabled={busy()} />
         <Show when={isAdmin()}>
-          <ActionRow label={t('settings.sync')} onClick={cloudSync} />
+          <ActionRow anchor="cloud-sync" label={t('settings.sync')} onClick={cloudSync} />
         </Show>
       </SettingsGroup>
 
       <SettingsGroup label={t('settings.importCard')} note={t('settings.importNote')}>
-        <NavRow href="/import" label={t('settings.importFrom')} />
+        <NavRow anchor="import" href="/import" label={t('settings.importFrom')} />
       </SettingsGroup>
 
       <SettingsGroup label={t('settings.group.maintenance')} note={t('settings.note.maintenance')}>
-        <ActionRow label={t('settings.repair')} onClick={repair} />
+        <ActionRow anchor="repair" label={t('settings.repair')} onClick={repair} />
         <Show when={isAdmin()}>
-          <ActionRow label={t('settings.optimize')} onClick={optimize} />
+          <ActionRow anchor="optimize" label={t('settings.optimize')} onClick={optimize} />
         </Show>
-        <ActionRow label={t('settings.purgeFiles')} onClick={purge} />
+        <ActionRow anchor="purge-missing" label={t('settings.purgeFiles')} onClick={purge} />
         <Show when={isAdmin()}>
-          <ActionRow label={t('settings.emptyLibrary')} onClick={wipe} danger warn />
+          <ActionRow anchor="empty-library" label={t('settings.emptyLibrary')} onClick={wipe} danger warn />
         </Show>
       </SettingsGroup>
     </>
@@ -585,6 +608,7 @@ function DownloadsSection() {
     <>
       <SettingsGroup label={t('settings.quality')} note={t('settings.note.quality')}>
         <SegmentedRow
+          anchor="quality"
           label={t('settings.quality')}
           options={QUALITY_OPTIONS.map((q) => ({ value: q, label: qualityLabel(q) }))}
           value={quality()}
@@ -596,11 +620,13 @@ function DownloadsSection() {
 
       <SettingsGroup label={t('settings.group.updates')} note={t('settings.note.updates')}>
         <SwitchRow
+          anchor="auto-update-ytdlp"
           label={t('settings.autoUpdateYtdlp')}
           checked={autoUpdateYtdlp()}
           onChange={toggleAutoYtdlp}
         />
         <SwitchRow
+          anchor="auto-update-curl-cffi"
           label={t('settings.autoUpdateCurlCffi')}
           checked={autoUpdateCurlCffi()}
           onChange={toggleAutoCurlCffi}
@@ -618,12 +644,14 @@ function DevicesSection() {
     <>
       <SettingsGroup label={t('settings.group.thisDevice')} note={t('settings.note.device')}>
         <InputRow
+          anchor="device-name"
           label={t('settings.deviceName')}
           value={state.device.device_name}
           onInput={(value) => actions.setDeviceName(value)}
         />
         <Show when={sharedLinks}>
           <ActionRow
+            anchor="shared-links"
             label={t('settings.openSharedLinks')}
             hint={t('settings.sharedLinks')}
             onClick={() => window.location.assign(sharedLinks!)}
@@ -631,11 +659,11 @@ function DevicesSection() {
         </Show>
       </SettingsGroup>
 
-      <SettingsGroup label={t('settings.pairedDevices')} note={t('settings.pairNote')}>
+      <SettingsGroup anchor="paired-devices" label={t('settings.pairedDevices')} note={t('settings.pairNote')}>
         <PairedDevicesPanel />
       </SettingsGroup>
 
-      <SettingsGroup label={t('settings.group.network')} note={t('settings.note.network')}>
+      <SettingsGroup anchor="network-devices" label={t('settings.group.network')} note={t('settings.note.network')}>
         <DevicesPanel />
       </SettingsGroup>
     </>
@@ -669,8 +697,8 @@ function CommunitySection() {
 
   return (
     <SettingsGroup label={t('settings.community')} note={t('settings.note.community')}>
-      <ValueRow label={t('settings.communityService')} value={source()} />
-      <ValueRow label={t('settings.communityStatus')} value={status()} />
+      <ValueRow anchor="community-service" label={t('settings.communityService')} value={source()} />
+      <ValueRow anchor="community-status" label={t('settings.communityStatus')} value={status()} />
       <Show when={communityConfig()?.source === 'custom' && communityConfig()?.api_url}>
         <ValueRow
           label={t('settings.communityRelay')}
@@ -690,7 +718,7 @@ function AboutSection() {
   return (
     <>
       <SettingsGroup label={t('settings.connection')}>
-        <SettingRow label={t('settings.engineLabel')}>
+        <SettingRow anchor="engine-status" label={t('settings.engineLabel')}>
           <span class={styles.status}>
             <span
               class={styles.statusDot}
@@ -704,10 +732,11 @@ function AboutSection() {
 
       <SettingsGroup label={t('settings.about')}>
         <ValueRow
+          anchor="version"
           label={t('brand.soundsible')}
           value={<span class={styles.mono}>{t('settings.version')}</span>}
         />
-        <NavRow href="/preview" label={t('settings.viewDesign')} />
+        <NavRow anchor="design-system" href="/preview" label={t('settings.viewDesign')} />
       </SettingsGroup>
     </>
   );
@@ -715,11 +744,15 @@ function AboutSection() {
 
 /* ── The registry ─────────────────────────────────────────────────────── */
 
+/** A section's id and wording, taken from the catalog the search reads too. */
+function described(id: SettingsSectionId): Pick<SettingsSection, 'id' | 'title' | 'blurb'> {
+  const entry = SETTINGS_CATALOG[id];
+  return { id, title: () => t(entry.title), blurb: () => t(entry.blurb) };
+}
+
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
-    id: 'account',
-    title: () => t('account.title'),
-    blurb: () => t('settings.blurb.account'),
+    ...described('account'),
     tone: 'accent',
     icon: () =>
       svg(
@@ -728,20 +761,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <path d="M5 20a7 7 0 0 1 14 0" />
         </>,
       ),
-    keywords: () => [
-      t('account.changeName'),
-      t('account.changeUsername'),
-      t('account.changePassword'),
-      t('account.manageUsers'),
-      t('account.signOut'),
-      t('users.title'),
-    ],
     content: () => <AccountSection />,
   },
   {
-    id: 'appearance',
-    title: () => t('settings.appearance'),
-    blurb: () => t('settings.blurb.appearance'),
+    ...described('appearance'),
     tone: 'info',
     icon: () =>
       svg(
@@ -750,21 +773,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none" />
         </>,
       ),
-    keywords: () => [
-      t('settings.theme'),
-      t('settings.themeDark'),
-      t('settings.themeLight'),
-      t('settings.themeSystem'),
-      t('settings.language'),
-      t('settings.otherThemes'),
-      ...EXTRA_THEMES.map((theme) => EXTRA_THEME_LABELS[theme]()),
-    ],
     content: () => <AppearanceSection />,
   },
   {
-    id: 'accessibility',
-    title: () => t('accessibility.title'),
-    blurb: () => t('settings.blurb.accessibility'),
+    ...described('accessibility'),
     tone: 'success',
     icon: () =>
       svg(
@@ -773,18 +785,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <path d="M12 7.5v.01M8.5 10.5h7M12 10.5V16M12 16l-1.8 2.5M12 16l1.8 2.5" />
         </>,
       ),
-    keywords: () => [
-      t('nav.bottomBar'),
-      t('accessibility.interfaceSize'),
-      t('accessibility.highContrast'),
-      t('settings.haptics'),
-    ],
     content: () => <AccessibilitySection />,
   },
   {
-    id: 'playback',
-    title: () => t('settings.playback'),
-    blurb: () => t('settings.blurb.playback'),
+    ...described('playback'),
     tone: 'accent',
     icon: () =>
       svg(
@@ -793,20 +797,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <path d="M10 8.8l5.5 3.2-5.5 3.2z" />
         </>,
       ),
-    keywords: () => [
-      t('settings.volumeLeveling'),
-      t('settings.volumeLevelingSearch'),
-      t('settings.autoplay'),
-      t('settings.learnActivity'),
-      t('settings.resetLearning'),
-      t('settings.discovery'),
-    ],
     content: () => <PlaybackSection />,
   },
   {
-    id: 'library',
-    title: () => t('settings.libraryCard'),
-    blurb: () => t('settings.blurb.library'),
+    ...described('library'),
     tone: 'warning',
     icon: () =>
       svg(
@@ -815,39 +809,17 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <path d="M6 21h12M4 19a2 2 0 0 1 2-2h12" />
         </>,
       ),
-    keywords: () => [
-      t('settings.reload'),
-      t('settings.rescan'),
-      t('settings.purgeFiles'),
-      t('settings.optimize'),
-      t('settings.sync'),
-      t('settings.importFrom'),
-      t('settings.emptyLibrary'),
-    ],
     content: () => <LibrarySection />,
   },
   {
-    id: 'downloads',
-    title: () => t('settings.downloads'),
-    blurb: () => t('settings.blurb.downloads'),
+    ...described('downloads'),
     tone: 'info',
     adminOnly: true,
     icon: () => svg(<path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" />),
-    keywords: () => [
-      t('settings.quality'),
-      t('settings.losslessUpgrades'),
-      t('settings.losslessStatusLabel'),
-      t('settings.losslessRunNow'),
-      t('settings.losslessRecheck'),
-      t('settings.autoUpdateYtdlp'),
-      t('settings.autoUpdateCurlCffi'),
-    ],
     content: () => <DownloadsSection />,
   },
   {
-    id: 'devices',
-    title: () => t('settings.devices'),
-    blurb: () => t('settings.blurb.devices'),
+    ...described('devices'),
     tone: 'neutral',
     icon: () =>
       svg(
@@ -857,18 +829,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <rect x="16" y="9" width="6" height="11" rx="1.5" />
         </>,
       ),
-    keywords: () => [
-      t('settings.deviceName'),
-      t('settings.pairedDevices'),
-      t('settings.sharedLinks'),
-      t('settings.openSharedLinks'),
-    ],
     content: () => <DevicesSection />,
   },
   {
-    id: 'users',
-    title: () => t('users.title'),
-    blurb: () => t('settings.blurb.users'),
+    ...described('users'),
     tone: 'info',
     adminOnly: true,
     icon: () =>
@@ -879,18 +843,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <path d="M21 19v-1a4 4 0 00-3-3.87M16.5 4.13a4 4 0 010 7.75" />
         </>,
       ),
-    keywords: () => [
-      t('account.manageUsers'),
-      t('users.invite'),
-      t('users.addTitle'),
-      t('users.roleAdmin'),
-    ],
     content: () => <UsersPanel />,
   },
   {
-    id: 'community',
-    title: () => t('settings.community'),
-    blurb: () => t('settings.blurb.community'),
+    ...described('community'),
     tone: 'success',
     icon: () =>
       svg(
@@ -900,18 +856,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
         </>,
       ),
-    keywords: () => [
-      t('settings.communityService'),
-      t('settings.communityStatus'),
-      t('settings.communityRelay'),
-      'Live',
-    ],
     content: () => <CommunitySection />,
   },
   {
-    id: 'subsonic',
-    title: () => t('subsonic.title'),
-    blurb: () => t('settings.blurb.subsonic'),
+    ...described('subsonic'),
     tone: 'info',
     icon: () =>
       svg(
@@ -920,23 +868,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <path d="M9 9.5v5M12 7.5v9M15 10.5v3M18 9v6" />
         </>,
       ),
-    keywords: () => [
-      t('subsonic.server'),
-      t('subsonic.username'),
-      t('subsonic.password'),
-      'Subsonic',
-      'OpenSubsonic',
-      'Symfonium',
-      'Amperfy',
-      'Feishin',
-      'DSub',
-    ],
     content: () => <SubsonicAccessPanel />,
   },
   {
-    id: 'about',
-    title: () => t('settings.about'),
-    blurb: () => t('settings.blurb.about'),
+    ...described('about'),
     tone: 'neutral',
     icon: () =>
       svg(
@@ -945,7 +880,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           <path d="M12 11v5M12 8v.01" />
         </>,
       ),
-    keywords: () => [t('settings.engineLabel'), t('settings.version'), t('settings.viewDesign')],
     content: () => <AboutSection />,
   },
 ];
@@ -959,6 +893,11 @@ export const SETTINGS_GROUPS: { label: () => string; ids: string[] }[] = [
     ids: ['library', 'users', 'downloads', 'devices', 'subsonic', 'community', 'about'],
   },
 ];
+
+/** Which conditional rows this account and install actually draw. */
+export function settingsCapabilities(): SettingCapabilities {
+  return { admin: isAdmin(), sharedLinks: associationUrl() != null };
+}
 
 /** Sections the signed-in account is actually allowed to open. */
 export function visibleSections(): SettingsSection[] {

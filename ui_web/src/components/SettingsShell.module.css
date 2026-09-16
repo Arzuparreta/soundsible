@@ -227,6 +227,51 @@
   flex-shrink: 0;
 }
 
+/* ── Search results ─────────────────────────────────────────────────────── */
+
+/* A result always carries its path: without it, "Name" or "Status" could be
+   anywhere. The narrow rail keeps it too, on a second line. */
+.page[data-layout='split'] .result {
+  padding-block: var(--space-2xs);
+}
+
+/* The setting's own words are the answer, so a long one wraps rather than
+   losing its end. */
+.result .catTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.resultPath {
+  font-size: var(--text-caption);
+  line-height: var(--lh-snug);
+  color: color-mix(in srgb, var(--ink-secondary) 70%, var(--ink-primary));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The words that matched, in the accent rather than a highlighter. */
+.mark {
+  color: var(--accent-ink);
+  font-weight: var(--fw-semibold);
+  background: none;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .empty {
   margin: 0;
   padding: var(--space-xl) var(--space-md);
@@ -322,6 +367,34 @@
 .page[data-layout='split'] .detailScroll {
   max-width: none;
   padding: var(--space-lg) var(--space-xl) var(--space-2xl);
+}
+
+/* Where a search result landed: the row glows once, then settles. The rows
+   come from several stylesheets, so the marker is a plain attribute. */
+.detailScroll :global([data-setting-flash]) {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* A whole group glows as a card; a row borrows its panel's corners. */
+.detailScroll :global(section[data-setting-flash]) {
+  border-radius: var(--radius-md);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .detailScroll :global([data-setting-flash]) {
+    animation: setting-flash 1.8s var(--ease-out) both;
+  }
+}
+
+@keyframes setting-flash {
+  0%,
+  35% {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  100% {
+    background: transparent;
+  }
 }
 
 /* The submenu arrives from the side it was pushed from. */

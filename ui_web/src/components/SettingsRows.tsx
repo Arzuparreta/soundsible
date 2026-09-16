@@ -1,6 +1,7 @@
 import { For, Show, type JSX } from 'solid-js';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { A, useNavigate } from '@solidjs/router';
+import type { SettingAnchor } from '../lib/settingsCatalog';
 import styles from './SettingsRows.module.css';
 
 /**
@@ -9,6 +10,15 @@ import styles from './SettingsRows.module.css';
  * inside it. Keeping them here is what lets a section read as data rather than
  * as markup, and what keeps every submenu visually identical.
  */
+
+/**
+ * Marks the element the settings search lands on. Rows take it as `anchor`;
+ * panels that bring their own markup spread this instead. Typed against the
+ * catalog, so an anchor no search result points at does not compile.
+ */
+export function settingAnchor(id: SettingAnchor): { 'data-setting': SettingAnchor } {
+  return { 'data-setting': id };
+}
 
 export function Chevron(props: { class?: string }) {
   return (
@@ -43,10 +53,11 @@ export function SettingsGroup(props: {
   label?: string;
   note?: string;
   plain?: boolean;
+  anchor?: SettingAnchor;
   children: JSX.Element;
 }) {
   return (
-    <section class={styles.group}>
+    <section class={styles.group} data-setting={props.anchor}>
       <Show when={props.label}>
         <h2 class={styles.groupLabel}>{props.label}</h2>
       </Show>
@@ -77,9 +88,14 @@ function RowText(props: { label: string; hint?: string; warn?: boolean }) {
 }
 
 /** Label on the left, whatever control (or value) you pass on the right. */
-export function SettingRow(props: { label: string; hint?: string; children?: JSX.Element }) {
+export function SettingRow(props: {
+  label: string;
+  hint?: string;
+  anchor?: SettingAnchor;
+  children?: JSX.Element;
+}) {
   return (
-    <div class={styles.row}>
+    <div class={styles.row} data-setting={props.anchor}>
       <RowText label={props.label} hint={props.hint} />
       <Show when={props.children}>
         <span class={styles.control}>{props.children}</span>
@@ -89,9 +105,9 @@ export function SettingRow(props: { label: string; hint?: string; children?: JSX
 }
 
 /** Read-only fact: label left, value right. */
-export function ValueRow(props: { label: string; value: JSX.Element }) {
+export function ValueRow(props: { label: string; value: JSX.Element; anchor?: SettingAnchor }) {
   return (
-    <div class={styles.row}>
+    <div class={styles.row} data-setting={props.anchor}>
       <RowText label={props.label} />
       <span class={styles.value}>{props.value}</span>
     </div>
@@ -103,9 +119,10 @@ export function SwitchRow(props: {
   hint?: string;
   checked: boolean;
   onChange: () => void;
+  anchor?: SettingAnchor;
 }) {
   return (
-    <div class={styles.row}>
+    <div class={styles.row} data-setting={props.anchor}>
       <RowText label={props.label} hint={props.hint} />
       <button
         type="button"
@@ -131,6 +148,7 @@ export function ActionRow(props: {
   disabled?: boolean;
   danger?: boolean;
   warn?: boolean;
+  anchor?: SettingAnchor;
 }) {
   const tap = createResponsiveTap({
     disabled: () => Boolean(props.disabled),
@@ -144,6 +162,7 @@ export function ActionRow(props: {
       classList={{ [styles.rowBtnDanger]: props.danger }}
       disabled={props.disabled}
       data-pressable
+      data-setting={props.anchor}
       {...tap}
     >
       <RowText label={props.label} hint={props.hint} warn={props.warn} />
@@ -153,7 +172,7 @@ export function ActionRow(props: {
 }
 
 /** Row that navigates elsewhere in the app. */
-export function NavRow(props: { href: string; label: string; hint?: string }) {
+export function NavRow(props: { href: string; label: string; hint?: string; anchor?: SettingAnchor }) {
   const navigate = useNavigate();
   const tap = createResponsiveTap({
     onTap: (event) => {
@@ -163,7 +182,7 @@ export function NavRow(props: { href: string; label: string; hint?: string }) {
   });
 
   return (
-    <A href={props.href} class={styles.rowLink} data-pressable {...tap}>
+    <A href={props.href} class={styles.rowLink} data-pressable data-setting={props.anchor} {...tap}>
       <RowText label={props.label} hint={props.hint} />
       <Chevron />
     </A>
@@ -188,9 +207,10 @@ export function SegmentedRow<T extends string>(props: {
   options: SegmentOption<T>[];
   value: T | undefined;
   onChange: (value: T) => void;
+  anchor?: SettingAnchor;
 }) {
   return (
-    <div class={styles.stackRow}>
+    <div class={styles.stackRow} data-setting={props.anchor}>
       <RowText label={props.label} hint={props.hint} />
       <div class={styles.segment} role="group" aria-label={props.label}>
         <For each={props.options}>
@@ -221,10 +241,11 @@ export function SelectRow(props: {
   hint?: string;
   value: string;
   onChange: (value: string) => void;
+  anchor?: SettingAnchor;
   children: JSX.Element;
 }) {
   return (
-    <div class={styles.row}>
+    <div class={styles.row} data-setting={props.anchor}>
       <RowText label={props.label} hint={props.hint} />
       <select
         class={styles.select}
@@ -247,9 +268,10 @@ export function InputRow(props: {
   onInput: (value: string) => void;
   type?: 'text' | 'password';
   autocomplete?: string;
+  anchor?: SettingAnchor;
 }) {
   return (
-    <div class={styles.stackRow}>
+    <div class={styles.stackRow} data-setting={props.anchor}>
       <RowText label={props.label} hint={props.hint} />
       <input
         type={props.type ?? 'text'}

@@ -11,12 +11,16 @@ interface ScrollEntryState {
 interface ScrollRegistration {
   element: HTMLElement;
   ready: () => boolean;
+  landing?: () => number | null;
 }
 
 interface PendingRestore {
   entryId: string;
   route: string;
-  top: number;
+  /** `null` only when the page's own landing, if it has one, decides. */
+  top: number | null;
+  /** A new destination rather than a traversal back to a saved position. */
+  fresh: boolean;
 }
 
 const positions = new Map<string, number>();
@@ -114,7 +118,9 @@ function tryRestore(): void {
       return;
     }
     pendingRestore = null;
-    registration.element.scrollTop = pending.top;
+    const top = pending.fresh ? registration.landing?.() ?? pending.top : pending.top;
+    if (top == null) return;
+    registration.element.scrollTop = top;
     positions.set(pending.entryId, registration.element.scrollTop);
   });
 }
@@ -130,6 +136,9 @@ function settleRoute(): void {
 
   let entry: ScrollEntryState;
   let fresh = false;
+  // The session's first page: there is nothing to restore and the page already
+  // starts at the top, but a deep link into it may still ask to land.
+  const opening = !stateEntry && activeEntry == null;
   if (stateEntry) {
     entry = stateEntry;
     if (entry.id !== activeEntry?.id && !traversed) {
@@ -152,10 +161,12 @@ function settleRoute(): void {
 
   const saved = positions.get(entry.id);
   if (traversed && saved != null) {
-    pendingRestore = { entryId: entry.id, route, top: saved };
+    pendingRestore = { entryId: entry.id, route, top: saved, fresh: false };
   } else if (fresh) {
-    pendingRestore = { entryId: entry.id, route, top: 0 };
+    pendingRestore = { entryId: entry.id, route, top: 0, fresh: true };
     positions.set(entry.id, 0);
+  } else if (opening) {
+    pendingRestore = { entryId: entry.id, route, top: null, fresh: true };
   } else if (pendingRestore?.entryId !== entry.id) {
     cancelRestore();
   }
@@ -205,9 +216,15 @@ export function ScrollHistoryManager() {
 /**
  * Register the single route-level vertical scroller. `ready` must become true
  * only after asynchronous content that determines the page height has rendered.
+ * `landing` is where a fresh visit starts instead of the top — a deep link into
+ * the page. Traversing back still returns to the saved position.
  */
-export function registerPrimaryScroll(element: HTMLElement, ready: () => boolean = () => true): void {
-  const registration = { element, ready };
+export function registerPrimaryScroll(
+  element: HTMLElement,
+  ready: () => boolean = () => true,
+  landing?: () => number | null,
+): void {
+  const registration = { element, ready, landing };
   registrations.add(registration);
 
   const onScroll = () => {
