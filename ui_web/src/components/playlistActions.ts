@@ -6,6 +6,7 @@ import { promptDialog } from '../lib/prompt';
 import { confirmDialog } from '../lib/confirm';
 import type { Track } from '../types/music';
 import { t } from '../lib/i18n';
+import { playlistContext } from '../lib/playbackContext';
 
 export interface PlaylistMenuHooks {
   /** Called with the new name after a successful rename (e.g. to update the route). */
@@ -40,9 +41,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
               await actions.placeAutoTracks(t, hooks.beforeQueueId);
               if (actions.autoSessionToken() === epoch) hooks.onPlaced?.();
             } else {
-              actions.playFrom(t, 0, {
-                context: { id: `playlist:${name}`, kind: 'playlist', label: name },
-              });
+              actions.playFrom(t, 0, { context: playlistContext(name, t, state.librarySettings) });
             }
           }
         },
@@ -54,11 +53,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
         onSelect: () => {
           const t = playlistTracks(name);
           if (t.length) {
-            actions.playShuffled(t, {
-              id: `playlist:${name}`,
-              kind: 'playlist',
-              label: name,
-            });
+            actions.playShuffled(t, playlistContext(name, t, state.librarySettings));
           }
         },
       }] : []),

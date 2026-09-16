@@ -500,26 +500,24 @@ describe('Solid store library and playback resume', () => {
     expect(api.putPlaybackState).toHaveBeenCalledWith(expect.objectContaining({ track_id: null }), expect.anything());
   });
 
-  it('playNow inserts into the queue after the current track instead of replacing it', async () => {
+  it('playNow plays a song on its own: requests stay, the context it interrupts does not', async () => {
     const { actions, state } = await loadStore();
     const t3: Track = { id: 't3', title: 'Three', artist: 'Artist', youtube_id: 'yt333yt333y' };
+    const asked: Track = { id: 'asked', title: 'Asked', artist: 'Me' };
 
-    actions.playFrom([t1, t2], 0);
+    actions.playFrom([t1, t2], 0, { context: { id: 'album:record', kind: 'album', label: 'Record' } });
+    actions.enqueue(asked);
     actions.playNow(t3);
 
-    expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['t3', 'asked']);
+    expect(state.playback.queue.map((t) => t.queueLane)).toEqual(['context', 'manual']);
+    expect(state.playback.queue[0].queueContext?.kind).toBe('single');
     expect(state.playback.currentTrack?.id).toBe('t3');
 
     // Re-requesting the current occurrence is coalesced across source identity.
     actions.playNow({ id: 'yt333yt333y', title: 'Three', artist: 'Chan', source: 'preview' });
-    expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2']);
+    expect(state.playback.queue.map((t) => t.id)).toEqual(['t3', 'asked']);
     expect(state.playback.currentTrack?.id).toBe('t3');
-
-    // A future occurrence does not consume the existing context occurrence:
-    // explicit requests allow duplicates and remain a separate lane.
-    actions.playNow(t2);
-    expect(state.playback.queue.map((t) => t.id)).toEqual(['t1', 't3', 't2', 't2']);
-    expect(state.playback.currentTrack?.id).toBe('t2');
   });
 
   it('does not let an older library sync reinsert a track after optimistic delete', async () => {
@@ -1167,6 +1165,219 @@ describe('Playback queue lanes', () => {
     actions.next();
     expect(state.playback.queue.every((entry) => entry.queueLane === 'context')).toBe(true);
     expect(state.playback.currentTrack?.id).toBe('c0');
+  });
+});
+
+describe('Contextual queue', () => {
+  const album = { id: 'album:record', kind: 'album' as const, label: 'Record', destination: '/album/Record?artist=Band' };
+  /** A catalog song the context holds before it has been matched to a video. */
+  const unmatched = (title: string) => ({
+    id: `pending:${title}`,
+    title,
+    artist: 'Band',
+    source: 'preview' as const,
+    pendingResolve: { catalogItemId: `deezer:${title}`, artist: 'Band', title },
+  });
+  const matched = (title: string): Track => ({ id: `vid-${title}`, title, artist: 'Band', source: 'preview' });
+  const byTitle = (videos: Record<string, string | null>) =>
+    vi.fn(async ({ title }: { title: string }) => ({ video_id: title in videos ? videos[title] : `vid-${title}` }));
+
+  it('plays from the tapped song and matches only what comes next, in order', async () => {
+    const resolveCatalogItem = byTitle({});
+    const { actions, state, audioService, initStore, fireDeckEvent } = await loadStore({ resolveCatalogItem });
+    initStore();
+
+    actions.playFrom([unmatched('a'), matched('b'), unmatched('c'), unmatched('d')], 1, { context: album });
+    expect(state.playback.index).toBe(1);
+    expect(state.playback.currentTrack?.id).toBe('vid-b');
+    expect(resolveCatalogItem).not.toHaveBeenCalled();
+
+    fireDeckEvent('playing');
+    await flush();
+    expect(resolveCatalogItem.mock.calls.map(([body]) => body.title)).toEqual(['c', 'd']);
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(['pending:a', 'vid-b', 'vid-c', 'vid-d']);
+    expect(state.playback.queue.every((entry) => entry.queueContext?.destination === album.destination)).toBe(true);
+
+    actions.next();
+    expect(audioService.load).toHaveBeenLastCalledWith('/preview/vid-c', expect.any(Number));
+    // Going back reaches a song nobody matched yet: it is matched, then played.
+    actions.prev();
+    actions.prev();
+    await flush();
+    expect(state.playback.currentTrack?.id).toBe('vid-a');
+    expect(audioService.load).toHaveBeenLastCalledWith('/preview/vid-a', expect.any(Number));
+  });
+
+  it('names a song that is still being matched at once, and loads it when the match lands', async () => {
+    const match = deferred<{ video_id: string | null }>();
+    const resolveCatalogItem = vi.fn().mockReturnValue(match.promise);
+    const { actions, state, audioService } = await loadStore({ resolveCatalogItem });
+
+    actions.playFrom([t1, unmatched('c')], 0, { context: album });
+    audioService.load.mockClear();
+    actions.next();
+
+    expect(state.playback.currentTrack?.title).toBe('c');
+    expect(state.playback.phase).toBe('loading');
+    expect(audioService.pause).toHaveBeenCalled();
+    expect(audioService.load).not.toHaveBeenCalled();
+
+    match.resolve({ video_id: 'vid-c' });
+    await flush();
+    expect(state.playback.currentTrack?.id).toBe('vid-c');
+    expect(audioService.load).toHaveBeenCalledWith('/preview/vid-c', expect.any(Number));
+  });
+
+  it('skips a context song the engine cannot find, keeping the rest of the context', async () => {
+    const resolveCatalogItem = byTitle({ c: null });
+    const { actions, state, audioService, toastError } = await loadStore({ resolveCatalogItem });
+
+    actions.playFrom([t1, unmatched('c'), unmatched('d')], 0, { context: album });
+    actions.next();
+    await flush();
+
+    expect(toastError).toHaveBeenCalled();
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(['t1', 'vid-d']);
+    expect(state.playback.currentTrack?.id).toBe('vid-d');
+    expect(audioService.load).toHaveBeenLastCalledWith('/preview/vid-d', expect.any(Number));
+  });
+
+  it('lets an upcoming song that cannot be found leave without touching the one playing', async () => {
+    const resolveCatalogItem = byTitle({ c: null });
+    const { actions, state, initStore, fireDeckEvent } = await loadStore({ resolveCatalogItem });
+    initStore();
+
+    actions.playFrom([t1, unmatched('c'), unmatched('d')], 0, { context: album });
+    fireDeckEvent('playing');
+    await flush();
+
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(['t1', 'vid-d']);
+    expect(state.playback.index).toBe(0);
+    expect(state.playback.currentTrack?.id).toBe('t1');
+  });
+
+  it('removes the context: the song and the requests stay, Autoplay follows, a late match restores nothing', async () => {
+    const match = deferred<{ video_id: string | null }>();
+    const resolveCatalogItem = vi.fn().mockReturnValue(match.promise);
+    const relatedYouTube = vi.fn().mockResolvedValue(
+      Array.from({ length: 8 }, (_, index) => ({ id: `auto-${index}`, title: `Auto ${index}`, channel: 'Related' })),
+    );
+    const { actions, state, initStore, fireDeckEvent } = await loadStore({ resolveCatalogItem, relatedYouTube });
+    initStore();
+
+    actions.playFrom([t1, unmatched('c'), t2], 0, { context: album });
+    actions.enqueue({ id: 'asked', title: 'Asked', artist: 'Me' });
+    fireDeckEvent('playing');
+    await flush();
+    expect(resolveCatalogItem).toHaveBeenCalledTimes(1);
+
+    actions.removeContext();
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(['t1', 'asked']);
+    expect(state.playback.currentTrack?.id).toBe('t1');
+
+    match.resolve({ video_id: 'vid-c' });
+    await vi.waitFor(() =>
+      expect(state.playback.queue.some((entry) => entry.queueSource === 'autoplay')).toBe(true),
+    );
+    expect(state.playback.queue.slice(0, 2).map((entry) => entry.id)).toEqual(['t1', 'asked']);
+    expect(state.playback.queue.some((entry) => entry.id === 'vid-c')).toBe(false);
+    expect(state.playback.queue.some((entry) => entry.queueLane === 'context' && entry !== state.playback.queue[0])).toBe(false);
+  });
+
+  it('ends repeat-all with the context it was going round', async () => {
+    const { actions, state } = await loadStore();
+    actions.playFrom([t1, t2], 0, { context: album });
+    while (state.playback.repeat !== 'all') actions.cycleRepeat();
+
+    actions.removeContext();
+    expect(state.playback.repeat).toBe('off');
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(['t1']);
+  });
+
+  it('never interrupts a selection that is still being matched when the context goes', async () => {
+    const match = deferred<{ video_id: string | null }>();
+    const resolveCatalogItem = vi.fn().mockReturnValue(match.promise);
+    const { actions, state, audioService } = await loadStore({ resolveCatalogItem });
+
+    actions.playFrom([t1, unmatched('c'), unmatched('d')], 0, { context: album });
+    actions.next();
+    actions.removeContext();
+    expect(state.playback.queue.map((entry) => entry.title)).toEqual(['One', 'c']);
+
+    match.resolve({ video_id: 'vid-c' });
+    await flush();
+    // The match in flight for the playing selection was never abandoned.
+    expect(resolveCatalogItem).toHaveBeenCalledTimes(1);
+    expect(state.playback.currentTrack?.id).toBe('vid-c');
+    expect(audioService.load).toHaveBeenLastCalledWith('/preview/vid-c', expect.any(Number));
+  });
+
+  it('holds a selection paused while it is matched, and play loads the match', async () => {
+    const match = deferred<{ video_id: string | null }>();
+    const resolveCatalogItem = vi.fn().mockReturnValue(match.promise);
+    const { actions, state, audioService } = await loadStore({ resolveCatalogItem });
+
+    actions.playFrom([t1, unmatched('c')], 0, { context: album });
+    actions.next();
+    actions.pausePlayback();
+    audioService.load.mockClear();
+
+    match.resolve({ video_id: 'vid-c' });
+    await flush();
+    expect(state.playback.phase).toBe('paused');
+    expect(audioService.load).not.toHaveBeenCalled();
+
+    actions.resumePlayback();
+    expect(audioService.resume).not.toHaveBeenCalled();
+    expect(audioService.load).toHaveBeenCalledWith('/preview/vid-c', expect.any(Number));
+  });
+
+  it('forgets the old context when a new one is chosen', async () => {
+    const match = deferred<{ video_id: string | null }>();
+    const resolveCatalogItem = vi.fn().mockReturnValue(match.promise);
+    const { actions, state, initStore, fireDeckEvent } = await loadStore({ resolveCatalogItem });
+    initStore();
+
+    actions.playFrom([t1, unmatched('c')], 0, { context: album });
+    fireDeckEvent('playing');
+    await flush();
+    const signal = resolveCatalogItem.mock.calls[0][1] as AbortSignal;
+
+    actions.playFrom([t2], 0);
+    expect(signal.aborted).toBe(true);
+    match.resolve({ video_id: 'vid-c' });
+    await flush();
+    expect(state.playback.queue.map((entry) => entry.id)).toEqual(['t2']);
+  });
+
+  it('cues nothing for a restored song that was never matched, and matches it on play', async () => {
+    const pending = { ...unmatched('c'), queueId: 'q-c', queueLane: 'context', queueSource: 'album', queueContext: album };
+    const resolveCatalogItem = byTitle({});
+    const { actions, state, audioService } = await loadStore({
+      resolveCatalogItem,
+      getPlaybackState: vi.fn().mockResolvedValue({
+        device_id: 'dev1',
+        track_id: pending.id,
+        track: pending,
+        position_sec: 0,
+        is_playing: false,
+        updated_at: Date.now() / 1000,
+        session: {
+          v: 1, mode: 'now_playing', queue: [pending], index: 0, shuffle: false, repeat: 'off',
+          radio: { active: false, seedId: null }, auto: null,
+        },
+      }),
+    });
+
+    await actions.syncLibrary();
+    await actions.checkResume();
+    expect(state.playback.currentTrack?.title).toBe('c');
+    expect(state.playback.queue[0].queueContext?.destination).toBe(album.destination);
+    expect(audioService.prime).not.toHaveBeenCalled();
+
+    actions.resumePlayback();
+    await flush();
+    expect(audioService.load).toHaveBeenLastCalledWith('/preview/vid-c', expect.any(Number));
   });
 });
 

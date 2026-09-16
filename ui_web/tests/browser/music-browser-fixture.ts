@@ -104,3 +104,54 @@ export async function openMusicPlayer(page: Page) {
   await openMiniPlayer(page, /^NORMAL:/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
 }
+
+type FixtureTrack = (typeof TRACKS)[number];
+
+/**
+ * Hand this device a session to put back on boot: `current` paused, `requests`
+ * queued behind it, and `context` as what the library continues with.
+ *
+ * The same-device restore is the one path that lands a long request lane
+ * without tapping through a menu once per song — and a long request lane is
+ * what the queue has to scroll now that a context is a card rather than rows.
+ * Register it after the engine mock: the later route wins.
+ */
+export async function restoreQueueSession(
+  page: Page,
+  opts: { current: FixtureTrack; requests: FixtureTrack[]; context?: FixtureTrack[] },
+): Promise<void> {
+  const library = { id: 'library', kind: 'library', label: 'Tu biblioteca', destination: '/' };
+  const contextEntry = (track: FixtureTrack, index: number) => ({
+    ...track, queueId: `q-context-${track.id}`, queueLane: 'context', queueSource: 'library',
+    queueContext: library, queueContextIndex: index,
+  });
+  const queue = [
+    contextEntry(opts.current, 0),
+    ...opts.requests.map((track) => ({
+      ...track, queueId: `q-request-${track.id}`, queueLane: 'manual', queueSource: 'add_to_queue',
+    })),
+    ...(opts.context ?? []).map((track, index) => contextEntry(track, index + 1)),
+  ];
+  await page.addInitScript(() => localStorage.setItem('device_id', 'queue-fixture-device'));
+  await page.route((url) => url.pathname === '/api/playback/state', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fulfill({ json: { status: 'ok' } });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        device_id: 'queue-fixture-device',
+        device_name: 'Soundsible Web',
+        track_id: opts.current.id,
+        track: opts.current,
+        position_sec: 0,
+        is_playing: false,
+        updated_at: Date.now() / 1000,
+        session: {
+          v: 1, mode: 'now_playing', queue, index: 0, shuffle: false, repeat: 'off',
+          radio: { active: false, seedId: null }, auto: null,
+        },
+      },
+    });
+  });
+}

@@ -53,9 +53,11 @@ import {
   createQueueEntry,
   defaultContext,
   futureEntries,
+  isPendingEntry,
   manualInsertIndex,
   sameQueueSection,
   contextSource,
+  type ContextTrack,
   type PlaybackContextDescriptor,
   type PlaybackQueueEntry,
   type QueueSource,
@@ -200,6 +202,7 @@ function trackUrl(track: Track): string {
 /** A local file is already station-owned. An internet preview is viable for an
  * unattended boundary only after the engine confirms a complete disk copy. */
 function trackPrepared(track: Track): boolean {
+  if (isPendingEntry(track)) return false;
   if (track.source !== 'preview' || isPodcastTrack(track)) return true;
   const videoId = playbackYoutubeId(track);
   return !!videoId && previewPreparationState?.(videoId) === 'ready';
@@ -473,9 +476,13 @@ function repeatCycle(queue: PlaybackQueueEntry[]): PlaybackQueueEntry[] {
  * knowable — and just as important to prepare — as a linear context. */
 function prefetchUpcoming(): void {
   const pb = state.playback;
+  matchUpcomingContext();
   // Acquisition may start here, but staging waits for the current track's
   // `playing` event and for the engine's complete-file readiness verdict.
-  const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5);
+  // A song still waiting on its catalog match has no video to prepare yet.
+  const unmatched = new Set(pb.queue.filter(isPendingEntry).map((entry) => entry.id));
+  const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5)
+    .filter((id) => !unmatched.has(id));
   // Every unattended context needs alternatives, not one optimistic URL. The
   // download lane is serial, so this builds a small verified runway in order.
   const downloadCount = 3;
@@ -527,6 +534,12 @@ function stageNext(): void {
     audioService.clearStaged();
     return;
   }
+  if (isPendingEntry(next)) {
+    stagedEntry = null;
+    audioService.clearStaged();
+    void matchContextEntry(next.queueId).then((outcome) => afterContextMatch(next.queueId, outcome));
+    return;
+  }
   if (!trackPrepared(next)) {
     stagedEntry = null;
     audioService.clearStaged();
@@ -557,6 +570,175 @@ function cancelPendingRadio(): void {
 }
 
 /**
+ * Catalog songs in the context, matched shortly before they are needed.
+ *
+ * A few ahead of the current entry, in play order, so the preview behind each
+ * one can then be prepared like any other. Every match belongs to the
+ * occurrence it was asked for: choosing another context — or removing this
+ * one — abandons what is in flight, and an answer for an occurrence that has
+ * left the queue restores nothing.
+ */
+const CONTEXT_MATCH_AHEAD = 3;
+type ContextMatchOutcome = 'resolved' | 'unavailable' | 'gone';
+const contextMatches = new Map<string, { task: Promise<ContextMatchOutcome>; controller: AbortController }>();
+
+/** Abandon catalog matches, except for the occurrences `keep` names. */
+function abandonContextMatches(keep: (queueId: string) => boolean = () => false): void {
+  for (const [queueId, match] of contextMatches) {
+    if (keep(queueId)) continue;
+    match.controller.abort();
+    contextMatches.delete(queueId);
+  }
+}
+
+function matchContextEntry(queueId: string): Promise<ContextMatchOutcome> {
+  const inFlight = contextMatches.get(queueId);
+  if (inFlight) return inFlight.task;
+  const reference = state.playback.queue.find((entry) => entry.queueId === queueId)?.pendingResolve;
+  if (!reference) {
+    return Promise.resolve(state.playback.queue.some((entry) => entry.queueId === queueId) ? 'resolved' : 'gone');
+  }
+  const controller = new AbortController();
+  const { signal } = controller;
+  const task = Promise.resolve()
+    .then(() => api.resolveCatalogItem(
+      { artist: reference.artist, title: reference.title, duration: reference.duration },
+      signal,
+    ))
+    .then((resolved) => resolved?.video_id || null, () => null)
+    .then((videoId): ContextMatchOutcome => {
+      const at = state.playback.queue.findIndex((entry) => entry.queueId === queueId);
+      if (signal.aborted || at === -1) return 'gone';
+      if (!videoId) return 'unavailable';
+      actions.linkCatalogItem(reference.catalogItemId, videoId);
+      const entry = state.playback.queue[at];
+      const matched: PlaybackQueueEntry = { ...entry, id: videoId, pendingResolve: undefined };
+      const current = state.playback.queue[state.playback.index]?.queueId === queueId;
+      setState('playback', {
+        queue: state.playback.queue.map((row) => (row.queueId === queueId ? matched : row)),
+        ...(current ? { currentTrack: matched } : {}),
+      });
+      return 'resolved';
+    })
+    .finally(() => {
+      if (contextMatches.get(queueId)?.task === task) contextMatches.delete(queueId);
+    });
+  contextMatches.set(queueId, { task, controller });
+  return task;
+}
+
+/** Start matching the context songs the listener is about to reach. */
+function matchUpcomingContext(): void {
+  const pb = state.playback;
+  if (state.autoMode.active || pb.index < 0) return;
+  const ahead = pb.queue.slice(pb.index + 1, pb.index + 1 + CONTEXT_MATCH_AHEAD);
+  if (ahead.length < CONTEXT_MATCH_AHEAD && pb.repeat === 'all') {
+    ahead.push(...repeatCycle(pb.queue).slice(0, CONTEXT_MATCH_AHEAD - ahead.length));
+  }
+  for (const entry of ahead) {
+    if (!isPendingEntry(entry) || contextMatches.has(entry.queueId)) continue;
+    void matchContextEntry(entry.queueId).then((outcome) => afterContextMatch(entry.queueId, outcome));
+  }
+}
+
+/**
+ * Carry on from a match that was made ahead of time.
+ *
+ * A match is new runway: it is prepared, cued, and — if the music ran out
+ * waiting for exactly this — started. A song the engine could not find leaves
+ * the queue and the rest of the context closes up behind it; the one that is
+ * playing is never taken out from under the listener.
+ */
+function afterContextMatch(queueId: string, outcome: ContextMatchOutcome): void {
+  if (outcome === 'gone') return;
+  if (outcome === 'unavailable') {
+    const pb = state.playback;
+    const at = pb.queue.findIndex((entry) => entry.queueId === queueId);
+    if (at === -1 || at === pb.index) return;
+    const position = at - pb.index;
+    setState('playback', {
+      queue: pb.queue.filter((entry) => entry.queueId !== queueId),
+      index: at < pb.index ? pb.index - 1 : pb.index,
+    });
+    emitPlaybackEvent('ui_context_unmatched', { position });
+    void ensureAutoplay();
+  }
+  prefetchUpcoming();
+  stageNext();
+  resumeFromStarved();
+}
+
+/**
+ * A selection whose catalog match has not come back yet.
+ *
+ * The deck is not holding its stream, so the transport shows the song loading
+ * and anything that would resume "the current track" has to load it instead.
+ * `paused` is the listener pausing while it waits: the match still lands in the
+ * queue, but it does not start the song.
+ */
+let unmatchedSelection: { queueId: string; paused: boolean } | null = null;
+
+type LoadOptions = { restart?: boolean; trigger?: PlaybackTrigger; freshDeck?: boolean };
+
+/**
+ * Select a context song that still has to be matched, then load it.
+ *
+ * Reached by skipping ahead of the matches made in advance, or by going back
+ * to a song nobody needed yet. The transport names the selection at once and
+ * the outgoing song stops, so what is heard never disagrees with what is
+ * shown. A song the engine cannot find is skipped like any other unplayable
+ * one, with the rest of the context kept.
+ */
+function loadUnmatchedIndex(i: number, opts: LoadOptions): void {
+  const entry = state.playback.queue[i];
+  if (!entry) return;
+  userPlaybackStartedThisSession = true;
+  beginLoad();
+  cancelActiveAttempt('superseded');
+  runWhenAudible = null;
+  const selection = { queueId: entry.queueId, paused: false };
+  unmatchedSelection = selection;
+  setState('playback', {
+    currentTrack: entry,
+    index: i,
+    isPlaying: true,
+    isLoading: true,
+    loadError: false,
+    needsGesture: false,
+    phase: 'loading',
+    previewPreparation: null,
+    currentTime: 0,
+    duration: entry.duration ?? 0,
+  });
+  updateMediaSession(entry);
+  audioService.pause();
+  void matchContextEntry(entry.queueId).then((outcome) => {
+    if (unmatchedSelection !== selection || selection.paused) return;
+    const pb = state.playback;
+    const at = pb.queue.findIndex((row) => row.queueId === selection.queueId);
+    if (at === -1 || at !== pb.index) {
+      unmatchedSelection = null;
+      return;
+    }
+    if (outcome !== 'unavailable') {
+      loadIndex(at, { ...opts, restart: true });
+      return;
+    }
+    unmatchedSelection = null;
+    consecutiveLoadFailures += 1;
+    emitPlaybackEvent('ui_context_unmatched', { position: 0 });
+    if (at < pb.queue.length - 1 && consecutiveLoadFailures <= MAX_CONSECUTIVE_SKIPS) {
+      toast.error(tr('toast.trackUnavailableSkipping'));
+      setState('playback', 'queue', pb.queue.filter((row) => row.queueId !== selection.queueId));
+      loadIndex(at, { ...opts, restart: true });
+      return;
+    }
+    toast.error(tr('toast.trackUnavailable'));
+    setState('playback', { isPlaying: false, isLoading: false, loadError: true, phase: 'failed' });
+  });
+}
+
+/**
  * Keep a small final lane of similar music warm. The shared generated-queue
  * coordinator owns cancellation and asks the same server planner as Radio and
  * Auto Mode; this gate only decides when invisible Autoplay is allowed to run.
@@ -567,6 +749,7 @@ async function ensureAutoplay(force = false): Promise<boolean> {
   if (
     !pb.autoplayEnabled ||
     !current ||
+    isPendingEntry(current) ||
     isPodcastTrack(current) ||
     pb.radioMode ||
     state.autoMode.active ||
@@ -585,7 +768,8 @@ async function ensureAutoplay(force = false): Promise<boolean> {
   if (!force && deterministic.length > AUTOPLAY_PREPARE_THRESHOLD) return false;
   if (!force && generated.length >= AUTOPLAY_REFILL_THRESHOLD) return false;
 
-  const seed = generated.at(-1) ?? deterministic.at(-1) ?? current;
+  // A context song still waiting on its match has nothing to seed a plan with.
+  const seed = generated.at(-1) ?? deterministic.filter((entry) => !isPendingEntry(entry)).at(-1) ?? current;
   if (generated.length >= AUTOPLAY_TARGET) return true;
   return ensureGeneratedQueue().ensureAutoplay(seed, force);
 }
@@ -624,18 +808,21 @@ function osSeekStep(direction: 'forward' | 'backward'): number {
  * costs the engine a yt-dlp resolution and a proxied stream, and the first tap
  * has already paid for both. Pass `restart` for the deliberate replay.
  */
-function loadIndex(
-  i: number,
-  opts: { restart?: boolean; trigger?: PlaybackTrigger; freshDeck?: boolean } = {},
-): void {
+function loadIndex(i: number, opts: LoadOptions = {}): void {
   const track = state.playback.queue[i];
   if (!track) return;
   const pb = state.playback;
-  if (!opts.restart && !pb.loadError && i === pb.index && pb.currentTrack?.id === track.id) {
+  const deckHoldsIt = unmatchedSelection?.queueId !== track.queueId;
+  if (!opts.restart && !pb.loadError && deckHoldsIt && i === pb.index && pb.currentTrack?.id === track.id) {
     if (pb.isLoading || pb.isPlaying) return; // already on its way / already sounding
     void audioService.resume().catch(() => {});
     return;
   }
+  if (isPendingEntry(track)) {
+    loadUnmatchedIndex(i, opts);
+    return;
+  }
+  unmatchedSelection = null;
   if (state.autoMode.active) {
     if (!state.autoMode.sources.length) setState('autoMode', 'sources', [{ id: randomId(), label: track.title, tracks: [track], activation: 1 }]);
     const identity = queueIdentity(track);
@@ -1061,6 +1248,8 @@ function applySessionSnapshot(
   if (!entry) return null;
 
   cancelActiveAttempt('session_restored');
+  unmatchedSelection = null;
+  abandonContextMatches();
   // Auto's own teardown rewrites the queue, so it has to run before the
   // restored one is written rather than over the top of it.
   if (state.autoMode.active) actions.exitAutoMode();
@@ -1146,7 +1335,7 @@ function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
   const session = sessionFor(remote);
   const restored = session ? applySessionSnapshot(session, pos) : null;
   if (restored) {
-    audioService.prime(trackUrl(restored), pos, levelFor(restored));
+    primeRestored(restored, pos);
     return;
   }
   setState('playback', {
@@ -1165,7 +1354,22 @@ function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
     index: 0,
   });
   updateMediaSession(track);
-  audioService.prime(trackUrl(track), pos, levelFor(track));
+  primeRestored(state.playback.queue[0], pos);
+}
+
+/**
+ * Cue a restored session's song on the deck, paused.
+ *
+ * A song that was still waiting on its catalog match when the session was
+ * published has no stream to cue: it is left unmatched, and pressing play is
+ * what matches and loads it.
+ */
+function primeRestored(entry: PlaybackQueueEntry, position: number): void {
+  if (isPendingEntry(entry)) {
+    unmatchedSelection = { queueId: entry.queueId, paused: true };
+    return;
+  }
+  audioService.prime(trackUrl(entry), position, levelFor(entry));
 }
 
 /**
@@ -2312,6 +2516,7 @@ export const actions = {
     };
     discardFutureAutoplay();
     cancelPendingRadio();
+    abandonContextMatches();
     // Take the wheel while preserving explicit queue occurrences.
     const prefix = state.playback.queue.slice(0, state.playback.index + 1);
     const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
@@ -2944,7 +3149,7 @@ export const actions = {
    * flags are reset — `playTrack`/`playShuffled`/external callers therefore
    * cancel any active radio session. */
   playFrom(
-    tracks: Track[],
+    tracks: ContextTrack[],
     i: number,
     opts?: {
       radio?: boolean;
@@ -2965,6 +3170,13 @@ export const actions = {
         mixAutoTrackNow(selected);
       }
       return;
+    }
+    // A new context owns the continuation from here: matches asked for the old
+    // one, and whatever the idle deck was holding for it, no longer apply.
+    abandonContextMatches();
+    if (stagedEntry) {
+      stagedEntry = null;
+      audioService.clearStaged();
     }
     const context = opts?.context ?? defaultContext(tracks);
     const source: QueueSource = isRadio ? 'radio' : contextSource(context.kind);
@@ -3111,6 +3323,12 @@ export const actions = {
       resumeFromStarved();
       return;
     }
+    // Paused before its match came back: the deck is still holding whatever
+    // played before it, so carrying on means loading this one.
+    if (unmatchedSelection && unmatchedSelection.queueId === pb.queue[pb.index]?.queueId) {
+      loadIndex(pb.index, { restart: true, trigger: 'resume' });
+      return;
+    }
     // An Auto session with nobody planning for it: the workspace was entered
     // before there was anything to plan from, or it was restored from another
     // device, which brings the route and the sources but no planner behind
@@ -3135,10 +3353,13 @@ export const actions = {
     beginLoad();
     vibrate();
     if (pb.loadError) return;
+    if (unmatchedSelection) unmatchedSelection.paused = true;
     if (pb.phase === 'loading' || pb.phase === 'recovering') {
       cancelActiveAttempt('user_pause');
       setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
-      const previewId = pb.currentTrack.source === 'preview' ? playbackYoutubeId(pb.currentTrack) : null;
+      const previewId = pb.currentTrack.source === 'preview' && !isPendingEntry(pb.currentTrack)
+        ? playbackYoutubeId(pb.currentTrack)
+        : null;
       if (previewId) void api.cancelPreview(previewId).catch(() => {});
     }
     audioService.pause(origin);
@@ -3147,10 +3368,12 @@ export const actions = {
   /** End this playback session and release both decks, including pending work. */
   dismissPlayback(): void {
     const track = state.playback.currentTrack;
-    const previewId = track?.source === 'preview' ? playbackYoutubeId(track) : null;
+    const previewId = track?.source === 'preview' && !isPendingEntry(track) ? playbackYoutubeId(track) : null;
     userPlaybackStartedThisSession = true;
     beginLoad(); // Late load failures must not revive the dismissed session.
     cancelActiveAttempt('user_dismiss');
+    unmatchedSelection = null;
+    abandonContextMatches();
     commitSeq += 1; // Invalidate callbacks from an in-flight handoff.
     actions.exitAutoMode();
     generatedQueue?.stop();
@@ -3268,19 +3491,11 @@ export const actions = {
       else mixAutoTrackNow(track);
       return;
     }
-    // Explicitly requested a different track: cancel generators but preserve
-    // the manual/context runway behind the interruption.
-    discardFutureAutoplay();
-    cancelPendingRadio();
-    setState('playback', {
-      radioMode: false,
-      radioLoading: false,
-      radioSeedId: null,
-    });
-    const insertAt = pb.index + 1;
-    const entry = createQueueEntry(track, 'manual', 'play_next');
-    setState('playback', 'queue', (q) => [...q.slice(0, insertAt), entry, ...q.slice(insertAt)]);
-    loadIndex(insertAt);
+    // Playing a song on its own is choosing what comes after it: the context
+    // it interrupts does not resume, the listener's requests still play first,
+    // and Autoplay follows when it is on. Asking for a song to be *added* is
+    // `enqueue` / `playNext`, which keep the context.
+    actions.playTrack(track);
   },
 
   /** Insert a track right after the current one (starts playback if idle). */
@@ -3444,6 +3659,38 @@ export const actions = {
     actions.clearManualQueue();
   },
 
+  /**
+   * Stop continuing the context.
+   *
+   * What is left of it leaves the queue; the song that is playing and every
+   * request stay, and Autoplay — when it is on — is what follows. Repeat-all
+   * was a promise to go round this context again, so it goes with it. Matches
+   * and the idle deck prepared for the context are abandoned with it, and a
+   * late answer for one of its songs finds nothing to restore.
+   */
+  removeContext(): void {
+    if (state.autoMode.active) return;
+    const pb = state.playback;
+    const current = pb.queue[pb.index];
+    const removed = new Set(
+      futureEntries(pb.queue, pb.index, 'context').map((entry) => entry.queueId),
+    );
+    const cycling = pb.repeat === 'all';
+    if (removed.size === 0 && !cycling) return;
+    abandonContextMatches((queueId) => queueId === current?.queueId);
+    if (stagedEntry && removed.has(stagedEntry.queueId)) {
+      stagedEntry = null;
+      audioService.clearStaged();
+    }
+    setState('playback', {
+      queue: pb.queue.filter((entry) => !removed.has(entry.queueId)),
+      ...(cycling ? { repeat: 'off' as const } : {}),
+    });
+    prefetchUpcoming();
+    if (pb.isPlaying && !pb.isLoading) stageNext();
+    queueMicrotask(() => void ensureAutoplay());
+  },
+
   removeQueueEntry(queueId: string): void {
     const index = state.playback.queue.findIndex((entry) => entry.queueId === queueId);
     if (index !== -1) actions.removeFromQueue(index);
@@ -3499,6 +3746,7 @@ export const actions = {
       state.playback.currentTrack?.id === seed.id && state.playback.isPlaying;
 
     if (isCurrentPlaying) {
+      abandonContextMatches();
       const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
       setState('playback', {
         queue: [
@@ -4523,6 +4771,8 @@ export function initStore(): void {
     pushPlaybackState();
   });
   a.addEventListener('pause', () => {
+    // The outgoing song stopping for a selection that is still being matched.
+    if (unmatchedSelection && !unmatchedSelection.paused) return;
     beginLoad();
     clearStallTimer();
     if (state.playback.phase === 'loading' || state.playback.phase === 'recovering') cancelActiveAttempt('program_pause');

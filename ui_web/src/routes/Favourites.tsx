@@ -13,8 +13,9 @@ import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
 import { EmptyState } from '../components/EmptyState';
 import { CollectionActions } from '../components/CollectionActions';
+import { favouritesContext } from '../lib/playbackContext';
 
-const context = () => ({ id: 'favourites', kind: 'favourites' as const, label: t('favourites.title') });
+const context = () => favouritesContext(t('favourites.title'));
 
 /**
  * The songs you marked out, in the order you marked them.

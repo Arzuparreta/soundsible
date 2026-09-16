@@ -39,6 +39,7 @@ import styles from './Library.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
+import { libraryContext } from '../lib/playbackContext';
 
 /** Library view: songs (sortable, virtualized) or artists browser. */
 export default function Library() {
@@ -432,7 +433,7 @@ export default function Library() {
           <Match when={true}>
             <TrackList
               tracks={sorted()}
-              context={{ id: 'library', kind: 'library', label: t('library.title') }}
+              context={libraryContext(t('library.title'))}
               loading={state.loading}
               empty={emptyState(t('library.emptyLibrary'))}
             />

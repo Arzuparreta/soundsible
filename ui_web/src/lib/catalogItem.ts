@@ -6,7 +6,7 @@ import { t } from './i18n';
 import { actions, isPlayingItem, state } from '../stores';
 import { catalogItemKeys } from './playbackIdentity';
 import type { CatalogItem, Track } from '../types/music';
-import type { PlaybackContextDescriptor } from './playbackQueue';
+import type { ContextTrack, PlaybackContextDescriptor } from './playbackQueue';
 
 /** Artist name for a catalog row, wherever the source put it. */
 export function itemArtist(item: CatalogItem): string {
@@ -82,9 +82,12 @@ export function cancelCatalogResolve(): void {
  * - **Visible.** `resolvingItemId` marks the row, so the wait shows up under
  *   the finger instead of as a toast.
  *
- * With `queue`, the row's siblings become the rest of the playback queue (the
- * resolved track is *prepended* rather than written over index 0, which would
- * evict an owned track).
+ * With `queue`, the row plays from its own place in it and the whole of the
+ * queue becomes the context, in its order: the rows before it are what
+ * "previous" goes back to, the rows after it are what follows. Rows that still
+ * need matching keep their place as references the player matches shortly
+ * before it reaches them — only the row that was tapped is matched up front.
+ * Without `queue` the row is a selection of its own.
  */
 export async function playCatalogItem(
   item: CatalogItem,
@@ -94,15 +97,18 @@ export async function playCatalogItem(
   const artist = itemArtist(item);
   if (!artist || !item.title) return;
 
+  const play = (track: Track) => {
+    if (!queue) {
+      actions.playTrack(track);
+      return;
+    }
+    const { tracks, index } = catalogContext(queue, item, track);
+    actions.playFrom(tracks, index, { context });
+  };
+
   const existing = itemToTrack(item);
   if (existing) {
-    if (queue) {
-      const tracks = queue.map(itemToTrack).filter((tr): tr is Track => !!tr);
-      if (tracks.length) actions.playFrom(tracks, 0, { context });
-      else actions.playTrack(existing);
-    } else {
-      actions.playTrack(existing);
-    }
+    play(existing);
     return;
   }
 
@@ -115,21 +121,71 @@ export async function playCatalogItem(
     const track = await resolveCatalogTrack(item, signal);
     if (signal.aborted) return;
     if (!track) throw new Error('not-found');
-    if (queue) {
-      const rest = queue
-        .filter((q) => q !== item)
-        .map(itemToTrack)
-        .filter((tr): tr is Track => !!tr);
-      actions.playFrom([track, ...rest], 0, { context });
-    } else {
-      actions.playTrack(track);
-    }
+    play(track);
   } catch (err) {
     if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) return;
     toast.error(t('search.noPreview'));
   } finally {
     if (!signal.aborted) setResolvingItemId(null);
   }
+}
+
+/**
+ * A catalog row as a context song: playable when it already is, otherwise a
+ * reference in its place that the player matches before reaching it. Rows that
+ * name no song at all — no artist, no title — cannot become either.
+ */
+export function catalogContextTrack(item: CatalogItem): ContextTrack | null {
+  const playable = itemToTrack(item);
+  if (playable) return playable;
+  const artist = itemArtist(item);
+  if (!artist || !item.title) return null;
+  const music = catalogMusic(item);
+  return {
+    id: `pending:${item.id}`,
+    title: item.title,
+    artist,
+    album: item.album,
+    artists: item.raw?.artists,
+    album_artist: item.raw?.album_artist,
+    deezer_artist_id: music.deezerArtistId,
+    deezer_album_id: music.deezerAlbumId,
+    duration: item.duration,
+    cover: item.cover,
+    source: 'preview',
+    originKeys: catalogItemKeys(item),
+    recommendation: item.raw?.recommendation,
+    pendingResolve: { catalogItemId: item.id, artist, title: item.title, duration: item.duration },
+  };
+}
+
+/**
+ * The context a tapped catalog row plays in, and where in it the row sits.
+ *
+ * Found by reference first — the surfaces hand over the very row from the list
+ * they rendered — and by id after that. A row that is not in the list at all
+ * still plays, first, ahead of the list.
+ */
+export function catalogContext(
+  queue: CatalogItem[],
+  item: CatalogItem,
+  track: Track,
+): { tracks: ContextTrack[]; index: number } {
+  let position = queue.indexOf(item);
+  if (position === -1) position = queue.findIndex((row) => row.id === item.id);
+  const tracks: ContextTrack[] = [];
+  let index = 0;
+  if (position === -1) tracks.push(track);
+  queue.forEach((row, rowIndex) => {
+    if (rowIndex === position) {
+      index = tracks.length;
+      tracks.push(track);
+      return;
+    }
+    const song = catalogContextTrack(row);
+    if (song) tracks.push(song);
+  });
+  return { tracks, index };
 }
 
 /** One resolution path for individual and collection actions in every surface. */

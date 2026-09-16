@@ -46,6 +46,7 @@ import { resolveCatalogTrack, catalogPreviewId, itemArtist, itemToTrack, playCat
 import { writeAutoTrackTransfer } from '../lib/autoMusicTransfer';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
+import { libraryContext, playlistContext } from '../lib/playbackContext';
 import { prefetchPreviews } from '../lib/prefetch';
 import { isPodcastTrack } from '../lib/track';
 import { pickPlaylistCoverTrack } from '../lib/playlists';
@@ -892,7 +893,7 @@ function LibraryView(props: {
             const row = track();
             return row
               ? props.renderTrack(row, () =>
-                  actions.playFrom(props.tracks, index, { context: { id: 'library', kind: 'library', label: t('nav.library') } }),
+                  actions.playFrom(props.tracks, index, { context: libraryContext(t('nav.library')) }),
                 )
               : null;
           }}
@@ -934,7 +935,12 @@ function LibraryArtistView(props: {
           const row = track();
           return row
             ? props.renderTrack(row, () =>
-                actions.playFrom(tracks(), index, { context: { id: `artist:${props.name}`, kind: 'artist', label: props.name } }),
+                actions.playFrom(tracks(), index, { context: {
+                  id: `artist:${props.name}`,
+                  kind: 'artist',
+                  label: props.name,
+                  destination: artistPath(props.name, { view: 'library', artistId: props.artistId }),
+                } }),
               )
             : null;
         }}
@@ -953,7 +959,12 @@ function LibraryAlbumView(props: {
   const tracks = createMemo(() => tracksByIds(album()?.track_ids ?? []));
   return <Show when={!album.loading} fallback={<SkeletonRows count={8} />}>
     <TrackCollectionView title={props.view.name} tracks={tracks()} empty={t('album.noCatalogData')}
-      context={{ id: `album:${props.view.albumId}`, kind: 'album', label: props.view.name }} onBack={props.onBack}
+      context={{
+        id: `album:${props.view.albumId}`,
+        kind: 'album',
+        label: props.view.name,
+        destination: albumPath(props.view.name, props.view.artist, { view: 'library', albumId: props.view.albumId }),
+      }} onBack={props.onBack}
       renderTrack={props.renderTrack} showPlayAll={!props.inAuto} onUse={props.inAuto ? (rows) => actions.addAutoSource(rows, props.view.name) : undefined} />
   </Show>;
 }
@@ -981,11 +992,9 @@ function LocalSearchView(props: {
       <For each={props.results}>
         {(result) => result.kind === 'artist'
           ? <NavigationRow title={result.artist.name} destination={artistPath(result.artist.name, { view: "library", artistId: result.artist.id })} subtitle={t('library.artistTrackCount', { count: result.artist.count })} cover={coverUrl(result.artist.coverId, 'thumb')} round onClick={() => props.onArtist(result.artist.name)} />
-          : props.renderTrack(result.track, () => actions.playFrom(
-              tracks(),
-              Math.max(0, tracks().findIndex((track) => track.id === result.track.id)),
-              { context: { id: 'library-search', kind: 'search', label: t('library.searchLibrary') } },
-            ))}
+          // A search result is a song picked on its own: the rest of the results
+          // do not follow it.
+          : props.renderTrack(result.track, () => actions.playNow(result.track))}
       </For>
       <div class={styles.searchEverywhere}>
         <Show when={props.results.length === 0 && !props.albums.length && !props.playlists.length}>
@@ -1051,7 +1060,7 @@ function PlaylistView(props: {
       title={props.name}
       tracks={tracks()}
       empty={t('playlistDetail.empty')}
-      context={{ id: `playlist:${props.name}`, kind: 'playlist', label: props.name }}
+      context={playlistContext(props.name, tracks(), state.librarySettings)}
       onBack={props.onBack}
       renderTrack={props.renderTrack}
       showPlayAll={props.showPlayAll}
@@ -1213,7 +1222,13 @@ function CatalogArtistView(props: {
     ([name, id]) => api.getArtistProfile(name, id),
   );
   const play = (item: CatalogItem, queue: CatalogItem[]) =>
-    void playCatalogItem(item, queue, { id: `artist:${props.view.name}`, kind: 'artist', label: props.view.name });
+    void playCatalogItem(item, queue, {
+      id: `artist:${props.view.name}`,
+      kind: 'artist',
+      label: props.view.name,
+      cover: profile()?.metadata?.picture || undefined,
+      destination: artistPath(props.view.name, { view: 'discover', deezerId: props.view.deezerId }),
+    });
   return (
     <div class={styles.body} data-browser-body>
       <ViewHeader title={props.view.name} onBack={props.onBack}>
@@ -1268,7 +1283,13 @@ function CatalogAlbumView(props: {
     ([name, artist, id]) => api.getAlbumProfile(name, artist, id),
   );
   const play = (item: CatalogItem, queue: CatalogItem[]) =>
-    void playCatalogItem(item, queue, { id: `album:${props.view.name}`, kind: 'album', label: props.view.name });
+    void playCatalogItem(item, queue, {
+      id: `album:${props.view.name}`,
+      kind: 'album',
+      label: props.view.name,
+      cover: profile()?.cover || undefined,
+      destination: albumPath(props.view.name, props.view.artist, { view: 'discover', deezerId: props.view.deezerId }),
+    });
   return (
     <div class={styles.body} data-browser-body>
       <ViewHeader title={props.view.name} meta={<ArtistLinks music={{ artist: props.view.artist, view: "discover" }} />} onBack={props.onBack}>

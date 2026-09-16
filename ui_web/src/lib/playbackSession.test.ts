@@ -239,3 +239,35 @@ it('persists the direction and exploration without promoting legacy heard reques
   expect(migrated.auto?.heard).toEqual(snapshot.auto?.heard);
   expect(migrated.queue).toEqual(snapshot.queue);
 });
+
+describe('context continuation in a session', () => {
+  it('carries the context card and the songs still waiting on a match, and reads older sessions alike', () => {
+    const album = {
+      id: 'album:record', kind: 'album' as const, label: 'Record',
+      cover: '/cover/a', destination: '/album/Record?artist=Band&view=discover',
+    };
+    const queue = [
+      entry('a', { queueLane: 'context', queueSource: 'album', queueContext: album, queueContextIndex: 0 }),
+      entry('b', { queueLane: 'manual', queueSource: 'add_to_queue' }),
+      entry('pending:c', {
+        queueLane: 'context', queueSource: 'album', queueContext: album, queueContextIndex: 1,
+        source: 'preview',
+        pendingResolve: { catalogItemId: 'deezer:c', artist: 'Band', title: 'C' },
+      }),
+    ];
+    const snapshot = buildPlaybackSession(input({ queue, index: 0 }))!;
+    const restored = readPlaybackSession(JSON.parse(JSON.stringify(snapshot)))!;
+    expect(restored.queue[2].queueContext).toEqual(album);
+    expect(restored.queue[2].pendingResolve).toEqual({ catalogItemId: 'deezer:c', artist: 'Band', title: 'C' });
+    expect(restored.index).toBe(0);
+
+    // A session from before contexts had cards still reads: the card works its
+    // page out from what the context does carry.
+    const legacy = JSON.parse(JSON.stringify(snapshot));
+    for (const row of legacy.queue) {
+      if (row.queueContext) row.queueContext = { id: 'album:record', kind: 'album', label: 'Record' };
+    }
+    expect(readPlaybackSession(legacy)?.queue.map((row) => row.queueContext?.label))
+      .toEqual(['Record', undefined, 'Record']);
+  });
+});

@@ -10,9 +10,10 @@ import { trackCoverUrl } from '../lib/media';
 import { trackCount } from '../lib/format';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
-import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
+import { albumPath, artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { AlbumProfile, CatalogItem, Track } from '../types/music';
+import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Album.module.css';
@@ -104,8 +105,25 @@ export default function Album() {
     resolveViewMode({ urlView: viewParams().view, override: viewOverride(), canToggle: showToggle() }),
   );
 
+  /**
+   * This record as a context, for the tab it is played from. The queue's card
+   * leads back here, to the same tab — the library copy and the catalog
+   * listing are not the same list of songs.
+   */
+  const albumContext = (mode: ViewMode = view()): PlaybackContextDescriptor => ({
+    id: `album:${title()}`,
+    kind: 'album',
+    label: title(),
+    cover: profile()?.cover || undefined,
+    destination: albumPath(title(), artistName(), {
+      view: mode,
+      albumId: mode === 'library' ? viewParams().albumId : undefined,
+      deezerId: viewParams().deezerId,
+    }),
+  });
+
   const playAll = () => {
-    const context = { id: `album:${title()}`, kind: 'album' as const, label: title() };
+    const context = albumContext();
     if (state.autoMode.active) {
       if (view() === 'library') void actions.placeAutoTracks(libraryTrackList());
       else void useCatalogCollection(tracklist(), title(), 'request');
@@ -122,7 +140,7 @@ export default function Album() {
   };
 
   const shuffle = () => {
-    const context = { id: `album:${title()}`, kind: 'album' as const, label: title() };
+    const context = albumContext();
     if (state.autoMode.active) {
       if (view() === 'library') void actions.placeAutoTracks(libraryTrackList());
       else void useCatalogCollection(tracklist(), title(), 'request');
@@ -259,15 +277,11 @@ export default function Album() {
               when={profile()}
               fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}
             >
-              <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} contextLabel={title()} />}>
+              <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} context={albumContext('library')} />}>
                 <DiscoverView
                   tracklist={tracklist()}
                   saving={saving()}
-                  onPlayItem={(item, queue) => void playCatalogItem(item, queue, {
-                    id: `album:${title()}`,
-                    kind: 'album',
-                    label: title(),
-                  })}
+                  onPlayItem={(item, queue) => void playCatalogItem(item, queue, albumContext('discover'))}
                   onSaveItem={saveItem}
                 />
               </Show>
@@ -281,17 +295,17 @@ export default function Album() {
   );
 }
 
-function LibraryView(props: { tracks: Track[]; contextLabel: string }) {
+function LibraryView(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
   return (
     <div class={styles.contentView}>
       <Show when={props.tracks.length > 0} fallback={<EmptyState>{t('album.empty')}</EmptyState>}>
-        <TrackListLite tracks={props.tracks} contextLabel={props.contextLabel} />
+        <TrackListLite tracks={props.tracks} context={props.context} />
       </Show>
     </div>
   );
 }
 
-function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
+function TrackListLite(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
   return (
     <div class={styles.trackList}>
       <For each={props.tracks}>
@@ -300,9 +314,7 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
             track={track} music={libraryTrackMusic(track)}
             index={i() + 1}
             cover={trackCoverUrl(track, 'thumb')}
-            onPlay={() => actions.playFrom(props.tracks, i(), {
-              context: { id: `album:${props.contextLabel}`, kind: 'album', label: props.contextLabel },
-            })}
+            onPlay={() => actions.playFrom(props.tracks, i(), { context: props.context })}
           />
         )}
       </For>

@@ -3,6 +3,7 @@ import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import { actions, musicLibrary, state } from '../stores';
 import type { Track } from '../types/music';
+import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { artistKey } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 
@@ -16,6 +17,15 @@ function artistTracks(artist: string): Track[] {
     || t.artists?.some((name) => artistKey(name) === key));
 }
 
+function artistContext(artist: string): PlaybackContextDescriptor {
+  return {
+    id: `artist:${artist}`,
+    kind: 'artist',
+    label: artist,
+    destination: artistDestination({ artist, view: 'library' }, artist),
+  };
+}
+
 /** Play / shuffle / go-to-artist menu definition for an artist. */
 export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}): ActionMenuOptions {
   const inAuto = state.autoMode.active;
@@ -27,9 +37,7 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
         if (t.length) {
           if (state.autoMode.active) void actions.placeAutoTracks(t);
           else {
-            actions.playFrom(t, 0, {
-              context: { id: `artist:${artist}`, kind: 'artist', label: artist },
-            });
+            actions.playFrom(t, 0, { context: artistContext(artist) });
           }
         }
       },
@@ -42,11 +50,7 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
       onSelect: () => {
         const t = artistTracks(artist);
         if (t.length) {
-          actions.playShuffled(t, {
-            id: `artist:${artist}`,
-            kind: 'artist',
-            label: artist,
-          });
+          actions.playShuffled(t, artistContext(artist));
         }
       },
     });
