@@ -1,42 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openMiniPlayer, silentStream } from './music-browser-fixture';
+import { mockMusicEngine, openMiniPlayer, restoreQueueSession, TRACKS } from './music-browser-fixture';
 import { settledBox } from './settle';
 import { snapCarousel } from './playerGestures';
 
-/* A library long enough for the queue's context lane to scroll: the bug only
-   shows once the panel under the finger has something to scroll. */
-const tracks = Array.from({ length: 80 }, (_, index) => ({
-  id: `swipe-${index}`,
-  title: `Canción ${index}`,
-  artist: 'Artista de prueba',
-  album: 'Un álbum',
-  duration: 180,
-}));
-
+/* A queue long enough for its requests lane to scroll: the bug only shows once
+   the panel under the finger has something to scroll. The context is a card
+   now, so the length has to come from requests. */
 async function mockEngine(page: Page) {
-  await page.routeWebSocket('**/socket.io/**', (socket) => socket.close());
-  await page.route('**/socket.io/**', (route) => route.abort());
-  await page.route('**/api/**', async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    let body: unknown = {};
-    if (path === '/api/auth/state') {
-      body = { requires_login: true, user: { id: 'qa', username: 'qa', display_name: 'QA', role: 'admin', has_password: true } };
-    }
-    if (path === '/api/library') body = { tracks, playlists: {}, settings: {}, podcast_subscriptions: [] };
-    if (path === '/api/library/favourites') body = [];
-    if (path === '/api/downloader/queue') body = { queue: [], is_processing: false, logs: [] };
-    if (path === '/api/downloader/config') body = { quality: 'high', auto_update_ytdlp: false };
-    if (path === '/api/discovery/settings') body = { learning_enabled: true, autoplay_enabled: false };
-    if (path === '/api/discovery/music/feed') body = { sections: [] };
-    if (['/api/devices', '/api/paired-devices', '/api/pairing/sessions'].includes(path)) body = { devices: [], sessions: [] };
-    await route.fulfill({ json: body });
-  });
-  await silentStream(page);
-  await page.addInitScript(() => {
-    localStorage.clear();
-    localStorage.setItem('lang', 'es');
-    localStorage.setItem('soundsible:interface-size', 'normal');
-  });
+  await mockMusicEngine(page);
+  await restoreQueueSession(page, { current: TRACKS[319], requests: TRACKS.slice(200, 230) });
 }
 
 /** A real touch drag, dispatched through the browser's own input pipeline:
@@ -67,8 +39,7 @@ test.beforeEach(async ({ page }) => { await mockEngine(page); });
 test('a scrolled player panel still hands a sideways swipe to the pager', async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium' || (page.viewportSize()?.width ?? 1024) > 1023, 'real Chromium touch input');
   await page.goto('/player/#/');
-  await page.getByRole('button', { name: /Reproducir Canción 79/ }).click();
-  await openMiniPlayer(page, /Canción 79/);
+  await openMiniPlayer(page, /Canción de biblioteca 320/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
 
   const stage = page.locator('[data-now-playing-tile="stage"]');
@@ -79,7 +50,7 @@ test('a scrolled player panel still hands a sideways swipe to the pager', async 
   // The queue, scrolled, is the panel the swipe used to die on.
   await snapCarousel(page, 'queue');
   await expect(queue).not.toHaveAttribute('inert', '');
-  const lane = queue.locator('[data-section-rows]').last();
+  const lane = queue.locator('section[data-section="manual"] [data-section-rows]');
   const laneBox = await settledBox(page, lane, (box) => box.y + 120);
   await touchDrag(page, { x: laneBox.x + laneBox.width / 2, y: laneBox.y + 120 }, { dy: -120 }, 10);
   await expect.poll(() => lane.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);

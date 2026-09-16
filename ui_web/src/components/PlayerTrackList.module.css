@@ -144,6 +144,20 @@
   overscroll-behavior-y: contain;
 }
 
+/* The continuation cards never give way: they are what the queue turns into
+ * once the rows above them run out, so the song lanes shrink and scroll
+ * instead, and the cards stay in sight however long the requests get. */
+.section[data-cards] {
+  min-height: auto;
+  flex: 0 0 auto;
+}
+
+.sectionCards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* The bottom lane is the one whose last song would otherwise come to rest
  * under the pager pill, so it is the one that carries the footer clearance —
  * and it carries it inside its scroller, as content to be scrolled past. The
@@ -153,6 +167,11 @@
  * content here leaves a queue that fits without scrolling laid out exactly as
  * it was: the pixels only changed which side of the scrollport they sit on. */
 .section:last-child .sectionRows {
+  padding-bottom: max(24px, var(--player-mobile-footer-clearance, 24px));
+}
+
+/* The same band under the continuation cards when they close the list. */
+.section:last-child .sectionCards {
   padding-bottom: max(24px, var(--player-mobile-footer-clearance, 24px));
 }
 
@@ -395,9 +414,214 @@
   animation-play-state: paused;
 }
 
+/* A card is a row that stands for more than one song: the same artwork, name
+ * and detail, on a quiet plate of its own so it does not read as the next
+ * song in the list. */
+.card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  min-height: max(var(--row-h), 48px);
+  background: var(--stage-material-quiet);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--stage-line-soft);
+}
+
+/* Lined up with the rows' artwork column: their position column and its gap
+ * come before the cover. */
+.cardMain {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: inherit;
+  padding: 5px 4px 5px 42px;
+}
+
+.cardCover {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  color: #fff;
+  border-radius: var(--radius-sm);
+}
+
+.cardCover svg {
+  width: 20px;
+  height: 20px;
+}
+
+.cardMeta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cardDetail {
+  overflow: hidden;
+  color: var(--ink-secondary);
+  font-size: var(--text-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Switched off, the card is still there and still operable — only what it
+ * describes goes quiet. */
+.card[data-dimmed] .cardCover,
+.card[data-dimmed] .title {
+  opacity: 0.5;
+}
+
+.cardControls {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 8px;
+}
+
+.cardRemove,
+.cardMenu {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+  color: var(--ink-tertiary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.cardRemove svg {
+  width: 17px;
+  height: 17px;
+}
+
+.cardRemove:focus-visible,
+.cardMenu:focus-visible,
+.switch:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+.switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+
+/* The switch is 26px tall; the touch target is not. */
+.switch::before {
+  position: absolute;
+  inset: -9px 0;
+  content: '';
+}
+
+.switch[aria-checked='true'] {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-short) var(--ease-out);
+}
+
+.switch[aria-checked='true'] .knob {
+  transform: translateX(18px);
+}
+
+/* The phone row: name first, controls after it, artwork hard against the edge
+ * in the same column as every song's cover above. */
+.card[data-mobile] {
+  display: flex;
+  gap: 8px;
+  height: var(--row-h, 56px);
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
+}
+
+.card[data-mobile] .cardMain {
+  display: contents;
+}
+
+.card[data-mobile] .cardMeta {
+  flex: 1;
+  order: 1;
+}
+
+.card[data-mobile] .title {
+  font-size: var(--text-body);
+  font-weight: var(--fw-medium);
+}
+
+.card[data-mobile] .cardDetail {
+  font-size: var(--text-label);
+}
+
+.card[data-mobile] .cardControls {
+  order: 2;
+  padding-right: 0;
+}
+
+.card[data-mobile] .cardMenu {
+  width: max(44px, var(--control-h, 44px));
+  height: max(44px, var(--control-h, 44px));
+  color: var(--ink-secondary);
+}
+
+.card[data-mobile] .cardCover {
+  order: 3;
+  flex: none;
+  width: var(--cover-sm, 44px);
+  height: var(--cover-sm, 44px);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--hairline-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .knob {
+    transition: none;
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .row:not([data-current], [data-locked]):hover::before {
     background: var(--stage-row-hover);
+  }
+
+  .card:has([data-card-open]):hover {
+    background: var(--stage-row-hover);
+  }
+
+  .cardRemove:hover,
+  .cardMenu:hover {
+    color: var(--ink-primary);
+    background: var(--stage-material-hover);
   }
 
   .headAction:not(:disabled):hover {
@@ -412,6 +636,10 @@
 
 @media (min-width: 1024px) {
   .section:last-child .sectionRows {
+    padding-bottom: 24px;
+  }
+
+  .section:last-child .sectionCards {
     padding-bottom: 24px;
   }
 }

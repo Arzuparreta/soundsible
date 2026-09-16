@@ -13,13 +13,52 @@ Upcoming playback is always:
 3. generated continuation (`generated`).
 
 `Add to queue` appends to the manual lane (FIFO). `Play next` inserts at its
-front (LIFO). Choosing another album, playlist, artist, search result set, or
-library view starts the selected track immediately, preserves pending manual
-requests, replaces the old context, and cancels stale generators.
+front (LIFO). Both keep the context. Playing a song from an album, playlist,
+artist, favourites or the library plays it from its position there and makes
+that collection the context; a collection's Play button starts at its first
+song. Playing a single result — search, a recommendation, the explorer's
+search — makes that song a context of its own: the rest of the results do not
+follow, and the previous context does not resume. Every choice of context
+starts the selected track immediately, preserves pending manual requests,
+replaces the old context, and cancels stale generators.
 
 Shuffle only changes the remaining context order. Clearing the queue from
 NORMAL clears pending manual requests, not the active context or generated
 continuation. Reordering cannot cross lane or generator boundaries.
+
+### NORMAL presentation
+
+The queue panel shows the current song and the pending requests as rows, then
+the continuation as cards, never as rows: one card for the active context while
+it has anything left to play (with repeat-all, while any of it can come round
+again), then one card for Autoplay, always present for music outside Radio.
+Cards are not reorderable and are not playable entries.
+
+- The context card carries the context's artwork and page
+  (`PlaybackContextDescriptor.cover` / `destination`). Opening it navigates to
+  that page; a collection with no page of its own is named without offering
+  navigation. Sessions from older builds derive the page from the context id,
+  label and next song.
+- Removing the context card drops the context's remaining occurrences,
+  abandons their catalog matches and any staged deck, keeps the current song
+  and every request, and ends repeat-all. Autoplay is the next continuation.
+- The Autoplay card toggles the existing account preference. Switched off it is
+  dimmed, states its state in text, and its switch stays fully operable.
+  Disabling it discards future generated occurrences without cutting the
+  current one. Radio keeps its generated rows and gets no Autoplay card.
+
+### Catalog references in a context
+
+A catalog collection (Deezer album, artist top tracks) keeps every row in its
+place. Only the tapped row is matched before playback; the others become
+context occurrences with `pendingResolve` and a placeholder id. The player
+matches the next few ahead of the current entry, in order, replacing each
+occurrence in place. A selection that reaches an unmatched occurrence first
+shows it loading, stops the outgoing song, and loads it once matched. An
+occurrence the engine cannot match is removed and playback moves on to the
+next one; the current song is never removed from under the listener. A match
+answering for an occurrence that has left the queue restores nothing.
+Unmatched occurrences travel in published sessions and are matched on play.
 
 ## Generated playback
 
@@ -30,9 +69,9 @@ continuation. Reordering cannot cross lane or generator boundaries.
   and `POST /api/discovery/music/dj-repair` to re-seam a route the listener has
   rearranged. The browser never assembles provider pools.
 - **Autoplay** is an account preference, enabled by default. Near the end of a
-  finite music context it prepares a small related tail. It never runs for
-  podcasts, Radio, DJ, or while repeat is active. Failure ends playback
-  normally.
+  finite music context it prepares a small related tail, shown only as its
+  card. It never runs for podcasts, Radio, DJ, or while repeat is active.
+  Failure ends playback normally.
 - **Radio** preserves pending manual requests, places its generated mix behind
   them, resumes the mix afterwards, and replenishes its generated runway until
   the listener stops Radio. Starting a new context or stopping Radio aborts

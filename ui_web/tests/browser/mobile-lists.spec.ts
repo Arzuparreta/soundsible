@@ -212,6 +212,14 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   test.skip(!info.project.name.includes('mobile'));
   await page.goto('/player/#/');
   await page.locator('[data-row-main]').first().click();
+  // What the queue lets you move is what you asked for: the rest of the
+  // library it was played from is one card, and a card does not move.
+  const rows = page.locator('[data-music-list-row]');
+  for (const index of [1, 2, 3]) {
+    await rows.nth(index).locator('[data-row-menu]').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Añadir a la cola', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
   await page.locator('[data-omni-player]').click();
   const queue = page.locator('[data-now-playing-tile="queue"]');
   await page.locator('[data-now-playing-carousel]').evaluate(async (element) => {
@@ -234,6 +242,11 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   await expect(editing.locator('[data-editing]')).toBeVisible();
   await editing.getByRole('button', { name: 'Subir', exact: true }).click();
   await expect(queue.locator('[data-drag-row]').nth(1)).toHaveAttribute('data-drag-row', id!);
+  // The last request cannot go below the requests.
+  await editing.getByRole('button', { name: 'Bajar', exact: true }).click();
+  await editing.getByRole('button', { name: 'Bajar', exact: true }).click();
+  await expect(queue.locator('[data-drag-row]').nth(3)).toHaveAttribute('data-drag-row', id!);
+  await expect(editing.getByRole('button', { name: 'Bajar', exact: true })).toBeDisabled();
   await editing.getByRole('button', { name: 'Listo', exact: true }).click();
   // Left on the song that was being moved, rather than on nothing.
   await expect(editing.locator('[data-row-main]')).toBeFocused();

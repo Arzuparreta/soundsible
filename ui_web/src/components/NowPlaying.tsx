@@ -1,4 +1,4 @@
-import { trackMusic } from '../lib/musicNavigation';
+import { navigateMusic, trackMusic } from '../lib/musicNavigation';
 import { buildTrackMenu } from './trackActions';
 import { savedFromTrack } from '../lib/saved';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
@@ -12,13 +12,17 @@ import {
   type NowPlayingLayoutPresetId,
   type NowPlayingPanelId,
 } from '../lib/nowPlayingLayout';
-import type { PlaybackQueueEntry } from '../lib/playbackQueue';
+import { contextContinuation, sameQueueSection, type PlaybackQueueEntry } from '../lib/playbackQueue';
+import { contextDestination } from '../lib/playbackContext';
+import { isPodcastTrack } from '../lib/track';
+import { trackCount } from '../lib/format';
 import { t } from '../lib/i18n';
 import { NowPlayingBrowser } from './NowPlayingBrowser';
 import { PlayerLayoutControl } from './PlayerLayoutControl';
 import { PlayerStage } from './PlayerStage';
 import {
   PlayerTrackList,
+  type PlayerTrackListCard,
   type PlayerTrackListEntry,
   type PlayerTrackListSection,
 } from './PlayerTrackList';
@@ -49,11 +53,17 @@ export function NowPlaying(props: {
   const manualQueue = createMemo(() =>
     state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'manual'),
   );
-  const contextQueue = createMemo(() =>
-    state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'context'),
+  // The radio's picks are still songs to look through. Autoplay's are not: it
+  // is a continuation, drawn as its card, however many it has prepared.
+  const radioQueue = createMemo(() =>
+    state.playback.radioMode
+      ? state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'generated')
+      : [],
   );
-  const generatedQueue = createMemo(() =>
-    state.playback.queue.slice(state.playback.index + 1).filter((entry) => entry.queueLane === 'generated'),
+  const continuation = createMemo(() =>
+    state.playback.radioMode
+      ? null
+      : contextContinuation(state.playback.queue, state.playback.index, state.playback.repeat === 'all'),
   );
   const panelMinimum: Record<NowPlayingPanelId, number> = { browser: 240, stage: 360, queue: 240 };
 
@@ -124,8 +134,15 @@ export function NowPlaying(props: {
         ...(!current ? [{ label: t('nowPlaying.removeFromQueue'), danger: true,
           onSelect: () => actions.removeQueueEntry(entry.queueId) }] : []),
       ],
-      get canMoveUp() { return !current && queueIndex() > state.playback.index + 1; },
-      get canMoveDown() { return !current && queueIndex() < state.playback.queue.length - 1; },
+      // Requests move among themselves; the cards below them never move.
+      get canMoveUp() {
+        const above = state.playback.queue[queueIndex() - 1];
+        return !current && queueIndex() > state.playback.index + 1 && !!above && sameQueueSection(entry, above);
+      },
+      get canMoveDown() {
+        const below = state.playback.queue[queueIndex() + 1];
+        return !current && queueIndex() > state.playback.index && !!below && sameQueueSection(entry, below);
+      },
       onMove: current ? undefined : (direction) => {
         const from = queueIndex(); const to = from + direction;
         if (from > state.playback.index && to > state.playback.index && to < state.playback.queue.length) actions.moveInQueue(from, to);
@@ -144,15 +161,72 @@ export function NowPlaying(props: {
     };
   };
 
-  // Whatever the context lane was filled from — an album, a playlist, the
-  // library. Bare, it reads as a place rather than as the rest of what is
-  // playing, so the label puts it after a preposition.
-  const contextSource = () => contextQueue()[0]?.queueContext?.label;
+  /** The collection the music continues into, as one card. Opening it goes to
+   * its page; removing it stops the continuation and leaves the rest alone.
+   * What only changes its wording — shuffle, repeat — is read by the card
+   * itself, so flipping it does not rebuild the lanes around it. */
+  const contextCard = (): PlayerTrackListCard | null => {
+    const next = continuation();
+    if (!next) return null;
+    const { context, remaining } = next;
+    const title = context.label || t('nowPlaying.contextUntitled');
+    const destination = contextDestination(context, next.next);
+    const open = destination ? () => navigateMusic(destination) : undefined;
+    const kind = t(`nowPlaying.contextKind.${context.kind}`);
+    const remove = { label: t('nowPlaying.contextRemove', { name: title }), onSelect: () => actions.removeContext() };
+    const artworkFromSongs = context.kind === 'album' || context.kind === 'playlist' || context.kind === 'artist';
+    return {
+      id: 'context',
+      title,
+      get detail() {
+        return [
+          kind,
+          remaining > 0 ? trackCount(remaining) : '',
+          state.playback.shuffle ? t('nowPlaying.contextShuffled') : '',
+          state.playback.repeat === 'all' ? t('nowPlaying.contextRepeats') : '',
+        ].filter(Boolean).join(' · ');
+      },
+      seed: context.id,
+      cover: context.cover || (artworkFromSongs ? trackCoverUrl(next.next, 'thumb') : undefined),
+      glyph: <ContextGlyph kind={context.kind} />,
+      onOpen: open,
+      openLabel: open ? t('nowPlaying.contextOpen', { name: title }) : undefined,
+      menu: () => [
+        ...(open ? [{ label: t('nowPlaying.contextOpen', { name: title }), onSelect: open }] : []),
+        { label: t('nowPlaying.removeFromQueue'), danger: true, onSelect: remove.onSelect },
+      ],
+      remove,
+    };
+  };
+
+  /** Autoplay, always there for music: the setting itself, where the queue
+   * ends. Switched off it stays, quieter, so switching it back on is one tap.
+   * Its state is read by the card, not by the lanes: a refill starting and
+   * finishing would otherwise rebuild every row above it. */
+  const autoplayCard = (): PlayerTrackListCard | null => {
+    const current = state.playback.currentTrack;
+    if (state.playback.radioMode || !current || isPodcastTrack(current)) return null;
+    const label = t('nowPlaying.autoplayQueue');
+    const enabled = () => state.playback.autoplayEnabled;
+    return {
+      id: 'autoplay',
+      title: label,
+      get detail() {
+        if (!enabled()) return t('nowPlaying.autoplayOff');
+        return state.playback.autoplayLoading ? t('nowPlaying.autoplayPreparing') : t('nowPlaying.autoplayOn');
+      },
+      seed: 'autoplay',
+      glyph: <AutoplayGlyph />,
+      get dimmed() { return !enabled(); },
+      get toggle() {
+        return { label, checked: enabled(), onChange: () => void actions.setAutoplayEnabled(!enabled()) };
+      },
+    };
+  };
 
   const queueSections = createMemo<PlayerTrackListSection[]>(() => {
     const sections: PlayerTrackListSection[] = [];
     const current = currentQueueEntry();
-    const source = contextSource();
     if (current) {
       sections.push({
         id: 'current',
@@ -169,22 +243,19 @@ export function NowPlaying(props: {
       entries: manualQueue().map((entry, index) => queueRow(entry, index + 1)),
     });
     sections.push({
-      id: 'context',
-      label: source ? t('nowPlaying.contextQueueFrom', { source }) : t('nowPlaying.contextQueue'),
-      hint: source
-        ? t('nowPlaying.laneHintContext', { source })
-        : t('nowPlaying.laneHintContextPlain'),
-      count: contextQueue().length,
-      entries: contextQueue().map((entry, index) => queueRow(entry, index + 1)),
-    });
-    sections.push({
       id: 'generated',
-      label: state.playback.radioMode ? t('nowPlaying.radioQueue') : t('nowPlaying.autoplayQueue'),
-      hint: state.playback.radioMode
-        ? t('nowPlaying.laneHintRadio')
-        : t('nowPlaying.laneHintGenerated'),
-      count: generatedQueue().length,
-      entries: generatedQueue().map((entry, index) => queueRow(entry, index + 1)),
+      label: t('nowPlaying.radioQueue'),
+      hint: t('nowPlaying.laneHintRadio'),
+      count: radioQueue().length,
+      entries: radioQueue().map((entry, index) => queueRow(entry, index + 1)),
+    });
+    const cards = [contextCard(), autoplayCard()].filter((card): card is PlayerTrackListCard => card !== null);
+    sections.push({
+      id: 'continuation',
+      label: t('nowPlaying.continuationSection'),
+      hint: t('nowPlaying.laneHintContinuation'),
+      entries: [],
+      cards,
     });
     return sections;
   });
@@ -240,7 +311,7 @@ export function NowPlaying(props: {
             return (
               <PlayerTrackList
                 title={t('nowPlaying.queue')}
-                count={state.playback.queue.length}
+                count={manualQueue().length + radioQueue().length}
                 sections={queueSections()}
                 virtualize
                 empty={t('nowPlaying.queueEmpty')}
@@ -286,5 +357,26 @@ export function NowPlaying(props: {
         }}
       />
     </Show>
+  );
+}
+
+function ContextGlyph(props: { kind: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      {props.kind === 'favourites'
+        ? <path d="M12 20s-7-4.35-9.5-8.5C1 8.6 2.3 5 5.5 5 7.6 5 9 6.5 12 9c3-2.5 4.4-4 6.5-4 3.2 0 4.5 3.6 3 6.5C19 15.65 12 20 12 20z" />
+        : <><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>}
+    </svg>
+  );
+}
+
+/** Autoplay's mark: music that carries on by itself. */
+function AutoplayGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M18.2 8.4A7 7 0 1 0 19 12" />
+      <path d="M19 4v4.5h-4.5" />
+      <path d="M10 9.5v5l4-2.5z" fill="currentColor" />
+    </svg>
   );
 }

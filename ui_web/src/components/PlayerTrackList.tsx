@@ -4,6 +4,7 @@ import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { VirtualRows } from './VirtualRows';
 import { openContextMenu } from '../lib/contextMenu';
+import { coverStyle } from '../lib/cover';
 import { t } from '../lib/i18n';
 import type { MenuAction } from './ActionMenu';
 import type { SavedEntry } from '../types/music';
@@ -50,6 +51,33 @@ export interface PlayerTrackListEntry {
   onCarry?: () => void;
 }
 
+/**
+ * Something the list continues into that is not a song of its own — the
+ * collection the music was played from, or Autoplay.
+ *
+ * Drawn in the rows' language (artwork, a name, what it is, a menu) so it reads
+ * as part of the same list, but it is never numbered, reordered or played as a
+ * row: activating it opens what it stands for.
+ */
+export interface PlayerTrackListCard {
+  id: string;
+  title: string;
+  /** What the card is, and its state, in words. */
+  detail: string;
+  seed: string;
+  cover?: string;
+  /** Drawn over the seeded gradient when there is no artwork. */
+  glyph?: JSX.Element;
+  /** Present but switched off: drawn quieter, and every control on it still
+   * works exactly as it does when it is on. */
+  dimmed?: boolean;
+  onOpen?: () => void;
+  openLabel?: string;
+  menu?: () => MenuAction[];
+  remove?: { label: string; onSelect: () => void };
+  toggle?: { label: string; checked: boolean; onChange: () => void };
+}
+
 export interface PlayerTrackListSection {
   id: string;
   label?: string;
@@ -58,7 +86,13 @@ export interface PlayerTrackListSection {
   hint?: string;
   count?: number;
   entries: PlayerTrackListEntry[];
+  /** Drawn instead of rows. A section of cards keeps its full height: it is
+   * the lanes of songs above it that give way and scroll. */
+  cards?: PlayerTrackListCard[];
 }
+
+const sectionHasContent = (section: PlayerTrackListSection) =>
+  section.entries.length > 0 || Boolean(section.cards?.length);
 
 /** Above this many rows a lane is given a floor to shrink to, so several long
  * lanes at once cannot squeeze each other down to a sliver. */
@@ -226,14 +260,16 @@ export function PlayerTrackList(props: {
           if (target) props.onDropAtSlot(target, event);
         }}
       >
-        <Show when={props.sections.some((section) => section.entries.length > 0)} fallback={<div class={styles.empty}>{props.empty}</div>}>
+        <Show when={props.sections.some(sectionHasContent)} fallback={<div class={styles.empty}>{props.empty}</div>}>
           <For each={props.sections}>
             {(section) => (
-              <Show when={section.entries.length > 0}>
+              <Show when={sectionHasContent(section)}>
                 <section
                   class={styles.section}
                   data-head={section.label ? '' : undefined}
                   data-long={section.entries.length > LANE_FLOOR_ROWS ? '' : undefined}
+                  data-cards={section.cards?.length ? '' : undefined}
+                  data-section={section.id}
                 >
                   <Show when={section.label}>
                     <div class={styles.sectionHead} title={section.hint}>
@@ -243,6 +279,7 @@ export function PlayerTrackList(props: {
                       </Show>
                     </div>
                   </Show>
+                  <Show when={section.cards?.length} fallback={
                   <PlayerLane virtualize={props.virtualize} entries={section.entries} editingId={editingId()}
                     tail={<Show when={slot() && slot()!.index === section.entries.length}><div class={styles.seamTail} aria-hidden="true" /></Show>}>
                     {(entry, index) => <>
@@ -252,7 +289,11 @@ export function PlayerTrackList(props: {
                         onEditingChange={(editing) => { const id = entry().id; setEditingId(editing ? id : null); focusRowControl(id); }}
                         onMove={(direction) => { const row = entry(); row.onMove?.(direction); focusRowControl(row.id, direction < 0 ? 'up' : 'down'); }} />
                     </>}
-                  </PlayerLane>
+                  </PlayerLane>}>
+                    <div class={styles.sectionCards} data-section-cards>
+                      <For each={section.cards}>{(card) => <PlayerTrackListCardRow card={card} />}</For>
+                    </div>
+                  </Show>
                 </section>
               </Show>
             )}
@@ -281,6 +322,91 @@ function PlayerLane(props: {
     </Show>
     {props.tail}
   </div>;
+}
+
+function PlayerTrackListCardRow(props: { card: PlayerTrackListCard }) {
+  const tap = createResponsiveTap({
+    disabled: () => !props.card.onOpen,
+    onTap: () => props.card.onOpen?.(),
+  });
+  const openMenu = (event?: MouseEvent) => {
+    const actions = props.card.menu?.() ?? [];
+    if (actions.length) openContextMenu({ title: props.card.title, subtitle: props.card.detail, actions }, event);
+  };
+  const menuTap = createResponsiveTap({ onTap: (event) => { event.stopPropagation(); openMenu(); } });
+  return (
+    <div
+      class={styles.card}
+      data-queue-card={props.card.id}
+      data-dimmed={props.card.dimmed ? '' : undefined}
+      data-mobile={mobileListLayout() ? '' : undefined}
+      onContextMenu={(event) => {
+        if (!props.card.menu) return;
+        event.preventDefault();
+        openMenu(event);
+      }}
+    >
+      <div class={styles.cardMain}>
+        <Show when={props.card.onOpen}>
+          <button
+            class={styles.playButton}
+            type="button"
+            aria-label={props.card.openLabel ?? props.card.title}
+            data-card-open
+            data-pressable
+            onKeyDown={(event) => {
+              if (props.card.menu && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+                event.preventDefault();
+                openMenu();
+              }
+            }}
+            {...tap}
+          />
+        </Show>
+        <span class={styles.cardCover} style={coverStyle(props.card.seed, props.card.cover)} aria-hidden="true">
+          <Show when={!props.card.cover && props.card.glyph}>{props.card.glyph}</Show>
+        </span>
+        <span class={styles.cardMeta}>
+          <span class={styles.title}>{props.card.title}</span>
+          <span class={styles.cardDetail} data-card-detail>{props.card.detail}</span>
+        </span>
+      </div>
+      <span class={styles.cardControls}>
+        <Show when={props.card.toggle}>
+          {(toggle) => (
+            <button
+              type="button"
+              class={styles.switch}
+              role="switch"
+              aria-checked={toggle().checked}
+              aria-label={toggle().label}
+              data-pressable
+              onClick={() => toggle().onChange()}
+            >
+              <span class={styles.knob} />
+            </button>
+          )}
+        </Show>
+        <Show when={props.card.menu && mobileListLayout()}>
+          <button class={styles.cardMenu} type="button" data-row-menu data-pressable aria-haspopup="dialog"
+            aria-label={`${t('songRow.ariaMore')}: ${props.card.title}`} {...menuTap}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+              <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+            </svg>
+          </button>
+        </Show>
+        <Show when={!mobileListLayout() && props.card.remove}>
+          {(remove) => (
+            <button class={styles.cardRemove} type="button" aria-label={remove().label} onClick={() => remove().onSelect()}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          )}
+        </Show>
+      </span>
+    </div>
+  );
 }
 
 function PlayerTrackListRow(props: {

@@ -3,7 +3,9 @@ import type { CatalogItem } from '../types/music';
 
 const mocks = vi.hoisted(() => ({
   epoch: 1,
-  state: { library: [], autoMode: { active: true } },
+  state: { library: [] as Array<{ id: string; title: string; artist: string }>, autoMode: { active: true } },
+  playFrom: vi.fn(),
+  playTrack: vi.fn(),
   resolve: vi.fn(),
   request: vi.fn(),
   reference: vi.fn(),
@@ -22,13 +24,15 @@ vi.mock('../stores', () => ({
     linkCatalogItem: vi.fn(),
     placeAutoTracks: mocks.request,
     addAutoSource: mocks.reference,
+    playFrom: mocks.playFrom,
+    playTrack: mocks.playTrack,
   },
 }));
 vi.mock('./toast', () => ({ toast: {
   loading: () => ({ dismiss: mocks.dismiss }), error: mocks.error, success: vi.fn(),
 } }));
 
-import { useCatalogCollection } from './catalogItem';
+import { playCatalogItem, useCatalogCollection } from './catalogItem';
 
 const item = (index: number): CatalogItem => ({
   id: `catalog:${index}`, title: `Song ${index}`, artist: 'Artist', type: 'track', source: 'deezer',
@@ -99,5 +103,51 @@ describe('catalogue direction changes', () => {
     expect(started).toHaveBeenCalledOnce();
     expect(mocks.reference).not.toHaveBeenCalled();
     expect(mocks.request).not.toHaveBeenCalled();
+  });
+});
+
+describe('playing a catalog row in its collection', () => {
+  const album = { id: 'album:record', kind: 'album' as const, label: 'Record' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.state.autoMode.active = false;
+    mocks.state.library = [{ id: 'owned', title: 'Song 1', artist: 'Artist' }];
+    mocks.resolve.mockImplementation(async ({ title }: { title: string }) => ({ video_id: `vid-${title}` }));
+  });
+
+  it('plays from the tapped row and keeps every other row in its place, matched or not', async () => {
+    const rows = [item(0), { ...item(1), track_id: 'owned' }, item(2), item(3)];
+    await playCatalogItem(rows[2], rows, album);
+
+    // Only the tapped row is matched before playback starts.
+    expect(mocks.resolve).toHaveBeenCalledTimes(1);
+    const [tracks, index, opts] = mocks.playFrom.mock.calls[0];
+    expect(index).toBe(2);
+    expect(tracks.map((track: { id: string }) => track.id))
+      .toEqual(['pending:catalog:0', 'owned', 'vid-Song 2', 'pending:catalog:3']);
+    expect(tracks[3].pendingResolve).toEqual({ catalogItemId: 'catalog:3', artist: 'Artist', title: 'Song 3' });
+    expect(tracks[3].originKeys).toContain('cat:catalog:3');
+    expect(opts).toEqual({ context: album });
+  });
+
+  it('starts at the row itself when it is already playable, without asking the engine', async () => {
+    const rows = [item(0), { ...item(1), track_id: 'owned' }];
+    await playCatalogItem(rows[1], rows, album);
+    expect(mocks.resolve).not.toHaveBeenCalled();
+    const [tracks, index] = mocks.playFrom.mock.calls[0];
+    expect(index).toBe(1);
+    expect(tracks.map((track: { id: string }) => track.id)).toEqual(['pending:catalog:0', 'owned']);
+  });
+
+  it('plays a row outside the list first, and a row on its own as a selection', async () => {
+    const rows = [item(0)];
+    await playCatalogItem(item(5), rows, album);
+    expect(mocks.playFrom.mock.calls[0][1]).toBe(0);
+    expect(mocks.playFrom.mock.calls[0][0].map((track: { id: string }) => track.id))
+      .toEqual(['vid-Song 5', 'pending:catalog:0']);
+
+    await playCatalogItem(item(6));
+    expect(mocks.playTrack).toHaveBeenCalledWith(expect.objectContaining({ id: 'vid-Song 6' }));
   });
 });

@@ -138,7 +138,8 @@ describe('Artist route view mode', () => {
 
   it('keeps owned tracks in the queue when playing an unowned top track', async () => {
     // The queue used to be built by overwriting index 0 with the resolved
-    // track, which evicted whichever owned track sorted first.
+    // track, which evicted whichever owned track sorted first. The tapped row
+    // plays from its own place, so the owned song above it stays where it was.
     storeMock.library = [{ id: 'l1', title: 'Owned Hit', artist: 'Mixed', album: 'A', duration: 200 }];
     const profile = profileFor('Mixed', true);
     profile.top_tracks = [
@@ -154,9 +155,12 @@ describe('Artist route view mode', () => {
     screen.getByRole('button', { name: 'Fresh Hit' }).click();
 
     await waitFor(() => expect(storeMock.playFrom).toHaveBeenCalled());
-    const [queue, index] = storeMock.playFrom.mock.calls.at(-1)!;
-    expect(index).toBe(0);
-    expect((queue as Array<{ id: string }>).map((tr) => tr.id)).toEqual(['vid-fresh', 'l1']);
+    const [queue, index, opts] = storeMock.playFrom.mock.calls.at(-1)!;
+    expect(index).toBe(1);
+    expect((queue as Array<{ id: string }>).map((tr) => tr.id)).toEqual(['l1', 'vid-fresh']);
+    // The card in the queue leads back to this page, on the tab it was played from.
+    expect((opts as { context: { destination?: string } }).context.destination)
+      .toBe('/artist/Mixed?view=discover&deezer_id=1');
   });
 
   it('clamps to discover when a library deep-link lands on an artist not owned', async () => {

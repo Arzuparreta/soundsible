@@ -10,6 +10,7 @@ import type { Track } from '../types/music';
 import styles from './PlaylistDetail.module.css';
 import { EmptyState } from '../components/EmptyState';
 import { navigateBackOr } from '../lib/scrollHistory';
+import { playlistContext } from '../lib/playbackContext';
 
 export default function PlaylistDetail() {
   const params = useParams();
@@ -26,15 +27,15 @@ export default function PlaylistDetail() {
       .filter((t): t is Track => !!t);
   });
 
+  const context = () => playlistContext(name(), tracks(), state.librarySettings);
+
   const playAll = () => {
     if (tracks().length > 0) {
       if (state.autoMode.active) {
         void actions.placeAutoTracks(tracks());
         return;
       }
-      actions.playFrom(tracks(), 0, {
-        context: { id: `playlist:${name()}`, kind: 'playlist', label: name() },
-      });
+      actions.playFrom(tracks(), 0, { context: context() });
     }
   };
 
@@ -69,7 +70,7 @@ export default function PlaylistDetail() {
       </header>
       <TrackList
         tracks={tracks()}
-        context={{ id: `playlist:${name()}`, kind: 'playlist', label: name() }}
+        context={context()}
         loading={state.loading}
         menu={{
           playlistName: name(),

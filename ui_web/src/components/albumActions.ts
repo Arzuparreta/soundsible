@@ -6,7 +6,9 @@ import { tracksByIds } from '../lib/catalogTracks';
 import { albumDestination, albumMusic, navigateMusic } from '../lib/musicNavigation';
 import { t } from '../lib/i18n';
 import { toast } from '../lib/toast';
+import { coverUrl } from '../lib/media';
 import type { CatalogAlbum, Track } from '../types/music';
+import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 
 export interface AlbumMenuContext {
   navigate?: (path: string) => void;
@@ -27,8 +29,14 @@ async function albumTracks(album: CatalogAlbum): Promise<Track[]> {
   }
 }
 
-function albumContext(album: CatalogAlbum) {
-  return { id: `album:${album.id}`, kind: 'album' as const, label: album.title };
+function albumContext(album: CatalogAlbum): PlaybackContextDescriptor {
+  return {
+    id: `album:${album.id}`,
+    kind: 'album',
+    label: album.title,
+    cover: album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined,
+    destination: albumDestination(albumMusic(album)),
+  };
 }
 
 /** Play / shuffle / go-to-album menu definition for a catalog album. */

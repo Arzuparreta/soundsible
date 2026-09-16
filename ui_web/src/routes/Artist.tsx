@@ -12,6 +12,7 @@ import { toast } from '../lib/toast';
 import { artistKey, artistPath, albumPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { ArtistProfile, CatalogItem, Track } from '../types/music';
+import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
 import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
@@ -115,8 +116,22 @@ export default function Artist() {
     resolveViewMode({ urlView: viewParams().view, override: viewOverride(), canToggle: showToggle() }),
   );
 
+  /** This artist as a context, leading back to the tab it was played from. */
+  const artistContext = (mode: ViewMode = view()): PlaybackContextDescriptor => ({
+    id: `artist:${name()}`,
+    kind: 'artist',
+    label: name(),
+    cover: profile()?.metadata?.picture || undefined,
+    destination: artistPath(name(), {
+      view: mode,
+      // The artist the page settled on, when the link itself named none.
+      deezerId: viewParams().deezerId ?? (profile()?.deezer_id || undefined),
+      artistId: mode === 'library' ? viewParams().artistId : undefined,
+    }),
+  });
+
   const playAll = () => {
-    const context = { id: `artist:${name()}`, kind: 'artist' as const, label: name() };
+    const context = artistContext();
     if (state.autoMode.active) {
       if (view() === 'library') void actions.placeAutoTracks(libraryTrackList());
       else void useCatalogCollection(topTracks(), name(), 'request');
@@ -133,7 +148,7 @@ export default function Artist() {
   };
 
   const shuffle = () => {
-    const context = { id: `artist:${name()}`, kind: 'artist' as const, label: name() };
+    const context = artistContext();
     if (state.autoMode.active) {
       if (view() === 'library') void actions.placeAutoTracks(libraryTrackList());
       else void useCatalogCollection(topTracks(), name(), 'request');
@@ -310,7 +325,7 @@ export default function Artist() {
               when={profile()}
               fallback={<EmptyState>{t('artist.noCatalogData')}</EmptyState>}
             >
-              <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} loading={false} contextLabel={name()} />}>
+              <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} loading={false} context={artistContext('library')} />}>
                 <DiscoverView
                   topTracks={topTracks()}
                   albums={albums()}
@@ -318,11 +333,7 @@ export default function Artist() {
                   related={related()}
                   loading={profile.loading}
                   saving={saving()}
-                  onPlayItem={(item, queue) => void playCatalogItem(item, queue, {
-                    id: `artist:${name()}`,
-                    kind: 'artist',
-                    label: name(),
-                  })}
+                  onPlayItem={(item, queue) => void playCatalogItem(item, queue, artistContext('discover'))}
                   onSaveItem={saveItem}
                   artistName={name()}
                 />
@@ -353,17 +364,17 @@ function Button(props: { onClick: () => void; disabled?: boolean; variant?: 'pri
   );
 }
 
-function LibraryView(props: { tracks: Track[]; loading: boolean; contextLabel: string }) {
+function LibraryView(props: { tracks: Track[]; loading: boolean; context: PlaybackContextDescriptor }) {
   return (
     <div class={styles.libraryView}>
       <Show when={props.tracks.length > 0} fallback={<EmptyState>{t('artist.empty')}</EmptyState>}>
-        <TrackListLite tracks={props.tracks} contextLabel={props.contextLabel} />
+        <TrackListLite tracks={props.tracks} context={props.context} />
       </Show>
     </div>
   );
 }
 
-function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
+function TrackListLite(props: { tracks: Track[]; context: PlaybackContextDescriptor }) {
   return (
     <div class={styles.trackList}>
       <For each={props.tracks}>
@@ -372,9 +383,7 @@ function TrackListLite(props: { tracks: Track[]; contextLabel: string }) {
             track={track} music={libraryTrackMusic(track)}
             index={i() + 1}
             cover={trackCoverUrl(track, 'thumb')}
-            onPlay={() => actions.playFrom(props.tracks, i(), {
-              context: { id: `artist:${props.contextLabel}`, kind: 'artist', label: props.contextLabel },
-            })}
+            onPlay={() => actions.playFrom(props.tracks, i(), { context: props.context })}
           />
         )}
       </For>

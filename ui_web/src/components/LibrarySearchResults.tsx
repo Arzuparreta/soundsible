@@ -2,7 +2,7 @@ import { libraryTrackMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
 import { openArtistMenu } from './artistActions';
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { actions, isPlayingTrack } from '../stores';
@@ -69,14 +69,6 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
   const [rowH, setRowH] = createSignal(readRowHeight());
-  const trackQueue = createMemo(() =>
-    props.results.flatMap((result) => result.kind === 'track' ? [result.track] : []),
-  );
-  const trackPositions = createMemo(() => {
-    const positions = new Map<string, number>();
-    trackQueue().forEach((track, index) => positions.set(track.id, index));
-    return positions;
-  });
   const openMenu = (track: Extract<LibrarySearchResult, { kind: 'track' }>['track'], event?: MouseEvent) =>
     openTrackMenu(
       track,
@@ -138,11 +130,9 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
                       cover={trackCoverUrl((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track, 'thumb')}
                       badge={t('library.resultTrack')}
                       active={isPlayingTrack((result() as Extract<LibrarySearchResult, { kind: 'track' }>).track)}
-                      onPlay={(track) => actions.playFrom(
-                        trackQueue(),
-                        trackPositions().get(track.id) ?? 0,
-                        { context: { id: 'library-search', kind: 'search', label: t('library.searchLibrary') } },
-                      )}
+                      // A search result is a song picked on its own, not a
+                      // place in the results: the rest of them do not follow.
+                      onPlay={(track) => actions.playTrack(track)}
                       onMenu={openMenu}
                     />
                   </Show>

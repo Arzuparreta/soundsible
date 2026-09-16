@@ -1,68 +1,22 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { openMiniPlayer, silentStream } from './music-browser-fixture';
+import { mockMusicEngine, openMiniPlayer, restoreQueueSession, TRACKS } from './music-browser-fixture';
 import { settle } from './settle';
 import { snapPlayerCarousel } from './playerGestures';
 
 /**
- * Playing one song out of a large library is what exposed this: the context
- * lane holds the whole library, its flex base dominates the shrink, and the
- * one-row "Sonando ahora" lane above it was squeezed to a few pixels. Its
- * label cannot shrink below 26px, so it spilled out of its own lane and landed
- * on top of the next lane's label. The library has to be big for the ratio to
- * bite.
+ * The queue shows what the listener decided — the song playing and the songs
+ * they asked for — and then what the music continues into, as cards: the
+ * collection it was played from, and Autoplay. A library of 320 songs used to
+ * pour 319 rows into the queue; it is one card now.
  */
-const TRACKS = Array.from({ length: 320 }, (_, index) => ({
-  id: `library-track-${index + 1}`,
-  title: `Canción de biblioteca ${index + 1}`,
-  artist: `Artista ${index % 24}`,
-  album: 'Biblioteca de prueba',
-  duration: 180,
-}));
 
-async function mockEngine(page: Page) {
-  await page.routeWebSocket('**/socket.io/**', (socket) => socket.close());
-  await page.route('**/socket.io/**', (route) => route.abort());
-  await page.route('**/api/**', async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    let body: unknown = {};
-    if (path === '/api/auth/state') {
-      body = {
-        requires_login: true,
-        user: { id: 'queue-qa', username: 'queue-qa', display_name: 'Queue QA', role: 'admin', has_password: true },
-      };
-    } else if (path === '/api/library') {
-      body = { tracks: TRACKS, playlists: {}, settings: {}, podcast_subscriptions: [] };
-    } else if (path === '/api/library/favourites') {
-      body = [];
-    } else if (path === '/api/downloader/queue') {
-      body = { queue: [], is_processing: false, logs: [] };
-    } else if (path === '/api/discovery/settings') {
-      body = { learning_enabled: true, autoplay_enabled: false };
-    } else if (path === '/api/downloader/config') {
-      body = { quality: 'high', auto_update_ytdlp: false };
-    } else if (path === '/api/discovery/music/feed') {
-      body = { sections: [] };
-    } else if (path === '/api/devices' || path === '/api/paired-devices' || path === '/api/pairing/sessions') {
-      body = { devices: [], sessions: [] };
-    }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-  });
-  await silentStream(page);
-  await page.addInitScript(() => {
-    localStorage.clear();
-    localStorage.setItem('lang', 'es');
-    localStorage.setItem('soundsible:interface-size', 'normal');
-  });
-}
+const newest = TRACKS[319];
+/** Enough requests that their lane cannot fit and has to scroll itself. */
+const REQUESTS = TRACKS.slice(200, 230);
 
-/**
- * Play the song at the top of the library — the list reads newest first, so
- * that is track 320 — which leaves the other 319 in the context lane.
- */
-async function openQueuePanel(page: Page) {
-  await page.goto('/player/#/');
-  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
-  await openMiniPlayer(page, /Canción de biblioteca 320/);
+async function openQueuePanel(page: Page, song = /Canción de biblioteca 320/) {
+  await openMiniPlayer(page, song);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
   const queue = page.locator('[data-now-playing-tile="queue"]');
   await expect(queue).toBeVisible();
@@ -70,16 +24,90 @@ async function openQueuePanel(page: Page) {
   return queue;
 }
 
+/** Play the song at the top of the library — the list reads newest first. */
+async function playFromLibrary(page: Page) {
+  await page.goto('/player/#/');
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  return openQueuePanel(page);
+}
+
+/** Come back to a paused session with a long lane of requests. */
+async function restoreLongQueue(page: Page) {
+  await restoreQueueSession(page, { current: newest, requests: REQUESTS, context: TRACKS.slice(0, 5) });
+  await page.goto('/player/#/');
+  return openQueuePanel(page);
+}
+
 test.beforeEach(async ({ page }) => {
-  await mockEngine(page);
+  await mockMusicEngine(page);
 });
 
-test('queue lane labels never land on top of each other', async ({ page }) => {
-  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'desktop-only regression');
+test('the library continues as one card, not as a row per song', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'the phone gets the same cards on its queue page');
+  const queue = await playFromLibrary(page);
+
+  // Only the song that is playing is a row.
+  await expect(queue.locator('[data-drag-row]')).toHaveCount(1);
+  const context = queue.locator('[data-queue-card="context"]');
+  await expect(context).toBeVisible();
+  // `text-transform: uppercase` is CSS only, so the DOM keeps the real casing.
+  await expect(context).toContainText('Tu biblioteca');
+  await expect(context.locator('[data-card-detail]')).toHaveText('Biblioteca · 319 pistas');
+
+  // Autoplay is there too, off in this account, and says so in words.
+  const autoplay = queue.locator('[data-queue-card="autoplay"]');
+  await expect(autoplay).toHaveAttribute('data-dimmed', '');
+  await expect(autoplay.locator('[data-card-detail]')).toHaveText('Desactivada');
+  await expect(autoplay.getByRole('switch', { name: 'Reproducción automática' })).toHaveAttribute('aria-checked', 'false');
+
+  const violations = await new AxeBuilder({ page }).include('[data-now-playing-tile="queue"]').analyze();
+  expect(violations.violations).toEqual([]);
+});
+
+test('removing the context keeps the song and hands over to Autoplay, which switches from its card', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'desktop controls; the phone reaches them from the card menu');
+  const settings: unknown[] = [];
+  await page.route((url) => url.pathname === '/api/discovery/settings', async (route) => {
+    if (route.request().method() !== 'GET') settings.push(route.request().postDataJSON());
+    await route.fulfill({ json: { learning_enabled: true, autoplay_enabled: false } });
+  });
+  const queue = await playFromLibrary(page);
+
+  await queue.getByRole('button', { name: 'Quitar Tu biblioteca de la cola' }).click();
+  await expect(queue.locator('[data-queue-card="context"]')).toHaveCount(0);
+  await expect(queue.locator('[data-drag-row]')).toHaveCount(1);
+  await expect(page.locator('[data-omni-player]')).toContainText('Canción de biblioteca 320');
+
+  // Keyboard, not pointer: the switch is a real control even while dimmed.
+  const toggle = queue.getByRole('switch', { name: 'Reproducción automática' });
+  await toggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-checked', 'true');
+  await expect(queue.locator('[data-queue-card="autoplay"]')).not.toHaveAttribute('data-dimmed', '');
+  await expect.poll(() => settings).toContainEqual(expect.objectContaining({ autoplay_enabled: true }));
+});
+
+test('opening the context card goes to the collection and leaves the music playing', async ({ page, isMobile }) => {
+  await page.goto('/player/#/');
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  await page.goto('/player/#/playlists');
   const queue = await openQueuePanel(page);
+  if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
+
+  const open = queue.getByRole('button', { name: 'Abrir Tu biblioteca' });
+  if (isMobile) await open.tap();
+  else await open.click();
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(page.locator('[data-omni-player]')).toContainText('Canción de biblioteca 320');
+});
+
+test('section labels never land on top of each other', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'desktop-only regression');
+  const queue = await restoreLongQueue(page);
 
   const heads = queue.locator('section[data-head] > div:first-child');
-  await expect.poll(() => heads.count()).toBeGreaterThan(1);
+  await expect.poll(() => heads.count()).toBe(3);
   // The panel settled before the lanes existed. They arrive with an entrance of
   // their own, and a rect read inside it is a rect of something still growing.
   await settle(page, '[data-now-playing-tile="queue"]');
@@ -90,81 +118,54 @@ test('queue lane labels never land on top of each other', async ({ page }) => {
       return { top: rect.top, bottom: rect.bottom, text: node.textContent ?? '' };
     }),
   );
-
   for (let i = 1; i < boxes.length; i += 1) {
     const above = boxes[i - 1];
     const below = boxes[i];
-    expect(
-      above.bottom,
-      `"${above.text}" overlaps "${below.text}"`,
-    ).toBeLessThanOrEqual(below.top);
+    expect(above.bottom, `"${above.text}" overlaps "${below.text}"`).toBeLessThanOrEqual(below.top);
   }
 
   // A lane squeezed past its label is a lane showing none of its songs, which
-  // is the same collapse seen from the other side.
+  // is the same collapse seen from the other side. Polled rather than read
+  // once: a lane that has not finished laying out measures zero.
   const laneRows = queue.locator('[data-section-rows]');
-  await expect.poll(() => laneRows.count()).toBeGreaterThan(1);
-  // Polled rather than read once: a lane that has not finished laying out
-  // measures zero, which looks exactly like the collapse this guards against.
+  await expect(laneRows).toHaveCount(2);
   await expect
     .poll(async () => {
-      const heights = await laneRows.evaluateAll((nodes) =>
-        nodes.map((node) => node.getBoundingClientRect().height),
-      );
+      const heights = await laneRows.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height));
       return Math.min(...heights);
     }, { message: 'every lane must show songs, not only its label' })
     .toBeGreaterThan(40);
-});
-
-test('the context lane names where it came from', async ({ page }) => {
-  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'desktop-only regression');
-  const queue = await openQueuePanel(page);
-
-  // `text-transform: uppercase` is CSS only, so the DOM keeps the real casing.
-  await expect(queue.getByText('De Tu biblioteca', { exact: true })).toBeVisible();
+  // However long the requests get, the continuation stays in sight.
+  await expect(queue.locator('[data-queue-card="context"]')).toBeInViewport();
+  await expect(queue.locator('[data-queue-card="autoplay"]')).toBeInViewport();
 });
 
 /**
- * On a phone the queue is one card of the pager, and the box holding its lanes
- * fills with them and then almost never scrolls — so unlike the browser panel
- * beside it, whose body always overflows, a bottom padding there is not a band
- * the list is scrolled past. It is permanent empty panel, and reserving the
- * pager pill's clearance that way held the queue a whole clearance short of
- * the card's edge: the search tab painted its rows down to the bottom, the
- * queue stopped above it and showed the difference as a dead strip.
- *
- * Two things have to hold at once, and it is the pair that pins the fix: the
- * lanes reach the bottom of the card, *and* the last song still comes to rest
- * above the pill rather than under it. Either one alone is satisfied by the
- * bug — the old padding bought the second by giving up the first.
+ * On a phone the queue is one card of the pager, and the box holding its
+ * sections fills with them and then almost never scrolls. The requests lane is
+ * the one that gives way and scrolls; the cards close the list at the bottom
+ * of the card, above the pager pill — with the pill's clearance under them and
+ * no more.
  */
-test('the queue fills its card the way the browser does, and still clears the pill', async ({ page }) => {
+test('the queue fills its card the way the browser does, and its cards clear the pill', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'mobile-only regression');
-  await openQueuePanel(page);
+  await restoreLongQueue(page);
   await snapPlayerCarousel(page, 'now-playing', 'queue');
   await settle(page, '[data-now-playing-tile="queue"]');
 
   const queue = page.locator('[data-now-playing-tile="queue"]');
-  const lanes = queue.locator('[data-section-rows]');
-  await expect.poll(() => lanes.count()).toBeGreaterThan(0);
-  // A lane scrolls itself only once it has been squeezed, which is the state
-  // this measures: a short queue leaves room below it for honest reasons.
+  const requests = queue.locator('section[data-section="manual"] [data-section-rows]');
   await expect
-    .poll(() => lanes.last().evaluate((lane) => lane.scrollHeight - lane.clientHeight),
-      { message: 'the queue must be long enough to scroll' })
+    .poll(() => requests.evaluate((lane) => lane.scrollHeight - lane.clientHeight),
+      { message: 'the requests must be long enough to scroll' })
     .toBeGreaterThan(0);
 
-  // How far the painted list stops short of the card it sits in. For the queue
-  // that is the bottom lane's own box; for the browser it is the body's
-  // padding edge, which is where its overflowing rows are clipped. Both are
-  // polled rather than read once: a panel measured while it is still coming in
-  // is a panel still growing, and the shortfall of one is the whole assertion.
   await expect
     .poll(() => queue.evaluate((tile) => {
-      const laneNodes = [...tile.querySelectorAll('[data-section-rows]')];
-      const last = laneNodes[laneNodes.length - 1] as HTMLElement;
+      const sections = [...tile.querySelectorAll('section[data-section]')];
+      const last = sections[sections.length - 1] as HTMLElement;
       return tile.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom;
-    }), { message: 'the queue left a strip of empty panel under its bottom lane' })
+    }), { message: 'the queue left a strip of empty panel under its last section' })
     .toBeLessThanOrEqual(1);
 
   await snapPlayerCarousel(page, 'now-playing', 'browser');
@@ -177,40 +178,25 @@ test('the queue fills its card the way the browser does, and still clears the pi
     }), { message: 'the browser panel no longer reaches the bottom of its card' })
     .toBeLessThanOrEqual(1);
 
-  // And the clearance is still doing its job, one scrollport further in: at the
-  // end of the bottom lane the last song rests above the pill, not beneath it.
   await snapPlayerCarousel(page, 'now-playing', 'queue');
   await settle(page, '[data-now-playing-tile="queue"]');
 
-  // Row and pill are read in the same frame, and the lane is only measured
-  // once it reports itself at its end. It is virtualized, so the frame after a
-  // scroll still holds the rows of the range it left — and the pill, read back
-  // on its own after a trip across the pager, can be caught still travelling.
-  const airAbovePill = async () => {
-    await lanes.last().evaluate((lane) => { lane.scrollTop = lane.scrollHeight; });
-    return page.evaluate(() => {
-      const all = [...document.querySelectorAll('[data-now-playing-tile="queue"] [data-section-rows]')];
-      const lane = all[all.length - 1] as HTMLElement | undefined;
-      const pill = document.querySelector('nav[aria-label="Paneles de NORMAL"]');
-      if (!lane || !pill) return null;
-      if (Math.abs(lane.scrollTop + lane.clientHeight - lane.scrollHeight) > 1) return null;
-      const rows = [...lane.querySelectorAll('[data-drag-row]')] as HTMLElement[];
-      if (!rows.length) return null;
-      const bottom = Math.max(...rows.map((row) => row.getBoundingClientRect().bottom));
-      return Math.round(pill.getBoundingClientRect().top - bottom);
-    });
-  };
-
-  const rests = 'the last song rests just above the pager pill';
+  // Card and pill are read in the same frame: the pill, read back on its own
+  // after a trip across the pager, can be caught still travelling.
+  const rests = 'the last card rests just above the pager pill';
   await expect
     .poll(async () => {
-      const air = await airAbovePill();
-      if (air === null) return 'the bottom lane has not settled at its end';
-      if (air < 0) return `the last song sits ${-air}px under the pager pill`;
-      // The band the bug left behind arrives from the other side: air wide
-      // enough to read as empty panel is as wrong as no air at all.
+      const air = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll('[data-now-playing-tile="queue"] [data-queue-card]')];
+        const pill = document.querySelector('nav[aria-label="Paneles de NORMAL"]');
+        if (!cards.length || !pill) return null;
+        const bottom = Math.max(...cards.map((card) => card.getBoundingClientRect().bottom));
+        return Math.round(pill.getBoundingClientRect().top - bottom);
+      });
+      if (air === null) return 'the queue has no cards or no pill';
+      if (air < 0) return `the last card sits ${-air}px under the pager pill`;
       if (air > 24) return `${air}px of empty panel stands above the pager pill`;
       return rests;
-    }, { message: 'the bottom lane must end on the pill, with its clearance and no more' })
+    }, { message: 'the cards must end on the pill, with its clearance and no more' })
     .toBe(rests);
 });
