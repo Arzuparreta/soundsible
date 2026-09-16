@@ -28,6 +28,7 @@ vi.mock('../components/SettingsSections', () => {
     SETTINGS_GROUPS: [{ label: () => 'Preferencias', ids: sections.map((section) => section.id) }],
     visibleSections,
     findSection: (id?: string) => visibleSections().find((section) => section.id === id),
+    settingsCapabilities: () => ({ admin: admin(), sharedLinks: false }),
   };
 });
 
@@ -40,6 +41,12 @@ function mount(path = '/settings') {
     <Route path="/downloads" component={() => <h1>Descargas</h1>} />
     <Route path="/search" component={() => <h1>Buscar música</h1>} />
   </HashRouter>);
+}
+
+/** The route and its query, read apart: HashRouter keeps both in the hash. */
+function where() {
+  const [path, query = ''] = window.location.hash.split('?');
+  return { path, params: new URLSearchParams(query) };
 }
 
 beforeEach(async () => {
@@ -116,6 +123,48 @@ describe('integrated settings routes', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Dispositivos' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Escape' });
+    expect(window.location.hash).toBe('#/settings/devices');
+  });
+
+  it('keeps the search in the URL, so coming back from a result finds the results', async () => {
+    mount('/settings');
+    const field = await screen.findByPlaceholderText('Buscar en ajustes');
+    const depth = window.history.length;
+
+    fireEvent.input(field, { target: { value: 'contra' } });
+    fireEvent.input(field, { target: { value: 'contraseña' } });
+    await waitFor(() => expect(where().params.get('q')).toBe('contraseña'));
+    // Typing refines the entry you are on; it does not stack one per key.
+    expect(window.history.length).toBe(depth);
+
+    fireEvent.click(screen.getByRole('button', { name: /Cambiar contraseña/ }));
+    await screen.findByRole('heading', { name: 'Cuenta' });
+    expect(where().path).toBe('#/settings/account');
+    expect(where().params.get('setting')).toBe('change-password');
+
+    window.history.back();
+    await screen.findByRole('heading', { name: 'Ajustes' });
+    expect(screen.getByPlaceholderText('Buscar en ajustes')).toHaveValue('contraseña');
+    fireEvent.click(screen.getByRole('button', { name: /Cambiar contraseña/ }));
+    await screen.findByRole('heading', { name: 'Cuenta' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+    await screen.findByRole('heading', { name: 'Ajustes' });
+    expect(where()).toEqual({ path: '#/settings', params: new URLSearchParams({ q: 'contraseña' }) });
+    expect(screen.getByRole('button', { name: /Cambiar contraseña/ })).toBeInTheDocument();
+  });
+
+  it('drops the landing but not the search when a dead section is replaced', async () => {
+    mount('/settings/removed?q=perfil&setting=change-name');
+    await waitFor(() => expect(where().path).toBe('#/settings'));
+    expect(where().params.toString()).toBe('q=perfil');
+    expect(screen.getByRole('button', { name: /Cambiar nombre/ })).toBeInTheDocument();
+  });
+
+  it('opens a category from the index without carrying anything along', async () => {
+    mount('/settings');
+    fireEvent.click(await screen.findByRole('button', { name: /Dispositivos/ }));
+    await screen.findByRole('heading', { name: 'Dispositivos' });
     expect(window.location.hash).toBe('#/settings/devices');
   });
 

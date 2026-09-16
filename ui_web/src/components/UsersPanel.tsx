@@ -6,6 +6,7 @@ import { toast } from '../lib/toast';
 import { copyText } from '../lib/clipboard';
 import { t } from '../lib/i18n';
 import PasswordFields from './PasswordFields';
+import { settingAnchor } from './SettingsRows';
 import { invites, isAdmin, user, users, type Role, type User } from '../lib/session';
 import styles from './UsersPanel.module.css';
 
@@ -128,7 +129,7 @@ export function UsersPanel() {
           <p class={styles.notice}>{t('users.setYourPasswordFirst')}</p>
         </Show>
 
-        <div class={styles.inviteBar}>
+        <div class={styles.inviteBar} {...settingAnchor('invite')}>
           <Button onClick={invite} disabled={needsOwnPassword()}>
             {t('users.invite')}
           </Button>
@@ -184,7 +185,7 @@ export function UsersPanel() {
           </For>
         </ul>
 
-        <form class={styles.form} onSubmit={create}>
+        <form class={styles.form} onSubmit={create} {...settingAnchor('add-user')}>
           <h2 class={styles.formTitle}>{t('users.addTitle')}</h2>
 
           <div class={styles.field}>

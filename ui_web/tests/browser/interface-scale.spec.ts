@@ -246,7 +246,8 @@ test.describe('interface scale geometry', () => {
     const search = page.getByPlaceholder('Buscar en ajustes');
     await expect(search).toBeVisible();
     await search.fill('contraseña');
-    await expect(settings.getByRole('button', { name: /Cuenta/ })).toBeVisible();
+    // Results name the setting and where it lives, not just the submenu.
+    await expect(settings.getByRole('button', { name: /^Cambiar contraseña Cuenta/ })).toBeVisible();
     await expect(settings.getByRole('button', { name: /Apariencia/ })).toBeHidden();
     await search.clear();
 

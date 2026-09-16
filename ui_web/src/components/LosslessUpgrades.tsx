@@ -124,12 +124,17 @@ export function LosslessUpgrades() {
   return (
     <SettingsGroup label={t('settings.losslessStatusLabel')} note={t('settings.losslessNote')}>
       <SwitchRow
+        anchor="lossless-upgrades"
         label={t('settings.losslessUpgrades')}
         checked={status()?.enabled ?? true}
         onChange={toggleEnabled}
       />
 
-      <ValueRow label={t('settings.losslessState')} value={status() ? activityLabel(status()!) : '—'} />
+      <ValueRow
+        anchor="lossless-status"
+        label={t('settings.losslessState')}
+        value={status() ? activityLabel(status()!) : '—'}
+      />
       <ValueRow label={t('settings.losslessUpgraded')} value={String(count('completed'))} />
       <ValueRow label={t('settings.losslessPending')} value={String(pending())} />
       <ValueRow label={t('settings.losslessNoMatch')} value={String(count('no_match'))} />
@@ -147,6 +152,7 @@ export function LosslessUpgrades() {
         value={jamendoReady() ? t('settings.losslessJamendoReady') : t('settings.losslessJamendoMissing')}
       />
       <InputRow
+        anchor="lossless-jamendo"
         label={t('settings.losslessJamendoClientId')}
         hint={t('settings.losslessJamendoHint')}
         value={jamendoClientId()}
@@ -165,6 +171,7 @@ export function LosslessUpgrades() {
         when={running() || paused()}
         fallback={
           <ActionRow
+            anchor="lossless-run"
             label={t('settings.losslessRunNow')}
             hint={t('settings.losslessRunNowHint')}
             disabled={busy()}
@@ -176,6 +183,7 @@ export function LosslessUpgrades() {
           when={paused()}
           fallback={
             <ActionRow
+              anchor="lossless-run"
               label={t('settings.losslessPause')}
               hint={t('settings.losslessProcessed', { n: status()?.manual?.processed ?? 0 })}
               disabled={busy()}
@@ -184,6 +192,7 @@ export function LosslessUpgrades() {
           }
         >
           <ActionRow
+            anchor="lossless-run"
             label={t('settings.losslessResume')}
             hint={t('settings.losslessProcessed', { n: status()?.manual?.processed ?? 0 })}
             disabled={busy()}
@@ -199,6 +208,7 @@ export function LosslessUpgrades() {
       </Show>
 
       <ActionRow
+        anchor="lossless-recheck"
         label={t('settings.losslessRecheck')}
         hint={t('settings.losslessRecheckHint')}
         disabled={busy()}

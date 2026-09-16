@@ -84,15 +84,28 @@ export function SubsonicAccessPanel() {
   return (
     <>
       <SettingsGroup label={t('subsonic.title')} note={t('subsonic.note')}>
-        <ValueRow label={t('subsonic.server')} value={<span class={styles.mono}>{serverUrl()}</span>} />
         <ValueRow
+          anchor="subsonic-server"
+          label={t('subsonic.server')}
+          value={<span class={styles.mono}>{serverUrl()}</span>}
+        />
+        <ValueRow
+          anchor="subsonic-username"
           label={t('subsonic.username')}
           value={<span class={styles.mono}>{access()?.username ?? '—'}</span>}
         />
-        <ActionRow label={t('subsonic.copyServer')} onClick={() => void copy(serverUrl())} />
+        <ActionRow
+          anchor="subsonic-copy-server"
+          label={t('subsonic.copyServer')}
+          onClick={() => void copy(serverUrl())}
+        />
       </SettingsGroup>
 
-      <SettingsGroup label={t('subsonic.password')} note={t('subsonic.passwordNote')}>
+      <SettingsGroup
+        anchor="subsonic-password"
+        label={t('subsonic.password')}
+        note={t('subsonic.passwordNote')}
+      >
         <Show when={password()}>
           <SettingRow
             label={t('subsonic.passwordShownOnce')}
