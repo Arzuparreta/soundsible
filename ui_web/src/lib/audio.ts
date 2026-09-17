@@ -416,8 +416,8 @@ function releaseDeck(index: number): void {
  */
 export function unlockAudio(): boolean {
   if (graphState !== 'untested') {
+    reconcilePlatformPlayback();
     if (!playbackRequested) return graphState === 'ready';
-    resumeContext();
     unlockDecks();
     if (graphState === 'ready') {
       void programCarrier?.retryFromGesture(deckIsPlaying(audioEl()));
@@ -606,9 +606,13 @@ function watchContextState(context: AudioContext): void {
   context.addEventListener('statechange', () => {
     recordPlaybackDiagnostic('context.statechange', { state: context.state });
     if (audioContext !== context || graphState !== 'ready') return;
-    // Only existing playback permission permits recovery; a pause revokes it.
     resetClockSample();
-    if (playbackRequested) resumeContext();
+    // A platform interruption is not permission to restart. In particular,
+    // iOS may interrupt only Web Audio, leaving the source's paused flag false.
+    // Our own bounded output restart also emits state changes.
+    if (!outputRecovering && context.state !== 'running' && playbackRequested) {
+      audioService.pause('media_session');
+    }
   });
 }
 
@@ -664,7 +668,7 @@ function observeClock(): void {
   };
   if (frozen && wall - previous.since >= 1000
     && position - previous.startPosition >= (wall - previous.since) / 2000) {
-    void recoverOutputClock();
+    void recoverProgramOutput();
   }
 }
 
@@ -678,7 +682,7 @@ function superviseClock(): void {
 }
 
 /** One in-place recovery per incident. Never rebuild routed media elements. */
-async function recoverOutputClock(): Promise<void> {
+async function recoverProgramOutput(): Promise<void> {
   const context = audioContext;
   if (!context || outputRecovering || !playbackRequested) return;
   if (recoveryAttempted) {
@@ -707,6 +711,7 @@ async function recoverOutputClock(): Promise<void> {
         if (!current()) return;
         await context.resume();
         if (!current()) return;
+        primeAudioSession(context);
         const before = context.currentTime;
         // Route activation may settle after resume() resolves. The shared
         // deadline bounds this wait without mistaking a slow restart for death.
@@ -1310,6 +1315,15 @@ function flushDeferredWork(): void {
   pendingDetach.clear();
 }
 
+/** Read native state before queued pause/statechange events catch up on thaw.
+ * Healthy background playback continues; returning to the page never starts it. */
+function reconcilePlatformPlayback(): void {
+  if (!playbackRequested || outputRecovering) return;
+  if (audioEl().paused || (audioContext && audioContext.state !== 'running')) {
+    audioService.pause('media_session');
+  }
+}
+
 let lifecycleBound = false;
 
 /** Watch for the page coming back, once per session. Registered from `decks()`
@@ -1323,10 +1337,13 @@ function bindLifecycle(): void {
       resetClockSample();
       if (document.visibilityState !== 'hidden') {
         flushDeferredWork();
-        if (playbackRequested) { resumeContext(); superviseClock(); }
+        reconcilePlatformPlayback();
+        if (playbackRequested) superviseClock();
       }
     });
   }
+  document.addEventListener('resume', reconcilePlatformPlayback);
+  window.addEventListener('pageshow', reconcilePlatformPlayback);
   // A blend is driven by a chain of timeouts, and a backgrounded page does not
   // get to keep its timers: iOS throttles them to whatever it likes and stops
   // them altogether once the page is frozen. `timeupdate` and `ended` come from
@@ -1346,7 +1363,9 @@ function bindLifecycle(): void {
   });
   onDeckEvent('pause', (event) => {
     const deck = event.currentTarget as HTMLAudioElement;
-    if (expectedPauses.delete(deck) || outputRecovering || !deck.paused || deck.ended
+    // A queued system pause still revokes intent if WebKit has already
+    // restarted the source before delivering the event on unlock.
+    if (expectedPauses.delete(deck) || outputRecovering || deck.ended
       || holdsUnlockSample(deck) || !participatingDecks.has(deck) || !playbackRequested) return;
     audioService.pause('media_session');
   });
@@ -1684,14 +1703,15 @@ export const audioService = {
     playbackRequested = true;
     recoveryAttempted = false;
     outputHealth = 'healthy';
-    // Once the decks are routed through the graph, their output only exists
-    // inside it. Resuming here costs nothing and means any play gesture can
-    // recover a context the browser suspended behind our back.
-    resumeContext();
+    // iOS can keep both clocks moving after losing its hardware route. There
+    // is no web API to test whether the car is sounding. An explicit Play is
+    // the recovery boundary: renew the existing output even when it reports
+    // running, without replacing the graph, decks, or Live tap.
+    const renewOutput = programCarrier?.snapshot().mode === 'direct';
     const current = mix;
     const phase = current?.phase ?? 'idle';
     const dominant = current?.dominant ?? false;
-    const started = playProgramDeck(audioEl());
+    const started = renewOutput ? recoverProgramOutput() : playProgramDeck(audioEl());
     reportProgramTransport('resume', origin, phase, dominant);
     return started;
   },
