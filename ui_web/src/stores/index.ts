@@ -4925,11 +4925,6 @@ export function initStore(): void {
       }
     }
     hiddenSince = null;
-    // A context can come back from the background suspended, and a `resume()`
-    // attempted while we were away has no gesture behind it to succeed with.
-    // Only ever a resume: building the graph outside a gesture is the one
-    // sequence WebKit punishes, so a page that never had one waits for a tap.
-    if (audioService.graphReady()) audioService.unlockAudio();
     // Whatever stopped while we were away gets one more chance now.
     resumeFromStarved();
     if (state.playback.phase === 'buffering') {
@@ -4941,7 +4936,6 @@ export function initStore(): void {
   // freeze a backgrounded page outright, and a page that is thawed rather than
   // merely revealed does not always get a `visibilitychange` of its own.
   document.addEventListener('resume', () => {
-    if (audioService.graphReady()) audioService.unlockAudio();
     resumeFromStarved();
   });
 

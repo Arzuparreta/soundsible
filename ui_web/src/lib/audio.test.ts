@@ -282,7 +282,9 @@ describe('two-deck mixer', () => {
     expect(first.muted).toBe(true);
     module.audioService.pause('media_session');
     expect(second.muted).toBe(false); // current paused track remains resumable
-    await module.audioService.resume('media_session');
+    const resumed = module.audioService.resume('media_session');
+    await vi.advanceTimersByTimeAsync(300);
+    await resumed;
     await module.audioService.takeStaged('/third', 1);
     expect(first.muted).toBe(false);
     expect(second.muted).toBe(true);
@@ -313,7 +315,9 @@ describe('two-deck mixer', () => {
     module.audioService.setMuted(false);
     module.audioService.pause();
     expect(module.programPlaybackSnapshot().playing).toBe(false);
-    await module.audioService.resume();
+    const resumed = module.audioService.resume();
+    await vi.advanceTimersByTimeAsync(300);
+    await resumed;
     module.audioService.unlockAudio();
     expect(created).toHaveLength(2);
     expect(module.programPlaybackSnapshot()).toMatchObject({ outputMode: 'direct', playing: true });
@@ -849,7 +853,7 @@ describe('two-deck mixer', () => {
     expect(created).toEqual(before);
   });
 
-  it('resumes an interrupted playing context without replacing its graph or decks', async () => {
+  it('pauses an interrupted context until explicit Play without replacing its graph or decks', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
     expect(module.audioService.unlockAudio()).toBe(true);
@@ -864,6 +868,9 @@ describe('two-deck mixer', () => {
     stateHandler();
     await Promise.resolve();
 
+    expect(context.resume).not.toHaveBeenCalled();
+    expect(module.audioEl().paused).toBe(true);
+    await module.audioService.resume();
     expect(context.resume).toHaveBeenCalled();
     expect(module.audioService.graphReady()).toBe(true);
     expect(created).toEqual(before);
@@ -1131,6 +1138,100 @@ describe('CarPlay interruption recovery', () => {
     await audioService.resume('media_session');
     expect(deck.paused).toBe(false);
     expect(context.resume).toHaveBeenCalledTimes(1);
+    audioService.stop();
+  });
+
+  it.each(['visibility', 'resume', 'pageshow'])('reconciles a delayed native interruption on %s without autoplay', async (event) => {
+    const { audioService, context, deck } = await setup();
+    hide();
+    // Native state changes while JS is frozen; no pause/statechange task yet.
+    context.state = 'interrupted';
+    context.resume.mockClear();
+    if (event === 'visibility') reveal();
+    else if (event === 'resume') document.dispatchEvent(new Event('resume'));
+    else window.dispatchEvent(new Event('pageshow'));
+    audioService.unlockAudio();
+    expect(context.resume).not.toHaveBeenCalled();
+    expect(deck.paused).toBe(true);
+    await deck.play();
+    expect(deck.paused).toBe(true);
+    audioService.stop();
+  });
+
+  it('does not resume on a generic gesture before the interruption event arrives', async () => {
+    const { audioService, context } = await setup();
+    context.state = 'interrupted';
+    context.resume.mockClear();
+    audioService.unlockAudio();
+    expect(context.resume).not.toHaveBeenCalled();
+    audioService.stop();
+  });
+
+  it('leaves healthy background music playing when the page returns', async () => {
+    const { audioService, context, deck } = await setup();
+    hide();
+    context.resume.mockClear();
+    const starts = deck.play.mock.calls.length;
+    reveal();
+    expect(deck.paused).toBe(false);
+    expect(deck.play).toHaveBeenCalledTimes(starts);
+    expect(context.resume).not.toHaveBeenCalled();
+    expect(context.suspend).not.toHaveBeenCalled();
+    audioService.stop();
+  });
+
+  it.each(['ui', 'media_session'] as const)('renews iOS output on explicit %s Play even when both clocks advance', async (origin) => {
+    vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
+    const { audioService, context, deck } = await setup();
+    const stateHandler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')![1];
+    context.suspend.mockImplementation(async () => { context.state = 'suspended'; stateHandler(); });
+    context.resume.mockImplementation(async () => { context.state = 'running'; stateHandler(); });
+    const capture = audioService.acquireBroadcastCapture();
+    deck.currentTime = 42;
+    hide();
+    // Hardware output can be lost with no JS-visible interruption or clock stall.
+    const before = [...created];
+    const playing = audioService.resume(origin);
+    await vi.advanceTimersByTimeAsync(300);
+    await playing;
+    expect(context.suspend).toHaveBeenCalledTimes(1);
+    expect(context.resume).toHaveBeenCalled();
+    expect(deck.paused).toBe(false);
+    expect(deck.currentTime).toBe(42);
+    expect(created).toEqual(before);
+    expect(context.close).not.toHaveBeenCalled();
+    expect(audioService.acquireBroadcastCapture()).toBe(capture);
+    audioService.stop();
+    audioService.releaseBroadcastStream();
+  });
+
+  it('does not restart iOS output after Pause cancels an explicit Play renewal', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
+    const { audioService, context, deck } = await setup();
+    let finishSuspend!: () => void;
+    context.suspend.mockImplementation(() => new Promise<void>((resolve) => { finishSuspend = resolve; }));
+    const playing = audioService.resume('media_session');
+    audioService.pause('media_session');
+    const starts = deck.play.mock.calls.length;
+    const resumes = context.resume.mock.calls.length;
+    finishSuspend();
+    await playing;
+    expect(deck.paused).toBe(true);
+    expect(deck.play).toHaveBeenCalledTimes(starts);
+    expect(context.resume).toHaveBeenCalledTimes(resumes);
+    audioService.stop();
+  });
+
+  it('honors a queued system pause even if native playback has already restarted', async () => {
+    const { audioService, deck } = await setup();
+    hide();
+    // iOS paused and restarted while JavaScript could not process either task.
+    expect(deck.paused).toBe(false);
+    deck.dispatchEvent(new Event('pause'));
+    reveal();
+    expect(deck.paused).toBe(true);
+    await deck.play();
+    expect(deck.paused).toBe(true);
     audioService.stop();
   });
 

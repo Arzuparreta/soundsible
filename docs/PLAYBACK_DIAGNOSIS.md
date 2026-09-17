@@ -6,7 +6,10 @@ the speakers. Device acceptance is still required.
 
 ## CarPlay cable disconnect/reconnect recovery
 
-Status: candidate correction; physical iPhone/PWA/CarPlay acceptance is pending.
+The September 17 device report rejects the previous correction (#197): unlocking
+with the phone disconnected still starts music, and reconnecting can leave the
+source advancing without sound. The changes below address gaps in that approach;
+physical iPhone/PWA/car acceptance is still pending.
 The listener reports Safari PWA on iOS 27 with wired CarPlay. The user-agent
 version in the traces is not an independently verified OS version.
 
@@ -27,8 +30,20 @@ no arbitrary suppression window for car controls.
 Playback permission is now separate from native element state. A native programme
 pause stops all DJ participants and invalidates pending transport work. Native
 play without permission is stopped. Context state changes, page restoration and
-generic touch events cannot lift a pause. Existing playback permission still
-allows interrupted playback to continue, including with the screen locked.
+generic touch events cannot lift a pause. A platform context interruption now
+also revokes permission, even if the source still claims to play. Restoration
+reads native state before queued events arrive, and a queued native pause is
+honored even if iOS has already restarted the source. Returning to a healthy,
+still-playing session does not pause it. There is no resume from visibility,
+page thaw, or a generic gesture; deliberate Play remains available while locked.
+
+On iOS direct output, every explicit transport Play renews the existing context
+with a bounded suspend/resume cycle and a silent session-prime buffer before
+restarting the current source. This also covers a lost output with advancing
+clocks, which the clock supervisor cannot detect. It preserves position, gain,
+and Live capture. This cycle runs on Play, not on cable removal or page return.
+The platform still selects the physical output: the web app cannot verify that
+a running context is reaching the car. A successful cycle is not acoustic proof.
 
 A supervisor compares source progress with the context clock. One second of
 continuous observations with a frozen context and an advancing source starts
@@ -44,10 +59,23 @@ existing trace envelope and field allowlist.
 
 The in-place cycle is a candidate informed by the measured frozen clock and
 [WebKit reports](https://bugs.webkit.org/show_bug.cgi?id=276016#c7), not proof of
-recovery on the affected iPhone. Acceptance requires both unplug/power-off orders,
-no sound when opening/unlocking outside the car, and reconnection without closing
-the PWA from both paused and playing states. Check car Play/Pause, locked-screen
-playback, DJ transitions, and that sound reaches the car without restarting.
+recovery on the affected iPhone. Repeat these checks for NORMAL and DJ playback,
+with wired CarPlay and Bluetooth:
+
+1. Start music with the iPhone locked and the car on. Disconnect while it plays;
+   unlock with the PIN while still disconnected. Music must stay paused through
+   page return and unrelated taps until explicit Play.
+2. While locked and playing, disconnect and reconnect the output (including a
+   brief cable contact loss). Press Play on the car and, separately, in the PWA.
+   Sound must return to the car at the retained position without closing the PWA.
+3. Lock and unlock without an interruption: music must continue. Check both
+   unplug/power-off orders, repeated reconnects, and Play/Pause during a DJ blend.
+4. Pause or select another song during output renewal. The cancelled work must
+   not restart the previous song. Confirm Live capture survives a successful cycle.
+
+Automated tests cover intent, delayed events, output renewal with advancing
+clocks, cancellation, deadlines, deck identity and Live preservation. They do
+not emulate the iPhone audio session or establish speaker output.
 
 ## Evidence and hypothesis
 
