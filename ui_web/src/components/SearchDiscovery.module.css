@@ -1,9 +1,9 @@
-.home { display: flex; flex-direction: column; gap: 32px; padding: 14px 0 24px; }
+.home { display: flex; flex-direction: column; gap: 20px; padding: 14px 0 24px; }
 .home section { min-width: 0; position: relative; }
 .heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .heading h2 { margin: 0; font-size: clamp(20px, 2vw, 25px); line-height: 1.25; font-weight: var(--fw-bold); letter-spacing: -.025em; }
 .more { flex-shrink: 0; color: var(--ink-secondary); font-size: var(--text-caption); padding: 10px 0; }
-.rail { display: flex; gap: 16px; overflow-x: auto; padding: 2px 2px 12px; scroll-snap-type: x proximity; overscroll-behavior-x: contain; scrollbar-width: none; }
+.rail { display: flex; gap: 16px; overflow-x: auto; padding: 2px; scroll-snap-type: x proximity; overscroll-behavior-x: contain; scrollbar-width: none; }
 .rail::-webkit-scrollbar { display: none; }
 .entity { display: flex; flex-direction: column; gap: 12px; min-width: 0; flex: 0 0 156px; color: var(--ink-primary); scroll-snap-align: start; text-decoration: none; }
 .cover { display: block; position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: 8px; background: var(--bg-raised); }
@@ -27,5 +27,5 @@
   .controls button:disabled { opacity: .3; cursor: default; }
   .entity:hover .name { text-decoration: underline; }
 }
-@media (min-width: 768px) { .entity { flex-basis: 180px; } .home { gap: 40px; } }
+@media (min-width: 768px) { .entity { flex-basis: 180px; } .home { gap: 24px; } }
 @media (max-width: 380px) { .entity { flex-basis: 140px; } .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
