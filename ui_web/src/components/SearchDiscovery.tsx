@@ -132,9 +132,7 @@ function EntityRail(props: { items: DiscoveryBrowseItem[]; round: boolean; expan
       <For each={props.items}>{(item) => <MusicLink path={catalogDestination(item)!} class={styles.entity} label={item.title}>
         <span classList={{ [styles.cover]: true, [styles.round]: props.round }}><CoverImage src={item.cover} /></span>
         <span class={styles.meta}><span class={styles.name}>{item.title}</span>
-          <span class={styles.subtitle}>{props.round
-            ? item.reason_artist ? t('searchHome.related', { artist: item.reason_artist }) : t('search.tabArtists')
-            : item.artist}</span>
+          <Show when={!props.round}><span class={styles.subtitle}>{item.artist}</span></Show>
         </span>
       </MusicLink>}</For>
     </div>
