@@ -1,6 +1,21 @@
 import type { Dict } from './en';
 
 export const es: Dict = {
+  searchHome: {
+    "artists": "Artistas por descubrir",
+    "albums": "Álbumes para ti",
+    "songs": "Canciones que te pueden gustar",
+    "popularArtists": "Artistas populares",
+    "popularAlbums": "Álbumes populares",
+    "related": "Relacionado con {artist}",
+    "seeAll": "Ver todos",
+    "back": "Volver a Buscar",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "preparing": "Buscando artistas y álbumes para ti…",
+    "empty": "Busca música para empezar a explorar.",
+    "error": "No se pudieron cargar algunas recomendaciones."
+},
   musicExplorer: {
     change: 'Cambiar la sesión',
     mixWith: 'Mezclar con…',

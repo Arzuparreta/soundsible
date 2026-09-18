@@ -1,5 +1,20 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
+  searchHome: {
+    "artists": "Artists to discover",
+    "albums": "Albums for you",
+    "songs": "Songs you might like",
+    "popularArtists": "Popular artists",
+    "popularAlbums": "Popular albums",
+    "related": "Related to {artist}",
+    "seeAll": "See all",
+    "back": "Back to Search",
+    "previous": "Previous",
+    "next": "Next",
+    "preparing": "Finding artists and albums for you…",
+    "empty": "Search for music to start exploring.",
+    "error": "Some recommendations could not be loaded."
+},
   musicExplorer: {
     change: 'Change session',
     mixWith: 'Mix with…',

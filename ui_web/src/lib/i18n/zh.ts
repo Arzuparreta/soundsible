@@ -1,6 +1,21 @@
 import type { Dict } from './en';
 
 export const zh: Dict = {
+  searchHome: {
+    "artists": "发现艺人",
+    "albums": "为你推荐的专辑",
+    "songs": "你可能喜欢的歌曲",
+    "popularArtists": "热门艺人",
+    "popularAlbums": "热门专辑",
+    "related": "与 {artist} 相似",
+    "seeAll": "查看全部",
+    "back": "返回搜索",
+    "previous": "上一页",
+    "next": "下一页",
+    "preparing": "正在为你寻找艺人和专辑…",
+    "empty": "搜索音乐，开始探索。",
+    "error": "部分推荐无法加载。"
+},
   musicExplorer: {
     change: '更换会话',
     mixWith: '融入音乐…',

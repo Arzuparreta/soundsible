@@ -2,6 +2,7 @@ import { registerArtworkMetadata } from './media';
 import { apiOrigin, ownerToken } from './config';
 import type {
   CatalogAlbum,
+  CatalogItem,
   CatalogArtist,
   CatalogGenre,
   CatalogResolveResponse,
@@ -157,7 +158,19 @@ export interface DiscoveryFeedSection {
   score?: number;
 }
 
+export interface DiscoveryBrowseItem extends CatalogItem {
+  reason_artist?: string;
+}
+
+export interface DiscoveryBrowseSection {
+  id: 'artists' | 'albums';
+  popular: boolean;
+  items: DiscoveryBrowseItem[];
+}
+
 export interface DiscoveryMusicFeed {
+  browse_sections?: DiscoveryBrowseSection[];
+  browse_error?: boolean;
   v?: 1;
   generated_at?: number;
   cached?: boolean;
@@ -1011,8 +1024,8 @@ export const api = {
       body: { items },
       timeoutMs: 15000,
     }),
-  getDiscoveryMusicFeed: (signal?: AbortSignal) =>
-    request<DiscoveryMusicFeed>('/api/discovery/music/feed?limit=10', {
+  getDiscoveryMusicFeed: (signal?: AbortSignal, refresh = false) =>
+    request<DiscoveryMusicFeed>(`/api/discovery/music/feed?limit=10${refresh ? '&refresh=1' : ''}`, {
       signal,
       timeoutMs: 15000,
     }),

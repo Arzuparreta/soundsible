@@ -24,8 +24,7 @@
   animation: search-pop var(--dur-short) var(--ease-out);
 }
 
-.suggestItem,
-.recent {
+.suggestItem {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -47,22 +46,19 @@
 
 @media (hover: hover) and (pointer: fine) {
 
-.suggestItem:hover,
-.recent:hover {
+.suggestItem:hover {
   background: var(--bg-hover);
 }
 }
 
-.suggestItem span,
-.recent span {
+.suggestItem span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.suggestItem svg,
-.recent svg {
+.suggestItem svg {
   flex-shrink: 0;
   color: var(--ink-tertiary);
 }
@@ -167,276 +163,6 @@
   to {
     transform: translateX(270%);
   }
-}
-
-.start {
-  display: grid;
-  gap: var(--space-xl);
-  padding-top: var(--space-lg);
-}
-
-.rail {
-  min-width: 0;
-}
-
-.railHead {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-md);
-  margin-bottom: var(--space-sm);
-}
-
-.railRefresh {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--control-h);
-  height: var(--control-h);
-  flex-shrink: 0;
-  color: var(--ink-secondary);
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-.railRefresh:hover:not(:disabled) {
-  color: var(--ink-primary);
-  border-color: var(--hairline-strong);
-}
-}
-.railRefresh:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.spinning {
-  animation: refreshSpin 0.8s linear infinite;
-  animation-play-state: var(--decorative-animation-state, running);
-}
-
-@keyframes refreshSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Node-feed grid: same cards as the old rails, laid out as a responsive
-   grid instead of per-section horizontal scrollers. */
-.discoverGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(132px, 100%), 1fr));
-  gap: var(--space-md);
-  padding: var(--space-2xs) 0 var(--space-sm);
-}
-
-.discoverGrid .discoverCard {
-  width: auto;
-  min-width: 0;
-}
-
-.railTitle {
-  margin: 0;
-  color: var(--ink-primary);
-  font-size: var(--text-h2);
-  font-weight: var(--fw-bold);
-}
-
-.discoverCard {
-  position: relative;
-  width: 132px;
-  flex: none;
-  scroll-snap-align: start;
-}
-
-.discoverCardBtn {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  width: 100%;
-  padding: 0;
-  color: inherit;
-  background: transparent;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: transform var(--dur-short) var(--ease-out);
-}
-
-.discoverCardCover {
-  width: 100%;
-  aspect-ratio: 1;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
-  transition:
-    box-shadow var(--dur-short) var(--ease-out),
-    border-color var(--dur-short) var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.discoverCardBtn:hover .discoverCardCover {
-  box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
-  border-color: var(--hairline-strong);
-}
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .discoverCardBtn:hover {
-    transform: translateY(-3px);
-  }
-}
-
-.discoverCardTitle {
-  margin-top: var(--space-2xs);
-  color: var(--ink-primary);
-  font-size: var(--text-label);
-  font-weight: var(--fw-semibold);
-}
-
-.discoverCardSub {
-  color: var(--ink-tertiary);
-  font-size: var(--text-caption);
-}
-
-.discoverCardTitle,
-.discoverCardSub {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.discoverSaveBtn,
-.discoverSavedBadge {
-  position: absolute;
-  top: var(--space-xs);
-  left: var(--space-xs);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.62);
-  border: none;
-  border-radius: var(--radius-full);
-  opacity: 0;
-  transition: opacity var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
-}
-
-.discoverSaveBtn {
-  cursor: pointer;
-}
-
-@media (hover: none) and (pointer: coarse) {
-  .discoverSaveBtn::before,
-  .discoverSavedBadge::before {
-    position: absolute;
-    inset: -7px;
-    content: '';
-  }
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.discoverSaveBtn:hover {
-  background: var(--accent);
-}
-}
-
-.discoverSavedBadge {
-  color: var(--success);
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.discoverCard:hover .discoverSaveBtn,
-.discoverCard:hover .discoverSavedBadge {
-  opacity: 1;
-}
-}
-
-.seedState {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-sm);
-  max-width: 520px;
-  margin: var(--space-3xl) auto;
-  text-align: center;
-}
-
-.seedState h2 {
-  margin: 0;
-  color: var(--ink-primary);
-  font-size: var(--text-h1);
-}
-
-.seedState p {
-  margin: 0;
-  color: var(--ink-secondary);
-  line-height: var(--lh-normal);
-}
-
-.seedAction {
-  height: var(--control-h);
-  margin-top: var(--space-sm);
-  padding: 0 var(--space-lg);
-  color: var(--bg-base);
-  background: var(--ink-primary);
-  border: none;
-  border-radius: var(--radius-full);
-  font: inherit;
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
-}
-
-.seedHint {
-  display: none;
-  justify-self: center;
-  margin: var(--space-xl) auto 0;
-  padding: var(--space-sm) var(--space-md);
-  color: var(--ink-tertiary);
-  background: transparent;
-  border: none;
-  font: inherit;
-  font-size: var(--text-label);
-  cursor: pointer;
-}
-
-@media (hover: hover) and (pointer: fine) {
-
-.seedHint:hover {
-  color: var(--ink-secondary);
-}
-}
-
-@media (max-width: 1023px) {
-  .seedState {
-    display: none;
-  }
-
-  .seedHint {
-    display: block;
-  }
-}
-
-.recentGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--space-sm);
-}
-
-.recent {
-  height: 48px;
-  padding: 0 var(--space-md);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  font: inherit;
-  text-align: left;
 }
 
 .results {
@@ -879,17 +605,6 @@
     height: 38px;
   }
 
-  .railRefresh {
-    width: 34px;
-    height: 34px;
-  }
-}
-
-@media (hover: none) {
-  .discoverSaveBtn,
-  .discoverSavedBadge {
-    opacity: 1;
-  }
 }
 
 @keyframes search-pop {
@@ -910,3 +625,5 @@
 .entityActivate { position: absolute; inset: 0; background: transparent; border: 0; border-radius: inherit; cursor: pointer; }
 .entityActivate:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
 .entityCard a:not(.entityActivate) { position: relative; z-index: 1; }
+
+.recentHeading { margin: 10px 12px 4px; color: var(--ink-secondary); font-size: var(--text-caption); }
