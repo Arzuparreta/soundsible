@@ -7,6 +7,7 @@ import { clearSearchCache } from '../lib/searchCache';
 import { encodeTrackCapsule } from '../lib/trackShare';
 
 const apiMock = vi.hoisted(() => ({
+  getDiscoveryMusicFeed: vi.fn(),
   searchCatalog: vi.fn(),
   searchYouTube: vi.fn(),
   suggest: vi.fn(),
@@ -17,12 +18,6 @@ const apiMock = vi.hoisted(() => ({
   saveCatalogItem: vi.fn(),
   saveDiscoveryTrack: vi.fn(),
   prefetchPreviews: vi.fn(() => Promise.resolve({ status: 'queued' })),
-}));
-const nodeMock = vi.hoisted(() => ({
-  ensureNodeFeed: vi.fn(),
-  refreshNodeFeed: vi.fn(),
-  items: [] as Array<Record<string, unknown>>,
-  loading: false,
 }));
 const storeMock = vi.hoisted(() => ({
   playTrack: vi.fn(),
@@ -38,12 +33,6 @@ vi.mock('@solidjs/router', () => ({
   useSearchParams: () => [routerMock.params, routerMock.setParams],
 }));
 vi.mock('../lib/api', () => ({ api: apiMock }));
-vi.mock('../lib/nodeDiscover', () => ({
-  ensureNodeFeed: nodeMock.ensureNodeFeed,
-  refreshNodeFeed: nodeMock.refreshNodeFeed,
-  nodeFeed: () => nodeMock.items,
-  nodeLoading: () => nodeMock.loading,
-}));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/toast', () => ({
   toast: {
@@ -78,8 +67,7 @@ describe('Search route', () => {
     // Module scope outlives a test the way it outlives a navigation.
     clearSearchCache();
     vi.useFakeTimers();
-    nodeMock.items = [];
-    nodeMock.loading = false;
+    apiMock.getDiscoveryMusicFeed.mockResolvedValue({ items: [], browse_sections: [] });
     storeMock.library = [];
     routerMock.params = {};
     window.location.hash = '#/search';
@@ -414,24 +402,60 @@ describe('Search route', () => {
     expect(document.querySelector('[data-shape="round"]')).toBeInTheDocument();
   });
 
-  it('renders the node feed as the empty search state', async () => {
-    setLocale('es');
-    nodeMock.items = [
-      {
-        id: 'rec00000001',
-        title: 'New Track',
-        channel: 'New Artist',
-        seedId: 'lib1',
-        seedTitle: 'Seed Song',
-        seedArtist: 'Seed Artist',
-      },
-    ];
-
+  it('renders entity recommendations and song rows on the empty search home', async () => {
+    apiMock.getDiscoveryMusicFeed.mockResolvedValue({
+      browse_sections: [{ id: 'artists', popular: false, items: [{ id: 'artist:1', type: 'artist', source: 'deezer', title: 'New Artist', external_ids: { deezer_artist_id: '1' } }] }],
+      items: [{ id: 'song:2', title: 'New Track', artist: 'New Artist' }],
+    });
     render(() => <Search />);
-
-    expect(await screen.findByText('Recomendaciones')).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByRole('heading', { name: 'Artists to discover' })).toBeInTheDocument();
     expect(screen.getByText('New Track')).toBeInTheDocument();
-    expect(nodeMock.ensureNodeFeed).toHaveBeenCalled();
+    expect(apiMock.getDiscoveryMusicFeed).toHaveBeenCalled();
+  });
+
+  it('replaces the cold home when background enrichment finishes, then stops polling', async () => {
+    apiMock.getDiscoveryMusicFeed.mockResolvedValueOnce({ items: [], revalidating: true })
+      .mockResolvedValue({ browse_sections: [{ id: 'albums', popular: true, items: [{ id: 'album:1', type: 'album', source: 'deezer', title: 'Popular Album', artist: 'Artist', external_ids: { deezer_album_id: '1' } }] }] });
+    render(() => <Search />);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByText('Finding artists and albums for you…')).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.getByRole('heading', { name: 'Popular albums' })).toBeInTheDocument();
+    expect(screen.getByText('Popular Album')).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(apiMock.getDiscoveryMusicFeed).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps available recommendations after a failed background request and offers retry', async () => {
+    apiMock.getDiscoveryMusicFeed.mockResolvedValueOnce({ items: [{ id: 'song:1', title: 'Available Song', artist: 'Artist' }], revalidating: true })
+      .mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ items: [] });
+    render(() => <Search />);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.getByText('Available Song')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(apiMock.getDiscoveryMusicFeed).toHaveBeenLastCalledWith(expect.any(AbortSignal), true);
+  });
+
+  it('cancels discovery polling when a query replaces the home', async () => {
+    apiMock.getDiscoveryMusicFeed.mockResolvedValue({ items: [], revalidating: true });
+    render(() => <Search />);
+    await vi.advanceTimersByTimeAsync(0);
+    fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'Extremoduro' } });
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(apiMock.getDiscoveryMusicFeed).toHaveBeenCalledTimes(1);
+    expect(apiMock.getDiscoveryMusicFeed.mock.calls[0][0].aborted).toBe(true);
+  });
+
+  it('shows recent searches only while the empty field has focus', async () => {
+    localStorage.setItem('catalog_search_recents', JSON.stringify(['Marea']));
+    render(() => <Search />);
+    expect(screen.queryByRole('button', { name: 'Marea' })).not.toBeInTheDocument();
+    fireEvent.focus(screen.getByRole('searchbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Marea' }));
+    expect(apiMock.searchCatalog).toHaveBeenCalledWith('Marea', expect.any(AbortSignal));
+    expect(screen.queryByRole('button', { name: 'Marea' })).not.toBeInTheDocument();
+    localStorage.removeItem('catalog_search_recents');
   });
 
   it('treats pasted YouTube URLs as exact YouTube items', async () => {

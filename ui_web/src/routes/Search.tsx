@@ -8,18 +8,15 @@ import { api } from '../lib/api';
 import {
   actions,
   state,
-  isDownloadingKeys,
   isPlayingItem,
   isPlayingResult,
-  isSavedKeys,
-  ownedTrackForKeys,
 } from '../stores';
 import { coverUrl } from '../lib/media';
 import { artistPath, albumPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
 import { prefetchPreviews } from '../lib/prefetch';
-import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed, type NodeRec } from '../lib/nodeDiscover';
+import { SearchDiscovery } from '../components/SearchDiscovery';
 import { t as tr } from '../lib/i18n';
 import { userKey } from '../lib/session';
 import {
@@ -29,14 +26,9 @@ import {
   cancelCatalogResolve,
 } from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
-import { savedFromTrack } from '../lib/saved';
-import { Spinner } from '../components/Spinner';
-import type { CatalogItem, CatalogSaveResponse, CatalogSection, SavedEntry, SearchResult, Track } from '../types/music';
+import type { CatalogItem, CatalogSaveResponse, CatalogSection, SearchResult } from '../types/music';
 import styles from './Search.module.css';
 import { coverStyle } from '../lib/cover';
-import { attachContextMenu } from '../lib/contextMenu';
-import { trackMenuOptions } from '../components/trackActions';
-import type { ActionMenuOptions } from '../components/ActionMenu';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { sharedCapsuleFromHash, type TrackShareCapsuleV1 } from '../lib/trackShare';
@@ -150,6 +142,8 @@ export default function Search() {
   const [youtubeError, setYoutubeError] = createSignal(false);
   const [suggestions, setSuggestions] = createSignal<string[]>([]);
   const [showSuggest, setShowSuggest] = createSignal(false);
+  const [searchFocused, setSearchFocused] = createSignal(false);
+  const [discoveryReady, setDiscoveryReady] = createSignal(false);
   const [lastRun, setLastRun] = createSignal('');
   const [recents, setRecents] = createSignal<string[]>(loadRecents(initialDomain));
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
@@ -271,7 +265,6 @@ export default function Search() {
   };
 
   onMount(() => {
-    ensureNodeFeed();
     const shared = sharedCapsuleFromHash(window.location.hash);
     if (shared) openSharedTrack(shared.capsule);
     else if (/[?&]shared=/.test(window.location.hash)) {
@@ -418,6 +411,7 @@ export default function Search() {
     setSearchParams(
       {
         q: q().trim() || query.trim() || undefined,
+        browse: undefined,
         domain: explicitDomain === 'youtube' ? 'youtube' : undefined,
         tab: nextDomain === 'music' && nextTab !== 'all' ? nextTab : undefined,
       },
@@ -494,6 +488,7 @@ export default function Search() {
   };
 
   const commit = (value: string) => {
+    setSearchFocused(false);
     invalidatePending();
     const { query: parsed } = parseSearchInput(value.trim());
     const query = parsed.trim();
@@ -650,29 +645,6 @@ export default function Search() {
   };
 
 
-  // ── Node feed: play instantly (the video id is already resolved) and save
-  // through the standard download pipeline. ──
-  const nodeTrack = (rec: NodeRec): Track => ({
-    id: rec.id,
-    title: rec.title,
-    artist: rec.channel ?? '',
-    artist_is_channel: true,
-    duration: rec.duration,
-    cover: rec.thumbnail,
-    source: 'preview',
-    recommendation: rec.recommendation_identity
-      ? {
-          identity: rec.recommendation_identity,
-          source: 'discover',
-          reason: rec.seedArtist ? tr('discoverNodes.fromArtist', { artist: rec.seedArtist }) : undefined,
-        }
-      : undefined,
-  });
-
-  const playNodeRec = (rec: NodeRec) => {
-    actions.playTrack(nodeTrack(rec));
-  };
-
   onCleanup(() => {
     requestId += 1;
     aborter?.abort();
@@ -684,7 +656,9 @@ export default function Search() {
 
   return (
     <div class="view">
-      <div class={styles.searchBox}>
+      <div class={styles.searchBox} onFocusOut={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSearchFocused(false);
+      }}>
         <div class={styles.bar}>
           <NavigationMenuButton />
           <SearchField
@@ -696,7 +670,7 @@ export default function Search() {
               searchInput = element;
             }}
             onInput={onInput}
-            onFocus={() => setShowSuggest(domain() === 'youtube')}
+            onFocus={() => { setSearchFocused(true); setShowSuggest(domain() === 'youtube'); }}
             onBlur={() => setShowSuggest(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commit(e.currentTarget.value);
@@ -704,6 +678,15 @@ export default function Search() {
             }}
           />
         </div>
+        <Show when={searchFocused() && !q().trim() && recents().length > 0}>
+          <div class={styles.suggest} aria-label={tr('search.recentsSection')}>
+            <h2 class={styles.recentHeading}>{tr('search.recentsSection')}</h2>
+            <For each={recents()}>{(value) => <button class={styles.suggestItem} type="button"
+              onMouseDown={(event) => event.preventDefault()} onClick={() => commit(value)}>
+              <SearchIcon /><span>{value}</span>
+            </button>}</For>
+          </div>
+        </Show>
         <Show when={domain() === 'youtube' && showSuggest() && q().trim().length >= 2 && suggestions().length > 0}>
           <div class={styles.suggest}>
             <For each={suggestions()}>
@@ -739,7 +722,7 @@ export default function Search() {
       <div
         ref={(element) => registerPrimaryScroll(
           element,
-          () => !loading() && !youtubeLoading() && !sharedLoading() && !nodeLoading(),
+          () => !loading() && !youtubeLoading() && !sharedLoading() && (!!q().trim() || discoveryReady()),
         )}
         class={styles.scroll}
         data-primary-scroll
@@ -790,18 +773,8 @@ export default function Search() {
             </div>
           </Match>
           <Match when={!q().trim()}>
-            <StartPanel
-              recents={recents()}
-              domain={domain()}
-              recs={nodeFeed()}
-              loading={nodeLoading()}
-              onPick={commit}
-              onFocusSearch={() => searchInput?.focus()}
-              onRefresh={refreshNodeFeed}
-              onPlay={playNodeRec}
-              entry={(rec) => savedFromTrack(nodeTrack(rec))}
-              menu={(rec) => trackMenuOptions(nodeTrack(rec), { navigate })}
-            />
+            <SearchDiscovery section={typeof searchParams.browse === 'string' ? searchParams.browse : undefined}
+              onReady={setDiscoveryReady} onPlay={playItem} onSave={(item) => void saveItem(item)} saving={saving()} />
           </Match>
           <Match when={domain() === 'youtube'}>
             <div class={styles.results}>
@@ -1015,184 +988,6 @@ export default function Search() {
   );
 }
 
-function StartPanel(props: {
-  recents: string[];
-  domain: SearchDomain;
-  recs: NodeRec[];
-  loading: boolean;
-  onPick: (value: string) => void;
-  onFocusSearch: () => void;
-  onRefresh: () => void;
-  onPlay: (rec: NodeRec) => void;
-  entry: (rec: NodeRec) => SavedEntry;
-  menu: (rec: NodeRec) => ActionMenuOptions;
-}) {
-  return (
-    <div class={styles.start}>
-      <Show
-        when={props.recs.length > 0}
-        fallback={props.loading ? <RailSkeletons /> : <SeedSearch onFocusSearch={props.onFocusSearch} />}
-      >
-        <section class={styles.rail}>
-          <div class={styles.railHead}>
-            <div>
-              <h2 class={styles.railTitle}>{tr('discoverNodes.title')}</h2>
-            </div>
-            <button
-              class={styles.railRefresh}
-              type="button"
-              aria-label={tr('discoverNodes.refresh')}
-              title={tr('discoverNodes.refresh')}
-              disabled={props.loading}
-              onClick={props.onRefresh}
-            >
-              <svg
-                classList={{ [styles.spinning]: props.loading }}
-                viewBox="0 0 24 24"
-                width="17"
-                height="17"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" />
-              </svg>
-            </button>
-          </div>
-          <div class={styles.discoverGrid}>
-            <For each={props.recs}>
-              {(rec) => (
-                <DiscoveryCard
-                  title={rec.title}
-                  sub={rec.channel ?? ''}
-                  cover={rec.thumbnail}
-                  seedKey={rec.id}
-                  entry={props.entry(rec)}
-                  onPlay={() => props.onPlay(rec)}
-                  menu={() => props.menu(rec)}
-                />
-              )}
-            </For>
-          </div>
-        </section>
-      </Show>
-
-      <Show when={props.recents.length > 0}>
-        <section>
-          <h2 class={styles.sectionTitle}>{props.domain === 'youtube' ? tr('search.ytRecentsSection') : tr('search.recentsSection')}</h2>
-          <div class={styles.recentGrid}>
-            <For each={props.recents}>
-              {(value) => {
-                const tap = createResponsiveTap({ onTap: () => props.onPick(value) });
-                return (
-                  <button class={styles.recent} type="button" data-pressable {...tap}>
-                    <SearchIcon />
-                    <span>{value}</span>
-                  </button>
-                );
-              }}
-            </For>
-          </div>
-        </section>
-      </Show>
-    </div>
-  );
-}
-
-function SeedSearch(props: { onFocusSearch: () => void }) {
-  return (
-    <>
-      <div class={styles.seedState}>
-        <h2>{tr('search.seedHeading')}</h2>
-        <p>{tr('search.seedDesc')}</p>
-        <button class={styles.seedAction} type="button" onClick={props.onFocusSearch}>
-          {tr('search.seedAction')}
-        </button>
-      </div>
-      <button class={styles.seedHint} type="button" onClick={props.onFocusSearch}>
-        {tr('search.seedHeading')}
-      </button>
-    </>
-  );
-}
-
-function DiscoveryCard(props: {
-  title: string;
-  sub: string;
-  cover?: string;
-  seedKey: string;
-  /** What the card's corner control acts on. */
-  entry: SavedEntry;
-  onPlay: () => void;
-  menu?: () => ActionMenuOptions | null;
-}) {
-  const bg = (): JSX.CSSProperties => coverStyle(props.seedKey, props.cover);
-  const tap = createResponsiveTap({ onTap: props.onPlay });
-  // Same four states as every row, in the card's own corner slot: claim it,
-  // then give it a file. The heart lives in this card's context menu, which
-  // offers it from the moment the song is yours.
-  const owned = () => !!ownedTrackForKeys(props.entry.keys);
-  const downloading = () => isDownloadingKeys(props.entry.keys);
-  const saved = () => isSavedKeys(props.entry.keys);
-  return (
-    <div
-      class={styles.discoverCard}
-      ref={(el) => attachContextMenu(el, () => props.menu?.() ?? null)}
-    >
-      <button class={styles.discoverCardBtn} type="button" data-pressable {...tap}>
-        <span class={styles.discoverCardCover} style={bg()} />
-        <span class={styles.discoverCardTitle}>{props.title}</span>
-        <span class={styles.discoverCardSub}>{props.sub}</span>
-      </button>
-      <Switch>
-        <Match when={owned()}>
-          <span class={styles.discoverSavedBadge} aria-label={tr('collection.owned')}>
-            <CheckIcon />
-          </span>
-        </Match>
-        <Match when={downloading()}>
-          <span class={styles.discoverSavedBadge} aria-label={tr('collection.downloading')}>
-            <Spinner size={16} onAccent />
-          </span>
-        </Match>
-        <Match when={saved()}>
-          <button
-            class={styles.discoverSaveBtn}
-            type="button"
-            aria-label={tr('collection.download')}
-            onClick={(e) => {
-              e.stopPropagation();
-              void actions.downloadSaved(props.entry, 'discover');
-            }}
-          >
-            <DownloadIcon />
-          </button>
-        </Match>
-        <Match when={true}>
-          <button
-            class={styles.discoverSaveBtn}
-            type="button"
-            aria-label={tr('collection.save')}
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.toggleSaved(props.entry);
-            }}
-          >
-            <PlusIcon />
-          </button>
-        </Match>
-      </Switch>
-    </div>
-  );
-}
-
-function RailSkeletons() {
-  return <SkeletonCards count={12} />;
-}
-
 function SearchLoading(props: { tab: SearchTab }) {
   return (
     <Switch>
@@ -1267,30 +1062,6 @@ function SearchIcon() {
     <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
       <circle cx="11" cy="11" r="7" />
       <path d="M21 21l-4.3-4.3" />
-    </svg>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 20h14" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-      <path d="M5 12l5 5L20 7" />
     </svg>
   );
 }

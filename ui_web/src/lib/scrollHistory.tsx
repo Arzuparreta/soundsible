@@ -228,7 +228,9 @@ export function registerPrimaryScroll(
   registrations.add(registration);
 
   const onScroll = () => {
-    if (!activeEntry || element !== activeRegistration()?.element) return;
+    // Query-only navigation can shrink the same scroller before settleRoute's
+    // frame. Its clamped offset belongs to the destination, not the old entry.
+    if (!activeEntry || routeKey() !== activeRoute || element !== activeRegistration()?.element) return;
     positions.set(activeEntry.id, element.scrollTop);
   };
   const cancelPending = () => {

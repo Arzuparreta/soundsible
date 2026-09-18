@@ -150,8 +150,6 @@ def _append_external_items(
 
 def _top_taste_artists(metadata, fav_ids: list[str], limit: int = _MAX_PERSONALIZED_SEEDS) -> list[str]:
     tracks = list(metadata.tracks if metadata and metadata.tracks else [])
-    if not tracks:
-        return []
     rollup = load_listening_event_rollups()
     by_id = {t.id: t for t in tracks}
     scores: dict[str, float] = {}
@@ -454,12 +452,18 @@ def _build_discovery_feed_body(limit: int, *, include_external: bool = True) -> 
         sections=feed["sections"],
         limit=limit,
     )
-    return compose_discovery_feed(
+    body = compose_discovery_feed(
         feed,
         rollup=load_listening_event_rollups(),
         max_sections=6,
         section_size=limit,
     )
+
+    if include_external:
+        from shared.discovery_browse import build_browse_sections
+
+        body.update(build_browse_sections(_top_taste_artists(metadata, fav_ids), min(limit, 10)))
+    return body
 
 
 def _refresh_discovery_feed_cache(cache_key: str, user_id: str | None, limit: int) -> None:
@@ -470,8 +474,14 @@ def _refresh_discovery_feed_cache(cache_key: str, user_id: str | None, limit: in
             body = _build_discovery_feed_body(limit, include_external=True)
         now = time.time()
         with _DISCOVERY_FEED_LOCK:
+            previous = _DISCOVERY_FEED_CACHE.get(cache_key)
+            if body.get("browse_error") and previous:
+                current_sections = {s["id"]: s for s in body.get("browse_sections", [])}
+                for section in previous[2].get("browse_sections", []):
+                    current_sections.setdefault(section["id"], section)
+                body["browse_sections"] = [current_sections[key] for key in ("artists", "albums") if key in current_sections]
             _DISCOVERY_FEED_CACHE[cache_key] = (
-                now + _DISCOVERY_FEED_TTL_SEC,
+                now + (5 if body.get("browse_error") else _DISCOVERY_FEED_TTL_SEC),
                 now + _DISCOVERY_FEED_STALE_SEC,
                 dict(body),
             )
@@ -503,12 +513,13 @@ def discovery_music_feed():
     now = time.time()
     with _DISCOVERY_FEED_LOCK:
         cached = _DISCOVERY_FEED_CACHE.get(cache_key)
-    if cached and cached[0] > now:
+        refreshing = cache_key in _DISCOVERY_FEED_INFLIGHT
+    if cached and cached[0] > now and request.args.get("refresh") != "1":
         body = dict(cached[2])
-        body.update({"cached": True, "stale": False, "revalidating": False})
+        body.update({"cached": True, "stale": False, "revalidating": refreshing})
         return jsonify(body)
     if cached and cached[1] > now:
-        revalidating = _schedule_discovery_feed_refresh(cache_key, user_id, limit)
+        revalidating = _schedule_discovery_feed_refresh(cache_key, user_id, limit) or refreshing
         body = dict(cached[2])
         body.update({"cached": True, "stale": True, "revalidating": revalidating})
         return jsonify(body)
@@ -541,6 +552,6 @@ def discovery_music_feed():
             now + _DISCOVERY_FEED_STALE_SEC,
             dict(body),
         )
-    revalidating = _schedule_discovery_feed_refresh(cache_key, user_id, limit)
+    revalidating = _schedule_discovery_feed_refresh(cache_key, user_id, limit) or refreshing
     body.update({"cached": False, "stale": False, "revalidating": revalidating})
     return jsonify(body)
