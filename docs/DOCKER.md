@@ -56,8 +56,8 @@ name, Docker stores them as `soundsible_soundsible-*`:
 
 | Volume | Container path | Contents |
 | --- | --- | --- |
-| `soundsible_soundsible-config` | `/config` | Instance configuration, accounts, and user libraries |
-| `soundsible_soundsible-data` | `/data` | Persistent queues, instance database, and telemetry |
+| `soundsible_soundsible-config` | `/config` | Instance configuration and database: accounts, and each person's library and playlists |
+| `soundsible_soundsible-data` | `/data` | Queues, import jobs, listening telemetry, and preserved artwork |
 | `soundsible_soundsible-cache` | `/cache` | Rebuildable covers, previews, and media cache |
 | `soundsible_soundsible-logs` | `/logs` | Runtime logs |
 | `soundsible_soundsible-music` | `/music` | Imported and downloaded audio |

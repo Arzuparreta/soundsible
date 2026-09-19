@@ -4,11 +4,11 @@ This document describes how the Soundsible repository is structured, which proce
 
 ### 1. Mental model
 
-Soundsible is a **self-hosted music environment**: a Python **Station Engine** exposes an HTTP API and real-time events, serves the **Station** web UI, and coordinates library management, playback state, and downloads. A separate optional **web launcher** helps start the legacy daemon from a browser. Optional **CLI** flows use the same engine entry points.
+Soundsible is a **self-hosted music environment**: a Python **Station Engine** exposes an HTTP API and real-time events, serves the **Station** web UI, and coordinates library management, playback state, and downloads. A separate optional **web launcher** helps start the server daemon from a browser. Optional **CLI** flows use the same engine entry points.
 
 At runtime you typically have one of these engine modes:
 
-- **Legacy daemon** — one process listening on **port 5005** by default (`STATION_PORT` in `shared/constants.py`). It runs Flask, Socket.IO (async mode **gevent**), and background work (download queue, file watchers, optional library sync).
+- **Server daemon** (`run.py --daemon`) — one process listening on **port 5005** by default (`STATION_PORT` in `shared/constants.py`). It runs Flask, Socket.IO (async mode **gevent**), and background work (download queue, file watchers, optional library sync).
 - **Desktop engine** — one process started with `run.py --desktop-engine` or `soundsible_engine.py`. It binds to **`127.0.0.1` on a random free port by default**, writes runtime state under the app config dir, and emits a single JSON readiness line on stdout before normal startup logs.
 - **Web launcher** — optional Flask app on **port 5099** (`start_launcher.py` / `launcher_web/`). It does **not** serve the player; it only helps start or stop the engine and run first-time setup UI.
 
@@ -18,14 +18,14 @@ The **Station** UI is a responsive SolidJS application under `ui_web/`, served b
 
 | Area | Role |
 |------|------|
-| `run.py` | Universal entry: venv bootstrap, optional **TUI** menu, legacy **`--daemon`**, or desktop **`--desktop-engine`**. |
+| `run.py` | Universal entry: venv bootstrap, then the **TUI** menu, the server **`--daemon`** (also what systemd runs), or desktop **`--desktop-engine`**. |
 | `soundsible_engine.py` | Standalone desktop engine entrypoint that wraps `run.py --desktop-engine`. |
 | `shared/` | Cross-cutting code: Flask API app (`shared/api/`), models, config paths, security helpers, SQLite access, job orchestration. |
 | `player/` | Library manager, queue, favourites, cache — **core playback and library** logic used by the API. |
 | `ui_web/` | SolidJS + TypeScript Station frontend and Vite build; includes **Discover** (Deezer metadata + YouTube resolution). |
 | `launcher_web/` | Small Flask app for the launcher pages and “launch/stop ecosystem” API. |
 | `odst_tool/` | Download pipeline (yt-dlp, FFmpeg), ODST library format, cloud sync helpers; embedded in the API for downloads. |
-| `setup_tool/` | Storage providers (local, S3-compatible), scanning, uploads, audio/cover helpers used by library and sync paths. |
+| `setup_tool/` | Storage providers (local folder, Cloudflare R2, Backblaze B2), scanning, uploads, audio/cover helpers used by library and sync paths. |
 
 ### 3. Process and network view
 
@@ -53,7 +53,7 @@ flowchart LR
   API --> BG
 ```
 
-- **Starting the legacy daemon**: `shared/daemon_launcher.py` spawns `venv` Python with `run.py --daemon`, which calls `shared.api.start_api()` and binds **0.0.0.0:5005**.
+- **Starting the server daemon**: `shared/daemon_launcher.py` (terminal menu and web launcher) spawns `venv` Python with `run.py --daemon`, which calls `shared.api.start_api()` and binds **0.0.0.0:5005**.
 - **Starting the desktop engine**: `soundsible_engine.py` or `run.py --desktop-engine` builds a `RuntimeConfig`, creates a short owner token file plus matching scoped auth token, writes `desktop-engine-state.json` under the config dir, and then starts `shared.api.start_api()` on loopback.
 - **CORS**: REST CORS defaults allow localhost, private LAN, and Tailscale-style ranges unless overridden by `SOUNDSIBLE_ALLOWED_ORIGINS`. Socket.IO CORS can be tightened with `SOUNDSIBLE_SOCKET_CORS_ORIGINS`.
 
