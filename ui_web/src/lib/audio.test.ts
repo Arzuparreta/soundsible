@@ -853,7 +853,7 @@ describe('two-deck mixer', () => {
     expect(created).toEqual(before);
   });
 
-  it('pauses an interrupted context until explicit Play without replacing its graph or decks', async () => {
+  it('resumes an interrupted context without pausing or replacing its graph or decks', async () => {
     vi.stubGlobal('AudioContext', FakeAudioContext);
     const module = await import('./audio');
     expect(module.audioService.unlockAudio()).toBe(true);
@@ -868,10 +868,8 @@ describe('two-deck mixer', () => {
     stateHandler();
     await Promise.resolve();
 
-    expect(context.resume).not.toHaveBeenCalled();
-    expect(module.audioEl().paused).toBe(true);
-    await module.audioService.resume();
-    expect(context.resume).toHaveBeenCalled();
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    expect(module.audioEl().paused).toBe(false);
     expect(module.audioService.graphReady()).toBe(true);
     expect(created).toEqual(before);
   });
@@ -1141,7 +1139,7 @@ describe('CarPlay interruption recovery', () => {
     audioService.stop();
   });
 
-  it.each(['visibility', 'resume', 'pageshow'])('reconciles a delayed native interruption on %s without autoplay', async (event) => {
+  it.each(['visibility', 'resume', 'pageshow'])('continues an unpaused source after a context interruption on %s', async (event) => {
     const { audioService, context, deck } = await setup();
     hide();
     // Native state changes while JS is frozen; no pause/statechange task yet.
@@ -1151,19 +1149,17 @@ describe('CarPlay interruption recovery', () => {
     else if (event === 'resume') document.dispatchEvent(new Event('resume'));
     else window.dispatchEvent(new Event('pageshow'));
     audioService.unlockAudio();
-    expect(context.resume).not.toHaveBeenCalled();
-    expect(deck.paused).toBe(true);
-    await deck.play();
-    expect(deck.paused).toBe(true);
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    expect(deck.paused).toBe(false);
     audioService.stop();
   });
 
-  it('does not resume on a generic gesture before the interruption event arrives', async () => {
+  it('resumes only the context on a gesture while playback is still requested', async () => {
     const { audioService, context } = await setup();
     context.state = 'interrupted';
     context.resume.mockClear();
     audioService.unlockAudio();
-    expect(context.resume).not.toHaveBeenCalled();
+    expect(context.resume).toHaveBeenCalledTimes(1);
     audioService.stop();
   });
 
@@ -1180,7 +1176,7 @@ describe('CarPlay interruption recovery', () => {
     audioService.stop();
   });
 
-  it.each(['ui', 'media_session'] as const)('renews iOS output on explicit %s Play even when both clocks advance', async (origin) => {
+  it.each(['ui', 'media_session'] as const)('starts iOS output on explicit %s Play without a suspend cycle', async (origin) => {
     vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
     const { audioService, context, deck } = await setup();
     const stateHandler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')![1];
@@ -1189,12 +1185,14 @@ describe('CarPlay interruption recovery', () => {
     const capture = audioService.acquireBroadcastCapture();
     deck.currentTime = 42;
     hide();
-    // Hardware output can be lost with no JS-visible interruption or clock stall.
+    audioService.pause();
+    context.state = 'interrupted';
+    context.resume.mockClear();
     const before = [...created];
     const playing = audioService.resume(origin);
     await vi.advanceTimersByTimeAsync(300);
     await playing;
-    expect(context.suspend).toHaveBeenCalledTimes(1);
+    expect(context.suspend).not.toHaveBeenCalled();
     expect(context.resume).toHaveBeenCalled();
     expect(deck.paused).toBe(false);
     expect(deck.currentTime).toBe(42);
@@ -1205,20 +1203,106 @@ describe('CarPlay interruption recovery', () => {
     audioService.releaseBroadcastStream();
   });
 
-  it('does not restart iOS output after Pause cancels an explicit Play renewal', async () => {
-    vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
+  it('does not restart a source when context resume settles after Pause', async () => {
     const { audioService, context, deck } = await setup();
-    let finishSuspend!: () => void;
-    context.suspend.mockImplementation(() => new Promise<void>((resolve) => { finishSuspend = resolve; }));
-    const playing = audioService.resume('media_session');
+    let finishResume!: () => void;
+    context.state = 'interrupted';
+    context.resume.mockImplementation(() => new Promise<void>((resolve) => { finishResume = resolve; }));
+    await audioService.resume('media_session');
     audioService.pause('media_session');
     const starts = deck.play.mock.calls.length;
-    const resumes = context.resume.mock.calls.length;
-    finishSuspend();
-    await playing;
+    finishResume();
+    await Promise.resolve();
     expect(deck.paused).toBe(true);
     expect(deck.play).toHaveBeenCalledTimes(starts);
-    expect(context.resume).toHaveBeenCalledTimes(resumes);
+    audioService.stop();
+  });
+
+  it.each([true, false])('keeps playback through a lock interruption (hidden first: %s)', async (hiddenFirst) => {
+    const { audioService, context, deck } = await setup();
+    const handler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')![1];
+    for (let i = 0; i < 3; i++) {
+      if (hiddenFirst) hide();
+      context.state = 'interrupted';
+      handler();
+      if (!hiddenFirst) hide();
+      await Promise.resolve();
+      reveal();
+      expect(deck.paused).toBe(false);
+      expect(context.suspend).not.toHaveBeenCalled();
+    }
+    audioService.stop();
+  });
+
+  it('coalesces context resumes while a request is pending without replaying the source', async () => {
+    const { audioService, context, deck } = await setup();
+    const handler = context.addEventListener.mock.calls.find(([type]) => type === 'statechange')![1];
+    context.state = 'interrupted';
+    context.resume.mockClear();
+    context.resume.mockImplementation(() => new Promise<void>(() => {}));
+    const starts = deck.play.mock.calls.length;
+    handler();
+    handler();
+    hide();
+    reveal();
+    audioService.unlockAudio();
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    expect(deck.play).toHaveBeenCalledTimes(starts);
+    expect(deck.paused).toBe(false);
+    audioService.stop();
+  });
+
+  it('allows a later Play after a context request times out, without timer retries', async () => {
+    const { audioService, context } = await setup();
+    context.state = 'interrupted';
+    context.resume.mockClear();
+    context.resume.mockImplementation(() => new Promise<void>(() => {}));
+    await audioService.resume();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    await audioService.resume('media_session');
+    expect(context.resume).toHaveBeenCalledTimes(2);
+    audioService.stop();
+  });
+
+  it('does not turn a pending source start into a pause on page restoration', async () => {
+    const { audioService, deck } = await setup();
+    audioService.pause();
+    let finishPlay!: () => void;
+    deck.play.mockImplementation(() => new Promise<void>((resolve) => { finishPlay = resolve; }));
+    const playing = audioService.resume();
+    hide();
+    reveal();
+    audioService.unlockAudio();
+    deck.paused = false;
+    deck.dispatchEvent(new Event('playing'));
+    finishPlay();
+    await playing;
+    expect(deck.paused).toBe(false);
+    audioService.stop();
+  });
+
+  it.each(['supported', 'missing', 'rejecting'])('handles a %s playback audio session', async (kind) => {
+    const session = { type: 'auto' };
+    const setType = vi.fn((value: string) => {
+      if (kind === 'rejecting') throw new Error('unsupported');
+      session.type = value;
+    });
+    const platformSession = { get type() { return session.type; }, set type(value: string) { setType(value); } };
+    vi.stubGlobal('navigator', {
+      userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5,
+      ...(kind === 'missing' ? {} : { audioSession: platformSession }),
+    });
+    const { audioService, context, deck } = await setup();
+    expect(deck.paused).toBe(false);
+    audioService.pause();
+    await audioService.resume('media_session');
+    expect(deck.paused).toBe(false);
+    expect(context.suspend).not.toHaveBeenCalled();
+    if (kind === 'supported') {
+      expect(session.type).toBe('playback');
+      expect(setType).toHaveBeenCalledTimes(1);
+    }
     audioService.stop();
   });
 

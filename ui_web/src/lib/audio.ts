@@ -46,8 +46,10 @@ let activeIndex = 0;
 let playbackRequested = false;
 let seekGeneration = 0;
 const expectedPauses = new WeakSet<HTMLAudioElement>();
+const pendingStarts = new WeakMap<HTMLAudioElement, object>();
 
 function pauseDeck(deck: HTMLAudioElement): void {
+  pendingStarts.delete(deck);
   if (!deck.paused) expectedPauses.add(deck);
   diagnosticPause(deck);
 }
@@ -389,6 +391,17 @@ function releaseDeck(index: number): void {
   notifySourcesSettled();
 }
 
+/** Optional platform hint; unsupported browsers keep their existing routing. */
+function configurePlaybackSession(): void {
+  const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+  if (!session) return;
+  try {
+    if (session.type !== 'playback') session.type = 'playback';
+  } catch {
+    recordPlaybackDiagnostic('audio_session.configuration', { state: 'unsupported' });
+  }
+}
+
 /**
  * Wake the audio session, from the first user gesture of the session.
  *
@@ -415,6 +428,7 @@ function releaseDeck(index: number): void {
  * deliberately silent passage from a graph that is not reaching the speaker.
  */
 export function unlockAudio(): boolean {
+  configurePlaybackSession();
   if (graphState !== 'untested') {
     reconcilePlatformPlayback();
     if (!playbackRequested) return graphState === 'ready';
@@ -593,10 +607,35 @@ function primeAudioSession(context: AudioContext): void {
   }
 }
 
-/** Ask an interrupted context to continue without rebuilding its graph. */
+/** Resume requests never grant playback permission or restart a paused source. */
+const pendingContextResumes = new WeakMap<AudioContext, object>();
 function resumeContext(): void {
-  if (playbackRequested && !outputRecovering && audioContext && audioContext.state !== 'running') {
-    void audioContext.resume?.().catch(() => {});
+  const context = audioContext;
+  if (!playbackRequested || outputRecovering || !context
+    || context.state === 'running' || context.state === 'closed'
+    || pendingContextResumes.has(context)) return;
+  const request = {};
+  pendingContextResumes.set(context, request);
+  const finish = () => {
+    if (pendingContextResumes.get(context) === request) pendingContextResumes.delete(context);
+  };
+  const deadline = setTimeout(() => {
+    recordPlaybackDiagnostic('context.resume_result', { state: context.state, error: 'resume_timeout' });
+    finish(); // A later Play may retry; this timeout never retries by itself.
+  }, 5000);
+  recordPlaybackDiagnostic('context.resume_request', { state: context.state });
+  // Keep the native request in the activation turn. Statechange can fire before
+  // its promise resolves; the guard prevents recursive requests.
+  try {
+    void context.resume().then(() => {
+      recordPlaybackDiagnostic('context.resume_result', { state: context.state });
+    }, () => {
+      recordPlaybackDiagnostic('context.resume_result', { state: context.state, error: 'resume_failed' });
+    }).finally(() => { clearTimeout(deadline); finish(); });
+  } catch {
+    clearTimeout(deadline);
+    finish();
+    recordPlaybackDiagnostic('context.resume_result', { error: 'resume_failed' });
   }
 }
 
@@ -607,12 +646,9 @@ function watchContextState(context: AudioContext): void {
     recordPlaybackDiagnostic('context.statechange', { state: context.state });
     if (audioContext !== context || graphState !== 'ready') return;
     resetClockSample();
-    // A platform interruption is not permission to restart. In particular,
-    // iOS may interrupt only Web Audio, leaving the source's paused flag false.
-    // Our own bounded output restart also emits state changes.
-    if (!outputRecovering && context.state !== 'running' && playbackRequested) {
-      audioService.pause('media_session');
-    }
+    // Locking iOS can interrupt Web Audio before visibility changes. This is
+    // not a transport Pause. A real pause independently revokes permission.
+    resumeContext();
   });
 }
 
@@ -686,7 +722,7 @@ async function recoverProgramOutput(): Promise<void> {
   const context = audioContext;
   if (!context || outputRecovering || !playbackRequested) return;
   if (recoveryAttempted) {
-    audioService.pause();
+    audioService.pause('recovery', 'output_recovery_failed');
     publishOutputHealth('needs_play');
     return;
   }
@@ -730,7 +766,7 @@ async function recoverProgramOutput(): Promise<void> {
     if (current()) publishOutputHealth('healthy');
   } catch {
     if (!current()) return;
-    audioService.pause();
+    audioService.pause('recovery', 'output_recovery_failed');
     publishOutputHealth('needs_play');
   } finally {
     if (deadline !== undefined) clearTimeout(deadline);
@@ -779,9 +815,13 @@ function playProgramDeck(deck: HTMLAudioElement): Promise<void> {
   resumeContext();
   superviseClock();
   setDeckParticipation(deck, true);
+  const start = {};
+  pendingStarts.set(deck, start);
   const started = diagnosticPlay(deck);
   void programCarrier?.play();
-  return started;
+  return started.finally(() => {
+    if (pendingStarts.get(deck) === start) pendingStarts.delete(deck);
+  });
 }
 
 function deckBufferedEnd(deck: HTMLAudioElement): number {
@@ -1021,7 +1061,7 @@ export interface LiveTransitionPlan {
 
 export type MixPhase = 'idle' | 'armed' | 'prerolling' | 'crossfading';
 export type MixCancelReason = 'superseded' | 'load' | 'seek' | 'stop' | 'exit' | 'failed' | 'transport_pause';
-export type ProgramTransportOrigin = 'ui' | 'media_session';
+export type ProgramTransportOrigin = 'ui' | 'media_session' | 'platform' | 'recovery';
 
 export interface ProgramTransportEvent {
   kind: 'pause' | 'resume' | 'inactive_deck_play';
@@ -1319,9 +1359,11 @@ function flushDeferredWork(): void {
  * Healthy background playback continues; returning to the page never starts it. */
 function reconcilePlatformPlayback(): void {
   if (!playbackRequested || outputRecovering) return;
-  if (audioEl().paused || (audioContext && audioContext.state !== 'running')) {
-    audioService.pause('media_session');
+  if (audioEl().paused && !pendingStarts.has(audioEl())) {
+    audioService.pause('platform', 'native_paused_on_restore');
+    return;
   }
+  resumeContext();
 }
 
 let lifecycleBound = false;
@@ -1367,7 +1409,7 @@ function bindLifecycle(): void {
     // restarted the source before delivering the event on unlock.
     if (expectedPauses.delete(deck) || outputRecovering || deck.ended
       || holdsUnlockSample(deck) || !participatingDecks.has(deck) || !playbackRequested) return;
-    audioService.pause('media_session');
+    audioService.pause('platform', 'native_pause');
   });
   const rejectOrphanedDeck = (event: Event) => {
     const deck = event.currentTarget as HTMLAudioElement | null;
@@ -1703,15 +1745,11 @@ export const audioService = {
     playbackRequested = true;
     recoveryAttempted = false;
     outputHealth = 'healthy';
-    // iOS can keep both clocks moving after losing its hardware route. There
-    // is no web API to test whether the car is sounding. An explicit Play is
-    // the recovery boundary: renew the existing output even when it reports
-    // running, without replacing the graph, decks, or Live tap.
-    const renewOutput = programCarrier?.snapshot().mode === 'direct';
+    configurePlaybackSession();
     const current = mix;
     const phase = current?.phase ?? 'idle';
     const dominant = current?.dominant ?? false;
-    const started = renewOutput ? recoverProgramOutput() : playProgramDeck(audioEl());
+    const started = playProgramDeck(audioEl());
     reportProgramTransport('resume', origin, phase, dominant);
     return started;
   },
@@ -1730,8 +1768,8 @@ export const audioService = {
    * lock-screen or steering-wheel button, not a tap on the page. A suspended
    * context that will not come back is silence; an idle one is a rounding error.
    */
-  pause(origin: ProgramTransportOrigin = 'ui'): void {
-    recordPlaybackDiagnostic('transport.pause', { origin });
+  pause(origin: ProgramTransportOrigin = 'ui', reason = 'command'): void {
+    recordPlaybackDiagnostic('transport.pause', { origin, reason });
     playbackRequested = false;
     loadSeq += 1;
     cancelOutputRecovery();
