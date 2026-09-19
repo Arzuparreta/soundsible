@@ -4,78 +4,85 @@ Status: candidate iOS output and source-retirement correction, **not a device-ve
 proves what Now Playing, CarPlay or the head unit displays, or that sound reaches
 the speakers. Device acceptance is still required.
 
-## CarPlay cable disconnect/reconnect recovery
+## September 19: lock regression and rejected reconnect corrections
 
-The September 17 device report rejects the previous correction (#197): unlocking
-with the phone disconnected still starts music, and reconnecting can leave the
-source advancing without sound. The changes below address gaps in that approach;
-physical iPhone/PWA/car acceptance is still pending.
-The listener reports Safari PWA on iOS 27 with wired CarPlay. The user-agent
-version in the traces is not an independently verified OS version.
+The listener reports Safari PWA on the same iPhone with wired CarPlay. During
+11:00–12:20 Europe/Madrid on September 19, locking stopped sound immediately;
+Play did not reliably restore it. Disconnecting while locked could still cause
+music to resume after unlocking outside the car. Reconnecting could still leave
+playback advancing without sound. The listener therefore rejects both #197 and
+#210 as verified fixes for the disconnect/reconnect problems.
 
-On September 13 (Europe/Madrid), the same capture paused at 14:54:24 and received
-Media Session Play at 14:59:22. The source advanced from 162.301 to 171.729 seconds,
-while the AudioContext clock remained exactly 191.147 seconds despite reporting
-`running`. In-page pause/play did not move the context clock. A new capture began
-at 15:00:53. This fits the reported stop-and-reconnect failure; the traces cannot
-identify the physical route or measure the speakers.
+Seven received captures contain 3,316 events, no sequence gaps and no reported
+loss. There are 19 context-state changes immediately followed by programme pause,
+and 14 `needs_play` recovery failures. At 11:19:30, 11:19:37 and 12:05:38 a context
+`interrupted` event causes the app to pause before visibility becomes hidden,
+without a preceding Media Session Pause in those sequences. At 11:51 and 11:58,
+Play attempts time out while the context remains interrupted. These observations
+establish application behavior, not physical route or acoustic output.
 
-At 15:32:01 a native pause and Media Session pause were followed by native
-play/playing without an intervening application play call. On September 15 at
-14:24:19 a separate sequence included Media Session pause followed by Play.
-Media Session does not identify whether Play came from a physical button or
-platform behavior. The correction continues to accept those commands; there is
-no arbitrary suppression window for car controls.
+The captures identify client fingerprint
+`57eddd9e99a012d76773eeebf72c3bf04691ea32b6bc97681137f50a2f85ac47`.
+It differs from the inspected current source tree; it has not been mapped to an
+exact git revision. The immediate context-to-pause rule and mandatory iOS Play
+renewal are present in the merged #210 code. Do not label the captured client as
+a proven exact checkout of that commit.
 
-Playback permission is now separate from native element state. A native programme
-pause stops all DJ participants and invalidates pending transport work. Native
-play without permission is stopped. Context state changes, page restoration and
-generic touch events cannot lift a pause. A platform context interruption now
-also revokes permission, even if the source still claims to play. Restoration
-reads native state before queued events arrive, and a queued native pause is
-honored even if iOS has already restarted the source. Returning to a healthy,
-still-playing session does not pause it. There is no resume from visibility,
-page thaw, or a generic gesture; deliberate Play remains available while locked.
+### Candidate correction, pending physical acceptance
 
-On iOS direct output, every explicit transport Play renews the existing context
-with a bounded suspend/resume cycle and a silent session-prime buffer before
-restarting the current source. This also covers a lost output with advancing
-clocks, which the clock supervisor cannot detect. It preserves position, gain,
-and Live capture. This cycle runs on Play, not on cable removal or page return.
-The platform still selects the physical output: the web app cannot verify that
-a running context is reaching the car. A successful cycle is not acoustic proof.
+A context-only interruption no longer revokes playback intent. Locking can
+interrupt Web Audio before visibility changes, so visibility is not used to
+classify it as a cable disconnect. With playback still requested, context state
+changes and page restoration request `resume()` without pausing or restarting
+the source. Requests are coalesced, report their outcome, and time out after five
+seconds of executable JavaScript; a timeout does not schedule another attempt.
+A later event or explicit Play can retry. An initial pending source start is not
+mistaken for a native pause during page restoration.
 
-A supervisor compares source progress with the context clock. One second of
-continuous observations with a frozen context and an advancing source starts
-one in-place suspend/resume cycle. Observation gaps above one second, seeks,
-source changes and unavailable source data reset the measurement. Signal level
-is not used, so musical silence is not a failure. The cycle preserves the graph,
-Live tap and current programme owner; failed recovery leaves playback paused
-with the existing Play prompt. Async recovery is limited to five seconds when
-JavaScript can execute, and a new explicit Play permits another attempt.
-The `output.health` trace records recovering/healthy/needs_play; spontaneous
-source revivals are recorded as `transport.rejected_native_play`. Both use the
-existing trace envelope and field allowlist.
+Explicit UI and Media Session pauses and native participant pauses still revoke
+intent. Generic gestures and page return cannot lift that pause. Native pauses
+are recorded with `platform` origin; clock-recovery failures use `recovery`, not
+a fabricated UI or Media Session command. These are additive internal transport
+origins using the existing telemetry envelope and field allowlist.
 
-The in-place cycle is a candidate informed by the measured frozen clock and
-[WebKit reports](https://bugs.webkit.org/show_bug.cgi?id=276016#c7), not proof of
-recovery on the affected iPhone. Repeat these checks for NORMAL and DJ playback,
-with wired CarPlay and Bluetooth:
+Play requests context and source activation in the same turn, without an
+unconditional suspend/resume cycle or waiting for the context clock first.
+Where supported, the player requests `navigator.audioSession.type = 'playback'`
+before activation. Missing or rejected Audio Session support is tolerated.
+This is an explicit music-session hint described by the
+[Audio Session draft](https://www.w3.org/TR/audio-session/), not acoustic proof.
 
-1. Start music with the iPhone locked and the car on. Disconnect while it plays;
-   unlock with the PIN while still disconnected. Music must stay paused through
-   page return and unrelated taps until explicit Play.
-2. While locked and playing, disconnect and reconnect the output (including a
-   brief cable contact loss). Press Play on the car and, separately, in the PWA.
-   Sound must return to the car at the retained position without closing the PWA.
-3. Lock and unlock without an interruption: music must continue. Check both
-   unplug/power-off orders, repeated reconnects, and Play/Pause during a DJ blend.
-4. Pause or select another song during output renewal. The cancelled work must
-   not restart the previous song. Confirm Live capture survives a successful cycle.
+The existing one-shot suspend/resume recovery is retained only for the measured
+frozen-clock failure: the source progresses while the running context clock
+stays still across continuous observations. Observation gaps, source changes and
+seeks reset the measurement. It preserves the graph and Live tap; cancellation
+and its five-second deadline remain in place. Musical silence is not a trigger.
+There is no automatic detector for a lost route with both clocks advancing;
+`healthy` only describes internal checks, never confirmed sound in the car.
 
-Automated tests cover intent, delayed events, output renewal with advancing
-clocks, cancellation, deadlines, deck identity and Live preservation. They do
-not emulate the iPhone audio session or establish speaker output.
+### Acceptance
+
+Automated cases cover lock event ordering, repeated lock/unlock, restoration
+while Play is pending, explicit pause precedence, late resume completion,
+coalescing and timeouts, optional Audio Session support, source identity, Live,
+and the existing frozen-clock recovery and DJ ownership cases.
+
+On the affected iPhone/PWA with wired CarPlay, repeat for NORMAL and DJ:
+
+1. Play for at least ten minutes locked, including automatic and manual song
+   changes. Lock/unlock repeatedly. Sound must continue without another Play.
+2. Disconnect while playing and locked; unlock outside the car. Record whether
+   sound resumes unexpectedly. Explicit pauses must remain respected.
+3. Reconnect, then press Play from the car and separately from the phone. Sound
+   must return through the car without reloading the page, at the retained song
+   position. Repeat with the car unit on and off and different disconnect order.
+4. Pause or change song during a pending recovery and during a DJ transition.
+   Old work must not revive the previous song; volume and Live must be preserved.
+
+Lock continuity and audible reconnection require device acceptance. A remaining
+spontaneous resume on disconnect is a separate lower-priority issue: do not
+restore blanket context-to-pause rules to suppress it. Browser tests cannot
+identify a physical disconnect or establish speaker output.
 
 ## Evidence and hypothesis
 
