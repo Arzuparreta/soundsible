@@ -1,21 +1,35 @@
-## CONFIGURATION – Options and environment
+# Configuration
 
-This document summarizes the main configuration surfaces for Soundsible.
+Most of Soundsible is configured in the player: open **Settings**, or search
+for a setting from the box at its top. What the player cannot change — where
+the engine listens, where it keeps its files, how it reaches YouTube — comes
+from environment variables. This page covers both.
 
-Exact option names may evolve. When in doubt, prefer the in‑app setup wizard and settings UI.
+## 1. Setup and Settings
 
-### 1. Setup wizard (recommended)
+### Setup page
 
-The primary way to configure Soundsible is through the guided setup in the Station UI.
+A source install asks a few questions once, on the setup page at
+`http://localhost:5099/setup` (see [First run](INSTALL.md#first-run)):
 
-Key options:
+- **Where your music is** — a folder on this computer, which can be a NAS or
+  Samba share the computer mounts, or a Cloudflare R2 or Backblaze B2 bucket.
+- **The folder or account** to use, and for cloud storage, the bucket.
+- **Optional settings** — download quality and where temporary copies are
+  cached.
 
-- Library path – where your music files live.
-- Storage backend – local disk, NAS, or object storage.
-- Cloud backends – Cloudflare R2, Backblaze B2, generic S3 (optional).
-- Downloader defaults – quality preferences and search source.
+Setup writes `config.json` to the
+[configuration directory](#7-where-soundsible-keeps-its-files). Reopen it with
+`python3 run.py --setup`. Docker and the desktop app skip this page: the
+container configures `/music` on its first boot, and the desktop app asks for a
+music folder on its own first-run screen.
 
-Changes made here are persisted so future sessions pick them up automatically.
+### Settings
+
+Everything else lives in **Settings** in the player: theme, language, playback,
+downloads and lossless upgrades, library rescans, accounts, paired devices and
+music import. Some settings belong to each person and some only to an admin;
+[Accounts](#6-accounts-multi-user) lists which.
 
 ### Navigation preferences
 
@@ -31,76 +45,85 @@ accessible there even if you remove it from the bottom bar. Desktop uses the sam
 complete navigation in its persistent sidebar; customizing the bottom bar does
 not rearrange that sidebar.
 
-### 2. Environment variables
 
-Depending on how you deploy Soundsible, you may expose certain values via environment variables.
+## 2. Environment variables
 
-Typical categories:
+Set them where the engine starts, then restart it — they are read at start:
 
-- Paths – base paths for storage or temporary working directories.
-- Feature flags and tuning – optional flags for concurrency limits or debug behaviour.
-- Web player debug – append `?debug=1` to the player URL, or set `localStorage.soundsible_debug` to `1`, to enable verbose client connection/playback logs (off by default).
+| You run Soundsible with | Put variables in |
+| --- | --- |
+| `python3 run.py` or `python3 run.py --daemon` | The shell that starts it: `export NAME=value` first, or `NAME=value python3 run.py --daemon`. |
+| systemd | A drop-in: `sudo systemctl edit soundsible`, then `Environment=NAME=value` under `[Service]`. See [the service guide](INSTALL.md#run-it-as-a-systemd-service). |
+| Docker Compose | The `.env` file beside `compose.yaml`, or the `environment:` section. See [Docker](DOCKER.md#configuration-and-security). |
 
-Consult the code and any sample `.env` files in the repository for the current list of supported variables.
+### Network and access
 
-### 2A. Runtime and path variables
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `SOUNDSIBLE_HOST` | `0.0.0.0` | Address the engine listens on; same as `--host`. The desktop app uses `127.0.0.1`. |
+| `SOUNDSIBLE_PORT` | `5005` | Port the engine listens on; same as `--port`. The terminal menu always uses 5005. |
+| `SOUNDSIBLE_ADMIN_TOKEN` | unset | When set, admin routes require it as `Authorization: Bearer <token>` or `X-Soundsible-Admin-Token: <token>`. See the [security baseline](INSTALL.md#8-security-baseline). |
+| `SOUNDSIBLE_ALLOWED_ORIGINS` | localhost, private LAN and Tailscale addresses | Comma-separated browser origins allowed to call the API. |
+| `SOUNDSIBLE_SOCKET_CORS_ORIGINS` | any | Comma-separated origins allowed to open the real-time connection. |
+| `SOUNDSIBLE_HTTPS_URL` | unset | Your own HTTPS address, so [Live](LIVE.md#5-broadcasting-needs-https) can send a browser there to broadcast. |
+| `SOUNDSIBLE_LAUNCHER_BIND_ALL` | `false` | `true` makes the setup page and launcher answer on the network, not only on `localhost`. |
+| `LAUNCHER_PORT` | `5099` | Port of the setup page and launcher. |
+| `SOUNDSIBLE_LAN_ENABLED` | on, unless the host is loopback | Whether browsers on other machines are expected; same as `--lan-enabled` / `--no-lan`. |
+| `SOUNDSIBLE_ADVANCED_MODE` | on for `--daemon`, off for the desktop app | While the instance has one account and no password, trust browsers on the LAN and tailnet as its owner. It has no effect once sign-in is required. |
 
-The current runtime layer supports these top-level environment variables:
+### Paths
 
-- `SOUNDSIBLE_HOST`
-- `SOUNDSIBLE_PORT`
-- `SOUNDSIBLE_CONFIG_DIR`
-- `SOUNDSIBLE_DATA_DIR`
-- `SOUNDSIBLE_CACHE_DIR` — everything here is rebuildable. When Soundsible moves
-  from the legacy `~/.cache/soundsible` to a platform cache directory it carries
-  covers and DJ analysis across but **not** `previews/` or `media/`: those are
-  bulk audio that re-downloads on demand, and copying them doubled disk use on
-  first launch.
-- `SOUNDSIBLE_LOG_DIR`
-- `SOUNDSIBLE_MUSIC_DIR`
-- `SOUNDSIBLE_UI_DIST`
-- `SOUNDSIBLE_OWNER_TOKEN_FILE`
-- `SOUNDSIBLE_LAN_ENABLED`
-- `SOUNDSIBLE_ADVANCED_MODE`
-- `SOUNDSIBLE_YT_SEARCH_SOURCE` — `ytmusic` (default) or `youtube`. YouTube Music
-  gives cleaner metadata but is not always reachable from a datacenter IP; set it
-  to `youtube` on a VPS whose searches come back empty.
-- `SOUNDSIBLE_YT_PROXY` — private HTTP relay used for both YouTube resolution
-  and the resulting Googlevideo transfer. For the supported VPS topology use
-  Soundsible's Tailscale-only relay; see [VPS_RELAY.md](VPS_RELAY.md).
-- `SOUNDSIBLE_PREVIEW_CACHE_MB` — LRU preview-audio disk cache, `2048` by
-  default. This is disk, not reserved RAM; `0` disables audio caching while URL
-  warming remains available.
-- Community works without configuration through Soundsible's official service.
-  Set `SOUNDSIBLE_COMMUNITY_DISABLED=true` to disable Live, or set
-  `SOUNDSIBLE_COMMUNITY_URL` to the bare HTTPS origin of your own relay. Custom
-  origins cannot contain credentials, a path, query or fragment. The supported
-  self-hosted stack and its privacy/capacity contract are documented in
-  [deploy/community/README.md](../deploy/community/README.md).
+Each has a matching `run.py` option (`--config-dir`, `--data-dir`, …). The
+defaults are listed in [section 7](#7-where-soundsible-keeps-its-files).
 
-Notes:
+| Variable | Holds |
+| --- | --- |
+| `SOUNDSIBLE_CONFIG_DIR` | `config.json`, the instance database with its accounts, and each person's library, playlists and favourites. Back this up. |
+| `SOUNDSIBLE_DATA_DIR` | Queues, import jobs, listening telemetry and preserved artwork. |
+| `SOUNDSIBLE_CACHE_DIR` | Covers, preview audio and DJ analysis. Everything here is rebuildable. When Soundsible moves from the legacy `~/.cache/soundsible` to a platform cache directory it carries covers and DJ analysis across but **not** `previews/` or `media/`: those are bulk audio that re-downloads on demand. |
+| `SOUNDSIBLE_LOG_DIR` | The log directory the engine reports in `/api/health`. The engine itself logs to its terminal — the journal under systemd, `docker compose logs` in Docker. |
+| `SOUNDSIBLE_MUSIC_DIR` | The music folder, when it is not the one chosen during setup. |
+| `SOUNDSIBLE_UI_DIST` | A prebuilt web player to serve instead of `ui_web/dist`. The container and the desktop app set it; a source install does not need it. |
+| `SOUNDSIBLE_OWNER_TOKEN_FILE` | Where the desktop app's owner token is written. |
 
-- `python3 run.py --daemon` still defaults to the legacy server-style path (`0.0.0.0:5005` unless overridden).
-- `python3 run.py --desktop-engine` defaults to `127.0.0.1` and a random free port.
-- Platform app directories are resolved through `platformdirs`, and legacy `~/.config/soundsible`, `~/.cache/soundsible`, and `~/.local/share/soundsible` are migrated/read automatically.
+### YouTube and downloads
 
-### 2B. Desktop runtime token files
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `SOUNDSIBLE_YT_SEARCH_SOURCE` | `ytmusic` | `ytmusic` or `youtube`. YouTube Music gives cleaner metadata but is not always reachable from a datacenter IP; set `youtube` on a VPS whose searches come back empty. |
+| `SOUNDSIBLE_YT_PROXY` | unset | Private HTTP relay used for both YouTube resolution and the resulting media transfer. For the supported VPS topology use Soundsible's Tailscale-only relay; see [VPS_RELAY.md](VPS_RELAY.md). |
+| `SOUNDSIBLE_YTDLP_COOKIE_FILE` | `cookies.txt` in the configuration directory | YouTube cookies file; see [YouTube cookies](#youtube-cookies). |
+| `SOUNDSIBLE_YTDLP_FORCE_IPV4` | `true` | Forces yt-dlp over IPv4, because some VPS IPv6 routes hang during YouTube extraction. |
+| `SOUNDSIBLE_YTDLP_SOCKET_TIMEOUT` | `30` | yt-dlp socket timeout, in seconds. |
+| `SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE` | `10M` | yt-dlp HTTP chunk size. |
+| `SOUNDSIBLE_YTDLP_RETRY_SLEEP` | exponential, 1 to 20 s | yt-dlp `--retry-sleep` expression, e.g. `linear=2:10`. |
+| `SOUNDSIBLE_PREVIEW_CACHE_MB` | `2048` | Disk (not RAM) for the preview-audio LRU cache. `0` disables audio caching while URL warming remains available. |
+| `SOUNDSIBLE_LOSSLESS_UPGRADES` | `true` | Background lossless upgrades; also switchable in Settings. |
+| `SOUNDSIBLE_FFMPEG` | FFmpeg on `PATH` | Explicit path to the FFmpeg binary. |
 
-Desktop-engine mode creates and uses:
+### Features
 
-- `desktop-owner-token` in the Soundsible config directory by default
-- `desktop-engine-state.json` in the Soundsible config directory
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `SOUNDSIBLE_COMMUNITY_DISABLED` | `false` | `true` turns Live off. |
+| `SOUNDSIBLE_COMMUNITY_URL` | Soundsible's official service | Bare HTTPS origin of your own Live relay — no credentials, path, query or fragment. The self-hosted stack is documented in [deploy/community/README.md](../deploy/community/README.md). |
+| `SOUNDSIBLE_TELEMETRY_ENABLED` | on | `0`, `false` or `off` stops recording local listening telemetry. See [Privacy](TELEMETRY_PRIVACY.md). |
+| `SOUNDSIBLE_LOUDNESS_ANALYSIS` | on | `false` stops measuring new tracks for loudness levelling; tracks already measured keep their levels. |
+| `SOUNDSIBLE_SUBSONIC_MAX_TRANSCODES` | `2` | Concurrent [OpenSubsonic](OPENSUBSONIC.md) transcodes. |
+| `SOUNDSIBLE_SKIP_UI_BUILD` | unset | `1` stops the engine rebuilding the web player on start; it serves whatever `ui_web/dist` holds. |
 
-`desktop-owner-token` is the current owner credential for the local desktop UI and appliance shell work. `desktop-engine-state.json` records the owned process/runtime details so a future shell can stop the correct PID without killing by port.
+To turn on verbose connection and playback logs in one browser, append
+`?debug=1` to the player URL, or set `localStorage.soundsible_debug` to `1`.
 
-### 3. Downloader / ODST settings
+A source install never needs a manual build of the web player: the engine
+rebuilds it from `ui_web/` whenever the sources change. For frontend
+development, see [ui_web/README.md](../ui_web/README.md).
 
-The ODST downloader can be tuned from configuration and the UI.
+## 3. Downloads
 
-Main controls:
-
-- Selecting the search and download source (YouTube vs YouTube Music).
-- Choosing quality presets (lossless by default where available, with manual selection).
+Choose the download quality in **Settings → Downloads**; it applies to new
+downloads. The search source is the `SOUNDSIBLE_YT_SEARCH_SOURCE`
+[variable](#youtube-and-downloads).
 
 ### Optional lossless sources
 
@@ -114,88 +137,58 @@ Lossless upgrades → Jamendo Client ID**. Soundsible validates it with Jamendo
 before storing it in the ignored `odst_tool/.env` file, never returns the value
 through the status API, and reloads the provider without a daemon restart.
 OAuth `client_secret` and access tokens are not needed and must not be entered.
-- Controlling parallelism and concurrency for faster downloads (subject to your bandwidth and hardware).
 
-Refer to `odst_tool/README.md` for more details on standalone ODST usage.
+### YouTube cookies
 
-If downloads fail with yt‑dlp “Requested format is not available” when using cookies, see [troubleshooting-yt-dlp-formats.md](troubleshooting-yt-dlp-formats.md).
-
-For VPS or datacenter deployments, YouTube may require authenticated cookies. Place an exported YouTube cookies file at:
-
-```bash
-~/.config/soundsible/cookies.txt
-```
-
-Or point Soundsible at it explicitly:
+For VPS or datacenter deployments, YouTube may require authenticated cookies.
+Export a YouTube cookies file and place it as `cookies.txt` in the
+[configuration directory](#7-where-soundsible-keeps-its-files) — on Linux,
+`~/.config/soundsible/cookies.txt` — or point Soundsible at it explicitly:
 
 ```bash
 export SOUNDSIBLE_YTDLP_COOKIE_FILE=/path/to/cookies.txt
 ```
 
-Soundsible forces yt-dlp over IPv4 by default because some VPS IPv6 routes hang during YouTube extraction. To disable that:
-
-```bash
-export SOUNDSIBLE_YTDLP_FORCE_IPV4=false
-```
-
-Long-running YouTube downloads use a robust network profile by default:
-
-- socket timeout: `30` seconds
-- HTTP chunk size: `10M`
-- retry sleep: exponential backoff from 1 to 20 seconds
-
-Override these values when required by a specific network:
-
-```bash
-export SOUNDSIBLE_YTDLP_SOCKET_TIMEOUT=45
-export SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE=4M
-export SOUNDSIBLE_YTDLP_RETRY_SLEEP=linear=2:10
-```
-
-The retry expression uses yt-dlp's `--retry-sleep` syntax. These settings affect
-the Station Engine's outbound YouTube transfer; the browser's LAN, Tailscale,
-Funnel, or reverse-proxy connection only carries queue control and progress.
 Public extraction is attempted first because it normally exposes cleaner
 audio-only formats. Configured cookies are retried automatically when YouTube
-requires authentication, age confirmation, or a cookie-only format.
+requires authentication, age confirmation, or a cookie-only format. See
+[download troubleshooting](troubleshooting-yt-dlp-formats.md) if downloads still
+fail.
+
+### Network behaviour
+
+Long-running YouTube downloads use a robust network profile by default — the
+socket timeout, chunk size and retry sleep in the
+[table above](#youtube-and-downloads). These settings affect the Station
+Engine's outbound YouTube transfer; the browser's LAN, Tailscale, Funnel, or
+reverse-proxy connection only carries queue control and progress.
 
 When a relay is configured, every resolved stream records whether it came from
 direct or relay egress. Preview streaming and prefetch reuse that exact path;
 they never guess from the current environment after the URL has been resolved.
 
-### 3A. Web UI source-vs-build note
+The standalone downloader in `odst_tool/` is documented in
+[odst_tool/README.md](../odst_tool/README.md).
 
-The SolidJS player must be built before Flask serves it (`cd ui_web && npm run build`).
-For interactive development, use the Vite dev server (`npm run dev`), which proxies
-the engine API and Socket.IO connection.
-
-That currently includes:
-
-- `socket.io-client.esm.min.js`
-- `qrcode.esm.js`
-
-`npm install` and `npm run build` refresh those vendor files automatically through:
-
-- `ui_web/scripts/sync-vendor-socket.mjs`
-- `ui_web/scripts/sync-vendor-qrcode.mjs`
-
-### 4. Discover (Deezer metadata)
+## 4. Discover (Deezer metadata)
 
 - **No Deezer API key** is required for the built-in Discover experience. The Station proxies **public** Deezer GET endpoints (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 - The engine must be able to reach **`https://api.deezer.com`** outbound. If that fails, Discover lists and search will be empty or error.
 - Playback still depends on **YouTube / YouTube Music search** (ODST) and your existing downloader configuration; Discover does not add a separate audio backend.
 
-### 5. Storage configuration overview
+## 5. Storage
 
-At a high level, storage can be configured in three ways:
+Storage is chosen during [setup](#setup-page):
 
-- Local disk – default mode; files stored on the same machine running Soundsible.
-- NAS or shared storage – a mounted network path used as the library location.
-- Object storage – supported providers such as Cloudflare R2, Backblaze B2, or generic S3.
+- **Local disk** — the default; files are stored on the machine running
+  Soundsible.
+- **NAS or shared storage** — a network path the machine mounts, used as the
+  library folder. Under systemd, make the service
+  [wait for the mount](INSTALL.md#7-storage).
+- **Object storage** — Cloudflare R2 or Backblaze B2. Other S3-compatible
+  services are not implemented.
 
-The setup wizard and settings UI handle the common cases. If you need a custom backend, look for the storage abstraction layer in the code and implement the same interface that existing backends use.
-
-### 6. Accounts (multi-user)
+## 6. Accounts (multi-user)
 
 One Soundsible instance serves several people. Each account gets its own
 library, playlists, favourites, queue, podcast subscriptions, listening history
@@ -245,7 +238,7 @@ Sessions are 90-day HttpOnly cookies (`sb_session`), stored server-side as hashe
 only and revocable per account from the People screen. Deleting an account removes
 that person's directories; shared music files are never touched.
 
-### 6A. Pairing and admin auth
+### Pairing and admin auth
 
 Current pairing/runtime auth surfaces:
 
@@ -265,3 +258,28 @@ Current pairing endpoints:
 - `POST /api/paired-devices/<token_id>/revoke`
 
 The desktop player pairing modal now consumes this flow directly and renders a QR code from the backend `qr_text` payload.
+
+## 7. Where Soundsible keeps its files
+
+A source install and the desktop app resolve their directories per platform.
+The container uses `/config`, `/data`, `/cache`, `/logs` and `/music` instead.
+
+| | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| Configuration | `~/.config/soundsible` | `~/Library/Application Support/soundsible` | `%LOCALAPPDATA%\soundsible` |
+| Data | `~/.local/share/soundsible` | `~/Library/Application Support/soundsible` | `%LOCALAPPDATA%\soundsible` |
+| Cache | `~/.cache/soundsible` | `~/Library/Caches/soundsible` | `%LOCALAPPDATA%\soundsible\Cache` |
+| Music (default) | `~/Music/Soundsible` | `~/Music/Soundsible` | `%USERPROFILE%\Music\Soundsible` |
+
+They belong to the user who runs the engine, which is why a
+[systemd service](INSTALL.md#run-it-as-a-systemd-service) should run as the
+user who completed setup. Older installs used `~/.config/soundsible`,
+`~/.cache/soundsible` and `~/.local/share/soundsible` on every platform; those
+are copied to the new locations on first start. The `run.py` options and
+[path variables](#paths) override any of them.
+
+The desktop app also keeps two files in the configuration directory:
+
+- `desktop-owner-token` — the owner credential for the local desktop UI.
+- `desktop-engine-state.json` — the running engine's process and address, so
+  the app stops the right process instead of killing by port.

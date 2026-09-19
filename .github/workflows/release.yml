@@ -93,9 +93,14 @@ jobs:
 
       # Image tags carry no `v`; the git tag does. Quoting the wrong one in
       # the install instructions gives a pull command that cannot resolve.
+      # Image names must be lowercase, and the repository owner is not:
+      # `docker pull ghcr.io/Arzuparreta/...` is rejected as an invalid
+      # reference. CI publishes the image under the lowercased name.
       - name: Strip the tag prefix
         id: image
-        run: echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       # `-rc` in the tag is the only thing that marks a release as a
       # pre-release, so the channel is visible in the number itself and cannot
@@ -116,16 +121,21 @@ jobs:
 
             ```
             git clone --branch ${{ github.ref_name }} https://github.com/${{ github.repository }}.git
-            cd soundsible && python3 run.py
+            cd soundsible
+            cd ui_web && npm ci && cd ..
+            python3 run.py
             ```
 
             Prerequisites and per-OS steps: [Install & Deployment](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/INSTALL.md).
+            `python3 run.py` opens a terminal menu; on a server, run
+            `python3 run.py --daemon` or install it as a
+            [systemd service](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/INSTALL.md#run-it-as-a-systemd-service).
 
             **Docker** — supported, and the practical option on a NAS or a
             Raspberry Pi:
 
             ```
-            docker pull ghcr.io/${{ github.repository }}:${{ steps.image.outputs.tag }}
+            docker pull ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
             ```
 
             **Desktop app (beta)** — one machine, no terminal. Installers for
