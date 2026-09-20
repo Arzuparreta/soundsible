@@ -10,6 +10,7 @@ import os
 import queue
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Iterable
@@ -151,24 +152,10 @@ _POOL_ACQUIRE_TIMEOUT_SEC = BUSY_TIMEOUT_MS / 1000
 
 
 class ConnectionPool:
-    """A small, hard-capped pool of interchangeable SQLite connections.
+    """A hard-capped pool of warm SQLite connections.
 
-    Replaces caching one connection per calling thread forever. Under gevent
-    the WSGI server spawns a fresh greenlet per request rather than reusing a
-    bounded pool of them, so "per thread" quietly became "per request": every
-    request that touched the database left one open connection and file
-    descriptor behind, for the life of the process. Over enough hours that
-    stopped being cosmetic — the pile of open handles started starving actual
-    reads and writes on the same file, which is what the "buffering forever"
-    incident this pool was built for actually was.
-
-    A connection is borrowed for the life of one request (see
-    `DatabaseManager._get_connection`, released via `request_scope.on_end`)
-    and returned to the pool rather than closed, so steady-state traffic still
-    reuses a warm, already-PRAGMA'd connection — opening one is not free, and
-    that cost is exactly what the budget in `tests/test_request_db_budget.py`
-    guards. What changes is the ceiling: no matter how many requests a
-    long-running process serves, live connections never exceed `max_size`.
+    Connections belong to active database blocks, not to threads or requests.
+    A caller returns its loan after commit/rollback, including outside HTTP.
     """
 
     def __init__(self, factory, max_size: int):
@@ -176,26 +163,44 @@ class ConnectionPool:
         self._max_size = max_size
         self._idle: "queue.Queue" = queue.Queue()
         self._created = 0
-        self._create_lock = threading.Lock()
+        self._available = threading.Condition()
 
     def acquire(self):
-        try:
-            return self._idle.get_nowait()
-        except queue.Empty:
-            pass
-        with self._create_lock:
-            if self._created < self._max_size:
-                self._created += 1
-                return self._factory()
-        try:
-            return self._idle.get(timeout=_POOL_ACQUIRE_TIMEOUT_SEC)
-        except queue.Empty:
-            raise TimeoutError(
-                f"Database connection pool exhausted ({self._max_size} in use)"
-            ) from None
+        deadline = time.monotonic() + _POOL_ACQUIRE_TIMEOUT_SEC
+        with self._available:
+            while True:
+                try:
+                    return self._idle.get_nowait()
+                except queue.Empty:
+                    pass
+                if self._created < self._max_size:
+                    self._created += 1
+                    try:
+                        return self._factory()
+                    except BaseException:
+                        self._created -= 1
+                        self._available.notify()
+                        raise
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"Database connection pool exhausted ({self._max_size} in use)"
+                    )
+                self._available.wait(remaining)
 
     def release(self, conn) -> None:
-        self._idle.put(conn)
+        with self._available:
+            self._idle.put(conn)
+            self._available.notify()
+
+    def discard(self, conn) -> None:
+        """Retire an unusable connection and wake a waiter to replace it."""
+        try:
+            conn.close()
+        finally:
+            with self._available:
+                self._created -= 1
+                self._available.notify()
 
     def stats(self) -> dict:
         """Point-in-time view for `/api/health`: how close this pool is to
@@ -251,11 +256,9 @@ class DatabaseManager:
         else:
             self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        # Borrowed from `_pool` for the life of one request/thread and given
-        # back rather than kept forever — see `ConnectionPool` and
-        # `_get_connection`. Thread-local because a sqlite3 connection may
-        # only be used from the OS thread that created it; under gevent that
-        # is one specific greenlet at a time, never two concurrently.
+        # Only an active nested database block keeps a local loan. With the
+        # engine's early gevent patch this local belongs to a greenlet; without
+        # the patch it belongs to a native thread.
         self._connections = threading.local()
         self._pool = ConnectionPool(self._open_connection, _POOL_MAX_SIZE)
 
@@ -263,19 +266,18 @@ class DatabaseManager:
 
     def _open_connection(self):
         conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_MS / 1000, check_same_thread=False)
-        # busy_timeout first: it is per-connection and always succeeds, and
-        # switching journal mode needs a lock. Without the timeout in place that
-        # switch fails immediately instead of waiting for a concurrent reader.
-        conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
         try:
-            # Note: Enable WAL mode for high concurrency
-            conn.execute("PRAGMA journal_mode=WAL")
-        except sqlite3.OperationalError:
-            # WAL belongs to the file, not the connection — another connection
-            # has already set it.
-            logger.debug("Could not set WAL on %s; already set by another connection", self.db_path)
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA foreign_keys=ON")
+            # busy_timeout first: switching journal mode can need a write lock.
+            conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+            except sqlite3.OperationalError:
+                logger.debug("Could not set WAL on %s; already set by another connection", self.db_path)
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+        except BaseException:
+            conn.close()
+            raise
         return conn
 
     def pool_stats(self) -> dict:
@@ -283,38 +285,41 @@ class DatabaseManager:
         connection leak before it hits every request as a `TimeoutError`."""
         return self._pool.stats()
 
+    @contextmanager
     def _get_connection(self):
-        """This thread's connection to the database, borrowed from the pool.
+        """Borrow for a database block, returning only after commit/rollback.
 
-        Returned rather than newly opened, so `with db._get_connection() as
-        conn:` keeps its existing meaning — sqlite3 connections commit on a
-        clean exit and roll back on an exception, and neither closes them.
-        Repeat calls within the same request return the identical connection;
-        `request_scope.on_end` returns it to `_pool` when the request ends, so
-        the next caller — same thread or not — gets a warm connection instead
-        of paying to open one. Outside a request (background jobs, the CLI)
-        nothing returns it: it stays pinned to that thread for the thread's
-        life, same as before this pool existed, which is correct for the
-        small, bounded thread pools those callers run on.
+        Nested blocks reuse the active loan and retain sqlite3's existing
+        transaction-context semantics (they are not savepoints). Only the
+        outer block returns the connection. No request scope is required.
         """
         existing = getattr(self._connections, "conn", None)
         if existing is not None:
-            return existing
+            with existing:
+                yield existing
+            return
 
         conn = self._pool.acquire()
         self._connections.conn = conn
-        self._release_at_request_end(conn)
-        return conn
-
-    def _release_at_request_end(self, conn) -> None:
-        from shared import request_scope
-
-        def _release() -> None:
-            if getattr(self._connections, "conn", None) is conn:
-                del self._connections.conn
-            self._pool.release(conn)
-
-        request_scope.on_end(_release)
+        try:
+            with conn:
+                yield conn
+        finally:
+            del self._connections.conn
+            try:
+                # sqlite3 normally leaves no transaction here. A failed
+                # commit/rollback must never pass dirty state to another job.
+                if conn.in_transaction:
+                    conn.rollback()
+                if conn.in_transaction:
+                    raise sqlite3.OperationalError("connection still has an open transaction")
+            except BaseException:
+                try:
+                    self._pool.discard(conn)
+                except BaseException:
+                    logger.exception("Could not close discarded SQLite connection")
+            else:
+                self._pool.release(conn)
 
     # ------------------------------------------------------------------
     # Schema setup helpers (static to keep _init_db readable)
