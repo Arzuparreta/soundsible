@@ -27,6 +27,7 @@ import { recordPlaybackDiagnostic, startAutomaticPlaybackDiagnostics } from '../
 import { streamUrl, previewUrl, podcastStreamUrl, bustCovers, playbackYoutubeId } from '../lib/media';
 import {
   prefetchPreviews,
+  createPreparationOwner,
   previewPreparation,
   previewPreparationState,
   upcomingPreviewIds,
@@ -472,26 +473,45 @@ function repeatCycle(queue: PlaybackQueueEntry[]): PlaybackQueueEntry[] {
   return queue.filter((entry) => entry.queueLane !== 'manual' && entry.queueSource !== 'autoplay');
 }
 
-/** Warm the tracks `actions.next` would reach so track changes start instantly.
- * Shuffle writes its chosen order into the queue, so its successors are just as
- * knowable — and just as important to prepare — as a linear context. */
-function prefetchUpcoming(): void {
+// The current selection and its runway own observation independently.
+// Replacing a selection releases old listeners before any asynchronous reply.
+const currentPreparation = createPreparationOwner(onPreviewPreparation);
+const upcomingPreparation = createPreparationOwner(onPreviewPreparation);
+
+function releasePreparation(): void {
+  currentPreparation.update([]);
+  upcomingPreparation.update([]);
+}
+
+function revalidatePreparation(): void {
+  currentPreparation.revalidate();
+  upcomingPreparation.revalidate();
+}
+
+function previewLookahead(): string[] {
   const pb = state.playback;
-  matchUpcomingContext();
-  // Acquisition may start here, but staging waits for the current track's
-  // `playing` event and for the engine's complete-file readiness verdict.
-  // A song still waiting on its catalog match has no video to prepare yet.
+  if (!pb.currentTrack || runWhenAudible) return [];
   const unmatched = new Set(pb.queue.filter(isPendingEntry).map((entry) => entry.id));
-  const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5)
+  return upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5)
     .filter((id) => !unmatched.has(id));
-  // Every unattended context needs alternatives, not one optimistic URL. The
-  // download lane is serial, so this builds a small verified runway in order.
-  const downloadCount = 3;
-  const downloads = ids.slice(0, downloadCount);
-  if (downloads.length > 0) {
-    prefetchPreviews(downloads, { download: true, onStatus: onPreviewPreparation });
+}
+
+/** Reconcile ownership without starting catalog matching or speculative warming. */
+function updateUpcomingPreparation(): void {
+  upcomingPreparation.update(previewLookahead().slice(0, 3));
+}
+
+/** Warm the next three previews on disk and only resolve the following two.
+ * Defer this work until the selection is audible, including status callbacks. */
+function prefetchUpcoming(): void {
+  if (!state.playback.currentTrack || runWhenAudible) {
+    upcomingPreparation.update([]);
+    return;
   }
-  const warmOnly = ids.slice(downloadCount);
+  matchUpcomingContext();
+  const ids = previewLookahead();
+  upcomingPreparation.update(ids.slice(0, 3));
+  const warmOnly = ids.slice(3);
   if (warmOnly.length > 0) prefetchPreviews(warmOnly);
 }
 
@@ -541,14 +561,14 @@ function stageNext(): void {
     void matchContextEntry(next.queueId).then((outcome) => afterContextMatch(next.queueId, outcome));
     return;
   }
+  if (stagedEntry?.queueId === next.queueId) return;
   if (!trackPrepared(next)) {
     stagedEntry = null;
     audioService.clearStaged();
     const videoId = playbackYoutubeId(next);
-    if (videoId) prefetchPreviews([videoId], { download: true, onStatus: onPreviewPreparation });
+    if (videoId) prefetchUpcoming();
     return;
   }
-  if (stagedEntry?.queueId === next.queueId) return;
   // Minted here rather than at playback so a handoff reports the same attempt
   // the deck was cued under. It identifies the attempt in telemetry only — it
   // is deliberately not in the URL, which has to stay cacheable.
@@ -564,6 +584,7 @@ function discardFutureAutoplay(): void {
     (entry, index) => index <= pb.index || !(entry.queueLane === 'generated' && entry.queueSource === 'autoplay'),
   );
   setState('playback', { queue, autoplayLoading: false });
+  updateUpcomingPreparation();
 }
 
 function cancelPendingRadio(): void {
@@ -694,6 +715,7 @@ function loadUnmatchedIndex(i: number, opts: LoadOptions): void {
   const entry = state.playback.queue[i];
   if (!entry) return;
   userPlaybackStartedThisSession = true;
+  releasePreparation();
   beginLoad();
   cancelActiveAttempt('superseded');
   runWhenAudible = null;
@@ -832,6 +854,7 @@ function loadIndex(i: number, opts: LoadOptions = {}): void {
     }
   }
   userPlaybackStartedThisSession = true;
+  releasePreparation();
   const generation = beginLoad();
   // A deck already holding this exact stream takes over without a request and
   // without an `src` assignment. From `ended` that keeps the handover inside the
@@ -863,9 +886,7 @@ function loadIndex(i: number, opts: LoadOptions = {}): void {
   });
   updateMediaSession(track);
   const previewId = track.source === 'preview' ? playbackYoutubeId(track) : null;
-  if (previewId) {
-    prefetchPreviews([previewId], { download: true, onStatus: onPreviewPreparation });
-  }
+  currentPreparation.update(previewId ? [previewId] : []);
   const start = staged
     ?? (opts.freshDeck
       ? audioService.recover(trackUrl(track), 0, level)
@@ -1190,6 +1211,7 @@ function removeTrackReferences(id: string): void {
   }
 
   if (pb.currentTrack?.id === id) {
+    releasePreparation();
     cancelActiveAttempt('track_removed');
     audioService.stop();
     setState('playback', {
@@ -1206,6 +1228,7 @@ function removeTrackReferences(id: string): void {
     updateMediaSession(null);
     pushEmptyPlaybackState();
   }
+  prefetchUpcoming();
 }
 
 function restorePlaybackSnapshot(snapshot: PlaybackState): void {
@@ -1248,6 +1271,8 @@ function applySessionSnapshot(
   const entry = queue[index];
   if (!entry) return null;
 
+  releasePreparation();
+  runWhenAudible = null;
   cancelActiveAttempt('session_restored');
   unmatchedSelection = null;
   abandonContextMatches();
@@ -1339,6 +1364,7 @@ function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
     primeRestored(restored, pos);
     return;
   }
+  releasePreparation();
   setState('playback', {
     currentTrack: track,
     isPlaying: false,
@@ -1527,6 +1553,9 @@ function commitTransition(
         technique: plan.technique,
         nextTrackId: toKey,
       });
+      const previewId = next.source === 'preview' ? playbackYoutubeId(next) : null;
+      currentPreparation.update(previewId ? [previewId] : []);
+      prefetchUpcoming();
       updateMediaSession(next, 'handoff_dominant', true);
       pushPlaybackState();
     },
@@ -1659,7 +1688,7 @@ function evaluateDjRunway(): void {
   if (!current || !next || pb.loadError) return;
   if (!trackPrepared(next)) {
     const videoId = playbackYoutubeId(next);
-    if (videoId) prefetchPreviews([videoId], { download: true });
+    if (videoId) prefetchUpcoming();
     promotePreparedAutoSuccessor();
     return;
   }
@@ -1944,6 +1973,7 @@ function dropAutoRouteOccurrence(queueId: string): PlaybackQueueEntry | null {
     Object.entries(plan).filter(([id]) => !owned.has(id)),
   ));
   setState('autoMode', 'staleSeams', (seams) => seams.filter((id) => !owned.has(id)));
+  updateUpcomingPreparation();
   void generatedQueue?.ensureRunway();
   return track;
 }
@@ -2297,9 +2327,13 @@ function promotePreparedAutoSuccessor(): boolean {
  * preserve the lane/context ordering already encoded by the queue. */
 function onPreviewPreparation(videoId: string, status: PreviewPreparation): void {
   const pb = state.playback;
-  if (pb.currentTrack && playbackYoutubeId(pb.currentTrack) === videoId) {
+  const currentId = pb.currentTrack && playbackYoutubeId(pb.currentTrack);
+  const wanted = previewLookahead().slice(0, 3);
+  if (videoId !== currentId && !wanted.includes(videoId)) return;
+  if (pb.currentTrack && currentId === videoId) {
     setState('playback', 'previewPreparation', status);
   }
+  if (runWhenAudible) return;
   const future = pb.queue.slice(Math.max(0, pb.index + 1));
   const matching = future.filter((entry) => playbackYoutubeId(entry) === videoId);
   if (status.state === 'unavailable' && matching.length > 0) {
@@ -2610,6 +2644,7 @@ export const actions = {
       repairing: false,
       staleSeams: [],
     });
+    updateUpcomingPreparation();
   },
 
   addAutoSource(tracks: Track[], label: string): void {
@@ -3242,6 +3277,8 @@ export const actions = {
     if (pb.currentTrack?.id === track.id && (pb.isLoading || pb.isPlaying)) return;
     userPlaybackStartedThisSession = true;
     const generation = beginLoad();
+    releasePreparation();
+    runWhenAudible = null;
     createPlaybackAttempt(track, generation, 'podcast');
     setState('playback', {
       currentTrack: track,
@@ -3383,6 +3420,7 @@ export const actions = {
     const track = state.playback.currentTrack;
     const previewId = track?.source === 'preview' && !isPendingEntry(track) ? playbackYoutubeId(track) : null;
     userPlaybackStartedThisSession = true;
+    releasePreparation();
     beginLoad(); // Late load failures must not revive the dismissed session.
     cancelActiveAttempt('user_dismiss');
     unmatchedSelection = null;
@@ -3412,6 +3450,7 @@ export const actions = {
       radioSeedId: null,
       autoplayLoading: false,
     });
+    releasePreparation();
     setState('autoMode', { activity: null, transition: { status: 'idle' } });
     setNowPlayingOpen(false);
     updateMediaSession(null);
@@ -3539,6 +3578,7 @@ export const actions = {
     if (i === pb.index) {
       setState('playback', 'queue', next);
       if (next.length === 0) {
+        releasePreparation();
         cancelActiveAttempt('queue_empty');
         audioService.stop();
         setState('playback', {
@@ -3556,6 +3596,7 @@ export const actions = {
     }
     setState('playback', 'queue', next);
     if (i < pb.index) setState('playback', 'index', pb.index - 1);
+    prefetchUpcoming();
     if (state.playback.radioMode || state.autoMode.active) {
       void generatedQueue?.ensureRunway();
     }
@@ -4938,6 +4979,7 @@ export function initStore(): void {
       }
     }
     hiddenSince = null;
+    revalidatePreparation();
     // Whatever stopped while we were away gets one more chance now.
     resumeFromStarved();
     if (state.playback.phase === 'buffering') {
@@ -4949,6 +4991,7 @@ export function initStore(): void {
   // freeze a backgrounded page outright, and a page that is thawed rather than
   // merely revealed does not always get a `visibilitychange` of its own.
   document.addEventListener('resume', () => {
+    revalidatePreparation();
     resumeFromStarved();
   });
 
@@ -4969,6 +5012,7 @@ export function initStore(): void {
 
   socket = createSocket();
   socket.on('connect', () => {
+    revalidatePreparation();
     setState('online', true);
     socket!.emit('playback_register', state.device);
     void api.registerDevice(state.device).catch(() => {});

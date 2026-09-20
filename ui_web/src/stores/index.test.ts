@@ -299,11 +299,28 @@ async function loadStore(
     } | undefined) | undefined
   ) ?? (() => undefined);
   let previewStatusListener: ((id: string, status: { state: 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable'; retry_after?: number }) => void) | null = null;
+  const preparationOwners: Array<{
+    ids: string[];
+    update: ReturnType<typeof vi.fn<(ids: string[]) => void>>;
+    revalidate: ReturnType<typeof vi.fn>;
+    dispose: ReturnType<typeof vi.fn>;
+  }> = [];
   const prefetchPreviews = vi.fn((_ids: string[], opts?: { onStatus?: typeof previewStatusListener }) => {
     if (opts?.onStatus) previewStatusListener = opts.onStatus;
   });
   vi.doMock('../lib/prefetch', () => ({
     prefetchPreviews,
+    createPreparationOwner: (listener: NonNullable<typeof previewStatusListener>) => {
+      previewStatusListener = listener;
+      const owner = {
+        ids: [] as string[],
+        update: vi.fn((ids: string[]) => { owner.ids = ids; }),
+        revalidate: vi.fn(),
+        dispose: vi.fn(),
+      };
+      preparationOwners.push(owner);
+      return owner;
+    },
     previewPreparation,
     previewPreparationState,
     upcomingPreviewIds: (queue: Track[], index: number, repeatAll: boolean, count = 2) => {
@@ -389,6 +406,7 @@ async function loadStore(
     fireProgramOutput,
     firePreviewStatus: (id: string, status: { state: 'cold' | 'pending' | 'streamable' | 'ready' | 'unavailable'; retry_after?: number }) => previewStatusListener?.(id, status),
     prefetchPreviews,
+    preparationOwners,
     toastAction,
     toastError,
     toastSuccess,
@@ -3762,5 +3780,109 @@ describe('output recovery state', () => {
     expect(state.playback.currentTrack?.id).toBe('t1');
     expect(audioService.recover).not.toHaveBeenCalled();
     expect(audioService.load).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('preview preparation ownership', () => {
+  const previews: Track[] = Array.from({ length: 7 }, (_, n) => ({
+    id: String(n).padStart(11, '0'), title: String(n), artist: 'Artist', source: 'preview',
+  }));
+
+  it('owns the selection immediately and only acquires its three successors once audible', async () => {
+    const { actions, initStore, fireDeckEvent, firePreviewStatus, preparationOwners, prefetchPreviews, audioService } = await loadStore();
+    initStore();
+    actions.playFrom(previews, 0);
+    expect(preparationOwners[0].ids).toEqual([previews[0].id]);
+    expect(preparationOwners[1].ids).toEqual([]);
+    firePreviewStatus(previews[0].id, { state: 'pending' });
+    expect(audioService.stage).not.toHaveBeenCalled();
+    expect(preparationOwners[1].ids).toEqual([]);
+    fireDeckEvent('playing');
+    expect(preparationOwners[1].ids).toEqual(previews.slice(1, 4).map(t => t.id));
+    expect(prefetchPreviews).toHaveBeenCalledWith(previews.slice(4, 6).map(t => t.id));
+
+    actions.playFrom(previews.slice(5), 0);
+    expect(preparationOwners[0].ids).toEqual([previews[5].id]);
+    expect(preparationOwners[1].ids).toEqual([]);
+    actions.dismissPlayback();
+    expect(preparationOwners.map(o => o.ids)).toEqual([[], []]);
+  });
+
+  it('updates interest on queue removal and ignores obsolete verdicts', async () => {
+    const { actions, state, initStore, fireDeckEvent, firePreviewStatus, preparationOwners } = await loadStore();
+    initStore();
+    actions.playFrom(previews, 0);
+    fireDeckEvent('playing');
+    actions.removeFromQueue(1);
+    expect(preparationOwners[1].ids).toEqual(previews.slice(2, 5).map(t => t.id));
+    const before = state.playback.queue.slice();
+    firePreviewStatus(previews[1].id, { state: 'unavailable' });
+    expect(state.playback.queue).toEqual(before);
+    actions.dismissPlayback();
+    firePreviewStatus(previews[0].id, { state: 'pending' });
+    expect(state.playback.previewPreparation).toBeNull();
+  });
+
+  it('revalidates owned IDs on reconnect and resume without discarding a staged deck', async () => {
+    const readiness: Record<string, 'ready' | 'cold'> = {};
+    const { actions, initStore, fireSocketEvent, fireDeckEvent, firePreviewStatus, preparationOwners, audioService } = await loadStore({
+      __previewPreparationState: (id: string) => readiness[id] ?? 'ready',
+      registerDevice: vi.fn().mockResolvedValue({}),
+    });
+    initStore();
+    actions.playFrom(previews, 0);
+    fireDeckEvent('playing');
+    expect(audioService.stage).toHaveBeenCalled();
+    audioService.clearStaged.mockClear();
+    fireSocketEvent('connect');
+    document.dispatchEvent(new Event('resume'));
+    for (const owner of preparationOwners) expect(owner.revalidate).toHaveBeenCalledTimes(2);
+    readiness[previews[1].id] = 'cold';
+    firePreviewStatus(previews[1].id, { state: 'cold' });
+    expect(audioService.clearStaged).not.toHaveBeenCalled();
+  });
+
+  it('releases preview owners when starting a podcast', async () => {
+    const { actions, initStore, fireDeckEvent, preparationOwners } = await loadStore({
+      podcastPeek: vi.fn().mockResolvedValue({ stream_token: 'token' }),
+    });
+    initStore();
+    actions.playFrom(previews, 0);
+    fireDeckEvent('playing');
+    await actions.playEpisode({ guid: 'episode', title: 'Episode', enclosure_url: 'https://example.org/audio.mp3' });
+    expect(preparationOwners.map(o => o.ids)).toEqual([[], []]);
+  });
+});
+
+describe('preparation ownership after generated queue cleanup', () => {
+  it('drops subscriptions for the Auto route when leaving Auto', async () => {
+    const { actions, initStore, fireDeckEvent, preparationOwners } = await loadStore({
+      planDjQueue: vi.fn().mockResolvedValue(autoPlan(['route-00001', 'route-00002'])),
+    });
+    initStore();
+    actions.playTrack(t1);
+    fireDeckEvent('playing');
+    actions.enterAutoMode();
+    await flush();
+    expect(preparationOwners[1].ids).toContain('route-00001');
+    actions.exitAutoMode();
+    expect(preparationOwners[1].ids).toEqual([]);
+  });
+
+  it('releases generated Autoplay interest when Autoplay is disabled', async () => {
+    const upcoming: Track = { id: 'future00001', title: 'Future', artist: 'A', source: 'preview' };
+    const { actions, state, initStore, fireDeckEvent, preparationOwners } = await loadStore({
+      setAutoplayEnabled: vi.fn().mockResolvedValue({}),
+    });
+    initStore();
+    actions.playFrom([t1, upcoming], 0);
+    fireDeckEvent('playing');
+    const { setState } = await import('./core');
+    setState('playback', 'autoplayEnabled', true);
+    setState('playback', 'queue', 1, { queueLane: 'generated', queueSource: 'autoplay' });
+    expect(preparationOwners[1].ids).toEqual([upcoming.id]);
+    await actions.setAutoplayEnabled(false);
+    expect(state.playback.queue).toHaveLength(1);
+    expect(preparationOwners[1].ids).toEqual([]);
   });
 });
