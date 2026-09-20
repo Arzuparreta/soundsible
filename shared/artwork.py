@@ -21,6 +21,7 @@ from shared.runtime import get_cache_dir, get_data_dir
 SIZES = (160, 320, 640, 960, 1280)
 MAX_BYTES = 20 * 1024 * 1024
 MAX_PIXELS = 40_000_000
+_REF_BATCH_SIZE = 500
 TRANSFORM = "jpeg90-v1"
 
 
@@ -149,11 +150,21 @@ class ArtworkStore:
         return path
 
     def annotate(self, tracks: list[dict]) -> None:
-        if not tracks:
+        ids = list(dict.fromkeys(track.get("id") for track in tracks if isinstance(track.get("id"), str)))
+        if not ids:
             return
+        refs = {}
         with self.connect() as db:
-            refs = {row['track_id']: dict(row) for row in db.execute(
-                "SELECT track_id, refs.hash, revision, width, height FROM refs LEFT JOIN objects ON refs.hash=objects.hash")}
+            # All batches see the same artwork revisions, just as one SELECT
+            # did, without materializing references outside the requested set.
+            db.execute("BEGIN")
+            for offset in range(0, len(ids), _REF_BATCH_SIZE):
+                batch = ids[offset:offset + _REF_BATCH_SIZE]
+                placeholders = ",".join("?" for _ in batch)
+                refs.update((row["track_id"], dict(row)) for row in db.execute(
+                    "SELECT track_id, refs.hash, revision, width, height FROM refs "
+                    "LEFT JOIN objects ON refs.hash=objects.hash "
+                    f"WHERE refs.track_id IN ({placeholders})", batch))
         for track in tracks:
             ref = refs.get(track.get('id'))
             if ref:

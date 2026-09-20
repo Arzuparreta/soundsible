@@ -3,7 +3,6 @@ from pathlib import Path
 Library, metadata, playlists, favourites, and cover routes.
 """
 
-import json
 import logging
 import os
 import tempfile
@@ -107,7 +106,7 @@ def get_library():
     if not lib.metadata:
         lib.sync_library()
     if lib.metadata:
-        payload = json.loads(lib.metadata.to_json())
+        payload = lib.metadata.to_public_dict()
         # Loudness rides the library the player already fetches, so levelling
         # costs no extra request and is available before the first track loads.
         annotate_tracks(payload.get("tracks") or [])

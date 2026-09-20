@@ -5,7 +5,8 @@ This module defines the core data structures used throughout the platform
 for representing music tracks, library organization, and synchronization.
 """
 
-from dataclasses import dataclass, asdict, field
+from copy import deepcopy
+from dataclasses import dataclass, asdict, field, fields
 from typing import List, Dict, Optional, Any, Literal
 from enum import Enum
 import json
@@ -111,6 +112,18 @@ class Track:
         """Convert track to dictionary."""
         return asdict(self)
     
+    def to_public_dict(self) -> Dict[str, Any]:
+        """Detached portable metadata, excluding machine-local scan fields."""
+        result = {}
+        for item in fields(self):
+            if item.name in {"local_path", "local_mtime_ns"}:
+                continue
+            value = getattr(self, item.name)
+            # Track fields are scalars except structured performer names.
+            # Copy mutable values without asdict's recursive work on scalars.
+            result[item.name] = value if isinstance(value, (str, int, float, bool, type(None))) else deepcopy(value)
+        return result
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Track':
         """Create Track from dictionary, filtering unknown keys."""
@@ -307,36 +320,26 @@ class LibraryMetadata:
     # feed_id -> {"fetched_at": iso, "episodes": [ {...}, ... ]}
     podcast_episode_cache: Dict[str, Any] = field(default_factory=dict)
     
-    def to_json(self, indent: int = 2) -> str:
+    def to_public_dict(self) -> Dict[str, Any]:
+        """Build a detached payload shared by HTTP and portable JSON exports.
+
+        Annotations and callers may mutate this snapshot without modifying the
+        canonical model. Machine-local scan paths/fingerprints never travel.
         """
-        Serialize library metadata to JSON string.
-        
-        Args:
-            indent: JSON indentation level
-            
-        Returns:
-            JSON string representation
-        """
-        # Machine-local scan locations/fingerprints must never travel to another
-        # installation through library.json.
-        data = {
+        return {
             "version": self.version,
-            "tracks": [
-                {
-                    k: v
-                    for k, v in track.to_dict().items()
-                    if k not in {"local_path", "local_mtime_ns"}
-                }
-                for track in self.tracks
-            ],
-            "playlists": self.playlists,
-            "settings": self.settings,
+            "tracks": [track.to_public_dict() for track in self.tracks],
+            "playlists": deepcopy(self.playlists),
+            "settings": deepcopy(self.settings),
             "last_updated": self.last_updated,
-            "podcast_subscriptions": list(self.podcast_subscriptions),
-            "podcast_episode_cache": dict(self.podcast_episode_cache),
+            "podcast_subscriptions": deepcopy(list(self.podcast_subscriptions)),
+            "podcast_episode_cache": deepcopy(dict(self.podcast_episode_cache)),
         }
-        return json.dumps(data, indent=indent)
-    
+
+    def to_json(self, indent: int = 2) -> str:
+        """Serialize portable library metadata to JSON."""
+        return json.dumps(self.to_public_dict(), indent=indent)
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'LibraryMetadata':
         """
