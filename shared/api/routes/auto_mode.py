@@ -12,9 +12,12 @@ import hashlib
 import logging
 import random
 import re
+import threading
 import time
 import uuid
-from concurrent.futures import wait
+from collections.abc import Iterable
+from concurrent.futures import Future, wait
+from typing import NamedTuple
 
 from flask import jsonify, request
 
@@ -50,10 +53,13 @@ from .discovery_common import (
     _AUTO_CONTEXT_MAX,
     _AUTO_GRAPH_ANCHORS,
     _AUTO_GRAPH_FETCH_MISSES,
+    _AUTO_GRAPH_RETRY_AFTER_SEC,
+    _AUTO_GRAPH_WAIT_SEC,
     _AUTO_RAW_LIMIT,
     _AUTO_ROUTER_LIMIT,
     _AUTO_SHORTLIST_LIMIT,
     _CANONICAL_RESOLVE_BUDGET_SEC,
+    _GRAPH_FETCH_EXECUTOR,
     _PLAN_RESOLVE_EXECUTOR,
     _get_api,
 )
@@ -147,6 +153,43 @@ def _planner_item_from_feed(item: dict, *, pool: str) -> dict | None:
         "score": float(item.get("score") or 0.5),
         "external_ids": {**external, **({"youtube_id": video_id} if video_id else {})},
     }
+
+
+def _candidate_keys(item: dict) -> set[str]:
+    """Every id a planner candidate can legitimately be recognised by.
+
+    The browser excludes what it already holds using raw playback ids
+    (`youtube_id or id`), while the planner names the same song
+    `music:youtube:<id>` or `music:track:<id>`. Comparing only the namespaced
+    form let the seed of a session come back as its own route: the browser
+    dropped it as a duplicate and then read the empty result as a dry pool.
+    """
+    external = item.get("external_ids") if isinstance(item.get("external_ids"), dict) else {}
+    values = (
+        item.get("recommendation_identity"),
+        item.get("canonical_identity"),
+        item.get("track_id"),
+        item.get("youtube_id"),
+        item.get("discovery_youtube_id"),
+        external.get("youtube_id"),
+        item.get("id"),
+    )
+    return {str(value) for value in values if value}
+
+
+class _GraphWalk(NamedTuple):
+    """One related-graph expansion, and how much of it actually arrived.
+
+    `warming` is the difference between "this neighbourhood is empty" and "we
+    have not finished reading it yet" — the distinction the route panel needs
+    before it tells a listener there is nothing left to play.
+    """
+
+    items: list[dict]
+    degraded: bool
+    warming: bool
+    cache_hit: int = 0
+    cache_miss: int = 0
 
 
 def _planner_artist_key(value: object) -> str:
@@ -300,12 +343,60 @@ def _planner_uncached_related(video_id: str) -> list[dict]:
     return rows
 
 
+_GRAPH_INFLIGHT: dict[str, Future] = {}
+_GRAPH_INFLIGHT_LOCK = threading.Lock()
+
+
+def _planner_related_future(video_id: str) -> Future:
+    """One fetch per seed, however many callers want it.
+
+    A cold seed outlives the caller that asked for it: the wait expires, the
+    listener retries, and without this every retry queued *another* copy of the
+    same fetch against the same threads — so the retries were competing with the
+    work that would have answered them. Joining the live future instead means a
+    retry either finds the cache warm or waits on the fetch already running.
+    """
+    with _GRAPH_INFLIGHT_LOCK:
+        existing = _GRAPH_INFLIGHT.get(video_id)
+        if existing is not None and not existing.done():
+            return existing
+        future = _GRAPH_FETCH_EXECUTOR.submit(_planner_uncached_related, video_id)
+        _GRAPH_INFLIGHT[video_id] = future
+
+    def _release(_done: Future, key: str = video_id) -> None:
+        with _GRAPH_INFLIGHT_LOCK:
+            if _GRAPH_INFLIGHT.get(key) is _done:
+                _GRAPH_INFLIGHT.pop(key, None)
+
+    future.add_done_callback(_release)
+    return future
+
+
+def _planner_warm_related(video_ids: Iterable[str]) -> None:
+    """Start reading a seed's neighbourhood before anybody waits on it.
+
+    Called for the tracks a session is steered by and for the head of each route
+    it hands out, so the refill that follows is a cache hit rather than the next
+    cold wait. Nothing joins these futures: warming is best effort.
+    """
+    for video_id in list(dict.fromkeys(video_ids))[:_AUTO_GRAPH_ANCHORS + 2]:
+        if not video_id or not validate_youtube_video_id(video_id):
+            continue
+        if instance_db().get_related_mix(video_id) is not None:
+            continue
+        try:
+            _planner_related_future(video_id)
+        except RuntimeError as exc:  # executor shutting down
+            logger.debug("Auto graph warm rejected for %s: %s", video_id, exc)
+            return
+
+
 def _planner_context_related(
     metadata,
     context: list[dict],
     *,
     personalise: bool = True,
-) -> tuple[list[dict], bool]:
+) -> _GraphWalk:
     """Collect a bounded semantic neighbourhood around the route that survives."""
     anchors: list[tuple[str, float]] = []
     for index, item in enumerate(context[-_AUTO_GRAPH_ANCHORS:]):
@@ -326,14 +417,18 @@ def _planner_context_related(
         else:
             mixes[video_id] = cached
 
+    warming = len(misses) > _AUTO_GRAPH_FETCH_MISSES
     futures = {
-        _PLAN_RESOLVE_EXECUTOR.submit(_planner_uncached_related, video_id): video_id
+        _planner_related_future(video_id): video_id
         for video_id in misses[:_AUTO_GRAPH_FETCH_MISSES]
     }
     if futures:
-        done, pending = wait(futures, timeout=8)
-        for future in pending:
-            future.cancel()
+        done, pending = wait(futures, timeout=_AUTO_GRAPH_WAIT_SEC)
+        # A running fetch cannot be cancelled, and we do not want it to be: it
+        # finishes, caches its rows, and answers the next call in microseconds.
+        # What matters here is telling the caller the difference between "this
+        # seed has no neighbours" and "we are still reading them".
+        warming = warming or bool(pending)
         for future in done:
             try:
                 mixes[futures[future]] = future.result()
@@ -366,7 +461,13 @@ def _planner_context_related(
                 break
         if len(candidates) >= _AUTO_RAW_LIMIT:
             break
-    return list(candidates.values()), any(video_id not in mixes for video_id, _ in anchors)
+    return _GraphWalk(
+        list(candidates.values()),
+        any(video_id not in mixes for video_id, _ in anchors),
+        warming,
+        len(anchors) - len(misses),
+        len(misses),
+    )
 
 
 def _planner_related_artist_pool(
@@ -474,7 +575,12 @@ def _build_auto_pools(
     favourite_ids: set[str],
     user_id: str | None,
 ) -> tuple[dict[str, list[dict]], bool]:
-    related, graph_degraded = _planner_context_related(metadata, context)
+    walk = _planner_context_related(metadata, context)
+    related = list(walk.items)
+    # This pool feeds the legacy plan and the discovery feed, neither of which
+    # has a "still warming" state to show. For them an unfinished walk is simply
+    # one more way of being degraded.
+    graph_degraded = walk.degraded or walk.warming
     seed_artist = str(context[-1].get("artist") or "") if context else ""
     related_artists, discovery = _planner_related_artist_pool(seed_artist, user_id)
     related_artist_keys = {_planner_artist_key(name) for name in related_artists}
@@ -986,11 +1092,12 @@ def _auto_set_arc_position(heard_count: int, segment_index: int) -> float:
     return phases[(heard_count + segment_index) % len(phases)]
 
 
-def _exploration_related(metadata, heard_roots: list[dict]) -> tuple[list[dict], bool]:
+def _exploration_related(metadata, heard_roots: list[dict]) -> _GraphWalk:
     """One hop out of confirmed automatic playback in the current direction."""
     if not heard_roots:
-        return [], False
-    related, graph_degraded = _planner_context_related(metadata, heard_roots, personalise=False)
+        return _GraphWalk([], False, False)
+    walk = _planner_context_related(metadata, heard_roots, personalise=False)
+    related = list(walk.items)
     for item in related:
         item.update({
             "source_set_id": "exploration",
@@ -1002,7 +1109,7 @@ def _exploration_related(metadata, heard_roots: list[dict]) -> tuple[list[dict],
             "recommendation_source": "auto_mode",
         })
         item["score"] = float(item.get("score") or 0.5) * 0.3
-    return related, graph_degraded
+    return walk._replace(items=related)
 
 
 def _build_music_set_route(data: dict) -> tuple[dict, int]:
@@ -1028,6 +1135,8 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     metadata = getattr(lib, "metadata", None)
     candidates: list[dict] = []
     degraded = False
+    warming = False
+    cache_hit = cache_miss = 0
     ordered_sources = sorted(
         sources,
         key=lambda row: int(row.get("activation") or 0),
@@ -1047,8 +1156,12 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         candidates.extend(roots)
         if not roots:
             continue
-        related, graph_degraded = _planner_context_related(metadata, roots[-4:], personalise=False)
-        degraded = degraded or graph_degraded
+        walk = _planner_context_related(metadata, roots[-4:], personalise=False)
+        related = list(walk.items)
+        degraded = degraded or walk.degraded
+        warming = warming or walk.warming
+        cache_hit += walk.cache_hit
+        cache_miss += walk.cache_miss
         root_identity = roots[-1]["recommendation_identity"]
         for item in related:
             item.update({
@@ -1072,23 +1185,42 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         item for raw in raw_exploration[-4:] if isinstance(raw, dict)
         and (item := _music_set_item(raw, source_id="exploration", label="Session", weight=0.3))
     ]
-    related, graph_degraded = _exploration_related(metadata, exploration_roots)
-    degraded = degraded or graph_degraded
-    candidates.extend(related)
-    heard = {
+    exploration_walk = _exploration_related(metadata, exploration_roots)
+    degraded = degraded or exploration_walk.degraded
+    warming = warming or exploration_walk.warming
+    cache_hit += exploration_walk.cache_hit
+    cache_miss += exploration_walk.cache_miss
+    candidates.extend(exploration_walk.items)
+    heard_order = [
         item["recommendation_identity"] for raw in raw_heard[-4:]
         if isinstance(raw, dict)
         and (item := _music_set_item(raw, source_id="heard", label="Heard"))
-    }
+    ]
+    heard = set(heard_order)
     excluded = {str(value) for value in data.get("exclude", []) if str(value)}
+    # The song a route continues from is never a candidate for that route. It
+    # reaches the pool as a source root, and the browser names it in the
+    # playback namespace (`<video id>`) rather than the planner's
+    # (`music:youtube:<video id>`), so matching on one key alone let the seed
+    # come back as its own runway — which the browser then dropped as a
+    # duplicate and reported as a dry pool.
+    if seed:
+        excluded |= _candidate_keys(seed)
     unique: dict[str, dict] = {}
+    seen: set[str] = set()
     for item in candidates:
-        identity = str(item.get("recommendation_identity") or item.get("id") or "")
-        if identity and identity not in excluded:
-            unique.setdefault(identity, item)
+        keys = _candidate_keys(item)
+        if not keys or keys & excluded or keys & seen:
+            continue
+        seen |= keys
+        unique[str(item.get("recommendation_identity") or item.get("id") or "")] = item
+    # Repeating something the session has already heard beats stopping, but only
+    # once the rest has been tried. Relaxing all the way back is what used to
+    # hand the listener the track that was already playing.
+    recent_heard = set(heard_order[-2:])
     available = [item for key, item in unique.items() if key not in heard]
     if not available:
-        available = list(unique.values())
+        available = [item for key, item in unique.items() if key not in recent_heard]
 
     seed_material = f"{data.get('session_id', '')}:{segment_index}:{','.join(sorted(unique))}"
     entropy = int.from_bytes(hashlib.blake2s(seed_material.encode(), digest_size=8).digest(), "big")
@@ -1143,6 +1275,41 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     route = [row for row, _ in ordered]
     for item in route:
         _dj_item_analysis(metadata, item, schedule=True)
+    # Read ahead of the listener. The seeds that will anchor the next refill are
+    # the head of this route, and the sources it is steered by; warming them now
+    # is the difference between the next call being a cache hit and it being
+    # another cold wait the listener has to sit through.
+    _planner_warm_related(
+        _planner_video_id(metadata, item)
+        for item in [*route[:2], *(row for source in ordered_sources for row in source.get("tracks", []) if isinstance(row, dict))]
+    )
+    # `empty_reason` is the only failure signal the route panel acts on, and
+    # "exhausted" is terminal there: it stops the automatic retry and asks the
+    # listener to press a button. Reserve it for a neighbourhood we actually
+    # finished reading and found nothing in.
+    if route:
+        empty_reason = None
+    elif degraded or warming:
+        empty_reason = "temporary_failure"
+    else:
+        empty_reason = "exhausted"
+    logger.info(
+        "dj-plan session=%s segment=%d sources=%d candidates=%d unique=%d "
+        "excluded=%d heard=%d cache_hit=%d cache_miss=%d warming=%s degraded=%s empty_reason=%s route=%d",
+        data.get("session_id") or "-",
+        segment_index,
+        len(ordered_sources),
+        len(candidates),
+        len(unique),
+        len(excluded),
+        len(heard),
+        cache_hit,
+        cache_miss,
+        warming,
+        degraded,
+        empty_reason,
+        len(route),
+    )
     return {
         "v": 6,
         "plan_id": str(uuid.uuid4()),
@@ -1154,8 +1321,10 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
         "seed_analysis": opening_analysis or _dj_item_analysis(metadata, seed, schedule=True),
         **({"opening": opening} if opening else {}),
         "items": route,
-        "degraded": degraded or not route,
-        "empty_reason": ("temporary_failure" if degraded else "exhausted") if not route else None,
+        "degraded": degraded,
+        "warming": warming,
+        "retry_after": _AUTO_GRAPH_RETRY_AFTER_SEC if warming else None,
+        "empty_reason": empty_reason,
         "direction_revision": data.get("direction_revision"),
         "pool_counts": {
             "local": sum(1 for item in unique.values() if item.get("source_pool") == "local"),
@@ -1393,7 +1562,7 @@ def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tupl
     def walk(roots: list[dict]) -> list[tuple[dict, dict]]:
         if not roots:
             return []
-        related, _ = _planner_context_related(metadata, roots[-8:], personalise=False)
+        related = list(_planner_context_related(metadata, roots[-8:], personalise=False).items)
         candidates = []
         for item in related:
             identity = str(item.get("recommendation_identity") or item.get("id") or "")

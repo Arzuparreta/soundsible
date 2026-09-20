@@ -299,6 +299,8 @@ export interface ListeningPlanResponse {
   seed_identity: string;
   items: ListeningPlanItem[];
   degraded: boolean;
+  warming?: boolean;
+  retry_after?: number | null;
   empty_reason?: 'exhausted' | 'temporary_failure' | null;
   direction_revision?: number;
   pool_counts: Record<'local' | 'related' | 'discovery', number>;

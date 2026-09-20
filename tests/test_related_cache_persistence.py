@@ -39,26 +39,26 @@ def test_get_related_mix_empty_video_id_returns_none():
 
 def test_set_related_mix_upsert_overwrites():
     db = _make_db()
-    db.set_related_mix("vid111111111", [{"id": "old", "title": "Old"}])
-    db.set_related_mix("vid111111111", [{"id": "new", "title": "New"}])
-    got = db.get_related_mix("vid111111111")
+    db.set_related_mix("vid11111111", [{"id": "old", "title": "Old"}])
+    db.set_related_mix("vid11111111", [{"id": "new", "title": "New"}])
+    got = db.get_related_mix("vid11111111")
     assert len(got) == 1
     assert got[0]["id"] == "new"
 
 
 def test_set_related_mix_empty_list_still_cached():
-    """An empty result is cached so a known-empty seed isn't re-fetched for a week."""
+    """An empty result is cached so a known-empty seed isn't immediately re-fetched."""
     db = _make_db()
-    db.set_related_mix("vid222222222", [])
-    got = db.get_related_mix("vid222222222")
+    db.set_related_mix("vid22222222", [])
+    got = db.get_related_mix("vid22222222")
     assert got is not None
     assert got == []
 
 
 def test_set_related_mix_ignores_none():
     db = _make_db()
-    db.set_related_mix("vid333333333", None)  # type: ignore[arg-type]
-    assert db.get_related_mix("vid333333333") is None
+    db.set_related_mix("vid33333333", None)  # type: ignore[arg-type]
+    assert db.get_related_mix("vid33333333") is None
 
 
 def test_related_mix_survives_new_db_manager_instance():
@@ -67,9 +67,9 @@ def test_related_mix_survives_new_db_manager_instance():
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()
     db1 = DatabaseManager(tmp.name)
-    db1.set_related_mix("vid444444444", [{"id": "x", "title": "Persisted"}])
+    db1.set_related_mix("vid44444444", [{"id": "x", "title": "Persisted"}])
     db2 = DatabaseManager(tmp.name)
-    got = db2.get_related_mix("vid444444444")
+    got = db2.get_related_mix("vid44444444")
     assert got is not None
     assert got[0]["id"] == "x"
 
@@ -80,16 +80,16 @@ def test_related_mix_ttl_expires_old_entries():
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()
     db = DatabaseManager(tmp.name)
-    db.set_related_mix("vid555555555", [{"id": "old", "title": "Old"}])
+    db.set_related_mix("vid55555555", [{"id": "old", "title": "Old"}])
     # Manually backdate the entry past the 7-day TTL.
     conn = sqlite3.connect(tmp.name)
     conn.execute(
         "UPDATE related_mix_cache SET last_updated = datetime('now', '-8 days') WHERE video_id = ?",
-        ("vid555555555",),
+        ("vid55555555",),
     )
     conn.commit()
     conn.close()
-    assert db.get_related_mix("vid555555555") is None
+    assert db.get_related_mix("vid55555555") is None
 
 
 def test_related_mix_within_ttl_is_fresh():
@@ -98,15 +98,15 @@ def test_related_mix_within_ttl_is_fresh():
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()
     db = DatabaseManager(tmp.name)
-    db.set_related_mix("vid666666666", [{"id": "fresh", "title": "Fresh"}])
+    db.set_related_mix("vid66666666", [{"id": "fresh", "title": "Fresh"}])
     conn = sqlite3.connect(tmp.name)
     conn.execute(
         "UPDATE related_mix_cache SET last_updated = datetime('now', '-6 days') WHERE video_id = ?",
-        ("vid666666666",),
+        ("vid66666666",),
     )
     conn.commit()
     conn.close()
-    got = db.get_related_mix("vid666666666")
+    got = db.get_related_mix("vid66666666")
     assert got is not None
     assert got[0]["id"] == "fresh"
 
@@ -139,3 +139,38 @@ def test_get_related_mixes_matches_single_lookups():
 
 def test_get_related_mixes_handles_no_input():
     assert _make_db().get_related_mixes([]) == {}
+
+
+def test_negative_ttl_and_positive_ttl_are_independent():
+    db = _make_db()
+    db.set_related_mix("aaa11111111", [])
+    db.set_related_mix("bbb22222222", [{"id": "positive"}])
+    with db._get_connection() as conn:
+        conn.execute("UPDATE related_mix_cache SET last_updated = datetime('now', '-16 minutes')")
+    assert db.get_related_mix("aaa11111111") is None
+    assert db.get_related_mix("bbb22222222") == [{"id": "positive"}]
+    assert db.get_related_mixes(["aaa11111111", "bbb22222222"]) == {
+        "bbb22222222": [{"id": "positive"}],
+    }
+
+
+def test_invalid_seed_is_not_written():
+    db = _make_db()
+    db.set_related_mix("not-a-video-id", [{"id": "song"}])
+    assert db.get_related_mix("not-a-video-id") is None
+
+
+def test_legacy_cleanup_runs_once():
+    db = _make_db()
+    with db._get_connection() as conn:
+        conn.execute("DELETE FROM cache_migrations")
+        conn.executemany("INSERT INTO related_mix_cache (video_id, results_json) VALUES (?, ?)", [
+            ("not-a-video-id", '[{"id":"bad"}]'), ("aaa11111111", '[]'),
+            ("bbb22222222", '[{"id":"good"}]'),
+        ])
+        db._migrate_related_mix_cache(conn)
+        assert [row[0] for row in conn.execute("SELECT video_id FROM related_mix_cache")] == ["bbb22222222"]
+    db.set_related_mix("aaa11111111", [])
+    with db._get_connection() as conn:
+        db._migrate_related_mix_cache(conn)
+    assert db.get_related_mix("aaa11111111") == []

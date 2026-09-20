@@ -71,10 +71,9 @@ def bootstrap_local_config(environment: Mapping[str, str] | None = None) -> bool
 
 
 def main() -> int:
-    logging.basicConfig(
-        level=os.getenv("SOUNDSIBLE_LOG_LEVEL", "INFO").upper(),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    from shared.logging_setup import configure_logging
+
+    configure_logging()
     created = bootstrap_local_config()
     if created:
         logger.info("Created first-run local configuration in %s", os.environ.get("SOUNDSIBLE_CONFIG_DIR", "/config"))

@@ -319,6 +319,8 @@ export const en = {
       preparingWhilePlaying: 'The track keeps playing while the DJ fits what comes next.',
       preparingHint: 'The route will appear here as soon as the mix is ready.',
       retrying: 'Looking for another route',
+      warming: 'Finding what fits with “{title}”',
+      warmingHint: 'The first route from a new source can take a little longer. Playback will continue.',
       exhausted: 'No new tracks are available to continue this session.',
       retryingHint: 'The search could not complete. The DJ will try again.',
     },

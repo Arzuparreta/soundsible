@@ -95,8 +95,8 @@ def test_one_shared_manager_serves_many_threads(tmp_path):
     def worker(n: int) -> None:
         try:
             for i in range(20):
-                manager.set_related_mix(f"vid{n}_{i}", [{"id": "x", "title": "T"}])
-                assert manager.get_related_mix(f"vid{n}_{i}") is not None
+                manager.set_related_mix(f"vid{n:03d}_{i:04d}", [{"id": "x", "title": "T"}])
+                assert manager.get_related_mix(f"vid{n:03d}_{i:04d}") is not None
             with connections_lock:
                 connections.add(id(manager._get_connection()))
         except BaseException as exc:  # noqa: BLE001 — the assertion reports it
@@ -131,8 +131,8 @@ def test_concurrent_writers_do_not_hit_database_is_locked(tmp_path):
         try:
             for i in range(20):
                 db = DatabaseManager(str(path))
-                db.set_related_mix(f"vid{n}_{i}", [{"id": "x", "title": "T"}])
-                db.get_related_mix(f"vid{n}_{i}")
+                db.set_related_mix(f"vid{n:03d}_{i:04d}", [{"id": "x", "title": "T"}])
+                db.get_related_mix(f"vid{n:03d}_{i:04d}")
         except BaseException as exc:  # noqa: BLE001 — the assertion reports it
             failures.append(exc)
 

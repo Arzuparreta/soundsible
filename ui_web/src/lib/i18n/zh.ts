@@ -319,6 +319,8 @@ export const zh: Dict = {
       preparingWhilePlaying: '歌曲会继续播放，DJ 正在衔接后续曲目。',
       preparingHint: '混音准备好后，路线会显示在这里。',
       retrying: '正在寻找另一条路线',
+      warming: '正在寻找与“{title}”相配的歌曲',
+      warmingHint: '新来源的首次选曲可能需要多一点时间。现有音乐将继续播放。',
       exhausted: '没有可用于继续此会话的新歌曲。',
       retryingHint: '搜索未能完成。DJ 将重试。',
     },
