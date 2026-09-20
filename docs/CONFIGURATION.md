@@ -81,6 +81,7 @@ defaults are listed in [section 7](#7-where-soundsible-keeps-its-files).
 | `SOUNDSIBLE_CONFIG_DIR` | `config.json`, the instance database with its accounts, and each person's library, playlists and favourites. Back this up. |
 | `SOUNDSIBLE_DATA_DIR` | Queues, import jobs, listening telemetry and preserved artwork. |
 | `SOUNDSIBLE_CACHE_DIR` | Covers, preview audio and DJ analysis. Everything here is rebuildable. When Soundsible moves from the legacy `~/.cache/soundsible` to a platform cache directory it carries covers and DJ analysis across but **not** `previews/` or `media/`: those are bulk audio that re-downloads on demand. |
+| `SOUNDSIBLE_LOG_LEVEL` | Console logging level for native and container engines; defaults to `INFO`. DJ planning reports cache hits, pending fetches and route outcomes here. |
 | `SOUNDSIBLE_LOG_DIR` | The log directory the engine reports in `/api/health`. The engine itself logs to its terminal — the journal under systemd, `docker compose logs` in Docker. |
 | `SOUNDSIBLE_MUSIC_DIR` | The music folder, when it is not the one chosen during setup. |
 | `SOUNDSIBLE_UI_DIST` | A prebuilt web player to serve instead of `ui_web/dist`. The container and the desktop app set it; a source install does not need it. |

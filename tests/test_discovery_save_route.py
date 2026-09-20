@@ -366,7 +366,7 @@ def test_auto_library_pool_only_promotes_tracks_inside_the_session_path(tmp_path
     }]
 
     with (
-        patch.object(_auto_mode, "_planner_context_related", return_value=(related, False)),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)),
         patch.object(_auto_mode, "_planner_related_artist_pool", return_value=([], [])),
     ):
         pools, degraded = _disc_routes._build_auto_pools(
@@ -1009,7 +1009,7 @@ def test_dj_plan_v6_ignores_legacy_boundaries_and_walks_explicit_sources(tmp_pat
     }]
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=(related, False)) as graph,
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)) as graph,
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -1046,7 +1046,7 @@ def test_dj_plan_v6_chooses_an_opening_from_a_source_when_there_is_no_seed(tmp_p
     )
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-plan",
@@ -1100,7 +1100,7 @@ def test_dj_plan_v6_walks_from_sources_and_applies_exact_exclusions(tmp_path):
     }
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=(related, False)) as graph,
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)) as graph,
     ):
         root_excluded = _make_app().test_client().post("/api/discovery/music/dj-plan", json=payload)
         related_excluded = _make_app().test_client().post(
@@ -1128,7 +1128,7 @@ def test_dj_place_inserts_exact_track_without_returning_a_replacement_route(tmp_
     )
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
     ):
         response = _make_app().test_client().post(
             "/api/discovery/music/dj-place",
@@ -1177,7 +1177,7 @@ def _post_repair(body: dict, related=None):
     )
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=(related or [], False)),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related or [], False, False)),
     ):
         return _make_app().test_client().post("/api/discovery/music/dj-repair", json=body)
 
@@ -1246,7 +1246,7 @@ def test_dj_repair_never_decodes_audio_on_the_interaction_path(tmp_path):
     )
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
         patch.object(_auto_mode, "_dj_source_path", return_value="/library/candidate.mp3"),
         patch.object(_auto_mode, "cached_analysis", return_value=None),
         patch.object(_auto_mode, "request_analysis", side_effect=lambda *a, **k: queued.append(a[1])),
@@ -1389,7 +1389,7 @@ def test_dj_collection_places_every_occurrence_beyond_the_analysis_window(tmp_pa
     ]
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-place", json={
             "seed": {"id": "seed", "title": "Seed", "artist": "Artist"},
@@ -1466,7 +1466,7 @@ def test_explicit_dj_direction_never_uses_heard_requests_as_graph_roots(tmp_path
     body = {"source_policy": "explicit", "seed": seed, "sources": [source], "heard": [seed]}
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=(_house_related(), False)) as graph,
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(_house_related(), False, False)) as graph,
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-plan", json=body)
         assert response.status_code == 200
@@ -1505,7 +1505,7 @@ def test_explicit_dj_route_continues_from_confirmed_exploration(tmp_path):
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
         patch.object(
             _auto_mode, "_planner_context_related",
-            side_effect=[([], False), (recovered, False)],
+            side_effect=[_auto_mode._GraphWalk([], False, False), _auto_mode._GraphWalk(recovered, False, False)],
         ) as graph,
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
@@ -1537,7 +1537,7 @@ def test_explicit_dj_bridges_use_sources_and_confirmed_exploration(tmp_path):
     body = {"source_policy": "explicit", "sources": [source], "heard": [heard], "exploration": [heard]}
     with patch.object(
         _auto_mode, "_planner_context_related",
-        return_value=(bridge, False),
+        return_value=_auto_mode._GraphWalk(bridge, False, False),
     ) as graph:
         candidates = _auto_mode._dj_place_bridge_pool(None, body, set())
     assert graph.call_count == 1
@@ -1568,7 +1568,7 @@ def test_explicit_dj_arc_follows_the_recent_window_not_the_whole_history(tmp_pat
     def arc_for(heard: list[dict]) -> dict:
         with (
             patch.object(_auto_mode, "_get_api", return_value=mock_api),
-            patch.object(_auto_mode, "_planner_context_related", return_value=(_house_related(), False)),
+            patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(_house_related(), False, False)),
         ):
             response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
                 "source_policy": "explicit", "session_id": "session-arc", "segment_index": 0,
@@ -1592,7 +1592,7 @@ def test_explicit_dj_mix_keeps_both_sources_but_excludes_heard_music(tmp_path):
     house = {"id": "house", "track_id": "house", "title": "Gecko", "artist": "Oliver Heldens"}
     with (
         patch.object(_auto_mode, "_get_api", return_value=mock_api),
-        patch.object(_auto_mode, "_planner_context_related", return_value=([], False)) as graph,
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)) as graph,
     ):
         response = _make_app().test_client().post("/api/discovery/music/dj-plan", json={
             "source_policy": "explicit", "seed": rock, "heard": [rock],
@@ -1614,7 +1614,7 @@ def test_dj_empty_result_distinguishes_exhaustion_from_provider_failure(tmp_path
     )
     track = {"id": "one", "title": "One", "artist": "Artist"}
     with patch.object(_auto_mode, "_get_api", return_value=api), patch.object(
-        _auto_mode, "_planner_context_related", return_value=([], failed),
+        _auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], failed, False),
     ):
         body, status = _auto_mode._build_music_set_route({
             "seed": track, "sources": [{"tracks": [track]}], "source_policy": "explicit",
@@ -1645,7 +1645,7 @@ def test_dj_explores_even_before_sources_run_out_and_continues_thirty_routes(tmp
     def graph(_metadata, roots, **_kwargs):
         rows = {row["id"]: row for root in roots
                 for row in [track(0), track(int(root["id"][1:]) + 1)]}
-        return list(rows.values()), False
+        return _auto_mode._GraphWalk(list(rows.values()), False, False)
 
     data = {"seed": track(0), "sources": [{"id": "source", "tracks": [track(0)]}],
             "source_policy": "explicit", "heard": [track(0)], "exploration": [],
@@ -1666,7 +1666,7 @@ def test_dj_explores_even_before_sources_run_out_and_continues_thirty_routes(tmp
         # With a full influence pool the moving roots must still be queried.
         walk.reset_mock()
         walk.side_effect = None
-        walk.return_value = (_house_related(), False)
+        walk.return_value = _auto_mode._GraphWalk(_house_related(), False, False)
         _auto_mode._build_music_set_route({**data, "exclude": []})
         assert walk.call_count == 2
 
@@ -1683,10 +1683,114 @@ def test_partial_graph_failure_is_not_reported_as_exhaustion(tmp_path):
     with (
         patch.object(_auto_mode, 'instance_db', return_value=database),
         patch.object(_auto_mode, '_planner_video_id', side_effect=lambda _, row: row['id']),
-        patch.object(_auto_mode._PLAN_RESOLVE_EXECUTOR, 'submit', return_value=failed),
+        patch.object(_auto_mode, '_planner_related_future', return_value=failed),
     ):
-        items, degraded = _auto_mode._planner_context_related(
+        walk = _auto_mode._planner_context_related(
             None, [{'id': 'cached'}, {'id': 'uncached'}], personalise=False,
         )
-    assert items == []
-    assert degraded is True
+    assert walk.items == []
+    assert walk.degraded is True
+
+
+@pytest.mark.parametrize("warming", [False, True])
+@pytest.mark.parametrize("exclude", [[], ["FgGtOCKWLwI"]])
+def test_impend_seed_cannot_be_its_own_route(tmp_path, warming, exclude):
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    seed = {"id": "FgGtOCKWLwI", "title": "Impend", "artist": "Artist", "source": "preview"}
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=api),
+        patch.object(_auto_mode, "_planner_context_related",
+                     return_value=_auto_mode._GraphWalk([], warming, warming)),
+        patch.object(_auto_mode, "_planner_warm_related"),
+    ):
+        body, status = _auto_mode._build_music_set_route({
+            "seed": seed, "sources": [{"tracks": [seed]}], "exclude": exclude,
+        })
+    assert status == 200
+    assert body["items"] == []
+    assert body["warming"] is warming
+    assert body["degraded"] is warming
+    assert body["empty_reason"] == ("temporary_failure" if warming else "exhausted")
+    assert body["retry_after"] == (2.0 if warming else None)
+
+
+def test_cold_graph_joins_inflight_fetch_then_uses_persisted_result(tmp_path):
+    """Real executor/cache path; a delayed provider outlives multiple HTTP waits."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    _make_runtime(tmp_path)
+    seed = {"id": "FgGtOCKWLwI", "youtube_id": "FgGtOCKWLwI"}
+    release = threading.Event()
+    started = threading.Event()
+    rows = [{"id": "abc11111111", "title": "Next", "channel": "Artist", "duration": 200}]
+    db = instance_db()
+
+    def fetch(video_id):
+        started.set()
+        assert release.wait(5)
+        db.set_related_mix(video_id, rows)
+        return rows
+
+    with (
+        ThreadPoolExecutor(max_workers=1) as executor,
+        patch.object(_auto_mode, "_GRAPH_FETCH_EXECUTOR", executor),
+        patch.object(_auto_mode, "_planner_uncached_related", side_effect=fetch) as provider,
+        patch.object(_auto_mode, "_AUTO_GRAPH_WAIT_SEC", 0.01),
+    ):
+        try:
+            first = _auto_mode._planner_context_related(None, [seed], personalise=False)
+            assert started.wait(1)
+            second = _auto_mode._planner_context_related(None, [seed], personalise=False)
+            assert first.warming and second.warming
+            assert first.cache_miss == 1
+            assert provider.call_count == 1
+            future = _auto_mode._planner_related_future(seed["id"])
+            release.set()
+            future.result(timeout=5)
+            warm = _auto_mode._planner_context_related(None, [seed], personalise=False)
+            assert not warm.warming and not warm.degraded
+            assert warm.cache_hit == 1
+            assert warm.items[0]["id"] == "abc11111111"
+            assert provider.call_count == 1
+        finally:
+            release.set()
+
+
+def test_graph_timeout_does_not_cancel_queued_work(tmp_path):
+    from concurrent.futures import Future
+
+    _make_runtime(tmp_path)
+    pending = Future()
+    with (
+        patch.object(_auto_mode, '_planner_related_future', return_value=pending),
+        patch.object(_auto_mode, '_AUTO_GRAPH_WAIT_SEC', 0),
+    ):
+        walk = _auto_mode._planner_context_related(None, [
+            {'id': 'FgGtOCKWLwI', 'source': 'preview'},
+        ], personalise=False)
+    assert walk.warming and walk.degraded
+    assert not pending.cancelled()
+
+
+def test_heard_relaxation_preserves_last_two_tracks(tmp_path):
+    _make_runtime(tmp_path)
+    api = _mock_api()
+    api['get_core'].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    tracks = [{'id': str(n), 'title': str(n), 'artist': 'Artist'} for n in range(4)]
+    with (
+        patch.object(_auto_mode, '_get_api', return_value=api),
+        patch.object(_auto_mode, '_planner_context_related', return_value=_auto_mode._GraphWalk([], False, False)),
+    ):
+        body, status = _auto_mode._build_music_set_route({
+            'seed': tracks[-1], 'sources': [{'tracks': tracks}], 'heard': tracks,
+            'exclude': ['0'],
+        })
+    assert status == 200
+    assert [item['id'] for item in body['items']] == ['1']

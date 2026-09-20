@@ -319,6 +319,8 @@ export const fr: Dict = {
       preparingWhilePlaying: 'Le morceau continue pendant que le DJ prépare la suite.',
       preparingHint: 'Le parcours apparaîtra ici dès que le mix sera prêt.',
       retrying: 'Recherche d’un autre parcours',
+      warming: 'Recherche de morceaux qui vont avec « {title} »',
+      warmingHint: 'La première sélection depuis une nouvelle source peut prendre un peu plus de temps. La lecture continue.',
       exhausted: 'Aucun nouveau morceau disponible pour poursuivre cette session.',
       retryingHint: 'La recherche n’a pas abouti. Le DJ réessaiera.',
     },

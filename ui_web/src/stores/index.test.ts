@@ -1610,6 +1610,26 @@ describe('Auto Mode store contract', () => {
     expect(audioService.load).toHaveBeenCalledWith('/preview/opening', 1);
   });
 
+  it.each([false, true])('retries source opening automatically unless the session exited: %s', async (exit) => {
+    const planDjQueue = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
+      ...autoPlan(['next-1', 'next-2', 'next-3', 'next-4', 'next-5', 'next-6', 'next-7', 'next-8']),
+      opening: { id: 'opening', title: 'Opening', artist: 'Selector', source: 'preview',
+        source_pool: 'related', recommendation_identity: 'music:youtube:opening' },
+    });
+    const { actions, state } = await loadStore({ planDjQueue });
+    vi.useFakeTimers();
+    actions.enterAutoMode();
+    actions.addAutoSource([{ id: 'opening', title: 'Opening', artist: 'Selector' }], 'Source');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.autoMode.phase).toBe('degraded');
+    if (exit) actions.exitAutoMode();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(planDjQueue).toHaveBeenCalledTimes(exit ? 1 : 2);
+    expect(state.playback.currentTrack?.id).toBe(exit ? undefined : 'opening');
+    actions.exitAutoMode();
+    vi.useRealTimers();
+  });
+
   it('asks before a podcast switches a DJ session back to Normal', async () => {
     const confirmDialog = vi.fn().mockResolvedValue(true);
     const { actions, state } = await loadStore({ __confirmDialog: confirmDialog });

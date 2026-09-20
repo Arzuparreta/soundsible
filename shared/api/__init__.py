@@ -1899,6 +1899,9 @@ def start_api(
     runtime_config: Optional[RuntimeConfig] = None,
     on_ready: Optional[Any] = None,
 ):
+    from shared.logging_setup import configure_logging
+
+    configure_logging()
     global api_observer, _startup_degraded_reason
     _startup_degraded_reason = None
     runtime = runtime_config or get_runtime_config()

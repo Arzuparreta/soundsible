@@ -238,7 +238,7 @@ describe('GeneratedQueueController', () => {
     // first backoff step, not the minute-long one the abandoned chain had
     // already climbed to.
     h.controller.resumePlanning();
-    await vi.advanceTimersByTimeAsync(14_000);
+    await vi.advanceTimersByTimeAsync(1_000);
     expect(h.requestPlan).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(2_000);
     expect(h.requestPlan).toHaveBeenCalledTimes(3);
@@ -286,15 +286,66 @@ describe('exhausted DJ input', () => {
     h.controller.stop();
   });
 
-  it('stops repeating nonempty plans rejected entirely as duplicates', async () => {
+  it('backs off nonempty plans rejected as duplicates and then retries automatically', async () => {
     vi.useFakeTimers();
     const h = harness();
     h.applyPlan.mockReturnValue(0);
     await h.controller.start('auto_mode', seed);
-    await vi.advanceTimersByTimeAsync(180_000);
     await h.controller.ensureRunway();
     expect(h.requestPlan).toHaveBeenCalledTimes(1);
-    expect(h.onStatus).toHaveBeenLastCalledWith('auto_mode', 'exhausted', expect.any(Object), false);
+    expect(h.onStatus).toHaveBeenLastCalledWith('auto_mode', 'degraded', expect.any(Object), false);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(h.requestPlan).toHaveBeenCalledTimes(2);
+    h.controller.stop();
+  });
+});
+
+
+describe('warming DJ routes', () => {
+  it('honours retry_after, avoids immediate duplicate requests and recovers without a click', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    h.requestPlan.mockResolvedValueOnce({ ...response('auto_mode', 0), warming: true,
+      degraded: true, empty_reason: 'temporary_failure', retry_after: 4 });
+    await h.controller.start('auto_mode', seed);
+    expect(h.onStatus).toHaveBeenLastCalledWith('auto_mode', 'warming', expect.any(Object), false);
+    await h.controller.ensureRunway();
+    await vi.advanceTimersByTimeAsync(3_999);
+    expect(h.requestPlan).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.requestPlan).toHaveBeenCalledTimes(2);
+    expect(h.onStatus).toHaveBeenLastCalledWith('auto_mode', 'ready', expect.any(Object), false);
+    expect(h.queue()).toHaveLength(9);
+    h.controller.stop();
+  });
+
+  it.each([{ warming: true, degraded: false }, { warming: false, degraded: true }])(
+    'does not latch exhaustion when the provider is incomplete: %j', async (flags) => {
+      vi.useFakeTimers();
+      const h = harness();
+      h.requestPlan.mockResolvedValue({ ...response('auto_mode', 0), ...flags, empty_reason: 'exhausted' });
+      await h.controller.start('auto_mode', seed);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(h.requestPlan).toHaveBeenCalledTimes(2);
+      expect(h.onStatus.mock.calls.some((call) => call[1] === 'exhausted')).toBe(false);
+      h.controller.stop();
+    },
+  );
+
+  it('resets backoff on manual retry and keeps the current step as the server hint floor', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    h.requestPlan.mockResolvedValue({ ...response('auto_mode', 0), warming: true, retry_after: 0.1 });
+    await h.controller.start('auto_mode', seed);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(h.requestPlan).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.requestPlan).toHaveBeenCalledTimes(3);
+    await h.controller.retry();
+    expect(h.requestPlan).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(h.requestPlan).toHaveBeenCalledTimes(5);
     h.controller.stop();
   });
 });

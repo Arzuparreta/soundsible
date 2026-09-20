@@ -117,6 +117,7 @@ let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
 let autoSessionEpoch = 0;
 let pendingImmediateAutoTrack: Track | null = null;
 let autoOpeningAborter: AbortController | null = null;
+let autoOpeningRetry: ReturnType<typeof setTimeout> | null = null;
 const AUTOPLAY_TARGET = 8;
 const AUTOPLAY_PREPARE_THRESHOLD = 2;
 /** Matches REFILL_THRESHOLD.autoplay in generatedQueue: deep enough that a
@@ -1849,7 +1850,7 @@ function startAutoFromSourcePlan(response: DjPlanResponse): boolean {
     heard: [opening],
     plan,
     staleSeams: [],
-    phase: entries.length ? 'ready' : 'degraded',
+    phase: entries.length ? 'ready' : response.warming ? 'warming' : 'degraded',
     activity: {
       id: ++generatedActivityId,
       status: 'done',
@@ -1862,7 +1863,9 @@ function startAutoFromSourcePlan(response: DjPlanResponse): boolean {
   return true;
 }
 
-async function startAutoFromSources(): Promise<void> {
+async function startAutoFromSources(retryStep = 0): Promise<void> {
+  if (autoOpeningRetry) clearTimeout(autoOpeningRetry);
+  autoOpeningRetry = null;
   if (!state.autoMode.active || state.playback.currentTrack || state.autoMode.sources.length === 0) return;
   const sessionEpoch = autoSessionEpoch;
   autoOpeningAborter?.abort();
@@ -1889,12 +1892,18 @@ async function startAutoFromSources(): Promise<void> {
     if (aborter.signal.aborted || !state.autoMode.active || sessionEpoch !== autoSessionEpoch || state.playback.currentTrack) return;
     if (!startAutoFromSourcePlan(response)) throw new Error('no opening');
   } catch (error) {
-    if (aborter.signal.aborted) return;
+    if (aborter.signal.aborted || !state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
     setState('autoMode', {
       phase: 'degraded',
       activity: { id: ++generatedActivityId, status: 'error', key: 'autoMode.agent.openingFailed' },
     });
-    toast.error(tr('toast.autoModeOpeningFailed'));
+    const delay = [2_000, 5_000, 15_000, 30_000, 60_000][Math.min(retryStep, 4)];
+    autoOpeningRetry = setTimeout(() => {
+      autoOpeningRetry = null;
+      if (state.autoMode.active && sessionEpoch === autoSessionEpoch && !state.playback.currentTrack) {
+        void startAutoFromSources(retryStep + 1);
+      }
+    }, delay);
   } finally {
     if (autoOpeningAborter === aborter) autoOpeningAborter = null;
   }
@@ -2634,6 +2643,10 @@ export const actions = {
   cancelAutoSessionChange(): void { cancelSessionChange(); },
 
   retryAutoRoute(): void {
+    if (!state.playback.currentTrack) {
+      void startAutoFromSources();
+      return;
+    }
     void generatedQueue?.retry();
   },
 
@@ -4564,7 +4577,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
       const exhausted = status === 'exhausted';
       const degraded = status === 'degraded' || exhausted;
       setState('autoMode', {
-        phase: exhausted ? 'exhausted' : degraded ? 'degraded' : 'ready',
+        phase: exhausted ? 'exhausted' : status === 'warming' ? 'warming' : degraded ? 'degraded' : 'ready',
         activity: {
           id: ++generatedActivityId,
           status: degraded ? 'error' : 'done',

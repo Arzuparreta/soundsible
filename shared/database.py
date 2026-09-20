@@ -16,6 +16,7 @@ from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
 from shared.runtime import get_config_dir
 from shared.time_utils import UTC
+from shared.url_utils import validate_youtube_video_id
 
 logger = logging.getLogger(__name__)
 
@@ -936,6 +937,19 @@ class DatabaseManager:
         tracks = [cls._flat_track_from_row(row) for row in rows]
         cls._replace_catalog_projection(conn, tracks)
 
+    @staticmethod
+    def _migrate_related_mix_cache(conn):
+        """Discard legacy negative/invalid entries once, preserving new short TTLs."""
+        conn.execute("CREATE TABLE IF NOT EXISTS cache_migrations (name TEXT PRIMARY KEY)")
+        name = "related_mix_short_negative_ttl"
+        if conn.execute("SELECT 1 FROM cache_migrations WHERE name = ?", (name,)).fetchone():
+            return
+        conn.execute("DELETE FROM related_mix_cache WHERE results_json = '[]'")
+        invalid = [(row[0],) for row in conn.execute("SELECT video_id FROM related_mix_cache")
+                   if not validate_youtube_video_id(row[0])]
+        conn.executemany("DELETE FROM related_mix_cache WHERE video_id = ?", invalid)
+        conn.execute("INSERT INTO cache_migrations (name) VALUES (?)", (name,))
+
     def _init_db(self):
         """Initialize the database schema.
 
@@ -974,6 +988,7 @@ class DatabaseManager:
             self._migrate_tracks_columns(conn)
             self._create_youtube_cache_table(conn)
             self._create_related_mix_cache_table(conn)
+            self._migrate_related_mix_cache(conn)
             self._create_stream_url_cache_table(conn)
             self._create_users_table(conn)
             self._create_invites_table(conn)
@@ -2228,10 +2243,11 @@ class DatabaseManager:
     # Note: Related/mix expansion cache (discover node engine)
 
     _RELATED_MIX_TTL_SEC = 7 * 24 * 3600
+    _RELATED_MIX_EMPTY_TTL_SEC = 15 * 60
 
     def get_related_mix(self, video_id: str) -> Optional[list]:
         """Return cached related-mix results for a seed video id, or None if
-        missing or older than the 7-day TTL. Results are returned as a parsed
+        missing or expired (15 minutes for empty results, 7 days otherwise). Results are returned as a parsed
         list (the same shape `get_related_videos` produces). The TTL check is
         done in SQL so it works with SQLite's text CURRENT_TIMESTAMP format."""
         if not video_id:
@@ -2243,9 +2259,9 @@ class DatabaseManager:
                 """
                 SELECT results_json FROM related_mix_cache
                 WHERE video_id = ?
-                  AND last_updated >= datetime('now', ? || ' seconds')
+                  AND last_updated >= datetime('now', (CASE WHEN results_json = '[]' THEN ? ELSE ? END) || ' seconds')
                 """,
-                (video_id, f"-{cutoff}"),
+                (video_id, -self._RELATED_MIX_EMPTY_TTL_SEC, -cutoff),
             ).fetchone()
             if not row:
                 return None
@@ -2273,9 +2289,9 @@ class DatabaseManager:
                 f"""
                 SELECT video_id, results_json FROM related_mix_cache
                 WHERE video_id IN ({placeholders})
-                  AND last_updated >= datetime('now', ? || ' seconds')
+                  AND last_updated >= datetime('now', (CASE WHEN results_json = '[]' THEN ? ELSE ? END) || ' seconds')
                 """,
-                (*wanted, f"-{cutoff}"),
+                (*wanted, -self._RELATED_MIX_EMPTY_TTL_SEC, -cutoff),
             ).fetchall()
         found: Dict[str, list] = {}
         for row in rows:
@@ -2287,9 +2303,8 @@ class DatabaseManager:
 
     def set_related_mix(self, video_id: str, results: list) -> None:
         """Persist related-mix results for a seed video id (upsert). Empty
-        results are still cached so a known-empty seed isn't re-fetched for a
-        week."""
-        if not video_id or not isinstance(results, list):
+        results expire after 15 minutes so transient provider failures recover."""
+        if not validate_youtube_video_id(video_id) or not isinstance(results, list):
             return
         payload = json.dumps(results)
         with self._get_connection() as conn:

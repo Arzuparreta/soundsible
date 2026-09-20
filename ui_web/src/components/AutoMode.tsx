@@ -157,7 +157,7 @@ export function AutoMode(props: {
   const mixPending = createMemo(() => routeEntries().some((entry) => entry.stale));
   const routeWaiting = createMemo(() => (
     routeEntries().length === 0
-    && (state.autoMode.phase === 'planning' || state.autoMode.phase === 'degraded')
+    && (state.autoMode.phase === 'planning' || state.autoMode.phase === 'warming' || state.autoMode.phase === 'degraded')
   ));
 
   const routeEmpty = () => (
@@ -176,14 +176,18 @@ export function AutoMode(props: {
       >
         <span class={styles.routeLoadingMark} aria-hidden="true"><i /><i /><i /></span>
         <strong>
-          {state.autoMode.phase === 'degraded'
+          {state.autoMode.phase === 'warming'
+            ? t('autoMode.route.warming', { title: state.playback.currentTrack?.title ?? state.autoMode.sources[0]?.label ?? '' })
+            : state.autoMode.phase === 'degraded'
             ? t('autoMode.route.retrying')
             : state.playback.currentTrack
               ? t('autoMode.route.preparingFrom', { title: state.playback.currentTrack.title })
               : t('autoMode.route.preparing')}
         </strong>
         <span>
-          {state.autoMode.phase === 'degraded'
+          {state.autoMode.phase === 'warming'
+            ? t('autoMode.route.warmingHint')
+            : state.autoMode.phase === 'degraded'
             ? t('autoMode.route.retryingHint')
             : state.playback.isPlaying
               ? t('autoMode.route.preparingWhilePlaying')

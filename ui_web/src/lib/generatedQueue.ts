@@ -20,7 +20,7 @@ export interface AutoMusicSet {
   activation: number;
 }
 
-export type AutoPhase = 'idle' | 'following_queue' | 'planning' | 'ready' | 'exhausted' | 'degraded';
+export type AutoPhase = 'idle' | 'following_queue' | 'planning' | 'ready' | 'exhausted' | 'warming' | 'degraded';
 
 export interface AutoActivity {
   id: number;
@@ -123,7 +123,7 @@ export interface GeneratedQueueDeps {
   ) => number;
   onStatus: (
     intent: ListeningPlanIntent,
-    status: 'planning' | 'ready' | 'exhausted' | 'degraded' | 'idle',
+    status: 'planning' | 'ready' | 'exhausted' | 'warming' | 'degraded' | 'idle',
     response?: ListeningPlanResponse,
     replacing?: boolean,
   ) => void;
@@ -168,7 +168,7 @@ function sessionId(): string {
   cryptoApi.getRandomValues(bytes);
   return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
-const RETRY_DELAYS = [15_000, 30_000, 60_000];
+const RETRY_DELAYS = [2_000, 5_000, 15_000, 30_000, 60_000];
 const RECENT_MAX = 80;
 
 /** One lifecycle owner for every generated queue.
@@ -187,7 +187,7 @@ export class GeneratedQueueController {
   private recent: string[] = [];
   private suspended = false;
   private retryPending = false;
-  private exhaustedInput: string | null = null;
+  private settledInput: string | null = null;
 
   constructor(private readonly deps: GeneratedQueueDeps) {}
 
@@ -311,7 +311,7 @@ export class GeneratedQueueController {
     this.inFlight = null;
     this.retryStep = 0;
     this.recent = [];
-    this.exhaustedInput = null;
+    this.settledInput = null;
     this.session = null;
     if (stoppedIntent) this.deps.onStatus(stoppedIntent, 'idle');
   }
@@ -343,7 +343,10 @@ export class GeneratedQueueController {
   }
 
   retry(): Promise<boolean> {
-    this.exhaustedInput = null;
+    this.retryStep = 0;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.settledInput = null;
     return this.refillNow();
   }
 
@@ -370,12 +373,16 @@ export class GeneratedQueueController {
    * ended when the queue ran out. Autoplay is no less continuous to the listener
    * than Radio is; it just does not say so on screen.
    */
-  private scheduleRetry(): void {
+  private scheduleRetry(retryAfter?: number | null): void {
     if (!this.session || this.retryTimer) return;
-    const delay = RETRY_DELAYS[Math.min(this.retryStep, RETRY_DELAYS.length - 1)];
+    const delay = Math.max(
+      RETRY_DELAYS[Math.min(this.retryStep, RETRY_DELAYS.length - 1)],
+      retryAfter != null && Number.isFinite(retryAfter) ? Math.max(0, retryAfter * 1000) : 0,
+    );
     this.retryStep += 1;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
+      this.settledInput = null;
       void this.sync(true);
     }, delay);
   }
@@ -448,7 +455,7 @@ export class GeneratedQueueController {
     if (needed === 0) return Promise.resolve(true);
 
     const input = JSON.stringify([replace, session.profile, this.deps.planningContext?.(), this.exclusions(replace), this.deps.identity(this.anchor(replace))]);
-    if (session.intent === 'auto_mode' && this.exhaustedInput === input) return Promise.resolve(false);
+    if (session.intent === 'auto_mode' && this.settledInput === input) return Promise.resolve(false);
     const generation = ++this.generation;
     this.aborter?.abort();
     const aborter = new AbortController();
@@ -479,18 +486,18 @@ export class GeneratedQueueController {
       const accepted = this.deps.applyPlan(session.intent, response, replace, seed);
       if (accepted === 0) {
         const exhausted = session.intent === 'auto_mode'
-          && (response.empty_reason === 'exhausted' || (response.items.length > 0 && response.empty_reason !== 'temporary_failure'));
+          && response.empty_reason === 'exhausted' && !response.warming && !response.degraded;
+        this.settledInput = input;
         if (exhausted) {
-          this.exhaustedInput = input;
           if (this.retryTimer) clearTimeout(this.retryTimer);
           this.retryTimer = null;
           this.retryPending = false;
         }
-        this.deps.onStatus(session.intent, exhausted ? 'exhausted' : 'degraded', response, replace);
-        if (!exhausted) this.scheduleRetry();
+        this.deps.onStatus(session.intent, exhausted ? 'exhausted' : response.warming ? 'warming' : 'degraded', response, replace);
+        if (!exhausted) this.scheduleRetry(response.retry_after);
         return false;
       }
-      this.exhaustedInput = null;
+      this.settledInput = null;
       for (const item of response.items) this.remember(item.recommendation_identity || item.id);
       if (session.intent === 'auto_mode') session.segmentIndex += 1;
       this.retryStep = 0;
