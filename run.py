@@ -286,10 +286,22 @@ PYTHON_EXE = VENV_DIR / ("Scripts\\python.exe" if platform.system() == "Windows"
 from shared.daemon_launcher import (
     start_daemon_process,
     stop_daemon_process,
+    stop_owned_daemon,
     MSG_KEEP_TERMINAL_OPEN,
     MSG_CONFIG_MISSING,
     MSG_SETUP_REQUIRED,
 )
+
+
+def _owner_user_id() -> str | None:
+    """The account the menu speaks for: this instance's first admin."""
+    try:
+        from shared.users import get_admin_user
+
+        admin = get_admin_user()
+    except Exception:
+        return None
+    return admin["id"] if admin else None
 
 
 def _config_path() -> Path:
@@ -336,11 +348,6 @@ def _is_port_in_use(port: int) -> bool:
     """Return True if something is listening on the given port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("127.0.0.1", port)) == 0
-
-
-def _kill_station_process(port: int = STATION_PORT) -> tuple[bool, str]:
-    """Kill the process listening on the Station Engine port. Returns (success, message)."""
-    return stop_daemon_process(port)
 
 
 def _run_legacy_daemon(args: argparse.Namespace) -> None:
@@ -396,8 +403,11 @@ class SoundsibleLauncher:
         signal.signal(signal.SIGINT, lambda s, f: sys.exit(0))
         signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
 
-        from shared.database import DatabaseManager
-        self.db = DatabaseManager()
+        # The menu reads a library, and every library belongs to an account.
+        # Accounts are created when the engine first boots, so before that
+        # there is none to read and the menu opens without stats rather than
+        # failing to open at all.
+        self.user_id = _owner_user_id()
         self.stats = {"tracks": 0, "local": 0, "cloud": 0}
         self.sync_status = "Idle"
         self._load_stats()
@@ -439,16 +449,32 @@ class SoundsibleLauncher:
             except Exception:
                 pass
         
-        # Note: Final safety check kill anything on station engine port
+        # The menu stops the engine it started, and only that one. It used to
+        # kill whatever held the port, so leaving the menu on a server also
+        # took down an engine running under systemd.
         try:
-            _kill_station_process(STATION_PORT)
+            stop_owned_daemon(STATION_PORT)
         except Exception:
             pass
+
+    def _library(self):
+        """The owner's library index, or None while the instance has no account.
+
+        The account appears when the engine first boots, so the menu asks
+        again each time rather than deciding once at startup.
+        """
+        from shared.database import user_db
+
+        if not self.user_id:
+            self.user_id = _owner_user_id()
+        return user_db(self.user_id) if self.user_id else None
 
     def _load_stats(self):
         """Load library stats from SQLite database."""
         try:
-            self.stats = self.db.get_stats()
+            db = self._library()
+            if db is not None:
+                self.stats = db.get_stats()
         except Exception:
             pass
 
@@ -462,15 +488,23 @@ class SoundsibleLauncher:
             
         def _sync():
             time.sleep(1.0)
+            if not self.user_id:
+                self.sync_status = "No account yet"
+                return
             self.sync_status = "Syncing..."
             try:
                 from player.library import LibraryManager
-                lib = LibraryManager(silent=True)
-                if lib.sync_library(silent=True):
-                    self.stats = self.db.get_stats()
-                    self.sync_status = "Synced"
-                else:
-                    self.sync_status = "Sync Failed"
+                from shared.user_context import user_context
+
+                # A thread starts with an empty context, so the account the
+                # library manager works on is bound here.
+                with user_context(self.user_id):
+                    lib = LibraryManager(silent=True)
+                    if lib.sync_library(silent=True):
+                        self._load_stats()
+                        self.sync_status = "Synced"
+                    else:
+                        self.sync_status = "Sync Failed"
             except Exception:
                 self.sync_status = "Sync Error"
         
@@ -583,13 +617,16 @@ class SoundsibleLauncher:
         time.sleep(0.5)
 
     def stop_station(self):
-        """Kill the process listening on the Station Engine port."""
+        """Stop the Station Engine, unless it belongs to a service manager."""
         ok, msg = stop_daemon_process(STATION_PORT)
         if ok:
             console.print(f"[green]{msg}[/green]")
-        else:
-            console.print(f"[red]{msg}[/red]")
-        time.sleep(0.5)
+            time.sleep(0.5)
+            return
+        # The message carries the command to run instead, so give the reader
+        # time to read it rather than redrawing the menu over it.
+        console.print(f"[yellow]{msg}[/yellow]")
+        Prompt.ask("Press Enter to return")
 
     def launch_web_player(self):
         """Open the Station (web player) in the default browser (Station Engine must already be running)."""
@@ -606,7 +643,12 @@ class SoundsibleLauncher:
         query = Prompt.ask("[bold magenta]Search Library[/bold magenta]")
         if not query: return
         try:
-            results = self.db.search_tracks(query)
+            db = self._library()
+            if db is None:
+                console.print("[yellow]No library yet. Start the Station Engine once.[/yellow]")
+                Prompt.ask("Press Enter to return")
+                return
+            results = db.search_tracks(query)
             if not results:
                 console.print("[yellow]No tracks found.[/yellow]")
             else:

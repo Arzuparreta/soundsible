@@ -12,7 +12,7 @@ Soundsible in one of three ways:
 
 | Command | What runs | Use it when |
 | --- | --- | --- |
-| `python3 run.py` | A terminal menu that starts, opens and stops the engine for you. | You are trying Soundsible on the computer in front of you. Quitting the menu stops the engine. |
+| `python3 run.py` | A terminal menu that starts, opens and stops the engine for you. | You are trying Soundsible on the computer in front of you. Quitting the menu stops the engine it started. |
 | `python3 run.py --daemon` | The engine on its own, in the foreground, logging to the terminal. `Ctrl+C` stops it. | You run a server, a `tmux` session, or anything else that supervises processes. |
 | [A systemd service](#run-it-as-a-systemd-service) | `run.py --daemon` under systemd: starts at boot, restarts after a crash, logs to the journal. | You want Soundsible always on, on Linux. |
 
@@ -143,7 +143,7 @@ To reopen setup later, run `python3 run.py --setup`.
 | `4` | Stop the engine |
 | `5` | Search your library from the terminal |
 | `6` | Open the setup page again |
-| `q` | Quit — this also stops the engine |
+| `q` | Quit — this also stops the engine the menu started |
 
 The menu is for a session at your computer: keep its terminal open while you
 listen.
@@ -279,8 +279,9 @@ Save, then `sudo systemctl restart soundsible`.
 
 Two things to know once systemd owns the engine:
 
-- **Manage it with `systemctl`, not the menu.** Menu option `4`, and quitting
-  the menu, kill whatever is listening on port 5005 — the service included.
+- **Manage it with `systemctl`, not the menu.** The menu only stops an engine
+  it started itself: quitting it leaves the service running, and option `4`
+  answers with the `systemctl` command to use instead.
 - **The service does not see your shell's `PATH`.** The engine rebuilds the
   web player with `npm` after an update. If Node.js came from `nvm`, `fnm` or
   another per-user installer, add its directory to the drop-in, for example
