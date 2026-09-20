@@ -75,7 +75,7 @@ Browsers hide the ICE candidates WebRTC needs on origins they do not trust, so
 | Path | How |
 |---|---|
 | Same machine | Open `http://localhost:5005` — localhost is trusted |
-| Remote, easiest | `tailscale serve --bg --yes 5005`, then open the `https://…ts.net` address it prints |
+| Remote, easiest | `tailscale serve --bg --yes --https=443 5005`, then open the `https://…ts.net` address it prints ([details](INSTALL.md#4-remote-access-over-tailscale)) |
 | Your own domain | Put Soundsible behind HTTPS and set `SOUNDSIBLE_HTTPS_URL=https://your.domain` |
 
 When the origin is not trusted, the Live page says so and offers a link to the

@@ -18,7 +18,7 @@ import os
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Soundsible launcher and engine entrypoint.")
     parser.add_argument("--setup", action="store_true", help="Run the setup web UI.")
-    parser.add_argument("--daemon", action="store_true", help="Run the legacy Station Engine daemon.")
+    parser.add_argument("--daemon", action="store_true", help="Run the Station Engine in the foreground, without the menu (servers, systemd).")
     parser.add_argument("--desktop-engine", action="store_true", help="Run the desktop engine entrypoint on loopback.")
     parser.add_argument("--host", help="Bind host override for daemon or desktop engine mode.")
     parser.add_argument("--port", type=int, help="Bind port override for daemon or desktop engine mode. Use 0 for a random port.")

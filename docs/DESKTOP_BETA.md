@@ -1,9 +1,51 @@
-# Soundsible Desktop — Windows 1.0 RC
+# Desktop app (beta)
 
-The consumer desktop path is a Tauri shell plus a PyInstaller engine sidecar
-and bundled FFmpeg. Users do not need Python, Git, FFmpeg, or a terminal.
+The desktop app packages the Station Engine, the web player and FFmpeg into
+one installer. You do not need Python, Git, Node.js, FFmpeg or a terminal.
 
-## Current release-candidate contract
+It serves the computer it is installed on: its engine listens on `127.0.0.1`
+on a random port, not on your network. To listen from a phone or another
+computer, run Soundsible as a server instead — [natively](INSTALL.md) or with
+[Docker](DOCKER.md).
+
+## Downloads
+
+Every [release](https://github.com/Arzuparreta/soundsible/releases) attaches:
+
+| File | For | What CI checks |
+| --- | --- | --- |
+| `Soundsible_<version>_x64-setup.exe` | Windows 11 x64 | Installs, runs and uninstalls it through the real Windows UI ([below](#what-ci-proves)) |
+| `Soundsible_<version>_arm64-setup.exe` | Windows 11 ARM64 | The same, on a native ARM64 runner |
+| `Soundsible_<version>_amd64.deb` | Debian and Ubuntu, x86-64 | Builds it and smoke-tests its engine; nothing installs or drives the app |
+
+There is no macOS build. On a Mac, use the [native installation](INSTALL.md)
+or Docker.
+
+The Windows installers come with `SHA256SUMS-x64.txt` and
+`SHA256SUMS-arm64.txt`, and carry build-provenance attestations you can check
+with `gh attestation verify <installer> --repo Arzuparreta/soundsible`. They
+are **not code-signed**, so Windows warns about an unknown publisher; see
+[Stable-release blockers](#stable-release-blockers) for why.
+
+The app carries the same version number as the rest of the release. "Beta"
+describes the desktop shell's maturity, not a separate version — see
+[Releasing](RELEASING.md).
+
+## Using it
+
+- **First run** asks for your music folder through the system's folder dialog,
+  and offers to start Soundsible when you log in.
+- **Closing the window** hides Soundsible in the tray and keeps playback
+  running. **Quit** in the tray menu, or `Ctrl+Alt+Q`, stops the engine and
+  exits. The other tray actions and shortcuts are listed in the
+  [desktop shell README](../desktop-shell/README.md#architecture).
+- **Updating**: there is no automatic update. Install the newer release over
+  the old one. Upgrading an existing installation has not had a human
+  review yet (see [blockers](#stable-release-blockers)), so copy the
+  [configuration directory](CONFIGURATION.md#7-where-soundsible-keeps-its-files)
+  somewhere safe first.
+
+## What CI proves
 
 | Area | Automated gate |
 |------|----------------|
@@ -14,13 +56,11 @@ and bundled FFmpeg. Users do not need Python, Git, FFmpeg, or a terminal.
 | Lifecycle | Silent NSIS install, launch, hide-to-tray, restore, quit and uninstall |
 | Evidence | Screenshots, Windows accessibility tree, logs, checksums and build provenance |
 
-The Windows product version is `1.0.0-rc.1`. Windows delivery is NSIS `.exe`
-only. MSI is intentionally not part of the supported RC surface.
-
-## What CI proves
+Windows ships as an NSIS `.exe` only; there is no MSI.
 
 `.github/workflows/desktop-shell.yml` exercises the interactive path on both
-architectures through the Windows UI Automation backend in `pywinauto`:
+Windows architectures through the Windows UI Automation backend in
+`pywinauto`:
 
 1. install into a clean temporary location;
 2. launch with an isolated configuration;
@@ -35,13 +75,16 @@ architectures through the Windows UI Automation backend in `pywinauto`:
 `verify-pe-architecture.ps1` checks the machine field of the app, engine and
 FFmpeg. ARM64 artifacts may not silently fall back to x64 emulation.
 
+On Linux, CI builds the PyInstaller sidecar and the Tauri shell and runs the
+engine smoke test; the `.deb` itself is not installed or driven.
+
 The browser-level shell suite separately checks cancellation, localization,
 minimum-window layout and 200% zoom without overlap. The shared player keeps
 its own Compact, Normal and Large accessibility matrix.
 
 ## What CI cannot prove
 
-This remains a release candidate until these human gates exist:
+The app stays in beta until these human checks exist:
 
 - audible output through real Windows audio hardware;
 - visual and keyboard review of the tray on a normal Windows 11 desktop;
@@ -49,8 +92,8 @@ This remains a release candidate until these human gates exist:
 - upgrade review on a non-ephemeral user profile;
 - code-signing identity and reputation.
 
-An unsigned automated RC must not be described or published as the stable
-Windows release.
+An unsigned build must not be described or published as a stable Windows
+release.
 
 ## Build and release
 
@@ -72,12 +115,11 @@ cd desktop-shell
 npm run build
 ```
 
-The release workflow builds x64 and ARM64 installers, emits SHA-256 manifests,
-adds GitHub build-provenance attestations, and publishes them on a `v*` tag
-alongside the server images. A release candidate — `vX.Y.Z-rc.N` — is marked as
-a prerelease and never moves the `latest` container tag, so cutting one is the
-deliberate act that used to be "press publish". See
-[RELEASING.md](RELEASING.md).
+The release workflow builds the Windows x64 and ARM64 installers and the Linux
+`.deb`, emits SHA-256 manifests, adds GitHub build-provenance attestations to
+the Windows installers, and publishes them on a `v*` tag alongside the server
+images. A release candidate — `vX.Y.Z-rc.N` — is marked as a prerelease and
+never moves the `latest` container tag. See [RELEASING.md](RELEASING.md).
 
 ## Stable-release blockers
 
@@ -90,4 +132,5 @@ deliberate act that used to be "press publish". See
 2. Complete one human Windows 11 x64 run and one ARM64 run.
 3. Validate real playback, tray behaviour, Defender and SmartScreen.
 4. Validate upgrade from the latest public beta without losing configuration.
-5. Decide and implement the stable update channel before publishing `1.0.0`.
+5. Decide and implement the stable update channel before publishing a stable
+   desktop release.

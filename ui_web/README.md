@@ -18,8 +18,8 @@ Reach for these before writing a local copy — each one used to be duplicated a
 
 ## Prerequisites
 
-- **Node.js 20+** and **npm**
-- Station Engine listening on **port 5005** (start via `python3 run.py` or the launcher)
+- **Node.js 22+** and **npm**
+- Station Engine listening on **port 5005** (start it with `python3 run.py --daemon`, the terminal menu or the launcher)
 
 ## Development
 

@@ -65,11 +65,21 @@ car controls are unverified. Broader offline and device support is on the
 | --- | --- |
 | **Your computer or server** | [Native installation](docs/INSTALL.md#2-install-on-your-computer) for Linux, macOS and Windows. This is the maintainer's primary installation method. |
 | **Docker / NAS** | [Docker Compose setup](docs/DOCKER.md), with persistent storage and prebuilt images. |
-| **Desktop, without a terminal** | [Download a desktop beta](https://github.com/Arzuparreta/soundsible/releases). Check the [platform status](docs/DESKTOP_BETA.md) before installing. |
+| **Desktop, without a terminal** | [Download a desktop beta](https://github.com/Arzuparreta/soundsible/releases) for Windows or Debian/Ubuntu. Check the [platform status](docs/DESKTOP_BETA.md) before installing. |
 
 For native and Docker installs, open **<http://localhost:5005/player/>** on the
 server, or replace `localhost` with its address on another device. The desktop
 app opens its own player.
+
+### Running a native install
+
+| Command | What it does |
+| --- | --- |
+| `python3 run.py` | Opens a terminal menu that starts and stops Soundsible. Good for trying it out; quitting the menu stops it. |
+| `python3 run.py --daemon` | Runs the server directly, without the menu. Use it on a server or in `tmux`. |
+| [systemd service](docs/INSTALL.md#run-it-as-a-systemd-service) | Runs `--daemon` in the background on Linux: starts at boot and restarts after a crash. |
+
+The first start opens a setup page once. [All the ways to run it →](docs/INSTALL.md#ways-to-run-it)
 
 ## Documentation
 
