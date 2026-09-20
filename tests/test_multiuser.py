@@ -16,7 +16,15 @@ from shared.database import instance_db
 from shared.hardening import _rate_limiter
 from shared.multiuser_migration import BACKUP_SUFFIX, ensure_multiuser_layout
 from shared.runtime import get_config_dir, get_data_dir
-from shared.user_context import user_config_dir, user_context, user_data_dir
+from shared.database import DatabaseManager, user_db
+from shared.user_context import (
+    NoUserBound,
+    bind_user,
+    unbind_user,
+    user_config_dir,
+    user_context,
+    user_data_dir,
+)
 from shared.users import (
     ROLE_ADMIN,
     ROLE_MEMBER,
@@ -153,6 +161,23 @@ def test_deleting_a_user_removes_their_directories_but_not_the_pool():
 # ---------------------------------------------------------------------------
 # Isolation
 # ---------------------------------------------------------------------------
+
+
+def test_the_owner_library_opens_for_a_named_account_with_nobody_bound():
+    """The terminal menu runs outside any request, so it names the account.
+
+    Asking for the default library without a bound user is what made
+    `python3 run.py` fail before it could draw its menu.
+    """
+    ensure_multiuser_layout()
+    admin = get_admin_user()
+    token = bind_user(None)
+    try:
+        assert user_db(admin["id"]).get_stats()["tracks"] == 0
+        with pytest.raises(NoUserBound):
+            DatabaseManager()
+    finally:
+        unbind_user(token)
 
 
 def test_two_accounts_get_separate_directories_and_favourites():
