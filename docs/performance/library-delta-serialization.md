@@ -1,5 +1,9 @@
 # Bounded JSON serialization for library deltas
 
+The subsequent [journal-driven path](journal-library-deltas.md) skips whole
+snapshot preparation for verified canonical sources. This bounded serializer
+remains available on the legacy full-comparison fallback described here.
+
 A changed library response previously built both the detached public snapshot
 and a complete Flask JSON response before choosing a small delta. That full
 JSON body was used to calculate its ETag and byte length, then discarded when

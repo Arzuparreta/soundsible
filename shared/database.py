@@ -1004,6 +1004,8 @@ class DatabaseManager:
             self._create_catalog_tables(conn)
             self._create_performance_indexes(conn)
             self._backfill_catalog_tables(conn)
+            from shared.library_changes import install
+            install(conn)
             conn.execute("COMMIT")
         except Exception as e:
             conn.execute("ROLLBACK")
@@ -1090,6 +1092,7 @@ class DatabaseManager:
                     removed = conn.execute(
                         f'DELETE FROM tracks WHERE NOT EXISTS (SELECT 1 FROM {incoming} n WHERE n.track_id=tracks.id)').rowcount
                     catalog_dirty |= bool(removed)
+                order_changed = catalog_dirty
                 catalog_dirty |= sync_tracks(conn, metadata.tracks, replacement_added_at)
 
                 for new_id, state in replacement_state.items():
@@ -1154,6 +1157,8 @@ class DatabaseManager:
                     json.dumps(metadata.podcast_subscriptions, ensure_ascii=False),
                     json.dumps(metadata.podcast_episode_cache, ensure_ascii=False),
                 ))
+                from shared.library_changes import sync_source
+                sync_source(conn, metadata, order_changed)
                 conn.execute("COMMIT")
                 return revision
             except Exception as e:
@@ -1170,6 +1175,24 @@ class DatabaseManager:
                 "SELECT canonical FROM library_state WHERE singleton = 1"
             ).fetchone()
             return bool(row and row[0])
+
+    def public_source(self):
+        from shared.library_changes import source
+        with self._get_connection() as conn:
+            conn.execute('BEGIN')
+            try:
+                return source(conn)
+            finally:
+                conn.rollback()
+
+    def public_changes(self, previous, expected, artwork_ids, identities):
+        from shared.library_changes import affected
+        with self._get_connection() as conn:
+            conn.execute('BEGIN')
+            try:
+                return affected(conn, previous, expected, artwork_ids, identities)
+            finally:
+                conn.rollback()
 
     def get_library_revision(self) -> int:
         with self._get_connection() as conn:

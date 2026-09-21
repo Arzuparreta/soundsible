@@ -132,6 +132,7 @@ def get_library():
     artwork = artwork_store()
     user_id = current_user_id() or ""
     dependencies = None
+    source_fingerprint = None
     try:
         # Empty manifests have no annotation dependencies or lookup cost.
         dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
@@ -145,6 +146,16 @@ def get_library():
         # An unavailable dependency or unsupported model disables only the
         # shortcut. Loudness remains best effort, just as on the full path.
         dependencies = None
+
+    from shared.api import library_incremental
+    if request.args.get("delta") == "1":
+        try:
+            partial = library_incremental.try_delta(
+                lib, artwork, user_id, request.args.get("since"), dependencies, source_fingerprint)
+            if partial is not None:
+                return partial
+        except Exception:
+            logger.debug("Incremental library proof unavailable; using full comparison", exc_info=True)
 
     payload = lib.metadata.to_public_dict()
     snapshot_fingerprint = None
@@ -161,19 +172,30 @@ def get_library():
     base = request.args.get("since") if wants_delta else None
     if base and len(base) > 128:
         base = None
+    incremental_state = None
+    if snapshot_fingerprint is not None and loudness_ok is True:
+        try:
+            incremental_state = library_incremental.prepare(lib, artwork, dependencies, snapshot_fingerprint)
+        except Exception:
+            logger.debug("Canonical public source unavailable", exc_info=True)
     response = None
     signature = None
-    if base:
-        # A small delta only needs the full body's digest/size, not its bytes.
-        from shared.api.library_serialization import compact_signature
-        signature = compact_signature(payload, user_id)
-    if signature is None:
+    if incremental_state is not None:
+        # A proven source needs no serialized-body hash or legacy row history.
+        revision = library_incremental.revision_for(user_id, incremental_state)
         response = jsonify(payload)
-        digest = sha256(user_id.encode() + b"\0")
-        digest.update(response.get_data())
-        revision, full_size = digest.hexdigest(), len(response.get_data())
+        full_size = len(response.get_data())
     else:
-        revision, full_size = signature
+        if base:
+            from shared.api.library_serialization import compact_signature
+            signature = compact_signature(payload, user_id)
+        if signature is None:
+            response = jsonify(payload)
+            digest = sha256(user_id.encode() + b"\0")
+            digest.update(response.get_data())
+            revision, full_size = digest.hexdigest(), len(response.get_data())
+        else:
+            revision, full_size = signature
     if snapshot_fingerprint is not None and loudness_ok is True:
         try:
             # A concurrent annotation commit must never tag a mixed snapshot
@@ -184,7 +206,13 @@ def get_library():
                 validators.put(key, revision)
         except Exception:
             pass
-    if wants_delta:
+    if wants_delta and incremental_state is not None:
+        try:
+            library_incremental.remember(user_id, revision, incremental_state,
+                                         {k: v for k, v in payload.items() if k != 'tracks'})
+        except Exception:
+            logger.debug("Incremental base unavailable; sending full snapshot", exc_info=True)
+    elif wants_delta:
         try:
             from shared.api.library_deltas import exchange
             delta = exchange(user_id, revision, payload, base)

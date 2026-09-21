@@ -1,5 +1,11 @@
 # Disk-backed library deltas
 
+The [journal-driven path](journal-library-deltas.md) now serves verified
+canonical libraries from changed-key journals and lightweight base proofs.
+This document describes the original row-hash comparison, retained as a fallback
+for sources without that proof, and its original measurements. Verified-source
+ETags represent dependencies; unverified sources retain serialized-body hashes.
+
 Clients opt in with `GET /api/library?delta=1`. A full response keeps the existing
 JSON shape and weak ETag. Subsequent requests include `since=<unquoted ETag>` and
 `If-None-Match`. Unchanged libraries keep the existing early 304 path, without

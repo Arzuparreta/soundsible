@@ -72,6 +72,35 @@ class ArtworkStore:
             """)
 
             install_revision(db, ("objects", "refs"))
+            from shared.sqlite_changes import install_changes
+            install_changes(db, (('refs', 'track', 'track_id'), ('objects', 'object', 'hash')))
+            db.execute('CREATE INDEX IF NOT EXISTS refs_hash ON refs(hash)')
+
+    def change_state(self):
+        from shared.sqlite_changes import cursor
+        with self.connect() as db:
+            db.execute('BEGIN')
+            return {'token': read_revision(db), 'cursor': cursor(db).to_list()}
+
+    def changed_tracks(self, previous, expected):
+        from shared.sqlite_changes import Cursor, changes_since, MAX_KEYS
+        with self.connect() as db:
+            db.execute('BEGIN')
+            if read_revision(db) != expected['token']:
+                return None
+            events = changes_since(db, Cursor.parse(previous['cursor']), Cursor.parse(expected['cursor']))
+            if events is None:
+                return None
+            ids = {key for kind, key, operation in events if kind == 'track'}
+            objects = [key for kind, key, operation in events if kind == 'object']
+            for offset in range(0, len(objects), 500):
+                batch = objects[offset:offset + 500]
+                ids.update(row[0] for row in db.execute(
+                    f'SELECT track_id FROM refs WHERE hash IN ({",".join("?" for _ in batch)}) LIMIT ?',
+                    [*batch, MAX_KEYS + 1]))
+                if len(ids) > MAX_KEYS:
+                    return None
+            return ids
 
     def public_revision(self) -> str:
         with self.connect() as db:
