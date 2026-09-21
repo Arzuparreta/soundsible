@@ -17,6 +17,7 @@ from pathlib import Path
 
 from shared.database import BUSY_TIMEOUT_MS
 from shared.runtime import get_config_dir
+from shared.sqlite_revision import install_revision, read_revision
 
 from .measure import LOUDNESS_VERSION, LoudnessMeasurement
 
@@ -97,6 +98,7 @@ def _connect() -> sqlite3.Connection:
         pass
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute(_SCHEMA)
+    install_revision(conn, ("track_loudness",))
     conn.commit()
     _CONNECTIONS.conn = conn
     _CONNECTIONS.path = path
@@ -117,6 +119,9 @@ def reset_connections() -> None:
 
 class LoudnessStore:
     """Measurements, and the bookkeeping for the ones still to be taken."""
+
+    def public_revision(self) -> str:
+        return read_revision(_connect())
 
     def measured(self) -> dict[str, tuple[float, float]]:
         """Every usable reading, as ``identity -> (lufs, peak_dbtp)``.

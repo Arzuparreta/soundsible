@@ -17,6 +17,7 @@ import threading
 from PIL import Image, ImageOps
 
 from shared.runtime import get_cache_dir, get_data_dir
+from shared.sqlite_revision import install_revision, read_revision
 
 SIZES = (160, 320, 640, 960, 1280)
 MAX_BYTES = 20 * 1024 * 1024
@@ -69,6 +70,12 @@ class ArtworkStore:
                     next_try REAL DEFAULT 0, detail TEXT
                 );
             """)
+
+            install_revision(db, ("objects", "refs"))
+
+    def public_revision(self) -> str:
+        with self.connect() as db:
+            return read_revision(db)
 
     @contextmanager
     def connect(self):

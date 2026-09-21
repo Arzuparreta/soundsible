@@ -99,6 +99,21 @@ def _get_api():
     }
 
 
+def _library_response(response, revision):
+    response.set_etag(revision, weak=True)
+    response.headers["Cache-Control"] = "private, no-cache"
+    response.vary.update(("Cookie", "X-Soundsible-Admin-Token"))
+    if request.if_none_match.contains_weak(revision):
+        response.status_code = 304
+        response.set_data(b"")
+    return response
+
+
+def _annotation_revisions(artwork):
+    from shared.loudness import LoudnessStore
+    return artwork.public_revision(), LoudnessStore().public_revision()
+
+
 @library_bp.route("/api/library", methods=["GET"])
 def get_library():
     api = _get_api()
@@ -106,29 +121,57 @@ def get_library():
     lib.refresh_if_stale()
     if not lib.metadata:
         lib.sync_library()
-    if lib.metadata:
-        payload = lib.metadata.to_public_dict()
-        # Loudness rides the library the player already fetches, so levelling
-        # costs no extra request and is available before the first track loads.
-        annotate_tracks(payload.get("tracks") or [])
-        from shared.artwork import artwork_store
-        artwork_store().annotate(payload.get("tracks") or [])
-        # The DB revision alone misses independently updated artwork/loudness.
-        # Hash the actual public representation, once serialized, and scope its
-        # validator to the authenticated account. No snapshots are cached here.
-        from shared.user_context import current_user_id
-        response = jsonify(payload)
-        digest = sha256((current_user_id() or "").encode() + b"\0")
-        digest.update(response.get_data())
-        revision = digest.hexdigest()
-        response.set_etag(revision, weak=True)
-        response.headers["Cache-Control"] = "private, no-cache"
-        response.vary.update(("Cookie", "X-Soundsible-Admin-Token"))
-        if request.if_none_match.contains_weak(revision):
-            response.status_code = 304
-            response.set_data(b"")
-        return response
-    return jsonify({"error": "Library not loaded"}), 404
+    if not lib.metadata:
+        return jsonify({"error": "Library not loaded"}), 404
+
+    from shared.api.library_revision import fingerprint, validators
+    from shared.artwork import artwork_store
+    from shared.user_context import current_user_id
+    from flask import Response
+
+    artwork = artwork_store()
+    user_id = current_user_id() or ""
+    dependencies = None
+    try:
+        # Empty manifests have no annotation dependencies or lookup cost.
+        dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
+        if request.if_none_match:
+            source_fingerprint = fingerprint(lib.metadata)
+            key = sha256(repr((user_id, source_fingerprint, dependencies)).encode()).hexdigest()
+            cached = validators.get(key)
+            if cached and request.if_none_match.contains_weak(cached):
+                return _library_response(Response(), cached)
+    except Exception:
+        # An unavailable dependency or unsupported model disables only the
+        # shortcut. Loudness remains best effort, just as on the full path.
+        dependencies = None
+
+    payload = lib.metadata.to_public_dict()
+    snapshot_fingerprint = None
+    if dependencies is not None:
+        try:
+            # Cache under the actual detached content, not the earlier mutable
+            # model. A concurrent metadata edit then cannot mislabel this ETag.
+            snapshot_fingerprint = fingerprint(payload)
+        except Exception:
+            pass
+    loudness_ok = annotate_tracks(payload.get("tracks") or [])
+    artwork.annotate(payload.get("tracks") or [])
+    response = jsonify(payload)
+    digest = sha256(user_id.encode() + b"\0")
+    digest.update(response.get_data())
+    revision = digest.hexdigest()
+    if snapshot_fingerprint is not None and loudness_ok is True:
+        try:
+            # A concurrent annotation commit must never tag a mixed snapshot
+            # with either the old or new dependency token.
+            current_dependencies = _annotation_revisions(artwork) if payload.get("tracks") else ()
+            if current_dependencies == dependencies:
+                key = sha256(repr((user_id, snapshot_fingerprint, dependencies)).encode()).hexdigest()
+                validators.put(key, revision)
+        except Exception:
+            pass
+    return _library_response(response, revision)
 
 
 @library_bp.route("/api/library/youtube-ids", methods=["GET"])
