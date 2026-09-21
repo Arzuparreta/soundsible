@@ -76,15 +76,17 @@ class Memo(Generic[T]):
 
     def get(self, key: str) -> Optional[T]:
         """Return the live value for `key`, or None when absent/expired."""
-        now = time.time()
         with self._lock:
-            entry = self._entries.get(key)
-            if entry is None:
-                return None
-            if entry[0] <= now:
-                self._entries.pop(key, None)
-                return None
-            return entry[1]
+            return self._get_locked(key)
+
+    def _get_locked(self, key: str) -> Optional[T]:
+        entry = self._entries.get(key)
+        if entry is None:
+            return None
+        if entry[0] <= time.time():
+            self._entries.pop(key, None)
+            return None
+        return entry[1]
 
     def put(self, key: str, value: T, *, ttl_sec: Optional[float] = None) -> None:
         """Store `value`, using the negative TTL for falsy values when set."""
@@ -133,11 +135,12 @@ class Memo(Generic[T]):
         `compute` while every concurrent caller for the same key waits for that
         one result — including the exception, if it raises.
         """
-        cached = self.get(key)
-        if cached is not None:
-            return cached
-
         with self._lock:
+            # Cache lookup and leader election must share a critical section:
+            # a previous leader can publish and retire while this caller waits.
+            cached = self._get_locked(key)
+            if cached is not None:
+                return cached
             flight = self._flights.get(key)
             leader = flight is None
             if leader:
