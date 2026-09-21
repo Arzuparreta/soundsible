@@ -53,6 +53,8 @@ class ArtworkStore:
     def __init__(self, root: Path, cache: Path):
         self.root, self.cache = Path(root), Path(cache)
         self.root.mkdir(parents=True, exist_ok=True)
+        from shared.artwork_variants import VariantCache
+        self._variants = VariantCache(self.cache, self.root)
         self._generation = threading.BoundedSemaphore(2)
         self._locks = [threading.Lock() for _ in range(64)]
         with self.connect() as db:
@@ -166,24 +168,40 @@ class ArtworkStore:
         path = self.root / "objects" / ref["hash"]
         return str(path) if path.is_file() else None
 
-    def variant(self, digest: str, size: int, square: bool = False) -> Path:
+    def open_variant(self, digest: str, size: int, square: bool = False):
+        """Return an open file; caller owns it until the HTTP response closes."""
         if size not in SIZES or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
             raise ValueError("Invalid artwork variant")
-        path = self.cache / f"{digest}-{size}-{'square' if square else 'original'}-{TRANSFORM}.jpg"
-        with self._locks[int(digest[:2], 16) % len(self._locks)]:
-            if path.is_file():
-                return path
+        name = f"{digest}-{size}-{'square' if square else 'original'}-{TRANSFORM}.jpg"
+
+        def generate(output):
             with self._generation:
-                image = open_image((self.root / "objects" / digest).read_bytes())
-                if square:
-                    edge = min(image.size)
-                    left, top = (image.width - edge) // 2, (image.height - edge) // 2
-                    image = image.crop((left, top, left + edge, top + edge))
-                image.thumbnail((size, size), Image.Resampling.LANCZOS)
-                buffer = io.BytesIO()
-                image.save(buffer, "JPEG", quality=90, optimize=True)
-                atomic_write(path, buffer.getvalue())
-        return path
+                with open_image((self.root / "objects" / digest).read_bytes()) as original:
+                    image = original
+                    if square:
+                        edge = min(image.size)
+                        left, top = (image.width - edge) // 2, (image.height - edge) // 2
+                        image = image.crop((left, top, left + edge, top + edge))
+                    try:
+                        image.thumbnail((size, size), Image.Resampling.LANCZOS)
+                        image.save(output, "JPEG", quality=90, optimize=True)
+                    finally:
+                        if image is not original:
+                            image.close()
+
+        with self._locks[int(digest[:2], 16) % len(self._locks)]:
+            return self._variants.open(name, generate)
+
+    def variant(self, digest: str, size: int, square: bool = False) -> Path:
+        """Compatibility path lookup; HTTP must use open_variant to pin reads."""
+        variant = self.open_variant(digest, size, square)
+        try:
+            path = self.cache / variant.etag
+            if not path.is_file():
+                raise OSError("Variant not retained; use open_variant")
+            return path
+        finally:
+            variant.file.close()
 
     def annotate(self, tracks: list[dict]) -> None:
         ids = list(dict.fromkeys(track.get("id") for track in tracks if isinstance(track.get("id"), str)))
