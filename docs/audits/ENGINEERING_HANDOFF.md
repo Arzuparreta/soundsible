@@ -2,7 +2,7 @@
 
 Punto de entrada para continuar con otro agente sin el historial del chat.
 Estado verificado al preparar este documento: rama `fix/sqlite-connection-lifecycle`,
-último chunk funcional `c544318`. Este traspaso se incorpora en un commit posterior.
+último chunk funcional `bc90a83`. Este traspaso se incorpora en un commit posterior.
 
 ## Instrucciones del usuario que siguen vigentes
 
@@ -52,6 +52,7 @@ Los hashes identifican cambios reales de esta rama, no propuestas:
 | `563d0c6` | Journals transaccionales acotados y preparación exclusiva de filas afectadas; cubre carátulas y volumen. |
 | `e2efc64` | Corregir carrera de `Memo.resolve`: comprobar caché y elegir flight dentro del mismo bloqueo. |
 | `c544318` | Cuota de variantes de artwork, índice en disco y descriptores abiertos para respuestas activas. |
+| `bc90a83` | Candidatos de búsqueda local desde un índice SQLite verificado por huella; mismo ranker, resultados y orden; recorrido completo si no se puede demostrar. |
 
 Documentación y resultados reproducibles:
 
@@ -62,7 +63,8 @@ Documentación y resultados reproducibles:
   [serialización acotada](../performance/library-delta-serialization.md),
   [deltas por journals](../performance/journal-library-deltas.md).
 - [Coordinación Memo](../performance/memo-coordination.md),
-  [cuota de artwork](../performance/artwork-variant-quota.md).
+  [cuota de artwork](../performance/artwork-variant-quota.md),
+  [índice de búsqueda local](../performance/local-search-index.md).
 - Los JSONL de mediciones están junto a sus documentos en `docs/performance/`.
   Los scripts correspondientes viven en `scripts/benchmark_*.py`.
 
@@ -114,65 +116,74 @@ total, ahorro de energía, calidad de reproducción o aceptación acústica.
 - Windows: mecanismo implementado y borrado denegado simulado, **no validación
   nativa de Windows**. No presentarlo como comprobado en Windows.
 
-## Próximo chunk acordado como dirección: índice de búsqueda local
+### Búsqueda local: último chunk
 
-El usuario preguntó qué seguía y se propuso **índice de búsqueda local en SQLite**.
-Todavía no se ha diseñado en detalle ni implementado. No hay permiso implícito
-para introducir una búsqueda con resultados distintos. La siguiente acción es
-explorar, concretar un plan y continuar según la petición del usuario.
-
-Puntos de entrada:
-
-- `shared/api/routes/catalog.py`: `_local_catalog()` y sus helpers de normalización,
-  puntuación, entidades y desempates.
-- `tests/fixtures/local_catalog_reference.py`: selector de referencia congelado.
-- `scripts/benchmark_local_catalog.py` y pruebas de catálogo/selección actuales.
-- `shared/database.py` ya tiene FTS y proyecciones; examinar cobertura real antes
-  de inventar otro índice. Verificar qué modelo consume `_local_catalog()` y cómo
-  refleja modificaciones aún sin guardar.
-
-Resultado deseado: candidatos indexados antes del ranker actual; índice en disco,
-actualización incremental al guardar, sin segunda biblioteca residente en RAM.
-Conservar resultados **y orden**: acentos, substring, palabras reordenadas,
-artistas/álbumes, campos vacíos, IDs duplicados, empates y orden de biblioteca.
-FTS por tokens no garantiza substring: demostrar que los candidatos son un
-superconjunto de todas las coincidencias del ranker o usar fallback equivalente.
-
-Validación mínima del futuro plan: equivalencia exacta con referencia, ediciones,
-altas/bajas, rekeys, reinicio, consultas simultáneas e índice ausente/desactualizado;
-benchmark 1k/10k/50k, consultas densas/raras/ausentes, memoria, tamaño en disco y
-sobrecoste de actualización. No prometer latencia de audio sin medirla.
+- `shared/library_search.py`: tabla `library_search` (por cuenta, en `library.db`)
+  con posición y título/artista/álbum ya plegados como los compara el ranker, y
+  `library_search_state` (válido, `VERSION`, huella y la marca `syncing` de `sync`).
+- `_local_catalog()` usa el índice **solo** si, en una misma instantánea de
+  lectura, el estado es válido, `VERSION` coincide y la huella de
+  `(title, artist, album_artist, album)` del modelo en memoria es igual a la
+  guardada. Si no (ediciones sin guardar, índice inválido, tabla ausente, error
+  SQL, consulta no enlazable) recorre el modelo completo como antes. No quitar
+  esa comprobación ni sustituirla por la revisión SQLite.
+- La huella cuesta ~22 ms por consulta a 50k: es el suelo de este diseño. No
+  incluye IDs a propósito; el ranker toma IDs y payload del propio modelo.
+- El filtro SQL es un **superconjunto** de lo que puntúa (tokens como substrings);
+  filas `loose` siempre candidatas. `_text_score`/`_score_folded` y el índice
+  comparten `search_title`/`search_text`. Una prueba fija el código de
+  normalización, `_score_folded` y el filtro a `INDEX_FORMAT`: si cambia, revisar
+  la prueba de superconjunto y subir el formato si cambian los valores guardados.
+- Mantenimiento solo desde filas SQLite confirmadas, dentro de `replace_library`
+  y del esquema, en un savepoint: un fallo deja el índice inválido y **nunca**
+  hace fallar una guarda. Triggers en la BD invalidan, borran filas obsoletas o
+  fuerzan reconstrucción (escrituras ajenas de valores plegados). Guardas que no
+  tocan campos de búsqueda ni orden no pagan nada.
+- Coste medido a 50k: guardado con edición de título +194 ms (+18 %), baja en medio
+  +456 ms (+18 %), alta +156 ms (+6 %); índice 4,4 MB; construcción única 1,3 s en
+  el primer arranque tras actualizar (bajo el lock global de esquema). Consultas
+  raras 250–265 → 29–41 ms; densas de 2 letras 197 → 143 ms. Ver el documento.
+- Las consultas densas siguen puntuando en Python cada coincidencia; bajar más
+  exigiría puntuar en SQL, lo que duplicaría el ranker. No se ha hecho.
 
 ## Pendientes de auditoría, sin declarar todo terminado
 
-1. Índice/candidatos de búsqueda local: siguiente dirección indicada arriba.
-2. Presupuestos de admisión por recurso y colas: medir saturación primero;
+El índice de búsqueda local (antes punto 1) está hecho en `bc90a83`. No hay
+siguiente chunk acordado; elegir con el usuario entre estos:
+
+1. Presupuestos de admisión por recurso y colas: medir saturación primero;
    priorizar reproducción y siguientes pistas, descartar solo especulación
    obsoleta. No fusionar pools que están separados para evitar bloqueos.
-3. `syncCatalog()` todavía usa `inFlight` booleano y retorno inmediato; revisar
+2. `syncCatalog()` todavía usa `inFlight` booleano y retorno inmediato; revisar
    contrato de promesa compartida, generación/cuenta y retry. `syncLibrary()`
    **ya comparte una promesa**; no rehacer ese arreglo.
-4. Escrituras dirigidas y exportación portable: aunque las escrituras SQLite sean
+3. Escrituras dirigidas y exportación portable: aunque las escrituras SQLite sean
    incrementales, snapshots, fingerprints y exports siguen teniendo recorridos
    completos. Agrupar exports requiere decidir explícitamente su durabilidad.
-5. Línea base controlada de escucha y carga concurrente, cliente y servidor:
+   El índice de búsqueda añade una pasada ordenada a las guardas que cambian
+   campos de búsqueda u orden; controlar las mutaciones en memoria permitiría
+   quitar tanto esa pasada como la huella por consulta.
+4. Línea base controlada de escucha y carga concurrente, cliente y servidor:
    cerrado/pausado/NORMAL/DJ/Live, frío/caliente, visible/oculto, sesiones largas,
    latencias, colas, CPU y memoria. Sigue pendiente; benchmarks sintéticos no la
    sustituyen. Validación iPhone/CarPlay requiere dispositivo físico.
-6. Otros puntos exploratorios del informe (shell rebuild checks, clasificación
+5. Otros puntos exploratorios del informe (shell rebuild checks, clasificación
    de fallos de fondo) solo justifican cambios tras evidencia; no hacer limpieza
    global ni reescritura cosmética.
 
 ## Última validación y cómo retomar
 
-Último chunk funcional `c544318`:
+Último chunk funcional `bc90a83`:
 
-- Suite Python completa: **1.429 passed**.
-- Suite específica final de cuota: **25 passed**, incluye tres casos añadidos
-  tras la suite completa (fallo de índice, publicación interrumpida, paths).
+- Suite Python completa: **1.474 passed**.
+- `tests/test_library_search_index.py`: **42 passed**; con
+  `tests/test_catalog_routes.py`, 108.
+- `scripts/benchmark_local_search_index.py` (1k/10k/50k, 5 repeticiones) y
+  `scripts/benchmark_local_catalog.py` afirman igualdad exacta de resultados.
 - `cd ui_web && npm test`: typecheck y **1.123 tests / 115 files** pasan.
 - Ruff y `git diff --check` pasan en archivos modificados.
-- Linux validado; Windows nativo y escucha física siguen pendientes.
+- Linux validado; Windows nativo y escucha física siguen pendientes. El motor
+  real (puerto 5005) no se reinició ni se probó con el índice.
 
 Antes de editar, ejecutar `git status --short`, comprobar rama y leer `AGENTS.md`.
 Los resultados anteriores son evidencia histórica, no sustituyen pruebas del
@@ -189,6 +200,6 @@ Este traspaso no requiere herramientas de memoria privadas ni acceso al chat.
 El usuario puede iniciar otra sesión con:
 
 > Continúa en la rama fix/sqlite-connection-lifecycle. Lee AGENTS.md y
-> docs/audits/ENGINEERING_HANDOFF.md. Revisa la auditoría original y planea el
-> índice de búsqueda local en SQLite conservando exactamente sus resultados.
+> docs/audits/ENGINEERING_HANDOFF.md. Propón el siguiente chunk de la lista de
+> pendientes y planéalo antes de implementar.
 > No abras PR ni hagas push; cada implementación terminada debe quedar commiteada.
