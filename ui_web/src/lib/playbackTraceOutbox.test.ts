@@ -4,7 +4,7 @@ import { recordPlaybackDiagnostic, startAutomaticPlaybackDiagnostics } from './p
 
 const setup = { userId: 'user', deviceId: 'device', platform: 'test', displayMode: 'browser' };
 const cleanups: Array<() => void> = [];
-afterEach(() => { for (const cleanup of cleanups.splice(0)) cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { for (const cleanup of cleanups.splice(0)) cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const batch = (id: string): TraceBatch => ({ id, userId: 'user', createdAt: Date.now(), capture: {}, dropped: 0, events: [{}] });
 
 describe('automatic trace delivery', () => {
@@ -103,4 +103,84 @@ describe('automatic trace delivery', () => {
     expect(sent.every(b => JSON.stringify(b.events).length <= 40_000)).toBe(true);
   });
 
+});
+
+describe('bounded diagnostic persistence and delivery', () => {
+  it('checks network backoff before reading the upload window', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('indexedDB', undefined);
+    const reads = vi.spyOn(PlaybackTraceOutbox.prototype, 'pending');
+    const send = vi.fn(async () => { throw new Error('offline'); });
+    cleanups.push(startAutomaticPlaybackDiagnostics(setup, send));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(reads).toHaveBeenCalledTimes(1);
+    recordPlaybackDiagnostic('during-backoff');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(reads).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds queued writes behind slow storage and reports the discarded sequences', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('indexedDB', undefined);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const realPut = PlaybackTraceOutbox.prototype.put;
+    const puts = vi.spyOn(PlaybackTraceOutbox.prototype, 'put').mockImplementationOnce(async function (this: PlaybackTraceOutbox, batch) {
+      await gate;
+      await realPut.call(this, batch);
+    });
+    const sent: TraceBatch[] = [];
+    cleanups.push(startAutomaticPlaybackDiagnostics(setup, async b => {
+      sent.push(b);
+      return { id: b.id, enabled: true };
+    }));
+    await vi.advanceTimersByTimeAsync(1);
+    for (let i = 0; i < 24 * 1000; i++) recordPlaybackDiagnostic('disk-stall', { i });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(puts).toHaveBeenCalledTimes(1);
+    release();
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect(puts.mock.calls.length).toBeLessThanOrEqual(33);
+    expect(sent.some(b => b.dropped > 20_000)).toBe(true);
+    expect(sent.flatMap(b => b.events).some(row =>
+      (row as { facts?: { i?: number } }).facts?.i === 23999)).toBe(true);
+  });
+
+  it('retains an ACK mismatch and purges all account batches on server opt-out', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('indexedDB', undefined);
+    const clear = vi.spyOn(PlaybackTraceOutbox.prototype, 'clear');
+    const sent: TraceBatch[] = [];
+    let disabled = false;
+    cleanups.push(startAutomaticPlaybackDiagnostics(setup, async b => {
+      sent.push(b);
+      return { id: disabled ? b.id : 'wrong-ack', enabled: !disabled };
+    }));
+    await vi.advanceTimersByTimeAsync(1);
+    for (let i = 0; i < 10; i++) {
+      recordPlaybackDiagnostic('offline');
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    disabled = true;
+    window.dispatchEvent(new Event('online'));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sent.filter(b => b.id === sent[0].id).length).toBeGreaterThan(1);
+    expect(clear).toHaveBeenCalledOnce();
+    const count = sent.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sent).toHaveLength(count);
+  });
+
+  it('returns a six-batch window in fallback and rejects cross-account writes', async () => {
+    vi.stubGlobal('indexedDB', undefined);
+    const outbox = new PlaybackTraceOutbox('user');
+    for (let i = 0; i < 20; i++) await outbox.put(batch(String(i).padStart(3, '0')));
+    expect((await outbox.pending()).map(b => b.id)).toEqual(['000', '001', '002', '003', '004', '005']);
+    await expect(outbox.put({ ...batch('foreign'), userId: 'other' })).rejects.toThrow('trace_account_mismatch');
+    await outbox.clear();
+    expect(await outbox.pending()).toEqual([]);
+  });
 });

@@ -18,7 +18,7 @@ test('automatically uploads evidence, retries persisted batches after reload, an
   expect(original.capture.clientRevision).toBe('development-unverified');
   // The application itself persists the failed upload. No settings or export.
   await expect.poll(() => page.evaluate(async () => {
-    const request = indexedDB.open('soundsible-playback-traces', 1);
+    const request = indexedDB.open('soundsible-playback-traces');
     const db = await new Promise<IDBDatabase>((resolve) => { request.onsuccess = () => resolve(request.result); });
     const rows = db.transaction('batches').objectStore('batches').getAll();
     return await new Promise<number>((resolve) => { rows.onsuccess = () => { resolve(rows.result.length); db.close(); }; });
@@ -27,7 +27,7 @@ test('automatically uploads evidence, retries persisted batches after reload, an
   await page.reload();
   await expect.poll(() => attempts.filter((b) => b.id === original.id).length).toBeGreaterThan(1);
   await expect.poll(() => page.evaluate(async (id) => {
-    const request = indexedDB.open('soundsible-playback-traces', 1);
+    const request = indexedDB.open('soundsible-playback-traces');
     const db = await new Promise<IDBDatabase>((resolve) => { request.onsuccess = () => resolve(request.result); });
     const row = db.transaction('batches').objectStore('batches').get(id);
     return await new Promise<boolean>((resolve) => { row.onsuccess = () => { resolve(row.result === undefined); db.close(); }; });
