@@ -223,3 +223,55 @@ def test_history_connections_close_and_physical_file_is_capped(monkeypatch):
     path = get_cache_dir() / 'library-deltas.sqlite3'
     assert path.stat().st_size <= history.MAX_BYTES
     assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_small_delta_never_materializes_full_json(endpoint, monkeypatch):
+    from shared.api.routes import library as route
+
+    client, lib = endpoint
+    lib.metadata = snapshot(1001)
+    first = client.get('/api/library?delta=1')
+    base = first.headers['ETag'][3:-1]
+    lib.metadata.tracks[500].title = 'Changed at batch boundary 🎵'
+    expected = client.get('/api/library')
+    original = route.jsonify
+    bodies = []
+
+    def jsonify_delta_only(body):
+        assert 'tracks' not in body, 'full JSON must not be built for a small delta'
+        bodies.append(body)
+        return original(body)
+
+    monkeypatch.setattr(route, 'jsonify', jsonify_delta_only)
+    response = client.get('/api/library?delta=1&since=' + base)
+    assert response.status_code == 200
+    assert len(bodies) == 1
+    delta = response.get_json()
+    assert len(delta['upserts']) == 1
+    assert apply(first.get_json(), delta) == expected.get_json()
+    assert delta['revision'] == expected.headers['ETag'][3:-1]
+
+
+@pytest.mark.parametrize('mode', ['pretty', 'custom', 'unicode', 'unsorted'])
+def test_provider_options_preserve_delta_full_equivalence(endpoint, mode):
+    from flask.json.provider import DefaultJSONProvider
+
+    client, lib = endpoint
+    app = client.application
+    if mode == 'pretty': app.json.compact = False
+    elif mode == 'custom':
+        class Custom(DefaultJSONProvider):
+            def dumps(self, obj, **kwargs):
+                return super().dumps(obj, **kwargs) + ' '
+        app.json = Custom(app)
+    elif mode == 'unicode': app.json.ensure_ascii = False
+    elif mode == 'unsorted': app.json.sort_keys = False
+    first = client.get('/api/library?delta=1')
+    base = first.headers['ETag'][3:-1]
+    lib.metadata.tracks[0].title = 'Más música 🎵'
+    response = client.get('/api/library?delta=1&since=' + base)
+    full = client.get('/api/library')
+    delta = response.get_json()
+    assert delta['kind'] == 'delta'
+    assert apply(first.get_json(), delta) == full.get_json()
+    assert delta['revision'] == full.headers['ETag'][3:-1]

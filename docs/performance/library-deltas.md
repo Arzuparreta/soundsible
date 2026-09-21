@@ -58,8 +58,11 @@ computed once into a file-backed temporary table, compared with indexed SQL
 joins, and selected positions are consumed in batches of 500. Previous full
 revisions are not loaded into Python maps. Application lists contain only the
 response's changed rows, removals and optional new order. The existing current
-public snapshot and serialization still require memory proportional to library
-size; large deltas can add transient response memory before full fallback.
+public snapshot still requires memory proportional to library size. Delta-target
+JSON hashing uses batches of 500 tracks rather than a retained full body; full
+responses and large deltas can still add transient response memory. See
+[bounded serialization](library-delta-serialization.md) for measurements and
+fallback costs.
 
 Initialization and admission are transactional. Concurrent duplicate admissions
 are idempotent. Writers wait at most 100 ms per SQLite lock acquisition; errors,
@@ -90,7 +93,8 @@ Flask route and real SQLite history in a temporary directory beside the repo
 DB loading, annotation/token lookups, network, compression and playback. Every
 delta is applied and compared to an unconditional full response. Timings and
 tracemalloc are separate runs; changed timing is the median of three edits.
-Example local run on 2026-09-21:
+Original delta implementation, before bounded JSON serialization, measured
+locally on 2026-09-21:
 
 | Tracks | Full bytes | One-edit delta bytes | Full without history ms | First full + history ms | Changed delta ms | Four-revision file bytes |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -98,13 +102,16 @@ Example local run on 2026-09-21:
 | 10,000 | 7,156,815 | 925 | 158.48 | 457.45 | 414.68 | 3,264,512 |
 | 50,000 | 35,916,815 | 925 | 781.90 | 1,470.12 | 1,682.60 | 16,928,768 |
 
-For 50,000 tracks, changed-response peak additional Python allocation was
+In that original implementation, for 50,000 tracks, changed-response peak
+additional Python allocation was
 113,896,531 bytes: this slice does not remove full server snapshot construction.
 Unchanged requests still took about 168 ms through the existing early 304 path.
 The benefit here is transfer and client work, paid for by extra server hashing,
 SQLite writes and disk usage. These results are not evidence of improved CPU,
-audio continuity or production end-to-end latency. Reducing changed-response
-server work requires incremental canonical writes/revisions in a later chunk.
+audio continuity or production end-to-end latency. The subsequent
+[bounded serialization chunk](library-delta-serialization.md) reduces that memory
+peak. Avoiding full snapshot construction, annotation and per-row hashing on
+changed responses remains separate work.
 
 Tests cover exact ordered equivalence, annotations disappearing, additions and
 removals, header/podcast changes, account isolation, restart in a fresh process,
