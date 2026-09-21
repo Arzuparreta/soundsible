@@ -3,6 +3,7 @@
 This slice reduces repeated artist/album scoring and full-match sorting in
 `_local_catalog`. It does not introduce a persistent search index or change the
 ranking function, provider merge, per-shape budgets, or response payload.
+A later slice adds one: see [local search index](local-search-index.md).
 
 Each request has two LRU caches (4,096 entries each): entity field scores and
 folded entity keys. Titles are scored directly. Caches contain strings/numbers,

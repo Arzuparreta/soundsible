@@ -1006,6 +1006,11 @@ class DatabaseManager:
             self._backfill_catalog_tables(conn)
             from shared.library_changes import install
             install(conn)
+            from shared import library_search
+            library_search.install(conn)
+            # Builds the index once after an upgrade or a Python/Unicode change;
+            # otherwise a single state read.
+            library_search.sync(conn)
             conn.execute("COMMIT")
         except Exception as e:
             conn.execute("ROLLBACK")
@@ -1159,6 +1164,8 @@ class DatabaseManager:
                 ))
                 from shared.library_changes import sync_source
                 sync_source(conn, metadata, order_changed)
+                from shared import library_search
+                library_search.sync(conn)
                 conn.execute("COMMIT")
                 return revision
             except Exception as e:
@@ -1182,6 +1189,22 @@ class DatabaseManager:
             conn.execute('BEGIN')
             try:
                 return source(conn)
+            finally:
+                conn.rollback()
+
+    @contextmanager
+    def library_search_candidates(self, tracks, q_folded: str, q_tokens: frozenset):
+        """Library-ordered rows covering every local search match, or None.
+
+        None means the index cannot be proven to describe ``tracks`` (unsaved
+        edits, an invalid or outdated index); callers then scan the model.
+        The rows share one read snapshot and must be consumed inside the block.
+        """
+        from shared.library_search import candidates
+        with self._get_connection() as conn:
+            conn.execute('BEGIN')
+            try:
+                yield candidates(conn, tracks, q_folded, q_tokens)
             finally:
                 conn.rollback()
 

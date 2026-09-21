@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import copy_context
@@ -21,7 +22,8 @@ except ImportError:  # pragma: no cover
 
 from shared import request_scope
 from shared.api.memo import Memo
-from shared.database import instance_db
+from shared.database import DatabaseManager, instance_db
+from shared.library_search import search_text, search_title
 from shared.musicbrainz import normalize_recording_mbid
 from shared.providers import deezer
 from shared.hardening import rate_limit
@@ -338,7 +340,26 @@ def _text_score(
     names everywhere except YouTube channels, so a length ratio carries almost
     no signal there and would only penalise bands with long names.
     """
-    text = fold_text(strip_release_junk(value) if apply_coverage else value)
+    text = search_title(value) if apply_coverage else search_text(value)
+    return _score_folded(q_folded, q_tokens, text, exact, prefix, contains, apply_coverage=apply_coverage)
+
+
+def _score_folded(
+    q_folded: str,
+    q_tokens: frozenset[str],
+    text: str,
+    exact: float,
+    prefix: float,
+    contains: float,
+    *,
+    apply_coverage: bool,
+) -> float:
+    """`_text_score` for a field that is already folded.
+
+    The local search index stores exactly these folded texts, and its
+    candidate filter (`shared.library_search`) must keep every row this can
+    score above zero.
+    """
     if not text or not q_folded:
         return 0.0
     if text == q_folded:
@@ -686,6 +707,11 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     ``"title artist album"`` joined together, which matched across field
     boundaries.
 
+    Candidates come from the on-disk search index (`shared.library_search`)
+    when its fingerprint proves it describes this exact model; otherwise, as
+    with unsaved edits, every track is scanned. Both feed the same ranker and
+    selection, so the result and its order do not depend on which was used.
+
     Repeated entity scores are reused within each request (bounded LRU), and a stable
     top-k selection retains only the winning track candidates. Entity maps
     still retain one representative per matching artist/album for deduplication.
@@ -698,47 +724,93 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     """
     q_folded = fold_text(query)
     q_tokens = frozenset(match_tokens(query))
-    artists: dict[str, tuple[float, str, Any]] = {}
-    albums: dict[str, tuple[float, str, Any]] = {}
+    if not q_folded:
+        # Every field scores zero against an empty folded query.
+        return []
+    tracks = _library_tracks()
 
-    # Request-local caches cannot retain tracks or serve stale metadata after edits.
-    # Bound even a library containing entirely distinct artist/album names.
-    folded = lru_cache(maxsize=4096)(fold_text)
-
-    def score(value: str, *, coverage: bool) -> float:
-        return _text_score(
-            q_folded, q_tokens, value,
+    def score(text: str, *, coverage: bool) -> float:
+        return _score_folded(
+            q_folded, q_tokens, text,
             _TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS, apply_coverage=coverage,
         )
 
-    # Titles are usually unique: caching them displaces reusable entity fields.
-    entity_score = lru_cache(maxsize=4096)(score)
+    # Entity scores are cached per request, so they cannot retain tracks or
+    # serve stale metadata after edits, and bounded even for a library of
+    # entirely distinct names. Titles are usually unique: caching them would
+    # displace reusable entity fields.
+    def scanned():
+        @lru_cache(maxsize=4096)
+        def entity(value: str) -> tuple[str, float]:
+            key = search_text(value)
+            return key, score(key, coverage=False)
 
-    def candidates():
-        for track in _library_tracks():
+        for track in tracks:
             title = getattr(track, "title", "") or ""
             artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
             album = getattr(track, "album", "") or ""
+            title_score = score(search_title(title), coverage=True)
+            artist_key, artist_score = entity(artist)
+            album_key, album_score = entity(album)
+            if title_score or artist_score or album_score:
+                yield track, title_score, artist_score, album_score, artist_key, album_key
+
+    def indexed(rows):
+        @lru_cache(maxsize=4096)
+        def entity(key: str) -> float:
+            return score(key, coverage=False)
+
+        for position, title, artist_key, album_key in rows:
             title_score = score(title, coverage=True)
-            artist_score = entity_score(artist, coverage=False)
-            album_score = entity_score(album, coverage=False)
-            if not (title_score or artist_score or album_score):
-                continue
-            track_id = str(getattr(track, "id", ""))
-            yield (title_score * 2 + artist_score + album_score, track_id, track)
-            if artist and artist_score:
-                key = folded(artist)
-                if artist_score > artists.get(key, (0.0, "", None))[0]:
-                    artists[key] = (artist_score, artist, track)
-            if album and (album_score or artist_score):
-                key = f"{folded(artist)}\x00{folded(album)}"
-                weight = max(album_score, artist_score)
-                if weight > albums.get(key, (0.0, "", None))[0]:
-                    albums[key] = (weight, album, track)
+            artist_score = entity(artist_key)
+            album_score = entity(album_key)
+            # The filter keeps a superset: a token found inside a longer word,
+            # or a `loose` row, can still score zero here.
+            if title_score or artist_score or album_score:
+                yield tracks[position], title_score, artist_score, album_score, artist_key, album_key
+
+    def select(rows):
+        artists: dict[str, tuple[float, str, Any]] = {}
+        albums: dict[str, tuple[float, str, Any]] = {}
+
+        def candidates():
+            for order, row in enumerate(rows):
+                track, title_score, artist_score, album_score, artist_key, album_key = row
+                # `order` breaks equal (score, id) pairs by library order, as a
+                # stable key-based selection would, without a key call per row.
+                yield (-(title_score * 2 + artist_score + album_score), str(getattr(track, "id", "")), order, track)
+                if not (artist_score or album_score):
+                    continue
+                artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
+                album = getattr(track, "album", "") or ""
+                if artist and artist_score:
+                    if artist_score > artists.get(artist_key, (0.0, "", None))[0]:
+                        artists[artist_key] = (artist_score, artist, track)
+                if album and (album_score or artist_score):
+                    key = f"{artist_key}\x00{album_key}"
+                    weight = max(album_score, artist_score)
+                    if weight > albums.get(key, (0.0, "", None))[0]:
+                        albums[key] = (weight, album, track)
+
+        return nsmallest(_LOCAL_TRACK_BUDGET, candidates()), artists, albums
+
+    selection = None
+    search_db = getattr(tracks, "search_db", None)
+    if search_db is not None:
+        try:
+            with search_db.library_search_candidates(tracks, q_folded, q_tokens) as rows:
+                if rows is not None:
+                    selection = select(indexed(rows))
+        except (sqlite3.Error, UnicodeError) as exc:
+            # Partial maps are discarded; the scan below starts from scratch.
+            logger.debug("Local search index unavailable, scanning the library: %s", exc)
+            selection = None
+    if selection is None:
+        selection = select(scanned())
+    best_tracks, artists, albums = selection
 
     out: list[dict[str, Any]] = []
-    best_tracks = nsmallest(_LOCAL_TRACK_BUDGET, candidates(), key=lambda row: (-row[0], row[1]))
-    for _, _, track in best_tracks:
+    for *_, track in best_tracks:
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         out.append(
             _catalog_item(
@@ -1584,6 +1656,16 @@ def _extract_year(release_date: Any) -> int | None:
     return None
 
 
+class _LibraryTracks(list):
+    """The bound library's tracks and the database whose search index may cover them.
+
+    Tying the database to this exact list keeps a monkeypatched or synthetic
+    track list from ever being checked against somebody else's index.
+    """
+
+    __slots__ = ("search_db",)
+
+
 def _library_tracks() -> list[Any]:
     """The bound user's tracks, loaded once per request.
 
@@ -1602,7 +1684,10 @@ def _load_library_tracks() -> list[Any]:
     except Exception:
         pass
     metadata = getattr(lib, "metadata", None)
-    return list(metadata.tracks if metadata and metadata.tracks else [])
+    tracks = _LibraryTracks(metadata.tracks if metadata and metadata.tracks else [])
+    db = getattr(lib, "db", None)
+    tracks.search_db = db if isinstance(db, DatabaseManager) else None
+    return tracks
 
 
 def _library_key_index() -> dict[str, Any]:

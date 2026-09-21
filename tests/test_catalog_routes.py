@@ -1306,17 +1306,17 @@ def test_local_selection_matches_full_sort_reference(monkeypatch, query):
 def test_local_scores_reuse_fields_without_retaining_previous_library(monkeypatch):
     tracks = [_track_full(str(i), f"Song {i}", "Rosalía", "Live") for i in range(500)]
     monkeypatch.setattr(catalog_routes, "_library_tracks", lambda: tracks)
-    original = catalog_routes._text_score
+    original = catalog_routes._score_folded
     calls = []
 
     def counted(*args, **kwargs):
         calls.append(args[2])
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(catalog_routes, "_text_score", counted)
+    monkeypatch.setattr(catalog_routes, "_score_folded", counted)
     assert catalog_routes._local_catalog("rosalia", 30)
-    assert calls.count("Rosalía") == 1
-    assert calls.count("Live") == 1
+    assert calls.count("rosalia") == 1
+    assert calls.count("live") == 1
     for track in tracks:
         track.artist = "Changed"
     assert catalog_routes._local_catalog("rosalia", 30) == []
