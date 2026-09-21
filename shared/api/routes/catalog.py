@@ -5,6 +5,8 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import copy_context
+from functools import lru_cache
+from heapq import nsmallest
 from typing import Any
 
 import requests
@@ -684,7 +686,10 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     ``"title artist album"`` joined together, which matched across field
     boundaries.
 
-    Scoring runs on the raw strings and only the winners are materialised: each
+    Repeated entity scores are reused within each request (bounded LRU), and a stable
+    top-k selection retains only the winning track candidates. Entity maps
+    still retain one representative per matching artist/album for deduplication.
+    Only the winners are materialised: each
     `_catalog_item` embeds a full `track.to_dict()`, so building one per match
     would mean tens of thousands of them per keystroke on a big library.
 
@@ -693,39 +698,46 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     """
     q_folded = fold_text(query)
     q_tokens = frozenset(match_tokens(query))
-    scored: list[tuple[float, str, Any]] = []
     artists: dict[str, tuple[float, str, Any]] = {}
     albums: dict[str, tuple[float, str, Any]] = {}
 
-    def score(value: object, *, coverage: bool) -> float:
+    # Request-local caches cannot retain tracks or serve stale metadata after edits.
+    # Bound even a library containing entirely distinct artist/album names.
+    folded = lru_cache(maxsize=4096)(fold_text)
+
+    def score(value: str, *, coverage: bool) -> float:
         return _text_score(
             q_folded, q_tokens, value,
             _TITLE_EXACT, _TITLE_PREFIX, _TITLE_CONTAINS, apply_coverage=coverage,
         )
 
-    for track in _library_tracks():
-        title = getattr(track, "title", "") or ""
-        artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
-        album = getattr(track, "album", "") or ""
-        title_score = score(title, coverage=True)
-        artist_score = score(artist, coverage=False)
-        album_score = score(album, coverage=False)
-        if not (title_score or artist_score or album_score):
-            continue
-        track_id = str(getattr(track, "id", ""))
-        scored.append((title_score * 2 + artist_score + album_score, track_id, track))
-        if artist and artist_score:
-            key = fold_text(artist)
-            if artist_score > artists.get(key, (0.0, "", None))[0]:
-                artists[key] = (artist_score, artist, track)
-        if album and (album_score or artist_score):
-            key = f"{fold_text(artist)}\x00{fold_text(album)}"
-            weight = max(album_score, artist_score)
-            if weight > albums.get(key, (0.0, "", None))[0]:
-                albums[key] = (weight, album, track)
+    # Titles are usually unique: caching them displaces reusable entity fields.
+    entity_score = lru_cache(maxsize=4096)(score)
+
+    def candidates():
+        for track in _library_tracks():
+            title = getattr(track, "title", "") or ""
+            artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
+            album = getattr(track, "album", "") or ""
+            title_score = score(title, coverage=True)
+            artist_score = entity_score(artist, coverage=False)
+            album_score = entity_score(album, coverage=False)
+            if not (title_score or artist_score or album_score):
+                continue
+            track_id = str(getattr(track, "id", ""))
+            yield (title_score * 2 + artist_score + album_score, track_id, track)
+            if artist and artist_score:
+                key = folded(artist)
+                if artist_score > artists.get(key, (0.0, "", None))[0]:
+                    artists[key] = (artist_score, artist, track)
+            if album and (album_score or artist_score):
+                key = f"{folded(artist)}\x00{folded(album)}"
+                weight = max(album_score, artist_score)
+                if weight > albums.get(key, (0.0, "", None))[0]:
+                    albums[key] = (weight, album, track)
 
     out: list[dict[str, Any]] = []
-    best_tracks = sorted(scored, key=lambda row: (-row[0], row[1]))[:_LOCAL_TRACK_BUDGET]
+    best_tracks = nsmallest(_LOCAL_TRACK_BUDGET, candidates(), key=lambda row: (-row[0], row[1]))
     for _, _, track in best_tracks:
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         out.append(
@@ -752,7 +764,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
             )
         )
 
-    for key, (_, name, track) in sorted(artists.items(), key=lambda kv: (-kv[1][0], kv[0]))[:_LOCAL_ENTITY_BUDGET]:
+    for key, (_, name, track) in nsmallest(_LOCAL_ENTITY_BUDGET, artists.items(), key=lambda kv: (-kv[1][0], kv[0])):
         out.append(
             _catalog_item(
                 item_id=f"library:artist:{key}",
@@ -770,7 +782,7 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
             )
         )
 
-    for key, (_, name, track) in sorted(albums.items(), key=lambda kv: (-kv[1][0], kv[0]))[:_LOCAL_ENTITY_BUDGET]:
+    for key, (_, name, track) in nsmallest(_LOCAL_ENTITY_BUDGET, albums.items(), key=lambda kv: (-kv[1][0], kv[0])):
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         out.append(
             _catalog_item(
