@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
+from shared.library_write import disk_staging, staged_rows, sync_rows, sync_tracks
 from shared.runtime import get_config_dir
 from shared.time_utils import UTC
 from shared.url_utils import validate_youtube_video_id
@@ -123,9 +124,9 @@ _MUSIC_ONLY = "(t.media_kind IS NULL OR t.media_kind != 'podcast_episode')"
 class StaleLibraryWrite(RuntimeError):
     """A whole-library write was refused because the canonical state moved on.
 
-    ``replace_library`` rewrites everything — every track, playlist and setting
-    — from one in-memory snapshot. A writer holding a snapshot taken before
-    somebody else's commit would therefore not merely lose its own change: it
+    ``replace_library`` replaces the complete logical library from one
+    in-memory snapshot, persisting only differences. A writer holding a snapshot
+    taken before somebody else's commit would not merely lose its own change: it
     would silently undo theirs. Callers that know which revision their snapshot
     came from say so, and get this instead of a quiet revert.
     """
@@ -865,6 +866,7 @@ class DatabaseManager:
                 name=excluded.name,
                 name_key=excluded.name_key,
                 updated_at=CURRENT_TIMESTAMP
+            WHERE artists.name IS NOT excluded.name OR artists.name_key IS NOT excluded.name_key
             """,
             ((artist.id, artist.name, artist.name_key) for artist in snapshot.artists),
         )
@@ -883,6 +885,13 @@ class DatabaseManager:
                 genre=excluded.genre,
                 is_compilation=excluded.is_compilation,
                 updated_at=CURRENT_TIMESTAMP
+            WHERE albums.title IS NOT excluded.title
+               OR albums.title_key IS NOT excluded.title_key
+               OR albums.album_artist_id IS NOT excluded.album_artist_id
+               OR albums.album_artist IS NOT excluded.album_artist
+               OR albums.year IS NOT excluded.year
+               OR albums.genre IS NOT excluded.genre
+               OR albums.is_compilation IS NOT excluded.is_compilation
             """,
             (
                 (
@@ -899,29 +908,19 @@ class DatabaseManager:
             ),
         )
 
-        conn.execute("DELETE FROM track_artists")
+        sync_rows(conn, 'track_artists', ('track_id', 'artist_id', 'position'), ('track_id', 'position'),
+                  ((link.track_id, identifier, position) for link in snapshot.tracks
+                   for position, identifier in enumerate(link.artist_ids)), delete_changed=True)
         conn.executemany(
-            "INSERT INTO track_artists (track_id, artist_id, position) VALUES (?, ?, ?)",
-            (
-                (link.track_id, identifier, position)
-                for link in snapshot.tracks
-                for position, identifier in enumerate(link.artist_ids)
-            ),
+            "UPDATE tracks SET album_id = ? WHERE id = ? AND album_id IS NOT ?",
+            ((link.album_id, link.track_id, link.album_id) for link in snapshot.tracks),
         )
-        conn.executemany(
-            "UPDATE tracks SET album_id = ? WHERE id = ?",
-            ((link.album_id, link.track_id) for link in snapshot.tracks),
-        )
-
-        incoming_ids = [track.id for track in track_list]
-        if incoming_ids:
-            placeholders = ",".join("?" for _ in incoming_ids)
-            conn.execute(
-                f"DELETE FROM track_user_state WHERE track_id NOT IN ({placeholders})",
-                incoming_ids,
-            )
-        else:
-            conn.execute("DELETE FROM track_user_state")
+        # Also used during migrations; preserve pruning semantics without a
+        # parameter per incoming song.
+        with staged_rows(conn, 'library_tracks', ('track_id',), ('track_id',),
+                         ((track.id,) for track in track_list)) as incoming:
+            conn.execute(f'DELETE FROM track_user_state WHERE NOT EXISTS '
+                         f'(SELECT 1 FROM {incoming} n WHERE n.track_id=track_user_state.track_id)')
 
         conn.execute("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE album_id IS NOT NULL)")
         conn.execute("""
@@ -1035,7 +1034,7 @@ class DatabaseManager:
         if id_replacements:
             from shared.artwork import artwork_store
             artwork_store().remap(id_replacements)
-        with self._get_connection() as conn:
+        with self._get_connection() as conn, disk_staging(conn):
             conn.execute("BEGIN IMMEDIATE")
             try:
                 if expected_revision is not None:
@@ -1056,6 +1055,7 @@ class DatabaseManager:
                     VALUES (?, ?)
                     ON CONFLICT(old_track_id) DO UPDATE SET
                         new_track_id=excluded.new_track_id
+                    WHERE track_id_aliases.new_track_id IS NOT excluded.new_track_id
                     """,
                     aliases.items(),
                 )
@@ -1078,95 +1078,19 @@ class DatabaseManager:
                     ).fetchone()
                     if dated is not None and dated["added_at"]:
                         replacement_added_at[new_id] = dated["added_at"]
-                # Note: Update version
-                conn.execute("INSERT OR REPLACE INTO library_info (key, value) VALUES ('version', ?)", (str(metadata.version),))
-                
-                # Note: 1. Get ids of tracks we are about to sync
-                incoming_ids = [t.id for t in metadata.tracks]
-                
-                # Note: 2. Prune tracks that are no longer in the manifest
-                if incoming_ids:
-                    placeholders = ','.join(['?'] * len(incoming_ids))
-                    conn.execute(f"DELETE FROM tracks WHERE id NOT IN ({placeholders})", incoming_ids)
-                else:
-                    conn.execute("DELETE FROM tracks")
-
-                # Note: 3. Batch update tracks
-                for track in metadata.tracks:
-                    # Note: Column order MUST match the tuple below exactly
-                    conn.execute("""
-                        INSERT INTO tracks (
-                            id, title, artist, album, duration, file_hash, 
-                            original_filename, compressed, file_size, bitrate, 
-                            format, cover_art_key, year, genre, track_number, 
-                            disc_number, disc_total, is_compilation, media_kind,
-                            podcast_feed_id, podcast_episode_guid, podcast_rss_url, artists_json,
-                            is_local, local_path, local_mtime_ns, musicbrainz_id, isrc, album_artist,
-                            cover_source, metadata_modified_by_user, youtube_id,
-                            audio_quality, audio_source, audio_source_url,
-                            audio_license_url, audio_identity_verified, added_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(id) DO UPDATE SET
-                            title=excluded.title,
-                            artist=excluded.artist,
-                            album=excluded.album,
-                            duration=excluded.duration,
-                            file_hash=excluded.file_hash,
-                            original_filename=excluded.original_filename,
-                            compressed=excluded.compressed,
-                            file_size=excluded.file_size,
-                            bitrate=excluded.bitrate,
-                            format=excluded.format,
-                            cover_art_key=excluded.cover_art_key,
-                            year=excluded.year,
-                            genre=excluded.genre,
-                            track_number=excluded.track_number,
-                            disc_number=excluded.disc_number,
-                            disc_total=excluded.disc_total,
-                            is_compilation=excluded.is_compilation,
-                            media_kind=excluded.media_kind,
-                            podcast_feed_id=excluded.podcast_feed_id,
-                            podcast_episode_guid=excluded.podcast_episode_guid,
-                            podcast_rss_url=excluded.podcast_rss_url,
-                            artists_json=excluded.artists_json,
-                            is_local=excluded.is_local,
-                            local_path=excluded.local_path,
-                            local_mtime_ns=excluded.local_mtime_ns,
-                            musicbrainz_id=excluded.musicbrainz_id,
-                            isrc=excluded.isrc,
-                            album_artist=excluded.album_artist,
-                            cover_source=excluded.cover_source,
-                            metadata_modified_by_user=excluded.metadata_modified_by_user,
-                            youtube_id=excluded.youtube_id,
-                            audio_quality=excluded.audio_quality,
-                            audio_source=excluded.audio_source,
-                            audio_source_url=excluded.audio_source_url,
-                            audio_license_url=excluded.audio_license_url,
-                            audio_identity_verified=excluded.audio_identity_verified,
-                            -- First seen wins. A manifest that has forgotten the
-                            -- date (an older export, a remote copy) must never be
-                            -- able to redate a song the library already holds.
-                            added_at=COALESCE(tracks.added_at, excluded.added_at)
-                    """, (
-                        track.id, track.title, track.artist, track.album,
-                        track.duration, track.file_hash, track.original_filename, 
-                        track.compressed, track.file_size, track.bitrate, track.format, 
-                        track.cover_art_key, track.year, track.genre, track.track_number, 
-                        track.disc_number, track.disc_total, track.is_compilation, track.media_kind,
-                        track.podcast_feed_id, track.podcast_episode_guid, track.podcast_rss_url,
-                        json.dumps(track.artists, ensure_ascii=False) if track.artists is not None else None,
-                        track.is_local, track.local_path, track.local_mtime_ns,
-                        track.musicbrainz_id, track.isrc, track.album_artist,
-                        track.cover_source, track.metadata_modified_by_user, track.youtube_id,
-                        track.audio_quality, track.audio_source, track.audio_source_url,
-                        track.audio_license_url, track.audio_identity_verified,
-                        # A replaced id keeps the date of the row it replaced.
-                        # NULL is left as NULL rather than defaulted to now:
-                        # undated rows are what `backfill_added_at` recognises,
-                        # and stamping them here would date a library that has
-                        # been around for months with the moment of one save.
-                        replacement_added_at.get(track.id) or track.added_at,
-                    ))
+                conn.execute("INSERT INTO library_info (key, value) VALUES ('version', ?) "
+                             "ON CONFLICT(key) DO UPDATE SET value=excluded.value "
+                             "WHERE library_info.value IS NOT excluded.value", (str(metadata.version),))
+                # Stage only IDs/order, avoiding a full manifest-sized IN list.
+                with staged_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
+                                 ((t.id, i) for i, t in enumerate(metadata.tracks))) as incoming:
+                    catalog_dirty = conn.execute(
+                        f'SELECT 1 FROM {incoming} n LEFT JOIN library_tracks l ON l.track_id=n.track_id '
+                        'WHERE l.position IS NOT n.position LIMIT 1').fetchone() is not None
+                    removed = conn.execute(
+                        f'DELETE FROM tracks WHERE NOT EXISTS (SELECT 1 FROM {incoming} n WHERE n.track_id=tracks.id)').rowcount
+                    catalog_dirty |= bool(removed)
+                catalog_dirty |= sync_tracks(conn, metadata.tracks, replacement_added_at)
 
                 for new_id, state in replacement_state.items():
                     conn.execute(
@@ -1192,26 +1116,17 @@ class DatabaseManager:
                             state["updated_at"],
                         ),
                     )
-                self._replace_catalog_projection(conn, metadata.tracks)
+                if catalog_dirty:
+                    self._replace_catalog_projection(conn, metadata.tracks)
 
-                conn.execute("DELETE FROM library_tracks")
-                conn.executemany(
-                    "INSERT INTO library_tracks (track_id, position) VALUES (?, ?)",
-                    ((track.id, position) for position, track in enumerate(metadata.tracks)),
-                )
-
-                conn.execute("DELETE FROM playlist_tracks")
-                conn.execute("DELETE FROM playlists")
+                sync_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
+                          ((t.id, i) for i, t in enumerate(metadata.tracks)))
                 playlist_map = metadata.playlists if isinstance(metadata.playlists, dict) else {}
-                for playlist_position, (name, track_ids) in enumerate(playlist_map.items()):
-                    conn.execute(
-                        "INSERT INTO playlists (name, position) VALUES (?, ?)",
-                        (name, playlist_position),
-                    )
-                    conn.executemany(
-                        "INSERT INTO playlist_tracks (playlist_name, position, track_id) VALUES (?, ?, ?)",
-                        ((name, position, track_id) for position, track_id in enumerate(track_ids)),
-                    )
+                sync_rows(conn, 'playlists', ('name', 'position'), ('name',),
+                          ((name, i) for i, name in enumerate(playlist_map)))
+                sync_rows(conn, 'playlist_tracks', ('playlist_name', 'position', 'track_id'),
+                          ('playlist_name', 'position'),
+                          ((name, i, track_id) for name, ids in playlist_map.items() for i, track_id in enumerate(ids)))
 
                 previous = conn.execute(
                     "SELECT revision FROM library_state WHERE singleton = 1"
