@@ -5,10 +5,10 @@ import type { Track } from '../types/music';
 
 const mocks = vi.hoisted(() => ({
   getLibrary: vi.fn(), getSaved: vi.fn(), syncCatalog: vi.fn(),
-  invalidateCatalogSync: vi.fn(), registerArtworkMetadata: vi.fn(),
+  invalidateCatalogSync: vi.fn(), registerArtworkMetadata: vi.fn(), patchArtworkMetadata: vi.fn(),
 }));
 vi.mock('../lib/api', () => ({ api: mocks }));
-vi.mock('../lib/media', () => ({ registerArtworkMetadata: mocks.registerArtworkMetadata }));
+vi.mock('../lib/media', () => ({ registerArtworkMetadata: mocks.registerArtworkMetadata, patchArtworkMetadata: mocks.patchArtworkMetadata }));
 vi.mock('./catalog', () => mocks);
 vi.mock('./core', () => {
   const [state, setState] = createStore({
@@ -133,4 +133,68 @@ it('keeps full refreshes compatible with engines that do not send a revision', a
   await syncLibrary();
   expect(mocks.getLibrary.mock.calls).toEqual([[undefined], [undefined]]);
   expect(mocks.syncCatalog).toHaveBeenCalledTimes(2);
+});
+
+it('applies a delta atomically, deletes obsolete fields and preserves untouched Solid row identities', async () => {
+  const { syncLibrary } = await import('./library');
+  const { state } = await import('./core');
+  const a = 'a'.repeat(64), b = 'b'.repeat(64);
+  mocks.getLibrary.mockResolvedValueOnce({ tracks: [
+    { id: 'one', title: 'One', artist: 'Artist', loudness_lufs: -12 },
+    { id: 'two', title: 'Two', artist: 'Artist' },
+  ], playlists: { Old: ['one'] }, settings: { old: true }, revision: `W/"${a}"` });
+  await syncLibrary();
+  const untouched = state.library[1];
+  mocks.getLibrary.mockResolvedValueOnce({ kind: 'delta', base_revision: a, revision: b,
+    upserts: [{ id: 'one', title: 'Edited', artist: 'Artist' }], removed: [],
+    fields: { playlists: {}, settings: {} },
+  });
+  await syncLibrary();
+  expect(state.library[0].title).toBe('Edited');
+  expect(state.library[0]).not.toHaveProperty('loudness_lufs');
+  expect(state.library[1]).toBe(untouched);
+  expect(state.playlists).toEqual({});
+  expect(state.librarySettings).toEqual({});
+  expect(mocks.patchArtworkMetadata).toHaveBeenCalledTimes(1);
+  mocks.getLibrary.mockResolvedValueOnce(null);
+  await syncLibrary();
+  expect(mocks.getLibrary).toHaveBeenLastCalledWith(`W/"${b}"`);
+});
+
+it('retries an invalid delta once unconditionally without installing a partial update', async () => {
+  const { syncLibrary } = await import('./library');
+  const { state } = await import('./core');
+  const a = 'a'.repeat(64), b = 'b'.repeat(64);
+  mocks.getLibrary.mockResolvedValueOnce(snapshot(a));
+  await syncLibrary();
+  const replacement = deferred<LibrarySnapshot>();
+  mocks.getLibrary.mockResolvedValueOnce({ kind: 'delta', base_revision: 'wrong', revision: b,
+    upserts: [{ id: a, title: 'Bad' }], removed: [], fields: {} }).mockReturnValueOnce(replacement.promise);
+  const running = syncLibrary();
+  await vi.waitFor(() => expect(mocks.getLibrary).toHaveBeenCalledTimes(3));
+  expect(state.library[0].title).toBe(a);
+  expect(mocks.getLibrary).toHaveBeenLastCalledWith();
+  replacement.resolve(snapshot(b));
+  await running;
+  expect(state.library[0].title).toBe(b);
+  expect(mocks.patchArtworkMetadata).not.toHaveBeenCalled();
+});
+
+it('discards a late delta after invalidation before modifying tracks or artwork', async () => {
+  const { syncLibrary, invalidateLibrarySync } = await import('./library');
+  const { state } = await import('./core');
+  const a = 'a'.repeat(64), b = 'b'.repeat(64);
+  const old = deferred<unknown>();
+  mocks.getLibrary.mockResolvedValueOnce(snapshot(a)).mockReturnValueOnce(old.promise)
+    .mockResolvedValueOnce(snapshot('new-account'));
+  await syncLibrary();
+  const pending = syncLibrary();
+  await Promise.resolve();
+  invalidateLibrarySync();
+  await syncLibrary();
+  old.resolve({ kind: 'delta', base_revision: a, revision: b,
+    upserts: [{ id: a, title: 'Stale', artist: 'Artist' }], removed: [], fields: {} });
+  await pending;
+  expect(state.library[0].title).toBe('new-account');
+  expect(mocks.patchArtworkMetadata).not.toHaveBeenCalled();
 });

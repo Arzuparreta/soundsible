@@ -281,6 +281,7 @@ async function loadStore(
   const extra = (rest: unknown[]) => (rest.length ? `?${rest.join('&')}` : '');
   vi.doMock('../lib/media', () => ({
     registerArtworkMetadata: vi.fn(),
+    patchArtworkMetadata: vi.fn(),
     streamUrl: (id: string, ...rest: unknown[]) => `/stream/${id}${extra(rest)}`,
     previewUrl: (id: string, ...rest: unknown[]) => `/preview/${id}${extra(rest)}`,
     playbackYoutubeId: (track: { id: string; youtube_id?: string | null; source?: 'preview' }) =>

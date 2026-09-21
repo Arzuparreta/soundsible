@@ -83,5 +83,7 @@ and Chromium/WebKit tests from the preceding chunk cover conditional HTTP,
 reload, stale responses, and object identity preservation; their protocol is
 unchanged by the early server path.
 
-Incremental library deltas and a fully transactional manifest revision remain
-separate work. This chunk introduces no delta journal or retained snapshots.
+Incremental transport is now covered by [disk-backed library deltas](library-deltas.md).
+The validator cache described here still retains no snapshots; optional delta
+history stores only ordered IDs and hashes on disk. A fully transactional
+manifest revision and incremental server construction remain separate work.

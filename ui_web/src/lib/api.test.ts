@@ -110,3 +110,14 @@ it.each(['', 'null', '{}', '{"tracks":null}'])('rejects malformed full library r
   globalThis.fetch = vi.fn().mockResolvedValueOnce(new Response(body, { headers: { ETag: 'W/"broken"' } }));
   await expect(api.getLibrary('W/"previous"')).rejects.toThrow('Invalid library snapshot');
 });
+
+it('opts into disk-backed deltas with the accepted revision as the explicit base', async () => {
+  const { api } = await import('./api');
+  const revision = 'a'.repeat(64);
+  const delta = { kind: 'delta', base_revision: revision, revision: 'b'.repeat(64), upserts: [], removed: [], fields: {} };
+  globalThis.fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(delta)));
+  expect(await api.getLibrary(`W/"${revision}"`)).toEqual(delta);
+  const [url, options] = vi.mocked(globalThis.fetch).mock.calls[0];
+  expect(String(url)).toContain(`/api/library?delta=1&since=${revision}`);
+  expect(options?.headers).toMatchObject({ 'If-None-Match': `W/"${revision}"` });
+});

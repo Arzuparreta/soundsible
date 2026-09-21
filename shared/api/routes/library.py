@@ -171,6 +171,22 @@ def get_library():
                 validators.put(key, revision)
         except Exception:
             pass
+    if request.args.get("delta") == "1":
+        try:
+            from shared.api.library_deltas import exchange
+            base = request.args.get("since")
+            if base and len(base) > 128:
+                base = None
+            delta = exchange(user_id, revision, payload, base)
+            if delta is not None:
+                candidate = jsonify(delta)
+                if len(candidate.get_data()) < len(response.get_data()):
+                    # A delta is a representation of a transition, not the full
+                    # resource: its target revision is in the body, not ETag.
+                    candidate.headers["Cache-Control"] = "private, no-store"
+                    return candidate
+        except Exception:
+            logger.debug("Library delta history unavailable; sending full snapshot", exc_info=True)
     return _library_response(response, revision)
 
 

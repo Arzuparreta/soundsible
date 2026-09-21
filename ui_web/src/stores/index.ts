@@ -2449,6 +2449,7 @@ function onEnded(): void {
 
 /** Apply a playlist mutation response (authoritative playlists + settings). */
 function applyPlaylistMutation(res: { playlists?: PlaylistMap; settings?: LibrarySettings }): void {
+  invalidateLibrarySync();
   if (res.playlists) setState('playlists', res.playlists);
   if (res.settings) setState('librarySettings', res.settings);
 }
@@ -3879,6 +3880,7 @@ export const actions = {
       await actions.syncLibrary();
       toast.success(tr('toast.trackDeleted'));
     } catch {
+      invalidateLibrarySync();
       setState({ library: prevLib, playlists: prevPlaylists });
       restorePlaybackSnapshot(prevPlayback);
       toast.error(tr('toast.deleteFailed'));
@@ -3906,14 +3908,17 @@ export const actions = {
     for (const key of Object.keys(patch) as (keyof Track)[]) {
       restore[key] = state.library[index][key] as never;
     }
+    invalidateLibrarySync();
     setState('library', index, patch);
     if (state.playback.currentTrack?.id === id)
       setState('playback', 'currentTrack', (c) => (c ? { ...c, ...patch } : c));
     try {
       await api.updateTrackMetadata(id, meta);
+      invalidateLibrarySync();
       toast.success(tr('toast.dataUpdated'));
       return true;
     } catch {
+      invalidateLibrarySync();
       setState('library', index, restore);
       toast.error(tr('toast.updateFailed'));
       return false;
@@ -4264,6 +4269,7 @@ export const actions = {
     try {
       applyPlaylistMutation(await api.reorderPlaylists(order));
     } catch {
+      invalidateLibrarySync();
       setState('playlists', prev);
       toast.error(tr('toast.reorderFailed'));
     }

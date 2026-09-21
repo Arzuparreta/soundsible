@@ -534,6 +534,16 @@ export interface LibrarySnapshot {
   revision?: string;
 }
 
+export interface LibraryDelta {
+  kind: 'delta';
+  base_revision: string;
+  revision: string;
+  upserts: Track[];
+  removed: string[];
+  order?: string[];
+  fields: Partial<LibrarySnapshot>;
+}
+
 interface RequestOptions {
   method?: string;
   body?: unknown;
@@ -761,10 +771,12 @@ export const api = {
   /** The whole library in one payload. Deliberately past the default deadline:
    * a few thousand tracks over a phone's link to a home server can outrun 8s,
    * and giving up there is what turns a large library into an empty screen. */
-  getLibrary: async (revision?: string): Promise<LibrarySnapshot | null> => {
+  getLibrary: async (revision?: string): Promise<LibrarySnapshot | LibraryDelta | null> => {
     let nextRevision: string | undefined;
     let receivedSnapshot = false;
-    const payload = await request<LibrarySnapshot | null>('/api/library', {
+    const since = revision?.replace(/^W\//, '').replace(/^"|"$/g, '');
+    const path = `/api/library?delta=1${since ? `&since=${encodeURIComponent(since)}` : ''}`;
+    const payload = await request<LibrarySnapshot | LibraryDelta | null>(path, {
       timeoutMs: 30000,
       ifNoneMatch: revision,
       // The store owns the validator; never let an HTTP cache substitute a
@@ -773,7 +785,8 @@ export const api = {
       onETag: etag => { receivedSnapshot = true; nextRevision = etag ?? undefined; },
     });
     if (payload === null && !receivedSnapshot) return null;
-    if (!payload || !Array.isArray(payload.tracks)) throw new Error('Invalid library snapshot');
+    if (payload && 'kind' in payload && payload.kind === 'delta') return payload;
+    if (!payload || !('tracks' in payload) || !Array.isArray(payload.tracks)) throw new Error('Invalid library snapshot');
     return { ...payload, revision: nextRevision };
   },
   /** The songs in the library that have no file of their own — identity plus

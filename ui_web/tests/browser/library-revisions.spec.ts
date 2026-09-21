@@ -125,3 +125,59 @@ test('an abandoned account response cannot overwrite tracks or artwork after a n
   expect(result.artwork).toContain('rev=new');
   expect(result.artwork).not.toContain('rev=old');
 });
+
+test('applies changed, reordered and deleted songs without recreating untouched rows, then recovers a bad base', async ({ page }) => {
+  const a = 'a'.repeat(64), b = 'b'.repeat(64), c = 'c'.repeat(64);
+  let requestIndex = 0;
+  const bases: Array<string | null> = [];
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname !== '/api/library') {
+      await route.fulfill({ contentType: 'application/json', body: '{}' });
+      return;
+    }
+    expect(url.searchParams.get('delta')).toBe('1');
+    bases.push(url.searchParams.get('since'));
+    requestIndex++;
+    const initial = { tracks: [
+      { id: 'one', title: 'One', artist: 'Artist', loudness_lufs: -12, artwork_revision: 'old' },
+      { id: 'two', title: 'Two', artist: 'Artist' },
+      { id: 'delete', title: 'Delete', artist: 'Artist' },
+    ], playlists: { Old: ['delete'] }, settings: { old: true } };
+    const delta = { kind: 'delta', base_revision: a, revision: b,
+      upserts: [{ id: 'one', title: 'Edited', artist: 'Artist', artwork_revision: 'new' },
+        { id: 'added', title: 'Added', artist: 'Artist' }],
+      removed: ['delete'], order: ['two', 'added', 'one'], fields: { playlists: {}, settings: {} },
+    };
+    const body = requestIndex === 1 ? initial : requestIndex === 2 ? delta
+      : requestIndex === 3 ? { ...delta, base_revision: 'wrong', revision: c }
+        : { tracks: [{ id: 'final', title: 'Final', artist: 'Artist' }], playlists: {}, settings: {} };
+    await route.fulfill({ contentType: 'application/json',
+      headers: requestIndex === 1 ? { ETag: `W/"${a}"` } : requestIndex === 4 ? { ETag: `W/"${c}"` } : {},
+      body: JSON.stringify(body),
+    });
+  });
+  const result = await page.evaluate(async () => {
+    const { syncLibrary } = await import('/player/src/stores/library.ts');
+    const { state } = await import('/player/src/stores/core.ts');
+    const { artworkCandidates } = await import('/player/src/lib/media.ts');
+    await syncLibrary();
+    const untouched = state.library[1];
+    await syncLibrary();
+    return { ids: state.library.map(t => t.id), same: state.library[0] === untouched,
+      loudnessRemoved: !('loudness_lufs' in state.library[2]), title: state.library[2].title,
+      playlists: Object.keys(state.playlists), settings: Object.keys(state.librarySettings),
+      artwork: artworkCandidates(`${location.origin}/api/static/cover/one`) };
+  });
+  expect(result).toMatchObject({ ids: ['two', 'added', 'one'], same: true, loudnessRemoved: true,
+    title: 'Edited', playlists: [], settings: [] });
+  expect(result.artwork).toContain('rev=new');
+  const finalIds = await page.evaluate(async () => {
+    const { syncLibrary } = await import('/player/src/stores/library.ts');
+    const { state } = await import('/player/src/stores/core.ts');
+    await syncLibrary();
+    return state.library.map(t => t.id);
+  });
+  expect(finalIds).toEqual(['final']);
+  expect(bases).toEqual([null, a, b, null]);
+});

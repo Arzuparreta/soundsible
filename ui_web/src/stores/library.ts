@@ -7,7 +7,10 @@
  */
 
 import { api } from '../lib/api';
-import { registerArtworkMetadata } from '../lib/media';
+import { batch } from 'solid-js';
+import { reconcile, unwrap } from 'solid-js/store';
+import { applyLibraryDelta } from '../lib/libraryDelta';
+import { registerArtworkMetadata, patchArtworkMetadata } from '../lib/media';
 import { invalidateCatalogSync, syncCatalog } from './catalog';
 import { setState, state } from './core';
 
@@ -74,19 +77,39 @@ async function syncOnce(): Promise<void> {
   const syncVersion = ++version;
   setState('loading', true);
   try {
-    const [lib, saved] = await Promise.all([
+    let [lib, saved] = await Promise.all([
       api.getLibrary(revision),
       api.getSaved().catch(() => state.saved.slice()),
     ]);
     if (syncVersion !== version) return;
-    if (lib !== null) {
+    if (lib !== null && 'kind' in lib && lib.kind === 'delta') {
+      try {
+        const next = applyLibraryDelta(unwrap(state.library), lib, revision);
+        batch(() => {
+          if (next.tracks !== unwrap(state.library)) setState('library', reconcile(next.tracks, { key: 'id' }));
+          if ('playlists' in next.fields) setState('playlists', reconcile(next.fields.playlists ?? {}));
+          if ('settings' in next.fields) setState('librarySettings', reconcile(next.fields.settings ?? {}));
+          if ('podcast_subscriptions' in next.fields) setState('podcastSubscriptions', reconcile(next.fields.podcast_subscriptions ?? []));
+          patchArtworkMetadata(next.upserts, next.removed);
+          revision = next.revision;
+        });
+        lib = null;
+      } catch {
+        // One unconditional retry; never partially apply an invalid delta.
+        lib = await api.getLibrary();
+        if (syncVersion !== version) return;
+        if (!lib || 'kind' in lib) throw new Error('Expected full library snapshot');
+      }
+    }
+    if (lib !== null && !('kind' in lib)) {
+      const full = lib;
       // Only an accepted snapshot may update artwork metadata or its validator.
-      registerArtworkMetadata(lib.tracks ?? []);
-      setState({
-        library: lib.tracks ?? [],
-        playlists: lib.playlists ?? {},
-        librarySettings: lib.settings ?? {},
-        podcastSubscriptions: lib.podcast_subscriptions ?? [],
+      registerArtworkMetadata(full.tracks ?? []);
+      batch(() => {
+        setState('library', reconcile(full.tracks ?? [], { key: 'id' }));
+        setState('playlists', reconcile(full.playlists ?? {}));
+        setState('librarySettings', reconcile(full.settings ?? {}));
+        setState('podcastSubscriptions', reconcile(full.podcast_subscriptions ?? []));
       });
       revision = lib.revision;
     }
