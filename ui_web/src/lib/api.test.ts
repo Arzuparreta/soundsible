@@ -76,3 +76,37 @@ describe('request abort handling', () => {
     expect(captured.init().signal).not.toBe(caller.signal);
   });
 });
+
+
+describe('library revision HTTP contract', () => {
+  it('returns the validator and sends it only when supplied by the store', async () => {
+    const { api } = await import('./api');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('{"tracks":[]}', { headers: { ETag: 'W/"a"' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 304 }))
+      .mockResolvedValueOnce(new Response('{"tracks":[]}'));
+    globalThis.fetch = fetchMock;
+    expect(await api.getLibrary()).toEqual({ tracks: [], revision: 'W/"a"' });
+    expect(await api.getLibrary('W/"a"')).toBeNull();
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      headers: { 'If-None-Match': 'W/"a"' }, cache: 'no-store', credentials: 'same-origin',
+    });
+    expect(await api.getLibrary()).toEqual({ tracks: [], revision: undefined });
+    expect(fetchMock.mock.calls[2][1].headers).not.toHaveProperty('If-None-Match');
+  });
+
+  it('does not mistake failures or an unsolicited 304 for an unchanged snapshot', async () => {
+    const { api } = await import('./api');
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 304 }))
+      .mockResolvedValueOnce(new Response('offline', { status: 503 }));
+    await expect(api.getLibrary()).rejects.toMatchObject({ status: 304 });
+    await expect(api.getLibrary('W/"a"')).rejects.toMatchObject({ status: 503 });
+  });
+});
+
+it.each(['', 'null', '{}', '{"tracks":null}'])('rejects malformed full library response %s instead of clearing the accepted snapshot', async body => {
+  const { api } = await import('./api');
+  globalThis.fetch = vi.fn().mockResolvedValueOnce(new Response(body, { headers: { ETag: 'W/"broken"' } }));
+  await expect(api.getLibrary('W/"previous"')).rejects.toThrow('Invalid library snapshot');
+});

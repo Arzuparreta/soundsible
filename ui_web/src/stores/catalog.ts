@@ -35,10 +35,10 @@ export function invalidateCatalogSync(): void {
   version += 1;
 }
 
-export async function syncCatalog(): Promise<void> {
+export async function syncCatalog(): Promise<boolean> {
   if (inFlight) {
     pending = true;
-    return;
+    return false;
   }
   inFlight = true;
   const syncVersion = ++version;
@@ -49,7 +49,7 @@ export async function syncCatalog(): Promise<void> {
       api.getLibraryGenres(),
       api.getLibraryYears(),
     ]);
-    if (syncVersion !== version) return;
+    if (syncVersion !== version) return false;
     setState('catalog', (prev) => ({
       ...prev,
       artists,
@@ -57,10 +57,12 @@ export async function syncCatalog(): Promise<void> {
       years,
       revision: prev.revision + 1,
     }));
+    return true;
   } catch {
     // Keep the last good catalog on screen. A failed fetch is not news that the
     // library lost its albums, and `libraryError` already tells the user the
     // station is unreachable.
+    return false;
   } finally {
     if (syncVersion === version) {
       setState('catalog', { loading: false, ready: true });

@@ -1,3 +1,4 @@
+from hashlib import sha256
 from pathlib import Path
 """
 Library, metadata, playlists, favourites, and cover routes.
@@ -112,7 +113,21 @@ def get_library():
         annotate_tracks(payload.get("tracks") or [])
         from shared.artwork import artwork_store
         artwork_store().annotate(payload.get("tracks") or [])
-        return jsonify(payload)
+        # The DB revision alone misses independently updated artwork/loudness.
+        # Hash the actual public representation, once serialized, and scope its
+        # validator to the authenticated account. No snapshots are cached here.
+        from shared.user_context import current_user_id
+        response = jsonify(payload)
+        digest = sha256((current_user_id() or "").encode() + b"\0")
+        digest.update(response.get_data())
+        revision = digest.hexdigest()
+        response.set_etag(revision, weak=True)
+        response.headers["Cache-Control"] = "private, no-cache"
+        response.vary.update(("Cookie", "X-Soundsible-Admin-Token"))
+        if request.if_none_match.contains_weak(revision):
+            response.status_code = 304
+            response.set_data(b"")
+        return response
     return jsonify({"error": "Library not loaded"}), 404
 
 

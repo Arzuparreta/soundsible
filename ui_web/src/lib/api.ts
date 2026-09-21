@@ -1,4 +1,3 @@
-import { registerArtworkMetadata } from './media';
 import { apiOrigin, ownerToken } from './config';
 import type {
   CatalogAlbum,
@@ -526,12 +525,24 @@ export interface MigrationPreview {
   matches: MigrationMatch[];
 }
 
+export interface LibrarySnapshot {
+  tracks?: Track[];
+  playlists?: PlaylistMap;
+  settings?: LibrarySettings;
+  podcast_subscriptions?: PodcastSubscription[];
+  /** Opaque, account-scoped validator from the response ETag. */
+  revision?: string;
+}
+
 interface RequestOptions {
   method?: string;
   body?: unknown;
   signal?: AbortSignal;
   timeoutMs?: number;
   keepalive?: boolean;
+  ifNoneMatch?: string;
+  onETag?: (etag: string | null) => void;
+  cache?: RequestCache;
 }
 
 /** Notified whenever the engine answers 401 — the app shows the login screen. */
@@ -558,6 +569,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     else external.addEventListener('abort', abortFromCaller, { once: true });
   }
   const headers: Record<string, string> = {};
+  if (opts.ifNoneMatch) headers['If-None-Match'] = opts.ifNoneMatch;
   // FormData sets its own multipart Content-Type (with boundary); JSON we set explicitly.
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
   if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
@@ -573,8 +585,10 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
       signal: controller.signal,
       keepalive: opts.keepalive,
+      cache: opts.cache,
     });
     if (res.status === 401 && !path.startsWith('/api/auth/')) onUnauthorized?.();
+    if (res.status === 304 && opts.ifNoneMatch) return null as T;
     if (!res.ok) {
       const text = await res.text();
       let payload: unknown;
@@ -588,6 +602,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
         : undefined;
       throw new ApiError(res.status, `${method} ${path} → ${res.status}`, code, payload);
     }
+    opts.onETag?.(res.headers.get('ETag'));
     if (res.status === 204) return undefined as T;
     const text = await res.text();
     return (text ? JSON.parse(text) : undefined) as T;
@@ -746,16 +761,21 @@ export const api = {
   /** The whole library in one payload. Deliberately past the default deadline:
    * a few thousand tracks over a phone's link to a home server can outrun 8s,
    * and giving up there is what turns a large library into an empty screen. */
-  getLibrary: () =>
-    request<{
-      tracks?: Track[];
-      playlists?: PlaylistMap;
-      settings?: LibrarySettings;
-      podcast_subscriptions?: PodcastSubscription[];
-    }>(`/api/library?t=${Date.now()}`, { timeoutMs: 30000 }).then(payload => {
-      registerArtworkMetadata(payload.tracks ?? []);
-      return payload;
-    }),
+  getLibrary: async (revision?: string): Promise<LibrarySnapshot | null> => {
+    let nextRevision: string | undefined;
+    let receivedSnapshot = false;
+    const payload = await request<LibrarySnapshot | null>('/api/library', {
+      timeoutMs: 30000,
+      ifNoneMatch: revision,
+      // The store owns the validator; never let an HTTP cache substitute a
+      // snapshot from an earlier account or hide a 304 behind a cached 200.
+      cache: 'no-store',
+      onETag: etag => { receivedSnapshot = true; nextRevision = etag ?? undefined; },
+    });
+    if (payload === null && !receivedSnapshot) return null;
+    if (!payload || !Array.isArray(payload.tracks)) throw new Error('Invalid library snapshot');
+    return { ...payload, revision: nextRevision };
+  },
   /** The songs in the library that have no file of their own — identity plus
    * snapshot, newest first, each carrying whether it is marked a favourite. */
   getSaved: () =>

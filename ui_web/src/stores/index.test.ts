@@ -280,6 +280,7 @@ async function loadStore(
   // varies between two plays of the same track fails a test instead of a drive.
   const extra = (rest: unknown[]) => (rest.length ? `?${rest.join('&')}` : '');
   vi.doMock('../lib/media', () => ({
+    registerArtworkMetadata: vi.fn(),
     streamUrl: (id: string, ...rest: unknown[]) => `/stream/${id}${extra(rest)}`,
     previewUrl: (id: string, ...rest: unknown[]) => `/preview/${id}${extra(rest)}`,
     playbackYoutubeId: (track: { id: string; youtube_id?: string | null; source?: 'preview' }) =>

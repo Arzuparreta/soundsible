@@ -108,3 +108,78 @@ def test_endpoint_uses_fresh_direct_snapshot_and_annotations(monkeypatch):
     # A different bound library must not receive another snapshot's tracks.
     lib.metadata = LibraryMetadata(1, [], {"Private": []}, {})
     assert client.get("/api/library").get_json() == lib.metadata.to_public_dict()
+
+
+@pytest.fixture
+def revision_endpoint(monkeypatch):
+    from shared.api.routes import library
+    from shared.artwork import artwork_store
+
+    lib = SimpleNamespace(metadata=metadata(), refresh_if_stale=lambda: None)
+    annotations = {"gain": -2}
+    monkeypatch.setattr(library, "_get_api", lambda: {"get_core": lambda: (lib, None, None)})
+
+    def annotate(tracks):
+        for track in tracks:
+            track["loudness"] = {"gain_db": annotations["gain"]}
+
+    monkeypatch.setattr(library, "annotate_tracks", annotate)
+    app = Flask(__name__)
+    app.register_blueprint(library.library_bp)
+    return app.test_client(), lib, annotations, artwork_store()
+
+
+def test_revision_revalidates_without_body_and_is_account_scoped(revision_endpoint):
+    from shared.user_context import user_context
+
+    client, _, _, _ = revision_endpoint
+    with user_context("alice"):
+        first = client.get("/api/library")
+        etag = first.headers["ETag"]
+        unchanged = client.get("/api/library", headers={"If-None-Match": etag})
+        assert unchanged.status_code == 304
+        assert unchanged.data == b""
+        assert unchanged.headers["ETag"] == etag
+        assert unchanged.headers["Cache-Control"] == "private, no-cache"
+        assert "Cookie" in unchanged.vary
+        assert "X-Soundsible-Admin-Token" in unchanged.vary
+        # HTTP weak matching also accepts lists and the strong spelling.
+        assert client.get("/api/library", headers={"If-None-Match": '"other", ' + etag[2:]}).status_code == 304
+        assert client.get("/api/library", headers={"If-None-Match": '"unknown"'}).status_code == 200
+    with user_context("bob"):
+        other = client.get("/api/library", headers={"If-None-Match": etag})
+        assert other.status_code == 200
+        assert other.headers["ETag"] != etag
+        assert other.get_json() == first.get_json()
+
+
+@pytest.mark.parametrize("change", ["edit", "remove", "add", "order", "playlist", "settings", "subscription", "episodes", "artwork", "loudness"])
+def test_revision_covers_all_public_snapshot_changes(revision_endpoint, change):
+    client, lib, annotations, artwork = revision_endpoint
+    etag = client.get("/api/library").headers["ETag"]
+    model = lib.metadata
+    if change == "edit": model.tracks[0].title = "Edited"
+    elif change == "remove": model.tracks.pop()
+    elif change == "add":
+        added = deepcopy(model.tracks[0])
+        added.id = "new"
+        model.tracks.append(added)
+    elif change == "order": model.tracks.reverse()
+    elif change == "playlist": model.playlists["Favoritas"].clear()
+    elif change == "settings": model.settings["nested"]["flags"].append(False)
+    elif change == "subscription": model.podcast_subscriptions.clear()
+    elif change == "episodes": model.podcast_episode_cache.clear()
+    elif change == "artwork": artwork.bind("song", "new-revision-hash", "manual")
+    elif change == "loudness": annotations["gain"] = -5
+    changed = client.get("/api/library", headers={"If-None-Match": etag})
+    assert changed.status_code == 200
+    assert changed.headers["ETag"] != etag
+    assert client.get("/api/library", headers={"If-None-Match": changed.headers["ETag"]}).status_code == 304
+
+
+def test_private_file_changes_do_not_invalidate_public_revision(revision_endpoint):
+    client, lib, _, _ = revision_endpoint
+    etag = client.get("/api/library").headers["ETag"]
+    lib.metadata.tracks[0].local_path = "/different/private/file"
+    lib.metadata.tracks[0].local_mtime_ns += 1
+    assert client.get("/api/library", headers={"If-None-Match": etag}).status_code == 304

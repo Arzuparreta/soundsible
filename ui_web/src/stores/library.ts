@@ -1,18 +1,21 @@
 /**
  * Fetching the library and keeping the fetches from piling up.
  *
- * Refreshing means refetching the whole thing and replacing `state.library`,
- * which rebuilds the identity index and every derived list. That is fine once;
+ * Changed snapshots replace `state.library`; unchanged revisions leave it intact.
+ * Replacing the array rebuilds the identity index and every derived list. That is fine once;
  * it is not fine once per finished download.
  */
 
 import { api } from '../lib/api';
+import { registerArtworkMetadata } from '../lib/media';
 import { invalidateCatalogSync, syncCatalog } from './catalog';
 import { setState, state } from './core';
 
-let inFlight = false;
-let pending = false;
+interface SyncFlight { pending: boolean; promise: Promise<void> }
+let inFlight: SyncFlight | undefined;
 let version = 0;
+let revision: string | undefined;
+let catalogRevision: string | undefined;
 let coalesceTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
@@ -33,54 +36,77 @@ const COALESCE_MS = 1500;
  */
 export function invalidateLibrarySync(): void {
   version += 1;
+  revision = undefined;
+  catalogRevision = undefined;
+  // A different account/storage must not wait behind the abandoned request.
+  inFlight = undefined;
+  if (coalesceTimer) clearTimeout(coalesceTimer);
+  coalesceTimer = undefined;
   // The catalog is a projection of the same manifest, so a reply that is wrong
   // for one is wrong for the other.
   invalidateCatalogSync();
 }
 
-export async function syncLibrary(): Promise<void> {
+export function syncLibrary(): Promise<void> {
   if (inFlight) {
-    pending = true;
-    return;
+    inFlight.pending = true;
+    return inFlight.promise;
   }
-  inFlight = true;
+  const flight: SyncFlight = { pending: false, promise: Promise.resolve() };
+  inFlight = flight;
+  // Defer execution until the shared promise is assigned, including reentrant
+  // callers triggered by a state update. All callers await the queued refresh.
+  flight.promise = Promise.resolve().then(async () => {
+    try {
+      do {
+        if (inFlight !== flight) return;
+        flight.pending = false;
+        await syncOnce();
+      } while (inFlight === flight && flight.pending);
+    } finally {
+      if (inFlight === flight) inFlight = undefined;
+    }
+  });
+  return flight.promise;
+}
+
+async function syncOnce(): Promise<void> {
   const syncVersion = ++version;
   setState('loading', true);
   try {
     const [lib, saved] = await Promise.all([
-      api.getLibrary(),
+      api.getLibrary(revision),
       api.getSaved().catch(() => state.saved.slice()),
     ]);
     if (syncVersion !== version) return;
-    setState({
-      library: lib.tracks ?? [],
-      playlists: lib.playlists ?? {},
-      librarySettings: lib.settings ?? {},
-      podcastSubscriptions: lib.podcast_subscriptions ?? [],
-      saved,
-      libraryError: false,
-    });
-    // Artists, genres and years describe this same payload. Not awaited:
-    // callers that await a sync are waiting to act on tracks, and the grids
-    // they are not looking at must not hold that up.
-    void syncCatalog();
+    if (lib !== null) {
+      // Only an accepted snapshot may update artwork metadata or its validator.
+      registerArtworkMetadata(lib.tracks ?? []);
+      setState({
+        library: lib.tracks ?? [],
+        playlists: lib.playlists ?? {},
+        librarySettings: lib.settings ?? {},
+        podcastSubscriptions: lib.podcast_subscriptions ?? [],
+      });
+      revision = lib.revision;
+    }
+    setState({ saved, libraryError: false });
+    // Retry failed projection fetches even when the manifest is unchanged.
+    // Older engines without validators keep the previous full-refresh behavior.
+    if (!revision || catalogRevision !== revision) {
+      const targetRevision = revision;
+      void syncCatalog().then(success => {
+        if (success && syncVersion === version) catalogRevision = targetRevision;
+      });
+    }
   } catch {
-    // Offline or engine down — keep whatever we have, but stop claiming it is
-    // the whole story. An empty list after a failed fetch is not an empty
-    // library, and the view says so.
+    // Preserve the last accepted snapshot and validator on transient failures.
     if (syncVersion === version) setState('libraryError', true);
   } finally {
     if (syncVersion === version) {
       setState('loading', false);
-      // Settled either way: success means the list is the library, failure is
-      // reported through `libraryError`. Both are answers, so stop making
-      // callers wait on a sync that is over.
       setState('libraryReady', true);
     }
-    inFlight = false;
-    const runAgain = pending;
-    pending = false;
-    if (runAgain) queueMicrotask(() => void syncLibrary());
   }
 }
 
