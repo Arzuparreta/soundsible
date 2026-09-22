@@ -9,11 +9,10 @@ entire write. Existing behavior is preserved: I/O failures and valid JSON that
 cannot construct the model retain podcast fields in memory; malformed JSON
 returns an empty model and clears those fields. The latter distinction was
 confirmed by the subsequent podcast-reader differential tests. Write and
-serialization errors propagate. The existing file is rewritten in place, keeping
-its inode, permissions and symlink target. No debounce, fsync or atomic rename
-was added. A failed save can still leave a corrupt file: a streaming encoding
-failure may leave a prefix where the former eager encoding left an empty file.
-Neither implementation guarantees recovery of the previous document.
+serialization errors propagate. The blocks stream into a temporary beside the
+file, which is fsynced and renamed over it (`shared.atomic_file.replace_contents`,
+see [Atomic replacement](#atomic-replacement) below): the Station reads this file
+while ODST writes it, and a failed save now leaves the previous document intact.
 
 This removes the complete output string and full track-dictionary serialization
 copy. It does **not** remove ODST's resident model or the full read and model
@@ -63,6 +62,40 @@ includes buffered close, not fsync. They exclude file opening, lock acquisition
 and other bookkeeping and must not be summed as the full-save medians. No
 benchmark ran concurrently with the full test suite.
 
+## Atomic replacement
+
+The streamed save first wrote in place, as the eager one had: truncate, then
+write. Across 128-track blocks that left a window in which the Station could
+read a partial `library.json`, and a crash or encoding error left one behind.
+The save now goes through `replace_contents`, which keeps what the in-place
+write offered its users:
+
+- a symlink is followed and stays a symlink; its target is replaced;
+- the file keeps its permission bits, and a new file gets the umask default
+  (a plain `mkstemp` temporary would have left it 0600);
+- a folder that refuses a temporary gets the old in-place write rather than none.
+
+The inode and owner change. Hard links to `library.json` no longer follow it;
+nothing in Soundsible creates them.
+
+Cost, measured against the in-place writer `ee94fdb` with the same benchmark,
+five alternating repetitions, on an ext4 filesystem on a spinning disk
+(Seagate ST1000DM010): [raw results](odst-save-atomic-results.jsonl).
+
+| Library | In place ms | Atomic ms | Peak MiB (both) |
+| --- | ---: | ---: | ---: |
+| Synthetic, 200 | 4.21 | 57.22 | 0.53 |
+| Synthetic, 1,000 | 20.22 | 71.71 | 0.69 |
+| Synthetic, 10,000 | 238.06 | 312.02 | 0.76 |
+| Synthetic, 50,000 | 1,261.66 | 1,439.97 | 1.07 |
+
+The added ~50–75 ms is the fsync on this disk. At 50k the difference is noisy:
+an earlier identical run measured +2 ms, this one +178 ms. It is paid once per
+save, that is once per finished download, inside ODST's lock. Memory peaks are
+unchanged. The benchmark's per-phase split instruments `open` in the ODST
+module, so it no longer sees the candidate's writes; read the medians, not the
+phase rows, for this comparison.
+
 ## Reproduction and validation
 
 ```sh
@@ -78,8 +111,8 @@ The baseline method is loaded from the trusted git revision; the shared model
 implementation is held constant. Constructor side effects, downloads and cloud
 sync are intentionally excluded. Missing files, malformed old JSON, empty and
 batch-boundary libraries, exact bytes, podcast preservation, permissions,
-symlinks, lock ownership and recovery after open/write/encoding errors are
-covered by 12 targeted tests. Linux validation does not establish native Windows
+symlinks, lock ownership and keeping the previous file after temporary, write and
+encoding errors are covered by targeted tests. Linux validation does not establish native Windows
 behavior or cross-process safety with concurrent Station writes. The latter is
 an existing limitation of the two writers and was not changed here.
 

@@ -1,4 +1,5 @@
 """Portable library.json exports: same bytes, one serialization, bounded memory."""
+import os
 from pathlib import Path
 import random
 import stat
@@ -194,3 +195,58 @@ def test_export_memory_is_bounded_by_a_block_of_tracks(manager):
     tracemalloc.stop()
     assert manager.lib.manifest_path.stat().st_size == size
     assert peak < size / 3, (peak, size)
+
+
+def _temporaries(directory):
+    return [p.name for p in directory.iterdir() if p.name.startswith(".library.json.")]
+
+
+def test_replace_contents_keeps_mode_and_follows_symlinks(tmp_path):
+    real = tmp_path / "shared" / "library.json"
+    real.parent.mkdir()
+    real.write_text("old")
+    real.chmod(0o640)
+    link = tmp_path / "library.json"
+    link.symlink_to(real)
+    atomic_file.replace_contents(link, atomic_file.text_pieces(["new"]))
+    assert link.is_symlink()
+    assert real.read_text() == "new"
+    assert stat.S_IMODE(real.stat().st_mode) == 0o640
+    assert not _temporaries(real.parent) and not _temporaries(tmp_path)
+
+
+def test_replace_contents_creates_with_the_umask_default(tmp_path):
+    umask = os.umask(0o027)
+    try:
+        atomic_file.replace_contents(tmp_path / "library.json", atomic_file.text_pieces(["new"]))
+    finally:
+        os.umask(umask)
+    assert stat.S_IMODE((tmp_path / "library.json").stat().st_mode) == 0o640
+
+
+def test_replace_contents_failure_keeps_the_previous_file(tmp_path):
+    path = tmp_path / "library.json"
+    path.write_text("previous")
+
+    def broken(handle):
+        handle.write(b"{")
+        raise ValueError("encoding failed")
+
+    with pytest.raises(ValueError):
+        atomic_file.replace_contents(path, broken)
+    assert path.read_text() == "previous"
+    assert not _temporaries(tmp_path)
+
+
+def test_replace_contents_writes_in_place_when_the_folder_refuses_temporaries(tmp_path, monkeypatch):
+    path = tmp_path / "library.json"
+    path.write_text("previous")
+    inode = path.stat().st_ino
+
+    def refuse(*args):
+        raise PermissionError("read-only folder")
+
+    monkeypatch.setattr(atomic_file.os, "open", refuse)
+    atomic_file.replace_contents(path, atomic_file.text_pieces(["new"]))
+    assert path.read_text() == "new"
+    assert path.stat().st_ino == inode

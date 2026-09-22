@@ -151,7 +151,7 @@ def main():
                               'python': sys.version, 'platform': platform.platform(),
                               'candidate_sha256': hashlib.sha256((ROOT / 'odst_tool/odst_downloader.py').read_bytes()).hexdigest(),
                               'podcast_reader_sha256': hashlib.sha256((ROOT / 'odst_tool/library_podcasts.py').read_bytes()).hexdigest(),
-                              'scope': 'ODST complete save; temporary copies; Python allocations excluding preloaded model; no fsync'}) + '\n')
+                              'scope': 'ODST complete save; temporary copies; Python allocations excluding preloaded model; fsync only where the measured code does it'}) + '\n')
         if args.library:
             row = measure(LibraryMetadata.from_json(args.library.read_text()), reference, args.repeats, 'real-copy')
             out.write(json.dumps(row) + '\n')

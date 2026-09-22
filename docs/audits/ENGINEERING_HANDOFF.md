@@ -176,8 +176,8 @@ total, ahorro de energía, calidad de reproducción o aceptación acústica.
   ventana de datos de podcast viejos) y el debounce existente no vacía nada al
   apagar. Revisar solo con las líneas INFO de una instancia real grande.
 - Hallazgos sin tocar: tres copias del mismo archivo en el mismo disco; ODST
-  mantiene su propia `LibraryMetadata` completa en RAM, la serializa entera tras
-  cada descarga y escribe sin atomicidad.
+  mantiene su propia `LibraryMetadata` completa en RAM y la serializa entera tras
+  cada descarga. Su escritura ya es atómica: ver «Correcciones tras la revisión».
 
 ## Evaluación posterior: prioridad de análisis DJ (2026-09-22)
 
@@ -235,8 +235,9 @@ peticiones terminan antes de una nueva ronda, incluso con error parcial.
 
 `ODSTDownloader.save_library()` usa `iter_json()` y escribe bloques de 128 pistas.
 Conserva bytes, lock, podcasts del disco, permisos/inodo/symlinks y propagación de
-fallos. Sigue escribiendo in situ, sin fsync ni atomicidad; no se modificó la
-coordinación entre procesos con Station.
+fallos. Escribía in situ, sin fsync ni atomicidad (corregido después: ver
+«Correcciones tras la revisión»); no se modificó la coordinación entre procesos
+con Station.
 
 - [Mediciones y reproducción](../performance/odst-save-streaming.md): cinco
   repeticiones, copia real de 208 pistas y corpus de 1k/10k/50k.
@@ -247,8 +248,8 @@ coordinación entre procesos con Station.
 - Validación: 1.521 pruebas Python, Ruff en archivos modificados y
   `git diff --check` correctos. Sin cambios frontend ni reinicio del motor.
 - No se eliminaron la biblioteca residente ni la lectura completa para podcasts;
-  no hay debounce nuevo. Un fallo puede dejar un archivo parcial, como la
-  escritura anterior tampoco conservaba el documento original.
+  no hay debounce nuevo. El archivo parcial tras un fallo quedó corregido después
+  con la escritura atómica.
 
 ## Lectura ODST de podcasts sin reconstruir pistas completada (2026-09-22)
 
@@ -267,13 +268,41 @@ conserva los dos campos de podcasts. Sigue recorriendo todos los bytes.
   modelo/E/S mantienen los de memoria. Se corrigió esa distinción en el informe
   previo y su test, que no comprobaba explícitamente el valor esperado.
 - Un descriptor conserva su lectura ante reemplazo POSIX. No hay bloqueo común
-  ODST/Station ni protección nueva contra carreras o escritura parcial.
+  ODST/Station ni protección contra carreras entre los dos escritores; la
+  escritura parcial se corrigió después (ver la sección siguiente).
 - Validación actual: **1.532 pruebas Python**, Ruff y `git diff --check` pasan;
   smoke del benchmark con el hash adicional del lector correcto. Sin cambios
   frontend, reinicio del motor, escritura de biblioteca real, push ni PR.
 - Memoria del lector ligada al mayor valor individual y los podcasts; JSON
   malformado puede acumularse hasta EOF. La serialización conserva su lista de
   referencias. No afirmar memoria estrictamente constante.
+
+## Correcciones tras la revisión (2026-09-22)
+
+Un `/code-review` de `main...HEAD` dejó diez hallazgos sin verificar. Se
+corrigieron los que podían perder datos o bloquear la interfaz; los otros siete
+(bloqueos SQLite de deltas y sonoridad, pool que abre conexiones con el lock
+tomado, token de sonoridad demasiado sensible, proyección de catálogo que ya no
+se autorrepara, delta sin cambios que no devuelve 304, carátulas serializadas)
+siguen **sin verificar ni tocar**.
+
+- `c9a40e8` Interfaz: las ediciones locales (metadatos, borrado, playlists)
+  usaban el reinicio de cambio de cuenta, que borraba el refresco programado
+  tras una descarga y abandonaba el sync en curso sin sustituto (`loading`
+  podía quedarse activo). Ahora `beginLibraryEdit`/`endLibraryEdit`: se siguen
+  descartando respuestas viejas sin esperar por ellas, pero el sync abandonado
+  queda debido y se paga al terminar la edición, el temporizador sobrevive y una
+  respuesta aplicada mientras la edición estaba en vuelo provoca otra lectura.
+  `invalidateLibrarySync` queda solo para cambio de cuenta y hoy no tiene
+  llamador en producción.
+- ODST: `save_library()` escribe en un temporal con fsync y rename mediante
+  `shared.atomic_file.replace_contents`, que sigue symlinks, conserva permisos,
+  usa el umask por defecto en archivos nuevos y, si la carpeta no admite
+  temporales, escribe in situ como antes. Cambian inodo y propietario (nada en
+  Soundsible crea enlaces duros). Un fallo conserva el documento anterior.
+  Coste: el fsync, ~50–75 ms por guardado (una vez por descarga) en disco
+  giratorio; picos de memoria iguales.
+  [Medición](../performance/odst-save-streaming.md#atomic-replacement).
 
 ## Pendientes de auditoría, sin declarar todo terminado
 

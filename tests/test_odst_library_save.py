@@ -1,4 +1,4 @@
-"""ODST's existing in-place writer, using the shared streamed serializer."""
+"""ODST's library.json writer: streamed, and never visible half-written."""
 import threading
 from unittest.mock import patch
 
@@ -52,41 +52,31 @@ def test_corrupt_disk_matches_legacy_empty_podcast_defaults(tmp_path):
     assert target.library_path.read_text() == target.library.to_json()
 
 
-def test_keeps_symlink_inode_and_permissions(tmp_path):
+def temporaries(tmp_path):
+    return [p.name for p in tmp_path.iterdir() if p.name.startswith('.library.json.')]
+
+
+def test_keeps_symlink_and_permissions(tmp_path):
     target = writer(tmp_path)
     actual = tmp_path / 'actual.json'
-    actual.write_text(target.library.to_json())
+    actual.write_text('old')
     actual.chmod(0o640)
-    inode = actual.stat().st_ino
     target.library_path.symlink_to(actual)
     target.save_library()
     assert target.library_path.is_symlink()
-    assert actual.stat().st_ino == inode
     assert actual.stat().st_mode & 0o777 == 0o640
     assert actual.read_text() == target.library.to_json()
+    assert not [p.name for p in tmp_path.iterdir() if p.name.startswith('.actual.json.')]
 
 
-def test_write_error_propagates_closes_file_and_releases_lock(tmp_path):
+def test_write_error_keeps_previous_file_and_releases_lock(tmp_path):
     target = writer(tmp_path)
-    real_open = open
-    handles = []
-
-    class BrokenFile:
-        def __enter__(self):
-            self.file = real_open(target.library_path, 'w')
-            handles.append(self.file)
-            return self
-
-        def write(self, block):
-            raise OSError('disk full')
-
-        def __exit__(self, *args):
-            self.file.close()
-
-    with patch('odst_tool.odst_downloader.open', return_value=BrokenFile(), create=True):
+    target.library_path.write_text('previous')
+    with patch('shared.atomic_file.os.fsync', side_effect=OSError('disk full')):
         with pytest.raises(OSError, match='disk full'):
             target.save_library()
-    assert handles[0].closed
+    assert target.library_path.read_text() == 'previous'
+    assert not temporaries(tmp_path)
     assert target._lock.acquire(blocking=False)
     target._lock.release()
     target.save_library()
@@ -100,9 +90,13 @@ def test_encoding_failure_propagates_and_allows_next_save(tmp_path):
         yield '{'
         raise ValueError('encoding failed')
 
+    target.library_path.write_text('previous')
     with patch.object(LibraryMetadata, 'iter_json', broken):
         with pytest.raises(ValueError, match='encoding failed'):
             target.save_library()
+    # A reader never sees the '{' that was already written.
+    assert target.library_path.read_text() == 'previous'
+    assert not temporaries(tmp_path)
     target.save_library()
     assert target.library_path.read_text() == target.library.to_json()
 
@@ -122,11 +116,12 @@ def test_lock_covers_every_serialized_block(tmp_path):
     target._lock.release()
 
 
-def test_open_failure_propagates_without_losing_lock(tmp_path):
+def test_temporary_failure_propagates_without_losing_lock(tmp_path):
     target = writer(tmp_path)
-    with patch('odst_tool.odst_downloader.open', side_effect=PermissionError('denied'), create=True):
-        with pytest.raises(PermissionError):
+    with patch('shared.atomic_file.os.open', side_effect=OSError(28, 'No space left on device')):
+        with pytest.raises(OSError, match='No space left'):
             target.save_library()
+    assert not target.library_path.exists()
     assert target._lock.acquire(blocking=False)
     target._lock.release()
 
