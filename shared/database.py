@@ -10,10 +10,12 @@ import os
 import queue
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
+from shared.library_write import disk_staging, staged_rows, sync_rows, sync_tracks
 from shared.runtime import get_config_dir
 from shared.time_utils import UTC
 from shared.url_utils import validate_youtube_video_id
@@ -122,9 +124,9 @@ _MUSIC_ONLY = "(t.media_kind IS NULL OR t.media_kind != 'podcast_episode')"
 class StaleLibraryWrite(RuntimeError):
     """A whole-library write was refused because the canonical state moved on.
 
-    ``replace_library`` rewrites everything — every track, playlist and setting
-    — from one in-memory snapshot. A writer holding a snapshot taken before
-    somebody else's commit would therefore not merely lose its own change: it
+    ``replace_library`` replaces the complete logical library from one
+    in-memory snapshot, persisting only differences. A writer holding a snapshot
+    taken before somebody else's commit would not merely lose its own change: it
     would silently undo theirs. Callers that know which revision their snapshot
     came from say so, and get this instead of a quiet revert.
     """
@@ -151,24 +153,10 @@ _POOL_ACQUIRE_TIMEOUT_SEC = BUSY_TIMEOUT_MS / 1000
 
 
 class ConnectionPool:
-    """A small, hard-capped pool of interchangeable SQLite connections.
+    """A hard-capped pool of warm SQLite connections.
 
-    Replaces caching one connection per calling thread forever. Under gevent
-    the WSGI server spawns a fresh greenlet per request rather than reusing a
-    bounded pool of them, so "per thread" quietly became "per request": every
-    request that touched the database left one open connection and file
-    descriptor behind, for the life of the process. Over enough hours that
-    stopped being cosmetic — the pile of open handles started starving actual
-    reads and writes on the same file, which is what the "buffering forever"
-    incident this pool was built for actually was.
-
-    A connection is borrowed for the life of one request (see
-    `DatabaseManager._get_connection`, released via `request_scope.on_end`)
-    and returned to the pool rather than closed, so steady-state traffic still
-    reuses a warm, already-PRAGMA'd connection — opening one is not free, and
-    that cost is exactly what the budget in `tests/test_request_db_budget.py`
-    guards. What changes is the ceiling: no matter how many requests a
-    long-running process serves, live connections never exceed `max_size`.
+    Connections belong to active database blocks, not to threads or requests.
+    A caller returns its loan after commit/rollback, including outside HTTP.
     """
 
     def __init__(self, factory, max_size: int):
@@ -176,26 +164,44 @@ class ConnectionPool:
         self._max_size = max_size
         self._idle: "queue.Queue" = queue.Queue()
         self._created = 0
-        self._create_lock = threading.Lock()
+        self._available = threading.Condition()
 
     def acquire(self):
-        try:
-            return self._idle.get_nowait()
-        except queue.Empty:
-            pass
-        with self._create_lock:
-            if self._created < self._max_size:
-                self._created += 1
-                return self._factory()
-        try:
-            return self._idle.get(timeout=_POOL_ACQUIRE_TIMEOUT_SEC)
-        except queue.Empty:
-            raise TimeoutError(
-                f"Database connection pool exhausted ({self._max_size} in use)"
-            ) from None
+        deadline = time.monotonic() + _POOL_ACQUIRE_TIMEOUT_SEC
+        with self._available:
+            while True:
+                try:
+                    return self._idle.get_nowait()
+                except queue.Empty:
+                    pass
+                if self._created < self._max_size:
+                    self._created += 1
+                    try:
+                        return self._factory()
+                    except BaseException:
+                        self._created -= 1
+                        self._available.notify()
+                        raise
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"Database connection pool exhausted ({self._max_size} in use)"
+                    )
+                self._available.wait(remaining)
 
     def release(self, conn) -> None:
-        self._idle.put(conn)
+        with self._available:
+            self._idle.put(conn)
+            self._available.notify()
+
+    def discard(self, conn) -> None:
+        """Retire an unusable connection and wake a waiter to replace it."""
+        try:
+            conn.close()
+        finally:
+            with self._available:
+                self._created -= 1
+                self._available.notify()
 
     def stats(self) -> dict:
         """Point-in-time view for `/api/health`: how close this pool is to
@@ -251,11 +257,9 @@ class DatabaseManager:
         else:
             self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        # Borrowed from `_pool` for the life of one request/thread and given
-        # back rather than kept forever — see `ConnectionPool` and
-        # `_get_connection`. Thread-local because a sqlite3 connection may
-        # only be used from the OS thread that created it; under gevent that
-        # is one specific greenlet at a time, never two concurrently.
+        # Only an active nested database block keeps a local loan. With the
+        # engine's early gevent patch this local belongs to a greenlet; without
+        # the patch it belongs to a native thread.
         self._connections = threading.local()
         self._pool = ConnectionPool(self._open_connection, _POOL_MAX_SIZE)
 
@@ -263,19 +267,18 @@ class DatabaseManager:
 
     def _open_connection(self):
         conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_MS / 1000, check_same_thread=False)
-        # busy_timeout first: it is per-connection and always succeeds, and
-        # switching journal mode needs a lock. Without the timeout in place that
-        # switch fails immediately instead of waiting for a concurrent reader.
-        conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
         try:
-            # Note: Enable WAL mode for high concurrency
-            conn.execute("PRAGMA journal_mode=WAL")
-        except sqlite3.OperationalError:
-            # WAL belongs to the file, not the connection — another connection
-            # has already set it.
-            logger.debug("Could not set WAL on %s; already set by another connection", self.db_path)
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA foreign_keys=ON")
+            # busy_timeout first: switching journal mode can need a write lock.
+            conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+            except sqlite3.OperationalError:
+                logger.debug("Could not set WAL on %s; already set by another connection", self.db_path)
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+        except BaseException:
+            conn.close()
+            raise
         return conn
 
     def pool_stats(self) -> dict:
@@ -283,38 +286,41 @@ class DatabaseManager:
         connection leak before it hits every request as a `TimeoutError`."""
         return self._pool.stats()
 
+    @contextmanager
     def _get_connection(self):
-        """This thread's connection to the database, borrowed from the pool.
+        """Borrow for a database block, returning only after commit/rollback.
 
-        Returned rather than newly opened, so `with db._get_connection() as
-        conn:` keeps its existing meaning — sqlite3 connections commit on a
-        clean exit and roll back on an exception, and neither closes them.
-        Repeat calls within the same request return the identical connection;
-        `request_scope.on_end` returns it to `_pool` when the request ends, so
-        the next caller — same thread or not — gets a warm connection instead
-        of paying to open one. Outside a request (background jobs, the CLI)
-        nothing returns it: it stays pinned to that thread for the thread's
-        life, same as before this pool existed, which is correct for the
-        small, bounded thread pools those callers run on.
+        Nested blocks reuse the active loan and retain sqlite3's existing
+        transaction-context semantics (they are not savepoints). Only the
+        outer block returns the connection. No request scope is required.
         """
         existing = getattr(self._connections, "conn", None)
         if existing is not None:
-            return existing
+            with existing:
+                yield existing
+            return
 
         conn = self._pool.acquire()
         self._connections.conn = conn
-        self._release_at_request_end(conn)
-        return conn
-
-    def _release_at_request_end(self, conn) -> None:
-        from shared import request_scope
-
-        def _release() -> None:
-            if getattr(self._connections, "conn", None) is conn:
-                del self._connections.conn
-            self._pool.release(conn)
-
-        request_scope.on_end(_release)
+        try:
+            with conn:
+                yield conn
+        finally:
+            del self._connections.conn
+            try:
+                # sqlite3 normally leaves no transaction here. A failed
+                # commit/rollback must never pass dirty state to another job.
+                if conn.in_transaction:
+                    conn.rollback()
+                if conn.in_transaction:
+                    raise sqlite3.OperationalError("connection still has an open transaction")
+            except BaseException:
+                try:
+                    self._pool.discard(conn)
+                except BaseException:
+                    logger.exception("Could not close discarded SQLite connection")
+            else:
+                self._pool.release(conn)
 
     # ------------------------------------------------------------------
     # Schema setup helpers (static to keep _init_db readable)
@@ -860,6 +866,7 @@ class DatabaseManager:
                 name=excluded.name,
                 name_key=excluded.name_key,
                 updated_at=CURRENT_TIMESTAMP
+            WHERE artists.name IS NOT excluded.name OR artists.name_key IS NOT excluded.name_key
             """,
             ((artist.id, artist.name, artist.name_key) for artist in snapshot.artists),
         )
@@ -878,6 +885,13 @@ class DatabaseManager:
                 genre=excluded.genre,
                 is_compilation=excluded.is_compilation,
                 updated_at=CURRENT_TIMESTAMP
+            WHERE albums.title IS NOT excluded.title
+               OR albums.title_key IS NOT excluded.title_key
+               OR albums.album_artist_id IS NOT excluded.album_artist_id
+               OR albums.album_artist IS NOT excluded.album_artist
+               OR albums.year IS NOT excluded.year
+               OR albums.genre IS NOT excluded.genre
+               OR albums.is_compilation IS NOT excluded.is_compilation
             """,
             (
                 (
@@ -894,29 +908,19 @@ class DatabaseManager:
             ),
         )
 
-        conn.execute("DELETE FROM track_artists")
+        sync_rows(conn, 'track_artists', ('track_id', 'artist_id', 'position'), ('track_id', 'position'),
+                  ((link.track_id, identifier, position) for link in snapshot.tracks
+                   for position, identifier in enumerate(link.artist_ids)), delete_changed=True)
         conn.executemany(
-            "INSERT INTO track_artists (track_id, artist_id, position) VALUES (?, ?, ?)",
-            (
-                (link.track_id, identifier, position)
-                for link in snapshot.tracks
-                for position, identifier in enumerate(link.artist_ids)
-            ),
+            "UPDATE tracks SET album_id = ? WHERE id = ? AND album_id IS NOT ?",
+            ((link.album_id, link.track_id, link.album_id) for link in snapshot.tracks),
         )
-        conn.executemany(
-            "UPDATE tracks SET album_id = ? WHERE id = ?",
-            ((link.album_id, link.track_id) for link in snapshot.tracks),
-        )
-
-        incoming_ids = [track.id for track in track_list]
-        if incoming_ids:
-            placeholders = ",".join("?" for _ in incoming_ids)
-            conn.execute(
-                f"DELETE FROM track_user_state WHERE track_id NOT IN ({placeholders})",
-                incoming_ids,
-            )
-        else:
-            conn.execute("DELETE FROM track_user_state")
+        # Also used during migrations; preserve pruning semantics without a
+        # parameter per incoming song.
+        with staged_rows(conn, 'library_tracks', ('track_id',), ('track_id',),
+                         ((track.id,) for track in track_list)) as incoming:
+            conn.execute(f'DELETE FROM track_user_state WHERE NOT EXISTS '
+                         f'(SELECT 1 FROM {incoming} n WHERE n.track_id=track_user_state.track_id)')
 
         conn.execute("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE album_id IS NOT NULL)")
         conn.execute("""
@@ -926,16 +930,39 @@ class DatabaseManager:
         """)
 
     @classmethod
-    def _backfill_catalog_tables(cls, conn) -> None:
-        """Populate new catalog tables once when upgrading a flat legacy DB."""
-        has_tracks = conn.execute("SELECT 1 FROM tracks LIMIT 1").fetchone() is not None
-        has_links = conn.execute("SELECT 1 FROM track_artists LIMIT 1").fetchone() is not None
-        if not has_tracks or has_links:
+    def _sync_catalog_projection(cls, conn) -> None:
+        """Rebuild artists and albums once when the projection rules changed.
+
+        Also when tracks have no catalog links at all: a flat pre-catalog
+        database, or catalog tables recreated empty. Otherwise two small reads.
+        Tracks are projected in manifest order, as a save would, because an
+        album takes the first year and genre it meets.
+        """
+        from shared.library_catalog import PROJECTION_VERSION
+
+        row = conn.execute(
+            "SELECT value FROM library_info WHERE key = 'catalog_projection_version'"
+        ).fetchone()
+        # Podcast episodes never get links, so only songs count here.
+        unlinked = conn.execute(
+            f"SELECT EXISTS (SELECT 1 FROM tracks t WHERE {_MUSIC_ONLY}) "
+            "AND NOT EXISTS (SELECT 1 FROM track_artists)"
+        ).fetchone()[0]
+        if row is not None and row[0] == str(PROJECTION_VERSION) and not unlinked:
             return
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT * FROM tracks").fetchall()
-        tracks = [cls._flat_track_from_row(row) for row in rows]
-        cls._replace_catalog_projection(conn, tracks)
+        cursor = conn.execute(
+            "SELECT t.* FROM tracks t LEFT JOIN library_tracks l ON l.track_id = t.id "
+            "ORDER BY l.position IS NULL, l.position, t.rowid"
+        )
+        columns = [description[0] for description in cursor.description]
+        cls._replace_catalog_projection(
+            conn, (cls._flat_track_from_row(track, columns) for track in cursor)
+        )
+        conn.execute(
+            "INSERT INTO library_info (key, value) VALUES ('catalog_projection_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(PROJECTION_VERSION),),
+        )
 
     @staticmethod
     def _migrate_related_mix_cache(conn):
@@ -999,7 +1026,14 @@ class DatabaseManager:
             self._create_discovery_tables(conn)
             self._create_catalog_tables(conn)
             self._create_performance_indexes(conn)
-            self._backfill_catalog_tables(conn)
+            self._sync_catalog_projection(conn)
+            from shared.library_changes import install
+            install(conn)
+            from shared import library_search
+            library_search.install(conn)
+            # Builds the index once after an upgrade or a Python/Unicode change;
+            # otherwise a single state read.
+            library_search.sync(conn)
             conn.execute("COMMIT")
         except Exception as e:
             conn.execute("ROLLBACK")
@@ -1030,7 +1064,7 @@ class DatabaseManager:
         if id_replacements:
             from shared.artwork import artwork_store
             artwork_store().remap(id_replacements)
-        with self._get_connection() as conn:
+        with self._get_connection() as conn, disk_staging(conn):
             conn.execute("BEGIN IMMEDIATE")
             try:
                 if expected_revision is not None:
@@ -1051,6 +1085,7 @@ class DatabaseManager:
                     VALUES (?, ?)
                     ON CONFLICT(old_track_id) DO UPDATE SET
                         new_track_id=excluded.new_track_id
+                    WHERE track_id_aliases.new_track_id IS NOT excluded.new_track_id
                     """,
                     aliases.items(),
                 )
@@ -1073,95 +1108,20 @@ class DatabaseManager:
                     ).fetchone()
                     if dated is not None and dated["added_at"]:
                         replacement_added_at[new_id] = dated["added_at"]
-                # Note: Update version
-                conn.execute("INSERT OR REPLACE INTO library_info (key, value) VALUES ('version', ?)", (str(metadata.version),))
-                
-                # Note: 1. Get ids of tracks we are about to sync
-                incoming_ids = [t.id for t in metadata.tracks]
-                
-                # Note: 2. Prune tracks that are no longer in the manifest
-                if incoming_ids:
-                    placeholders = ','.join(['?'] * len(incoming_ids))
-                    conn.execute(f"DELETE FROM tracks WHERE id NOT IN ({placeholders})", incoming_ids)
-                else:
-                    conn.execute("DELETE FROM tracks")
-
-                # Note: 3. Batch update tracks
-                for track in metadata.tracks:
-                    # Note: Column order MUST match the tuple below exactly
-                    conn.execute("""
-                        INSERT INTO tracks (
-                            id, title, artist, album, duration, file_hash, 
-                            original_filename, compressed, file_size, bitrate, 
-                            format, cover_art_key, year, genre, track_number, 
-                            disc_number, disc_total, is_compilation, media_kind,
-                            podcast_feed_id, podcast_episode_guid, podcast_rss_url, artists_json,
-                            is_local, local_path, local_mtime_ns, musicbrainz_id, isrc, album_artist,
-                            cover_source, metadata_modified_by_user, youtube_id,
-                            audio_quality, audio_source, audio_source_url,
-                            audio_license_url, audio_identity_verified, added_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(id) DO UPDATE SET
-                            title=excluded.title,
-                            artist=excluded.artist,
-                            album=excluded.album,
-                            duration=excluded.duration,
-                            file_hash=excluded.file_hash,
-                            original_filename=excluded.original_filename,
-                            compressed=excluded.compressed,
-                            file_size=excluded.file_size,
-                            bitrate=excluded.bitrate,
-                            format=excluded.format,
-                            cover_art_key=excluded.cover_art_key,
-                            year=excluded.year,
-                            genre=excluded.genre,
-                            track_number=excluded.track_number,
-                            disc_number=excluded.disc_number,
-                            disc_total=excluded.disc_total,
-                            is_compilation=excluded.is_compilation,
-                            media_kind=excluded.media_kind,
-                            podcast_feed_id=excluded.podcast_feed_id,
-                            podcast_episode_guid=excluded.podcast_episode_guid,
-                            podcast_rss_url=excluded.podcast_rss_url,
-                            artists_json=excluded.artists_json,
-                            is_local=excluded.is_local,
-                            local_path=excluded.local_path,
-                            local_mtime_ns=excluded.local_mtime_ns,
-                            musicbrainz_id=excluded.musicbrainz_id,
-                            isrc=excluded.isrc,
-                            album_artist=excluded.album_artist,
-                            cover_source=excluded.cover_source,
-                            metadata_modified_by_user=excluded.metadata_modified_by_user,
-                            youtube_id=excluded.youtube_id,
-                            audio_quality=excluded.audio_quality,
-                            audio_source=excluded.audio_source,
-                            audio_source_url=excluded.audio_source_url,
-                            audio_license_url=excluded.audio_license_url,
-                            audio_identity_verified=excluded.audio_identity_verified,
-                            -- First seen wins. A manifest that has forgotten the
-                            -- date (an older export, a remote copy) must never be
-                            -- able to redate a song the library already holds.
-                            added_at=COALESCE(tracks.added_at, excluded.added_at)
-                    """, (
-                        track.id, track.title, track.artist, track.album,
-                        track.duration, track.file_hash, track.original_filename, 
-                        track.compressed, track.file_size, track.bitrate, track.format, 
-                        track.cover_art_key, track.year, track.genre, track.track_number, 
-                        track.disc_number, track.disc_total, track.is_compilation, track.media_kind,
-                        track.podcast_feed_id, track.podcast_episode_guid, track.podcast_rss_url,
-                        json.dumps(track.artists, ensure_ascii=False) if track.artists is not None else None,
-                        track.is_local, track.local_path, track.local_mtime_ns,
-                        track.musicbrainz_id, track.isrc, track.album_artist,
-                        track.cover_source, track.metadata_modified_by_user, track.youtube_id,
-                        track.audio_quality, track.audio_source, track.audio_source_url,
-                        track.audio_license_url, track.audio_identity_verified,
-                        # A replaced id keeps the date of the row it replaced.
-                        # NULL is left as NULL rather than defaulted to now:
-                        # undated rows are what `backfill_added_at` recognises,
-                        # and stamping them here would date a library that has
-                        # been around for months with the moment of one save.
-                        replacement_added_at.get(track.id) or track.added_at,
-                    ))
+                conn.execute("INSERT INTO library_info (key, value) VALUES ('version', ?) "
+                             "ON CONFLICT(key) DO UPDATE SET value=excluded.value "
+                             "WHERE library_info.value IS NOT excluded.value", (str(metadata.version),))
+                # Stage only IDs/order, avoiding a full manifest-sized IN list.
+                with staged_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
+                                 ((t.id, i) for i, t in enumerate(metadata.tracks))) as incoming:
+                    catalog_dirty = conn.execute(
+                        f'SELECT 1 FROM {incoming} n LEFT JOIN library_tracks l ON l.track_id=n.track_id '
+                        'WHERE l.position IS NOT n.position LIMIT 1').fetchone() is not None
+                    removed = conn.execute(
+                        f'DELETE FROM tracks WHERE NOT EXISTS (SELECT 1 FROM {incoming} n WHERE n.track_id=tracks.id)').rowcount
+                    catalog_dirty |= bool(removed)
+                order_changed = catalog_dirty
+                catalog_dirty |= sync_tracks(conn, metadata.tracks, replacement_added_at)
 
                 for new_id, state in replacement_state.items():
                     conn.execute(
@@ -1187,26 +1147,17 @@ class DatabaseManager:
                             state["updated_at"],
                         ),
                     )
-                self._replace_catalog_projection(conn, metadata.tracks)
+                if catalog_dirty:
+                    self._replace_catalog_projection(conn, metadata.tracks)
 
-                conn.execute("DELETE FROM library_tracks")
-                conn.executemany(
-                    "INSERT INTO library_tracks (track_id, position) VALUES (?, ?)",
-                    ((track.id, position) for position, track in enumerate(metadata.tracks)),
-                )
-
-                conn.execute("DELETE FROM playlist_tracks")
-                conn.execute("DELETE FROM playlists")
+                sync_rows(conn, 'library_tracks', ('track_id', 'position'), ('track_id',),
+                          ((t.id, i) for i, t in enumerate(metadata.tracks)))
                 playlist_map = metadata.playlists if isinstance(metadata.playlists, dict) else {}
-                for playlist_position, (name, track_ids) in enumerate(playlist_map.items()):
-                    conn.execute(
-                        "INSERT INTO playlists (name, position) VALUES (?, ?)",
-                        (name, playlist_position),
-                    )
-                    conn.executemany(
-                        "INSERT INTO playlist_tracks (playlist_name, position, track_id) VALUES (?, ?, ?)",
-                        ((name, position, track_id) for position, track_id in enumerate(track_ids)),
-                    )
+                sync_rows(conn, 'playlists', ('name', 'position'), ('name',),
+                          ((name, i) for i, name in enumerate(playlist_map)))
+                sync_rows(conn, 'playlist_tracks', ('playlist_name', 'position', 'track_id'),
+                          ('playlist_name', 'position'),
+                          ((name, i, track_id) for name, ids in playlist_map.items() for i, track_id in enumerate(ids)))
 
                 previous = conn.execute(
                     "SELECT revision FROM library_state WHERE singleton = 1"
@@ -1234,6 +1185,10 @@ class DatabaseManager:
                     json.dumps(metadata.podcast_subscriptions, ensure_ascii=False),
                     json.dumps(metadata.podcast_episode_cache, ensure_ascii=False),
                 ))
+                from shared.library_changes import sync_source
+                sync_source(conn, metadata, order_changed)
+                from shared import library_search
+                library_search.sync(conn)
                 conn.execute("COMMIT")
                 return revision
             except Exception as e:
@@ -1250,6 +1205,40 @@ class DatabaseManager:
                 "SELECT canonical FROM library_state WHERE singleton = 1"
             ).fetchone()
             return bool(row and row[0])
+
+    def public_source(self):
+        from shared.library_changes import source
+        with self._get_connection() as conn:
+            conn.execute('BEGIN')
+            try:
+                return source(conn)
+            finally:
+                conn.rollback()
+
+    @contextmanager
+    def library_search_candidates(self, tracks, q_folded: str, q_tokens: frozenset):
+        """Library-ordered rows covering every local search match, or None.
+
+        None means the index cannot be proven to describe ``tracks`` (unsaved
+        edits, an invalid or outdated index); callers then scan the model.
+        The rows share one read snapshot and must be consumed inside the block.
+        """
+        from shared.library_search import candidates
+        with self._get_connection() as conn:
+            conn.execute('BEGIN')
+            try:
+                yield candidates(conn, tracks, q_folded, q_tokens)
+            finally:
+                conn.rollback()
+
+    def public_changes(self, previous, expected, artwork_ids, identities):
+        from shared.library_changes import affected
+        with self._get_connection() as conn:
+            conn.execute('BEGIN')
+            try:
+                return affected(conn, previous, expected, artwork_ids, identities)
+            finally:
+                conn.rollback()
 
     def get_library_revision(self) -> int:
         with self._get_connection() as conn:

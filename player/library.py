@@ -4,10 +4,13 @@ Handles canonical SQLite state, portable exports, URLs, and playlists.
 """
 
 import json
+import logging
 import os
 import threading
+import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
+from shared.atomic_file import copy_of, publish, text_pieces
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider, merge_playlist_maps, merge_podcast_subscriptions
 from shared.constants import LIBRARY_METADATA_FILENAME
 from shared.path_resolver import resolve_local_track_path, track_storage_key
@@ -15,6 +18,9 @@ from shared.app_config import get_output_dir
 from shared.runtime import get_config_dir
 from shared.track_identity import preserve_track_identity
 from setup_tool.provider_factory import StorageProviderFactory
+
+logger = logging.getLogger(__name__)
+
 
 def _output_dir_for_library() -> Optional[Path]:
     """Return OUTPUT_DIR so player and API both see the path. Checks config dir first (same place we save from webapp)."""
@@ -91,6 +97,10 @@ class LibraryManager:
             self._log(f"Could not date pre-existing tracks: {exc}")
         self._library_revision = self.db.get_library_revision()
         self._lock = threading.Lock()
+        # Exports copy the first file they publish into the others; two exports
+        # of this library must not interleave (Windows cannot replace a file
+        # another export is still reading).
+        self._export_lock = threading.Lock()
         # Paths whose write failed once (e.g. read-only music mount). Logged once,
         # then skipped, so a read-only output dir doesn't spam every save.
         self._unwritable_paths: set[str] = set()
@@ -185,44 +195,59 @@ class LibraryManager:
                     pass
 
     @staticmethod
-    def _atomic_write(path: Path, content: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        except Exception:
-            try:
-                os.unlink(temporary)
-            except OSError:
-                pass
-            raise
+    def _atomic_write(path: Path, fill: Callable) -> None:
+        """One published export copy; the seam tests use to make a copy fail."""
+        publish(path, fill)
 
-    def _export_metadata(self, json_str: str) -> None:
-        """Best-effort portable exports after SQLite has committed."""
+    def _export_metadata(self, metadata: LibraryMetadata) -> None:
+        """Best-effort portable exports after SQLite has committed.
+
+        The library is serialized once, in pieces, into the first writable
+        destination; the other copies and the storage provider's are byte
+        copies of that file. Memory stays bounded by one block of tracks rather
+        than the whole document, and every copy has the same content.
+        """
         destinations = [self.manifest_path]
         out_dir = None if _music_dir_manifest_is_shared() else _output_dir_for_library()
         if out_dir:
             destinations.append(Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME)
 
-        for path in destinations:
-            key = str(path)
-            if key in self._unwritable_paths:
-                continue
-            try:
-                self._atomic_write(path, json_str)
-            except OSError as exc:
-                self._unwritable_paths.add(key)
-                self._log(f"Library export not writable, skipping {path}: {exc}")
+        with self._export_lock:
+            started = time.perf_counter()
+            source: Optional[Path] = None
+            for path in destinations:
+                key = str(path)
+                if key in self._unwritable_paths:
+                    continue
+                try:
+                    if source is None:
+                        self._atomic_write(path, text_pieces(metadata.iter_json()))
+                        source = path
+                    else:
+                        self._atomic_write(path, copy_of(source))
+                except OSError as exc:
+                    self._unwritable_paths.add(key)
+                    self._log(f"Library export not writable, skipping {path}: {exc}")
 
-        if self.provider:
-            try:
-                self.provider.save_library(self.metadata)
-            except Exception as exc:
-                self._log(f"Remote library export failed: {exc}")
+            if self.provider:
+                try:
+                    if source is not None:
+                        self.provider.save_library_file(source)
+                    else:
+                        self.provider.save_library(metadata)
+                except Exception as exc:
+                    self._log(f"Remote library export failed: {exc}")
+
+            if source is not None:
+                # Evidence for whether exports are worth coalescing on this instance.
+                try:
+                    size = source.stat().st_size
+                except OSError:
+                    size = -1
+                logger.info("Exported library.json: %d bytes, %d local copies%s, %.1f ms",
+                            size, sum(str(path) not in self._unwritable_paths for path in destinations),
+                            " + storage provider" if self.provider else "",
+                            (time.perf_counter() - started) * 1000)
 
     def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None) -> bool:
         """
@@ -248,7 +273,7 @@ class LibraryManager:
                 )
                 # replace_library is also the alias-normalization boundary, so
                 # serialize only after it has moved every durable reference.
-                self._export_metadata(self.metadata.to_json())
+                self._export_metadata(self.metadata)
                 return True
             except StaleLibraryWrite as e:
                 self._log(f"Library changed underneath this save, not writing: {e}")
@@ -286,7 +311,7 @@ class LibraryManager:
                     return False
             else:
                 self._library_revision = self.db.get_library_revision()
-                self._export_metadata(canonical.to_json())
+                self._export_metadata(canonical)
             return True
 
         # A per-user manifest is the authoritative legacy source: it names this

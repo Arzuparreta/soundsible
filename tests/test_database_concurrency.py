@@ -82,23 +82,26 @@ def test_schema_is_reconciled_when_the_file_changes_underneath(tmp_path):
 def test_one_shared_manager_serves_many_threads(tmp_path):
     """`instance_db()` hands the same manager to every caller.
 
-    Its connections are thread-local, so eight threads driving one manager must
-    each get their own — sharing a sqlite3 connection across threads raises
-    ProgrammingError, and reopening per call is the cost this replaced.
+    Its active loans are thread-local, so eight simultaneous borrowers must
+    each get their own connection so their transactions cannot interfere.
+    Sequential operations still reuse warm connections across threads.
     """
     path = tmp_path / "shared.db"
     manager = DatabaseManager(str(path))
     failures: list[BaseException] = []
     connections: set[int] = set()
     connections_lock = threading.Lock()
+    borrowed = threading.Barrier(8)
 
     def worker(n: int) -> None:
         try:
             for i in range(20):
                 manager.set_related_mix(f"vid{n:03d}_{i:04d}", [{"id": "x", "title": "T"}])
                 assert manager.get_related_mix(f"vid{n:03d}_{i:04d}") is not None
-            with connections_lock:
-                connections.add(id(manager._get_connection()))
+            with manager._get_connection() as conn:
+                with connections_lock:
+                    connections.add(id(conn))
+                borrowed.wait(timeout=5)
         except BaseException as exc:  # noqa: BLE001 — the assertion reports it
             failures.append(exc)
 
@@ -115,11 +118,14 @@ def test_one_shared_manager_serves_many_threads(tmp_path):
 def test_repeated_calls_on_one_thread_reuse_a_single_connection(tmp_path):
     manager = DatabaseManager(str(tmp_path / "reuse.db"))
 
-    first = manager._get_connection()
+    with manager._get_connection() as conn:
+        first = conn
     for i in range(10):
         manager.set_related_mix(f"vid{i}", [{"id": "x", "title": "T"}])
 
-    assert manager._get_connection() is first
+    with manager._get_connection() as conn:
+        assert conn is first
+    assert manager.pool_stats()["idle"] == manager.pool_stats()["created"]
 
 
 def test_concurrent_writers_do_not_hit_database_is_locked(tmp_path):

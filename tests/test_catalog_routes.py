@@ -1271,3 +1271,69 @@ def test_library_is_loaded_once_per_request(monkeypatch):
         catalog_routes._library_tracks()
 
     assert calls["n"] == 1
+
+
+@pytest.mark.parametrize("query", ["", "rosalia", "in rainbows", "rainbows in", "live", "nude", "closer nine", "a", "absent"])
+def test_local_selection_matches_full_sort_reference(monkeypatch, query):
+    import random
+    import runpy
+    from types import FunctionType
+
+    frozen = runpy.run_path(str(_ROOT / "tests/fixtures/local_catalog_reference.py"))["_local_catalog"]
+    reference = FunctionType(frozen.__code__, vars(catalog_routes))
+    rng = random.Random(47)
+    tracks = [
+        _track_full(
+            f"t{rng.randrange(100):03}-{i}",
+            rng.choice(["Nude", "In Rainbows", "Rosalía (Official Video)", "Live", "Closer", ""]),
+            rng.choice(["Rosalía", "Rosalia", "Radiohead", "Nine Inch Nails", ""]),
+            rng.choice(["In Rainbows", "Live", "Nude", "", "Álbum"]),
+        ) for i in range(500)
+    ]
+    # Stable ties and fallback metadata must preserve the first representative.
+    tracks[1].id = tracks[0].id
+    tracks[1].title = tracks[0].title
+    tracks[1].artist = tracks[0].artist
+    tracks[1].album = tracks[0].album
+    tracks[2].artist = ""
+    tracks[2].album_artist = "Rosalía"
+    monkeypatch.setattr(catalog_routes, "_library_tracks", lambda: tracks)
+    assert catalog_routes._local_catalog(query, 1) == reference(query, 1)
+    tracks.reverse()
+    assert catalog_routes._local_catalog(query, 100) == reference(query, 100)
+
+
+def test_local_scores_reuse_fields_without_retaining_previous_library(monkeypatch):
+    tracks = [_track_full(str(i), f"Song {i}", "Rosalía", "Live") for i in range(500)]
+    monkeypatch.setattr(catalog_routes, "_library_tracks", lambda: tracks)
+    original = catalog_routes._score_folded
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(args[2])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(catalog_routes, "_score_folded", counted)
+    assert catalog_routes._local_catalog("rosalia", 30)
+    assert calls.count("rosalia") == 1
+    assert calls.count("live") == 1
+    for track in tracks:
+        track.artist = "Changed"
+    assert catalog_routes._local_catalog("rosalia", 30) == []
+
+
+def test_local_selection_handles_cache_eviction_and_concurrent_queries(monkeypatch):
+    import runpy
+    from concurrent.futures import ThreadPoolExecutor
+    from types import FunctionType
+
+    frozen = runpy.run_path(str(_ROOT / "tests/fixtures/local_catalog_reference.py"))["_local_catalog"]
+    reference = FunctionType(frozen.__code__, vars(catalog_routes))
+    tracks = [_track_full(str(i), f"Song {i}", f"Artist {i}", f"Album {i}") for i in range(5000)]
+    tracks.extend([_track_full("last", "Song 0", "Artist 0", "Album 0")])
+    monkeypatch.setattr(catalog_routes, "_library_tracks", lambda: tracks)
+    queries = ["artist", "album 0", "song", "absent"]
+    expected = [reference(query, 30) for query in queries]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        actual = list(pool.map(lambda query: catalog_routes._local_catalog(query, 30), queries))
+    assert actual == expected

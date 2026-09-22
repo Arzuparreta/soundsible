@@ -99,3 +99,50 @@ def test_streaming_route_can_release_request_resources_before_teardown():
     finally:
         request_scope.end(token)
     assert released == ["connection"]
+
+
+def test_library_request_leaves_all_managers_idle(client):
+    assert client.get("/api/library").status_code == 200
+    for manager in database._MANAGERS.values():
+        stats = manager.pool_stats()
+        assert stats["idle"] == stats["created"]
+
+
+def test_streaming_does_not_hold_connection_until_response_closes(tmp_path):
+    from flask import Flask, Response, g, stream_with_context
+
+    db = database.DatabaseManager(str(tmp_path / "stream.db"))
+    app = Flask(__name__)
+
+    @app.before_request
+    def begin():
+        g.token = request_scope.begin()
+
+    @app.teardown_request
+    def end(_error):
+        token = g.pop("token", None)
+        if token is not None:
+            request_scope.end(token)
+
+    @app.get("/")
+    def stream():
+        db.get_library_revision()
+
+        def chunks():
+            # stream_with_context keeps the request alive across iteration.
+            stats = db.pool_stats()
+            assert stats["idle"] == stats["created"]
+            yield b"first"
+            db.get_library_revision()
+            stats = db.pool_stats()
+            assert stats["idle"] == stats["created"]
+            yield b"second"
+
+        return Response(stream_with_context(chunks()))
+
+    response = app.test_client().get("/", buffered=False)
+    try:
+        assert list(response.response) == [b"first", b"second"]
+    finally:
+        response.close()
+    assert db.pool_stats()["idle"] == db.pool_stats()["created"]

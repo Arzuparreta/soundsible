@@ -7,6 +7,8 @@ or any other S3-compatible storage service.
 """
 
 from abc import ABC, abstractmethod
+import os
+from pathlib import Path
 from typing import Optional, Callable, Dict, Any, List
 from dataclasses import dataclass
 
@@ -242,6 +244,23 @@ class S3StorageProvider(ABC):
             from shared.constants import LIBRARY_METADATA_FILENAME
             metadata_json = metadata.to_json()
             return self.upload_json(metadata_json, LIBRARY_METADATA_FILENAME)
+        except Exception as e:
+            print(f"Failed to save library: {e}")
+            return False
+
+    def save_library_file(self, path: Path) -> bool:
+        """Save a library.json the caller already serialized to `path`.
+
+        Saves serializing the whole library a second time. The file was written
+        in text mode, so platform line endings are turned back into the plain
+        newlines `save_library` would have uploaded.
+        """
+        try:
+            from shared.constants import LIBRARY_METADATA_FILENAME
+            text = Path(path).read_bytes().decode("utf-8")
+            if os.linesep != "\n":
+                text = text.replace(os.linesep, "\n")
+            return self.upload_json(text, LIBRARY_METADATA_FILENAME)
         except Exception as e:
             print(f"Failed to save library: {e}")
             return False

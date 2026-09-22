@@ -1,9 +1,9 @@
+from hashlib import sha256
 from pathlib import Path
 """
 Library, metadata, playlists, favourites, and cover routes.
 """
 
-import json
 import logging
 import os
 import tempfile
@@ -99,6 +99,21 @@ def _get_api():
     }
 
 
+def _library_response(response, revision):
+    response.set_etag(revision, weak=True)
+    response.headers["Cache-Control"] = "private, no-cache"
+    response.vary.update(("Cookie", "X-Soundsible-Admin-Token"))
+    if request.if_none_match.contains_weak(revision):
+        response.status_code = 304
+        response.set_data(b"")
+    return response
+
+
+def _annotation_revisions(artwork):
+    from shared.loudness import LoudnessStore
+    return artwork.public_revision(), LoudnessStore().public_revision()
+
+
 @library_bp.route("/api/library", methods=["GET"])
 def get_library():
     api = _get_api()
@@ -106,15 +121,113 @@ def get_library():
     lib.refresh_if_stale()
     if not lib.metadata:
         lib.sync_library()
-    if lib.metadata:
-        payload = json.loads(lib.metadata.to_json())
-        # Loudness rides the library the player already fetches, so levelling
-        # costs no extra request and is available before the first track loads.
-        annotate_tracks(payload.get("tracks") or [])
-        from shared.artwork import artwork_store
-        artwork_store().annotate(payload.get("tracks") or [])
-        return jsonify(payload)
-    return jsonify({"error": "Library not loaded"}), 404
+    if not lib.metadata:
+        return jsonify({"error": "Library not loaded"}), 404
+
+    from shared.api.library_revision import fingerprint, validators
+    from shared.artwork import artwork_store
+    from shared.user_context import current_user_id
+    from flask import Response
+
+    artwork = artwork_store()
+    user_id = current_user_id() or ""
+    dependencies = None
+    source_fingerprint = None
+    try:
+        # Empty manifests have no annotation dependencies or lookup cost.
+        dependencies = _annotation_revisions(artwork) if lib.metadata.tracks else ()
+        if request.if_none_match:
+            source_fingerprint = fingerprint(lib.metadata)
+            key = sha256(repr((user_id, source_fingerprint, dependencies)).encode()).hexdigest()
+            cached = validators.get(key)
+            if cached and request.if_none_match.contains_weak(cached):
+                return _library_response(Response(), cached)
+    except Exception:
+        # An unavailable dependency or unsupported model disables only the
+        # shortcut. Loudness remains best effort, just as on the full path.
+        dependencies = None
+
+    from shared.api import library_incremental
+    if request.args.get("delta") == "1":
+        try:
+            partial = library_incremental.try_delta(
+                lib, artwork, user_id, request.args.get("since"), dependencies, source_fingerprint)
+            if partial is not None:
+                return partial
+        except Exception:
+            logger.debug("Incremental library proof unavailable; using full comparison", exc_info=True)
+
+    payload = lib.metadata.to_public_dict()
+    snapshot_fingerprint = None
+    if dependencies is not None:
+        try:
+            # Cache under the actual detached content, not the earlier mutable
+            # model. A concurrent metadata edit then cannot mislabel this ETag.
+            snapshot_fingerprint = fingerprint(payload)
+        except Exception:
+            pass
+    loudness_ok = annotate_tracks(payload.get("tracks") or [])
+    artwork.annotate(payload.get("tracks") or [])
+    wants_delta = request.args.get("delta") == "1"
+    base = request.args.get("since") if wants_delta else None
+    if base and len(base) > 128:
+        base = None
+    incremental_state = None
+    if snapshot_fingerprint is not None and loudness_ok is True:
+        try:
+            incremental_state = library_incremental.prepare(lib, artwork, dependencies, snapshot_fingerprint)
+        except Exception:
+            logger.debug("Canonical public source unavailable", exc_info=True)
+    response = None
+    signature = None
+    if incremental_state is not None:
+        # A proven source needs no serialized-body hash or legacy row history.
+        revision = library_incremental.revision_for(user_id, incremental_state)
+        response = jsonify(payload)
+        full_size = len(response.get_data())
+    else:
+        if base:
+            from shared.api.library_serialization import compact_signature
+            signature = compact_signature(payload, user_id)
+        if signature is None:
+            response = jsonify(payload)
+            digest = sha256(user_id.encode() + b"\0")
+            digest.update(response.get_data())
+            revision, full_size = digest.hexdigest(), len(response.get_data())
+        else:
+            revision, full_size = signature
+    if snapshot_fingerprint is not None and loudness_ok is True:
+        try:
+            # A concurrent annotation commit must never tag a mixed snapshot
+            # with either the old or new dependency token.
+            current_dependencies = _annotation_revisions(artwork) if payload.get("tracks") else ()
+            if current_dependencies == dependencies:
+                key = sha256(repr((user_id, snapshot_fingerprint, dependencies)).encode()).hexdigest()
+                validators.put(key, revision)
+        except Exception:
+            pass
+    if wants_delta and incremental_state is not None:
+        try:
+            library_incremental.remember(user_id, revision, incremental_state,
+                                         {k: v for k, v in payload.items() if k != 'tracks'})
+        except Exception:
+            logger.debug("Incremental base unavailable; sending full snapshot", exc_info=True)
+    elif wants_delta:
+        try:
+            from shared.api.library_deltas import exchange
+            delta = exchange(user_id, revision, payload, base)
+            if delta is not None:
+                candidate = jsonify(delta)
+                if len(candidate.get_data()) < full_size:
+                    # A delta is a representation of a transition, not the full
+                    # resource: its target revision is in the body, not ETag.
+                    candidate.headers["Cache-Control"] = "private, no-store"
+                    return candidate
+        except Exception:
+            logger.debug("Library delta history unavailable; sending full snapshot", exc_info=True)
+    if response is None:
+        response = jsonify(payload)
+    return _library_response(response, revision)
 
 
 @library_bp.route("/api/library/youtube-ids", methods=["GET"])

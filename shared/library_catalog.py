@@ -19,6 +19,13 @@ from shared.models import Track
 
 
 _CATALOG_NAMESPACE = uuid.UUID("5274f9d0-7ca4-5a61-9234-cdf923fd8e5d")
+
+#: Bump whenever the same tracks would project differently: the rules in this
+#: module, or the SQL in `DatabaseManager._replace_catalog_projection`. A save
+#: rebuilds artists and albums only when a song's catalog fields change, so
+#: without a bump existing libraries keep the old projection until then; with
+#: one, each rebuilds once at the next engine start.
+PROJECTION_VERSION = 1
 _WHITESPACE = re.compile(r"\s+")
 _VARIOUS_ARTISTS = "Various Artists"
 

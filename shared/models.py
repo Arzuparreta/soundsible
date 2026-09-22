@@ -5,8 +5,9 @@ This module defines the core data structures used throughout the platform
 for representing music tracks, library organization, and synchronization.
 """
 
-from dataclasses import dataclass, asdict, field
-from typing import List, Dict, Optional, Any, Literal
+from copy import deepcopy
+from dataclasses import dataclass, asdict, field, fields
+from typing import List, Dict, Iterator, Optional, Any, Literal
 from enum import Enum
 import json
 import uuid
@@ -111,6 +112,18 @@ class Track:
         """Convert track to dictionary."""
         return asdict(self)
     
+    def to_public_dict(self) -> Dict[str, Any]:
+        """Detached portable metadata, excluding machine-local scan fields."""
+        result = {}
+        for item in fields(self):
+            if item.name in {"local_path", "local_mtime_ns"}:
+                continue
+            value = getattr(self, item.name)
+            # Track fields are scalars except structured performer names.
+            # Copy mutable values without asdict's recursive work on scalars.
+            result[item.name] = value if isinstance(value, (str, int, float, bool, type(None))) else deepcopy(value)
+        return result
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Track':
         """Create Track from dictionary, filtering unknown keys."""
@@ -307,36 +320,53 @@ class LibraryMetadata:
     # feed_id -> {"fetched_at": iso, "episodes": [ {...}, ... ]}
     podcast_episode_cache: Dict[str, Any] = field(default_factory=dict)
     
-    def to_json(self, indent: int = 2) -> str:
+    def to_public_dict(self) -> Dict[str, Any]:
+        """Build a detached payload shared by HTTP and portable JSON exports.
+
+        Annotations and callers may mutate this snapshot without modifying the
+        canonical model. Machine-local scan paths/fingerprints never travel.
         """
-        Serialize library metadata to JSON string.
-        
-        Args:
-            indent: JSON indentation level
-            
-        Returns:
-            JSON string representation
-        """
-        # Machine-local scan locations/fingerprints must never travel to another
-        # installation through library.json.
-        data = {
+        return self._public_fields([track.to_public_dict() for track in self.tracks])
+
+    def _public_fields(self, tracks: Any) -> Dict[str, Any]:
+        # One definition of the public keys and their order, for both encoders.
+        return {
             "version": self.version,
-            "tracks": [
-                {
-                    k: v
-                    for k, v in track.to_dict().items()
-                    if k not in {"local_path", "local_mtime_ns"}
-                }
-                for track in self.tracks
-            ],
-            "playlists": self.playlists,
-            "settings": self.settings,
+            "tracks": tracks,
+            "playlists": deepcopy(self.playlists),
+            "settings": deepcopy(self.settings),
             "last_updated": self.last_updated,
-            "podcast_subscriptions": list(self.podcast_subscriptions),
-            "podcast_episode_cache": dict(self.podcast_episode_cache),
+            "podcast_subscriptions": deepcopy(list(self.podcast_subscriptions)),
+            "podcast_episode_cache": deepcopy(dict(self.podcast_episode_cache)),
         }
-        return json.dumps(data, indent=indent)
-    
+
+    def to_json(self, indent: int = 2) -> str:
+        """Serialize portable library metadata to JSON."""
+        return json.dumps(self.to_public_dict(), indent=indent)
+
+    def iter_json(self, chunk: int = 128) -> Iterator[str]:
+        """`to_json()` in pieces: the same text, without the whole document in memory.
+
+        Header values are encoded as `to_json()` encodes them. Tracks are encoded
+        `chunk` at a time and moved one indentation level deeper; JSON escapes
+        newlines inside strings, so every newline in an encoded block is layout.
+        """
+        tracks = list(self.tracks)
+        for index, (key, value) in enumerate(self._public_fields(None).items()):
+            yield ("{" if index == 0 else ",") + "\n  " + json.dumps(key) + ": "
+            if key != "tracks":
+                yield json.dumps(value, indent=2).replace("\n", "\n  ")
+            elif not tracks:
+                yield "[]"
+            else:
+                yield "["
+                for offset in range(0, len(tracks), chunk):
+                    block = [track.to_public_dict() for track in tracks[offset:offset + chunk]]
+                    # `[\n  {...},\n  {...}\n]` without its brackets.
+                    yield ("," if offset else "") + json.dumps(block, indent=2)[1:-2].replace("\n", "\n  ")
+                yield "\n  ]"
+        yield "\n}"
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'LibraryMetadata':
         """

@@ -186,6 +186,11 @@ An account without a canonical marker is migrated once using the previous manife
 - Ranking is query-only. It never reads recommendation signals, favourites, or
   account preferences, including for tie-breaking. Ownership is an action-state
   badge, not a rank boost.
+- The library provider takes its candidates from a folded on-disk index in
+  `library.db` (`shared/library_search.py`) only when a fingerprint proves the
+  index describes the in-memory library; otherwise (unsaved edits, an outdated
+  index) it scans every track. Either way the same ranker orders the same rows —
+  see [local search index](performance/local-search-index.md).
 - **The server owns the layout.** The response carries `top_result` (an item id
   or `null`) and an ordered `sections` list of
   `{id, layout, item_ids, total}` — `layout` is one of
@@ -278,7 +283,7 @@ machine, and what belongs to a person.
 
 | File | Purpose |
 |------|---------|
-| `library.db` | Canonical library: ordered tracks and playlists, settings, podcast state, normalized artist/album catalog, per-track state, and machine-local scan paths/fingerprints. |
+| `library.db` | Canonical library: ordered tracks and playlists, settings, podcast state, normalized artist/album catalog, per-track state, and machine-local scan paths/fingerprints. Also a derived local search index, rebuilt from those rows when needed. |
 | `library.json` | Portable export of your canonical library for recovery and cloud interoperability. The first migration also keeps `library.json.pre-sqlite.bak`. |
 | `favourites.json`, `playback_state.json`, `discovery_settings.json` | Saved songs, cross-device resume, discovery opt-in. |
 | `queue_state.json` *(data dir)* | Playback queue. |

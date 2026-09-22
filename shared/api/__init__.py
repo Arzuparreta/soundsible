@@ -372,9 +372,8 @@ def on_socket_connect(auth=None):
     from shared.users import instance_requires_login
 
     # Socket.IO events never pass through Flask's before_request/teardown_request,
-    # so without an explicit scope any DB connection acquired below (auth context,
-    # instance_requires_login) would never be returned to the pool — see
-    # request_scope.on_end.
+    # so give auth resolution its own memo lifetime. SQLite loans end with
+    # their database blocks independently of this scope.
     with request_scope.request_scope():
         runtime = get_runtime_config()
         remote_addr = request.remote_addr or ""

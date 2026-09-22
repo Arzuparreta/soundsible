@@ -1,0 +1,2 @@
+{"fixtures": 1000, "limit_bytes": 25556511, "retained_jpeg_bytes": 23266522, "index_bytes": 364544, "warm_median_ms": 0.181, "warm_peak_python_bytes": 267381, "cold_640_ms": 217.93, "reconcile_instrumented_ms": 590.158, "reconcile_peak_python_bytes": 1311925}
+{"fixtures": 10000, "limit_bytes": 255071004, "retained_jpeg_bytes": 229829498, "index_bytes": 3514368, "warm_median_ms": 0.181, "warm_peak_python_bytes": 267381, "cold_640_ms": 260.179, "reconcile_instrumented_ms": 5085.273, "reconcile_peak_python_bytes": 1283585}

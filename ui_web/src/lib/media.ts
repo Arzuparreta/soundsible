@@ -12,6 +12,17 @@ export function registerArtworkMetadata(tracks: ArtworkMetadata[]): void {
   setArtworkMetadata(Object.fromEntries(tracks.map(track => [track.id, track])));
 }
 
+/** Apply accepted delta metadata without rebuilding entries for every track. */
+export function patchArtworkMetadata(tracks: ArtworkMetadata[], removed: string[]): void {
+  if (!tracks.length && !removed.length) return;
+  setArtworkMetadata(previous => {
+    const next = { ...previous };
+    for (const id of removed) delete next[id];
+    for (const track of tracks) next[track.id] = track;
+    return next;
+  });
+}
+
 export function artworkCandidates(src?: string | null): string | undefined {
   if (!src) return undefined;
   const base = `${apiOrigin()}/api/static/cover/`;

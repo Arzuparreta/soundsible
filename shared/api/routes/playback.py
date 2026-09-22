@@ -897,10 +897,22 @@ def get_track_cover(track_id):
                     return response
                 path = store.path(track_id)
                 if size:
-                    path = str(store.variant(ref['hash'], 320 if size == 'thumb' else int(size), fit == 'square'))
-                with Image.open(path) as artwork:
-                    mimetype = Image.MIME.get(artwork.format, 'application/octet-stream')
-                response = send_file(path, mimetype=mimetype, conditional=True)
+                    variant = store.open_variant(ref['hash'], 320 if size == 'thumb' else int(size), fit == 'square')
+                    try:
+                        response = send_file(variant.file, mimetype='image/jpeg', conditional=False,
+                                             etag=variant.etag, last_modified=variant.modified)
+                        response.content_length = variant.size
+                        response.make_conditional(request.environ, accept_ranges=True, complete_length=variant.size)
+                        response.call_on_close(variant.file.close)
+                        if request.method == 'HEAD' or response.status_code == 304:
+                            variant.file.close()
+                    except BaseException:
+                        variant.file.close()
+                        raise
+                else:
+                    with Image.open(path) as artwork:
+                        mimetype = Image.MIME.get(artwork.format, 'application/octet-stream')
+                    response = send_file(path, mimetype=mimetype, conditional=True)
                 response.headers['Cache-Control'] = (
                     'private, max-age=31536000, immutable' if requested_revision == revision
                     else f'private, max-age={COVER_CACHE_SEC}'

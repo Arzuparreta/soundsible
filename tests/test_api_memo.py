@@ -131,3 +131,126 @@ def test_waiter_times_out_instead_of_blocking_forever():
     finally:
         release.set()
         leader.join(5)
+
+
+@pytest.mark.parametrize('published', ['ready', '', False, 0])
+def test_delayed_miss_rechecks_cache_before_starting_work(published):
+    """Pause a caller just before coordination; another request publishes first.
+
+    On the old implementation get() takes the first lock, sees a miss, then
+    resolve() takes a second lock to elect a leader. The publishing thread runs
+    precisely between them. With atomic lookup/election, publication happens
+    before the single critical section instead. No scheduler sleeps are needed.
+    """
+    memo = Memo(ttl_sec=60, negative_ttl_sec=10)
+    real_lock = memo._lock
+    get_lock_finished = threading.Event()
+    published_ready = threading.Event()
+    local = threading.local()
+    calls = []
+
+    class CoordinatedLock:
+        def __enter__(self):
+            # The old get() is distinguishable from resolve() without altering
+            # either production method or depending on a particular line number.
+            import sys
+            caller = sys._getframe(1).f_code.co_name
+            if threading.current_thread().name == 'delayed-request':
+                if caller != 'get':
+                    get_lock_finished.set()
+                    assert published_ready.wait(5)
+                local.in_get = caller == 'get'
+            real_lock.acquire()
+            return self
+
+        def __exit__(self, *_):
+            real_lock.release()
+            if threading.current_thread().name == 'delayed-request' and getattr(local, 'in_get', False):
+                local.in_get = False
+                get_lock_finished.set()
+                assert published_ready.wait(5)
+
+    memo._lock = CoordinatedLock()
+    # Use a named thread and a Future so failures propagate to the test.
+    from concurrent.futures import Future
+    result = Future()
+
+    def delayed():
+        try:
+            result.set_result(memo.resolve('key', lambda: calls.append('duplicate') or 'duplicate'))
+        except BaseException as exc:
+            result.set_exception(exc)
+
+    thread = threading.Thread(target=delayed, name='delayed-request')
+    thread.start()
+    try:
+        assert get_lock_finished.wait(5)
+        assert memo.resolve('key', lambda: published) == published
+    finally:
+        published_ready.set()
+        thread.join(5)
+    assert not thread.is_alive()
+    assert result.result(timeout=1) == published
+    assert calls == []
+
+
+def test_independent_keys_do_not_wait_for_another_computation():
+    from concurrent.futures import ThreadPoolExecutor
+
+    memo = Memo(ttl_sec=60)
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow():
+        started.set()
+        assert release.wait(5)
+        return 'slow'
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(memo.resolve, 'slow', slow)
+        try:
+            assert started.wait(5)
+            assert pool.submit(memo.resolve, 'other', lambda: 'other').result(timeout=2) == 'other'
+        finally:
+            release.set()
+        assert first.result(timeout=2) == 'slow'
+    assert memo._flights == {}
+
+
+def test_expired_entry_is_recomputed_under_coordination(monkeypatch):
+    import shared.api.memo as module
+
+    now = [100.0]
+    monkeypatch.setattr(module.time, 'time', lambda: now[0])
+    memo = Memo(ttl_sec=10)
+    memo.put('key', 'old')
+    now[0] = 110.0
+    assert memo.resolve('key', lambda: 'new') == 'new'
+    assert memo.get('key') == 'new'
+    memo.invalidate('key')
+    assert memo.resolve('key', lambda: 'after invalidation') == 'after invalidation'
+    memo.clear()
+    assert memo.resolve('key', lambda: 'after clear') == 'after clear'
+
+
+def test_catalog_consumer_keeps_account_isolation_and_copy_on_read():
+    from shared.api.routes.catalog import _memo_resolve
+    from shared.user_context import user_context
+
+    memo = Memo(ttl_sec=60)
+    calls = []
+
+    def compute():
+        calls.append(1)
+        return {'title': 'Original'}
+
+    with user_context('alice'):
+        first, cached = _memo_resolve(memo, 'query', compute)
+        assert not cached
+        first['title'] = 'Caller mutation'
+        second, cached = _memo_resolve(memo, 'query', compute)
+        assert cached and second == {'title': 'Original'}
+    with user_context('bob'):
+        third, cached = _memo_resolve(memo, 'query', compute)
+        assert not cached and third == {'title': 'Original'}
+    assert len(calls) == 2

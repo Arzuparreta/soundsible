@@ -17,6 +17,7 @@ from pathlib import Path
 
 from shared.database import BUSY_TIMEOUT_MS
 from shared.runtime import get_config_dir
+from shared.sqlite_revision import install_revision, read_revision
 
 from .measure import LOUDNESS_VERSION, LoudnessMeasurement
 
@@ -97,6 +98,9 @@ def _connect() -> sqlite3.Connection:
         pass
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute(_SCHEMA)
+    install_revision(conn, ("track_loudness",))
+    from shared.sqlite_changes import install_changes
+    install_changes(conn, (('track_loudness', 'identity', 'identity'),))
     conn.commit()
     _CONNECTIONS.conn = conn
     _CONNECTIONS.path = path
@@ -117,6 +121,48 @@ def reset_connections() -> None:
 
 class LoudnessStore:
     """Measurements, and the bookkeeping for the ones still to be taken."""
+
+    def change_state(self):
+        from shared.sqlite_changes import cursor
+        db = _connect()
+        db.execute('BEGIN')
+        try:
+            return {'token': read_revision(db), 'cursor': cursor(db).to_list()}
+        finally:
+            db.rollback()
+
+    def changed_identities(self, previous, expected):
+        from shared.sqlite_changes import Cursor, changes_since
+        db = _connect()
+        db.execute('BEGIN')
+        try:
+            if read_revision(db) != expected['token']:
+                return None
+            events = changes_since(db, Cursor.parse(previous['cursor']), Cursor.parse(expected['cursor']))
+            return None if events is None else {key for kind, key, operation in events}
+        finally:
+            db.rollback()
+
+    def measured_for(self, identities):
+        """Only requested identities; never materialize all account measurements."""
+        keys = list(dict.fromkeys(identities))
+        result = {}
+        db = _connect()
+        db.execute('BEGIN')
+        try:
+            for offset in range(0, len(keys), 500):
+                batch = keys[offset:offset + 500]
+                rows = db.execute(
+                    'SELECT identity,lufs,peak_dbtp FROM track_loudness WHERE version=? AND status=? '
+                    f'AND identity IN ({",".join("?" for _ in batch)}) '
+                    'AND lufs IS NOT NULL AND peak_dbtp IS NOT NULL', [LOUDNESS_VERSION, STATUS_OK, *batch])
+                result.update((row[0], (row[1], row[2])) for row in rows)
+            return result
+        finally:
+            db.rollback()
+
+    def public_revision(self) -> str:
+        return read_revision(_connect())
 
     def measured(self) -> dict[str, tuple[float, float]]:
         """Every usable reading, as ``identity -> (lufs, peak_dbtp)``.

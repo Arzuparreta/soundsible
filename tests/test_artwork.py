@@ -187,3 +187,65 @@ def test_metadata_rewrite_keeps_original_and_final_hash_reference(tmp_path):
     assert before != after
     assert store.ref(after)['hash'] == digest
     assert open_image(EmbeddedAudio.extract_cover_art(str(path))).size == (600, 338)
+
+
+def test_annotation_only_reads_requested_references_in_bounded_batches(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    import sqlite3
+    from shared.artwork import _REF_BATCH_SIZE
+
+    store = ArtworkStore(tmp_path / "data", tmp_path / "cache")
+    with store.connect() as db:
+        db.execute("INSERT INTO objects VALUES ('cover', 640, 320, 'png', 10)")
+        db.executemany("INSERT INTO refs VALUES (?, 'cover', 'manual', 1)",
+                       [(f"song-{i}",) for i in range(10000)])
+        db.execute("INSERT INTO refs VALUES (?, NULL, 'none', 2)", ("removed",))
+    original_connect = store.connect
+    rows_read = []
+    queries = []
+
+    @contextmanager
+    def measured_connect():
+        with original_connect() as db:
+            # Exercise the portable variable ceiling rather than this host's
+            # potentially much larger SQLite default.
+            db.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 999)
+            db.set_trace_callback(queries.append)
+
+            def row_factory(cursor, row):
+                rows_read.append(row[0])
+                return sqlite3.Row(cursor, row)
+
+            db.row_factory = row_factory
+            yield db
+
+    monkeypatch.setattr(store, "connect", measured_connect)
+    tracks = [{"id": f"song-{i}"} for i in range(20)]
+    store.annotate(tracks)
+    assert len(rows_read) == 20
+    assert all(t["artwork_revision"] == "cover-1" for t in tracks)
+    assert len([q for q in queries if q.startswith("SELECT")]) == 1
+
+    rows_read.clear()
+    queries.clear()
+    count = _REF_BATCH_SIZE * 2 + 1
+    tracks = [{"id": f"song-{i}"} for i in range(count)]
+    tracks += [{"id": "song-0"}, {"id": "removed"}, {"id": "missing"}, {}, {"id": None}]
+    store.annotate(tracks)
+    assert len(rows_read) == count + 1  # duplicate IDs are queried once
+    assert len([q for q in queries if q.startswith("SELECT")]) == 3
+    assert tracks[count]["artwork_revision"] == "cover-1"
+    assert tracks[count + 1] == {
+        "id": "removed", "artwork_revision": "none-2",
+        "artwork_width": None, "artwork_height": None,
+    }
+    assert tracks[-3:] == [{"id": "missing"}, {}, {"id": None}]
+    assert tracks[0]["artwork_width"] == 640
+    assert tracks[0]["artwork_height"] == 320
+
+    rows_read.clear()
+    queries.clear()
+    store.annotate([])
+    store.annotate([{}, {"id": None}])
+    assert not queries
+    assert not rows_read

@@ -119,3 +119,66 @@ def test_released_connection_is_available_to_a_different_thread():
 
     assert seen.get_nowait() is conn
     assert counts["created"] == 1
+
+
+@pytest.mark.parametrize("failure", [OSError, KeyboardInterrupt])
+def test_failed_factory_preserves_capacity(failure):
+    attempts = 0
+
+    def factory():
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 4:
+            raise failure("opening failed")
+        return object()
+
+    pool = ConnectionPool(factory, max_size=2)
+    for _ in range(4):
+        with pytest.raises(failure):
+            pool.acquire()
+        assert pool.stats()["created"] == 0
+    a, b = pool.acquire(), pool.acquire()
+    assert a is not b
+    pool.release(a)
+    pool.release(b)
+    assert pool.stats()["created"] == pool.stats()["idle"] == 2
+
+
+@pytest.mark.parametrize("discard", [False, True])
+def test_waiter_wakes_when_connection_returns_or_is_discarded(monkeypatch, discard):
+    class Connection:
+        def close(self):
+            pass
+
+    pool = ConnectionPool(Connection, max_size=1)
+    held = pool.acquire()
+    waiting = threading.Event()
+    real_wait = pool._available.wait
+
+    def wait(timeout=None):
+        waiting.set()
+        return real_wait(timeout)
+
+    monkeypatch.setattr(pool._available, "wait", wait)
+    result = queue.Queue()
+
+    def worker():
+        try:
+            result.put(pool.acquire())
+        except BaseException as exc:
+            result.put(exc)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    assert waiting.wait(timeout=2)
+    if discard:
+        pool.discard(held)
+    else:
+        pool.release(held)
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    acquired = result.get_nowait()
+    assert isinstance(acquired, Connection)
+    assert (acquired is held) is (not discard)
+    pool.release(acquired)
+    assert pool.stats()["created"] == pool.stats()["idle"] == 1

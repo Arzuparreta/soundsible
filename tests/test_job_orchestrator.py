@@ -191,29 +191,23 @@ def test_schedule_metadata_commit_debounces(orch):
 
 def test_schedule_metadata_commit_returns_its_pool_connection(orch, tmp_path):
     """The debounced commit fires from a bare threading.Timer thread, never a
-    Flask request. Before request_scope wrapped it, a connection acquired
-    during the commit had nowhere to be released to (request_scope.on_end is
-    a no-op outside a scope) and leaked from the pool forever."""
+    Flask request. Its database block must return the loan after the commit,
+    including the connection used during database construction."""
     from shared.database import DatabaseManager
 
     db = DatabaseManager(str(tmp_path / "library.db"))
-    # Construction itself pins one connection to the constructing thread for
-    # good (documented, intentional — see DatabaseManager._get_connection) so
-    # the baseline already has one live, non-idle connection before the timer
-    # ever fires. What this test guards is the *next* one, acquired by the
-    # Timer thread, coming back.
-    before = db.pool_stats()
     orch.commit_debounce_sec = 0.05
+    completed = threading.Event()
 
     def commit():
-        db._get_connection()
+        db.get_library_revision()
+        completed.set()
 
     orch.schedule_metadata_commit(commit)
-    time.sleep(0.3)
+    assert completed.wait(timeout=3)
 
     stats = db.pool_stats()
-    assert stats["created"] == before["created"] + 1
-    assert stats["idle"] == before["idle"] + 1, "connection was not returned to the pool after the commit"
+    assert stats["created"] == stats["idle"] == 1
 
 
 def test_failing_task_clears_active_jobs(orch):
@@ -235,3 +229,24 @@ def test_detect_rotational_disk_returns_bool(tmp_path):
 def test_profile_constants_have_expected_worker_counts():
     assert _PROFILE_BACKGROUND_WORKERS[PROFILE_HDD] == 1
     assert _PROFILE_BACKGROUND_WORKERS[PROFILE_SSD] == 3
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_background_tasks_return_database_loans(orch, tmp_path, fail):
+    from shared.database import DatabaseManager
+
+    db = DatabaseManager(str(tmp_path / "jobs.db"))
+
+    def work():
+        db.get_library_revision()
+        if fail:
+            raise RuntimeError("task failed")
+
+    for i in range(50):
+        future = orch.submit_background(f"database-{i}", work)
+        if fail:
+            with pytest.raises(RuntimeError, match="task failed"):
+                future.result(timeout=3)
+        else:
+            future.result(timeout=3)
+        assert db.pool_stats()["idle"] == db.pool_stats()["created"]

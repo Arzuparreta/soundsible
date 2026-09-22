@@ -294,7 +294,7 @@ class LibraryScanService:
             library._library_revision = library.db.replace_library(
                 latest, id_replacements=replacements
             )
-            library._export_metadata(latest.to_json())
+            library._export_metadata(latest)
             for old_id, new_id in replacements.items():
                 core.favourites.remap_library_id(old_id, new_id)
 

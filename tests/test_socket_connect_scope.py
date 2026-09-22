@@ -1,13 +1,7 @@
-"""`on_socket_connect` must return its pooled DB connection when it's done.
+"""Socket auth must leave all database connections available for the next event.
 
-Socket.IO 'connect' events never pass through Flask's before_request/
-teardown_request, so before this handler was wrapped in
-`request_scope.request_scope()`, any connection acquired while resolving auth
-(`get_request_auth_context`, `instance_requires_login`) had nowhere to be
-released to — `request_scope.on_end` is a no-op outside a scope — and leaked
-from the pool permanently. Every routine socket reconnect (phone sleep/wake,
-tab refocus, a network blip) burned one of the pool's 16 slots for good; see
-`shared.database.ConnectionPool`.
+Socket.IO connect events bypass Flask's before_request/teardown_request hooks.
+Their database work must return its loans without relying on those hooks.
 """
 
 from unittest.mock import patch

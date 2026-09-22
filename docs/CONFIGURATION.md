@@ -99,6 +99,7 @@ defaults are listed in [section 7](#7-where-soundsible-keeps-its-files).
 | `SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE` | `10M` | yt-dlp HTTP chunk size. |
 | `SOUNDSIBLE_YTDLP_RETRY_SLEEP` | exponential, 1 to 20 s | yt-dlp `--retry-sleep` expression, e.g. `linear=2:10`. |
 | `SOUNDSIBLE_PREVIEW_CACHE_MB` | `2048` | Disk (not RAM) for the preview-audio LRU cache. `0` disables audio caching while URL warming remains available. |
+| `SOUNDSIBLE_ARTWORK_CACHE_MB` | `512` | MiB of retained resized/cropped cover JPEGs per cache directory. Originals are excluded; `0` serves temporary disk variants without retention. Restart after changing it. See [quota details](performance/artwork-variant-quota.md). |
 | `SOUNDSIBLE_LOSSLESS_UPGRADES` | `true` | Background lossless upgrades; also switchable in Settings. |
 | `SOUNDSIBLE_FFMPEG` | FFmpeg on `PATH` | Explicit path to the FFmpeg binary. |
 

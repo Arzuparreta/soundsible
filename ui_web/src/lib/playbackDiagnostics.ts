@@ -168,7 +168,27 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
   let pending: Array<ReturnType<typeof entry>> = [];
   let pendingSize = 2; // JSON array brackets, then one comma between rows.
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
-  let chain = Promise.resolve();
+  const writes: Array<{ batch: TraceBatch; bytes: number }> = [];
+  let writeBytes = 0;
+  let writeTask: Promise<void> | null = null;
+  let writeLost = 0;
+  const encoder = new TextEncoder();
+  const drainWrites = (): Promise<void> => {
+    if (writeTask) return writeTask;
+    writeTask = (async () => {
+      while (writes.length) {
+        const next = writes.shift()!;
+        writeBytes -= next.bytes;
+        next.batch.dropped += writeLost;
+        try { await outbox.put(next.batch); }
+        catch { writeLost += next.batch.events.length; }
+      }
+    })().finally(() => {
+      writeTask = null;
+      if (writes.length) void drainWrites();
+    });
+    return writeTask;
+  };
   let busy = false;
   let stopped = false;
   let retryAt = 0;
@@ -181,20 +201,31 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
     pending = [];
     pendingSize = 2;
     const batch: TraceBatch = { id: `${setup.id}:${rows[0].sequence}`, userId: options.userId,
-      createdAt: Date.now(), capture: { ...setup }, dropped: dropped + outbox.lost, events: rows };
-    chain = chain.then(() => outbox.put(batch));
+      createdAt: Date.now(), capture: { ...setup }, dropped, events: rows };
+    const bytes = encoder.encode(JSON.stringify(batch)).byteLength;
+    writes.push({ batch, bytes });
+    writeBytes += bytes;
+    // Keep recent evidence when storage stalls; never retain an unbounded
+    // promise chain of captured batches behind a slow IndexedDB transaction.
+    while (writes.length > 32 || writeBytes > 1024 * 1024) {
+      const removed = writes.shift()!;
+      writeBytes -= removed.bytes;
+      writeLost += removed.batch.events.length;
+    }
+    void drainWrites();
   };
   const flush = async () => {
     persist();
     if (busy || stopped || !stillSameUser()) return;
     busy = true;
     try {
-      await chain;
+      await drainWrites();
+      await outbox.maintain();
+      if (stopped || !stillSameUser() || Date.now() < retryAt) return;
       const batches = await outbox.pending();
-      if (Date.now() < retryAt) return;
       // Persisting once per second can create five batches between sends.
       // Drain more than that so an offline backlog shrinks during playback.
-      for (const batch of batches.slice(0, 6)) {
+      for (const batch of batches) {
         if (stopped || !stillSameUser()) break;
         const ack = await send(batch);
         if (ack.id !== batch.id) throw new Error('trace_ack_mismatch');
@@ -203,8 +234,8 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
         if (!ack.enabled) {
           pending = [];
           stop();
-          await chain;
-          for (const remaining of await outbox.pending()) await outbox.remove(remaining.id);
+          await drainWrites();
+          await outbox.clear();
           break;
         }
       }
@@ -215,7 +246,8 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
   collect = (row) => {
     if (!stillSameUser() || stopped) return;
     // A batch stays below the browser keepalive and server body limits.
-    const rowSize = JSON.stringify(row).length;
+    const rowSize = encoder.encode(JSON.stringify(row)).byteLength;
+    if (rowSize + 2 > 40_000) { dropped++; return; }
     if (pending.length && pendingSize + 1 + rowSize > 40_000) persist();
     pendingSize += rowSize + (pending.length ? 1 : 0);
     pending.push(row);
@@ -223,7 +255,7 @@ export function startAutomaticPlaybackDiagnostics(options: DiagnosticSetup, send
     else if (persistTimer === null) persistTimer = setTimeout(persist, 1000);
   };
   const lifecycle = () => {
-    recordPlaybackDiagnostic('capture.lifecycle', { persisted: !outbox.volatile, lost: outbox.lost });
+    recordPlaybackDiagnostic('capture.lifecycle', { persisted: !outbox.volatile, lost: outbox.lost + writeLost });
     void flush();
   };
   const online = () => { retryAt = 0; void flush(); };

@@ -39,22 +39,26 @@ __all__ = [
 ]
 
 
-def annotate_tracks(tracks: list[dict[str, Any]]) -> None:
+def annotate_tracks(tracks: list[dict[str, Any]], *, selected: bool = False) -> bool:
     """Attach loudness to serialized tracks, in place.
 
-    One query for the whole table, then a dict lookup per track. Deliberately
+    By default one query reads the table; selected=True queries only requested
+    identities in batches for partial library responses. Deliberately
     silent on failure: levelling is an enhancement, and a cache that cannot be
     read must cost the listener their volume knob, never their library.
+    Return false on failure so callers cannot cache an incomplete annotation.
     """
     if not tracks:
-        return
+        return True
     try:
-        measured = LoudnessStore().measured()
+        store = LoudnessStore()
+        measured = (store.measured_for(str(t.get("file_hash") or t.get("id") or "") for t in tracks)
+                    if selected else store.measured())
     except Exception:
         logger.debug("Loudness: could not read measurements for annotation", exc_info=True)
-        return
+        return False
     if not measured:
-        return
+        return True
     for track in tracks:
         if not isinstance(track, dict):
             continue
@@ -64,6 +68,7 @@ def annotate_tracks(tracks: list[dict[str, Any]]) -> None:
         lufs, peak = found
         track["loudness_lufs"] = round(lufs, 2)
         track["loudness_peak_dbtp"] = round(peak, 2)
+    return True
 
 
 def get_loudness_service():

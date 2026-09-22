@@ -128,17 +128,20 @@ def test_health_reports_degraded_once_the_db_pool_is_actually_exhausted(isolated
     exactly why the leak went unnoticed for days."""
     from shared.database import instance_db
 
-    pool = instance_db()._pool
-    # Building the manager itself already pins one connection to this thread
-    # (see DatabaseManager._get_connection) — top the rest of the way up.
-    remaining = pool._max_size - pool.stats()["created"]
-    held = [pool.acquire() for _ in range(remaining)]
-    try:
-        body = api_app.test_client().get("/api/health").get_json()
-        assert body["status"] == "degraded"
-        assert body["degraded_reason"] == "database connection pool exhausted"
-        assert body["db_pool"]["created"] == pool._max_size
-        assert body["db_pool"]["idle"] == 0
-    finally:
-        for conn in held:
-            pool.release(conn)
+    manager = instance_db()
+    pool = manager._pool
+    # Keep an explicit loan in this calling context so auth can use it while
+    # every slot is occupied. Construction no longer pins that loan for us.
+    # This checks the health diagnostic with auth able to complete.
+    with manager._get_connection():
+        held = [pool.acquire() for _ in range(pool._max_size - 1)]
+        try:
+            body = api_app.test_client().get("/api/health").get_json()
+            assert body["status"] == "degraded"
+            assert body["degraded_reason"] == "database connection pool exhausted"
+            assert body["db_pool"]["created"] == pool._max_size
+            assert body["db_pool"]["idle"] == 0
+        finally:
+            for conn in held:
+                pool.release(conn)
+    assert pool.stats()["idle"] == pool.stats()["created"]

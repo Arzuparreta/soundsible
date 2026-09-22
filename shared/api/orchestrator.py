@@ -243,11 +243,9 @@ class JobOrchestrator:
         if pending is None:
             return False
         commit_func, emit_func = pending
-        # May fire from a bare threading.Timer thread, outside any Flask
-        # request — without an explicit scope, any DB connection commit_func()
-        # acquires would never be returned to the pool (see
-        # request_scope.on_end). Nesting one inside a request is safe: the
-        # inner scope only owns what this commit opens.
+        # Give the coalesced operation its own memo lifetime, whether invoked
+        # by a timer or synchronously inside a request. Database blocks return
+        # their connections independently of this scope.
         with request_scope.request_scope(), self.commit_lock:
             logger.info("Orchestrator: Executing coalesced metadata commit...")
             try:
