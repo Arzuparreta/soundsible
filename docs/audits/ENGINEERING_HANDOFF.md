@@ -2,7 +2,7 @@
 
 Punto de entrada para continuar con otro agente sin el historial del chat.
 Estado verificado al preparar este documento: rama `fix/sqlite-connection-lifecycle`,
-último chunk funcional `bc90a83`. Este traspaso se incorpora en un commit posterior.
+último chunk funcional `32929f7`. Este traspaso se incorpora en un commit posterior.
 
 ## Instrucciones del usuario que siguen vigentes
 
@@ -53,6 +53,7 @@ Los hashes identifican cambios reales de esta rama, no propuestas:
 | `e2efc64` | Corregir carrera de `Memo.resolve`: comprobar caché y elegir flight dentro del mismo bloqueo. |
 | `c544318` | Cuota de variantes de artwork, índice en disco y descriptores abiertos para respuestas activas. |
 | `bc90a83` | Candidatos de búsqueda local desde un índice SQLite verificado por huella; mismo ranker, resultados y orden; recorrido completo si no se puede demostrar. |
+| `32929f7` | Exportación de `library.json` serializada una vez por bloques y copiada al resto de destinos; mismos bytes, permisos y durabilidad. |
 
 Documentación y resultados reproducibles:
 
@@ -64,7 +65,8 @@ Documentación y resultados reproducibles:
   [deltas por journals](../performance/journal-library-deltas.md).
 - [Coordinación Memo](../performance/memo-coordination.md),
   [cuota de artwork](../performance/artwork-variant-quota.md),
-  [índice de búsqueda local](../performance/local-search-index.md).
+  [índice de búsqueda local](../performance/local-search-index.md),
+  [exportación por bloques](../performance/library-export-streaming.md).
 - Los JSONL de mediciones están junto a sus documentos en `docs/performance/`.
   Los scripts correspondientes viven en `scripts/benchmark_*.py`.
 
@@ -98,7 +100,7 @@ total, ahorro de energía, calidad de reproducción o aceptación acústica.
 - "Importación inicial" significa insertar una biblioteca en base vacía; **no**
   cada arranque del motor, apertura del cliente o consulta de biblioteca.
 
-### Artwork: último chunk
+### Artwork
 
 - `SOUNDSIBLE_ARTWORK_CACHE_MB=512` por defecto, seleccionado por el usuario;
   `0` desactiva retención. Configuración documentada en `docs/CONFIGURATION.md`.
@@ -116,7 +118,7 @@ total, ahorro de energía, calidad de reproducción o aceptación acústica.
 - Windows: mecanismo implementado y borrado denegado simulado, **no validación
   nativa de Windows**. No presentarlo como comprobado en Windows.
 
-### Búsqueda local: último chunk
+### Búsqueda local
 
 - `shared/library_search.py`: tabla `library_search` (por cuenta, en `library.db`)
   con posición y título/artista/álbum ya plegados como los compara el ranker, y
@@ -146,10 +148,41 @@ total, ahorro de energía, calidad de reproducción o aceptación acústica.
 - Las consultas densas siguen puntuando en Python cada coincidencia; bajar más
   exigiría puntuar en SQL, lo que duplicaría el ranker. No se ha hecho.
 
+### Exportación portable: último chunk
+
+- Cada guardado canónico reescribe `library.json` por usuario, en
+  `<music>/library.json` si la instancia no es multiusuario y en el espejo del
+  proveedor. Antes se construía el documento entero **dos veces** (export y
+  `provider.save_library`); ahora `LibraryMetadata.iter_json()` lo genera por
+  bloques de 128 pistas una vez y el resto son copias byte a byte
+  (`shared/atomic_file.py`). `to_json()` no cambia; una prueba exige igualdad
+  exacta de bytes.
+- Se conservan: temporal + fsync + rename en las copias propias, destinos no
+  escribibles avisados una vez, orden de publicación. El espejo del proveedor
+  local se reescribe **in situ** como antes (mismo inodo, permisos 0644,
+  symlinks; sin fsync). Hacerlo atómico con `mkstemp` lo habría dejado en 0600 y
+  roto enlaces: se descartó. Los proveedores remotos suben el mismo texto.
+- Un lock por `LibraryManager` impide que dos exportaciones se crucen (Windows no
+  deja reemplazar un archivo que otra exportación está leyendo). No hay
+  validación nativa en Windows.
+- Una línea INFO por exportación (bytes, copias, ms) para decidir con datos si
+  agruparlas merece la pena.
+- Medido: 50k pistas 2,47 → 1,92 s y pico 168,5 → 1,07 MiB; la biblioteca real
+  del usuario (208 pistas, 719 KB, 60 % caché de podcasts) 107 → 100 ms, 2,2 →
+  1,3 MiB. Bytes escritos iguales. A esa escala dominan los dos fsync.
+- **Agrupar exportaciones no se hizo**: se recomendó no hacerlo tras medir y el
+  usuario aprobó el plan con esa recomendación. Motivos: poco
+  ahorro a su escala, ODST lee y reescribe `<music>/library.json` (alargar la
+  ventana de datos de podcast viejos) y el debounce existente no vacía nada al
+  apagar. Revisar solo con las líneas INFO de una instancia real grande.
+- Hallazgos sin tocar: tres copias del mismo archivo en el mismo disco; ODST
+  mantiene su propia `LibraryMetadata` completa en RAM, la serializa entera tras
+  cada descarga y escribe sin atomicidad.
+
 ## Pendientes de auditoría, sin declarar todo terminado
 
-El índice de búsqueda local (antes punto 1) está hecho en `bc90a83`. No hay
-siguiente chunk acordado; elegir con el usuario entre estos:
+El índice de búsqueda local está hecho en `bc90a83` y la exportación por bloques
+en `32929f7`. No hay siguiente chunk acordado; elegir con el usuario entre estos:
 
 1. Presupuestos de admisión por recurso y colas: medir saturación primero;
    priorizar reproducción y siguientes pistas, descartar solo especulación
@@ -157,12 +190,13 @@ siguiente chunk acordado; elegir con el usuario entre estos:
 2. `syncCatalog()` todavía usa `inFlight` booleano y retorno inmediato; revisar
    contrato de promesa compartida, generación/cuenta y retry. `syncLibrary()`
    **ya comparte una promesa**; no rehacer ese arreglo.
-3. Escrituras dirigidas y exportación portable: aunque las escrituras SQLite sean
-   incrementales, snapshots, fingerprints y exports siguen teniendo recorridos
-   completos. Agrupar exports requiere decidir explícitamente su durabilidad.
-   El índice de búsqueda añade una pasada ordenada a las guardas que cambian
-   campos de búsqueda u orden; controlar las mutaciones en memoria permitiría
-   quitar tanto esa pasada como la huella por consulta.
+3. Escrituras dirigidas: aunque las escrituras SQLite sean incrementales y la
+   exportación ya no duplique memoria, snapshots, fingerprints y exports siguen
+   recorriendo la biblioteca entera en cada guardado. El índice de búsqueda
+   añade una pasada ordenada a las guardas que cambian campos de búsqueda u
+   orden; controlar las mutaciones en memoria permitiría quitar esa pasada y la
+   huella por consulta. Agrupar exports: ver la decisión de arriba. El escritor
+   ODST (`odst_tool/odst_downloader.py`) es otro candidato con evidencia medida.
 4. Línea base controlada de escucha y carga concurrente, cliente y servidor:
    cerrado/pausado/NORMAL/DJ/Live, frío/caliente, visible/oculto, sesiones largas,
    latencias, colas, CPU y memoria. Sigue pendiente; benchmarks sintéticos no la
@@ -173,17 +207,18 @@ siguiente chunk acordado; elegir con el usuario entre estos:
 
 ## Última validación y cómo retomar
 
-Último chunk funcional `bc90a83`:
+Último chunk funcional `32929f7`:
 
-- Suite Python completa: **1.474 passed**.
-- `tests/test_library_search_index.py`: **42 passed**; con
-  `tests/test_catalog_routes.py`, 108.
-- `scripts/benchmark_local_search_index.py` (1k/10k/50k, 5 repeticiones) y
-  `scripts/benchmark_local_catalog.py` afirman igualdad exacta de resultados.
+- Suite Python completa: **1.509 passed**.
+- `tests/test_library_export.py`: **35 passed**; con los tests de biblioteca
+  canónica, escaneo de carpetas y multiusuario, 100.
+- `scripts/benchmark_library_export.py` (200/1k/10k/50k y la biblioteca real en
+  solo lectura, 5 repeticiones) exige que las tres copias igualen `to_json()`.
 - `cd ui_web && npm test`: typecheck y **1.123 tests / 115 files** pasan.
 - Ruff y `git diff --check` pasan en archivos modificados.
 - Linux validado; Windows nativo y escucha física siguen pendientes. El motor
-  real (puerto 5005) no se reinició ni se probó con el índice.
+  real (puerto 5005) no se reinició ni se probó con el índice de búsqueda ni con
+  la nueva exportación; lo hará en su próximo arranque.
 
 Antes de editar, ejecutar `git status --short`, comprobar rama y leer `AGENTS.md`.
 Los resultados anteriores son evidencia histórica, no sustituyen pruebas del
