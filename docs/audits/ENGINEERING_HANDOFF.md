@@ -159,9 +159,10 @@ total, ahorro de energía, calidad de reproducción o aceptación acústica.
   exacta de bytes.
 - Se conservan: temporal + fsync + rename en las copias propias, destinos no
   escribibles avisados una vez, orden de publicación. El espejo del proveedor
-  local se reescribe **in situ** como antes (mismo inodo, permisos 0644,
-  symlinks; sin fsync). Hacerlo atómico con `mkstemp` lo habría dejado en 0600 y
-  roto enlaces: se descartó. Los proveedores remotos suben el mismo texto.
+  local se reescribía **in situ** (mismo inodo, permisos, symlinks; sin fsync)
+  porque `mkstemp` lo habría dejado en 0600 y roto enlaces. Después se sustituyó
+  por un reemplazo atómico que conserva symlink y permisos: ver «Correcciones
+  tras la revisión». Los proveedores remotos suben el mismo texto.
 - Un lock por `LibraryManager` impide que dos exportaciones se crucen (Windows no
   deja reemplazar un archivo que otra exportación está leyendo). No hay
   validación nativa en Windows.
@@ -303,6 +304,12 @@ siguen **sin verificar ni tocar**.
   Coste: el fsync, ~50–75 ms por guardado (una vez por descarga) en disco
   giratorio; picos de memoria iguales.
   [Medición](../performance/odst-save-streaming.md#atomic-replacement).
+- Espejo local: `save_library_file` abría el destino con `wb` antes de leer la
+  fuente. Con el almacenamiento LOCAL apuntando a la carpeta de música (bucket
+  `.`) y el manifiesto no escribible, espejo y fuente son `<music>/library.json`
+  y quedaba vacío (reproducido en prueba). Ahora omite la copia si
+  `os.path.samefile` y, si no, reemplaza con `replace_contents`, conservando
+  symlink y permisos; cambia el inodo y gana fsync.
 
 ## Pendientes de auditoría, sin declarar todo terminado
 

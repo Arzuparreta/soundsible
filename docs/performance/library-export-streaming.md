@@ -21,9 +21,13 @@ the first. File contents, locations, permissions and durability are unchanged.
   Unwritable destinations are still reported once and skipped; if the first
   fails, the next one is serialized instead.
 - The provider receives the finished file (`save_library_file`). The local
-  provider copies it **in place**, exactly like the `write_text` it replaces:
-  the mirror keeps its inode, permissions and any symlink, and is still not
-  fsynced. Remote providers upload the same text as before (platform line
+  provider first copied it in place, like the `write_text` it replaced; that
+  truncated the mirror before reading the source, and when storage points at
+  the music folder the mirror *is* the source, so `library.json` came out
+  empty. It now skips a mirror that is the same file as the source, and
+  otherwise replaces it whole (`replace_contents`: temporary, fsync, rename)
+  while keeping its symlink and permission bits; only the inode changes.
+  Remote providers upload the same text as before (platform line
   endings turned back into `\n`), without a second serialization; their upload
   still holds the file's text in memory once. With no local copy written, the
   provider serializes the model as before.
@@ -39,8 +43,8 @@ byte (empty headers; 0/1/511/512/513/1025 tracks; blocks of 1/2/128/512;
 non-ASCII, quotes, backslashes, control characters, NUL, `None`, nested lists
 and dictionaries, podcasts), that a save never builds the whole document, that
 every copy equals `to_json()` without leftover temporaries, shared music
-folders, unwritable and failing destinations, failed renames, the in-place
-mirror keeping symlink/inode/mode, the provider fallback, the export lock,
+folders, unwritable and failing destinations, failed renames, the mirror
+keeping symlink and mode, a mirror that is the source file, the provider fallback, the export lock,
 remote uploads including CRLF files, and a memory bound. Existing canonical
 library, folder scan and multi-user tests pass unchanged.
 
@@ -82,7 +86,7 @@ bursts of saves. It was evaluated and deferred:
   about 2.2 MB written. Saves follow user actions, and download commits are
   already coalesced (`orchestrator.schedule_metadata_commit`, 2 s).
 - ODST also reads `<music>/library.json` (at construction and on each of its
-  saves, to keep podcast data) and rewrites it in place. A delayed Station export
+  saves, to keep podcast data) and replaces it. A delayed Station export
   lengthens the window in which ODST can write stale podcast data back.
 - The existing commit debounce has no flush on shutdown. A delayed export would
   be lost when the engine stops; it is rewritten from SQLite only when the

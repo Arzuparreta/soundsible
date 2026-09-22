@@ -58,13 +58,13 @@ standard decoder waits for a complete value. Total save memory also includes
 the existing serializer's track-reference list and whole non-track fields; it
 is not strictly constant. No resident cache or third-party parser was added.
 
-ODST still locks only its own instance and rewrites the shared path in place.
-Station publishes portable exports by replacement, without a common writer
-lock. A POSIX test verifies that replacement during reading preserves the old
+ODST still locks only its own instance. It rewrote the shared path in place
+when this was measured; it now replaces it whole, as Station publishes its
+portable exports, still without a common writer lock. A POSIX test verifies that replacement during reading preserves the old
 open descriptor's contents and that the next read sees the new file. This does
-not fix concurrent in-place writes, lost updates, or the read-to-write race.
-Cross-writer ownership, atomicity/durability and native Windows validation remain
-separate work. Write failure may still leave a partial file.
+not fix lost updates or the read-to-write race. Cross-writer ownership and
+native Windows validation remain separate work. A failed write now leaves the
+previous file (see [ODST saves](odst-save-streaming.md#atomic-replacement)).
 
 Validation: **1,532 Python tests passed**, focused Ruff checks and
 `git diff --check` passed. A small benchmark smoke also verified the additional

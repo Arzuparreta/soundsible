@@ -201,10 +201,12 @@ class LocalStorageProvider(S3StorageProvider):
     def save_library_file(self, path: Path) -> bool:
         """Copy an already serialized library.json instead of serializing it again.
 
-        Written in place exactly like `upload_json`: the mirror keeps its inode,
-        permissions and any symlink. Only the second serialization goes away.
+        The mirror is replaced whole, so nobody reading it sees half a copy,
+        and it keeps its symlink and permissions as the in-place `upload_json`
+        write did. When storage points at the folder the export was written
+        to, the mirror already is that file and there is nothing to copy.
         """
-        from shared.atomic_file import COPY_BUFFER
+        from shared.atomic_file import copy_of, replace_contents
         from shared.constants import LIBRARY_METADATA_FILENAME
 
         key = LIBRARY_METADATA_FILENAME
@@ -212,9 +214,9 @@ class LocalStorageProvider(S3StorageProvider):
             return False
         try:
             target = self._get_path(key)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, "rb") as source, open(target, "wb") as mirror:
-                shutil.copyfileobj(source, mirror, COPY_BUFFER)
+            if target.exists() and os.path.samefile(path, target):
+                return True
+            replace_contents(target, copy_of(path))
             return True
         except Exception as e:
             self._unwritable_keys.add(key)

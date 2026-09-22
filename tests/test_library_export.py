@@ -131,20 +131,46 @@ def test_a_failed_rename_leaves_no_temporary(manager, monkeypatch):
     assert manager.mirror.exists()
 
 
-def test_the_provider_mirror_is_rewritten_in_place_as_before(manager):
-    # `upload_json` wrote in place: a symlinked or shared mirror keeps its
-    # inode and permissions. Copying the serialized file must not change that.
+def test_the_provider_mirror_keeps_its_symlink_and_permissions(manager):
+    # `upload_json` wrote in place: a symlinked or shared mirror kept its link
+    # and permissions. Replacing it whole must keep both too.
     manager.mirror.parent.mkdir(parents=True)
     real = manager.mirror.parent / "real-library.json"
     real.write_text("old")
     real.chmod(0o644)
     manager.mirror.symlink_to(real.name)
-    inode = real.stat().st_ino
     assert manager.lib._save_metadata() is True
     assert manager.mirror.is_symlink()
-    assert real.stat().st_ino == inode
     assert stat.S_IMODE(real.stat().st_mode) == 0o644
     assert real.read_bytes() == manager.lib.metadata.to_json().encode("utf-8")
+    assert not [p.name for p in manager.mirror.parent.iterdir() if p.name.startswith(".real-library.json.")]
+
+
+def test_a_mirror_that_is_the_source_is_left_alone(tmp_path):
+    source = tmp_path / "library.json"
+    source.write_text("the only copy")
+    provider = LocalStorageProvider()
+    provider.authenticate({"base_path": str(tmp_path)})
+    provider.bucket_name = "."
+    assert provider.save_library_file(source) is True
+    assert source.read_text() == "the only copy"
+    link = tmp_path / "linked" / "library.json"
+    link.parent.mkdir()
+    link.symlink_to(source)
+    provider.authenticate({"base_path": str(link.parent)})
+    assert provider.save_library_file(source) is True
+    assert source.read_text() == "the only copy"
+
+
+def test_a_local_provider_in_the_music_folder_keeps_library_json(manager):
+    # Storage endpoint = music folder, bucket ".": the mirror is
+    # <music>/library.json, which is also the export source once the per-user
+    # manifest cannot be written.
+    manager.lib.provider.authenticate({"base_path": str(manager.music)})
+    manager.lib.provider.bucket_name = "."
+    manager.lib._unwritable_paths.add(str(manager.lib.manifest_path))
+    assert manager.lib._save_metadata() is True
+    assert (manager.music / "library.json").read_bytes() == manager.lib.metadata.to_json().encode("utf-8")
 
 
 def test_the_provider_serializes_itself_only_when_no_copy_was_written(manager, monkeypatch):
