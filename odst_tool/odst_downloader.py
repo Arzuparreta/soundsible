@@ -59,7 +59,9 @@ class ODSTDownloader:
                 except Exception:
                     pass
             with open(self.library_path, "w") as f:
-                f.write(self.library.to_json())
+                # Same portable bytes, without a second full JSON document in RAM.
+                for block in self.library.iter_json():
+                    f.write(block)
 
     def add_track(self, track) -> None:
         with self._lock:

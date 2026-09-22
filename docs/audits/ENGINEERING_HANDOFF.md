@@ -231,6 +231,25 @@ peticiones terminan antes de una nueva ronda, incluso con error parcial.
 - Typecheck y 1.138 pruebas frontend / 116 archivos; siete pruebas Chromium;
   `git diff --check`. Sin cambios Python ni validación física de audio.
 
+## Guardado ODST por bloques completado (2026-09-22)
+
+`ODSTDownloader.save_library()` usa `iter_json()` y escribe bloques de 128 pistas.
+Conserva bytes, lock, podcasts del disco, permisos/inodo/symlinks y propagación de
+fallos. Sigue escribiendo in situ, sin fsync ni atomicidad; no se modificó la
+coordinación entre procesos con Station.
+
+- [Mediciones y reproducción](../performance/odst-save-streaming.md): cinco
+  repeticiones, copia real de 208 pistas y corpus de 1k/10k/50k.
+- Pico temporal completo a 50k: 245,14 → 229,11 MiB; a 208: 2,88 → 2,71 MiB.
+  La lectura y reconstrucción del modelo completo sigue dominando memoria.
+- No afirmar aceleración general: 50k 1,77 → 1,75 s, pero 10k 280 → 320 ms;
+  copia real 9,44 → 9,85 ms. Bytes escritos iguales. No es RSS ni escucha.
+- Validación: 1.521 pruebas Python, Ruff en archivos modificados y
+  `git diff --check` correctos. Sin cambios frontend ni reinicio del motor.
+- No se eliminaron la biblioteca residente ni la lectura completa para podcasts;
+  no hay debounce nuevo. Un fallo puede dejar un archivo parcial, como la
+  escritura anterior tampoco conservaba el documento original.
+
 ## Pendientes de auditoría, sin declarar todo terminado
 
 El índice de búsqueda local está hecho en `bc90a83` y la exportación por bloques
@@ -248,8 +267,9 @@ chunk entre estos:
    recorriendo la biblioteca entera en cada guardado. El índice de búsqueda
    añade una pasada ordenada a las guardas que cambian campos de búsqueda u
    orden; controlar las mutaciones en memoria permitiría quitar esa pasada y la
-   huella por consulta. Agrupar exports: ver la decisión de arriba. El escritor
-   ODST (`odst_tool/odst_downloader.py`) es otro candidato con evidencia medida.
+   huella por consulta. Agrupar exports: ver la decisión de arriba. En ODST la
+   serialización por bloques está hecha; siguen pendientes la lectura completa
+   para conservar podcasts y la propiedad/coordinación de los dos escritores.
 3. Línea base controlada de escucha y carga concurrente, cliente y servidor:
    cerrado/pausado/NORMAL/DJ/Live, frío/caliente, visible/oculto, sesiones largas,
    latencias, colas, CPU y memoria. Sigue pendiente; benchmarks sintéticos no la
