@@ -22,6 +22,10 @@ let revision: string | undefined;
 let catalogRevision: string | undefined;
 let catalogSync: Promise<boolean> | undefined;
 let coalesceTimer: ReturnType<typeof setTimeout> | undefined;
+/** Replies that replaced library data; `endLibraryEdit` compares against it. */
+let applied = 0;
+/** A local edit abandoned a sync that nothing has restarted yet. */
+let owed = false;
 
 /**
  * Delay before a background refresh actually fires.
@@ -47,11 +51,50 @@ export function invalidateLibrarySync(): void {
   catalogRevision = undefined;
   // A different account/storage must not wait behind the abandoned request.
   inFlight = undefined;
+  owed = false;
   if (coalesceTimer) clearTimeout(coalesceTimer);
   coalesceTimer = undefined;
   // The catalog is a projection of the same manifest, so a reply that is wrong
   // for one is wrong for the other.
   invalidateCatalogSync();
+}
+
+/**
+ * A local edit changed the library under whatever sync is in flight.
+ *
+ * Replies fetched before it are stale, and nobody should wait behind them, so
+ * the flight is abandoned as on a switch. Unlike a switch, the refreshes
+ * already asked for still stand: a download that finished a second ago must
+ * still appear. So the abandoned sync is owed until another one starts, and a
+ * scheduled refresh still fires.
+ */
+function supersedeLibrarySync(): void {
+  version += 1;
+  generation += 1;
+  catalogSync = undefined;
+  revision = undefined;
+  catalogRevision = undefined;
+  if (inFlight) {
+    inFlight = undefined;
+    owed = true;
+  }
+  invalidateCatalogSync();
+}
+
+/** Before an optimistic edit. Pass the result to `endLibraryEdit`. */
+export function beginLibraryEdit(): number {
+  supersedeLibrarySync();
+  return applied;
+}
+
+/**
+ * After the engine answered an edit: pay an abandoned sync back. With the mark
+ * from `beginLibraryEdit`, a reply applied while the request was out may have
+ * predated the write and overwritten the optimistic change, so fetch again.
+ */
+export function endLibraryEdit(mark?: number): void {
+  supersedeLibrarySync();
+  if (owed || (mark !== undefined && mark !== applied)) void syncLibrary();
 }
 
 export function syncLibrary(): Promise<void> {
@@ -61,6 +104,7 @@ export function syncLibrary(): Promise<void> {
   }
   const flight: SyncFlight = { pending: false, promise: Promise.resolve() };
   inFlight = flight;
+  owed = false;
   // Defer execution until the shared promise is assigned, including reentrant
   // callers triggered by a state update. All callers await the queued refresh.
   flight.promise = Promise.resolve().then(async () => {
@@ -97,6 +141,7 @@ async function syncOnce(): Promise<void> {
           patchArtworkMetadata(next.upserts, next.removed);
           revision = next.revision;
         });
+        applied += 1;
         lib = null;
       } catch {
         // One unconditional retry; never partially apply an invalid delta.
@@ -116,6 +161,7 @@ async function syncOnce(): Promise<void> {
         setState('podcastSubscriptions', reconcile(full.podcast_subscriptions ?? []));
       });
       revision = lib.revision;
+      applied += 1;
     }
     setState({ saved, libraryError: false });
     // Retry failed projection fetches even when the manifest is unchanged.

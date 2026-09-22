@@ -198,3 +198,72 @@ it('discards a late delta after invalidation before modifying tracks or artwork'
   expect(state.library[0].title).toBe('new-account');
   expect(mocks.patchArtworkMetadata).not.toHaveBeenCalled();
 });
+
+it('owes a sync abandoned by a local edit and runs it when the edit settles', async () => {
+  const { syncLibrary, beginLibraryEdit, endLibraryEdit } = await import('./library');
+  const { state } = await import('./core');
+  const stale = deferred<LibrarySnapshot>();
+  mocks.getLibrary.mockReturnValueOnce(stale.promise).mockResolvedValueOnce(snapshot('fresh'));
+  const run = syncLibrary();
+  await Promise.resolve();
+  const mark = beginLibraryEdit();
+  stale.resolve(snapshot('stale'));
+  await run;
+  // Still loading: the abandoned sync is owed, not over.
+  expect(state.loading).toBe(true);
+  expect(mocks.registerArtworkMetadata).not.toHaveBeenCalled();
+  expect(mocks.getLibrary).toHaveBeenCalledTimes(1);
+  endLibraryEdit(mark);
+  await vi.waitFor(() => expect(state.loading).toBe(false));
+  expect(mocks.getLibrary).toHaveBeenCalledTimes(2);
+  expect(state.library[0].id).toBe('fresh');
+  expect(mocks.registerArtworkMetadata).toHaveBeenCalledExactlyOnceWith(snapshot('fresh').tracks);
+  expect(state.libraryReady).toBe(true);
+});
+
+it('does not make a sync started during an edit wait behind the abandoned one', async () => {
+  const { syncLibrary, beginLibraryEdit, endLibraryEdit } = await import('./library');
+  const { state } = await import('./core');
+  const stale = deferred<LibrarySnapshot>();
+  mocks.getLibrary.mockReturnValueOnce(stale.promise).mockResolvedValueOnce(snapshot('fresh'));
+  void syncLibrary();
+  await Promise.resolve();
+  beginLibraryEdit();
+  await syncLibrary();
+  expect(state.library[0].id).toBe('fresh');
+  // The restart paid the debt: settling the edit fetches nothing more.
+  endLibraryEdit();
+  stale.resolve(snapshot('stale'));
+  await Promise.resolve();
+  expect(mocks.getLibrary).toHaveBeenCalledTimes(2);
+  expect(state.library[0].id).toBe('fresh');
+});
+
+it('keeps a scheduled refresh through a local edit', async () => {
+  vi.useFakeTimers();
+  const { syncLibrarySoon, beginLibraryEdit, endLibraryEdit } = await import('./library');
+  mocks.getLibrary.mockResolvedValue(snapshot('downloaded'));
+  syncLibrarySoon();
+  endLibraryEdit(beginLibraryEdit());
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(mocks.getLibrary).toHaveBeenCalledExactlyOnceWith(undefined);
+});
+
+it('refetches after an edit only when a reply landed while its request was out', async () => {
+  const { syncLibrary, beginLibraryEdit, endLibraryEdit } = await import('./library');
+  const { state } = await import('./core');
+  mocks.getLibrary.mockResolvedValueOnce(snapshot('a'));
+  await syncLibrary();
+  let mark = beginLibraryEdit();
+  endLibraryEdit(mark);
+  await Promise.resolve();
+  expect(mocks.getLibrary).toHaveBeenCalledTimes(1);
+
+  mark = beginLibraryEdit();
+  // Fetched while the edit was still being written: predates it.
+  mocks.getLibrary.mockResolvedValueOnce(snapshot('before-write')).mockResolvedValueOnce(snapshot('after-write'));
+  await syncLibrary();
+  endLibraryEdit(mark);
+  await vi.waitFor(() => expect(state.library[0].id).toBe('after-write'));
+  expect(mocks.getLibrary).toHaveBeenCalledTimes(3);
+});
