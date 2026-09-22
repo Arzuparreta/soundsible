@@ -179,12 +179,46 @@ total, ahorro de energía, calidad de reproducción o aceptación acústica.
   mantiene su propia `LibraryMetadata` completa en RAM, la serializa entera tras
   cada descarga y escribe sin atomicidad.
 
+## Evaluación posterior: prioridad de análisis DJ (2026-09-22)
+
+Se implementó la puerta de medición del siguiente candidato, **no un scheduler
+nuevo**. Ver [decisión y reproducción](../performance/dj-queue-priority-gate.md),
+`scripts/benchmark_dj_queue.py` y la caracterización Chromium
+`ui_web/tests/browser/dj-refinement-audit.spec.ts`.
+
+- Ruta actual de colecciones explícitas, gevent y análisis/FFmpeg/SQLite reales;
+  candidatos y audio sintéticos, runtime temporal. Cinco repeticiones por caso,
+  con instrumentación activada/desactivada, sin tocar el motor del usuario.
+- Nueve, 18 y 36 análisis terminan en medianas de 0,45 / 0,85 / 1,55 s. En
+  caliente no se solicitan nuevos análisis. Es evidencia de ese corpus y equipo,
+  no latencia de escucha ni ahorro de recursos demostrado.
+- La consulta a los 50 ms llega sin análisis en los tres casos fríos (5/5);
+  a los dos segundos llega con análisis (5/5). Todos los trabajos terminan.
+- **Priorizar desde `dj-transition` no supera la aceptación funcional:** el
+  endpoint devuelve fallback al encontrar miss y el cliente solo refina una
+  vez por pareja. Terminar antes después de esa respuesta no hace que se
+  consuma el resultado. Chromium confirmó los casos listo antes/después en
+  diez pruebas. La prueba caracteriza este comportamiento; no obliga a
+  conservarlo si se define otro contrato de refinamiento.
+- No se cambiaron colas, workers, descarte, análisis, transporte ni store.
+  Reabrir esta candidata exige primero definir cómo consumir un resultado
+  tardío antes del commit. No introducir reintentos indiscriminados.
+- Validación de esta entrega: 70 ejecuciones aisladas del benchmark, 10 pruebas
+  Chromium, 1.509 pruebas Python, typecheck y 1.123 pruebas del cliente; Ruff y
+  `git diff --check` correctos.
+- La matriz larga de carga, instrumentación de otros pools, biblioteca real,
+  descargas/escaneo y medición completa cliente/servidor **sigue pendiente**.
+  Se detuvo esa ampliación al fallar la puerta funcional del cambio candidato.
+
 ## Pendientes de auditoría, sin declarar todo terminado
 
 El índice de búsqueda local está hecho en `bc90a83` y la exportación por bloques
-en `32929f7`. No hay siguiente chunk acordado; elegir con el usuario entre estos:
+en `32929f7`. La candidata de prioridad DJ se evaluó y descartó como se explica
+arriba. No hay siguiente optimización acordada; elegir con el usuario entre estos:
 
 1. Presupuestos de admisión por recurso y colas: medir saturación primero;
+   la prueba acotada de DJ no demuestra saturación global ni justifica prioridad
+   desde el endpoint de refinamiento sin cambiar el contrato del consumidor;
    priorizar reproducción y siguientes pistas, descartar solo especulación
    obsoleta. No fusionar pools que están separados para evitar bloqueos.
 2. `syncCatalog()` todavía usa `inFlight` booleano y retorno inmediato; revisar
