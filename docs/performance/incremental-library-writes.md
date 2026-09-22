@@ -57,6 +57,17 @@ the fixed comparison batch; large catalog-changing saves still construct the
 full projection. Initial imports also incur extra temporary I/O, so this change
 primarily improves repeated saves and small edits.
 
+A save now rebuilds the artist/album projection only when a song's catalog
+fields or order change. The old writer rebuilt it on every save, which also
+applied any change to the projection rules at the next save. That job belongs to
+`shared.library_catalog.PROJECTION_VERSION` now: bump it with any change that
+makes the same tracks project differently, and each library rebuilds once, in
+manifest order, when the engine next opens it. The same check rebuilds songs
+that have no catalog links at all. Otherwise a start costs two small reads.
+Measured on tmpfs with the export benchmark's synthetic tracks: a normal start
+~1.2 ms at any size; a start that rebuilds ~115 ms at 1k tracks, ~1.2 s and
+30 MiB of Python allocations at 10k, ~6.4 s and 151 MiB at 50k, once per bump.
+
 ## Recorded results (2026-09-21)
 
 Raw measurements: [JSONL](incremental-library-writes-results.jsonl). Linux,

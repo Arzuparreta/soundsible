@@ -1,7 +1,9 @@
+from dataclasses import replace
 import sqlite3
 
 import pytest
 
+from shared import database, library_catalog
 from shared.database import DatabaseManager
 from shared.library_catalog import build_catalog_snapshot
 from shared.models import LibraryMetadata, Track
@@ -195,3 +197,76 @@ def test_new_track_fields_round_trip_through_json_and_sqlite(tmp_path):
     [stored] = db.get_all_tracks()
     assert stored.artists == ["One", "Two"]
     assert stored.is_compilation is True
+
+
+def _next_start(path):
+    """What the next engine start sees: the schema is reconciled afresh."""
+    database._SCHEMA_READY.clear()
+    return DatabaseManager(str(path))
+
+
+def _count_rebuilds(monkeypatch):
+    calls = []
+    original = DatabaseManager._replace_catalog_projection
+
+    def counted(conn, tracks):
+        calls.append(1)
+        return original(conn, tracks)
+
+    monkeypatch.setattr(DatabaseManager, "_replace_catalog_projection", staticmethod(counted))
+    return calls
+
+
+def test_a_projection_version_bump_rebuilds_each_library_once(tmp_path, monkeypatch):
+    path = tmp_path / "library.db"
+    db = DatabaseManager(str(path))
+    db.sync_from_metadata(_metadata(_track("a", artist="Old Name")))
+    with db._get_connection() as conn:
+        # The stored track now projects differently, as it would under new rules.
+        conn.execute("UPDATE tracks SET artist = 'New Name' WHERE id = 'a'")
+    rebuilds = _count_rebuilds(monkeypatch)
+
+    # Same rules: a start costs a read, not a rebuild.
+    assert [row["name"] for row in _next_start(path).get_artists()] == ["Old Name"]
+    assert rebuilds == []
+
+    monkeypatch.setattr(library_catalog, "PROJECTION_VERSION", library_catalog.PROJECTION_VERSION + 1)
+    assert [row["name"] for row in _next_start(path).get_artists()] == ["New Name"]
+    _next_start(path)
+    assert rebuilds == [1]
+
+
+def test_a_rebuild_projects_tracks_in_manifest_order(tmp_path, monkeypatch):
+    # An album takes the first year it meets; rowid order would pick 1999.
+    first = replace(_track("a"), year=1999)
+    second = replace(_track("b"), year=2001)
+    path = tmp_path / "library.db"
+    db = DatabaseManager(str(path))
+    db.sync_from_metadata(_metadata(first, second))
+    db.sync_from_metadata(_metadata(second, first))
+    assert [row["year"] for row in db.get_albums()] == [2001]
+
+    monkeypatch.setattr(library_catalog, "PROJECTION_VERSION", library_catalog.PROJECTION_VERSION + 1)
+    assert [row["year"] for row in _next_start(path).get_albums()] == [2001]
+
+
+def test_a_podcast_only_library_is_not_rebuilt_on_every_start(tmp_path, monkeypatch):
+    path = tmp_path / "library.db"
+    episode = replace(_track("episode"), media_kind="podcast_episode")
+    DatabaseManager(str(path)).sync_from_metadata(_metadata(episode))
+    rebuilds = _count_rebuilds(monkeypatch)
+    _next_start(path)
+    assert rebuilds == []
+
+
+def test_a_library_without_a_recorded_version_is_rebuilt(tmp_path, monkeypatch):
+    # Every library written before the version existed.
+    path = tmp_path / "library.db"
+    db = DatabaseManager(str(path))
+    db.sync_from_metadata(_metadata(_track("a")))
+    with db._get_connection() as conn:
+        conn.execute("DELETE FROM library_info WHERE key = 'catalog_projection_version'")
+    rebuilds = _count_rebuilds(monkeypatch)
+    _next_start(path)
+    _next_start(path)
+    assert rebuilds == [1]

@@ -281,11 +281,9 @@ conserva los dos campos de podcasts. Sigue recorriendo todos los bytes.
 ## Correcciones tras la revisión (2026-09-22)
 
 Un `/code-review` de `main...HEAD` dejó diez hallazgos sin verificar. Se
-corrigieron los que podían perder datos o bloquear la interfaz; los otros siete
-(bloqueos SQLite de deltas y sonoridad, pool que abre conexiones con el lock
-tomado, token de sonoridad demasiado sensible, proyección de catálogo que ya no
-se autorrepara, delta sin cambios que no devuelve 304, carátulas serializadas)
-siguen **sin verificar ni tocar**.
+corrigieron los que podían perder datos o bloquear la interfaz y la proyección
+de catálogo; los otros seis se analizaron y se descartaron (ver al final de esta
+sección).
 
 - `c9a40e8` Interfaz: las ediciones locales (metadatos, borrado, playlists)
   usaban el reinicio de cambio de cuenta, que borraba el refresco programado
@@ -310,6 +308,41 @@ siguen **sin verificar ni tocar**.
   y quedaba vacío (reproducido en prueba). Ahora omite la copia si
   `os.path.samefile` y, si no, reemplaza con `replace_contents`, conservando
   symlink y permisos; cambia el inodo y gana fsync.
+- Proyección de catálogo: un guardado solo reconstruye artistas/álbumes si
+  cambian campos de catálogo u orden, así que un cambio en las reglas de
+  `build_catalog_snapshot` no llegaba a bibliotecas existentes hasta la siguiente
+  edición o descarga. Ahora `library_catalog.PROJECTION_VERSION` se guarda en
+  `library_info`; al abrir la base con otra versión se reconstruye una vez, en
+  orden de manifiesto (el álbum toma el primer año/género). Sustituye al
+  backfill, cuya condición (canciones sin enlaces) se mantiene sin contar
+  podcasts. Arranque normal ~1,2 ms; reconstrucción única ~115 ms a 1k y
+  ~6,4 s / 151 MiB a 50k (tmpfs). Todas las bibliotecas actuales se reconstruyen
+  una vez al actualizar, porque aún no tienen versión.
+  [Detalle](../performance/incremental-library-writes.md).
+
+Descartados tras revisar el código, porque el motor es **un solo proceso
+gevent**: SQLite no cede el control, así que una transacción termina antes de
+que corra otra petición. Reabrir si el motor pasa a varios procesos o hilos reales.
+
+- Historial de deltas con `BEGIN IMMEDIATE` en cada conexión (0,1 s de espera):
+  sin contención posible dentro del proceso; ~0,12 ms por llamada; si fallara,
+  se envía la biblioteca completa.
+- Conexión de sonoridad por petición (gevent convierte el thread-local en
+  greenlet-local) que instala triggers y hace `INSERT OR IGNORE`: ~0,34 ms frente
+  a 0,007 ms reutilizada; ningún otro proceso escribe esa base.
+- `ConnectionPool.acquire` llama a la factory con el lock tomado y `release`
+  necesita ese lock (en `main` no): como mucho 16 aperturas por base y proceso, y
+  con gevent una espera de SQLite ya bloquea todo. Arreglarlo si se toca el pool.
+- Variantes de carátula con lock, `flock` y SQLite en cada acierto: con gevent ya
+  se servían en serie; el coste extra por acierto no se midió. Medir una
+  cuadrícula real antes de tocarlo.
+- Token de sonoridad que rota con reintentos y fallos: los clientes solo
+  resincronizan con `loudness_updated`, como mucho cada 5 min y solo si hubo
+  mediciones nuevas, y reciben deltas pequeños. Cambiarlo exigiría migrar
+  triggers instalados.
+- Ruta de delta heredada que devuelve un delta vacío en vez de 304 y no renueva
+  `created`: solo se usa si falla el 304 temprano y la vía incremental; en el
+  peor caso, una descarga completa al día.
 
 ## Pendientes de auditoría, sin declarar todo terminado
 

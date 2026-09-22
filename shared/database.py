@@ -930,16 +930,39 @@ class DatabaseManager:
         """)
 
     @classmethod
-    def _backfill_catalog_tables(cls, conn) -> None:
-        """Populate new catalog tables once when upgrading a flat legacy DB."""
-        has_tracks = conn.execute("SELECT 1 FROM tracks LIMIT 1").fetchone() is not None
-        has_links = conn.execute("SELECT 1 FROM track_artists LIMIT 1").fetchone() is not None
-        if not has_tracks or has_links:
+    def _sync_catalog_projection(cls, conn) -> None:
+        """Rebuild artists and albums once when the projection rules changed.
+
+        Also when tracks have no catalog links at all: a flat pre-catalog
+        database, or catalog tables recreated empty. Otherwise two small reads.
+        Tracks are projected in manifest order, as a save would, because an
+        album takes the first year and genre it meets.
+        """
+        from shared.library_catalog import PROJECTION_VERSION
+
+        row = conn.execute(
+            "SELECT value FROM library_info WHERE key = 'catalog_projection_version'"
+        ).fetchone()
+        # Podcast episodes never get links, so only songs count here.
+        unlinked = conn.execute(
+            f"SELECT EXISTS (SELECT 1 FROM tracks t WHERE {_MUSIC_ONLY}) "
+            "AND NOT EXISTS (SELECT 1 FROM track_artists)"
+        ).fetchone()[0]
+        if row is not None and row[0] == str(PROJECTION_VERSION) and not unlinked:
             return
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT * FROM tracks").fetchall()
-        tracks = [cls._flat_track_from_row(row) for row in rows]
-        cls._replace_catalog_projection(conn, tracks)
+        cursor = conn.execute(
+            "SELECT t.* FROM tracks t LEFT JOIN library_tracks l ON l.track_id = t.id "
+            "ORDER BY l.position IS NULL, l.position, t.rowid"
+        )
+        columns = [description[0] for description in cursor.description]
+        cls._replace_catalog_projection(
+            conn, (cls._flat_track_from_row(track, columns) for track in cursor)
+        )
+        conn.execute(
+            "INSERT INTO library_info (key, value) VALUES ('catalog_projection_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(PROJECTION_VERSION),),
+        )
 
     @staticmethod
     def _migrate_related_mix_cache(conn):
@@ -1003,7 +1026,7 @@ class DatabaseManager:
             self._create_discovery_tables(conn)
             self._create_catalog_tables(conn)
             self._create_performance_indexes(conn)
-            self._backfill_catalog_tables(conn)
+            self._sync_catalog_projection(conn)
             from shared.library_changes import install
             install(conn)
             from shared import library_search
