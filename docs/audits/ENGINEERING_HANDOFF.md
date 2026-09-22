@@ -210,32 +210,51 @@ nuevo**. Ver [decisión y reproducción](../performance/dj-queue-priority-gate.m
   descargas/escaneo y medición completa cliente/servidor **sigue pendiente**.
   Se detuvo esa ampliación al fallar la puerta funcional del cambio candidato.
 
+## Coordinación de catálogo completada (2026-09-22)
+
+`syncCatalog(targetRevision?)` comparte una promesa por operación/generación,
+agrupa revisiones pendientes y descarta resultados superados. La biblioteca
+reconoce el éxito por generación y revisión, no por número de refresco. A → B → A
+también invalida la consulta B aunque A ya estuviese reconocida. Las tres
+peticiones terminan antes de una nueva ronda, incluso con error parcial.
+
+- Misma revisión: 9 → 3 consultas en el escenario controlado; A → B → C: 9 → 6.
+- Cuenta nueva empieza sin esperar respuestas antiguas; sus resultados y cleanup
+  no afectan a la cuenta actual. No se abortan las peticiones antiguas.
+- Errores conservan catálogo y permiten retry al siguiente refresco; sin
+  revisiones se conserva el refresco conservador. No hay retry periódico.
+- Invalidar conserva un catálogo ya disponible: también se usa al editar listas
+  sin una consulta inmediata. La limpieza de cuenta sigue en sus llamadores.
+- [Contrato, mediciones y reproducción](../performance/catalog-sync.md), con
+  resultados JSONL. Tiempos virtuales/API simulada: no son ahorro de CPU ni red
+  medidos sobre una instancia real.
+- Typecheck y 1.138 pruebas frontend / 116 archivos; siete pruebas Chromium;
+  `git diff --check`. Sin cambios Python ni validación física de audio.
+
 ## Pendientes de auditoría, sin declarar todo terminado
 
 El índice de búsqueda local está hecho en `bc90a83` y la exportación por bloques
 en `32929f7`. La candidata de prioridad DJ se evaluó y descartó como se explica
-arriba. No hay siguiente optimización acordada; elegir con el usuario entre estos:
+arriba. La coordinación de catálogo también está completada. Elegir el siguiente
+chunk entre estos:
 
 1. Presupuestos de admisión por recurso y colas: medir saturación primero;
    la prueba acotada de DJ no demuestra saturación global ni justifica prioridad
    desde el endpoint de refinamiento sin cambiar el contrato del consumidor;
    priorizar reproducción y siguientes pistas, descartar solo especulación
    obsoleta. No fusionar pools que están separados para evitar bloqueos.
-2. `syncCatalog()` todavía usa `inFlight` booleano y retorno inmediato; revisar
-   contrato de promesa compartida, generación/cuenta y retry. `syncLibrary()`
-   **ya comparte una promesa**; no rehacer ese arreglo.
-3. Escrituras dirigidas: aunque las escrituras SQLite sean incrementales y la
+2. Escrituras dirigidas: aunque las escrituras SQLite sean incrementales y la
    exportación ya no duplique memoria, snapshots, fingerprints y exports siguen
    recorriendo la biblioteca entera en cada guardado. El índice de búsqueda
    añade una pasada ordenada a las guardas que cambian campos de búsqueda u
    orden; controlar las mutaciones en memoria permitiría quitar esa pasada y la
    huella por consulta. Agrupar exports: ver la decisión de arriba. El escritor
    ODST (`odst_tool/odst_downloader.py`) es otro candidato con evidencia medida.
-4. Línea base controlada de escucha y carga concurrente, cliente y servidor:
+3. Línea base controlada de escucha y carga concurrente, cliente y servidor:
    cerrado/pausado/NORMAL/DJ/Live, frío/caliente, visible/oculto, sesiones largas,
    latencias, colas, CPU y memoria. Sigue pendiente; benchmarks sintéticos no la
    sustituyen. Validación iPhone/CarPlay requiere dispositivo físico.
-5. Otros puntos exploratorios del informe (shell rebuild checks, clasificación
+4. Otros puntos exploratorios del informe (shell rebuild checks, clasificación
    de fallos de fondo) solo justifican cambios tras evidencia; no hacer limpieza
    global ni reescritura cosmética.
 

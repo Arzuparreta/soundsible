@@ -25,51 +25,79 @@
 import { api } from '../lib/api';
 import { setState } from './core';
 
-let inFlight = false;
-let pending = false;
-let version = 0;
+interface CatalogFlight {
+  generation: number;
+  targetRevision: string | undefined;
+  request: number;
+  promise: Promise<boolean>;
+}
+let inFlight: CatalogFlight | undefined;
+let generation = 0;
 
-/** Abandon whatever fetch is in flight — after an account switch its answer
- * describes somebody else's shelf. */
+/** Detach old account/storage work immediately. Its requests may still finish,
+ * but neither their payload nor their cleanup belongs to the new generation. */
 export function invalidateCatalogSync(): void {
-  version += 1;
+  generation += 1;
+  inFlight = undefined;
+  // Invalidation also follows playlist edits with no immediate refetch. Keep
+  // the last accepted catalog available; account teardown owns clearing data.
+  setState('catalog', 'loading', false);
 }
 
-export async function syncCatalog(): Promise<boolean> {
+/** All callers await the latest requested projection. Revisions are opaque
+ * equality tokens, not ordered numbers. Without a token, another request must
+ * conservatively require a follow-up if a round has already started. */
+export function syncCatalog(targetRevision?: string): Promise<boolean> {
   if (inFlight) {
-    pending = true;
-    return false;
-  }
-  inFlight = true;
-  const syncVersion = ++version;
-  setState('catalog', 'loading', true);
-  try {
-    const [artists, genres, years] = await Promise.all([
-      api.getLibraryArtists(),
-      api.getLibraryGenres(),
-      api.getLibraryYears(),
-    ]);
-    if (syncVersion !== version) return false;
-    setState('catalog', (prev) => ({
-      ...prev,
-      artists,
-      genres,
-      years,
-      revision: prev.revision + 1,
-    }));
-    return true;
-  } catch {
-    // Keep the last good catalog on screen. A failed fetch is not news that the
-    // library lost its albums, and `libraryError` already tells the user the
-    // station is unreachable.
-    return false;
-  } finally {
-    if (syncVersion === version) {
-      setState('catalog', { loading: false, ready: true });
+    if (targetRevision === undefined || targetRevision !== inFlight.targetRevision) {
+      inFlight.targetRevision = targetRevision;
+      inFlight.request += 1;
     }
-    inFlight = false;
-    const runAgain = pending;
-    pending = false;
-    if (runAgain) queueMicrotask(() => void syncCatalog());
+    return inFlight.promise;
   }
+  const flight: CatalogFlight = {
+    generation, targetRevision, request: 0, promise: Promise.resolve(false),
+  };
+  inFlight = flight;
+  const current = () => inFlight === flight && generation === flight.generation;
+  // Assign the shared promise before any state write can trigger reentrant
+  // subscribers. A synchronous invalidation also prevents the first request.
+  flight.promise = Promise.resolve().then(async () => {
+    try {
+      if (!current()) return false;
+      setState('catalog', 'loading', true);
+      while (current()) {
+        const requested = flight.request;
+        // A quick failure must not let a new round overlap the two slower
+        // requests. Wrap invocation too, so synchronous errors settle normally.
+        const [artists, genres, years] = await Promise.allSettled([
+          Promise.resolve().then(() => api.getLibraryArtists()),
+          Promise.resolve().then(() => api.getLibraryGenres()),
+          Promise.resolve().then(() => api.getLibraryYears()),
+        ]);
+        if (!current()) return false;
+        if (requested !== flight.request) continue;
+        if (artists.status !== 'fulfilled' || genres.status !== 'fulfilled' || years.status !== 'fulfilled') {
+          return false;
+        }
+        setState('catalog', prev => ({
+          ...prev,
+          artists: artists.value,
+          genres: genres.value,
+          years: years.value,
+          revision: prev.revision + 1,
+        }));
+        // Publishing can itself request another revision or switch accounts.
+        if (!current()) return false;
+        if (requested === flight.request) return true;
+      }
+      return false;
+    } finally {
+      if (current()) {
+        inFlight = undefined;
+        setState('catalog', { loading: false, ready: true });
+      }
+    }
+  });
+  return flight.promise;
 }

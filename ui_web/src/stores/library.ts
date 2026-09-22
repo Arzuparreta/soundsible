@@ -17,8 +17,10 @@ import { setState, state } from './core';
 interface SyncFlight { pending: boolean; promise: Promise<void> }
 let inFlight: SyncFlight | undefined;
 let version = 0;
+let generation = 0;
 let revision: string | undefined;
 let catalogRevision: string | undefined;
+let catalogSync: Promise<boolean> | undefined;
 let coalesceTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
@@ -39,6 +41,8 @@ const COALESCE_MS = 1500;
  */
 export function invalidateLibrarySync(): void {
   version += 1;
+  generation += 1;
+  catalogSync = undefined;
   revision = undefined;
   catalogRevision = undefined;
   // A different account/storage must not wait behind the abandoned request.
@@ -116,10 +120,19 @@ async function syncOnce(): Promise<void> {
     setState({ saved, libraryError: false });
     // Retry failed projection fetches even when the manifest is unchanged.
     // Older engines without validators keep the previous full-refresh behavior.
-    if (!revision || catalogRevision !== revision) {
+    // Even an already acknowledged revision must supersede other pending
+    // work (A -> B -> A). Otherwise B could publish after the return to A.
+    if (!revision || catalogRevision !== revision || catalogSync) {
       const targetRevision = revision;
-      void syncCatalog().then(success => {
-        if (success && syncVersion === version) catalogRevision = targetRevision;
+      const targetGeneration = generation;
+      const syncing = syncCatalog(targetRevision);
+      catalogSync = syncing;
+      void syncing.then(success => {
+        if (catalogSync === syncing) catalogSync = undefined;
+        // Another unchanged manifest refresh does not invalidate this success.
+        if (success && targetGeneration === generation && targetRevision === revision) {
+          catalogRevision = targetRevision;
+        }
       });
     }
   } catch {
