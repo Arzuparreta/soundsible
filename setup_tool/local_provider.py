@@ -198,6 +198,29 @@ class LocalStorageProvider(S3StorageProvider):
             print(f"Local storage not writable, skipping cloud mirror for '{remote_key}': {e}")
             return False
 
+    def save_library_file(self, path: Path) -> bool:
+        """Copy an already serialized library.json instead of serializing it again.
+
+        Written in place exactly like `upload_json`: the mirror keeps its inode,
+        permissions and any symlink. Only the second serialization goes away.
+        """
+        from shared.atomic_file import COPY_BUFFER
+        from shared.constants import LIBRARY_METADATA_FILENAME
+
+        key = LIBRARY_METADATA_FILENAME
+        if key in self._unwritable_keys:
+            return False
+        try:
+            target = self._get_path(key)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "rb") as source, open(target, "wb") as mirror:
+                shutil.copyfileobj(source, mirror, COPY_BUFFER)
+            return True
+        except Exception as e:
+            self._unwritable_keys.add(key)
+            print(f"Local storage not writable, skipping cloud mirror for '{key}': {e}")
+            return False
+
     def download_json(self, remote_key: str) -> Optional[str]:
         try:
             path = self._get_path(remote_key)

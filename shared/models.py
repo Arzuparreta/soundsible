@@ -7,7 +7,7 @@ for representing music tracks, library organization, and synchronization.
 
 from copy import deepcopy
 from dataclasses import dataclass, asdict, field, fields
-from typing import List, Dict, Optional, Any, Literal
+from typing import List, Dict, Iterator, Optional, Any, Literal
 from enum import Enum
 import json
 import uuid
@@ -326,9 +326,13 @@ class LibraryMetadata:
         Annotations and callers may mutate this snapshot without modifying the
         canonical model. Machine-local scan paths/fingerprints never travel.
         """
+        return self._public_fields([track.to_public_dict() for track in self.tracks])
+
+    def _public_fields(self, tracks: Any) -> Dict[str, Any]:
+        # One definition of the public keys and their order, for both encoders.
         return {
             "version": self.version,
-            "tracks": [track.to_public_dict() for track in self.tracks],
+            "tracks": tracks,
             "playlists": deepcopy(self.playlists),
             "settings": deepcopy(self.settings),
             "last_updated": self.last_updated,
@@ -339,6 +343,29 @@ class LibraryMetadata:
     def to_json(self, indent: int = 2) -> str:
         """Serialize portable library metadata to JSON."""
         return json.dumps(self.to_public_dict(), indent=indent)
+
+    def iter_json(self, chunk: int = 128) -> Iterator[str]:
+        """`to_json()` in pieces: the same text, without the whole document in memory.
+
+        Header values are encoded as `to_json()` encodes them. Tracks are encoded
+        `chunk` at a time and moved one indentation level deeper; JSON escapes
+        newlines inside strings, so every newline in an encoded block is layout.
+        """
+        tracks = list(self.tracks)
+        for index, (key, value) in enumerate(self._public_fields(None).items()):
+            yield ("{" if index == 0 else ",") + "\n  " + json.dumps(key) + ": "
+            if key != "tracks":
+                yield json.dumps(value, indent=2).replace("\n", "\n  ")
+            elif not tracks:
+                yield "[]"
+            else:
+                yield "["
+                for offset in range(0, len(tracks), chunk):
+                    block = [track.to_public_dict() for track in tracks[offset:offset + chunk]]
+                    # `[\n  {...},\n  {...}\n]` without its brackets.
+                    yield ("," if offset else "") + json.dumps(block, indent=2)[1:-2].replace("\n", "\n  ")
+                yield "\n  ]"
+        yield "\n}"
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'LibraryMetadata':
