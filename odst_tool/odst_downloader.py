@@ -6,6 +6,7 @@ from typing import Optional
 import threading
 from .config import DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_QUALITY
 from .models import LibraryMetadata
+from .library_podcasts import read_podcast_fields
 from .youtube_downloader import YouTubeDownloader
 from .cloud_sync import CloudSync
 
@@ -53,9 +54,9 @@ class ODSTDownloader:
             if self.library_path.exists():
                 try:
                     with open(self.library_path, "r") as rf:
-                        disk = LibraryMetadata.from_json(rf.read())
-                    self.library.podcast_subscriptions = disk.podcast_subscriptions
-                    self.library.podcast_episode_cache = disk.podcast_episode_cache
+                        subscriptions, cache = read_podcast_fields(rf)
+                    self.library.podcast_subscriptions = subscriptions
+                    self.library.podcast_episode_cache = cache
                 except Exception:
                     pass
             with open(self.library_path, "w") as f:

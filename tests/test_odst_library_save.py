@@ -42,11 +42,13 @@ def test_preserves_disk_podcasts_but_keeps_current_tracks_and_settings(tmp_path)
     assert target.library_path.read_text() == target.library.to_json()
 
 
-def test_corrupt_disk_keeps_memory_podcasts(tmp_path):
+def test_corrupt_disk_matches_legacy_empty_podcast_defaults(tmp_path):
     target = writer(tmp_path)
     target.library.podcast_episode_cache = {'feed': []}
     target.library_path.write_text('{invalid')
     target.save_library()
+    assert target.library.podcast_subscriptions == []
+    assert target.library.podcast_episode_cache == {}
     assert target.library_path.read_text() == target.library.to_json()
 
 
@@ -127,3 +129,24 @@ def test_open_failure_propagates_without_losing_lock(tmp_path):
             target.save_library()
     assert target._lock.acquire(blocking=False)
     target._lock.release()
+
+
+def test_model_invalid_tracks_retain_memory_podcasts(tmp_path):
+    target = writer(tmp_path)
+    target.library.podcast_subscriptions = [{'id': 'memory'}]
+    target.library.podcast_episode_cache = {'memory': [1]}
+    target.library_path.write_text('{"tracks":[{}],"podcast_subscriptions":[{"id":"disk"}]}')
+    target.save_library()
+    assert target.library.podcast_subscriptions == [{'id': 'memory'}]
+    assert target.library.podcast_episode_cache == {'memory': [1]}
+
+
+def test_save_reads_podcasts_without_reconstructing_disk_tracks(tmp_path):
+    target = writer(tmp_path)
+    disk = library(257)
+    disk.podcast_subscriptions = [{'id': 'disk'}]
+    target.library_path.write_text(disk.to_json())
+    with patch.object(LibraryMetadata, 'from_json', side_effect=AssertionError('model reconstruction')):
+        target.save_library()
+    assert target.library.podcast_subscriptions == [{'id': 'disk'}]
+    assert len(target.library.tracks) == 129

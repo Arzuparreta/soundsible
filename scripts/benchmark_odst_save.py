@@ -45,6 +45,7 @@ def measure(metadata, reference, repeats, name):
     original_parse = LibraryMetadata.from_json
     original_json = LibraryMetadata.to_json
     original_iter = LibraryMetadata.iter_json
+    original_select = module.read_podcast_fields
     with tempfile.TemporaryDirectory(prefix='odst-save-', dir=ROOT) as directory:
         target = module.ODSTDownloader.__new__(module.ODSTDownloader)
         target.library_path = Path(directory) / 'library.json'
@@ -92,8 +93,8 @@ def measure(metadata, reference, repeats, name):
                 def __exit__(self, *args):
                     return timed('write_ms', self.file.__exit__, *args)
 
-                def read(self):
-                    return timed('read_ms', self.file.read)
+                def read(self, size=-1):
+                    return timed('read_ms', self.file.read, size)
 
                 def write(self, value):
                     return timed('write_ms', self.file.write, value)
@@ -107,10 +108,20 @@ def measure(metadata, reference, repeats, name):
                         return
                     yield value
 
+            def select(source):
+                before_read = totals['read_ms']
+                try:
+                    return timed('parse_ms', original_select, source)
+                finally:
+                    # The streaming selector reads internally; keep phase
+                    # totals exclusive, like the old read-then-parse path.
+                    totals['parse_ms'] -= totals['read_ms'] - before_read
+
             reset()
             reference['open'] = File
             try:
                 with (patch.object(module, 'open', File, create=True),
+                      patch.object(module, 'read_podcast_fields', side_effect=select),
                       patch.object(LibraryMetadata, 'from_json', side_effect=lambda value: timed('parse_ms', original_parse, value)),
                       patch.object(LibraryMetadata, 'to_json', lambda model: timed('encode_ms', original_json, model)),
                       patch.object(LibraryMetadata, 'iter_json', encode)):
@@ -139,6 +150,7 @@ def main():
         out.write(json.dumps({'baseline': args.reference, 'repeats': args.repeats,
                               'python': sys.version, 'platform': platform.platform(),
                               'candidate_sha256': hashlib.sha256((ROOT / 'odst_tool/odst_downloader.py').read_bytes()).hexdigest(),
+                              'podcast_reader_sha256': hashlib.sha256((ROOT / 'odst_tool/library_podcasts.py').read_bytes()).hexdigest(),
                               'scope': 'ODST complete save; temporary copies; Python allocations excluding preloaded model; no fsync'}) + '\n')
         if args.library:
             row = measure(LibraryMetadata.from_json(args.library.read_text()), reference, args.repeats, 'real-copy')

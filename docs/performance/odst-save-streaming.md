@@ -5,8 +5,10 @@ blocks instead of constructing `to_json()` before writing. The track batch is
 128, using the existing shared serializer. Successful files remain byte-identical.
 
 The lock still covers reading, preservation of Station's podcast data and the
-entire write. Existing behavior is preserved: invalid/unreadable old JSON is
-ignored, existing podcast fields in memory survive that failure, and write or
+entire write. Existing behavior is preserved: I/O failures and valid JSON that
+cannot construct the model retain podcast fields in memory; malformed JSON
+returns an empty model and clears those fields. The latter distinction was
+confirmed by the subsequent podcast-reader differential tests. Write and
 serialization errors propagate. The existing file is rewritten in place, keeping
 its inode, permissions and symlink target. No debounce, fsync or atomic rename
 was added. A failed save can still leave a corrupt file: a streaming encoding

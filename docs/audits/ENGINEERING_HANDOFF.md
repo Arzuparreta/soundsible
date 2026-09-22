@@ -250,6 +250,31 @@ coordinación entre procesos con Station.
   no hay debounce nuevo. Un fallo puede dejar un archivo parcial, como la
   escritura anterior tampoco conservaba el documento original.
 
+## Lectura ODST de podcasts sin reconstruir pistas completada (2026-09-22)
+
+`read_podcast_fields()` sustituye la lectura/modelo completo durante el guardado:
+lee por bloques con el decodificador estándar, valida y descarta cada pista y
+conserva los dos campos de podcasts. Sigue recorriendo todos los bytes.
+
+- [Mediciones, límites y reproducción](../performance/odst-podcast-read.md), con
+  baseline `f5a5a8a`, cinco repeticiones alternadas y bytes finales idénticos.
+- A 50k pistas: pico temporal Python 229,107 → 1,067 MiB; mediana del guardado
+  completo 1.755 → 1.156 ms. No es RSS ni evidencia de escucha.
+- Copia real de 208 pistas: 9,32 → 10,88 ms; 2,715 → 2,139 MiB. Se acepta ese
+  coste pequeño por la mejora de escalabilidad; no afirmar aceleración universal.
+- Compatibilidad diferencial: campos/tipos, claves duplicadas, Unicode, límites
+  de bloque y corrupción. JSON malformado vacía podcasts como antes; errores de
+  modelo/E/S mantienen los de memoria. Se corrigió esa distinción en el informe
+  previo y su test, que no comprobaba explícitamente el valor esperado.
+- Un descriptor conserva su lectura ante reemplazo POSIX. No hay bloqueo común
+  ODST/Station ni protección nueva contra carreras o escritura parcial.
+- Validación actual: **1.532 pruebas Python**, Ruff y `git diff --check` pasan;
+  smoke del benchmark con el hash adicional del lector correcto. Sin cambios
+  frontend, reinicio del motor, escritura de biblioteca real, push ni PR.
+- Memoria del lector ligada al mayor valor individual y los podcasts; JSON
+  malformado puede acumularse hasta EOF. La serialización conserva su lista de
+  referencias. No afirmar memoria estrictamente constante.
+
 ## Pendientes de auditoría, sin declarar todo terminado
 
 El índice de búsqueda local está hecho en `bc90a83` y la exportación por bloques
@@ -268,8 +293,9 @@ chunk entre estos:
    añade una pasada ordenada a las guardas que cambian campos de búsqueda u
    orden; controlar las mutaciones en memoria permitiría quitar esa pasada y la
    huella por consulta. Agrupar exports: ver la decisión de arriba. En ODST la
-   serialización por bloques está hecha; siguen pendientes la lectura completa
-   para conservar podcasts y la propiedad/coordinación de los dos escritores.
+   serialización por bloques y la eliminación del segundo modelo están hechas;
+   siguen pendientes evitar recorrer todos los bytes para conservar podcasts y
+   la propiedad/coordinación de los dos escritores.
 3. Línea base controlada de escucha y carga concurrente, cliente y servidor:
    cerrado/pausado/NORMAL/DJ/Live, frío/caliente, visible/oculto, sesiones largas,
    latencias, colas, CPU y memoria. Sigue pendiente; benchmarks sintéticos no la
@@ -280,7 +306,8 @@ chunk entre estos:
 
 ## Última validación y cómo retomar
 
-Último chunk funcional `32929f7`:
+Validación histórica del chunk de exportación `32929f7` (la del lector ODST
+está en su sección anterior):
 
 - Suite Python completa: **1.509 passed**.
 - `tests/test_library_export.py`: **35 passed**; con los tests de biblioteca
