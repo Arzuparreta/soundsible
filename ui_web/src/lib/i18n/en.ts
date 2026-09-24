@@ -1128,6 +1128,7 @@ export const en = {
     trackFallback: 'Track',
     addingDownloads: 'Adding to downloads…',
     episodeInDownloads: 'Episode in downloads',
+    downloadOperationFailed: 'Could not save the download change. Please try again.',
     downloadFailed: 'Could not download',
     addedToQueue: 'Added to queue',
     playNextConfirmed: 'Will play next',

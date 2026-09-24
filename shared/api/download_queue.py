@@ -3,6 +3,8 @@ Download queue manager for the Station Engine.
 """
 
 import json
+import sqlite3
+from contextlib import contextmanager
 import logging
 import threading
 import time
@@ -12,7 +14,7 @@ from pathlib import Path
 
 from shared.time_utils import utc_now_iso_z
 
-from shared.constants import DEFAULT_CONFIG_DIR, SourceType
+from shared.constants import SourceType
 from shared.text_utils import sanitize_cli_message
 from shared.url_utils import normalize_youtube_url, extract_youtube_video_id
 from shared.user_context import current_user_id as _current_user_id
@@ -40,7 +42,7 @@ def _owns(item, user_id):
     if user_id is None:
         return True
     owner = item.get("user_id") if isinstance(item, dict) else None
-    return owner is None or owner == user_id
+    return owner == user_id
 
 
 def classify_download_error(error) -> tuple[str, str]:
@@ -263,36 +265,130 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
 
 
 class DownloadQueueManager:
-    """Manages the download queue for the Station Engine."""
+    """Durable jobs. Only progress is volatile; transitions commit before return."""
 
     def __init__(self, storage_path=None, socketio=None):
-        if storage_path is None:
-            storage_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "download_queue.json"
-        self.storage_path = Path(storage_path)
+        self._legacy_path = Path(storage_path) if storage_path else None
         self.socketio = socketio
-
-        self.queue = self._load()
-        for item in self.queue:
-            if isinstance(item, dict) and item.get("status") == "downloading":
-                item["status"] = "interrupted"
-
         self.lock = threading.RLock()
-
-        evicted = self._evict_failed_and_interrupted()
-        if evicted:
-            logger.info(
-                "API: [Queue] Evicted %d failed/interrupted item(s) on startup.",
-                evicted,
-            )
-
-        if self.queue:
-            self.save()
-
         self.is_processing = False
-        self.log_buffers: dict[str, list[str]] = {}
+        self.accepting = True
+        self.log_buffers = {}
         self.max_logs = 50
-        self._progress_emit_min_gap_sec = 0.3
-        self._progress_emit_min_pct_delta = 2.0
+        self._progress = {}
+        self._ready_path = None
+        if storage_path is not None:
+            self.initialize(recover=True)
+
+    @property
+    def storage_path(self):
+        from shared.runtime import get_config_dir
+        return self._legacy_path or get_config_dir() / 'download_queue.json'
+
+    @property
+    def db_path(self):
+        return (self.storage_path.with_suffix('.db') if self._legacy_path
+                else self.storage_path.parent / 'instance.db')
+
+    @contextmanager
+    def _connection(self):
+        from shared.library_lifecycle import LibraryPersistenceError
+        conn = None
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(self.db_path, timeout=5)
+            conn.row_factory = sqlite3.Row
+            conn.execute('PRAGMA synchronous=FULL')
+            conn.execute("CREATE TABLE IF NOT EXISTS download_jobs (id TEXT PRIMARY KEY, status TEXT NOT NULL, payload TEXT NOT NULL, updated REAL NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS download_migrations (name TEXT PRIMARY KEY)")
+            conn.commit()
+            yield conn
+            conn.commit()
+        except (OSError, sqlite3.Error) as exc:
+            if conn:
+                conn.rollback()
+            raise LibraryPersistenceError('download_storage_unavailable') from exc
+        except BaseException:
+            if conn:
+                conn.rollback()
+            raise
+        finally:
+            if conn:
+                conn.close()
+
+    def _write(self, conn, item):
+        conn.execute('INSERT INTO download_jobs VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, payload=excluded.payload, updated=excluded.updated',
+                     (item['id'], item['status'], json.dumps(item), time.time()))
+
+    def initialize(self, *, recover=False):
+        from shared.library_lifecycle import coordinated, LibraryPersistenceError
+        owner_id = None
+        if not self._legacy_path:
+            from shared.users import get_admin_user
+            owner = get_admin_user()
+            owner_id = owner['id'] if owner else None
+        with coordinated(), self.lock, self._connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            migrated = conn.execute("SELECT 1 FROM download_migrations WHERE name='json'").fetchone()
+            if not migrated:
+                if self.storage_path.exists():
+                    try:
+                        items = json.loads(self.storage_path.read_text(encoding='utf-8'))
+                        if not isinstance(items, list) or any(not isinstance(i, dict) or not i.get('id') for i in items):
+                            raise ValueError('Invalid download queue')
+                    except (OSError, ValueError) as exc:
+                        raise LibraryPersistenceError('download_queue_invalid') from exc
+                    for item in items:
+                        if not item.get('user_id') and owner_id:
+                            item['user_id'] = owner_id
+                        self._write(conn, item)
+                conn.execute("INSERT INTO download_migrations VALUES ('json')")
+            if recover:
+                for row in conn.execute("SELECT payload FROM download_jobs WHERE status IN ('downloading','interrupted')").fetchall():
+                    item = json.loads(row['payload'])
+                    item['status'] = 'pending'
+                    item.pop('attempt', None)
+                    self._write(conn, item)
+                # Terminal work is invisible and kept briefly for crash recovery.
+                expired = conn.execute("SELECT id, payload FROM download_jobs WHERE status IN ('completed','cancelled') AND updated < ?", (time.time() - 7 * 86400,)).fetchall()
+                for row in expired:
+                    owner = json.loads(row['payload']).get('user_id')
+                    if owner:
+                        from shared.user_context import user_config_dir
+                        library_path = user_config_dir(owner, create=False) / 'library.db'
+                        if library_path.exists():
+                            with sqlite3.connect(library_path) as library_conn:
+                                if library_conn.execute("SELECT 1 FROM sqlite_master WHERE name='library_operations'").fetchone():
+                                    library_conn.execute('DELETE FROM library_operations WHERE id=?', (row['id'],))
+                            library_conn.close()
+                    conn.execute('DELETE FROM download_jobs WHERE id=?', (row['id'],))
+            conn.commit()
+            # The marker makes a crash before/after this rename idempotent.
+            if self.storage_path.exists():
+                backup = self.storage_path.with_name(self.storage_path.name + '.sqlite.bak')
+                if not backup.exists():
+                    self.storage_path.rename(backup)
+            self._ready_path = self.db_path
+            self.accepting = True
+
+    def _ensure_ready(self):
+        if self._ready_path != self.db_path or not self.db_path.exists():
+            self.initialize()
+
+    @property
+    def queue(self):
+        return self.list_items()
+
+    @queue.setter
+    def queue(self, items):
+        # Compatibility seam for isolated test fixtures; production uses methods.
+        self._ensure_ready()
+        with self.lock, self._connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            conn.execute('DELETE FROM download_jobs')
+            for item in items:
+                self._write(conn, item)
+        self._progress.clear()
 
     def add_log(self, msg, *, user_id=None):
         log_entry = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
@@ -320,243 +416,170 @@ class DownloadQueueManager:
             mine = list(self.log_buffers.get(user_id, [])) if user_id else []
             return sorted(shared + mine)[-self.max_logs :]
 
-    def _load(self):
-        if self.storage_path.exists():
-            try:
-                with open(self.storage_path, "r") as f:
-                    data = json.load(f)
-                    return data if isinstance(data, list) else []
-            except Exception as e:
-                logger.warning("API: Error loading download queue: %s", e)
-        return []
-
-    def save(self):
-        try:
-            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.lock:
-                with open(self.storage_path, "w") as f:
-                    json.dump(self.queue, f, indent=2)
-        except Exception as e:
-            logger.warning("API: Error saving download queue: %s", e)
+    def add_many(self, items, *, user_id=None):
+        from shared.library_lifecycle import coordinated, LibraryPersistenceError
+        self._ensure_ready()
+        added = []
+        with coordinated(), self.lock, self._connection() as conn:
+            if not self.accepting:
+                raise LibraryPersistenceError('download_shutting_down')
+            conn.execute('BEGIN IMMEDIATE')
+            for raw in items:
+                item = dict(raw) if isinstance(raw, dict) else {'song_str': str(raw)}
+                item.update(id=str(uuid.uuid4()), status='pending', added_at=utc_now_iso_z(),
+                            user_id=user_id or _current_user_id())
+                self._write(conn, item)
+                added.append(dict(item))
+        return added
 
     def add(self, item, *, user_id=None):
-        with self.lock:
-            if not isinstance(item, dict):
-                item = {"song_str": str(item)}
-
-            item["id"] = item.get("id", str(uuid.uuid4()))
-            item["status"] = "pending"
-            item["added_at"] = utc_now_iso_z()
-            # Stamped at enqueue time: the pump runs long after the request is
-            # gone and needs to know whose library the result belongs in.
-            item.setdefault("user_id", user_id or _current_user_id())
-            self.queue.append(item)
-
-        self.save()
-        return item
+        return self.add_many([item], user_id=user_id)[0]
 
     def get_pending(self, user_id=None):
-        with self.lock:
-            return [i for i in self.queue if i["status"] == "pending" and _owns(i, user_id)]
+        return [i for i in self.list_items(user_id) if i['status'] == 'pending']
 
     def list_items(self, user_id=None):
-        """Queue rows visible to ``user_id`` (all of them when ``None``)."""
-        with self.lock:
-            return [dict(i) for i in self.queue if _owns(i, user_id)]
+        self._ensure_ready()
+        with self.lock, self._connection() as conn:
+            rows = conn.execute("SELECT payload FROM download_jobs WHERE status NOT IN ('completed','cancelled') ORDER BY rowid").fetchall()
+            result = []
+            for row in rows:
+                item = json.loads(row['payload'])
+                if _owns(item, user_id):
+                    item.update(self._progress.get(item['id'], {}))
+                    # Private recovery data is never returned through HTTP.
+                    result.append({k: v for k, v in item.items() if k not in ('result', 'attempt') and not k.startswith('_')})
+            return result
 
-    def update_status(self, item_id, status, error=None):
-        do_save = False
-        updated_item = None
-        with self.lock:
-            for item in self.queue:
-                if item["id"] == item_id:
-                    item["status"] = status
-                    if error is not None:
-                        clean_error = sanitize_cli_message(str(error))
-                        error_kind, error_message = classify_download_error(clean_error)
-                        item["error"] = clean_error
-                        item["error_kind"] = error_kind
-                        item["error_message"] = error_message
-                    elif status != "failed":
-                        item.pop("error", None)
-                        item.pop("error_kind", None)
-                        item.pop("error_message", None)
-                    updated_item = dict(item)
-                    do_save = True
-                    break
-        if do_save:
-            self.save()
-        return updated_item
+    def _mutate(self, item_id, change, *, user_id=None, attempt=None):
+        from shared.library_lifecycle import coordinated
+        self._ensure_ready()
+        with coordinated(), self.lock, self._connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            row = conn.execute('SELECT payload FROM download_jobs WHERE id=?', (item_id,)).fetchone()
+            if row is None:
+                return None
+            item = json.loads(row['payload'])
+            if not _owns(item, user_id) or item['status'] in ('completed', 'cancelled'):
+                return None
+            if attempt is not None and item.get('attempt') != attempt:
+                return None
+            if not change(item):
+                return None
+            self._write(conn, item)
+            return dict(item)
 
-    def update_progress(
-        self,
-        item_id,
-        *,
-        percent=None,
-        speed=None,
-        eta=None,
-        phase=None,
-        total_bytes=None,
-    ):
-        """Update in-flight download progress; throttles socket emits (≥2% jump or ≥300ms)."""
-        emit_payload = None
-        emit_owner = None
-        now = time.time()
-        found = False
-        with self.lock:
-            for item in self.queue:
-                if item["id"] != item_id:
-                    continue
-                found = True
-                emit_owner = item.get("user_id")
-                if percent is not None:
-                    try:
-                        item["progress_percent"] = float(percent)
-                    except (TypeError, ValueError):
-                        pass
-                if speed is not None:
-                    item["speed"] = speed
-                if eta is not None:
-                    item["eta"] = eta
-                if phase is not None:
-                    item["phase"] = phase
-                if total_bytes is not None:
-                    try:
-                        item["total_bytes"] = int(total_bytes)
-                    except (TypeError, ValueError):
-                        pass
+    def claim(self, item_id):
+        # Resolve account state before opening this store's write transaction.
+        # The account manager uses a separate connection to the same database.
+        candidate = next((i for i in self.list_items() if i['id'] == item_id), None)
+        if candidate is None:
+            return None
+        available = True
+        if not self._legacy_path:
+            from shared.users import get_user
+            user = get_user(candidate.get('user_id')) if candidate.get('user_id') else None
+            available = bool(user and not user.get('disabled'))
+        def change(item):
+            if not self.accepting or item['status'] != 'pending':
+                return False
+            if not available:
+                item.update(status='failed', error_kind='account_unavailable',
+                            error_message='The download owner is unavailable.')
+            else:
+                item.update(status='downloading', attempt=uuid.uuid4().hex)
+            return True
+        item = self._mutate(item_id, change)
+        return item if item and item['status'] == 'downloading' else None
 
-                last_ts = float(item.get("_progress_emit_ts") or 0)
-                last_pct = item.get("_progress_emit_pct")
-                cur_pct = item.get("progress_percent")
-                last_phase = item.get("_last_emitted_phase")
+    def active(self, item_id, attempt):
+        self._ensure_ready()
+        with self._connection() as conn:
+            row = conn.execute('SELECT payload FROM download_jobs WHERE id=?', (item_id,)).fetchone()
+            item = json.loads(row['payload']) if row else {}
+            return item.get('status') == 'downloading' and item.get('attempt') == attempt
 
-                should_emit = False
-                if last_ts == 0 and cur_pct is not None:
-                    should_emit = True
-                elif now - last_ts >= self._progress_emit_min_gap_sec:
-                    should_emit = True
-                elif (
-                    last_pct is not None
-                    and cur_pct is not None
-                    and abs(float(cur_pct) - float(last_pct)) >= self._progress_emit_min_pct_delta
-                ):
-                    should_emit = True
-                elif phase is not None and phase != last_phase:
-                    should_emit = True
+    def checkpoint(self, item_id, attempt, track):
+        return self._mutate(item_id, lambda item: (item.update(result=track, phase='processing') or True), attempt=attempt)
 
-                if should_emit:
-                    item["_progress_emit_ts"] = now
-                    if cur_pct is not None:
-                        item["_progress_emit_pct"] = cur_pct
-                    if phase is not None:
-                        item["_last_emitted_phase"] = phase
-                    emit_payload = {
-                        "id": item_id,
-                        "status": "downloading",
-                        "progress_percent": item.get("progress_percent"),
-                        "speed": item.get("speed"),
-                        "eta": item.get("eta"),
-                        "phase": item.get("phase"),
-                        "total_bytes": item.get("total_bytes"),
-                    }
-                break
+    def complete(self, item_id, attempt):
+        result = self._mutate(item_id, lambda item: (item.update(status='completed') or True), attempt=attempt)
+        if result:
+            self._progress.pop(item_id, None)
+        return result
 
-        if not found:
+    def update_status(self, item_id, status, error=None, *, attempt=None):
+        def change(item):
+            item.update(self._progress.get(item_id, {}))
+            item['status'] = status
+            if error is not None:
+                clean = sanitize_cli_message(str(error))
+                kind, message = classify_download_error(clean)
+                item.update(error=clean, error_kind=kind, error_message=message)
+            elif status != 'failed':
+                for key in ('error', 'error_kind', 'error_message'):
+                    item.pop(key, None)
+            return True
+        return self._mutate(item_id, change, attempt=attempt)
+
+    def update_progress(self, item_id, *, attempt=None, **values):
+        if attempt is not None and not self.active(item_id, attempt):
             return
-
-        self.save()
-        if emit_payload and self.socketio:
-            try:
-                self._emit_item_update({"user_id": emit_owner}, emit_payload)
-            except Exception as e:
-                logger.warning("API: downloader_update emit failed: %s", e)
+        values = {('progress_percent' if k == 'percent' else k): v for k, v in values.items() if v is not None}
+        with self.lock:
+            now = time.monotonic()
+            progress = self._progress.setdefault(item_id, {})
+            last = progress.get('_emitted', 0)
+            previous_phase = progress.get('phase')
+            progress.update(values)
+            emit = now - last >= .3 or previous_phase != progress.get('phase')
+            if emit:
+                progress['_emitted'] = now
+        if emit and self.socketio:
+            item = next((i for i in self.list_items() if i['id'] == item_id), None)
+            if item:
+                self._emit_item_update(item, {'id': item_id, 'status': item['status'], **{k: v for k, v in progress.items() if not k.startswith('_')}})
 
     def remove_item(self, item_id, *, user_id=None):
-        with self.lock:
-            self.queue = [
-                i for i in self.queue if not (i["id"] == item_id and _owns(i, user_id))
-            ]
-        self.save()
+        item = self._mutate(item_id, lambda item: (item.update(status='cancelled') or True), user_id=user_id)
+        if item:
+            self._progress.pop(item_id, None)
+        return item
 
     def clear_queue(self, *, user_id=None):
-        with self.lock:
-            self.queue = [
-                i
-                for i in self.queue
-                if i["status"] == "downloading" or not _owns(i, user_id)
-            ]
-        self.save()
+        self._clear(user_id, {'pending', 'failed', 'interrupted'})
 
-    def _evict_failed_and_interrupted(self) -> int:
-        """Remove failed/interrupted items from the in-memory queue.
-
-        Called at startup so a server restart clears the residue of the
-        previous run. The persisted JSON is rewritten afterwards by
-        ``__init__``'s trailing ``self.save()``.
-        """
-        with self.lock:
-            kept = [i for i in self.queue if i.get("status") not in ("failed", "interrupted")]
-            evicted = len(self.queue) - len(kept)
-            self.queue = kept
-        return evicted
+    def _clear(self, user_id, statuses):
+        from shared.library_lifecycle import coordinated
+        self._ensure_ready()
+        removed = 0
+        with coordinated(), self.lock, self._connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            for row in conn.execute('SELECT payload FROM download_jobs').fetchall():
+                item = json.loads(row['payload'])
+                if item['status'] in statuses and _owns(item, user_id):
+                    item['status'] = 'cancelled'
+                    self._write(conn, item)
+                    self._progress.pop(item['id'], None)
+                    removed += 1
+        return removed
 
     def retry_failed(self, item_id, *, user_id=None):
-        """Reset a failed item back to pending so the pump re-processes it.
+        def change(item):
+            if item['status'] not in ('failed', 'interrupted'):
+                return False
+            for key in ('error', 'error_kind', 'error_message', 'progress_percent', 'speed', 'eta', 'phase', 'total_bytes', 'attempt'):
+                item.pop(key, None)
+            item['status'] = 'pending'
+            return True
+        result = self._mutate(item_id, change, user_id=user_id)
+        if result:
+            self._progress.pop(item_id, None)
+            self._emit_item_update(result, {'id': item_id, 'status': 'pending', 'progress_percent': None})
+        return {k: v for k, v in result.items() if k not in ('result', 'attempt')} if result else None
 
-        Returns the updated item dict, or ``None`` if the id is unknown, not
-        yours, or the item is not currently in ``failed`` state.
-        """
-        updated_item = None
-        with self.lock:
-            for item in self.queue:
-                if item.get("id") != item_id or not _owns(item, user_id):
-                    continue
-                if item.get("status") != "failed":
-                    return None
-                item["status"] = "pending"
-                for stale_key in (
-                    "error",
-                    "error_kind",
-                    "error_message",
-                    "progress_percent",
-                    "speed",
-                    "eta",
-                    "phase",
-                    "total_bytes",
-                ):
-                    item.pop(stale_key, None)
-                updated_item = dict(item)
-                break
-        if updated_item:
-            self.save()
-            if self.socketio:
-                try:
-                    self._emit_item_update(
-                        updated_item,
-                        {
-                            "id": updated_item["id"],
-                            "status": "pending",
-                            "progress_percent": None,
-                        },
-                    )
-                except Exception as e:
-                    logger.warning("API: downloader_update emit failed: %s", e)
-        return updated_item
-
-    def clear_failed(self, *, user_id=None) -> int:
-        """Remove your failed/interrupted items from the queue. Returns count."""
-        with self.lock:
-            kept = [
-                i
-                for i in self.queue
-                if i.get("status") not in ("failed", "interrupted") or not _owns(i, user_id)
-            ]
-            removed = len(self.queue) - len(kept)
-            self.queue = kept
-        if removed:
-            self.save()
-        return removed
+    def clear_failed(self, *, user_id=None):
+        return self._clear(user_id, {'failed', 'interrupted'})
 
     def _emit_item_update(self, item, payload) -> None:
         """Send a queue update to the owner of ``item`` only."""

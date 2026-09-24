@@ -2995,14 +2995,18 @@ describe('download queue writes', () => {
       retryDownload: vi.fn().mockResolvedValue({ status: 'ok' }),
     });
     await actions.loadDownloads();
-    const untouched = state.downloads.queue[1];
 
-    actions.retryDownload('a');
+    api.getDownloadQueue.mockResolvedValueOnce({ queue: [
+      { id: 'a', status: 'pending' },
+      { id: 'b', status: 'downloading', progress_percent: 40 },
+    ], is_processing: true });
+    const retried = actions.retryDownload('a');
+    expect(state.downloads.queue[0].status).toBe('failed');
+    await retried;
 
     expect(state.downloads.queue[0].status).toBe('pending');
     expect(state.downloads.queue[0].error).toBeUndefined();
-    // The other row is the very same object: nothing rebuilt the array.
-    expect(state.downloads.queue[1]).toBe(untouched);
+    expect(state.downloads.queue[1].progress_percent).toBe(40);
     expect(api.retryDownload).toHaveBeenCalledWith('a');
   });
 });

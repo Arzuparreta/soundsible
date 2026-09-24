@@ -39,6 +39,12 @@ def api_error(message: str, status: int = 400, *, code: Optional[str] = None, **
 def register_error_handlers(app: Flask) -> None:
     """Make every unhandled failure a JSON response, and log it once."""
 
+    from shared.library_lifecycle import LibraryPersistenceError
+
+    @app.errorhandler(LibraryPersistenceError)
+    def _persistence_error(exc):
+        return api_error(str(exc), exc.status, code=exc.code)
+
     @app.errorhandler(HTTPException)
     def _http_exception(exc: HTTPException):
         # 404s and 405s are routine; anything else is worth a line.

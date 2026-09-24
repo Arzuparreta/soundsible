@@ -121,7 +121,7 @@ def subscribe():
         "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "episodes": eps[:500],
     }
-    lib._save_metadata()
+    lib.require_saved()
     api["emit_to_user"]("library_updated")
     return jsonify({"status": "success", "subscription": sub})
 
@@ -141,7 +141,7 @@ def unsubscribe(feed_id: str):
     if len(metadata.podcast_subscriptions) == before:
         return jsonify({"error": "Not found"}), 404
     metadata.podcast_episode_cache.pop(feed_id, None)
-    lib._save_metadata()
+    lib.require_saved()
     api["emit_to_user"]("library_updated")
     return jsonify({"status": "success"})
 
@@ -190,7 +190,7 @@ def feed_episodes(feed_id: str):
                 "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "episodes": episodes[:500],
             }
-            lib._save_metadata()
+            lib.require_saved()
     else:
         episodes = (cache or {}).get("episodes") or []
 

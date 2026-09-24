@@ -6,7 +6,8 @@ import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .config import DEFAULT_OUTPUT_DIR, LIBRARY_FILENAME, TRACKS_DIR
-from .models import LibraryMetadata, Track
+from .models import LibraryMetadata
+from dataclasses import replace
 from .audio_utils import AudioProcessor
 
 def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, progress_callback=None, library: Optional[LibraryMetadata] = None, save_callback=None) -> Dict[str, Any]:
@@ -58,9 +59,6 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
     for i, track in enumerate(library.tracks):
         if limit > 0 and optimized_count >= limit:
             log(f"Limit of {limit} reached.")
-            updated_tracks.append(track) # Note: Append the rest? no, we should break and append the rest unmodified
-            # Note: Actually if we rebuild list, we must process all
-            # Note: So if limit reached, we just skip optimization logic but append track
             updated_tracks.append(track)
             continue
 
@@ -108,31 +106,15 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
                         shutil.move(str(temp_file), str(new_final_path))
                         
                         if new_hash != track.file_hash:
-                            if original_file.exists(): os.remove(original_file)
+                            from shared.library_lifecycle import retire
+                            retire(track)
                         
-                        updated_track = Track(
-                            id=new_hash,
-                            title=track.title,
-                            artist=track.artist,
-                            album=track.album,
-                            album_artist=track.album_artist,
-                            duration=track.duration,
-                            file_hash=new_hash,
-                            original_filename=track.original_filename,
-                            compressed=True,
-                            file_size=new_size,
-                            bitrate=128,
-                            format='mp3',
-                            year=track.year,
-                            genre=track.genre,
-                            track_number=track.track_number,
-                            artists=track.artists,
-                            disc_number=track.disc_number,
-                            disc_total=track.disc_total,
-                            is_compilation=track.is_compilation,
-                            cover_art_key=track.cover_art_key
+                        updated_track = replace(
+                            track, id=new_hash, file_hash=new_hash,
+                            compressed=True, file_size=new_size, bitrate=128,
+                            format='mp3', local_path=None,
                         )
-                        
+
                         updated_tracks.append(updated_track)
                         if updated_track.id != track.id:
                             id_map[track.id] = updated_track.id

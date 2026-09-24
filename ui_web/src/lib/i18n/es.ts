@@ -1130,6 +1130,7 @@ export const es: Dict = {
     trackFallback: 'Pista',
     addingDownloads: 'Añadiendo a descargas…',
     episodeInDownloads: 'Episodio en descargas',
+    downloadOperationFailed: 'No se pudo guardar el cambio en la descarga. Vuelve a intentarlo.',
     downloadFailed: 'No se pudo descargar',
     addedToQueue: 'Añadida a la cola',
     playNextConfirmed: 'Se reproducirá a continuación',

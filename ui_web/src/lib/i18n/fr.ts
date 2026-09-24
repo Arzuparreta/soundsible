@@ -1138,6 +1138,7 @@ export const fr: Dict = {
     trackFallback: 'Piste',
     addingDownloads: 'Ajout aux téléchargements…',
     episodeInDownloads: 'Épisode dans les téléchargements',
+    downloadOperationFailed: 'Impossible d’enregistrer la modification du téléchargement. Réessayez.',
     downloadFailed: 'Impossible de télécharger',
     addedToQueue: 'Ajoutée à la file',
     playNextConfirmed: 'Sera lue ensuite',

@@ -21,6 +21,7 @@ from flask_cors import CORS
 logger = logging.getLogger(__name__)
 API_STARTED_AT = time.time()
 
+from shared.library_lifecycle import serialized, drain as drain_audio_cleanup
 from shared import request_scope
 from shared.models import Track, LibraryMetadata
 from shared.constants import STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
@@ -612,6 +613,13 @@ def get_user_core(user_id: Optional[str] = None) -> _UserCore:
     uid = user_id or require_user_id()
     with _user_cores_lock:
         core = _user_cores.get(uid)
+    if core is not None:
+        return core
+    # Only construction may write. Ordinary playback reads never wait for the
+    # lifecycle lock while another account uploads/edits metadata.
+    from shared.library_lifecycle import coordinated
+    with coordinated(), _user_cores_lock:
+        core = _user_cores.get(uid)
         if core is None:
             with user_context(uid):
                 core = _build_user_core(uid)
@@ -893,13 +901,17 @@ def _process_single_queue_item(item):
     """
     from shared.user_context import user_context
 
-    with user_context(item.get("user_id")):
-        _process_single_queue_item_bound(item)
+    claimed = item if item.get('attempt') else queue_manager_dl.claim(item['id'])
+    if not claimed:
+        return
+    with user_context(claimed.get("user_id")):
+        _process_single_queue_item_bound(claimed)
 
 
 def _process_single_queue_item_bound(item):
     global downloader_service, queue_manager_dl
     item_id = item['id']
+    attempt = item['attempt']
     song_str = item.get('song_str')
     output_dir = item.get('output_dir')
     source_type = item.get('source_type') or 'manual'
@@ -910,7 +922,6 @@ def _process_single_queue_item_bound(item):
         queue_manager_dl._emit_item_update(item, payload)
 
     queue_manager_dl.add_log(f"Preparing: {song_str or item_id}...")
-    queue_manager_dl.update_status(item_id, 'downloading')
     with app.app_context():
         _emit_item({'id': item_id, 'status': 'downloading'})
 
@@ -919,8 +930,22 @@ def _process_single_queue_item_bound(item):
         queue_manager_dl.add_log(f"Processing: {song_str or item_id}...")
 
         track = None
+        # If the library transaction committed before a crash, a later user
+        # deletion must not be undone by replaying this job.
+        lib = get_user_core(item_user_id).library
+        if lib.db.has_library_operation(item_id):
+            if queue_manager_dl.complete(item_id, attempt):
+                _emit_item({'id': item_id, 'status': 'completed'})
+            return
+        checkpoint = item.get('result')
+        if checkpoint:
+            restored = Track.from_dict(checkpoint)
+            if resolve_local_track_path(restored):
+                track = restored
         st = (source_type or "").strip()
-        if st == SourceType.PODCAST_ENCLOSURE or st == "podcast_enclosure":
+        if track is not None:
+            pass
+        elif st == SourceType.PODCAST_ENCLOSURE or st == "podcast_enclosure":
             enclosure_url = (item.get("enclosure_url") or song_str or "").strip()
             if not enclosure_url:
                 raise Exception("Missing podcast enclosure URL")
@@ -934,9 +959,13 @@ def _process_single_queue_item_bound(item):
                     ) == eg:
                         td = t.to_dict()
                         td.pop("local_path", None)
-                        queue_manager_dl.update_status(item_id, "completed")
+                        from shared.library_lifecycle import coordinated
+                        with coordinated():
+                            if not queue_manager_dl.active(item_id, attempt):
+                                return
+                            add_tracks_to_user_library([t], user_id=item_user_id, operation_id=item_id)
+                            queue_manager_dl.complete(item_id, attempt)
                         with app.app_context():
-                            queue_manager_dl.remove_item(item_id)
                             _emit_item(
                                 {"id": item_id, "status": "completed", "track": td, "duplicate": True},
                             )
@@ -1024,7 +1053,7 @@ def _process_single_queue_item_bound(item):
                     if payload.get("total_bytes") is not None:
                         kwargs["total_bytes"] = payload["total_bytes"]
                     if kwargs:
-                        queue_manager_dl.update_progress(item_id, **kwargs)
+                        queue_manager_dl.update_progress(item_id, attempt=attempt, **kwargs)
 
                 track = dl.downloader.process_video(
                     song_str,
@@ -1045,12 +1074,18 @@ def _process_single_queue_item_bound(item):
                 track = dl.downloader.process_track(fake_meta, source="manual")
 
         if track:
-            # Note: Update ODST internal record (replace by hash if already present)
-            existing = dl.library.get_track_by_hash(track.file_hash)
-            if existing:
-                dl.library.remove_track(existing.id)
-            dl.add_track(track)
-            dl.save_library()
+            # Persist the reusable result before any personal-library work.
+            if not queue_manager_dl.checkpoint(item_id, attempt, track.to_dict()):
+                return
+            from shared.library_lifecycle import coordinated
+            with coordinated():
+                if not queue_manager_dl.active(item_id, attempt):
+                    return
+                existing = dl.library.get_track_by_hash(track.file_hash)
+                if existing:
+                    dl.library.remove_track(existing.id)
+                dl.add_track(track)
+                dl.save_library()
 
             # Note: Pre-cache cover so first request serves it
             track_dict = track.to_dict()
@@ -1073,7 +1108,16 @@ def _process_single_queue_item_bound(item):
 
             # Note: Add to the requesting user's library — and only theirs. The
             # file itself lives in the pool everyone shares.
-            add_tracks_to_user_library([shared_track], user_id=item_user_id)
+            with coordinated():
+                if not queue_manager_dl.active(item_id, attempt):
+                    return
+                from shared.users import get_user
+                owner = get_user(item_user_id)
+                if not owner or owner.get('disabled'):
+                    raise RuntimeError('The download owner is unavailable')
+                add_tracks_to_user_library([shared_track], user_id=item_user_id, operation_id=item_id)
+                if not queue_manager_dl.complete(item_id, attempt):
+                    return
 
             # Measure it now rather than waiting for the idle sweep: a song
             # somebody just asked for is the one they are about to play, and one
@@ -1086,7 +1130,6 @@ def _process_single_queue_item_bound(item):
                 logger.debug("API: could not measure loudness for %s", shared_track.id, exc_info=True)
 
             with app.app_context():
-                queue_manager_dl.remove_item(item_id)
                 _emit_item({'id': item_id, 'status': 'completed', 'track': track_dict})
             queue_manager_dl.add_log(f"✅ Finished: {track.artist} - {track.title}")
         else:
@@ -1094,7 +1137,9 @@ def _process_single_queue_item_bound(item):
 
     except Exception as e:
         logger.warning("API Downloader Error: %s", e)
-        failed_item = queue_manager_dl.update_status(item_id, 'failed', error=str(e)) or {}
+        failed_item = queue_manager_dl.update_status(item_id, 'failed', error=str(e), attempt=attempt)
+        if failed_item is None:
+            return
         with app.app_context():
             _emit_item(
                 {
@@ -1128,8 +1173,17 @@ def process_queue_background(stop_event: Optional[threading.Event] = None):
     def _stopped() -> bool:
         return stop_event is not None and stop_event.is_set()
 
+    cleanup_at = 0.0
     try:
         while True:
+            if time.monotonic() >= cleanup_at:
+                cleanup_at = time.monotonic() + 30
+                try:
+                    provider = next((core.library.provider for core in list(_user_cores.values())
+                                     if core.library.provider), None)
+                    drain_audio_cleanup(provider)
+                except Exception:
+                    logger.warning("Deferred audio cleanup failed", exc_info=True)
             if _stopped():
                 queue_manager_dl.add_log("Station Engine: Pump stop requested; exiting.")
                 break
@@ -1240,7 +1294,7 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
         from shared.artwork import artwork_store
         artwork_store().bind(track_id, None, "none")
     track.metadata_modified_by_user = True
-    lib._save_metadata()
+    lib.require_saved()
     _mirror_track_into_odst_downloader(track)
     emit_to_user('library_updated', payload={'cover_changed': cover_source is not None})
     return True
@@ -1256,13 +1310,11 @@ def _ensure_lib_metadata():
     renamed on one snapshot and a song added to another — the later save
     reverting the earlier change, and the client being told both succeeded.
 
-    Pending work is committed first: a finished download lives only in the
-    in-memory snapshot until its debounced commit runs, and reloading over it
-    would drop those tracks.
+    Downloads commit before reporting completion; no unsaved download snapshot
+    is carried across requests.
 
     Returns (lib, metadata) or (None, None).
     """
-    orchestrator.flush_metadata_commit()
     lib, _, _ = get_core()
     if not lib.metadata:
         lib.sync_library()
@@ -1299,7 +1351,8 @@ def _loaded_user_library():
     return lib
 
 
-def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
+@serialized
+def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None, operation_id=None) -> int:
     """Put specific tracks into one person's library.
 
     Downloads land in a pool everyone shares, so what makes a track *yours* is
@@ -1315,7 +1368,10 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
 
     lib = get_user_core(target).library
     if not lib.metadata:
-        _loaded_user_library()
+        lib.sync_library(silent=True)
+    lib.refresh_if_stale()
+    if operation_id and lib.db.has_library_operation(operation_id):
+        return 0
 
     added = 0
     newly_added = []
@@ -1332,15 +1388,13 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
         newly_added.append(stored)
         added += 1
 
-    if added:
+    if added or operation_id:
+        lib.require_saved(**({'operation_id': operation_id} if operation_id else {}))
         promoted = _promote_favourites_to_library(newly_added, user_id=target)
-
-        def _emit_updated():
-            with app.app_context():
-                emit_to_user('library_updated', user_id=target)
-                if promoted:
-                    emit_to_user('favourites_updated', user_id=target)
-        orchestrator.schedule_metadata_commit(lib._save_metadata, _emit_updated)
+        with app.app_context():
+            emit_to_user('library_updated', user_id=target)
+            if promoted:
+                emit_to_user('favourites_updated', user_id=target)
     return added
 
 
@@ -1412,7 +1466,8 @@ def _sync_odst_to_main_core():
     return add_tracks_to_user_library(dl.library.tracks)
 
 
-def remap_track_ids_for_all_users(id_map: dict) -> dict:
+@serialized
+def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
     """Rewrite track ids across every account after files were re-encoded.
 
     Optimization changes each file's content hash, and the hash is the track
@@ -1426,6 +1481,7 @@ def remap_track_ids_for_all_users(id_map: dict) -> dict:
         return {}
 
     touched: dict[str, int] = {}
+    failed = []
     for account in list_users():
         user_id = account["id"]
         try:
@@ -1437,7 +1493,20 @@ def remap_track_ids_for_all_users(id_map: dict) -> dict:
                 if not lib.metadata:
                     continue
 
+                lib.refresh_if_stale()
                 changed = lib.metadata.remap_track_ids(id_map)
+                for track in lib.metadata.tracks:
+                    replacement = (replacements or {}).get(track.id)
+                    if replacement:
+                        for field in ('file_hash', 'format', 'file_size', 'bitrate', 'compressed', 'local_path'):
+                            setattr(track, field, getattr(replacement, field))
+                        changed = True
+
+                if changed:
+                    lib.metadata.version += 1
+                    if not lib._save_metadata(id_replacements=id_map):
+                        raise RuntimeError("could not persist remapped library")
+                    touched[user_id] = 1
 
                 for old_id, new_id in id_map.items():
                     # Keeps the entry's snapshot and `added_at`, which a
@@ -1445,13 +1514,12 @@ def remap_track_ids_for_all_users(id_map: dict) -> dict:
                     core.favourites.remap_library_id(old_id, new_id)
 
                 if changed:
-                    lib.metadata.version += 1
-                    if not lib._save_metadata(id_replacements=id_map):
-                        raise RuntimeError("could not persist remapped library")
-                    touched[user_id] = 1
                     emit_to_user("library_updated", user_id=user_id)
         except Exception as e:
+            failed.append(user_id)
             logger.warning("API: could not remap optimized track ids for user %s: %s", user_id, e)
+    if failed:
+        raise RuntimeError("Some libraries could not commit repaired references; originals retained")
     return touched
 
 
@@ -1472,7 +1540,7 @@ def run_optimization_task(dry_run):
             ) or {}
 
             if not dry_run:
-                touched = remap_track_ids_for_all_users(summary.get("id_map") or {})
+                touched = remap_track_ids_for_all_users(summary.get("id_map") or {}, {t.id: t for t in dl.library.tracks})
                 if touched:
                     queue_manager_dl.add_log(
                         f"Updated track ids in {len(touched)} librar"
@@ -1527,7 +1595,7 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
                         raise RuntimeError("could not persist repaired track ids")
                     for old_id, new_id in summary["id_map"].items():
                         core.favourites.remap_library_id(old_id, new_id)
-                    remap_track_ids_for_all_users(summary["id_map"])
+                    remap_track_ids_for_all_users(summary["id_map"], {t.id: t for t in summary["tracks"]})
                     with app.app_context():
                         emit_to_user("library_updated", user_id=requester_id)
                         emit_to_user("favourites_updated", user_id=requester_id)
@@ -1736,7 +1804,7 @@ def health_check():
             "jobs": {
                 "active_count": len(orchestrator.active_jobs),
                 "active_ids": sorted(orchestrator.active_jobs.keys()),
-                "pending_metadata_commit": orchestrator.pending_commits,
+                "pending_metadata_commit": False,
             },
         }
     )
@@ -1783,6 +1851,7 @@ def stop_api() -> None:
         _api_shutdown_done = True
 
     logger.info("API: Shutting down...")
+    queue_manager_dl.accepting = False
     from shared.artwork_recovery import recovery
     recovery.stop()
 
@@ -1816,6 +1885,7 @@ def stop_api() -> None:
         logger.exception("API: Error stopping loudness idle worker")
 
     try:
+        orchestrator.drain_downloads(timeout=5.0)
         orchestrator.shutdown(wait=False)
     except Exception:
         logger.exception("API: Error stopping orchestrator")
@@ -1914,6 +1984,7 @@ def start_api(
     from shared.multiuser_migration import ensure_multiuser_layout
 
     _migration = ensure_multiuser_layout()
+    queue_manager_dl.initialize(recover=True)
     if _migration and _migration.get("adopted_existing_library"):
         logger.info(
             "API: Existing library adopted by account %r; originals kept as *.singleuser.bak",

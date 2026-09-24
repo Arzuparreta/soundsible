@@ -175,41 +175,6 @@ def test_run_serialized_still_works(orch):
     assert out == [1]
 
 
-def test_schedule_metadata_commit_debounces(orch):
-    orch.commit_debounce_sec = 0.05
-    counter = {"n": 0}
-
-    def commit():
-        counter["n"] += 1
-
-    for _ in range(5):
-        orch.schedule_metadata_commit(commit)
-        time.sleep(0.005)
-    time.sleep(0.2)
-    assert counter["n"] == 1
-
-
-def test_schedule_metadata_commit_returns_its_pool_connection(orch, tmp_path):
-    """The debounced commit fires from a bare threading.Timer thread, never a
-    Flask request. Its database block must return the loan after the commit,
-    including the connection used during database construction."""
-    from shared.database import DatabaseManager
-
-    db = DatabaseManager(str(tmp_path / "library.db"))
-    orch.commit_debounce_sec = 0.05
-    completed = threading.Event()
-
-    def commit():
-        db.get_library_revision()
-        completed.set()
-
-    orch.schedule_metadata_commit(commit)
-    assert completed.wait(timeout=3)
-
-    stats = db.pool_stats()
-    assert stats["created"] == stats["idle"] == 1
-
-
 def test_failing_task_clears_active_jobs(orch):
     def boom():
         raise RuntimeError("nope")

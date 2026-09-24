@@ -4121,35 +4121,44 @@ export const actions = {
     }
   },
 
-  retryDownload(id: string): void {
-    // Path write, so only the retried row's subscribers re-run.
-    setState(
-      'downloads',
-      'queue',
-      (item) => item.id === id,
-      { status: 'pending', progress_percent: null, error: undefined, error_message: undefined },
-    );
-    api.retryDownload(id).catch(() => void actions.loadDownloads()); // resync on failure
+  async retryDownload(id: string): Promise<void> {
+    try {
+      await api.retryDownload(id);
+      await actions.loadDownloads();
+    } catch {
+      toast.error(tr('toast.downloadOperationFailed'));
+      void actions.loadDownloads();
+    }
   },
 
-  removeDownload(id: string): void {
-    const prev = state.downloads.queue;
-    setState('downloads', 'queue', (q) => q.filter((i) => i.id !== id)); // optimistic
-    api.removeDownload(id).catch(() => setState('downloads', 'queue', prev)); // revert
+  async removeDownload(id: string): Promise<void> {
+    try {
+      await api.removeDownload(id);
+      setState('downloads', 'queue', (q) => q.filter((i) => i.id !== id));
+    } catch {
+      toast.error(tr('toast.downloadOperationFailed'));
+      void actions.loadDownloads();
+    }
   },
 
-  clearFailedDownloads(): void {
-    const prev = state.downloads.queue;
-    setState('downloads', 'queue', (q) =>
-      q.filter((i) => i.status !== 'failed' && i.status !== 'interrupted'),
-    );
-    api.clearFailedDownloads().catch(() => setState('downloads', 'queue', prev));
+  async clearFailedDownloads(): Promise<void> {
+    try {
+      await api.clearFailedDownloads();
+      await actions.loadDownloads();
+    } catch {
+      toast.error(tr('toast.downloadOperationFailed'));
+      void actions.loadDownloads();
+    }
   },
 
-  clearDownloads(): void {
-    const prev = state.downloads.queue;
-    setState('downloads', 'queue', (q) => q.filter((i) => i.status === 'downloading'));
-    api.clearDownloads().catch(() => setState('downloads', 'queue', prev));
+  async clearDownloads(): Promise<void> {
+    try {
+      await api.clearDownloads();
+      await actions.loadDownloads();
+    } catch {
+      toast.error(tr('toast.downloadOperationFailed'));
+      void actions.loadDownloads();
+    }
   },
 
   async rescanLibrary(): Promise<LibraryScanStatus> {

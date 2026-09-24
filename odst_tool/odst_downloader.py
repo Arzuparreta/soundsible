@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 import threading
+from shared.library_lifecycle import serialized
 from shared.atomic_file import replace_contents, text_pieces
 from .config import DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_QUALITY
 from .models import LibraryMetadata
@@ -49,6 +50,7 @@ class ODSTDownloader:
             settings={},
         )
 
+    @serialized
     def save_library(self) -> None:
         with self._lock:
             # Preserve podcast subscription metadata written by the Station API (same library.json).
@@ -64,6 +66,7 @@ class ODSTDownloader:
             # Streamed into a temporary: the Station reads this file meanwhile.
             replace_contents(self.library_path, text_pieces(self.library.iter_json()))
 
+    @serialized
     def add_track(self, track) -> None:
         with self._lock:
             self.library.add_track(track)

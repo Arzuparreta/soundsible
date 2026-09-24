@@ -401,14 +401,13 @@ def repair_library(
             continue
 
         source = Path(path).resolve()
-        managed = source.is_relative_to(pool.resolve())
-        external_destination = None
-        if not managed:
-            suffix = REMUXABLE.get(source.suffix.lower())
-            if suffix is None:
-                updated.append(track)
-                continue
-            external_destination = pool / f".external-repair-{track.id}{suffix}"
+        # Always publish a new object. All accounts must commit their new
+        # references before the old bytes can be retired.
+        suffix = REMUXABLE.get(source.suffix.lower())
+        if suffix is None:
+            updated.append(track)
+            continue
+        external_destination = pool / f".repair-{track.id}{suffix}"
 
         result = repair_file(
             source,
@@ -437,6 +436,9 @@ def repair_library(
             local_path=None,
         )
         if refreshed.id != track.id:
+            if source.is_relative_to(pool.resolve()):
+                from shared.library_lifecycle import retire
+                retire(track)
             id_map[track.id] = refreshed.id
         updated.append(refreshed)
         repaired += 1
