@@ -38,4 +38,9 @@ describe('mobile entry menus', () => {
     expect(list.map((action) => action.label)).toEqual(['trackActions.removeFav']);
     list[0].onSelect(); expect(store.actions.toggleFavourite).toHaveBeenCalledWith(entry);
   });
+  it('draws every collection action it adds', () => {
+    expect(buildEntryMenu(entry).every((action) => action.icon)).toBe(true);
+    store.saved = true;
+    expect(buildEntryMenu(entry, { onRadio: vi.fn() }).every((action) => action.icon)).toBe(true);
+  });
 });

@@ -9,6 +9,7 @@ import { createResponsiveTap } from '../lib/responsiveTap';
 import { savedFromSearchResult } from '../lib/saved';
 import { FavouriteButton } from './FavouriteButton';
 import { CollectionButton } from './CollectionButton';
+import { RadioIcon } from './icons';
 import styles from './SearchResultRow.module.css';
 
 function fmtDur(s?: number): string {
@@ -80,10 +81,7 @@ export default function SearchResultRow(props: SearchResultRowProps) {
             props.onRadio!();
           }}
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 12a8 8 0 018-8M4 12a8 8 0 008 8M8 12a4 4 0 014-4" />
-            <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-          </svg>
+          <RadioIcon size={18} />
         </button>
       </Show>
       <CollectionButton entry={entry()} compact />

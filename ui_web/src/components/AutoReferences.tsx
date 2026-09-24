@@ -6,6 +6,7 @@ import { coverStyle } from '../lib/cover';
 import { trackCoverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { Track } from '../types/music';
+import { ChangeSessionIcon, SourceIcon } from './icons';
 import styles from './AutoMode.module.css';
 
 export function AutoReferences(props: { carried?: Track; onUse: (track: Track) => void; onAdd: () => void; onChange: () => void }) {
@@ -25,8 +26,8 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
     onDragOver={(event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'; }}
     onDrop={(event) => { event.preventDefault(); event.stopPropagation(); depth = 0; setOver(false); const transfer = readAutoTrackTransfer(event); if (transfer) props.onUse(transfer.track); }}>
     <header><strong>{t('musicExplorer.references')}</strong><Show when={state.autoMode.sources.length}>
-      <button type="button" onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}>{t('musicExplorer.mixWith')}</button>
-      <button type="button" onClick={props.onChange}>{t('musicExplorer.changeShort')}</button>
+      <button type="button" onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}><SourceIcon size={16} />{t('musicExplorer.mixWith')}</button>
+      <button type="button" onClick={props.onChange}><ChangeSessionIcon size={16} />{t('musicExplorer.changeShort')}</button>
     </Show></header>
     <Show when={state.autoMode.sessionChange}>{(change) => <div role="status" aria-live="polite">
       <span>{t(change().status === 'working' ? 'musicExplorer.changing' : 'musicExplorer.changeFailed', { title: change().label })}</span>

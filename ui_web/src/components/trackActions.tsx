@@ -1,4 +1,3 @@
-import type { JSX } from 'solid-js';
 import { type MenuAction, type ActionMenuOptions } from './ActionMenu';
 import { openContextMenu } from '../lib/contextMenu';
 import type { Track } from '../types/music';
@@ -11,6 +10,7 @@ import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
+import { menuIcons as icons } from './icons';
 
 /**
  * Context for building a track's action menu. Optional callbacks let later
@@ -34,41 +34,6 @@ export interface TrackMenuContext {
   auto?: boolean;
 }
 
-const sw = (d: string): JSX.Element => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d={d} />
-  </svg>
-);
-
-const icons = {
-  playNext: () => sw('M5 4v16M9 5l8 7-8 7z'),
-  queue: () => sw('M3 6h13M3 12h9M3 18h9M16 14v6M19 17h-6'),
-  playlist: () => sw('M3 6h13M3 12h9M3 18h7M17 12v7M21 14l-4-2v7'),
-  radio: () => (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <path d="M4 12a8 8 0 018-8M4 12a8 8 0 008 8M8 12a4 4 0 014-4" />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-    </svg>
-  ),
-  artist: () => sw('M16 19a4 4 0 00-8 0M12 11a3 3 0 100-6 3 3 0 000 6M12 2a10 10 0 100 20 10 10 0 000-20'),
-  heart: () => sw('M12 21s-7-4.35-9.5-8.5C.9 9.6 2.2 6 5.5 6 7.6 6 9 7.5 12 10c3-2.5 4.4-4 6.5-4 3.3 0 4.6 3.6 3 6.5C19 16.65 12 21 12 21z'),
-  edit: () => sw('M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z'),
-  share: () => sw('M4 12v8h16v-8M12 16V3M8 7l4-4 4 4'),
-  device: () => (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <rect x="2" y="4" width="20" height="13" rx="2" />
-      <path d="M8 21h8M12 17v4" />
-    </svg>
-  ),
-  download: () => sw('M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3'),
-  save: () => sw('M12 5v14M5 12h14'),
-  unsave: () => sw('M5 12h14'),
-  remove: () => sw('M5 12h14'),
-  trash: () => sw('M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'),
-  feedback: () => sw('M17 14V4M9 18.5l1-4.5H4.5a2 2 0 01-1.9-2.6l2-6A2 2 0 016.5 4H17v10l-4 7a2 2 0 01-4-2.5z'),
-  info: () => sw('M12 17v-6M12 7h.01M12 2a10 10 0 100 20 10 10 0 000-20'),
-};
-
 /** The links a menu offers into the music itself: one entry per performer, then
  * the record it belongs to. Shared, so a saved row that never resolved to a
  * track offers the same wording and the same icons as the track menu beside it
@@ -82,7 +47,7 @@ export function musicLinkActions(music: MusicMetadata): MenuAction[] {
     onSelect: () => navigateMusic(artistDestination(music, name)),
   }));
   if (music.album?.trim())
-    list.push({ icon: icons.playlist(), label: t('musicExplorer.openAlbum'), onSelect: () => navigateMusic(albumDestination(music)) });
+    list.push({ icon: icons.album(), label: t('musicExplorer.openAlbum'), onSelect: () => navigateMusic(albumDestination(music)) });
   return list;
 }
 
@@ -103,8 +68,8 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   if (inAuto && !isPodcast) {
     list.push({ icon: icons.playNext(), label: t('musicExplorer.playNow'), onSelect: () => actions.playNow(track) });
     list.push({ icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: () => void actions.placeAutoTrack(track) });
-    list.push({ icon: icons.radio(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) });
-    list.push({ label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) });
+    list.push({ icon: icons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) });
+    list.push({ icon: icons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) });
   } else if (queueable) {
     list.push({ icon: icons.playNext(), label: t('trackActions.playNext'), onSelect: () => actions.playNext(track) });
     list.push({ icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => actions.enqueue(track) });
@@ -166,7 +131,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     }
     if (isSaved) {
       list.push({
-        icon: icons.unsave(),
+        icon: icons.remove(),
         label: t('collection.unsave'),
         danger: true,
         onSelect: () => actions.toggleSaved(entry),

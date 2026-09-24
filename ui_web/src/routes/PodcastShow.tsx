@@ -1,6 +1,7 @@
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
+import { CheckIcon, DownloadIcon, menuIcons } from '../components/icons';
 import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
@@ -124,8 +125,8 @@ export default function PodcastShow() {
                   seed={id} cover={ep.image || image()} active={isPlayingEpisode(id)} busy={downloading()} busyLabel={t('collection.downloading')}
                   actionLabel={`${t('podcastShow.ariaPlay')}: ${ep.title}`} onActivate={() => playEp(ep)}
                   onMenu={() => openContextMenu({ title: ep.title, subtitle: title(), actions: [
-                    { label: t('podcastShow.ariaPlay'), onSelect: () => playEp(ep) },
-                    { label: t(downloaded() ? 'podcastShow.ariaDownloaded' : downloading() ? 'collection.downloading' : 'podcastShow.ariaDownload'), disabled: downloaded() || downloading(),
+                    { icon: menuIcons.play(), label: t('podcastShow.ariaPlay'), onSelect: () => playEp(ep) },
+                    { icon: downloaded() ? menuIcons.check() : menuIcons.download(), label: t(downloaded() ? 'podcastShow.ariaDownloaded' : downloading() ? 'collection.downloading' : 'podcastShow.ariaDownload'), disabled: downloaded() || downloading(),
                       onSelect: () => void actions.downloadEpisode(ep, show()) },
                   ] })} />}>
                 <div
@@ -179,16 +180,12 @@ export default function PodcastShow() {
                           void actions.downloadEpisode(ep, show());
                         }}
                       >
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />
-                        </svg>
+                        <DownloadIcon size={18} />
                       </button>
                     }
                   >
                     <span class={styles.epDownloaded} aria-label={t('podcastShow.ariaDownloaded')}>
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path d="M5 12l5 5L20 7" />
-                      </svg>
+                      <CheckIcon size={16} />
                     </span>
                   </Show>
                 </div>

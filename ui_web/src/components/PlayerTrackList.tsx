@@ -7,6 +7,7 @@ import { openContextMenu } from '../lib/contextMenu';
 import { coverStyle } from '../lib/cover';
 import { t } from '../lib/i18n';
 import type { MenuAction } from './ActionMenu';
+import { menuIcons } from './icons';
 import type { SavedEntry } from '../types/music';
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import { createResponsiveTap, responsiveTapConstants } from '../lib/responsiveTap';
@@ -424,7 +425,7 @@ function PlayerTrackListRow(props: {
   const openMenu = () => {
     const actions = [...(props.entry.menu?.() ?? [])];
     if (!props.entry.locked && !props.entry.current && (props.entry.onMove || props.entry.onCarry)) actions.unshift({
-      label: t('musicList.move'), onSelect: () => props.entry.onMove ? props.onEditingChange(true) : props.entry.onCarry?.(),
+      icon: menuIcons.move(), label: t('musicList.move'), onSelect: () => props.entry.onMove ? props.onEditingChange(true) : props.entry.onCarry?.(),
     });
     if (actions.length) openContextMenu({ title: props.entry.title, subtitle: props.entry.artist, actions });
   };

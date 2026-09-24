@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildTrackMenu } from './trackActions';
+import { albumMenuOptions } from './albumActions';
+import { artistMenuOptions } from './artistActions';
+import { playlistMenuOptions } from './playlistActions';
 import type { Track } from '../types/music';
 
 const labels = (track: Track, ctx = {}) => buildTrackMenu(track, ctx).map((a) => a.label);
@@ -66,5 +69,28 @@ describe('buildTrackMenu — podcast coherence', () => {
     // …and a downloaded song, which is in the library by definition, has it.
     const owned: Track = { id: 'lib1', title: 'Song', artist: 'A' };
     expect(labels(owned, ctx)).toContain('Add to favourites');
+  });
+});
+
+describe('menu icons', () => {
+  // A row without a glyph reads as a different kind of thing in a list where
+  // every other row has one — the save and DJ rows used to be exactly that.
+  const unlabelled = (actions: { icon?: unknown; label: string }[]) => actions.filter((a) => !a.icon).map((a) => a.label);
+  const full = { ...ctx, onEditMetadata: () => {}, onPlayOnDevice: () => {}, playlistName: 'Mix', onRemoveFromPlaylist: () => {} };
+
+  it('draws every track action, in and out of DJ', () => {
+    const preview: Track = { id: 'yt3', title: 'Song', artist: 'A', album: 'Record', source: 'preview' };
+    const owned: Track = { id: 'lib2', title: 'Song', artist: 'A', album: 'Record' };
+    for (const track of [preview, owned]) {
+      expect(unlabelled(buildTrackMenu(track, full))).toEqual([]);
+      expect(unlabelled(buildTrackMenu(track, { ...full, auto: true }))).toEqual([]);
+    }
+  });
+
+  it('draws every album, artist and playlist action', () => {
+    const album = { id: 'al1', title: 'Record', album_artist: 'A' } as Parameters<typeof albumMenuOptions>[0];
+    expect(unlabelled(albumMenuOptions(album).actions ?? [])).toEqual([]);
+    expect(unlabelled(artistMenuOptions('A').actions ?? [])).toEqual([]);
+    expect(unlabelled(playlistMenuOptions('Mix', { onEdit: () => {} }).actions ?? [])).toEqual([]);
   });
 });

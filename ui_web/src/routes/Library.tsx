@@ -37,6 +37,7 @@ import { searchLibrary } from '../lib/librarySearch';
 import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Library.module.css';
 import { EmptyState } from '../components/EmptyState';
+import { DownloadIcon } from '../components/icons';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
 import { libraryContext } from '../lib/playbackContext';
@@ -310,9 +311,7 @@ export default function Library() {
               </svg>
             </A>
             <A class={styles.headerAction} href="/downloads" aria-label={t('library.downloads')} data-pressable>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" />
-              </svg>
+              <DownloadIcon />
               <Show when={active() > 0}>
                 <span class={styles.badge}>{active()}</span>
               </Show>

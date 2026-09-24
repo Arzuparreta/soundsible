@@ -1,4 +1,5 @@
 import { CollectionActions } from '../components/CollectionActions';
+import { PlayIcon, ShuffleIcon } from '../components/icons';
 import { CoverImage } from '../components/CoverImage';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { ArtistLinks } from '../components/MusicLinks';
@@ -232,6 +233,7 @@ export default function Album() {
           <div class={styles.actions}>
             <Show when={state.autoMode.active} fallback={
             <button class={styles.btnPrimary} type="button" disabled={view() === 'library' ? libraryTrackList().length === 0 : tracklist().length === 0} onClick={playAll}>
+              <PlayIcon size={16} />
               {t('album.play')}
             </button>
             }>
@@ -241,9 +243,7 @@ export default function Album() {
             </Show>
             <Show when={!state.autoMode.active}>
               <button class={styles.btnSecondary} type="button" disabled={view() === 'library' ? libraryTrackList().length === 0 : tracklist().length === 0} onClick={shuffle}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style={{ 'margin-right': '6px' }}>
-                  <path d="M16 3h5v5M21 3l-7 7M4 20l7-7M16 21h5v-5M4 4l5 5" />
-                </svg>
+                <ShuffleIcon size={16} />
                 {t('album.shuffle')}
               </button>
             </Show>

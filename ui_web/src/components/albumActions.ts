@@ -1,4 +1,5 @@
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
+import { menuIcons } from './icons';
 import { openContextMenu } from '../lib/contextMenu';
 import { actions, state } from '../stores';
 import { api } from '../lib/api';
@@ -44,6 +45,7 @@ export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {
   const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
     {
+      icon: inAuto ? menuIcons.queue() : menuIcons.play(),
       label: inAuto ? t('musicExplorer.requestAll') : t('albumActions.play'),
       onSelect: () => {
         const epoch = actions.autoSessionToken();
@@ -55,17 +57,18 @@ export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {
       },
     },
   ];
-  if (inAuto) list.push({ label: t('musicExplorer.reference'), onSelect: async () => {
+  if (inAuto) list.push({ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: async () => {
     const epoch = actions.autoSessionToken();
     const tracks = await albumTracks(album);
     if (actions.autoSessionToken() === epoch) actions.addAutoSource(tracks, album.title);
   } });
-  if (inAuto) list.push({ label: t('musicExplorer.change'), onSelect: async () => {
+  if (inAuto) list.push({ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: async () => {
     const epoch = actions.beginAutoSessionChange();
     const tracks = await albumTracks(album);
     if (actions.autoSessionToken() === epoch) await actions.changeAutoSession(tracks, album.title);
   } });
   if (!inAuto) list.push({
+      icon: menuIcons.shuffle(),
       label: t('albumActions.shuffle'),
       onSelect: () => {
         void albumTracks(album).then((tracks) => {
@@ -75,6 +78,7 @@ export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {
     });
   {
     list.push({
+      icon: menuIcons.album(),
       label: t('albumActions.goToAlbum'),
       onSelect: () =>
         navigateMusic(albumDestination(albumMusic(album))),

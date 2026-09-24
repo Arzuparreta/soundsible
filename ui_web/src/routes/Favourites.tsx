@@ -2,6 +2,7 @@ import { createMemo, createSignal, onMount, onCleanup, Show } from 'solid-js';
 import { actions, favouriteRows, state } from '../stores';
 import { MobileLibraryHeader } from '../components/MobileLibraryHeader';
 import { openActionMenu } from '../components/ActionMenu';
+import { menuIcons } from '../components/icons';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import { trackCount } from '../lib/format';
@@ -83,9 +84,9 @@ export default function Favourites() {
             <button type="button" aria-label={t('nav.more')} aria-haspopup="dialog" onClick={() => openActionMenu({
               title: t('nav.favourites'),
               actions: [
-                { label: t('musicExplorer.requestAll'), disabled: !favTracks().length, onSelect: () => void actions.placeAutoTracks(favTracks()) },
-                { label: t('musicExplorer.reference'), disabled: !favTracks().length, onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) },
-                { label: t('musicExplorer.change'), disabled: !favTracks().length, onSelect: () => void actions.changeAutoSession(favTracks(), t('favourites.title')) },
+                { icon: menuIcons.queue(), label: t('musicExplorer.requestAll'), disabled: !favTracks().length, onSelect: () => void actions.placeAutoTracks(favTracks()) },
+                { icon: menuIcons.source(), label: t('musicExplorer.reference'), disabled: !favTracks().length, onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) },
+                { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), disabled: !favTracks().length, onSelect: () => void actions.changeAutoSession(favTracks(), t('favourites.title')) },
               ],
             })}>⋯</button>
           </Show>

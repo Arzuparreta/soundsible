@@ -74,6 +74,7 @@ import { tracksByIds } from '../lib/catalogTracks';
 import { albumBrowseQuery, collateAlbums } from '../lib/albumBrowse';
 import { createPlaylistDialog, openPlaylistMenu } from './playlistActions';
 import { CollectionActions, CollectionPlacementContext } from './CollectionActions';
+import { SourceIcon } from './icons';
 import SongRow from './SongRow';
 import { openAlbumBrowseMenu } from './albumBrowseMenu';
 import { ViewHeader as SharedViewHeader } from './ViewHeader';
@@ -847,7 +848,7 @@ function LibraryView(props: {
   return (
     <div class={styles.body} data-browser-body ref={setScrollRef}>
       <ViewHeader title={t('nav.library')}>
-        <Show when={props.onUse}><button type="button" onClick={() => props.onUse?.(props.tracks)}>{t('musicExplorer.reference')}</button></Show>
+        <Show when={props.onUse}><button type="button" data-glyph-label onClick={() => props.onUse?.(props.tracks)}><SourceIcon />{t('musicExplorer.reference')}</button></Show>
         <button type="button" aria-label={t('nowPlayingBrowser.searchLibrary')} onClick={props.onSearch}><SearchIcon /></button>
       </ViewHeader>
       <div class={styles.tabs}>
@@ -985,7 +986,7 @@ function LocalSearchView(props: {
   return (
     <div class={styles.body} data-browser-body>
       <ViewHeader title={t('nowPlayingBrowser.libraryResults')} meta={`${props.results.length}`}>
-        <Show when={props.onUse}><button type="button" disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}>{t('musicExplorer.reference')}</button></Show>
+        <Show when={props.onUse}><button type="button" data-glyph-label disabled={!tracks().length} onClick={() => props.onUse?.(tracks())}><SourceIcon />{t('musicExplorer.reference')}</button></Show>
       </ViewHeader>
       <For each={props.albums}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} onClick={() => props.onAlbum(album)} />}</For>
       <For each={props.playlists}>{(name) => <NavigationRow title={name} subtitle={t('nav.playlists')} onClick={() => props.onPlaylist(name)} />}</For>
