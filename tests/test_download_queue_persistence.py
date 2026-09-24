@@ -257,3 +257,54 @@ os._exit(23)
     assert len(restored.queue) == 1
     job = restored.claim(restored.queue[0]['id'])
     assert job['result']['id'] == 'prepared-audio'
+
+
+def test_one_unreadable_account_does_not_abort_recovery(tmp_path):
+    import sqlite3
+    from shared.user_context import user_config_dir
+    path = tmp_path / 'queue.json'
+    manager = DownloadQueueManager(path)
+    alice = manager.add({'song_str': 'a'}, user_id='alice')
+    bob = manager.add({'song_str': 'b'}, user_id='bob')
+    manager.remove_item(alice['id'], user_id='alice')
+    manager.remove_item(bob['id'], user_id='bob')
+    with sqlite3.connect(path.with_suffix('.db')) as conn:
+        conn.execute('UPDATE download_jobs SET updated=0')
+    (user_config_dir('alice') / 'library.db').write_bytes(b'not sqlite')
+
+    DownloadQueueManager(path)
+
+    with sqlite3.connect(path.with_suffix('.db')) as conn:
+        remaining = [row[0] for row in conn.execute('SELECT id FROM download_jobs')]
+    # Alice's receipt could not be cleared, so her job waits for the next start.
+    assert remaining == [alice['id']]
+
+
+def test_emit_failure_does_not_fail_a_committed_retry(tmp_path):
+    class BrokenSocket:
+        def emit(self, *args, **kwargs):
+            raise ConnectionError('message queue unreachable')
+    manager = DownloadQueueManager(tmp_path / 'queue.json', socketio=BrokenSocket())
+    item = manager.add({'song_str': 'retry'}, user_id='alice')
+    manager.update_status(item['id'], 'failed', error='connection timed out')
+
+    retried = manager.retry_failed(item['id'], user_id='alice')
+
+    assert retried['status'] == 'pending'
+    assert manager.list_items('alice')[0]['status'] == 'pending'
+
+
+def test_ownerless_rows_go_to_the_admin_once_one_exists(monkeypatch):
+    from shared.runtime import get_config_dir
+    admin = {}
+    monkeypatch.setattr('shared.users.get_admin_user', lambda: admin or None)
+    (get_config_dir() / 'download_queue.json').write_text(json.dumps([{'id': 'old', 'status': 'pending', 'song_str': 'x'}]))
+    manager = DownloadQueueManager()
+    manager.initialize()
+    assert manager.list_items('admin-id') == []
+
+    admin['id'] = 'admin-id'
+    manager.initialize()
+
+    assert [i['id'] for i in manager.list_items('admin-id')] == ['old']
+    assert manager.list_items('bob') == []

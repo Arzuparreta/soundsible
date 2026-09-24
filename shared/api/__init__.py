@@ -1592,6 +1592,18 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
                     library.metadata.tracks = summary["tracks"]
                     library.metadata.version += 1
                     if not library._save_metadata(id_replacements=summary["id_map"]):
+                        # The repaired copies are already in the pool under ids
+                        # nothing will reference. Cleanup deletes only what no
+                        # library points at, so a shared hash is safe.
+                        try:
+                            from shared.library_lifecycle import retire
+                            new_ids = set(summary["id_map"].values())
+                            for track in summary["tracks"]:
+                                if track.id in new_ids:
+                                    retire(track)
+                            drain_audio_cleanup(library.provider)
+                        except Exception:
+                            logger.warning("Library repair: could not discard unused repaired copies", exc_info=True)
                         raise RuntimeError("could not persist repaired track ids")
                     for old_id, new_id in summary["id_map"].items():
                         core.favourites.remap_library_id(old_id, new_id)

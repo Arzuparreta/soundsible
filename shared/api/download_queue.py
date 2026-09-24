@@ -4,7 +4,7 @@ Download queue manager for the Station Engine.
 
 import json
 import sqlite3
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 import logging
 import threading
 import time
@@ -35,9 +35,9 @@ def _user_room(user_id: str) -> str:
 def _owns(item, user_id):
     """Whether ``item`` belongs to ``user_id``.
 
-    Items queued before accounts existed carry no owner. They are shown to
-    whoever asks rather than orphaned — the migration tags them, so this only
-    covers rows written by an older process mid-upgrade.
+    Items queued before accounts existed carry no owner. They are never shown
+    to an account that did not queue them: only an unscoped (``None``) caller
+    sees them, and startup assigns them to the admin once one exists.
     """
     if user_id is None:
         return True
@@ -343,6 +343,13 @@ class DownloadQueueManager:
                             item['user_id'] = owner_id
                         self._write(conn, item)
                 conn.execute("INSERT INTO download_migrations VALUES ('json')")
+            if owner_id:
+                # Migrated before any admin existed. Hand them to the admin
+                # rather than leave them invisible to every account.
+                for row in conn.execute("SELECT payload FROM download_jobs WHERE COALESCE(json_extract(payload, '$.user_id'), '') = ''").fetchall():
+                    item = json.loads(row['payload'])
+                    item['user_id'] = owner_id
+                    self._write(conn, item)
             if recover:
                 for row in conn.execute("SELECT payload FROM download_jobs WHERE status IN ('downloading','interrupted')").fetchall():
                     item = json.loads(row['payload'])
@@ -354,13 +361,19 @@ class DownloadQueueManager:
                 for row in expired:
                     owner = json.loads(row['payload']).get('user_id')
                     if owner:
-                        from shared.user_context import user_config_dir
-                        library_path = user_config_dir(owner, create=False) / 'library.db'
-                        if library_path.exists():
-                            with sqlite3.connect(library_path) as library_conn:
-                                if library_conn.execute("SELECT 1 FROM sqlite_master WHERE name='library_operations'").fetchone():
-                                    library_conn.execute('DELETE FROM library_operations WHERE id=?', (row['id'],))
-                            library_conn.close()
+                        try:
+                            from shared.user_context import user_config_dir
+                            library_path = user_config_dir(owner, create=False) / 'library.db'
+                            if library_path.exists():
+                                with closing(sqlite3.connect(library_path, timeout=5)) as library_conn, library_conn:
+                                    if library_conn.execute("SELECT 1 FROM sqlite_master WHERE name='library_operations'").fetchone():
+                                        library_conn.execute('DELETE FROM library_operations WHERE id=?', (row['id'],))
+                        except Exception:
+                            # One unreadable account must not stop recovery for
+                            # everyone. Keep the job; the next start retries.
+                            logger.warning("API: [Queue] Could not expire job %s for %s; retrying next start",
+                                           row['id'], owner, exc_info=True)
+                            continue
                     conn.execute('DELETE FROM download_jobs WHERE id=?', (row['id'],))
             conn.commit()
             # The marker makes a crash before/after this rename idempotent.
@@ -587,7 +600,12 @@ class DownloadQueueManager:
             return
         owner = (item or {}).get("user_id") if isinstance(item, dict) else None
         owner = owner or _current_user_id()
-        if owner:
-            self.socketio.emit("downloader_update", payload, room=_user_room(owner))
-        else:
-            self.socketio.emit("downloader_update", payload)
+        # The change is already committed; a transport hiccup must not turn it
+        # into a failed request.
+        try:
+            if owner:
+                self.socketio.emit("downloader_update", payload, room=_user_room(owner))
+            else:
+                self.socketio.emit("downloader_update", payload)
+        except Exception:
+            logger.warning("API: downloader_update emit failed", exc_info=True)
