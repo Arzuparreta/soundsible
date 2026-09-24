@@ -125,3 +125,15 @@ def test_failed_download_commit_never_emits_success(monkeypatch):
         api.add_tracks_to_user_library([track()], user_id='alice')
     assert not emitted
     assert lib.metadata.get_track_by_id('song') is None
+
+
+def test_cache_failure_does_not_reverse_a_committed_deletion(tmp_path):
+    from types import SimpleNamespace
+    provider, audio = provider_at(tmp_path / 'pool')
+    lib = library('alice', provider)
+    def unavailable(_):
+        raise OSError('cache read only')
+    lib._cache = SimpleNamespace(remove_track=unavailable)
+    assert lib.delete_track(track())
+    assert lib.db.get_track('song') is None
+    assert not audio.exists()

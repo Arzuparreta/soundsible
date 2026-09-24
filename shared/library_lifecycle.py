@@ -192,16 +192,20 @@ def _forget_pool_entry(payload):
 def drain(provider=None, limit=32):
     """Best effort. Unknown references/storage keep the intent and the bytes."""
     removed = []
-    with operation_db() as conn:
-        rows = conn.execute('SELECT target, payload FROM audio_cleanup ORDER BY rowid LIMIT ?', (limit,)).fetchall()
+    try:
+        with operation_db() as conn:
+            rows = conn.execute('SELECT target, payload FROM audio_cleanup ORDER BY rowid LIMIT ?', (limit,)).fetchall()
+    except Exception:
+        log.warning('Audio cleanup store unavailable; intents retained', exc_info=True)
+        return removed
     for row in rows:
         try:
+            # Rotate every attempted entry, including unreachable providers.
+            with operation_db() as conn:
+                conn.execute('DELETE FROM audio_cleanup WHERE target=?', (row['target'],))
+                conn.execute('INSERT INTO audio_cleanup VALUES (?, ?)', (row['target'], row['payload']))
             payload = json.loads(row['payload'])
             if _referenced(payload):
-                # Rotate blocked entries so a busy reference cannot starve cleanup.
-                with operation_db() as conn:
-                    conn.execute('DELETE FROM audio_cleanup WHERE target=?', (row['target'],))
-                    conn.execute('INSERT INTO audio_cleanup VALUES (?, ?)', (row['target'], row['payload']))
                 continue
             if payload['provider'] and payload['provider'] != provider_identity(provider):
                 continue

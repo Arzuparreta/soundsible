@@ -908,8 +908,11 @@ class LibraryManager:
             self.metadata.version += 1
             if not self._save_metadata():
                 return False
-            if self.cache:
-                self.cache.remove_track(track.id)
+            try:
+                if self.cache:
+                    self.cache.remove_track(track.id)
+            except Exception as exc:
+                self._log(f"Library deletion committed; cache cleanup deferred: {exc}")
             drain(self.provider)
             return True
         except Exception as exc:
