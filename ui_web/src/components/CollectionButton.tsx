@@ -3,6 +3,7 @@ import { actions, isDownloadingKeys, isSavedKeys, ownedTrackForKeys } from '../s
 import { t } from '../lib/i18n';
 import type { SavedEntry } from '../types/music';
 import { Spinner } from './Spinner';
+import { CheckIcon, DownloadIcon, SaveIcon } from './icons';
 import styles from './CollectionButton.module.css';
 
 export type CollectionState = 'unsaved' | 'streaming' | 'downloading' | 'owned';
@@ -98,21 +99,9 @@ export function CollectionButton(props: CollectionButtonProps) {
           title={props.tooltip ? label() : undefined}
           onClick={act}
         >
-          <Show when={state() === 'unsaved'}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </Show>
-          <Show when={state() === 'streaming'}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 20h14" />
-            </svg>
-          </Show>
-          <Show when={state() === 'owned'}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m5 12 5 5L20 7" />
-            </svg>
-          </Show>
+          <Show when={state() === 'unsaved'}><SaveIcon /></Show>
+          <Show when={state() === 'streaming'}><DownloadIcon /></Show>
+          <Show when={state() === 'owned'}><CheckIcon /></Show>
         </button>
       </Show>
     </Show>

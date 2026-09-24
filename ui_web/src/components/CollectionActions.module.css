@@ -1,0 +1,9 @@
+.content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.content svg {
+  flex: none;
+}

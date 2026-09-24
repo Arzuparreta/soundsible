@@ -25,7 +25,7 @@ import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
 import { AutoReferences } from './AutoReferences';
-import { SourceIcon } from './icons';
+import { SourceIcon, menuIcons } from './icons';
 import styles from './AutoMode.module.css';
 
 const AUTO_MINIMUMS = { browser: 280, stage: 390, route: 280 };
@@ -123,10 +123,10 @@ export function AutoMode(props: {
     // menu is reached the same way on every row — by holding it, or by
     // right-clicking it with a pointer.
     const menu = () => [
-      { label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
-      { label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) },
+      { icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
+      { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) },
       ...(committed ? [] : [{
-        label: t('autoMode.route.remove'), danger: true,
+        icon: menuIcons.remove(), label: t('autoMode.route.remove'), danger: true,
         onSelect: () => actions.removeAutoRouteOccurrence(track.queueId),
       }]),
     ];

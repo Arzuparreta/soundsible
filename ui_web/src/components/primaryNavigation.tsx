@@ -1,5 +1,6 @@
 import type { JSX } from 'solid-js';
 import { t } from '../lib/i18n';
+import { DownloadIcon } from './icons';
 
 export interface PrimaryNavItem {
   href: string;
@@ -94,11 +95,7 @@ export const libraryShortcuts: PrimaryNavItem[] = [
   {
     href: '/downloads',
     label: () => t('nav.downloads'),
-    icon: () => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" />
-      </svg>
-    ),
+    icon: () => <DownloadIcon />,
   },
 ];
 

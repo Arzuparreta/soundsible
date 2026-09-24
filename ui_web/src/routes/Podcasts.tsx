@@ -13,6 +13,7 @@ import styles from './Podcasts.module.css';
 import { neutralCoverStyle } from '../lib/cover';
 import { attachContextMenu } from '../lib/contextMenu';
 import type { ActionMenuOptions } from '../components/ActionMenu';
+import { menuIcons } from '../components/icons';
 import { toast } from '../lib/toast';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -120,8 +121,9 @@ export default function Podcasts() {
       title: p.title,
       subtitle: p.author,
       actions: [
-        ...(p.reason ? [{ label: p.reason, disabled: true, onSelect: () => {} }] : []),
+        ...(p.reason ? [{ icon: menuIcons.info(), label: p.reason, disabled: true, onSelect: () => {} }] : []),
         {
+          icon: menuIcons.feedback(),
           label: t('trackActions.notInterested'),
           onSelect: () => {
             void api.sendDiscoveryFeedback({
@@ -274,7 +276,8 @@ export default function Podcasts() {
                       if (sub) navigate(`/podcasts/${sub.id}`);
                     } : undefined}
                     onMenu={() => openContextMenu({ title: r.title, subtitle: r.author, actions: [
-                      { label: t(subscribedFeeds().has(r.feed_url) ? 'podcasts.subscribed' : 'podcasts.subscribe'),
+                      { icon: subscribedFeeds().has(r.feed_url) ? menuIcons.check() : menuIcons.subscribe(),
+                        label: t(subscribedFeeds().has(r.feed_url) ? 'podcasts.subscribed' : 'podcasts.subscribe'),
                         disabled: disabled() || subscribedFeeds().has(r.feed_url), onSelect: () => void subscribe(r) },
                     ] })} />}>
                   <div class={styles.row}>

@@ -109,6 +109,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   padding: var(--space-xs) var(--space-md);
   background: var(--accent-primary);
   color: var(--ink-on-accent);
@@ -142,6 +143,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   padding: var(--space-xs) var(--space-md);
   background: var(--bg-elevated);
   color: var(--ink-primary);

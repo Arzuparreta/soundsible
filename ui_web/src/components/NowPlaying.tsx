@@ -1,5 +1,6 @@
 import { navigateMusic, trackMusic } from '../lib/musicNavigation';
 import { buildTrackMenu } from './trackActions';
+import { menuIcons } from './icons';
 import { savedFromTrack } from '../lib/saved';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { actions, state } from '../stores';
@@ -131,7 +132,7 @@ export function NowPlaying(props: {
       get entry() { return savedFromTrack(entry); },
       menu: () => [
         ...buildTrackMenu(entry),
-        ...(!current ? [{ label: t('nowPlaying.removeFromQueue'), danger: true,
+        ...(!current ? [{ icon: menuIcons.remove(), label: t('nowPlaying.removeFromQueue'), danger: true,
           onSelect: () => actions.removeQueueEntry(entry.queueId) }] : []),
       ],
       // Requests move among themselves; the cards below them never move.
@@ -192,8 +193,8 @@ export function NowPlaying(props: {
       onOpen: open,
       openLabel: open ? t('nowPlaying.contextOpen', { name: title }) : undefined,
       menu: () => [
-        ...(open ? [{ label: t('nowPlaying.contextOpen', { name: title }), onSelect: open }] : []),
-        { label: t('nowPlaying.removeFromQueue'), danger: true, onSelect: remove.onSelect },
+        ...(open ? [{ icon: menuIcons.open(), label: t('nowPlaying.contextOpen', { name: title }), onSelect: open }] : []),
+        { icon: menuIcons.remove(), label: t('nowPlaying.removeFromQueue'), danger: true, onSelect: remove.onSelect },
       ],
       remove,
     };

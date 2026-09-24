@@ -7,6 +7,7 @@ import type { SavedEntry, Track } from '../types/music';
 import { buildTrackMenu, musicLinkActions } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import type { MenuAction } from './ActionMenu';
+import { menuIcons } from './icons';
 
 export interface EntryMenuContext {
   track?: Track;
@@ -25,11 +26,13 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
   const track = owned ?? ctx.track ?? (savedVideoId(entry) ? savedToTrack(entry, new Map()) : null);
   const list: MenuAction[] = [];
   if (saved) list.push({
+    icon: menuIcons.heart(),
     label: t(isFavouriteKeys(entry.keys) ? 'trackActions.removeFav' : 'trackActions.addFav'),
     onSelect: () => actions.toggleFavourite(entry),
   });
-  else list.push({ label: t('collection.save'), onSelect: () => actions.toggleSaved(entry) });
+  else list.push({ icon: menuIcons.save(), label: t('collection.save'), onSelect: () => actions.toggleSaved(entry) });
   if (!owned) list.push({
+    icon: menuIcons.download(),
     label: t(downloading ? 'collection.downloading' : 'collection.download'), disabled: downloading,
     onSelect: () => { if (ctx.onDownload) ctx.onDownload(); else void actions.downloadSaved(entry); },
   });
@@ -37,10 +40,10 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
   if (!track && ctx.music) list.push(...musicLinkActions(ctx.music));
   if (ctx.onRadio) {
     const radio = list.findIndex((action) => action.label === t('trackActions.startRadio') || action.label === t('modeChange.startRadio'));
-    const action = { label: t('trackActions.startRadio'), onSelect: ctx.onRadio };
+    const action = { icon: menuIcons.radio(), label: t('trackActions.startRadio'), onSelect: ctx.onRadio };
     if (radio >= 0) list[radio] = action; else list.push(action);
   }
-  if (saved && !owned) list.push({ label: t('collection.unsave'), danger: true, onSelect: () => actions.toggleSaved(entry) });
+  if (saved && !owned) list.push({ icon: menuIcons.remove(), label: t('collection.unsave'), danger: true, onSelect: () => actions.toggleSaved(entry) });
   return list;
 }
 

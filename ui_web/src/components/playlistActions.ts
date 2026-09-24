@@ -1,4 +1,5 @@
 import { type ActionMenuOptions } from './ActionMenu';
+import { menuIcons } from './icons';
 import { openContextMenu } from '../lib/contextMenu';
 import { openPlaylistCoverPicker } from './CoverPicker';
 import { actions, state, musicLibrary } from '../stores';
@@ -32,6 +33,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
     title: name,
     actions: [
       {
+        icon: inAuto ? menuIcons.queue() : menuIcons.play(),
         label: inAuto ? t('musicExplorer.requestAll') : t('playlistActions.play'),
         onSelect: async () => {
           const t = playlistTracks(name);
@@ -46,9 +48,10 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
           }
         },
       },
-      ...(inAuto ? [{ label: t('musicExplorer.reference'), onSelect: () => { actions.addAutoSource(playlistTracks(name), name); hooks.onPlaced?.(); } }] : []),
-      ...(inAuto ? [{ label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(playlistTracks(name), name) }] : []),
+      ...(inAuto ? [{ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => { actions.addAutoSource(playlistTracks(name), name); hooks.onPlaced?.(); } }] : []),
+      ...(inAuto ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(playlistTracks(name), name) }] : []),
       ...(!inAuto ? [{
+        icon: menuIcons.shuffle(),
         label: t('playlistActions.shuffle'),
         onSelect: () => {
           const t = playlistTracks(name);
@@ -57,17 +60,19 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
           }
         },
       }] : []),
-      ...(hooks.onEdit ? [{ label: t('musicExplorer.edit'), onSelect: hooks.onEdit }] : []),
+      ...(hooks.onEdit ? [{ icon: menuIcons.edit(), label: t('musicExplorer.edit'), onSelect: hooks.onEdit }] : []),
       {
+        icon: menuIcons.rename(),
         label: t('playlistActions.rename'),
         onSelect: async () => {
           const next = await promptDialog({ title: t('playlistActions.renameTitle'), initial: name, confirmLabel: t('playlistActions.renameConfirm') });
           if (next && (await actions.renamePlaylist(name, next))) hooks.onRenamed?.(next.trim());
         },
       },
-      { label: t('playlistActions.duplicate'), onSelect: () => void actions.duplicatePlaylist(name) },
-      { label: t('playlistActions.changeCover'), onSelect: () => openPlaylistCoverPicker(name) },
+      { icon: menuIcons.duplicate(), label: t('playlistActions.duplicate'), onSelect: () => void actions.duplicatePlaylist(name) },
+      { icon: menuIcons.cover(), label: t('playlistActions.changeCover'), onSelect: () => openPlaylistCoverPicker(name) },
       {
+        icon: menuIcons.trash(),
         label: t('playlistActions.deleteList'),
         danger: true,
         onSelect: async () => {

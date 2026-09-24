@@ -17,7 +17,7 @@ import { t } from '../lib/i18n';
 import { gainToVolumePosition, volumePositionToGain } from '../lib/volumeScale';
 import { CollectionButton } from './CollectionButton';
 import { FavouriteButton } from './FavouriteButton';
-import { KaraokeMicIcon } from './icons';
+import { KaraokeMicIcon, RadioIcon, RepeatIcon, ShuffleIcon, menuIcons } from './icons';
 import { LyricsPanel } from './LyricsPanel';
 import { openMetadataEditor } from './MetadataEditor';
 import { openPlayOnDevice } from './DeviceSheet';
@@ -168,14 +168,19 @@ export function PlayerStage(props: {
       actions: [
         ...(props.mode === 'now-playing' ? [
           {
-            label: `${state.playback.shuffle ? '✓  ' : ''}${t('nowPlaying.shuffle')}`,
+            icon: menuIcons.shuffle(),
+            label: t('nowPlaying.shuffle'),
+            selected: state.playback.shuffle,
             onSelect: () => actions.toggleShuffle(),
           },
           {
-            label: `${state.playback.repeat !== 'off' ? '✓  ' : ''}${t('nowPlaying.repeat')}`,
+            icon: menuIcons.repeat(),
+            label: t('nowPlaying.repeat'),
+            selected: state.playback.repeat !== 'off',
             onSelect: () => actions.cycleRepeat(),
           },
           {
+            icon: menuIcons.radio(),
             label: state.playback.radioMode ? t('nowPlaying.stopRadioTitle') : t('trackActions.startRadio'),
             onSelect: () => state.playback.radioMode ? void onStopRadio() : void actions.startRadio(current),
           },
@@ -340,9 +345,7 @@ export function PlayerStage(props: {
                       aria-pressed={state.playback.shuffle}
                       onClick={() => actions.toggleShuffle()}
                     >
-                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M16 3h5v5M21 3l-7 7M4 20l7-7M16 21h5v-5M4 4l5 5" />
-                      </svg>
+                      <ShuffleIcon size={20} />
                     </button>
                   </Show>
 
@@ -394,9 +397,7 @@ export function PlayerStage(props: {
                       aria-label={t('nowPlaying.repeat')}
                       onClick={() => actions.cycleRepeat()}
                     >
-                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3" />
-                      </svg>
+                      <RepeatIcon size={20} />
                       <Show when={state.playback.repeat === 'one'}>
                         <span class={styles.repeatOne}>1</span>
                       </Show>
@@ -455,10 +456,7 @@ export function PlayerStage(props: {
                       aria-pressed={state.playback.radioMode}
                       onClick={() => (state.playback.radioMode ? void onStopRadio() : void actions.startRadio(current()))}
                     >
-                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <path d="M4 12a8 8 0 018-8M4 12a8 8 0 008 8M8 12a4 4 0 014-4" />
-                        <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-                      </svg>
+                      <RadioIcon size={20} />
                     </button>
                   </Show>
 

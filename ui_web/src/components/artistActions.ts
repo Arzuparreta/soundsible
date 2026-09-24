@@ -1,5 +1,6 @@
 import { artistDestination, navigateMusic } from '../lib/musicNavigation';
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
+import { menuIcons } from './icons';
 import { openContextMenu } from '../lib/contextMenu';
 import { actions, musicLibrary, state } from '../stores';
 import type { Track } from '../types/music';
@@ -31,6 +32,7 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
   const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
     {
+      icon: inAuto ? menuIcons.queue() : menuIcons.play(),
       label: inAuto ? t('musicExplorer.requestAll') : t('artistActions.play'),
       onSelect: () => {
         const t = artistTracks(artist);
@@ -43,9 +45,10 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
       },
     },
   ];
-  if (inAuto) list.push({ label: t('musicExplorer.reference'), onSelect: () => actions.addAutoSource(artistTracks(artist), artist) });
-  if (inAuto) list.push({ label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(artistTracks(artist), artist) });
+  if (inAuto) list.push({ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.addAutoSource(artistTracks(artist), artist) });
+  if (inAuto) list.push({ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(artistTracks(artist), artist) });
   if (!inAuto) list.push({
+      icon: menuIcons.shuffle(),
       label: t('artistActions.shuffle'),
       onSelect: () => {
         const t = artistTracks(artist);
@@ -54,7 +57,7 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
         }
       },
     });
-  list.push({ label: t('artistActions.goToArtist'), onSelect: () => navigateMusic(artistDestination({ artist, view: 'library' }, artist)) });
+  list.push({ icon: menuIcons.artist(), label: t('artistActions.goToArtist'), onSelect: () => navigateMusic(artistDestination({ artist, view: 'library' }, artist)) });
   return { title: artist, actions: list };
 }
 
