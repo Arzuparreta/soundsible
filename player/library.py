@@ -251,7 +251,7 @@ class LibraryManager:
                             (time.perf_counter() - started) * 1000)
 
     @serialized
-    def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None) -> bool:
+    def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None, operation_id=None) -> bool:
         """
         Commit the canonical SQLite snapshot, then refresh portable exports.
 
@@ -273,6 +273,7 @@ class LibraryManager:
                     self.metadata,
                     id_replacements=id_replacements,
                     expected_revision=self._library_revision,
+                    **({"operation_id": operation_id} if operation_id else {}),
                 )
                 # replace_library is also the alias-normalization boundary, so
                 # serialize only after it has moved every durable reference.
@@ -290,6 +291,11 @@ class LibraryManager:
                 self._log(f"Error saving metadata: {e}")
                 self._reload_canonical()
                 return False
+
+    def require_saved(self, **kwargs):
+        if not self._save_metadata(**kwargs):
+            from shared.library_lifecycle import LibraryPersistenceError
+            raise LibraryPersistenceError(getattr(self, 'last_save_error', None))
 
     def _reload_canonical(self):
         try:
@@ -994,6 +1000,6 @@ class LibraryManager:
 
         if removed > 0:
             self.metadata.version += 1
-            self._save_metadata()
+            self.require_saved()
 
         return {"checked": checked, "removed": removed}

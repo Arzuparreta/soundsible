@@ -18,14 +18,6 @@ from tests.conftest import TEST_USER_ID
 def api(monkeypatch):
     import shared.api as api_mod
 
-    # The real one defers a manifest write onto a worker thread; the assertions
-    # here are about favourites, and a synchronous commit keeps the test honest
-    # about ordering rather than about timing.
-    monkeypatch.setattr(
-        api_mod.orchestrator,
-        "schedule_metadata_commit",
-        lambda save, after=None: (save(), after and after()),
-    )
     monkeypatch.setattr(api_mod, "emit_to_user", lambda *a, **k: None)
     return api_mod
 

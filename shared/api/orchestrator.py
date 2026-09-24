@@ -1,12 +1,10 @@
 import os
 import threading
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor, Future
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
-from shared import request_scope
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +16,7 @@ PROFILE_AUTO = "auto"
 
 # Pool sizing by profile. Metadata lane is always serialized (1 worker)
 # regardless of profile so commit ordering is preserved (see run_serialized
-# + schedule_metadata_commit).
+# and canonical library writes).
 _PROFILE_BACKGROUND_WORKERS = {
     PROFILE_HDD: 1,   # HDD: cap disk-heavy concurrency at 1 (plan 6A)
     PROFILE_SSD: 3,
@@ -99,15 +97,6 @@ class JobOrchestrator:
         self.state_lock = threading.Lock()
         self.commit_lock = threading.Lock()
         self.active_jobs: Dict[str, Future] = {}
-
-        # Metadata coalescing
-        self.pending_commits = False
-        self.last_commit_time = 0.0
-        self.commit_debounce_sec = 2.0
-        self.commit_timer: Optional[threading.Timer] = None
-        #: The commit the timer is waiting to run, claimed by whoever gets
-        #: there first — the timer or `flush_metadata_commit`.
-        self._pending_commit: Optional[tuple[Callable, Optional[Callable]]] = None
 
         # Downloader pump supervisor — owned by orchestrator so shutdown
         # can join it and double-start is rejected (plan 5A).
@@ -212,65 +201,6 @@ class JobOrchestrator:
         with self.commit_lock:
             return func(*args, **kwargs)
 
-    def schedule_metadata_commit(self, commit_func: Callable, emit_func: Optional[Callable] = None):
-        """
-        Schedule a metadata commit with debouncing/coalescing.
-        Multiple calls in short succession will trigger only one commit.
-        """
-        with self.state_lock:
-            self.pending_commits = True
-            self._pending_commit = (commit_func, emit_func)
-            if self.commit_timer:
-                self.commit_timer.cancel()
-            self.commit_timer = threading.Timer(
-                self.commit_debounce_sec, self._run_pending_commit
-            )
-            self.commit_timer.start()
-            logger.debug("Orchestrator: Metadata commit scheduled (debounced).")
-
-    def _claim_pending_commit(self):
-        """Take the scheduled commit, so exactly one caller runs it."""
-        with self.state_lock:
-            pending = self._pending_commit
-            self._pending_commit = None
-            if self.commit_timer is not None:
-                self.commit_timer.cancel()
-                self.commit_timer = None
-            return pending
-
-    def _run_pending_commit(self) -> bool:
-        pending = self._claim_pending_commit()
-        if pending is None:
-            return False
-        commit_func, emit_func = pending
-        # Give the coalesced operation its own memo lifetime, whether invoked
-        # by a timer or synchronously inside a request. Database blocks return
-        # their connections independently of this scope.
-        with request_scope.request_scope(), self.commit_lock:
-            logger.info("Orchestrator: Executing coalesced metadata commit...")
-            try:
-                commit_func()
-                if emit_func:
-                    emit_func()
-            except Exception as e:
-                logger.error(f"Orchestrator: Metadata commit failed: {e}")
-            finally:
-                with self.state_lock:
-                    self.pending_commits = False
-                    self.last_commit_time = time.time()
-        return True
-
-    def flush_metadata_commit(self) -> bool:
-        """Run a debounced metadata commit now instead of in a second or two.
-
-        Called before anything reloads the canonical library. The deferred
-        commit holds changes that exist only in the in-memory snapshot — the
-        tracks a finished download just added — and a reload would drop them
-        on the floor, to be written back out by the commit as an absence.
-        Returns whether there was anything to commit.
-        """
-        return self._run_pending_commit()
-
     # ----- Downloader pump supervision (plan 5A) -----
 
     def start_downloader_pump(self, pump_func: Callable[[threading.Event], None]) -> bool:
@@ -323,11 +253,6 @@ class JobOrchestrator:
 
     def shutdown(self, wait: bool = True) -> None:
         self.stop_downloader_pump(wait=wait)
-        if self.commit_timer:
-            try:
-                self.commit_timer.cancel()
-            except Exception:
-                pass
         if self.background_executor:
             self.background_executor.shutdown(wait=wait)
         if self.metadata_executor:

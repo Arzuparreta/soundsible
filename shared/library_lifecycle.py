@@ -19,6 +19,14 @@ _lock = threading.RLock()
 _local = threading.local()
 
 
+class LibraryPersistenceError(RuntimeError):
+    def __init__(self, code=None):
+        self.code = code or 'library_storage_unavailable'
+        self.status = 409 if self.code == 'library_conflict' else 503
+        super().__init__('Library changed while saving; try again.' if self.status == 409
+                         else 'Could not persist the operation. Check server storage and retry.')
+
+
 @contextmanager
 def coordinated():
     # Same lock order everywhere: process lock, file lock, SQLite transaction.

@@ -1254,7 +1254,7 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
         from shared.artwork import artwork_store
         artwork_store().bind(track_id, None, "none")
     track.metadata_modified_by_user = True
-    lib._save_metadata()
+    lib.require_saved()
     _mirror_track_into_odst_downloader(track)
     emit_to_user('library_updated', payload={'cover_changed': cover_source is not None})
     return True
@@ -1270,13 +1270,11 @@ def _ensure_lib_metadata():
     renamed on one snapshot and a song added to another — the later save
     reverting the earlier change, and the client being told both succeeded.
 
-    Pending work is committed first: a finished download lives only in the
-    in-memory snapshot until its debounced commit runs, and reloading over it
-    would drop those tracks.
+    Downloads commit before reporting completion; no unsaved download snapshot
+    is carried across requests.
 
     Returns (lib, metadata) or (None, None).
     """
-    orchestrator.flush_metadata_commit()
     lib, _, _ = get_core()
     if not lib.metadata:
         lib.sync_library()
@@ -1313,7 +1311,8 @@ def _loaded_user_library():
     return lib
 
 
-def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
+@serialized
+def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None, operation_id=None) -> int:
     """Put specific tracks into one person's library.
 
     Downloads land in a pool everyone shares, so what makes a track *yours* is
@@ -1329,7 +1328,10 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
 
     lib = get_user_core(target).library
     if not lib.metadata:
-        _loaded_user_library()
+        lib.sync_library(silent=True)
+    lib.refresh_if_stale()
+    if operation_id and lib.db.has_library_operation(operation_id):
+        return 0
 
     added = 0
     newly_added = []
@@ -1346,15 +1348,13 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None) -> int:
         newly_added.append(stored)
         added += 1
 
-    if added:
+    if added or operation_id:
+        lib.require_saved(**({'operation_id': operation_id} if operation_id else {}))
         promoted = _promote_favourites_to_library(newly_added, user_id=target)
-
-        def _emit_updated():
-            with app.app_context():
-                emit_to_user('library_updated', user_id=target)
-                if promoted:
-                    emit_to_user('favourites_updated', user_id=target)
-        orchestrator.schedule_metadata_commit(lib._save_metadata, _emit_updated)
+        with app.app_context():
+            emit_to_user('library_updated', user_id=target)
+            if promoted:
+                emit_to_user('favourites_updated', user_id=target)
     return added
 
 
@@ -1755,7 +1755,7 @@ def health_check():
             "jobs": {
                 "active_count": len(orchestrator.active_jobs),
                 "active_ids": sorted(orchestrator.active_jobs.keys()),
-                "pending_metadata_commit": orchestrator.pending_commits,
+                "pending_metadata_commit": False,
             },
         }
     )

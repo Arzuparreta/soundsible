@@ -86,3 +86,42 @@ def test_unreadable_other_library_blocks_cleanup(tmp_path):
     path.write_bytes(b'not sqlite')
     assert a.delete_track(track())
     assert audio.exists()
+
+
+def test_download_commits_each_account_before_returning(monkeypatch):
+    import shared.api as api
+    monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: None)
+    for uid in ('alice', 'bob'):
+        api.get_user_core(uid)
+    for uid in ('alice', 'bob'):
+        assert api.add_tracks_to_user_library([track()], user_id=uid) == 1
+    api.reset_user_cores()
+    for uid in ('alice', 'bob'):
+        assert api.get_user_core(uid).library.db.get_track('song')
+
+
+def test_replayed_download_receipt_does_not_resurrect_deleted_song(monkeypatch):
+    import shared.api as api
+    monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: None)
+    api.add_tracks_to_user_library([track()], user_id='alice', operation_id='job')
+    lib = api.get_user_core('alice').library
+    lib.metadata.remove_track('song')
+    assert lib._save_metadata()
+    assert api.add_tracks_to_user_library([track()], user_id='alice', operation_id='job') == 0
+    assert lib.db.get_track('song') is None
+
+
+def test_failed_download_commit_never_emits_success(monkeypatch):
+    import pytest
+    import shared.api as api
+    from shared.library_lifecycle import LibraryPersistenceError
+    emitted = []
+    lib = api.get_user_core('alice').library
+    def fail(*args, **kwargs):
+        raise OSError('disk full')
+    monkeypatch.setattr(lib.db, 'replace_library', fail)
+    monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: emitted.append(a))
+    with pytest.raises(LibraryPersistenceError):
+        api.add_tracks_to_user_library([track()], user_id='alice')
+    assert not emitted
+    assert lib.metadata.get_track_by_id('song') is None

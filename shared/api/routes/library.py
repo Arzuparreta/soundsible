@@ -61,10 +61,8 @@ def _commit_playlists(api, lib, metadata):
     again. Say it did not happen, so the client can say so too and retry.
     """
     if not lib._save_metadata():
-        return jsonify({
-            "error": "The library changed while saving; nothing was written. Try again.",
-            "code": "library_conflict",
-        }), 409
+        from shared.library_lifecycle import LibraryPersistenceError
+        raise LibraryPersistenceError(getattr(lib, "last_save_error", "library_conflict"))
     api["emit_to_user"]("library_updated")
     return _playlist_mutation_response(metadata)
 
@@ -307,7 +305,8 @@ def delete_track_from_library(track_id):
         # an object still owned by another account; cleanup reconciles it later.
         api["emit_to_user"]("library_updated")
         return jsonify({"status": "success"})
-    return jsonify({"error": "Deletion failed"}), 500
+    from shared.library_lifecycle import LibraryPersistenceError
+    raise LibraryPersistenceError(getattr(lib, "last_save_error", None))
 
 
 @library_bp.route("/api/library/wipe", methods=["POST"])

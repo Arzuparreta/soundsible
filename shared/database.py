@@ -1012,6 +1012,7 @@ class DatabaseManager:
             self._create_tracks_table(conn)
             self._create_library_info_table(conn)
             self._create_library_state_tables(conn)
+            conn.execute("CREATE TABLE IF NOT EXISTS library_operations (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)")
             self._create_fts5_triggers(conn)
             self._migrate_tracks_columns(conn)
             self._create_youtube_cache_table(conn)
@@ -1047,6 +1048,7 @@ class DatabaseManager:
         *,
         id_replacements: Optional[Dict[str, str]] = None,
         expected_revision: Optional[int] = None,
+        operation_id: Optional[str] = None,
     ) -> int:
         """Atomically replace the canonical library and return its revision.
 
@@ -1069,6 +1071,10 @@ class DatabaseManager:
         with self._get_connection() as conn, disk_staging(conn):
             conn.execute("BEGIN IMMEDIATE")
             try:
+                if operation_id and conn.execute("SELECT 1 FROM library_operations WHERE id=?", (operation_id,)).fetchone():
+                    revision = conn.execute("SELECT revision FROM library_state WHERE singleton=1").fetchone()[0]
+                    conn.execute("ROLLBACK")
+                    return int(revision)
                 if expected_revision is not None:
                     row = conn.execute(
                         "SELECT revision FROM library_state WHERE singleton = 1"
@@ -1191,11 +1197,17 @@ class DatabaseManager:
                 sync_source(conn, metadata, order_changed)
                 from shared import library_search
                 library_search.sync(conn)
+                if operation_id:
+                    conn.execute("INSERT INTO library_operations VALUES (?, ?)", (operation_id, int(time.time())))
                 conn.execute("COMMIT")
                 return revision
             except Exception as e:
                 conn.execute("ROLLBACK")
                 raise e
+
+    def has_library_operation(self, operation_id):
+        with self._get_connection() as conn:
+            return conn.execute("SELECT 1 FROM library_operations WHERE id=?", (operation_id,)).fetchone() is not None
 
     def sync_from_metadata(self, metadata: LibraryMetadata):
         """Compatibility name for callers migrating a complete manifest."""
