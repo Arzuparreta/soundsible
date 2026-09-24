@@ -61,7 +61,7 @@ const RANK: Record<string, number> = {
 /**
  * Downloads: the live mirror of the engine queue. Binds to the single store —
  * `downloader_update` events drive every progress bar with fine-grained updates,
- * so only the changed row re-renders. Retry/remove/clear are optimistic.
+ * so only the changed row re-renders. Retry/remove/clear wait for durable server confirmation.
  */
 export default function Downloads() {
   onMount(() => void actions.loadDownloads());

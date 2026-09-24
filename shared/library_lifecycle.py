@@ -3,7 +3,7 @@
 A cleanup intent is durable before references change. Failure always retains
 bytes; a later pass rechecks all canonical libraries before deleting anything.
 """
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from functools import wraps
 import json
 import logging
@@ -128,7 +128,7 @@ def _referenced(payload):
     # be interpreted as an empty library. Include disabled accounts as well.
     instance = root / 'instance.db'
     if instance.exists():
-        with sqlite3.connect(f'{instance.as_uri()}?mode=ro', uri=True) as conn:
+        with closing(sqlite3.connect(f'{instance.resolve().as_uri()}?mode=ro', uri=True)) as conn:
             if conn.execute("SELECT 1 FROM sqlite_master WHERE name='users'").fetchone():
                 for (uid,) in conn.execute('SELECT id FROM users'):
                     directory = root / 'users' / uid
@@ -140,17 +140,52 @@ def _referenced(payload):
             # An acquisition can be between publishing audio and committing its
             # personal reference. Conservatively postpone cleanup during jobs.
             if conn.execute("SELECT 1 FROM sqlite_master WHERE name='download_jobs'").fetchone():
-                if conn.execute("SELECT 1 FROM download_jobs WHERE status IN ('pending','downloading','failed') LIMIT 1").fetchone():
-                    return True
+                for row in conn.execute("SELECT status, payload FROM download_jobs WHERE status IN ('pending','downloading','failed')"):
+                    result = json.loads(row[1]).get('result')
+                    if not result and row[0] == 'downloading':
+                        return True
+                    if result and {result.get('id'), result.get('file_hash')} & {payload['track_id'], payload['file_hash']}:
+                        return True
+    for favourite_path in (root / 'users').glob('*/favourites.json'):
+        saved = json.loads(favourite_path.read_text())
+        entries = saved.get('saved', saved.get('favourites', [])) if isinstance(saved, dict) else saved
+        keys = {f"lib:{payload['track_id']}", f"lib:{payload['file_hash']}"}
+        for entry in entries:
+            if isinstance(entry, str) and entry in (payload['track_id'], payload['file_hash']):
+                return True
+            if isinstance(entry, dict) and keys.intersection(entry.get('keys', [])):
+                return True
     for path in paths:
-        with sqlite3.connect(f'{path.resolve().as_uri()}?mode=ro', uri=True) as conn:
+        with closing(sqlite3.connect(f'{path.resolve().as_uri()}?mode=ro', uri=True)) as conn:
             # IDs and hashes are both used by the local path resolver.
             if conn.execute('''SELECT 1 FROM tracks WHERE
                 (id IN (?, ?) OR file_hash IN (?, ?)) AND format=? LIMIT 1''',
                 (payload['track_id'], payload['file_hash'], payload['track_id'],
                  payload['file_hash'], payload['format'])).fetchone():
                 return True
+            if conn.execute('SELECT 1 FROM playlist_tracks WHERE track_id IN (?, ?) LIMIT 1',
+                            (payload['track_id'], payload['file_hash'])).fetchone():
+                return True
     return False
+
+
+def _forget_pool_entry(payload):
+    """Reconcile the portable pool catalog and any live downloader snapshot."""
+    import sys
+    from shared.models import LibraryMetadata
+    from shared.atomic_file import publish, text_pieces
+    if not payload['music_dir']:
+        return
+    root = Path(payload['music_dir'])
+    path = root / 'library.json'
+    if path.exists():
+        metadata = LibraryMetadata.from_json(path.read_text())
+        if metadata.remove_track(payload['track_id']):
+            publish(path, text_pieces(metadata.iter_json()))
+    api = sys.modules.get('shared.api')
+    downloader = getattr(api, 'downloader_service', None)
+    if downloader is not None and Path(downloader.output_dir).resolve() == root:
+        downloader.library.remove_track(payload['track_id'])
 
 
 @serialized
@@ -158,11 +193,15 @@ def drain(provider=None, limit=32):
     """Best effort. Unknown references/storage keep the intent and the bytes."""
     removed = []
     with operation_db() as conn:
-        rows = conn.execute('SELECT target, payload FROM audio_cleanup LIMIT ?', (limit,)).fetchall()
+        rows = conn.execute('SELECT target, payload FROM audio_cleanup ORDER BY rowid LIMIT ?', (limit,)).fetchall()
     for row in rows:
         try:
             payload = json.loads(row['payload'])
             if _referenced(payload):
+                # Rotate blocked entries so a busy reference cannot starve cleanup.
+                with operation_db() as conn:
+                    conn.execute('DELETE FROM audio_cleanup WHERE target=?', (row['target'],))
+                    conn.execute('INSERT INTO audio_cleanup VALUES (?, ?)', (row['target'], row['payload']))
                 continue
             if payload['provider'] and payload['provider'] != provider_identity(provider):
                 continue
@@ -176,6 +215,7 @@ def drain(provider=None, limit=32):
                 # Never follow a pool symlink to a borrowed external original.
                 if path.exists() and path.resolve().parent == pool.resolve():
                     path.unlink()
+            _forget_pool_entry(payload)
             # Shared artwork is deliberately retained; its existing store owns
             # reference accounting, not this audio cleanup operation.
             with operation_db() as conn:

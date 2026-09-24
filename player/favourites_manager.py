@@ -38,6 +38,7 @@ only stores them, matches on intersection, and knows that `lib:` means "a track
 in this account's library".
 """
 
+from shared.library_lifecycle import serialized
 import json
 import logging
 import os
@@ -99,6 +100,7 @@ class FavouritesManager:
         """The subset the user marked out, newest first."""
         return [entry for entry in self.get_entries() if entry.get("favourite")]
 
+    @serialized
     def toggle_saved(self, raw_entry: Dict[str, Any]) -> bool:
         """
         Add or remove a song from the library, matching on key intersection.
@@ -123,6 +125,7 @@ class FavouritesManager:
             self._persist()
             return True
 
+    @serialized
     def set_favourite(self, raw_entry: Dict[str, Any], favourite: Optional[bool] = None) -> bool:
         """
         Mark or unmark a song, saving it first if it is not in the library yet.
@@ -193,6 +196,7 @@ class FavouritesManager:
             entry = self._find(keys)
             return (entry or {}).get("added_at")
 
+    @serialized
     def update_keys(self, match_keys: Iterable[str], new_keys: Iterable[str]) -> bool:
         """
         Widen an existing entry with identities learned later — the video a
@@ -214,6 +218,7 @@ class FavouritesManager:
             self._persist()
             return True
 
+    @serialized
     def remap_library_id(self, old_id: str, new_id: str) -> bool:
         """
         Follow a library track whose id was rewritten (the optimizer re-keys ids
@@ -286,6 +291,7 @@ class FavouritesManager:
         with self._lock:
             return sum(1 for entry in self._entries if entry.get("favourite"))
 
+    @serialized
     def clear(self) -> None:
         """Clear all favourites."""
         with self._lock:

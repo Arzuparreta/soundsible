@@ -209,7 +209,8 @@ class LibraryManager:
         than the whole document, and every copy has the same content.
         """
         destinations = [self.manifest_path]
-        out_dir = None if _music_dir_manifest_is_shared() else _output_dir_for_library()
+        shared_pool = _music_dir_manifest_is_shared()
+        out_dir = None if shared_pool else _output_dir_for_library()
         if out_dir:
             destinations.append(Path(out_dir).expanduser().resolve() / LIBRARY_METADATA_FILENAME)
 
@@ -232,7 +233,13 @@ class LibraryManager:
 
             if self.provider:
                 try:
-                    if source is not None:
+                    if shared_pool:
+                        key = f"users/{self.user_config_dir.name}/library.json"
+                        if source is not None:
+                            self.provider.save_library_file(source, remote_key=key)
+                        else:
+                            self._log("Personal export unavailable; shared pool catalog left intact")
+                    elif source is not None:
                         self.provider.save_library_file(source)
                     else:
                         self.provider.save_library(metadata)
@@ -277,7 +284,10 @@ class LibraryManager:
                 )
                 # replace_library is also the alias-normalization boundary, so
                 # serialize only after it has moved every durable reference.
-                self._export_metadata(self.metadata)
+                try:
+                    self._export_metadata(self.metadata)
+                except Exception as exc:
+                    self._log(f"Library committed; portable export failed: {exc}")
                 return True
             except StaleLibraryWrite as e:
                 self._log(f"Library changed underneath this save, not writing: {e}")
@@ -723,7 +733,9 @@ class LibraryManager:
         3. Re-uploading (if hash changed).
         4. Updating library.json.
         """
+        self.last_save_error = None
         try:
+            self.refresh_if_stale()
             self._log(f"Updating track: {track.title}")
             
             # Note: 1. Get local file
@@ -956,6 +968,7 @@ class LibraryManager:
             self._log(f"Failed to disconnect: {e}")
             return False
 
+    @serialized
     def purge_missing_tracks(self) -> dict:
         """
         Remove tracks from metadata (and playlists/DB) whose audio file no longer exists

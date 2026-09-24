@@ -1,7 +1,7 @@
 import os
 import threading
 import logging
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor, Future, wait as wait_futures
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
@@ -250,6 +250,14 @@ class JobOrchestrator:
     def pump_is_running(self) -> bool:
         with self.state_lock:
             return self._pump_thread is not None and self._pump_thread.is_alive()
+
+    def drain_downloads(self, timeout=5.0):
+        """Stop admission and allow a bounded grace period for claimed jobs."""
+        self.stop_downloader_pump(wait=False)
+        with self.state_lock:
+            jobs = [future for key, future in self.active_jobs.items() if key.startswith('dl_')]
+        if jobs:
+            wait_futures(jobs, timeout=timeout)
 
     def shutdown(self, wait: bool = True) -> None:
         self.stop_downloader_pump(wait=wait)

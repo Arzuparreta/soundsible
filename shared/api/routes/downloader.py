@@ -2,6 +2,8 @@
 Downloader queue, YouTube search, discover, and downloader config routes.
 """
 
+from shared.library_lifecycle import LibraryPersistenceError
+
 import hashlib
 import json
 import logging
@@ -245,6 +247,7 @@ def add_to_downloader_queue():
         items = data.get("items", [])
         added_ids = []
         accepted = []
+        validated = []
         rejected = []
         for idx, item in enumerate(items):
             parsed, err = api["parse_intake_item"](item)
@@ -255,7 +258,9 @@ def add_to_downloader_queue():
             parsed["intake_payload_hash"] = hashlib.sha256(
                 json.dumps(parsed, sort_keys=True, default=str).encode("utf-8")
             ).hexdigest()
-            new_item = api["queue_manager_dl"].add(parsed, user_id=api["user_id"])
+            validated.append((idx, parsed))
+        durable = api["queue_manager_dl"].add_many([parsed for _, parsed in validated], user_id=api["user_id"])
+        for (idx, parsed), new_item in zip(validated, durable):
             added_ids.append(new_item["id"])
             accepted.append({"index": idx, "id": new_item["id"], "source_type": parsed.get("source_type")})
         status = "queued" if accepted else "error"
@@ -267,6 +272,8 @@ def add_to_downloader_queue():
             except Exception:
                 pass
         return jsonify({"status": status, "ids": added_ids, "accepted": accepted, "rejected": rejected}), code
+    except LibraryPersistenceError:
+        raise
     except Exception as e:
         logger.warning("API: Queue Add Error: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500

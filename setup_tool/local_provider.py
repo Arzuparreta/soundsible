@@ -198,7 +198,7 @@ class LocalStorageProvider(S3StorageProvider):
             print(f"Local storage not writable, skipping cloud mirror for '{remote_key}': {e}")
             return False
 
-    def save_library_file(self, path: Path) -> bool:
+    def save_library_file(self, path: Path, *, remote_key=None) -> bool:
         """Copy an already serialized library.json instead of serializing it again.
 
         The mirror is replaced whole, so nobody reading it sees half a copy,
@@ -209,14 +209,13 @@ class LocalStorageProvider(S3StorageProvider):
         from shared.atomic_file import copy_of, replace_contents
         from shared.constants import LIBRARY_METADATA_FILENAME
 
-        key = LIBRARY_METADATA_FILENAME
-        if key in self._unwritable_keys:
-            return False
+        key = remote_key or LIBRARY_METADATA_FILENAME
         try:
             target = self._get_path(key)
             if target.exists() and os.path.samefile(path, target):
                 return True
             replace_contents(target, copy_of(path))
+            self._unwritable_keys.discard(key)
             return True
         except Exception as e:
             self._unwritable_keys.add(key)

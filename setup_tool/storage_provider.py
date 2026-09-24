@@ -248,7 +248,7 @@ class S3StorageProvider(ABC):
             print(f"Failed to save library: {e}")
             return False
 
-    def save_library_file(self, path: Path) -> bool:
+    def save_library_file(self, path: Path, *, remote_key=None) -> bool:
         """Save a library.json the caller already serialized to `path`.
 
         Saves serializing the whole library a second time. The file was written
@@ -260,7 +260,7 @@ class S3StorageProvider(ABC):
             text = Path(path).read_bytes().decode("utf-8")
             if os.linesep != "\n":
                 text = text.replace(os.linesep, "\n")
-            return self.upload_json(text, LIBRARY_METADATA_FILENAME)
+            return self.upload_json(text, remote_key or LIBRARY_METADATA_FILENAME)
         except Exception as e:
             print(f"Failed to save library: {e}")
             return False

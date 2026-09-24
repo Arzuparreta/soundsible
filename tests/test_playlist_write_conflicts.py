@@ -142,6 +142,7 @@ def test_a_refused_playlist_write_is_reported_as_a_conflict(client, monkeypatch)
     with user_context(user_id):
         library = get_user_core(user_id).library
     monkeypatch.setattr(library, "_save_metadata", lambda **kwargs: False)
+    library.last_save_error = "library_conflict"
 
     response = client.post(
         "/api/library/playlists/Arma%20Reforger/tracks",

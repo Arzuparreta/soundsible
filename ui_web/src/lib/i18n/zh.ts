@@ -1115,6 +1115,7 @@ export const zh: Dict = {
     trackFallback: '曲目',
     addingDownloads: '正在添加到下载…',
     episodeInDownloads: '剧集在下载中',
+    downloadOperationFailed: '无法保存下载更改，请重试。',
     downloadFailed: '下载失败',
     addedToQueue: '已加入队列',
     playNextConfirmed: '将作为下一首播放',

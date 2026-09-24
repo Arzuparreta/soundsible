@@ -247,8 +247,12 @@ class MigrationRunner:
         item, error = api.parse_intake_item(raw)
         if error or not item:
             return None, error or "Invalid download candidate"
-        item = api.queue_manager_dl.add(item, user_id=self.user_id)
-        api.queue_manager_dl.update_status(item["id"], "downloading")
+        from shared.library_lifecycle import coordinated
+        with coordinated():
+            item = api.queue_manager_dl.add(item, user_id=self.user_id)
+            item = api.queue_manager_dl.claim(item['id'])
+        if item is None:
+            return None, 'Download could not be started'
         api._process_single_queue_item(item)
 
         lib = self._library()

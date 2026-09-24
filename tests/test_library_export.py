@@ -91,6 +91,8 @@ def test_a_shared_music_folder_gets_no_copy(manager, monkeypatch):
     assert manager.lib._save_metadata() is True
     assert manager.lib.manifest_path.exists()
     assert not (manager.music / "library.json").exists()
+    assert not manager.mirror.exists()
+    assert (manager.mirror.parent / "users" / manager.lib.user_config_dir.name / "library.json").exists()
 
 
 def test_an_unwritable_copy_is_skipped_and_reported_once(manager, monkeypatch):

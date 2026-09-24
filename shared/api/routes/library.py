@@ -1,3 +1,4 @@
+from shared.library_lifecycle import serialized, LibraryPersistenceError
 from hashlib import sha256
 from pathlib import Path
 """
@@ -473,6 +474,8 @@ def update_track_metadata(track_id):
     success = lib.update_track(track, new_meta, cover_path if not clear_cover else None)
     if cover_path and os.path.exists(cover_path):
         os.remove(cover_path)
+    if not success and getattr(lib, "last_save_error", None):
+        raise LibraryPersistenceError(lib.last_save_error)
     if success:
         cover_source = "none" if clear_cover else ("youtube" if cover_url and ("youtube.com" in cover_url or "youtu.be" in cover_url) else "manual" if cover_url else None)
         api["_mark_track_metadata_updated"](lib, track_id, cover_source=cover_source)
@@ -732,6 +735,7 @@ def _schedule_favourite_resolve(favourite: dict) -> None:
 @library_bp.route("/api/library/playlists", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_create", limit=60, window_sec=60)
+@serialized
 def create_playlist():
     api = _get_api()
     lib, metadata = api["_ensure_lib_metadata"]()
@@ -750,6 +754,7 @@ def create_playlist():
 @library_bp.route("/api/library/playlists", methods=["PATCH"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_reorder", limit=60, window_sec=60)
+@serialized
 def reorder_playlists():
     api = _get_api()
     lib, metadata = api["_ensure_lib_metadata"]()
@@ -766,6 +771,7 @@ def reorder_playlists():
 @library_bp.route("/api/library/playlists/<path:name>/tracks", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_add_track", limit=120, window_sec=60)
+@serialized
 def add_track_to_playlist(name):
     name = unquote(name)
     api = _get_api()
@@ -786,6 +792,7 @@ def add_track_to_playlist(name):
 @library_bp.route("/api/library/playlists/<path:name>/tracks/<track_id>", methods=["DELETE"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_remove_track", limit=120, window_sec=60)
+@serialized
 def remove_track_from_playlist(name, track_id):
     name = unquote(name)
     api = _get_api()
@@ -802,6 +809,7 @@ def remove_track_from_playlist(name, track_id):
 @library_bp.route("/api/library/playlists/<path:name>", methods=["PATCH"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_update", limit=80, window_sec=60)
+@serialized
 def update_playlist(name):
     name = unquote(name)
     api = _get_api()
@@ -836,6 +844,7 @@ def update_playlist(name):
 @library_bp.route("/api/library/playlists/<path:name>", methods=["DELETE"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_delete", limit=60, window_sec=60)
+@serialized
 def delete_playlist(name):
     name = unquote(name)
     api = _get_api()

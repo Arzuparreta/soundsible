@@ -253,6 +253,9 @@ def test_cross_user_remap_saves_an_account_with_only_playlist_references(tmp_pat
         def __init__(self):
             self.metadata = metadata
 
+        def refresh_if_stale(self):
+            pass
+
         def _save_metadata(self, *, id_replacements=None):
             saves.append(dict(id_replacements or {}))
             return True

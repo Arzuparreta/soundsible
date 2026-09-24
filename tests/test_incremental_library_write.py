@@ -195,16 +195,8 @@ def test_concurrent_writers_recheck_revision_inside_transaction(tmp_path):
     value = model()
     db.replace_library(value)
     barrier = threading.Barrier(2)
-    original = db.get_library_revision
-
-    def synchronized_revision():
-        result = original()
-        barrier.wait(timeout=5)
-        return result
-
-    db.get_library_revision = synchronized_revision
-
     def write(name):
+        barrier.wait(timeout=5)
         candidate = deepcopy(value)
         candidate.tracks[0].title = name
         try:
@@ -214,7 +206,6 @@ def test_concurrent_writers_recheck_revision_inside_transaction(tmp_path):
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(write, ['first', 'second']))
-    db.get_library_revision = original
     assert sorted(results, key=str) == [2, 'stale']
     assert db.get_library_revision() == 2
     assert db.load_library_metadata().tracks[0].title in {'first', 'second'}

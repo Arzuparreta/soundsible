@@ -28,6 +28,7 @@ from typing import Any, Optional
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from shared.library_lifecycle import serialized
 from shared.database import instance_db
 from shared.hardening import (
     SCOPE_ADMIN_CONFIG,
@@ -134,6 +135,7 @@ def count_users(*, include_disabled: bool = False) -> int:
     return instance_db().count_users(include_disabled=include_disabled)
 
 
+@serialized
 def create_user(
     username: str,
     *,
@@ -234,6 +236,7 @@ def verify_password(user_id: str, password: str) -> bool:
     return check_password_hash(stored, str(password or ""))
 
 
+@serialized
 def set_disabled(user_id: str, disabled: bool) -> Optional[dict[str, Any]]:
     db = instance_db()
     current = db.get_user_row(user_id)
@@ -248,6 +251,7 @@ def set_disabled(user_id: str, disabled: bool) -> Optional[dict[str, Any]]:
     return _public_user(row)
 
 
+@serialized
 def delete_user(user_id: str, *, purge_files: bool = True) -> bool:
     """Delete an account and, by default, its personal directories.
 

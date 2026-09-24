@@ -477,6 +477,7 @@ def _patch_downloader_api(monkeypatch):
     fake_svc.is_processing = False
     fake_svc.log_buffer = []
     fake_svc.add.return_value = {"id": "dl1"}
+    fake_svc.add_many.return_value = [{"id": "dl1"}]
     fake_svc.list_items.return_value = []
     fake_svc.logs_for.return_value = []
     monkeypatch.setattr("shared.api.routes.downloader._get_api", lambda: {
