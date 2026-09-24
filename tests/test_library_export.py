@@ -180,6 +180,9 @@ def test_the_provider_serializes_itself_only_when_no_copy_was_written(manager, m
         save_library=lambda metadata: calls.append(("model", metadata)),
     )
     manager.lib._unwritable_paths.update({str(manager.lib.manifest_path), str(manager.music / "library.json")})
+    def unavailable(*args):
+        raise PermissionError("read only")
+    monkeypatch.setattr(manager.lib, "_atomic_write", unavailable)
     assert manager.lib._save_metadata() is True
     assert calls == [("model", manager.lib.metadata)]
 

@@ -108,7 +108,8 @@ def optimize_library(library_path: Path, dry_run: bool = False, limit: int = 0, 
                         shutil.move(str(temp_file), str(new_final_path))
                         
                         if new_hash != track.file_hash:
-                            if original_file.exists(): os.remove(original_file)
+                            from shared.library_lifecycle import retire
+                            retire(track)
                         
                         updated_track = Track(
                             id=new_hash,

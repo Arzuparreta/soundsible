@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
+from shared.library_lifecycle import serialized
 from shared.library_write import disk_staging, staged_rows, sync_rows, sync_tracks
 from shared.runtime import get_config_dir
 from shared.time_utils import UTC
@@ -1039,6 +1040,7 @@ class DatabaseManager:
             conn.execute("ROLLBACK")
             raise e
 
+    @serialized
     def replace_library(
         self,
         metadata: LibraryMetadata,

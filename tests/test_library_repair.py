@@ -228,7 +228,7 @@ def test_a_repaired_track_keeps_everything_that_was_not_its_bytes(tmp_path, pool
     assert repaired.added_at == "2026-07-02T10:00:00"
     assert repaired.title == "Corpo e Canção"
     assert (tmp_path / f"{repaired.id}.{repaired.format}").exists()
-    assert not path.exists(), "the oversized original is not left behind"
+    assert path.exists(), "original stays until canonical references have committed"
 
 
 def test_cross_user_remap_saves_an_account_with_only_playlist_references(tmp_path, monkeypatch):

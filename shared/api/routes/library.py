@@ -303,16 +303,8 @@ def delete_track_from_library(track_id):
     logger.info("API: Deleting track %s (%s)...", track.title, track_id)
     success = lib.delete_track(track)
     if success:
-        # Note: Also remove from the ODST downloader's library (OUTPUT_DIR/library.json).
-        # sync_library() reads that file on startup; if we don't update it here the track
-        # reappears on every restart because that file is never touched by _save_metadata().
-        try:
-            dl = api["get_downloader"](open_browser=False)
-            if dl and dl.library and dl.library.remove_track(track_id):
-                dl.save_library()
-                logger.info("API: Track %s also removed from ODST library.", track_id)
-        except Exception as e:
-            logger.warning("API: Could not remove track from ODST library (non-fatal): %s", e)
+        # ODST is the shared pool catalog. A personal removal must not remove
+        # an object still owned by another account; cleanup reconciles it later.
         api["emit_to_user"]("library_updated")
         return jsonify({"status": "success"})
     return jsonify({"error": "Deletion failed"}), 500
@@ -331,13 +323,6 @@ def wipe_library():
         success = lib.nuke_library()
         if not success:
             return jsonify({"error": "Wipe failed"}), 500
-        try:
-            dl = api["get_downloader"](open_browser=False)
-            dl.library = api["LibraryMetadata"](version=1, tracks=[], playlists={}, settings={})
-            dl.save_library()
-            logger.info("API: ODST library wiped at %s", dl.output_dir)
-        except Exception as e:
-            logger.warning("API: ODST library wipe (non-fatal): %s", e)
         api["emit_to_user"]("library_updated")
         return jsonify({"status": "success"})
     except Exception as e:

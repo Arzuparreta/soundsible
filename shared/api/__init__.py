@@ -21,6 +21,7 @@ from flask_cors import CORS
 logger = logging.getLogger(__name__)
 API_STARTED_AT = time.time()
 
+from shared.library_lifecycle import serialized, drain as drain_audio_cleanup
 from shared import request_scope
 from shared.models import Track, LibraryMetadata
 from shared.constants import STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
@@ -1128,8 +1129,21 @@ def process_queue_background(stop_event: Optional[threading.Event] = None):
     def _stopped() -> bool:
         return stop_event is not None and stop_event.is_set()
 
+    cleanup_at = 0.0
     try:
         while True:
+            if time.monotonic() >= cleanup_at:
+                cleanup_at = time.monotonic() + 30
+                try:
+                    provider = next((core.library.provider for core in list(_user_cores.values())
+                                     if core.library.provider), None)
+                    removed = drain_audio_cleanup(provider)
+                    if removed and downloader_service is not None:
+                        for track_id in removed:
+                            downloader_service.library.remove_track(track_id)
+                        downloader_service.save_library()
+                except Exception:
+                    logger.warning("Deferred audio cleanup failed", exc_info=True)
             if _stopped():
                 queue_manager_dl.add_log("Station Engine: Pump stop requested; exiting.")
                 break
@@ -1412,6 +1426,7 @@ def _sync_odst_to_main_core():
     return add_tracks_to_user_library(dl.library.tracks)
 
 
+@serialized
 def remap_track_ids_for_all_users(id_map: dict) -> dict:
     """Rewrite track ids across every account after files were re-encoded.
 
@@ -1426,6 +1441,7 @@ def remap_track_ids_for_all_users(id_map: dict) -> dict:
         return {}
 
     touched: dict[str, int] = {}
+    failed = []
     for account in list_users():
         user_id = account["id"]
         try:
@@ -1451,7 +1467,10 @@ def remap_track_ids_for_all_users(id_map: dict) -> dict:
                     touched[user_id] = 1
                     emit_to_user("library_updated", user_id=user_id)
         except Exception as e:
+            failed.append(user_id)
             logger.warning("API: could not remap optimized track ids for user %s: %s", user_id, e)
+    if failed:
+        raise RuntimeError("Some libraries could not commit repaired references; originals retained")
     return touched
 
 

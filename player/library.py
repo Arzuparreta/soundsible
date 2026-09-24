@@ -10,6 +10,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+from shared.library_lifecycle import serialized, retire, drain
 from shared.atomic_file import copy_of, publish, text_pieces
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider, merge_playlist_maps, merge_podcast_subscriptions
 from shared.constants import LIBRARY_METADATA_FILENAME
@@ -217,17 +218,17 @@ class LibraryManager:
             source: Optional[Path] = None
             for path in destinations:
                 key = str(path)
-                if key in self._unwritable_paths:
-                    continue
                 try:
                     if source is None:
                         self._atomic_write(path, text_pieces(metadata.iter_json()))
                         source = path
                     else:
                         self._atomic_write(path, copy_of(source))
+                    self._unwritable_paths.discard(key)
                 except OSError as exc:
+                    if key not in self._unwritable_paths:
+                        self._log(f"Library export not writable, skipping {path}: {exc}")
                     self._unwritable_paths.add(key)
-                    self._log(f"Library export not writable, skipping {path}: {exc}")
 
             if self.provider:
                 try:
@@ -249,6 +250,7 @@ class LibraryManager:
                             " + storage provider" if self.provider else "",
                             (time.perf_counter() - started) * 1000)
 
+    @serialized
     def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None) -> bool:
         """
         Commit the canonical SQLite snapshot, then refresh portable exports.
@@ -265,6 +267,7 @@ class LibraryManager:
             return False
             
         with self._lock:
+            self.last_save_error = None
             try:
                 self._library_revision = self.db.replace_library(
                     self.metadata,
@@ -279,11 +282,22 @@ class LibraryManager:
                 self._log(f"Library changed underneath this save, not writing: {e}")
                 # Adopt what is actually there. Without this the manager keeps
                 # a revision nothing matches and every later save fails too.
-                self.refresh_if_stale()
+                self.last_save_error = "library_conflict"
+                self._reload_canonical()
                 return False
             except Exception as e:
+                self.last_save_error = "library_storage_unavailable"
                 self._log(f"Error saving metadata: {e}")
+                self._reload_canonical()
                 return False
+
+    def _reload_canonical(self):
+        try:
+            self.metadata = self.db.load_library_metadata()
+            self._library_revision = self.db.get_library_revision()
+        except Exception:
+            # Do not keep an uncommitted snapshot that a later save could leak.
+            self.metadata = None
 
     def sync_library(self, silent: bool = None) -> bool:
         """
@@ -693,6 +707,7 @@ class LibraryManager:
         except Exception:
             return self.metadata.tracks if (self.metadata and not query) else []
 
+    @serialized
     def update_track(self, track: Track, new_metadata: Dict[str, str], cover_path: Optional[str] = None) -> bool:
         """
         Update track metadata and/or cover art.
@@ -820,17 +835,18 @@ class LibraryManager:
                 self.metadata.version += 1
                 
                 # Note: Save changes everywhere
-                self._save_metadata()
+                retire(track, self.provider)
+                if not self._save_metadata():
+                    os.remove(local_path)
+                    return False
                 
                 # Note: 5. Cleanup old remote file (if hash changed).
                 # Editing tags re-hashes the file, so the old object may still be
                 # what somebody else's manifest points at. With several accounts
                 # sharing the pool, leave it: an orphan file is cheap, a broken
                 # library is not.
-                if new_track.id != track.id and not _music_dir_manifest_is_shared():
-                    self._log("Removing old file from storage...")
-                    old_key = track_storage_key(track)
-                    self.provider.delete_file(old_key)
+                if new_track.id != track.id:
+                    drain(self.provider)
 
                 # Note: Update cache identically
                 if self.cache:
@@ -855,6 +871,7 @@ class LibraryManager:
                 os.remove(local_path)
             return False
 
+    @serialized
     def delete_track(self, track: Track) -> bool:
         """
         Permanently delete a track from:
@@ -862,93 +879,39 @@ class LibraryManager:
         2. Cloud storage (R2/S3)
         3. Library metadata
         """
-        self._log(f"Deleting track: {track.title} ({track.id})...")
-        
         try:
-            # Note: 1. Remove from cache
+            self.refresh_if_stale()
+            if not self.metadata or not self.metadata.get_track_by_id(track.id):
+                return False
+            retire(track, self.provider)
+            self.metadata.remove_track(track.id)
+            for name, ids in self.metadata.playlists.items():
+                self.metadata.playlists[name] = [value for value in ids if value != track.id]
+            self.metadata.version += 1
+            if not self._save_metadata():
+                return False
             if self.cache:
                 self.cache.remove_track(track.id)
-                
-            # Note: 2. Remove from cloud storage
-            if self.provider:
-                remote_key = track_storage_key(track)
-                if self.provider.file_exists(remote_key):
-                    self._log(f"Deleting remote file: {remote_key}")
-                    if not self.provider.delete_file(remote_key):
-                        self._log("Failed to delete remote file. Proceeding anyway.")
-                
-                # Note: Check for cover art if stored separately?
-                # Note: Currently cover art seems embedded or fetched from URL, but if we stored it in S3 we should delete it too.
-                # Note: The track model has cover_art_key.
-                if track.cover_art_key:
-                    self._log(f"Deleting cover art: {track.cover_art_key}")
-                    self.provider.delete_file(track.cover_art_key)
-
-            # Note: 3. Update library metadata
-            # Note: Remove from track list
-            original_count = len(self.metadata.tracks)
-            self.metadata.tracks = [t for t in self.metadata.tracks if t.id != track.id]
-            
-            if len(self.metadata.tracks) < original_count:
-                self._log("Removed track from metadata.")
-                self.metadata.version += 1
-                
-                # Note: Remove from playlists
-                for name, playlist in self.metadata.playlists.items():
-                    if track.id in playlist:
-                        self.metadata.playlists[name] = [pid for pid in playlist if pid != track.id]
-
-                # Note: Save changes everywhere
-                if self._save_metadata():
-                    self._log("Track deleted successfully.")
-                    return True
-                else:
-                    self._log("Failed to save deletion metadata.")
-                    return False
-            else:
-                self._log("Track not found in metadata.")
-                return False
-                
-        except Exception as e:
-            self._log(f"Error deleting track: {e}")
-            return False
-        
-        return True
-
-    def nuke_library(self) -> bool:
-        """
-        The 'Nuclear Option': Permanently delete ALL tracks and metadata.
-        Deletes from cloud storage, local cache, and local database.
-        """
-        self._log("!!! NUKE INITIATED !!!")
-        try:
-            # Note: 1. Clear cloud storage
-            if self.provider:
-                self._log("Deleting all files from cloud storage...")
-                files = self.provider.list_files()
-                for file_info in files:
-                    remote_key = file_info.get('key') or file_info.get('Key')
-                    if not remote_key:
-                        continue
-                    self._log(f"  Deleting: {remote_key}")
-                    self.provider.delete_file(remote_key)
-            
-            # Note: 2. Clear local cache
-            if self.cache:
-                self._log("Clearing local media cache...")
-                self.cache.clear_cache()
-            
-            # Note: 3. Reset memory metadata and persist empty state (disk, cloud, DB)
-            self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-            self._log("Clearing local database and saving empty manifest...")
-            self._save_metadata()
-            
-            self._log("✓ Library nuked successfully.")
+            drain(self.provider)
             return True
-        except Exception as e:
-            self._log(f"Nuke failed: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception as exc:
+            self._log(f"Error deleting track: {exc}")
+            return False
+
+    @serialized
+    def nuke_library(self) -> bool:
+        """Clear this account; retire only its now-unreferenced managed audio."""
+        try:
+            self.refresh_if_stale()
+            for track in self.metadata.tracks if self.metadata else []:
+                retire(track, self.provider)
+            self.metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+            if not self._save_metadata():
+                return False
+            drain(self.provider)
+            return True
+        except Exception as exc:
+            self._log(f"Library clear failed: {exc}")
             return False
 
     def disconnect_storage(self, wipe_local: bool = False) -> bool:
