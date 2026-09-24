@@ -306,8 +306,9 @@ def repair_file(
         copying = destination is not None
         target = Path(destination) if copying else source.with_suffix(suffix)
         target.parent.mkdir(parents=True, exist_ok=True)
-        if repaired_size >= shape.size_bytes and target == source:
-            # Nothing gained. Not an error, just not worth rewriting a file for.
+        if repaired_size >= shape.size_bytes:
+            # Nothing gained. Not an error, just not worth rewriting a file, or
+            # publishing a copy under a new identity, for.
             return None
         if original_art:
             try:

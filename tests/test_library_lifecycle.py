@@ -182,3 +182,16 @@ def test_export_still_finishes_before_a_nested_save_returns(tmp_path):
         exported = json.loads(lib.manifest_path.read_text())
         assert 'Later' not in exported['playlists']
     assert 'Later' in json.loads(lib.manifest_path.read_text())['playlists']
+
+
+def test_failed_delete_does_not_report_an_earlier_saves_error(tmp_path, monkeypatch):
+    import player.library as library_module
+    provider, audio = provider_at(tmp_path / 'pool')
+    lib = library('alice', provider)
+    lib.last_save_error = 'library_conflict'  # from an unrelated earlier save
+    def unsafe(*args, **kwargs):
+        raise ValueError('Unsafe managed audio key')
+    monkeypatch.setattr(library_module, 'retire', unsafe)
+    assert not lib.delete_track(track())
+    assert lib.last_save_error == 'library_storage_unavailable'
+    assert audio.exists()

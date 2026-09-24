@@ -919,6 +919,8 @@ class LibraryManager:
         2. Cloud storage (R2/S3)
         3. Library metadata
         """
+        # Cached per account: never report an earlier, unrelated save's error.
+        self.last_save_error = None
         try:
             self.refresh_if_stale()
             if not self.metadata or not self.metadata.get_track_by_id(track.id):
@@ -939,6 +941,7 @@ class LibraryManager:
             return True
         except Exception as exc:
             self._log(f"Error deleting track: {exc}")
+            self.last_save_error = self.last_save_error or "library_storage_unavailable"
             return False
 
     @serialized

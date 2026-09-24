@@ -302,3 +302,48 @@ def test_repair_copies_a_scanned_external_file_without_mutating_it(tmp_path, poo
 def test_shrinking_refuses_to_invent_a_cover(tmp_path):
     assert shrink_cover(b"") is None
     assert shrink_cover(b"not an image") is None
+
+
+def test_a_repair_that_saves_nothing_publishes_nothing(tmp_path, pool_paths, monkeypatch):
+    """Every repair now publishes a new object, so the "nothing gained" check
+    is what keeps a remux that saves no bytes from churning the track's id."""
+    from dataclasses import replace
+    from shared import library_repair
+
+    pool = tmp_path / "tracks"
+    pool.mkdir()
+    path = _music_video(pool, name="hash-1.mp4")
+    real_inspect = library_repair.inspect_file
+    monkeypatch.setattr(library_repair, "inspect_file",
+                        lambda p: (lambda shape: shape and replace(shape, size_bytes=1))(real_inspect(p)))
+
+    summary = repair_library([_track("hash-1", path)], pool, dry_run=False)
+
+    assert summary["id_map"] == {}
+    assert sorted(p.name for p in pool.iterdir() if p.suffix != ".png") == ["hash-1.mp4"]
+
+
+def test_a_failed_repair_commit_discards_its_unreferenced_copies(tmp_path, pool_paths, monkeypatch):
+    import shared.api as api
+    from shared.user_context import user_context
+
+    pool = tmp_path / "music" / "tracks"
+    pool.mkdir(parents=True)
+    path = _music_video(pool, name="hash-1.mp4")
+    monkeypatch.setattr("shared.app_config.get_output_dir", lambda: pool.parent)
+    monkeypatch.setattr(api, "get_output_dir_for_repair", lambda: pool)
+    monkeypatch.setattr(api.orchestrator, "submit_task", lambda _name, task: task())
+    monkeypatch.setattr(api, "emit_to_user", lambda *_args, **_kwargs: None)
+    library = api.get_user_core("alice").library
+    library.metadata = LibraryMetadata(1, [_track("hash-1", path)], {}, {})
+    assert library._save_metadata()
+
+    def fail(*_args, **_kwargs):
+        raise OSError("disk full")
+    monkeypatch.setattr(library.db, "replace_library", fail)
+    with user_context("alice"):
+        api.run_library_repair_task(dry_run=False)
+
+    # The original is still referenced, so it stays; the copy nobody adopted goes.
+    assert sorted(p.name for p in pool.iterdir() if p.suffix != ".png") == ["hash-1.mp4"]
+    assert library.db.get_track("hash-1")
