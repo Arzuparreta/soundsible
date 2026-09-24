@@ -10,7 +10,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
-from shared.library_lifecycle import serialized, retire, drain
+from contextlib import nullcontext
+from shared.library_lifecycle import after_release, serialized, retire, drain
 from shared.atomic_file import copy_of, publish, text_pieces
 from shared.models import LibraryMetadata, Track, PlayerConfig, StorageProvider, merge_playlist_maps, merge_podcast_subscriptions
 from shared.constants import LIBRARY_METADATA_FILENAME
@@ -200,13 +201,18 @@ class LibraryManager:
         """One published export copy; the seam tests use to make a copy fail."""
         publish(path, fill)
 
-    def _export_metadata(self, metadata: LibraryMetadata) -> None:
+    def _export_metadata(self, metadata: Optional[LibraryMetadata] = None, *, hold=None) -> None:
         """Best-effort portable exports after SQLite has committed.
 
         The library is serialized once, in pieces, into the first writable
         destination; the other copies and the storage provider's are byte
         copies of that file. Memory stays bounded by one block of tracks rather
         than the whole document, and every copy has the same content.
+
+        Without ``metadata`` the live library is exported, read under ``hold``
+        so no writer changes it mid-serialization. The provider upload copies
+        the finished file and runs outside ``hold``: a slow remote must not
+        stall this account's writers while they wait on it.
         """
         destinations = [self.manifest_path]
         shared_pool = _music_dir_manifest_is_shared()
@@ -217,19 +223,32 @@ class LibraryManager:
         with self._export_lock:
             started = time.perf_counter()
             source: Optional[Path] = None
-            for path in destinations:
-                key = str(path)
-                try:
-                    if source is None:
-                        self._atomic_write(path, text_pieces(metadata.iter_json()))
-                        source = path
-                    else:
-                        self._atomic_write(path, copy_of(source))
-                    self._unwritable_paths.discard(key)
-                except OSError as exc:
-                    if key not in self._unwritable_paths:
-                        self._log(f"Library export not writable, skipping {path}: {exc}")
-                    self._unwritable_paths.add(key)
+            with hold or nullcontext():
+                if metadata is None:
+                    metadata = self.metadata
+                if metadata is None:
+                    return
+                for path in destinations:
+                    key = str(path)
+                    try:
+                        if source is None:
+                            self._atomic_write(path, text_pieces(metadata.iter_json()))
+                            source = path
+                        else:
+                            self._atomic_write(path, copy_of(source))
+                        self._unwritable_paths.discard(key)
+                    except OSError as exc:
+                        if key not in self._unwritable_paths:
+                            self._log(f"Library export not writable, skipping {path}: {exc}")
+                        self._unwritable_paths.add(key)
+                if self.provider and source is None and not shared_pool:
+                    # Nothing local to copy from, so the provider serializes the
+                    # live library itself. Only reachable when the config dir is
+                    # unwritable, where the SQLite commit would not have landed.
+                    try:
+                        self.provider.save_library(metadata)
+                    except Exception as exc:
+                        self._log(f"Remote library export failed: {exc}")
 
             if self.provider:
                 try:
@@ -241,8 +260,6 @@ class LibraryManager:
                             self._log("Personal export unavailable; shared pool catalog left intact")
                     elif source is not None:
                         self.provider.save_library_file(source)
-                    else:
-                        self.provider.save_library(metadata)
                 except Exception as exc:
                     self._log(f"Remote library export failed: {exc}")
 
@@ -284,10 +301,9 @@ class LibraryManager:
                 )
                 # replace_library is also the alias-normalization boundary, so
                 # serialize only after it has moved every durable reference.
-                try:
-                    self._export_metadata(self.metadata)
-                except Exception as exc:
-                    self._log(f"Library committed; portable export failed: {exc}")
+                # Exports can reach remote storage: run them once every
+                # account's lifecycle lock is released, not while holding it.
+                after_release(self._export_committed, key=('library-export', id(self)))
                 return True
             except StaleLibraryWrite as e:
                 self._log(f"Library changed underneath this save, not writing: {e}")
@@ -301,6 +317,12 @@ class LibraryManager:
                 self._log(f"Error saving metadata: {e}")
                 self._reload_canonical()
                 return False
+
+    def _export_committed(self) -> None:
+        try:
+            self._export_metadata(hold=self._lock)
+        except Exception as exc:
+            self._log(f"Library committed; portable export failed: {exc}")
 
     def require_saved(self, **kwargs):
         if not self._save_metadata(**kwargs):

@@ -31,38 +31,66 @@ class LibraryPersistenceError(RuntimeError):
 def coordinated():
     # Same lock order everywhere: process lock, file lock, SQLite transaction.
     # Reentrant because a library mutation calls DatabaseManager.replace_library.
-    with _lock:
-        if getattr(_local, 'depth', 0):
-            _local.depth += 1
-            try:
-                yield
-            finally:
-                _local.depth -= 1
-            return
-        path = get_config_dir() / '.library-lifecycle.lock'
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open('a+b') as handle:
-            handle.seek(0, 2)
-            if not handle.tell():
-                handle.write(b'0')
-                handle.flush()
-            handle.seek(0)
-            if os.name == 'nt':
-                import msvcrt
-                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            _local.depth = 1
-            try:
-                yield
-            finally:
-                _local.depth = 0
+    # The depth is thread-local and non-zero only while this thread holds both.
+    if getattr(_local, 'depth', 0):
+        _local.depth += 1
+        try:
+            yield
+        finally:
+            _local.depth -= 1
+        return
+    try:
+        with _lock:
+            path = get_config_dir() / '.library-lifecycle.lock'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open('a+b') as handle:
+                handle.seek(0, 2)
+                if not handle.tell():
+                    handle.write(b'0')
+                    handle.flush()
                 handle.seek(0)
                 if os.name == 'nt':
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                    import msvcrt
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
                 else:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                    import fcntl
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                _local.depth = 1
+                try:
+                    yield
+                finally:
+                    _local.depth = 0
+                    handle.seek(0)
+                    if os.name == 'nt':
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        _run_after_release()
+
+
+def after_release(callback, key=None):
+    """Run ``callback`` once this thread leaves its outermost coordinated().
+
+    Every account and the download queue share this lock, so follow-up work
+    that can be slow (portable exports, storage provider uploads) must not
+    hold it. Callbacks still run on this thread, before the outermost call
+    returns. Registering the same ``key`` twice in one hold runs it once.
+    """
+    if not getattr(_local, 'depth', 0):
+        callback()
+        return
+    pending = _local.__dict__.setdefault('after', {})
+    pending.setdefault(key if key is not None else object(), callback)
+
+
+def _run_after_release():
+    pending, _local.after = getattr(_local, 'after', None) or {}, {}
+    for callback in pending.values():
+        try:
+            callback()
+        except Exception:
+            log.warning('Post-commit follow-up failed', exc_info=True)
 
 
 def serialized(func):

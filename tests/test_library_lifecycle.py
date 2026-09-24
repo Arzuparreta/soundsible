@@ -137,3 +137,48 @@ def test_cache_failure_does_not_reverse_a_committed_deletion(tmp_path):
     assert lib.delete_track(track())
     assert lib.db.get_track('song') is None
     assert not audio.exists()
+
+
+def test_slow_remote_export_does_not_hold_the_shared_lock(tmp_path, monkeypatch):
+    import threading
+    from shared.library_lifecycle import coordinated
+    provider, _ = provider_at(tmp_path / 'pool')
+    lib = library('alice', provider)
+    uploading, release = threading.Event(), threading.Event()
+    def slow_upload(path, **kwargs):
+        uploading.set()
+        release.wait(10)
+        return True
+    monkeypatch.setattr(provider, 'save_library_file', slow_upload)
+    lib.metadata.version += 1
+    saver = threading.Thread(target=lib._save_metadata)
+    saver.start()
+    try:
+        assert uploading.wait(5)
+        # Any other account, or the download queue, can still take the lock.
+        acquired = threading.Event()
+        def take():
+            with coordinated():
+                acquired.set()
+        other = threading.Thread(target=take)
+        other.start()
+        assert acquired.wait(5)
+        other.join(5)
+    finally:
+        release.set()
+        saver.join(10)
+    assert lib.db.get_library_revision() == lib._library_revision
+
+
+def test_export_still_finishes_before_a_nested_save_returns(tmp_path):
+    import json
+    from shared.library_lifecycle import coordinated
+    provider, _ = provider_at(tmp_path / 'pool')
+    lib = library('alice', provider)
+    with coordinated():
+        lib.metadata.playlists['Later'] = ['song']
+        lib.metadata.version += 1
+        assert lib._save_metadata()
+        exported = json.loads(lib.manifest_path.read_text())
+        assert 'Later' not in exported['playlists']
+    assert 'Later' in json.loads(lib.manifest_path.read_text())['playlists']
