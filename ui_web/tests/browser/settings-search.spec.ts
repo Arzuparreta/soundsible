@@ -92,6 +92,26 @@ test('a result lands on its row, and the search survives the way back', async ({
   await expect(result).toBeVisible();
 });
 
+test('search landing waits for the lossless panel above its target', async ({ page }) => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/lossless/status', async route => {
+    await pending;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.goto('/player/#/settings');
+  await page.getByPlaceholder('Buscar en ajustes').fill('yt-dlp');
+  await page.getByRole('button', { name: /Auto-actualizar yt-dlp/ }).click();
+  const row = page.locator('[data-setting="auto-update-ytdlp"]');
+  await expect(row).toBeAttached();
+  await expect(page.locator('[data-settings-page] [aria-busy="true"]')).toBeVisible();
+  await page.waitForTimeout(1700); // Longer than the missing-anchor timeout.
+  await expect(row).not.toHaveAttribute('data-setting-flash');
+  release();
+  await expect(row).toHaveAttribute('data-setting-flash', '');
+  await expect(row).toBeInViewport();
+});
+
 test('a result opens the disclosure its row is folded into', async ({ page }) => {
   await page.goto('/player/#/settings');
   await page.getByPlaceholder('Buscar en ajustes').fill('barra inferior');

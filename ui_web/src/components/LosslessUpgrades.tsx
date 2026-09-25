@@ -131,7 +131,7 @@ export function LosslessUpgrades() {
   onCleanup(() => clearTimeout(timer));
 
   return (
-    <Show when={status() || !loading()} fallback={<SkeletonRows count={3} />}>
+    <Show when={status() || !loading()} fallback={<div aria-busy="true"><SkeletonRows count={3} /></div>}>
     <Show when={status() || !failed()} fallback={<EmptyState tone="danger">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void refresh()}>{t('common.retry')}</Button></EmptyState>}>
     <SettingsGroup label={t('settings.losslessStatusLabel')} note={t('settings.losslessNote')}>
       <SwitchRow

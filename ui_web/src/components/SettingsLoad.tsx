@@ -19,7 +19,7 @@ export function SettingsLoad(props: ParentProps<{ load: () => Promise<void> }>) 
     finally { if (!disposed) setLoading(false); }
   };
   onMount(() => void load());
-  return <Show when={!loading()} fallback={<SkeletonRows count={3} />}>
+  return <Show when={!loading()} fallback={<div aria-busy="true"><SkeletonRows count={3} /></div>}>
     <Show when={!failed()} fallback={<EmptyState tone="danger">
       {t('common.loadFailed')} <Button variant="secondary" onClick={() => void load()}>{t('common.retry')}</Button>
     </EmptyState>}>{props.children}</Show>

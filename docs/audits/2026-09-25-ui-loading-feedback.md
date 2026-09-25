@@ -58,19 +58,34 @@ componentes de carga y paneles de ajustes. Rama `fix/ui-navigation-feedback`.
 
 ## Validación y límites
 
-`cd ui_web && npm test`: typecheck y **1.163 pruebas / 122 archivos** correctos.
+`cd ui_web && npm test`: typecheck y **1.164 pruebas / 122 archivos** correctos.
 `git diff --check` correcto. Las regresiones añadidas
 comprueban navegación con un módulo pendiente, abandono y vuelta a una ruta,
-reintento de import, cancelación de frames, cierre antes de popstate, catálogo
+reintento de import, cancelación de frames, cierre sincronizado con popstate, catálogo
 pendiente, fallo de álbumes, independencia de pistas locales, cambio de entidad,
 cola de descargas y carga de ajustes.
 
 No se ejecutó build local ni se modificaron servicios o datos reales. La revisión
 es de código y pruebas DOM/router con peticiones controladas: no constituye una
 medición de latencia en móvil ni aceptación visual en un dispositivo físico.
-Se mantiene la preferencia previa de revisión visual manual, sin navegador
-automatizado. Para esa aceptación: menú → Artistas/Álbumes, primera visita a cada
+Para la aceptación física pendiente: menú → Artistas/Álbumes, primera visita a cada
 pestaña con red lenta, volver durante una carga y reintentar tras recuperar red.
 
 Las cuadrículas siguen montando todas las tarjetas tras el primer feedback;
 una biblioteca enorme puede requerir un trabajo separado de virtualización.
+
+## Correcciones de CI
+
+- El contador de reconstrucciones del catálogo queda limitado al archivo SQLite
+  de la prueba; abrir otra base no altera sus aserciones. La simulación de reinicio
+  invalida solo su entrada de esquema. Suite Python: 1.567 pruebas correctas,
+  cobertura 69,65 % (umbral de CI: 55 %).
+- La búsqueda de ajustes espera a que los paneles asíncronos dejen sus skeletons
+  antes de calcular el desplazamiento. El panel lossless anterior al resultado
+  podía crecer después del scroll y sacar la fila de la pantalla. La espera de
+  una carga lenta no se confunde con el timeout de un ancla inexistente.
+- Regresión DOM y de navegador con respuesta lossless retenida más allá del
+  timeout del ancla; pruebas de búsqueda en Chromium y WebKit móvil/escritorio.
+- Navegador en contenedor Playwright: búsqueda de ajustes, navegación móvil y
+  escala de interfaz, 119 pruebas correctas y 33 omitidas por plataforma, sin
+  reintentos, en Chromium y WebKit móvil/escritorio.

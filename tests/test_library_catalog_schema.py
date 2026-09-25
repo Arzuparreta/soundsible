@@ -201,16 +201,20 @@ def test_new_track_fields_round_trip_through_json_and_sqlite(tmp_path):
 
 def _next_start(path):
     """What the next engine start sees: the schema is reconciled afresh."""
-    database._SCHEMA_READY.clear()
+    database._SCHEMA_READY.pop(str(path), None)
     return DatabaseManager(str(path))
 
 
-def _count_rebuilds(monkeypatch):
+def _count_rebuilds(monkeypatch, path):
     calls = []
     original = DatabaseManager._replace_catalog_projection
 
     def counted(conn, tracks):
-        calls.append(1)
+        # Background work may initialize another user or instance database.
+        # Only the library under test belongs to this rebuild count.
+        databases = conn.execute("PRAGMA database_list").fetchall()
+        if any(name == "main" and filename == str(path.resolve()) for _, name, filename in databases):
+            calls.append(1)
         return original(conn, tracks)
 
     monkeypatch.setattr(DatabaseManager, "_replace_catalog_projection", staticmethod(counted))
@@ -224,7 +228,7 @@ def test_a_projection_version_bump_rebuilds_each_library_once(tmp_path, monkeypa
     with db._get_connection() as conn:
         # The stored track now projects differently, as it would under new rules.
         conn.execute("UPDATE tracks SET artist = 'New Name' WHERE id = 'a'")
-    rebuilds = _count_rebuilds(monkeypatch)
+    rebuilds = _count_rebuilds(monkeypatch, path)
 
     # Same rules: a start costs a read, not a rebuild.
     assert [row["name"] for row in _next_start(path).get_artists()] == ["Old Name"]
@@ -254,7 +258,7 @@ def test_a_podcast_only_library_is_not_rebuilt_on_every_start(tmp_path, monkeypa
     path = tmp_path / "library.db"
     episode = replace(_track("episode"), media_kind="podcast_episode")
     DatabaseManager(str(path)).sync_from_metadata(_metadata(episode))
-    rebuilds = _count_rebuilds(monkeypatch)
+    rebuilds = _count_rebuilds(monkeypatch, path)
     _next_start(path)
     assert rebuilds == []
 
@@ -266,7 +270,18 @@ def test_a_library_without_a_recorded_version_is_rebuilt(tmp_path, monkeypatch):
     db.sync_from_metadata(_metadata(_track("a")))
     with db._get_connection() as conn:
         conn.execute("DELETE FROM library_info WHERE key = 'catalog_projection_version'")
-    rebuilds = _count_rebuilds(monkeypatch)
+    rebuilds = _count_rebuilds(monkeypatch, path)
     _next_start(path)
+    _next_start(path)
+    assert rebuilds == [1]
+
+
+def test_rebuild_counter_ignores_other_databases(tmp_path, monkeypatch):
+    path = tmp_path / "library.db"
+    rebuilds = _count_rebuilds(monkeypatch, path)
+    DatabaseManager(str(tmp_path / "other.db"))
+    assert rebuilds == []
+    DatabaseManager(str(path))
+    assert rebuilds == [1]
     _next_start(path)
     assert rebuilds == [1]
