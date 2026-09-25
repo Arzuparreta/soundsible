@@ -875,6 +875,15 @@ function LibraryView(props: {
           <button class={styles.sort} type="button" aria-label={t('library.sortTitle')} onClick={sort}><SortIcon /></button>
         </Show>
       </div>
+      {/* The narrowing lives in the sort menu, so it has to show while it holds;
+          tapping the chip clears it, as on the Library route. */}
+      <Show when={libraryTab() === 'songs' && libraryFilter() === 'downloaded'}>
+        <div class={styles.filterChips}>
+          <button class={styles.chip} type="button" onClick={() => setLibraryFilter('all')}>
+            {t('library.filterDownloaded')} <span aria-hidden="true">×</span>
+          </button>
+        </div>
+      </Show>
       <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}><For each={collateAlbums(albums() ?? [], albumSort())}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For></Show></Show>
       <Show when={libraryTab() !== 'albums'}><Show
         when={libraryTab() === 'songs'}
