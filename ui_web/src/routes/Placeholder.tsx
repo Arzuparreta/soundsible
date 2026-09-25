@@ -1,8 +1,9 @@
-import { Show } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 import { state } from '../stores';
 import { openOverlay } from '../lib/overlay';
 import { t } from '../lib/i18n';
 import Button from '../components/Button';
+import { useAppBar } from '../lib/appBar';
 import styles from './Placeholder.module.css';
 
 /**
@@ -22,10 +23,13 @@ export function Placeholder(props: { title: string; blurb?: string }) {
       </div>
     ));
 
+  const [heading, setHeading] = createSignal<HTMLElement>();
+  useAppBar({ title: () => props.title, heading });
+
   return (
     <section class={styles.page}>
       <span class={styles.kicker}>{state.online ? t('placeholder.statusOnline') : t('placeholder.statusOffline')}</span>
-      <h1 class={styles.title}>{props.title}</h1>
+      <h1 ref={setHeading} class={styles.title}>{props.title}</h1>
       <Show when={props.blurb}>
         <p class={styles.blurb}>{props.blurb}</p>
       </Show>

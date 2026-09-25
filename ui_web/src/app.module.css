@@ -24,10 +24,11 @@
 
 .content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow-x: clip;
-  overflow-y: auto;
+  overflow: hidden;
   /* index.html declares viewport-fit=cover, so content draws edge-to-edge under
      the iOS notch/status bar. Reserve the safe areas here (once, for every route)
      so view headers clear the clock, battery, and Dynamic Island in any
@@ -41,6 +42,23 @@
     linear-gradient(180deg, var(--ambient-highlight), transparent 180px);
 }
 
+/* The routes' column, under the top bar. */
+.outlet {
+  /* Room above a page's first row when nothing sits above it. Under the top
+     bar the bar already is that room, so a page that opens with a field or a
+     toolbar (Search, Podcasts, Settings) starts right beneath it. */
+  --view-top: var(--space-lg);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: clip;
+  overflow-y: auto;
+}
+
+:global([data-app-bar]) + .outlet {
+  --view-top: var(--space-2xs);
+}
+
 /* Every route but Live wraps itself in `.view` and owns a [data-primary-scroll]
    body, which is where the floating mini-player's clearance is paid (app.css).
    Live scrolls through this column instead, so its last rows would end up under
@@ -48,7 +66,7 @@
    this from also firing on the routes that do own a scroller: there the column
    never scrolls, and space added here would just be a dead strip. */
 @media (max-width: 1023px) {
-  .app[data-mini-player] .content:not(:has(:global(.view)))::after {
+  .app[data-mini-player] .outlet:not(:has(:global(.view)))::after {
     display: block;
     height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2);
     content: '';

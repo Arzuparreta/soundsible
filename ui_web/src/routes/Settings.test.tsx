@@ -2,6 +2,7 @@ import { createSignal } from 'solid-js';
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { HashRouter, Route, type RouteSectionProps } from '@solidjs/router';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { AppBar } from '../components/AppBar';
 import tabStyles from '../components/TabBar.module.css';
 import { TabBar } from '../components/TabBar';
 import { NavRow } from '../components/SettingsRows';
@@ -34,7 +35,7 @@ vi.mock('../components/SettingsSections', () => {
 
 function mount(path = '/settings') {
   window.history.replaceState({}, '', `/player/#${path}`);
-  const Root = (props: RouteSectionProps) => <><main>{props.children}</main><TabBar /><OverlayOutlet /></>;
+  const Root = (props: RouteSectionProps) => <><main><AppBar /><div data-app-outlet>{props.children}</div></main><TabBar /><OverlayOutlet /></>;
   return render(() => <HashRouter root={Root}>
     <Route path="/settings" component={Settings} />
     <Route path="/settings/:section" component={Settings} />

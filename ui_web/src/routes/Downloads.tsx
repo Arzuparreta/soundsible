@@ -1,5 +1,7 @@
 import { registerPrimaryScroll } from '../lib/scrollHistory';
-import { NavigationMenuButton } from '../components/NavigationMenu';
+import { useAppBar } from '../lib/appBar';
+import { desktopShell } from '../lib/shellLayout';
+import { TrashIcon } from '../components/icons';
 import { createMemo, For, Show, onMount, type JSX } from 'solid-js';
 import { state, actions, downloadCounts } from '../stores';
 import { t } from '../lib/i18n';
@@ -72,10 +74,17 @@ export default function Downloads() {
   const counts = createMemo(() => downloadCounts());
   const hasClearable = createMemo(() => state.downloads.queue.some((i) => i.status !== 'downloading'));
 
+  useAppBar({
+    title: () => t('downloads.title'),
+    actions: () => counts().failed > 0
+      ? [{ label: t('downloads.clearErrors'), icon: () => <TrashIcon />, onSelect: () => void actions.clearFailedDownloads() }]
+      : [],
+  });
+
   return (
     <div class="view">
+      <Show when={desktopShell()}>
       <header class={styles.header}>
-        <NavigationMenuButton />
         <div class={styles.titleWrap}>
           <h1 class={styles.title}>{t('downloads.title')}</h1>
           <span class={styles.count}>
@@ -90,6 +99,7 @@ export default function Downloads() {
           </button>
         </Show>
       </header>
+      </Show>
 
       <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
         <For each={state.downloads.recent}>

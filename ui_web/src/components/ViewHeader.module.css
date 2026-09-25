@@ -45,18 +45,6 @@
   cursor: pointer;
 }
 
-@media (max-width: 420px) {
-  .header {
-    padding-top: var(--space-lg);
-  }
-
-  .heading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2px;
-  }
-}
-
 .meta {
   font-family: var(--font-mono);
   font-size: var(--text-caption);

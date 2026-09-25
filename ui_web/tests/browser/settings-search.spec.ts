@@ -87,7 +87,7 @@ test('a result lands on its row, and the search survives the way back', async ({
   await result.click();
   await expect(row).toBeInViewport();
 
-  await settings.getByRole('button', { name: 'Volver', exact: true }).click();
+  await page.locator('[data-app-bar]').getByRole('button', { name: 'Volver', exact: true }).click();
   await expect(page).toHaveURL(/#\/settings\?q=yt-dlp$/);
   await expect(result).toBeVisible();
 });

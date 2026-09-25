@@ -8,8 +8,8 @@ import {
   untrack,
   type JSX,
 } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
 import { ViewHeader } from './ViewHeader';
+import { useAppBar } from '../lib/appBar';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { t } from '../lib/i18n';
 import { SearchField } from './SearchField';
@@ -249,25 +249,18 @@ function Detail(props: { section: SettingsSection; setting: string | null; onBac
     return Math.max(0, Math.round(offset));
   };
 
+  // On the touch shell a section is a page of its own: its name and the way
+  // back to the index are the top bar's. Side by side, it is a pane under the
+  // page's title.
+  useAppBar({ title: () => props.section.title(), back: () => props.onBack() });
+
   return (
     <section class={styles.detail}>
-      <header class={styles.detailHead}>
-        <Show when={!desktopShell()}>
-          <button
-            type="button"
-            class={styles.back}
-            aria-label={t('common.back')}
-            onClick={() => props.onBack()}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
-        </Show>
-        <Dynamic component={desktopShell() ? 'h2' : 'h1'} class={styles.detailTitle}>
-          {props.section.title()}
-        </Dynamic>
-      </header>
+      <Show when={desktopShell()}>
+        <header class={styles.detailHead}>
+          <h2 class={styles.detailTitle}>{props.section.title()}</h2>
+        </header>
+      </Show>
       <ScrollArea
         primary={true}
         class={styles.detailScroll}

@@ -1,7 +1,8 @@
 import { CoverImage } from '../components/CoverImage';
 import { ArtistLinks, MusicLink } from '../components/MusicLinks';
 import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
-import { NavigationMenuButton } from '../components/NavigationMenu';
+import { useAppBar } from '../lib/appBar';
+import { reselectPrimaryTab } from '../lib/tabNavigation';
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
@@ -654,13 +655,17 @@ export default function Search() {
     clearTimeout(suggestDebounce);
   });
 
+  useAppBar({
+    title: () => tr('nav.search'),
+    onTitleTap: () => reselectPrimaryTab('/search'),
+  });
+
   return (
     <div class="view">
       <div class={styles.searchBox} onFocusOut={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSearchFocused(false);
       }}>
         <div class={styles.bar}>
-          <NavigationMenuButton />
           <SearchField
             placeholder={tr('search.placeholder')}
             clearLabel={tr('searchPanel.clear')}

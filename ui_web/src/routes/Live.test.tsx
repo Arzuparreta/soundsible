@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { InShell } from '../components/AppBar.harness';
 
 const community = vi.hoisted(() => ({
   config: {
@@ -84,7 +85,7 @@ beforeEach(() => {
 
 describe('Live operational UI', () => {
   it('enables broadcasting with the official service and creates a room', async () => {
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
     const button = screen.getByRole('button', { name: 'Go live' });
 
     expect(button).toBeEnabled();
@@ -94,7 +95,7 @@ describe('Live operational UI', () => {
 
   it('shows capacity with a manual retry', async () => {
     community.error = 'capacity';
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     expect(screen.getByText('The live directory is currently at capacity.')).toBeVisible();
     await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -109,7 +110,7 @@ describe('Live operational UI', () => {
       host: { display_name: 'Local DJ' },
     };
     community.publisherState = 'recovering';
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     expect(screen.getByText('Recovering audio')).toBeVisible();
     expect(screen.getByText('3 listeners')).toBeVisible();
@@ -126,7 +127,7 @@ describe('Live operational UI', () => {
     };
     community.publisherState = 'connecting';
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     expect(screen.getByText('Connecting audio')).toBeVisible();
     expect(screen.queryByText('About to start')).not.toBeInTheDocument();
@@ -142,7 +143,7 @@ describe('Live operational UI', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
     await fireEvent.click(screen.getByRole('button', { name: 'Share room' }));
 
     expect(writeText).toHaveBeenCalledWith('https://hub.test/live/?session=session-test');
@@ -166,7 +167,7 @@ describe('Live operational UI', () => {
       primary: { title: 'Hyperballad', artist: 'Björk' },
     };
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     expect(screen.getByText('You have been silent on air for 1:35.')).toBeVisible();
     expect(screen.queryByText('Your Soundsible master is live.')).not.toBeInTheDocument();
@@ -188,7 +189,7 @@ describe('Live operational UI', () => {
       primary: { title: 'Hyperballad', artist: 'Björk' },
     };
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     expect(screen.getByText('Your Soundsible master is live.')).toBeVisible();
   });
@@ -211,7 +212,7 @@ describe('Live operational UI', () => {
       whep_url: 'https://relay.test/media/whep',
     }];
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     expect(screen.getByText(/Your room/)).toBeVisible();
     expect(screen.getByRole('button', { name: /Your room/ })).toBeDisabled();
@@ -235,7 +236,7 @@ describe('Live operational UI', () => {
       },
     }];
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     expect(screen.getByText('On a break')).toHaveAttribute('data-status', 'paused');
   });
@@ -243,7 +244,7 @@ describe('Live operational UI', () => {
   it('blocks broadcasting from an insecure IP origin and offers localhost', () => {
     community.secure = false;
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     expect(screen.getByRole('button', { name: 'Go live' })).toBeDisabled();
     expect(screen.getByText(/Live broadcasting needs HTTPS/)).toBeVisible();
@@ -254,7 +255,7 @@ describe('Live operational UI', () => {
   it('publishes the session on the way out, so the secure origin finds it there', async () => {
     community.secure = false;
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
     await fireEvent.click(screen.getByRole('link', { name: 'Go live on the secure station' }));
 
     expect(stores.publishSession).toHaveBeenCalledOnce();
@@ -264,7 +265,7 @@ describe('Live operational UI', () => {
     community.secure = false;
     community.config = { ...community.config, secure_url: undefined as unknown as string };
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     expect(screen.getByRole('button', { name: 'Go live' })).toBeDisabled();
     expect(screen.getByText('tailscale serve --bg --yes 5005')).toBeVisible();
@@ -274,7 +275,7 @@ describe('Live operational UI', () => {
   it('opens the room by itself when the secure station was opened to go live', async () => {
     window.history.replaceState(null, '', '/player/#/live?handoff=live');
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
 
     await vi.waitFor(() => expect(community.create).toHaveBeenCalledWith('Session by Local DJ'));
     // The marker is spent: reloading the page is an ordinary visit to Live.
@@ -285,7 +286,7 @@ describe('Live operational UI', () => {
     window.history.replaceState(null, '', '/player/#/live?handoff=live');
     community.error = 'loading';
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
     await Promise.resolve();
 
     expect(community.create).not.toHaveBeenCalled();
@@ -300,14 +301,14 @@ describe('Live operational UI', () => {
       host: { display_name: 'Local DJ' },
     };
 
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
     await Promise.resolve();
 
     expect(community.create).not.toHaveBeenCalled();
   });
 
   it('leaves an ordinary visit to Live alone', async () => {
-    render(() => <Live />);
+    render(() => <InShell><Live /></InShell>);
     await Promise.resolve();
 
     expect(community.create).not.toHaveBeenCalled();

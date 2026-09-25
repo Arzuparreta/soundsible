@@ -1,7 +1,9 @@
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
-import { CheckIcon, DownloadIcon, menuIcons } from '../components/icons';
+import { BackIcon, CheckIcon, DownloadIcon, menuIcons } from '../components/icons';
+import { useAppBar } from '../lib/appBar';
+import { desktopShell } from '../lib/shellLayout';
 import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import { api } from '../lib/api';
@@ -72,17 +74,22 @@ export default function PodcastShow() {
     navigateBackOr(navigate, '/podcasts');
   };
 
+  const back = () => navigateBackOr(navigate, '/podcasts');
+  useAppBar({ title, back, backLabel: () => t('podcastShow.ariaBack') });
+
   return (
     <div class="view">
       <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label={t('podcastShow.ariaBack')} onClick={() => navigateBackOr(navigate, '/podcasts')}>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
+        <Show when={desktopShell()}>
+          <button class={styles.back} type="button" aria-label={t('podcastShow.ariaBack')} onClick={back}>
+            <BackIcon size={20} />
+          </button>
+        </Show>
         <div class={styles.cover} style={neutralCoverStyle(image())} />
         <div class={styles.info}>
-          <h1 class={styles.title}>{title()}</h1>
+          <Show when={desktopShell()}>
+            <h1 class={styles.title}>{title()}</h1>
+          </Show>
           <span class={styles.author}>{show()?.author}</span>
         </div>
         <Show when={sub()}>

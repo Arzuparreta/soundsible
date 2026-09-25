@@ -5,6 +5,7 @@ import { openOverlay } from '../lib/overlay';
 import { desktopShell } from '../lib/shellLayout';
 import { libraryTab, setLibraryTab } from '../lib/libraryView';
 import { downloadCounts } from '../stores';
+import { CloseIcon, MenuIcon } from './icons';
 import { navigationGroups, navigationItems, mobileNavGroup } from './primaryNavigation';
 import styles from './NavigationMenu.module.css';
 
@@ -45,7 +46,7 @@ function Drawer(props: { path: () => string; close: (after?: () => void) => void
   if (root) root.inert = true;
   onCleanup(() => { if (root) root.inert = wasInert ?? false; });
   return <div class={styles.drawer}>
-    <header class={styles.head}><strong>Soundsible</strong><button type="button" class={styles.close} aria-label={t('common.close')} onClick={() => props.close()}>×</button></header>
+    <header class={styles.head}><strong>Soundsible</strong><button type="button" class={styles.close} aria-label={t('common.close')} onClick={() => props.close()}><CloseIcon /></button></header>
     <NavigationLinks path={props.path()} select={(href, view) => props.close(() => {
       if (view) { props.onViewChange?.(); setLibraryTab(view); }
       props.navigate(href);
@@ -53,14 +54,14 @@ function Drawer(props: { path: () => string; close: (after?: () => void) => void
   </div>;
 }
 
-export function NavigationMenuButton(props: { onViewChange?: () => void } = {}) {
+export function NavigationMenuButton(props: { onViewChange?: () => void; class?: string } = {}) {
   const location = useLocation();
   const navigate = useNavigate();
-  return <Show when={!desktopShell()}><button type="button" class={styles.trigger}
+  return <Show when={!desktopShell()}><button type="button" class={props.class ?? styles.trigger}
     aria-label={t('nav.menu')} aria-haspopup="dialog" data-pressable
     onClick={event => { event.currentTarget.focus(); openOverlay(close =>
       <Drawer path={() => location.pathname} close={close} navigate={navigate} onViewChange={props.onViewChange} />,
       { variant: 'drawer', history: true, ariaLabel: () => t('nav.menu') }); }}>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    <MenuIcon />
   </button></Show>;
 }

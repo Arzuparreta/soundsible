@@ -173,6 +173,9 @@
      pill/segment tokens and receive breathing room from their parent rows. */
   --row-h: 56px; /* list row height */
   --control-h: 44px; /* min touch target */
+  /* The touch shell's top bar (AppBar): one touch row plus breathing room.
+     Declared against --control-h, so it follows every interface size. */
+  --topbar-h: calc(var(--control-h) + 12px);
   --pill-h: 34px; /* chips and low-emphasis filters */
   --segment-h: 36px; /* segmented navigation */
   --cover-sm: 44px; /* row thumbnail */

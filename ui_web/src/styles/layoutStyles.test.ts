@@ -49,7 +49,8 @@ describe('route scroll containment', () => {
       'overflow-x': 'clip',
       'overscroll-behavior-x': 'none',
     });
-    expect(declarations(shell, '.content')['overflow-x']).toBe('clip');
+    expect(declarations(shell, '.content')['overflow']).toBe('hidden');
+    expect(declarations(shell, '.outlet')['overflow-x']).toBe('clip');
   });
 
   it('contains intentional horizontal rails independently', () => {

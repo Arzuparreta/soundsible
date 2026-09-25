@@ -31,6 +31,9 @@ import {
 import { clearLiveHandoff, liveHandoffPending, secureLiveHandoffUrl } from '../lib/liveHandoff';
 import { t } from '../lib/i18n';
 import { ViewHeader } from '../components/ViewHeader';
+import { ShareIcon } from '../components/icons';
+import { useAppBar } from '../lib/appBar';
+import { desktopShell } from '../lib/shellLayout';
 import { LiveRoomPanel } from '../components/LiveRoomPanel';
 import styles from './Live.module.css';
 
@@ -163,13 +166,20 @@ function ListenerRoom() {
     }
   };
 
+  useAppBar({
+    title: () => joinedSession()?.host.display_name ?? t('live.title'),
+    back: () => void leaveLiveSession(),
+  });
+
   return (
     <section class={styles.room}>
       <div class={styles.roomStage}>
-        <div class={styles.roomTop}>
-          <button type="button" onClick={() => void leaveLiveSession()}>{t('common.back')}</button>
-          <span>{joinedSession()?.host.display_name}</span>
-        </div>
+        <Show when={desktopShell()}>
+          <div class={styles.roomTop}>
+            <button type="button" onClick={() => void leaveLiveSession()}>{t('common.back')}</button>
+            <span>{joinedSession()?.host.display_name}</span>
+          </div>
+        </Show>
         <div class={styles.heroArt}>
           <Show when={liveProgram()?.primary?.artwork_url} fallback={<span>♪</span>}>
             <img src={liveProgram()!.primary!.artwork_url!} alt="" />
@@ -311,6 +321,18 @@ export default function Live() {
         <ViewHeader
           title={t('live.title')}
           meta={t('live.meta')}
+          barActions={hostSession()
+            ? [
+                { label: copied() ? t('live.linkCopied') : t('live.share'), icon: () => <ShareIcon />, onSelect: () => void share(hostSession()!.id) },
+                { label: t('live.end'), icon: () => null, prominent: true, onSelect: () => void endHostSession() },
+              ]
+            : [{
+                label: creating() ? t('common.loading') : t('live.goLive'),
+                icon: () => null,
+                prominent: true,
+                disabled: !mediaSecure || creating() || communityError() === 'loading' || !communityConfig()?.enabled,
+                onSelect: () => void create(),
+              }]}
           actions={
             <Show
               when={hostSession()}

@@ -1,8 +1,9 @@
-import { createMemo, createSignal, onMount, onCleanup, Show } from 'solid-js';
+import { createMemo, Show } from 'solid-js';
 import { actions, favouriteRows, state } from '../stores';
-import { MobileLibraryHeader } from '../components/MobileLibraryHeader';
 import { openActionMenu } from '../components/ActionMenu';
-import { menuIcons } from '../components/icons';
+import { menuIcons, MoreIcon } from '../components/icons';
+import { useAppBar } from '../lib/appBar';
+import { desktopShell } from '../lib/shellLayout';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import { trackCount } from '../lib/format';
@@ -29,13 +30,6 @@ const context = () => favouritesContext(t('favourites.title'));
  * they live under their own section.
  */
 export default function Favourites() {
-  const [isMobile, setIsMobile] = createSignal(window.matchMedia('(max-width: 1023px)').matches);
-  onMount(() => {
-    const mq = window.matchMedia('(max-width: 1023px)');
-    const change = () => setIsMobile(mq.matches);
-    mq.addEventListener('change', change);
-    onCleanup(() => mq.removeEventListener('change', change));
-  });
   const rows = createMemo(() => favouriteRows().filter((row) => !isPodcastTrack(row.track)));
   const favTracks = createMemo<Track[]>(() => rows().map((row) => row.track));
 
@@ -68,29 +62,33 @@ export default function Favourites() {
     }
   };
 
+  useAppBar({
+    title: () => t('favourites.title'),
+    actions: () => state.autoMode.active ? [{
+      label: t('nav.more'),
+      icon: () => <MoreIcon />,
+      opensDialog: true,
+      onSelect: () => openActionMenu({
+        title: t('nav.favourites'),
+        actions: [
+          { icon: menuIcons.queue(), label: t('musicExplorer.requestAll'), disabled: !favTracks().length, onSelect: () => void actions.placeAutoTracks(favTracks()) },
+          { icon: menuIcons.source(), label: t('musicExplorer.reference'), disabled: !favTracks().length, onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) },
+          { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), disabled: !favTracks().length, onSelect: () => void actions.changeAutoSession(favTracks(), t('favourites.title')) },
+        ],
+      }),
+    }] : [],
+  });
+
   return (
     <div class="view">
-      <Show when={isMobile()} fallback={
-      <ViewHeader
-        title={t('favourites.title')}
-        meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
-        actions={state.autoMode.active ? (
-          <CollectionActions title={t('favourites.title')} tracks={favTracks()} auto />
-        ) : undefined}
-      />
-      }>
-        <MobileLibraryHeader favourites actions={
-          <Show when={state.autoMode.active}>
-            <button type="button" aria-label={t('nav.more')} aria-haspopup="dialog" onClick={() => openActionMenu({
-              title: t('nav.favourites'),
-              actions: [
-                { icon: menuIcons.queue(), label: t('musicExplorer.requestAll'), disabled: !favTracks().length, onSelect: () => void actions.placeAutoTracks(favTracks()) },
-                { icon: menuIcons.source(), label: t('musicExplorer.reference'), disabled: !favTracks().length, onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) },
-                { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), disabled: !favTracks().length, onSelect: () => void actions.changeAutoSession(favTracks(), t('favourites.title')) },
-              ],
-            })}>⋯</button>
-          </Show>
-        } />
+      <Show when={desktopShell()}>
+        <ViewHeader
+          title={t('favourites.title')}
+          meta={state.loading && favTracks().length === 0 ? t('common.loading') : trackCount(favTracks().length)}
+          actions={state.autoMode.active ? (
+            <CollectionActions title={t('favourites.title')} tracks={favTracks()} auto />
+          ) : undefined}
+        />
       </Show>
       <TrackList
         tracks={favTracks()}
