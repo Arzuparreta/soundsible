@@ -717,6 +717,7 @@ export function NowPlayingBrowser(props: {
             <Match when={currentView().kind === 'favourites'}>
               <TrackCollectionView
                 title={t('nav.favourites')}
+                untitled
                 tracks={favourites()}
                 empty={t('favourites.empty')}
                 context={{ id: 'favourites', kind: 'favourites', label: t('nav.favourites') }}
@@ -862,7 +863,8 @@ function LibraryView(props: {
   const [scrollRef, setScrollRef] = createSignal<HTMLElement | null>(null);
   return (
     <div class={styles.body} data-browser-body ref={setScrollRef}>
-      <ViewHeader title={t('nav.library')}>
+      {/* No title: the destinations bar above already names the tab. */}
+      <ViewHeader>
         <Show when={props.onUse}><button type="button" data-glyph-label onClick={() => props.onUse?.(props.tracks)}><SourceIcon />{t('musicExplorer.reference')}</button></Show>
         <button type="button" aria-label={t('nowPlayingBrowser.searchLibrary')} onClick={props.onSearch}><SearchIcon /></button>
       </ViewHeader>
@@ -1043,7 +1045,7 @@ function PlaylistsView(props: {
 
   return (
     <div class={styles.body} data-browser-body>
-      <ViewHeader title={t('nav.playlists')} meta={`${props.names.length}`}>
+      <ViewHeader meta={`${props.names.length}`}>
         <Show when={!picking()}>
           <button type="button" onClick={() => void createNew()}>{t('musicExplorer.newPlaylist')}</button>
           <button type="button" onClick={() => setEditing(!editing())}>{t(editing() ? 'musicExplorer.done' : 'musicExplorer.edit')}</button>
@@ -1100,6 +1102,8 @@ function PlaylistView(props: {
 
 function TrackCollectionView(props: {
   headerActions?: JSX.Element;
+  /** A destination tab's root, already named by the destinations bar. */
+  untitled?: boolean;
   editContent?: JSX.Element;
   title: string;
   tracks: Track[];
@@ -1113,7 +1117,7 @@ function TrackCollectionView(props: {
   const [scroller, setScroller] = createSignal<HTMLElement | null>(null);
   return (
     <div class={styles.body} data-browser-body ref={setScroller}>
-      <ViewHeader title={props.title} meta={`${props.tracks.length}`} onBack={props.onBack}>
+      <ViewHeader title={props.untitled ? undefined : props.title} meta={`${props.tracks.length}`} onBack={props.onBack}>
         <Show when={props.onUse}><CollectionActions title={props.title} tracks={props.tracks} auto hideReferenceMenu={Boolean(props.headerActions)} onReference={props.onUse} /></Show>
         <Show when={!props.onUse && props.showPlayAll}>
           <button type="button" disabled={props.tracks.length === 0} aria-label={t('playlistDetail.play')} onClick={() =>
@@ -1344,7 +1348,7 @@ function CatalogAlbumView(props: {
   );
 }
 
-function ViewHeader(props: { title: string; meta?: JSX.Element; onBack?: () => void; children?: JSX.Element }) {
+function ViewHeader(props: { title?: string; meta?: JSX.Element; onBack?: () => void; children?: JSX.Element }) {
   return <SharedViewHeader {...props} compact />;
 }
 
