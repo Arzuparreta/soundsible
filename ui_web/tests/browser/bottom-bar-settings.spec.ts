@@ -27,3 +27,14 @@ test('the bottom bar card holds its label closed and its editor open', async ({ 
   await expect(disclosure).not.toHaveAttribute('open');
   expect(await disclosure.evaluate(overflow)).toBeLessThanOrEqual(1);
 });
+
+// The closed card collapsed to nothing as soon as the page was taller than the
+// screen, which on a phone is always.
+test('the closed bottom bar card keeps its label when the page scrolls', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await mockMusicEngine(page);
+  await page.goto('/player/#/settings/accessibility');
+  const disclosure = page.locator('details[data-setting="bottom-bar"]');
+  await expect(disclosure.locator('summary')).toBeAttached();
+  expect(await disclosure.evaluate(overflow)).toBeLessThanOrEqual(1);
+});
