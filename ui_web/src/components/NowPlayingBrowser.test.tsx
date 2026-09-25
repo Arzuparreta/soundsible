@@ -289,7 +289,7 @@ describe('NowPlayingBrowser', () => {
     const onPlaced = vi.fn();
     render(() => <NowPlayingBrowser purpose="auto-route" routeBeforeQueueId="chosen-seam" onPlaced={onPlaced} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
-    fireEvent.click(within(document.querySelector<HTMLElement>('[data-browser-body] > header')!).getByRole('button', { name: 'Add to session' }));
+    fireEvent.click(within(document.querySelector<HTMLElement>('[data-browser-toolbar]')!).getByRole('button', { name: 'Add to session' }));
     await waitFor(() => expect(storeMock.actions.placeAutoTracks).toHaveBeenCalledWith([storeMock.local], 'chosen-seam'));
     expect(onPlaced).toHaveBeenCalledOnce();
   });
@@ -300,7 +300,7 @@ describe('NowPlayingBrowser', () => {
     render(() => <NowPlayingBrowser purpose="auto-reference" onPlaced={onPlaced} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
     expect(screen.queryByRole('button', { name: 'Add to session' })).not.toBeInTheDocument();
-    fireEvent.click(within(document.querySelector<HTMLElement>('[data-browser-body] > header')!).getByRole('button', { name: 'Mix into session' }));
+    fireEvent.click(within(document.querySelector<HTMLElement>('[data-browser-toolbar]')!).getByRole('button', { name: 'Mix into session' }));
     expect(storeMock.actions.addAutoSource).toHaveBeenCalledWith([storeMock.local], 'Favourites');
     expect(storeMock.actions.placeAutoTracks).not.toHaveBeenCalled();
     expect(onPlaced).toHaveBeenCalledOnce();
@@ -438,7 +438,7 @@ describe('DJ direction picker', () => {
     const onPlaced = vi.fn();
     render(() => <NowPlayingBrowser purpose="auto-change" onPlaced={onPlaced} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
-    const header = within(document.querySelector<HTMLElement>('[data-browser-body] > header')!);
+    const header = within(document.querySelector<HTMLElement>('[data-browser-toolbar]')!);
     expect(header.queryByRole('button', { name: 'Add to session' })).not.toBeInTheDocument();
     expect(header.queryByRole('button', { name: 'Mix into session' })).not.toBeInTheDocument();
     fireEvent.click(header.getByRole('button', { name: 'Change session' }));

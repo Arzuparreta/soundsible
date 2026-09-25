@@ -1314,7 +1314,6 @@ export const fr: Dict = {
     globalSearch: 'Revenir à la recherche globale',
     searchLibrary: 'Rechercher dans votre bibliothèque',
     listenNow: 'Écouter maintenant',
-    libraryResults: 'Résultats de la bibliothèque',
     searchEverywhere: 'Rechercher « {query} » partout',
   },
 };

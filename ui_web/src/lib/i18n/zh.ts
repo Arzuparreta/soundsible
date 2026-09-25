@@ -1291,7 +1291,6 @@ export const zh: Dict = {
     globalSearch: '返回全局搜索',
     searchLibrary: '搜索你的音乐库',
     listenNow: '现在收听',
-    libraryResults: '音乐库结果',
     searchEverywhere: '在全部内容中搜索“{query}”',
   },
 };
