@@ -188,14 +188,21 @@ function Detail(props: { section: SettingsSection; setting: string | null; onBac
   let scroller: HTMLDivElement | undefined;
   const [target, setTarget] = createSignal<HTMLElement | null>(null);
   const [gaveUp, setGaveUp] = createSignal(false);
+  const [loading, setLoading] = createSignal(false);
 
   createEffect(() => {
     const id = props.setting;
     setTarget(null);
     setGaveUp(false);
+    setLoading(false);
     if (!id || !scroller) return;
     const root = scroller;
     const look = () => {
+      // A preceding asynchronous panel can still move this row after it
+      // appears. Land only once the section has replaced all its skeletons.
+      const busy = !!root.querySelector('[aria-busy="true"]');
+      setLoading(busy);
+      if (busy) return false;
       const anchor = findAnchor(root, id);
       if (anchor) setTarget(anchor);
       return !!anchor;
@@ -205,14 +212,15 @@ function Detail(props: { section: SettingsSection; setting: string | null; onBac
       if (look()) stop();
     });
     const timer = window.setTimeout(() => {
-      stop();
+      // A slow request is not a missing anchor; keep observing its result.
+      if (!loading()) stop();
       setGaveUp(true);
     }, LANDING_WAIT_MS);
     const stop = () => {
       observer.disconnect();
       window.clearTimeout(timer);
     };
-    observer.observe(root, { childList: true, subtree: true });
+    observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-busy'] });
     onCleanup(stop);
   });
 
@@ -236,7 +244,7 @@ function Detail(props: { section: SettingsSection; setting: string | null; onBac
     });
   });
 
-  const ready = () => !props.setting || !!target() || gaveUp();
+  const ready = () => !loading() && (!props.setting || !!target() || gaveUp());
   /** A third of the way down, so the row reads with its context above it. */
   const landing = () => {
     const anchor = target();

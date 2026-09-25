@@ -100,7 +100,16 @@ export function openOverlay(
   if (opts.history) {
     let pending: (() => void) | undefined;
     let closing = false;
+    let closingEntry: OverlayEntry | undefined;
     const onPop = () => {
+      if (closingEntry) {
+        closingEntry.cleanup?.();
+        const after = pending;
+        pending = undefined;
+        closingEntry = undefined;
+        queueMicrotask(() => after?.());
+        return;
+      }
       const entry = overlays().find((item) => item.id === id);
       if (entry) entry.historyBack = undefined;
       remove(id, pending);
@@ -113,7 +122,18 @@ export function openOverlay(
       if (closing) return;
       closing = true;
       pending = afterClose;
-      if (window.history.state?.__soundsibleSheet === id) window.history.back();
+      if (window.history.state?.__soundsibleSheet === id) {
+        // A selection must keep the old page covered until popstate can
+        // commit its destination. Removing the drawer earlier exposes the
+        // previous view for however long browser history takes to settle.
+        // Plain dismissals have no destination and can release immediately.
+        if (!afterClose) {
+          closingEntry = entry;
+          setOverlays(list => list.filter(item => item.id !== id));
+          queueMicrotask(() => entry.returnFocus?.focus());
+        }
+        window.history.back();
+      }
       else onPop();
     };
   }

@@ -107,6 +107,23 @@ describe('Artist route view mode', () => {
     storeMock.library = [];
   });
 
+  it('removes the previous artist content while a new profile is pending', async () => {
+    apiMock.getArtistProfile.mockResolvedValueOnce(profileFor('First', false))
+      .mockImplementationOnce(() => new Promise(() => {}));
+    renderAt('/artist/First?view=discover');
+    await screen.findByText('First Hit');
+    await navigateTo('/artist/Second?view=discover');
+    await waitFor(() => expect(screen.queryByText('First Hit')).toBeNull());
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeInTheDocument();
+  });
+
+  it('renders local tracks without waiting for the external profile', async () => {
+    storeMock.library = [{ id: 'l1', title: 'Already owned', artist: 'Owned Artist', album: 'A' }];
+    apiMock.getArtistProfile.mockImplementationOnce(() => new Promise(() => {}));
+    renderAt('/artist/Owned%20Artist?view=library');
+    expect(screen.getByText('Already owned')).toBeInTheDocument();
+  });
+
   it('honours ?view=library for an artist in the library', async () => {
     storeMock.library = [{ id: 'l1', title: 'Owned', artist: 'Owned Artist', album: 'A' }];
     apiMock.getArtistProfile.mockResolvedValue(profileFor('Owned Artist', true));

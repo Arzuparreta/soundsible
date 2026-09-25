@@ -1,3 +1,6 @@
+import Button from '../components/Button';
+import { afterPaint } from '../lib/afterPaint';
+import { SkeletonCards } from '../components/Skeleton';
 import { openAlbumBrowseMenu } from '../components/albumBrowseMenu';
 import { createEffect, createMemo, createResource, createSignal, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
@@ -59,14 +62,20 @@ export default function Library() {
   // changes. Ordering and filtering are the engine's job — it is the only party
   // that knows what "most played" or "1994" means across the whole library, and
   // paging a filtered list in the browser would mean filtering it there first.
-  const [albums] = createResource(
+  const gridReady = afterPaint(libraryTab);
+  const [albumError, setAlbumError] = createSignal(false);
+  const [albums, { refetch: retryAlbums }] = createResource(
     () =>
       libraryTab() === 'albums'
         ? { ...albumBrowseQuery(albumSort(), albumFilter()), revision: state.catalog.revision }
         : // Not on screen, not fetched. Switching to the tab later asks once,
           // against a catalog revision that has already settled.
           null,
-    (query) => api.getLibraryAlbums(query).catch(() => [] as CatalogAlbum[]),
+    async (query) => {
+      setAlbumError(false);
+      try { return await api.getLibraryAlbums(query); }
+      catch { setAlbumError(true); return [] as CatalogAlbum[]; }
+    },
   );
   const albumRows = createMemo(() => collateAlbums(albums() ?? [], albumSort()));
   const [query, setQuerySignal] = createSignal(
@@ -421,6 +430,8 @@ export default function Library() {
       <Show when={searching()} fallback={
         <Switch>
           <Match when={libraryTab() === 'albums'}>
+            <Show when={gridReady() && (!albums.loading || albumRows().length > 0)} fallback={<div class="page-loading"><SkeletonCards /></div>}>
+            <Show when={!albumError()} fallback={<EmptyState tone="danger">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void retryAlbums()}>{t('common.retry')}</Button></EmptyState>}>
             <Show
               when={albumRows().length > 0}
               fallback={emptyState(
@@ -433,11 +444,14 @@ export default function Library() {
                 data-library-scroll
                 data-primary-scroll
               >
-                <AlbumGrid albums={albumRows()} />
+                <Show when={albums.loading}><p role="status">{t('common.loading')}</p></Show>
+                <div aria-busy={albums.loading}><AlbumGrid albums={albumRows()} /></div>
               </div>
             </Show>
+            </Show></Show>
           </Match>
           <Match when={libraryTab() === 'artists'}>
+            <Show when={gridReady() && !((state.loading || state.catalog.loading) && artists().length === 0)} fallback={<div class="page-loading"><SkeletonCards shape="round" /></div>}>
             <Show when={artists().length > 0} fallback={emptyState(t('library.emptyArtists'))}>
               <div
                 ref={(element) => registerPrimaryScroll(element)}
@@ -447,6 +461,7 @@ export default function Library() {
               >
                 <ArtistGrid artists={artists()} />
               </div>
+            </Show>
             </Show>
           </Match>
           <Match when={true}>

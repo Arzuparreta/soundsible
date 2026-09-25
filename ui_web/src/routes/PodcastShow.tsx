@@ -1,3 +1,4 @@
+import Button from '../components/Button';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
@@ -33,9 +34,14 @@ export default function PodcastShow() {
   const params = useParams();
   const navigate = useNavigate();
   const sub = createMemo(() => state.podcastSubscriptions.find((s) => s.id === params.id) ?? null);
-  const [data] = createResource(
+  const [failed, setFailed] = createSignal(false);
+  const [data, { refetch }] = createResource(
     () => params.id,
-    (id) => api.getPodcastEpisodes(id),
+    async (id) => {
+      setFailed(false);
+      try { return await api.getPodcastEpisodes(id); }
+      catch { setFailed(true); return null; }
+    },
   );
 
   /** The subscription as the library knows it, or as the feed response reports
@@ -119,7 +125,7 @@ export default function PodcastShow() {
           when={!data.loading}
           fallback={<SkeletonRows count={8} compact />}
         >
-          <For each={episodes()} fallback={<EmptyState>{t('podcastShow.empty')}</EmptyState>}>
+          <For each={episodes()} fallback={<EmptyState tone={failed() ? 'danger' : undefined}>{failed() ? t('common.loadFailed') : t('podcastShow.empty')} <Show when={failed()}><Button variant="secondary" onClick={() => void refetch()}>{t('common.retry')}</Button></Show></EmptyState>}>
             {(ep) => {
               const id = ep.guid || ep.enclosure_url;
               const downloaded = () => isDownloaded(ep);

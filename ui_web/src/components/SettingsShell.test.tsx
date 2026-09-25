@@ -194,6 +194,20 @@ describe('settings shell on mobile', () => {
     );
   });
 
+  it('waits for loading panels above an already mounted target', async () => {
+    const [loading, setLoading] = createSignal(true);
+    drawing('playback', () => <>
+      <Show when={loading()}><div aria-busy="true">Loading panel</div></Show>
+      <div data-setting="autoplay">Reproducción automática</div>
+    </>);
+    renderShell('playback', 'autoplay');
+    expect(screen.getByText('Reproducción automática')).not.toHaveAttribute('data-setting-flash');
+    setLoading(false);
+    await waitFor(() =>
+      expect(screen.getByText('Reproducción automática')).toHaveAttribute('data-setting-flash'),
+    );
+  });
+
   it('opens the disclosure that hides the row', () => {
     drawing('account', () => (
       <details data-setting="sign-out">

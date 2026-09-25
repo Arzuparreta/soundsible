@@ -1,12 +1,14 @@
+import Button from '../components/Button';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { TrashIcon } from '../components/icons';
-import { createMemo, For, Show, onMount, type JSX } from 'solid-js';
+import { createMemo, createSignal, For, Show, onMount, type JSX } from 'solid-js';
 import { state, actions, downloadCounts } from '../stores';
 import { t } from '../lib/i18n';
 import type { DownloadQueueItem } from '../types/download';
 import styles from './Downloads.module.css';
+import { SkeletonRows } from '../components/Skeleton';
 import { coverStyle } from '../lib/cover';
 
 function titleOf(i: DownloadQueueItem): string {
@@ -66,7 +68,15 @@ const RANK: Record<string, number> = {
  * so only the changed row re-renders. Retry/remove/clear wait for durable server confirmation.
  */
 export default function Downloads() {
-  onMount(() => void actions.loadDownloads());
+  const [loading, setLoading] = createSignal(true);
+  const [failed, setFailed] = createSignal(false);
+  const load = async () => {
+    setLoading(true);
+    setFailed(false);
+    try { setFailed(!(await actions.loadDownloads())); }
+    finally { setLoading(false); }
+  };
+  onMount(() => void load());
 
   const items = createMemo(() =>
     [...state.downloads.queue].sort((a, b) => (RANK[a.status] ?? 9) - (RANK[b.status] ?? 9)),
@@ -102,6 +112,7 @@ export default function Downloads() {
       </Show>
 
       <div ref={(element) => registerPrimaryScroll(element)} class={styles.scroll} data-primary-scroll>
+        <Show when={failed()}><p role="status">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void load()}>{t('common.retry')}</Button></p></Show>
         <For each={state.downloads.recent}>
           {(r) => (
             <div class={styles.recentRow}>
@@ -121,13 +132,15 @@ export default function Downloads() {
         <Show
           when={items().length > 0}
           fallback={
-            <Show when={state.downloads.recent.length === 0}>
+            <Show when={state.downloads.recent.length === 0 && !failed()}>
+              <Show when={!loading()} fallback={<SkeletonRows />}>
               <div class={styles.empty}>
                 <p class={styles.emptyTitle}>{t('downloads.emptyTitle')}</p>
                 <p class={styles.emptyText}>
                   {t('downloads.emptyBody')}
                 </p>
               </div>
+              </Show>
             </Show>
           }
         >

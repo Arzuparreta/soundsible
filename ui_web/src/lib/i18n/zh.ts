@@ -145,6 +145,7 @@ export const zh: Dict = {
     },
   },
   common: {
+    loadFailed: '加载失败，请重试。',
     play: '播放',
     pause: '暂停',
     next: '下一首',
