@@ -16,7 +16,9 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-panel);
   background: var(--bg-raised);
-  overflow: hidden;
+  /* No overflow: hidden. Nothing inside paints past the rounded corners, and
+     as a grid item of the settings scroller a clipped <details> kept the
+     height it had while closed, so opening it showed no editor. */
 }
 .disclosure summary {
   display: flex;
