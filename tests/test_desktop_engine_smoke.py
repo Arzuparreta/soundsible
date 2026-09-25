@@ -21,6 +21,11 @@ from shared.runtime import reset_runtime
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ENGINE_ENTRY = REPO_ROOT / "soundsible_engine.py"
 STARTUP_TIMEOUT_SEC = 120
+# The engine's own shutdown is sequential with bounded waits: the gevent pool
+# (1s), the lossless and loudness idle workers (3s each) and the download drain
+# (5s). A budget below that sum fails a clean exit on a slow runner; what this
+# test guards against is a shutdown that never finishes.
+SHUTDOWN_TIMEOUT_SEC = 30
 
 
 def _runtime_env(tmp_path: Path) -> dict[str, str]:
@@ -128,10 +133,12 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
 
 
 def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
-    """SIGTERM should stop the engine within a few seconds (no hang after 'Shutting down...')."""
+    """SIGTERM should stop the engine (no hang after 'Shutting down...')."""
     reset_runtime()
     env = os.environ.copy()
     env.update(_runtime_env(tmp_path))
+    # Dumps every thread's stack on SIGABRT, which is how a hang reports itself.
+    env["PYTHONFAULTHANDLER"] = "1"
 
     music = tmp_path / "music"
     music.mkdir()
@@ -143,15 +150,18 @@ def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
     cmd = _engine_command(None)
     cmd.extend(["--music-dir", str(music)])
 
-    proc = subprocess.Popen(
-        cmd,
-        cwd=REPO_ROOT,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        start_new_session=True,
-    )
+    # A file, not a pipe: nothing reads the pipe, and the log is the diagnosis.
+    log_path = tmp_path / "engine.log"
+    with log_path.open("w") as log:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=REPO_ROOT,
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            text=True,
+            start_new_session=True,
+        )
 
     try:
         _wait_for_health(config_dir)
@@ -159,8 +169,19 @@ def test_desktop_engine_sigterm_exits_cleanly(tmp_path):
             proc.terminate()
         else:
             os.killpg(proc.pid, signal.SIGTERM)
-        proc.wait(timeout=10)
-        assert proc.returncode is not None
+        try:
+            proc.wait(timeout=SHUTDOWN_TIMEOUT_SEC)
+        except subprocess.TimeoutExpired:
+            if os.name != "nt":
+                os.kill(proc.pid, signal.SIGABRT)
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+            pytest.fail(
+                f"engine still running {SHUTDOWN_TIMEOUT_SEC}s after SIGTERM; "
+                f"log tail:\n{log_path.read_text(errors='replace')[-8000:]}"
+            )
     finally:
         if proc.poll() is None:
             if os.name == "nt":
