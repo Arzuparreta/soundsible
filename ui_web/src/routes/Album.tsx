@@ -1,3 +1,4 @@
+import Button from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
 import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
@@ -54,10 +55,17 @@ export default function Album() {
     }
   };
 
-  const [profile] = createResource(
+  const [profileError, setProfileError] = createSignal(false);
+  const [profile, { refetch: retryProfile }] = createResource(
     () => ({ t: title(), a: artistName(), id: viewParams().deezerId }),
-    (args) => fetchAlbum(args.t, args.a, args.id),
+    async (args) => {
+      setProfileError(false);
+      try { return await fetchAlbum(args.t, args.a, args.id); }
+      catch { setProfileError(true); return null; }
+    },
   );
+
+  const currentProfile = () => profile.loading ? null : profile();
 
   onCleanup(() => {
     aborter?.abort();
@@ -77,7 +85,7 @@ export default function Album() {
   );
 
   const libraryTrackList = createMemo<Track[]>(() => {
-    if (viewParams().albumId) return tracksByIds(catalogTracks()?.track_ids ?? []);
+    if (viewParams().albumId) return tracksByIds(catalogTracks.loading ? [] : catalogTracks()?.track_ids ?? []);
     // artistKey folds the same Unicode/casing differences on both sides; the
     // album title is matched with it too so the two comparisons stay consistent.
     const tKey = artistKey(title());
@@ -90,8 +98,8 @@ export default function Album() {
     });
   });
 
-  const tracklist = createMemo<CatalogItem[]>(() => profile()?.tracklist ?? []);
-  const inLibrary = createMemo(() => profile()?.in_library ?? libraryTrackList().length > 0);
+  const tracklist = createMemo<CatalogItem[]>(() => currentProfile()?.tracklist ?? []);
+  const inLibrary = createMemo(() => currentProfile()?.in_library ?? libraryTrackList().length > 0);
   const showToggle = createMemo(() => inLibrary());
 
   // See Artist.tsx: the router reuses this component across :name changes, so
@@ -117,7 +125,7 @@ export default function Album() {
     id: `album:${title()}`,
     kind: 'album',
     label: title(),
-    cover: profile()?.cover || undefined,
+    cover: currentProfile()?.cover || undefined,
     destination: albumPath(title(), artistName(), {
       view: mode,
       albumId: mode === 'library' ? viewParams().albumId : undefined,
@@ -202,7 +210,7 @@ export default function Album() {
   );
   const [heading, setHeading] = createSignal<HTMLElement>();
   useAppBar({
-    title: () => profile()?.title || title(),
+    title: () => currentProfile()?.title || title(),
     back,
     backLabel: () => t('album.ariaBack'),
     heading,
@@ -224,16 +232,16 @@ export default function Album() {
 
         <div class={styles.hero}>
           <div class={styles.cover} style={{ position: 'relative', background: coverGradient(title()) }}>
-            <CoverImage src={profile()?.cover} eager />
-            <Show when={!profile()?.cover}>
+            <CoverImage src={currentProfile()?.cover} eager />
+            <Show when={!currentProfile()?.cover}>
               <span class={styles.initial}>{(title()[0] ?? '?').toUpperCase()}</span>
             </Show>
           </div>
-          <h1 ref={setHeading} class={styles.title}>{profile()?.title || title()}</h1>
-          <ArtistLinks class={styles.artistLink} music={{ artist: profile()?.artist || artistName(), view: view(), artistId: catalogTracks()?.album?.album_artist_id ?? undefined }} />
+          <h1 ref={setHeading} class={styles.title}>{currentProfile()?.title || title()}</h1>
+          <ArtistLinks class={styles.artistLink} music={{ artist: currentProfile()?.artist || artistName(), view: view(), artistId: catalogTracks()?.album?.album_artist_id ?? undefined }} />
           <span class={styles.meta}>
-            <Show when={profile()?.year}>{profile()!.year}</Show>
-            <Show when={profile()?.year && tracklist().length > 0}> · </Show>
+            <Show when={currentProfile()?.year}>{currentProfile()!.year}</Show>
+            <Show when={currentProfile()?.year && tracklist().length > 0}> · </Show>
             <Show when={tracklist().length > 0}>{trackCount(tracklist().length)}</Show>
           </span>
           <div class={styles.actions}>
@@ -277,13 +285,13 @@ export default function Album() {
         </header>
 
         <Show
-          when={profile.loading && !profile()}
+          when={view() === 'discover' && profile.loading && !currentProfile()}
           fallback={
             <Show
-              when={profile()}
-              fallback={<EmptyState>{t('album.noTracklist')}</EmptyState>}
+              when={view() === 'library' || currentProfile()}
+              fallback={<EmptyState tone={profileError() ? 'danger' : undefined}>{profileError() ? t('common.loadFailed') : t('album.noTracklist')} <Show when={profileError()}><Button variant="secondary" onClick={() => void retryProfile()}>{t('common.retry')}</Button></Show></EmptyState>}
             >
-              <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} context={albumContext('library')} />}>
+              <Show when={view() === 'discover'} fallback={<Show when={!catalogTracks.loading && !state.loading} fallback={<SkeletonRows />}><LibraryView tracks={libraryTrackList()} context={albumContext('library')} /></Show>}>
                 <DiscoverView
                   tracklist={tracklist()}
                   saving={saving()}

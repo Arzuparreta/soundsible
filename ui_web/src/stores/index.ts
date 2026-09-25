@@ -4112,12 +4112,14 @@ export const actions = {
   },
 
   /** Seed the live queue from the engine (called on connect + when opening the view). */
-  async loadDownloads(): Promise<void> {
+  async loadDownloads(): Promise<boolean> {
     try {
       const d = await api.getDownloadQueue();
       setState('downloads', { queue: d.queue ?? [], isProcessing: !!d.is_processing });
+      return true;
     } catch {
       // Engine down or unauthorized — leave whatever we have.
+      return false;
     }
   },
 

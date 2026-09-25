@@ -25,6 +25,7 @@ vi.mock('../lib/api', () => ({ api: apiMock }));
 vi.mock('../lib/discover', () => ({
   ensureDiscover: vi.fn(),
   topPodcasts: () => [],
+  revalidating: () => false,
 }));
 vi.mock('../stores', () => ({
   state: { podcastSubscriptions: [] },

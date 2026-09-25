@@ -1,34 +1,35 @@
 /* SolidJS player entry point for mobile, desktop, PWA, and the desktop shell. */
 import { render } from 'solid-js/web';
-import { Show, createEffect, lazy, onMount } from 'solid-js';
+import { Show, createEffect, onMount } from 'solid-js';
 import type { ParentProps } from 'solid-js';
 import { HashRouter, Route, useNavigate } from '@solidjs/router';
 import Shell from './app';
+import { asyncPage } from './components/AsyncPage';
 // Library is the landing route; Login and Invite are the pre-auth screens. All
-// three stay in the entry chunk — and Login/Invite must, because they render
-// outside the router, which is what supplies the Suspense boundary a lazy
-// component needs to appear at all. Every other route is split out: the import
+// three stay in the entry chunk. Other routes show their destination shell
+// while their module loads. Every other route is split out: the import
 // wizard alone is ~40 KB that most sessions never open, and it was downloaded
 // and parsed before the first track list could paint.
 import Library from './routes/Library';
 import Login from './routes/Login';
 import Invite from './routes/Invite';
 
-const Favourites = lazy(() => import('./routes/Favourites'));
-const Settings = lazy(() => import('./routes/Settings'));
-const Search = lazy(() => import('./routes/Search'));
-const Playlists = lazy(() => import('./routes/Playlists'));
-const PlaylistDetail = lazy(() => import('./routes/PlaylistDetail'));
-const Podcasts = lazy(() => import('./routes/Podcasts'));
-const PodcastShow = lazy(() => import('./routes/PodcastShow'));
-const Downloads = lazy(() => import('./routes/Downloads'));
-const Migrate = lazy(() => import('./routes/Migrate'));
-const Artist = lazy(() => import('./routes/Artist'));
-const Album = lazy(() => import('./routes/Album'));
-const Live = lazy(() => import('./routes/Live'));
-const DesignPreview = lazy(() => import('./pages/DesignPreview'));
-const Placeholder = lazy(() =>
-  import('./routes/Placeholder').then((m) => ({ default: m.Placeholder })),
+const Favourites = asyncPage(() => import('./routes/Favourites'), () => t('favourites.title'));
+const Settings = asyncPage(() => import('./routes/Settings'), () => t('settings.title'));
+const Search = asyncPage(() => import('./routes/Search'), () => t('nav.search'));
+const Playlists = asyncPage(() => import('./routes/Playlists'), () => t('playlists.title'), 'cards');
+const PlaylistDetail = asyncPage(() => import('./routes/PlaylistDetail'), () => t('playlists.title'));
+const Podcasts = asyncPage(() => import('./routes/Podcasts'), () => t('nav.podcasts'), 'cards');
+const PodcastShow = asyncPage(() => import('./routes/PodcastShow'), () => t('nav.podcasts'));
+const Downloads = asyncPage(() => import('./routes/Downloads'), () => t('downloads.title'));
+const Migrate = asyncPage(() => import('./routes/Migrate'), () => t('nav.import'));
+const Artist = asyncPage(() => import('./routes/Artist'), () => t('library.artists'));
+const Album = asyncPage(() => import('./routes/Album'), () => t('library.albums'));
+const Live = asyncPage(() => import('./routes/Live'), () => t('live.title'));
+const DesignPreview = asyncPage(() => import('./pages/DesignPreview'), () => t('common.loading'));
+const Placeholder = asyncPage(() =>
+  import('./routes/Placeholder').then((m) => ({ default: () => <m.Placeholder title={t('placeholder.notFoundTitle')} blurb={t('placeholder.notFoundBlurb')} /> })),
+  () => t('placeholder.notFoundTitle'),
 );
 import { initStore, state } from './stores';
 import { applyVisualPreferences } from './lib/visualPreferences';
@@ -119,7 +120,7 @@ function Player() {
       <Route path="/artist/:name" component={Artist} />
       <Route path="/album/:name" component={Album} />
       <Route path="/preview" component={DesignPreview} />
-      <Route path="*" component={() => <Placeholder title={t('placeholder.notFoundTitle')} blurb={t('placeholder.notFoundBlurb')} />} />
+      <Route path="*" component={Placeholder} />
     </HashRouter>
   );
 }

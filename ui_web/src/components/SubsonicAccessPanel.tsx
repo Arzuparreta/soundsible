@@ -1,4 +1,5 @@
-import { createSignal, onMount, Show } from 'solid-js';
+import { SettingsLoad } from './SettingsLoad';
+import { createSignal, Show } from 'solid-js';
 import { api, type SubsonicAccess } from '../lib/api';
 import { copyText } from '../lib/clipboard';
 import { confirmDialog } from '../lib/confirm';
@@ -22,13 +23,8 @@ export function SubsonicAccessPanel() {
   const [busy, setBusy] = createSignal(false);
 
   const load = async () => {
-    try {
-      setAccess(await api.getSubsonicAccess());
-    } catch {
-      setAccess(null);
-    }
+    setAccess(await api.getSubsonicAccess());
   };
-  onMount(() => void load());
 
   // The address the browser reached the engine on is the one that works for a
   // phone on the same network, which is exactly what needs pasting.
@@ -82,7 +78,7 @@ export function SubsonicAccessPanel() {
   };
 
   return (
-    <>
+    <SettingsLoad load={load}>
       <SettingsGroup label={t('subsonic.title')} note={t('subsonic.note')}>
         <ValueRow
           anchor="subsonic-server"
@@ -143,6 +139,6 @@ export function SubsonicAccessPanel() {
           </Show>
         </SettingsGroup>
       </Show>
-    </>
+    </SettingsLoad>
   );
 }

@@ -145,6 +145,7 @@ export const fr: Dict = {
     },
   },
   common: {
+    loadFailed: 'Impossible de charger. Veuillez réessayer.',
     play: 'Lire',
     pause: 'Pause',
     next: 'Suivant',

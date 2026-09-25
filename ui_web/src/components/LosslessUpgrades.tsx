@@ -1,3 +1,6 @@
+import { SkeletonRows } from './Skeleton';
+import { EmptyState } from './EmptyState';
+import Button from './Button';
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { api, type LosslessStatus } from '../lib/api';
 import { t } from '../lib/i18n';
@@ -36,6 +39,8 @@ function activityLabel(status: LosslessStatus): string {
 export function LosslessUpgrades() {
   const [status, setStatus] = createSignal<LosslessStatus | null>(null);
   const [busy, setBusy] = createSignal(false);
+  const [loading, setLoading] = createSignal(true);
+  const [failed, setFailed] = createSignal(false);
   const [jamendoClientId, setJamendoClientId] = createSignal('');
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -52,10 +57,14 @@ export function LosslessUpgrades() {
   };
 
   const refresh = async () => {
+    setLoading(true);
+    setFailed(false);
     try {
       setStatus(await api.getLosslessStatus());
     } catch {
-      /* the panel simply keeps the last snapshot */
+      setFailed(true);
+    } finally {
+      setLoading(false);
     }
     schedule();
   };
@@ -122,6 +131,8 @@ export function LosslessUpgrades() {
   onCleanup(() => clearTimeout(timer));
 
   return (
+    <Show when={status() || !loading()} fallback={<SkeletonRows count={3} />}>
+    <Show when={status() || !failed()} fallback={<EmptyState tone="danger">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void refresh()}>{t('common.retry')}</Button></EmptyState>}>
     <SettingsGroup label={t('settings.losslessStatusLabel')} note={t('settings.losslessNote')}>
       <SwitchRow
         anchor="lossless-upgrades"
@@ -215,5 +226,6 @@ export function LosslessUpgrades() {
         onClick={() => void recheck()}
       />
     </SettingsGroup>
+    </Show></Show>
   );
 }

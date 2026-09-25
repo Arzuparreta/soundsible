@@ -6,7 +6,7 @@ import { createMemo, createSignal, For, Show, onMount, onCleanup } from 'solid-j
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions } from '../stores';
-import { ensureDiscover, topPodcasts } from '../lib/discover';
+import { ensureDiscover, topPodcasts, revalidating } from '../lib/discover';
 import { t } from '../lib/i18n';
 import type { PodcastSearchResult } from '../types/podcast';
 import styles from './Podcasts.module.css';
@@ -15,7 +15,7 @@ import { attachContextMenu } from '../lib/contextMenu';
 import type { ActionMenuOptions } from '../components/ActionMenu';
 import { menuIcons } from '../components/icons';
 import { toast } from '../lib/toast';
-import { SkeletonRows } from '../components/Skeleton';
+import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { SearchField } from '../components/SearchField';
@@ -234,7 +234,7 @@ export default function Podcasts() {
               </Show>
 
               <Show when={state.podcastSubscriptions.length === 0 && recommendedPodcasts().length === 0}>
-                <EmptyState>{t('podcasts.hint')}</EmptyState>
+                <Show when={state.loading || revalidating()} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}><SkeletonCards /></Show>
               </Show>
             </>
           }

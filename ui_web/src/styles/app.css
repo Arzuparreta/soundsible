@@ -292,3 +292,6 @@ html[data-hold-gesture] *:not(input):not(textarea) {
 [data-playback-selected] [data-row-cover]:active {
   opacity: 1;
 }
+
+/* Route modules and initial data share a bounded, scrollable loading surface. */
+.page-loading { min-height: 0; overflow: auto; padding: var(--space-md) var(--gutter); }

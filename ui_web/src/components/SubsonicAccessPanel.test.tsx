@@ -118,7 +118,8 @@ describe('Subsonic access panel', () => {
     apiMock.getSubsonicAccess.mockRejectedValue(new Error('offline'));
     render(() => <SubsonicAccessPanel />);
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Generate a password/ })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument(),
     );
+    expect(screen.queryByRole('button', { name: /Generate a password/ })).toBeNull();
   });
 });

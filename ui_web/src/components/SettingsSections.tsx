@@ -1,3 +1,4 @@
+import { SettingsLoad } from './SettingsLoad';
 import { BottomNavigationSettings } from './BottomNavigationSettings';
 import { EXTRA_THEMES } from '../boot/themes';
 import { createSignal, onMount, For, Show, type JSX } from 'solid-js';
@@ -301,16 +302,12 @@ function PlaybackSection() {
   const [autoplay, setAutoplay] = createSignal(state.playback.autoplayEnabled);
   const [leveling, setLeveling] = createSignal(state.playback.volumeLeveling);
 
-  onMount(async () => {
-    try {
-      const d = await api.getDiscoverySettings();
-      if (typeof d.learning_enabled === 'boolean') setLearning(d.learning_enabled);
-      if (typeof d.autoplay_enabled === 'boolean') setAutoplay(d.autoplay_enabled);
-      if (typeof d.volume_leveling === 'boolean') setLeveling(d.volume_leveling);
-    } catch {
-      /* keep the optimistic defaults */
-    }
-  });
+  const load = async () => {
+    const d = await api.getDiscoverySettings();
+    if (typeof d.learning_enabled === 'boolean') setLearning(d.learning_enabled);
+    if (typeof d.autoplay_enabled === 'boolean') setAutoplay(d.autoplay_enabled);
+    if (typeof d.volume_leveling === 'boolean') setLeveling(d.volume_leveling);
+  };
 
   const toggleLeveling = async () => {
     const next = !leveling();
@@ -352,7 +349,7 @@ function PlaybackSection() {
   };
 
   return (
-    <>
+    <SettingsLoad load={load}>
       <SettingsGroup label={t('settings.group.connection')} note={t('settings.note.connection')}>
         <ValueRow anchor="delivery" label={t('settings.link.label')} value={connection()} />
       </SettingsGroup>
@@ -384,7 +381,7 @@ function PlaybackSection() {
         />
         <ActionRow anchor="reset-learning" label={t('settings.resetLearning')} onClick={resetLearning} />
       </SettingsGroup>
-    </>
+    </SettingsLoad>
   );
 }
 
@@ -559,16 +556,12 @@ function DownloadsSection() {
   const [autoUpdateYtdlp, setAutoUpdateYtdlp] = createSignal(false);
   const [autoUpdateCurlCffi, setAutoUpdateCurlCffi] = createSignal(false);
 
-  onMount(async () => {
-    try {
-      const c = await api.getDownloaderConfig();
-      if (c.quality) setQuality(c.quality as (typeof QUALITY_OPTIONS)[number]);
-      if (typeof c.auto_update_ytdlp === 'boolean') setAutoUpdateYtdlp(c.auto_update_ytdlp);
-      if (typeof c.auto_update_curl_cffi === 'boolean') setAutoUpdateCurlCffi(c.auto_update_curl_cffi);
-    } catch {
-      /* keep defaults */
-    }
-  });
+  const load = async () => {
+    const c = await api.getDownloaderConfig();
+    if (c.quality) setQuality(c.quality as (typeof QUALITY_OPTIONS)[number]);
+    if (typeof c.auto_update_ytdlp === 'boolean') setAutoUpdateYtdlp(c.auto_update_ytdlp);
+    if (typeof c.auto_update_curl_cffi === 'boolean') setAutoUpdateCurlCffi(c.auto_update_curl_cffi);
+  };
 
   const changeQuality = async (q: (typeof QUALITY_OPTIONS)[number]) => {
     const previous = quality();
@@ -605,7 +598,7 @@ function DownloadsSection() {
   };
 
   return (
-    <>
+    <SettingsLoad load={load}>
       <SettingsGroup label={t('settings.quality')} note={t('settings.note.quality')}>
         <SegmentedRow
           anchor="quality"
@@ -632,7 +625,7 @@ function DownloadsSection() {
           onChange={toggleAutoCurlCffi}
         />
       </SettingsGroup>
-    </>
+    </SettingsLoad>
   );
 }
 

@@ -100,7 +100,16 @@ export function openOverlay(
   if (opts.history) {
     let pending: (() => void) | undefined;
     let closing = false;
+    let closingEntry: OverlayEntry | undefined;
     const onPop = () => {
+      if (closingEntry) {
+        closingEntry.cleanup?.();
+        const after = pending;
+        pending = undefined;
+        closingEntry = undefined;
+        queueMicrotask(() => after?.());
+        return;
+      }
       const entry = overlays().find((item) => item.id === id);
       if (entry) entry.historyBack = undefined;
       remove(id, pending);
@@ -113,7 +122,13 @@ export function openOverlay(
       if (closing) return;
       closing = true;
       pending = afterClose;
-      if (window.history.state?.__soundsibleSheet === id) window.history.back();
+      if (window.history.state?.__soundsibleSheet === id) {
+        // Release the surface now; only navigation waits for browser history.
+        closingEntry = entry;
+        setOverlays(list => list.filter(item => item.id !== id));
+        queueMicrotask(() => entry.returnFocus?.focus());
+        window.history.back();
+      }
       else onPop();
     };
   }

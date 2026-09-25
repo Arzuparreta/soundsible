@@ -1,3 +1,5 @@
+import { SkeletonRows } from './Skeleton';
+import { EmptyState } from './EmptyState';
 import { For, Show, createResource, createSignal } from 'solid-js';
 import Button from './Button';
 import { confirmDialog } from '../lib/confirm';
@@ -141,6 +143,8 @@ export function UsersPanel() {
           <p class={styles.intro}>{t('users.inviteHint')}</p>
         </Show>
 
+        <Show when={!list.loading} fallback={<SkeletonRows count={3} />}>
+        <Show when={!list.error} fallback={<EmptyState tone="danger">{t('common.loadFailed')} <Button variant="secondary" onClick={() => void refetch()}>{t('common.retry')}</Button></EmptyState>}>
         <ul class={styles.list}>
           <For each={list() ?? []}>
             {(person) => (
@@ -184,6 +188,7 @@ export function UsersPanel() {
             )}
           </For>
         </ul>
+        </Show></Show>
 
         <form class={styles.form} onSubmit={create} {...settingAnchor('add-user')}>
           <h2 class={styles.formTitle}>{t('users.addTitle')}</h2>

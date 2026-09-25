@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library';
 import { OverlayOutlet, openOverlay } from './overlay';
 import { setMediaQuery } from '../test-setup';
@@ -201,5 +201,25 @@ describe('drag to dismiss', () => {
     drag(sheet(), 0, 160);
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText('Desktop card')).toBeInTheDocument();
+  });
+});
+
+
+describe('history-backed overlay feedback', () => {
+  it('dismisses immediately but waits for popstate before navigating', async () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const navigate = vi.fn();
+    render(() => <OverlayOutlet />);
+    openOverlay(close => <button onClick={() => close(navigate)}>Choose artists</button>, { history: true, ariaLabel: 'Pending navigation' });
+    fireEvent.click(screen.getByText('Choose artists'));
+    expect(screen.queryByRole('dialog', { name: 'Pending navigation' })).toBeNull();
+    expect(back).toHaveBeenCalledOnce();
+    expect(navigate).not.toHaveBeenCalled();
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledOnce());
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(navigate).toHaveBeenCalledOnce();
+    back.mockRestore();
+    window.history.replaceState(null, '');
   });
 });

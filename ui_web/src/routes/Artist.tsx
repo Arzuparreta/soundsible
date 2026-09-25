@@ -1,3 +1,4 @@
+import RetryButton from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
 import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
@@ -59,10 +60,17 @@ export default function Artist() {
     }
   };
 
-  const [profile] = createResource(
+  const [profileError, setProfileError] = createSignal(false);
+  const [profile, { refetch: retryProfile }] = createResource(
     () => ({ n: name(), id: viewParams().deezerId }),
-    (args) => fetchProfile(args.n, args.id),
+    async (args) => {
+      setProfileError(false);
+      try { return await fetchProfile(args.n, args.id); }
+      catch { setProfileError(true); return null; }
+    },
   );
+
+  const currentProfile = () => profile.loading ? null : profile();
 
   onCleanup(() => {
     aborter?.abort();
@@ -82,7 +90,7 @@ export default function Artist() {
   );
 
   const libraryTrackList = createMemo<Track[]>(() => {
-    if (viewParams().artistId) return tracksByIds(catalogTracks() ?? []);
+    if (viewParams().artistId) return tracksByIds(catalogTracks.loading ? [] : catalogTracks() ?? []);
     const n = artistKey(name());
     if (!n) return [];
     return musicLibrary().filter(
@@ -91,12 +99,12 @@ export default function Artist() {
     );
   });
 
-  const topTracks = createMemo<CatalogItem[]>(() => profile()?.top_tracks ?? []);
-  const albums = createMemo(() => profile()?.albums ?? []);
-  const singlesEps = createMemo(() => profile()?.singles_eps ?? []);
-  const related = createMemo(() => profile()?.related_artists ?? []);
-  const candidates = createMemo(() => profile()?.candidates ?? []);
-  const inLibrary = createMemo(() => profile()?.in_library ?? libraryTrackList().length > 0);
+  const topTracks = createMemo<CatalogItem[]>(() => currentProfile()?.top_tracks ?? []);
+  const albums = createMemo(() => currentProfile()?.albums ?? []);
+  const singlesEps = createMemo(() => currentProfile()?.singles_eps ?? []);
+  const related = createMemo(() => currentProfile()?.related_artists ?? []);
+  const candidates = createMemo(() => currentProfile()?.candidates ?? []);
+  const inLibrary = createMemo(() => currentProfile()?.in_library ?? libraryTrackList().length > 0);
 
 
 
@@ -124,11 +132,11 @@ export default function Artist() {
     id: `artist:${name()}`,
     kind: 'artist',
     label: name(),
-    cover: profile()?.metadata?.picture || undefined,
+    cover: currentProfile()?.metadata?.picture || undefined,
     destination: artistPath(name(), {
       view: mode,
       // The artist the page settled on, when the link itself named none.
-      deezerId: viewParams().deezerId ?? (profile()?.deezer_id || undefined),
+      deezerId: viewParams().deezerId ?? (currentProfile()?.deezer_id || undefined),
       artistId: mode === 'library' ? viewParams().artistId : undefined,
     }),
   });
@@ -235,8 +243,8 @@ export default function Artist() {
 
         <div class={styles.hero}>
           <div class={styles.avatar} style={{ position: 'relative', background: coverGradient(name()) }}>
-            <CoverImage src={profile()?.metadata?.picture} eager />
-            <Show when={!profile()?.metadata?.picture}>
+            <CoverImage src={currentProfile()?.metadata?.picture} eager />
+            <Show when={!currentProfile()?.metadata?.picture}>
               <span class={styles.initial}>{(name()[0] ?? '?').toUpperCase()}</span>
             </Show>
           </div>
@@ -274,10 +282,10 @@ export default function Artist() {
             </Show>
           </div>
           <span class={styles.count}>
-            <Show when={profile()?.metadata?.nb_fans}>
-              {formatFans(profile()!.metadata!.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}
+            <Show when={currentProfile()?.metadata?.nb_fans}>
+              {formatFans(currentProfile()!.metadata!.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}
             </Show>
-            <Show when={profile()?.metadata?.nb_fans && inLibrary()}>
+            <Show when={currentProfile()?.metadata?.nb_fans && inLibrary()}>
               {' · '}
             </Show>
             <Show when={inLibrary()}>
@@ -325,13 +333,13 @@ export default function Artist() {
         </header>
 
         <Show
-          when={profile.loading && !profile()}
+          when={view() === 'discover' && profile.loading && !currentProfile()}
           fallback={
             <Show
-              when={profile()}
-              fallback={<EmptyState>{t('artist.noCatalogData')}</EmptyState>}
+              when={view() === 'library' || currentProfile()}
+              fallback={<EmptyState tone={profileError() ? 'danger' : undefined}>{profileError() ? t('common.loadFailed') : t('artist.noCatalogData')} <Show when={profileError()}><RetryButton variant="secondary" onClick={() => void retryProfile()}>{t('common.retry')}</RetryButton></Show></EmptyState>}
             >
-              <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} loading={false} context={artistContext('library')} />}>
+              <Show when={view() === 'discover'} fallback={<LibraryView tracks={libraryTrackList()} loading={state.loading || catalogTracks.loading} context={artistContext('library')} />}>
                 <DiscoverView
                   topTracks={topTracks()}
                   albums={albums()}
@@ -373,7 +381,7 @@ function Button(props: { onClick: () => void; disabled?: boolean; variant?: 'pri
 function LibraryView(props: { tracks: Track[]; loading: boolean; context: PlaybackContextDescriptor }) {
   return (
     <div class={styles.libraryView}>
-      <Show when={props.tracks.length > 0} fallback={<EmptyState>{t('artist.empty')}</EmptyState>}>
+      <Show when={props.tracks.length > 0} fallback={<Show when={props.loading} fallback={<EmptyState>{t('artist.empty')}</EmptyState>}><SkeletonRows /></Show>}>
         <TrackListLite tracks={props.tracks} context={props.context} />
       </Show>
     </div>

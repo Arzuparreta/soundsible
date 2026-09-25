@@ -1,3 +1,4 @@
+import { SkeletonCards } from '../components/Skeleton';
 import { NEUTRAL_COVER } from '../lib/cover';
 import { createMemo, For, Show } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
@@ -43,7 +44,7 @@ export default function Playlists() {
           </svg>
           {t('playlists.new')}
         </button>
-        <Show when={names().length > 0} fallback={<EmptyState>{t('playlists.empty')}</EmptyState>}>
+        <Show when={names().length > 0} fallback={<Show when={state.loading} fallback={<EmptyState>{t('playlists.empty')}</EmptyState>}><SkeletonCards /></Show>}>
           <div class={styles.grid}>
             <For each={names()}>
               {(name) => {

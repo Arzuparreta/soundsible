@@ -145,6 +145,7 @@ export const en = {
     },
   },
   common: {
+    loadFailed: 'Could not load. Please try again.',
     play: 'Play',
     pause: 'Pause',
     next: 'Next',

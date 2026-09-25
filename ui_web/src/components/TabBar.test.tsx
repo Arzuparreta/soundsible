@@ -77,7 +77,7 @@ describe('mobile tab bar', () => {
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('link', { name: 'Biblioteca' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(libraryTab()).toBe('songs');
+    await waitFor(() => expect(libraryTab()).toBe('songs'));
   });
 
   it('keeps Library independent from the old Favourites preference', async () => {
