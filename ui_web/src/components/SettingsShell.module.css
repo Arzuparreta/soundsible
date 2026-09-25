@@ -303,32 +303,6 @@
   border-bottom: 1px solid var(--hairline-soft);
 }
 
-.back {
-  display: grid;
-  place-items: center;
-  width: var(--control-h);
-  height: var(--control-h);
-  margin-left: calc(var(--space-sm) * -1);
-  flex-shrink: 0;
-  color: var(--ink-primary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: background var(--dur-short) var(--ease-out);
-}
-
-.back svg {
-  width: var(--icon-md);
-  height: var(--icon-md);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .back:hover {
-    background: var(--bg-hover);
-  }
-}
-
 .detailTitle {
   flex: 1;
   min-width: 0;

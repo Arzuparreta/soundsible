@@ -1,5 +1,7 @@
 import { CollectionActions } from '../components/CollectionActions';
-import { PlayIcon, ShuffleIcon } from '../components/icons';
+import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
+import { useAppBar } from '../lib/appBar';
+import { desktopShell } from '../lib/shellLayout';
 import { CoverImage } from '../components/CoverImage';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { MusicLink } from '../components/MusicLinks';
@@ -213,6 +215,10 @@ export default function Artist() {
     setSearchParams({ view: mode }, { replace: true });
   };
 
+  const back = () => navigateBackOr(navigate, '/search');
+  const [heading, setHeading] = createSignal<HTMLElement>();
+  useAppBar({ title: name, back, backLabel: () => t('artist.ariaBack'), heading });
+
   return (
     <div class="view">
       <div
@@ -221,11 +227,11 @@ export default function Artist() {
         data-primary-scroll
       >
         <header class={styles.header}>
-        <button class={styles.back} type="button" aria-label={t('artist.ariaBack')} onClick={() => navigateBackOr(navigate, '/search')}>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
+        <Show when={desktopShell()}>
+          <button class={styles.back} type="button" aria-label={t('artist.ariaBack')} onClick={back}>
+            <BackIcon size={20} />
+          </button>
+        </Show>
 
         <div class={styles.hero}>
           <div class={styles.avatar} style={{ position: 'relative', background: coverGradient(name()) }}>
@@ -235,7 +241,7 @@ export default function Artist() {
             </Show>
           </div>
           <div class={styles.titleRow}>
-            <h1 class={styles.title}>{name()}</h1>
+            <h1 ref={setHeading} class={styles.title}>{name()}</h1>
             <Show when={candidates().length > 0}>
               <div class={styles.disambigWrap}>
                 <button

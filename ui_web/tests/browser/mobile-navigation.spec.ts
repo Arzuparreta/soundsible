@@ -67,7 +67,7 @@ test('custom bar persists and settings remain accessible after removal', async (
 });
 
 test('local search and view switching keep filters usable', async ({ page }) => {
-  const header = page.locator('[data-mobile-library-header]');
+  const header = page.locator('[data-app-bar]');
   await header.getByRole('button', { name: 'Buscar en biblioteca' }).click();
   const search = page.getByRole('textbox', { name: 'Buscar canciones y artistas' });
   await expect(search).toBeFocused();
@@ -122,7 +122,7 @@ for (const width of [320, 390, 430]) {
     test(`one header row and accessible controls at ${width}px, ${size}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate((size) => document.documentElement.dataset.interfaceSize = size, size);
-      const header = page.locator('[data-mobile-library-header]');
+      const header = page.locator('[data-app-bar]');
       await expect(header).toBeVisible();
       const buttons = header.getByRole('button');
       const first = await buttons.first().boundingBox();

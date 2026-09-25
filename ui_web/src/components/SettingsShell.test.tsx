@@ -1,6 +1,7 @@
 import { createSignal, Show, type JSX } from 'solid-js';
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { InShell } from './AppBar.harness';
 import { setLocale } from '../lib/i18n';
 import { setMediaQuery } from '../test-setup';
 import SettingsShell from './SettingsShell';
@@ -50,7 +51,7 @@ function renderShell(initial: string | null = null, landing: string | null = nul
   const [setting, setSetting] = createSignal<string | null>(landing);
   const [query, setQuery] = createSignal('');
   const view = render(() => (
-    <SettingsShell
+    <InShell><SettingsShell
       section={section()}
       setting={setting()}
       query={query()}
@@ -59,7 +60,7 @@ function renderShell(initial: string | null = null, landing: string | null = nul
         setSection(id);
         setSetting(anchor ?? null);
       }}
-    />
+    /></InShell>
   ));
   return { ...view, section, setting, query };
 }

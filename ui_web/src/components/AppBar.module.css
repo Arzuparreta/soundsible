@@ -1,0 +1,193 @@
+/* The touch shell's top bar. Every measurement comes from the density tokens,
+   so the bar keeps one shape per interface size and never one per page. */
+.bar {
+  /* Icon buttons are full touch targets; this is how far a glyph sits inside
+     its own button. Pulling the row out by that much puts the menu glyph on
+     the same vertical line as the page content below it. */
+  --bar-inset: calc((var(--control-h) - var(--icon-md)) / 2);
+
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  height: var(--topbar-h);
+  padding-inline: max(0px, calc(var(--gutter) - var(--bar-inset)));
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--dur-short) var(--ease-out),
+    background-color var(--dur-short) var(--ease-out);
+}
+
+/* Content has scrolled up under the bar: a hairline says where the page ends
+   and the chrome begins. At rest the bar is part of the page. */
+.bar[data-scrolled] {
+  background-color: color-mix(in srgb, var(--bg-base) 72%, transparent);
+  border-bottom-color: var(--hairline-soft);
+}
+
+.leading {
+  flex: none;
+  display: flex;
+}
+
+.icon {
+  position: relative;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  color: var(--ink-primary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background-color var(--dur-short) var(--ease-out);
+}
+
+.icon svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon:focus-visible,
+.prominent:focus-visible,
+.titleButton:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0 0 0 var(--space-2xs);
+  font-size: var(--text-h2);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--ink-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: title-in var(--dur-short) var(--ease-out);
+}
+
+/* The echo of a page's own large title: there, but only once that title has
+   gone up behind the bar. */
+.title[data-echo] {
+  transition:
+    opacity var(--dur-short) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
+}
+
+.title[data-hidden] {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+}
+
+.titleButton {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  text-align: start;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-xs, 4px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.badge {
+  position: absolute;
+  top: calc(var(--bar-inset) - 7px);
+  right: calc(var(--bar-inset) - 9px);
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: var(--text-micro);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border: 2px solid var(--bg-base);
+  border-radius: var(--radius-full);
+}
+
+/* The page's one primary command, spelled out. Shorter than the touch row so
+   it reads as a pill inside the bar rather than a second bar. */
+.prominent {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--pill-h);
+  margin-inline: var(--space-xs);
+  padding: 0 var(--space-md);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+/* Last in the row, a pill's edge lines up with the page's gutter the way an
+   icon's glyph does. */
+.prominent:last-child {
+  margin-right: var(--bar-inset);
+}
+
+.prominent:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .icon:not(:disabled):hover {
+    background: var(--bg-raised);
+  }
+
+  .prominent:not(:disabled):hover {
+    background: var(--accent-hover);
+  }
+}
+
+@keyframes title-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title {
+    animation: none;
+  }
+}

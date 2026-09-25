@@ -1,5 +1,7 @@
 import { CollectionActions } from '../components/CollectionActions';
-import { PlayIcon, ShuffleIcon } from '../components/icons';
+import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
+import { useAppBar } from '../lib/appBar';
+import { desktopShell } from '../lib/shellLayout';
 import { CoverImage } from '../components/CoverImage';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { ArtistLinks } from '../components/MusicLinks';
@@ -194,6 +196,18 @@ export default function Album() {
     setSearchParams({ view: mode }, { replace: true });
   };
 
+  const back = () => navigateBackOr(
+    navigate,
+    artistName() ? artistPath(artistName(), { view: 'discover' }) : '/search',
+  );
+  const [heading, setHeading] = createSignal<HTMLElement>();
+  useAppBar({
+    title: () => profile()?.title || title(),
+    back,
+    backLabel: () => t('album.ariaBack'),
+    heading,
+  });
+
   return (
     <div class="view">
       <div
@@ -202,19 +216,11 @@ export default function Album() {
         data-primary-scroll
       >
         <header class={styles.header}>
-        <button
-          class={styles.back}
-          type="button"
-          aria-label={t('album.ariaBack')}
-          onClick={() => navigateBackOr(
-            navigate,
-            artistName() ? artistPath(artistName(), { view: 'discover' }) : '/search',
-          )}
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
+        <Show when={desktopShell()}>
+          <button class={styles.back} type="button" aria-label={t('album.ariaBack')} onClick={back}>
+            <BackIcon size={20} />
+          </button>
+        </Show>
 
         <div class={styles.hero}>
           <div class={styles.cover} style={{ position: 'relative', background: coverGradient(title()) }}>
@@ -223,7 +229,7 @@ export default function Album() {
               <span class={styles.initial}>{(title()[0] ?? '?').toUpperCase()}</span>
             </Show>
           </div>
-          <h1 class={styles.title}>{profile()?.title || title()}</h1>
+          <h1 ref={setHeading} class={styles.title}>{profile()?.title || title()}</h1>
           <ArtistLinks class={styles.artistLink} music={{ artist: profile()?.artist || artistName(), view: view(), artistId: catalogTracks()?.album?.album_artist_id ?? undefined }} />
           <span class={styles.meta}>
             <Show when={profile()?.year}>{profile()!.year}</Show>

@@ -8,14 +8,14 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: var(--space-lg) var(--gutter) var(--space-sm);
+  padding: var(--view-top, var(--space-lg)) var(--gutter) var(--space-sm);
 }
 
 .suggest {
   position: absolute;
   left: var(--gutter);
   right: var(--gutter);
-  top: calc(var(--space-lg) + var(--control-h) + var(--space-xs));
+  top: calc(var(--view-top, var(--space-lg)) + var(--control-h) + var(--space-xs));
   padding: var(--space-2xs);
   background: var(--bg-elevated);
   border: 1px solid var(--hairline);

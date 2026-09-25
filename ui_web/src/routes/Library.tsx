@@ -1,8 +1,7 @@
 import { openAlbumBrowseMenu } from '../components/albumBrowseMenu';
-import { createMemo, createResource, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { A, useSearchParams } from '@solidjs/router';
 import { state, actions, downloadCounts, favouriteRows, musicLibrary } from '../stores';
-import { MobileLibraryHeader } from '../components/MobileLibraryHeader';
 import { ViewHeader } from '../components/ViewHeader';
 import TrackList from '../components/TrackList';
 import ArtistGrid from '../components/ArtistGrid';
@@ -37,7 +36,9 @@ import { searchLibrary } from '../lib/librarySearch';
 import { createTopSwipeReveal } from '../lib/topSwipeReveal';
 import styles from './Library.module.css';
 import { EmptyState } from '../components/EmptyState';
-import { DownloadIcon } from '../components/icons';
+import { DownloadIcon, SearchIcon, SortIcon } from '../components/icons';
+import { useAppBar } from '../lib/appBar';
+import { desktopShell } from '../lib/shellLayout';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { reselectPrimaryTab } from '../lib/tabNavigation';
 import { libraryContext } from '../lib/playbackContext';
@@ -97,25 +98,24 @@ export default function Library() {
   // Desktop breakpoint is 1024px (matches app.module.css / tokens.css). On
   // mobile the song row's subtitle is the same gesture as the row itself, so
   // we render the artist as plain text and let the row click play the track.
-  const [isMobile, setIsMobile] = createSignal(true);
-  const [searchProgress, setSearchProgress] = createSignal(0);
+  // The touch composition is the shell's call (lib/shellLayout), not a width
+  // of this page's own: at the Large size a small desktop window still gets
+  // the top bar, and this page has to agree with it.
+  const isMobile = () => !desktopShell();
+  const [searchProgress, setSearchProgress] = createSignal(isMobile() && !searching() ? 0 : 1);
   const [searchDragging, setSearchDragging] = createSignal(false);
   const swipeReveal = createTopSwipeReveal();
 
+  createEffect(on(isMobile, (mobile) => {
+    if (!mobile) {
+      setSearchProgress(1);
+      setSearchDragging(false);
+    } else {
+      setSearchProgress(searching() || searchFocused() ? 1 : 0);
+    }
+  }, { defer: true }));
+
   onMount(() => {
-    const mq = window.matchMedia('(max-width: 1023px)');
-    setIsMobile(mq.matches);
-    setSearchProgress(mq.matches ? (searching() ? 1 : 0) : 1);
-    const onChange = (e: MediaQueryListEvent) => {
-      setIsMobile(e.matches);
-      if (!e.matches) {
-        setSearchProgress(1);
-        setSearchDragging(false);
-      } else {
-        setSearchProgress(searching() || searchFocused() ? 1 : 0);
-      }
-    };
-    mq.addEventListener('change', onChange);
     if (searchParams.search === '1') {
       setSearchParams({ search: undefined }, { replace: true });
       revealSearch();
@@ -173,7 +173,6 @@ export default function Library() {
     view?.addEventListener('scroll', onScroll, true);
 
     onCleanup(() => {
-      mq.removeEventListener('change', onChange);
       view?.removeEventListener('touchstart', onTouchStart);
       view?.removeEventListener('touchmove', onTouchMove);
       view?.removeEventListener('touchend', finishTouch);
@@ -289,16 +288,39 @@ export default function Library() {
     </Show>
   </>);
 
+  // On the touch shell the view's name is the title — the drawer is where the
+  // views are switched — and search and ordering are the bar's commands.
+  useAppBar({
+    title: () => t(`library.${libraryTab()}` as 'library.songs'),
+    actions: () => [
+      { label: t('library.searchAction'), icon: () => <SearchIcon />, onSelect: revealSearch },
+      ...(!searching() && libraryTab() !== 'artists'
+        ? [{
+            label: libraryTab() === 'albums' ? t('library.albumSortTitle') : t('library.sortTitle'),
+            icon: () => <SortIcon />,
+            opensDialog: true,
+            onSelect: () => (libraryTab() === 'albums' ? openAlbumBrowseMenu() : sortLibrary()),
+          }]
+        : []),
+    ],
+    onTitleTap: () => reselectPrimaryTab('/'),
+    onViewChange: () => {
+      setQuery('');
+      setSearchProgress(0);
+      setSearchFocused(false);
+    },
+  });
+
   return (
     <div ref={viewRef} class="view">
-      <Show when={isMobile()} fallback={
+      <Show when={!isMobile()}>
       <ViewHeader
         title={t('library.title')}
         onTitleTap={() => reselectPrimaryTab('/')}
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
         actions={
           <>
-            <Show when={!isMobile()}>{searchField(true)}</Show>
+            {searchField(true)}
             <A class={styles.headerAction} href="/favourites" aria-label={t('library.favourites')} data-pressable>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z" />
@@ -319,8 +341,6 @@ export default function Library() {
           </>
         }
       />
-      }>
-        <MobileLibraryHeader onSearch={revealSearch} onViewChange={() => { setQuery(''); setSearchProgress(0); setSearchFocused(false); }} actions={!searching() ? sortControl() : undefined} />
       </Show>
 
       <Show when={isMobile()}>

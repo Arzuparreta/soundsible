@@ -6,6 +6,7 @@ import { ToastOutlet } from './lib/toast';
 import { TabBar } from './components/TabBar';
 import { Sidebar } from './components/Sidebar';
 import { OmniBar } from './components/OmniBar';
+import { AppBar } from './components/AppBar';
 import { PlayerSurface } from './components/PlayerSurface';
 import { ResumeBanner } from './components/ResumeBanner';
 import { ContextMenuOutlet } from './lib/contextMenu';
@@ -14,7 +15,9 @@ import { CommunityBridge } from './components/CommunityBridge';
 import styles from './app.module.css';
 
 /**
- * App shell. Mobile: scrollable outlet + bottom dock (player + tab bar).
+ * App shell. Mobile: top bar + scrollable outlet + bottom dock (player + tab
+ * bar). The top bar belongs to the shell, not the routes: pages describe it
+ * with `useAppBar` and it stays put while they change underneath.
  * Desktop (≥1024px, via CSS grid): left sidebar + outlet + player spanning the
  * bottom; the tab bar is hidden and the sidebar takes over navigation.
  */
@@ -29,7 +32,11 @@ export default function Shell(props: RouteSectionProps) {
       <ScrollHistoryManager />
       <CommunityBridge />
       <Sidebar />
-      <main class={styles.content}>{props.children}</main>
+      <main class={styles.content}>
+        <AppBar />
+        {/* The routes scroll here, under a bar that never moves. */}
+        <div class={styles.outlet} data-app-outlet>{props.children}</div>
+      </main>
       <div class={styles.dock}>
         <OmniBar />
         <div class={styles.tabbar}>

@@ -1,4 +1,4 @@
-import { NavigationMenuButton } from '../components/NavigationMenu';
+import { useAppBar } from '../lib/appBar';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
@@ -151,10 +151,11 @@ export default function Podcasts() {
     clearTimeout(debounce);
   });
 
+  useAppBar({ title: () => t('nav.podcasts') });
+
   return (
     <div class="view">
       <div class={styles.bar}>
-        <NavigationMenuButton />
         <SearchField
           placeholder={t('podcasts.searchPlaceholder')}
           clearLabel={t('searchPanel.clear')}

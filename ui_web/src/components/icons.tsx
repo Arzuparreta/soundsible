@@ -121,6 +121,16 @@ export const InfoIcon = line('M12 17v-6M12 7h.01M12 2a10 10 0 100 20 10 10 0 000
 /** Subscribe to a show: a plus, the same "claim it" as saving a song. */
 export const SubscribeIcon = SaveIcon;
 
+/* The top bar's own verbs (AppBar.tsx). One drawing each, so "back" on an
+ * album is the same chevron as "back" in a settings section. */
+export const MenuIcon = line('M4 6h16M4 12h16M4 18h16');
+export const BackIcon = line('m15 18-6-6 6-6');
+export const CloseIcon = line('M18 6 6 18M6 6l12 12');
+export const SearchIcon = (props: GlyphProps) => <Glyph {...props}><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></Glyph>;
+export const SortIcon = line('M3 6h18M6 12h12M10 18h4');
+export const MoreIcon = (props: GlyphProps) => <Glyph {...props}><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></Glyph>;
+export const BroadcastIcon = line('M8.5 8.5a5 5 0 000 7M15.5 8.5a5 5 0 010 7M5.6 5.6a9 9 0 000 12.8M18.4 5.6a9 9 0 010 12.8M12 12h.01');
+
 /** Menu-sized glyphs. Action sheets and context menus hold one per row, all at
  * the same box, so every builder reaches for the same set. */
 const MENU = 20;

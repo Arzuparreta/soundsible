@@ -237,6 +237,9 @@ test.describe('interface scale geometry', () => {
     const settings = page.locator('[data-settings-page]');
     await expect(settings).toBeVisible();
     const desktop = page.viewportSize()!.width >= 1024;
+    // Side by side the page draws its own headers; on a phone the page's title
+    // and the way back are the shell's top bar.
+    const head = desktop ? settings.locator('header') : page.locator('[data-app-bar]');
 
     await expect(page).toHaveURL(/#\/settings$/);
     await expect(page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }))
@@ -252,7 +255,7 @@ test.describe('interface scale geometry', () => {
     await search.clear();
 
     await settings.getByRole('button', { name: /Reproducción/ }).click();
-    await expect(settings.locator('header').getByRole('heading', { name: 'Reproducción', exact: true })).toBeVisible();
+    await expect(head.getByRole('heading', { name: 'Reproducción', exact: true })).toBeVisible();
 
     if (desktop) {
       // The index stays beside the open submenu, so there is nothing to go back
@@ -263,10 +266,10 @@ test.describe('interface scale geometry', () => {
     } else {
       // The push replaces the index, and the title names where you are.
       await expect(search).toBeHidden();
-      await expect(settings.getByRole('heading', { name: 'Ajustes' })).toHaveCount(0);
-      await settings.getByRole('button', { name: 'Volver' }).click();
+      await expect(page.getByRole('heading', { name: 'Ajustes' })).toHaveCount(0);
+      await head.getByRole('button', { name: 'Volver' }).click();
       await expect(search).toBeVisible();
-      await expect(settings.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
+      await expect(head.getByRole('heading', { name: 'Ajustes', level: 1 })).toBeVisible();
     }
 
     await settle(page, '[data-settings-page]');
@@ -291,16 +294,17 @@ test.describe('interface scale geometry', () => {
     await expect(page.getByRole('heading', { name: page.viewportSize()!.width < 1024 ? 'Canciones' : 'Tu biblioteca' })).toBeVisible();
     await page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }).click();
     const settings = page.locator('[data-settings-page]');
+    const head = page.viewportSize()!.width >= 1024 ? settings.locator('header') : page.locator('[data-app-bar]');
     await settings.getByRole('button', { name: /Apariencia/ }).click();
     await expect(page).toHaveURL(/#\/settings\/appearance$/);
     await page.goBack();
     await expect(page).toHaveURL(/#\/settings$/);
-    await expect(settings.getByRole('heading', { name: 'Ajustes' })).toBeVisible();
+    await expect(head.getByRole('heading', { name: 'Ajustes' })).toBeVisible();
     await page.goBack();
     await expect(page.getByRole('heading', { name: page.viewportSize()!.width < 1024 ? 'Canciones' : 'Tu biblioteca' })).toBeVisible();
     await page.goForward();
     await page.goForward();
-    await expect(settings.locator('header').getByRole('heading', { name: 'Apariencia', exact: true })).toBeVisible();
+    await expect(head.getByRole('heading', { name: 'Apariencia', exact: true })).toBeVisible();
   });
 
   test('a device link still opens settings on the submenu it names', async ({ page }) => {
@@ -309,8 +313,10 @@ test.describe('interface scale geometry', () => {
     // What a paired device sends its owner back to (lib/trackShare).
     await page.goto('/player/#/settings/devices');
 
-    const settings = page.locator('[data-settings-page]');
-    await expect(settings.locator('header').getByRole('heading', { name: 'Dispositivos', exact: true })).toBeVisible();
+    const head = page.viewportSize()!.width >= 1024
+      ? page.locator('[data-settings-page] header')
+      : page.locator('[data-app-bar]');
+    await expect(head.getByRole('heading', { name: 'Dispositivos', exact: true })).toBeVisible();
   });
 
   test('missing preference migrates every existing device to Normal', async ({ page }) => {
