@@ -330,7 +330,7 @@
 .destinations button { flex: 0 0 auto; min-height: 42px; padding: 0 10px; color: var(--ink-secondary); background: none; border: 0; border-bottom: 2px solid transparent; font: inherit; font-size: var(--text-caption); cursor: pointer; }
 .destinations button[aria-current] { color: var(--ink-primary); border-bottom-color: var(--accent); }
 .searchFilters { display: flex; align-items: center; gap: 8px; padding: 4px 12px; flex: 0 0 auto; }
-.searchFilters select, .libraryFilter { max-width: 100%; min-width: 0; min-height: 36px; color: var(--ink-secondary); background: var(--stage-material-quiet); border: 0; font: inherit; font-size: var(--text-caption); }
+.searchFilters select { max-width: 100%; min-width: 0; min-height: 36px; color: var(--ink-secondary); background: var(--stage-material-quiet); border: 0; font: inherit; font-size: var(--text-caption); }
 .searchFilters select { flex: 1; }
 .intent { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0; padding: 8px 12px; color: var(--ink-secondary); background: var(--accent-faint); font-size: var(--text-caption); }
 .intent button { background: none; color: var(--accent); border: 0; min-height: 36px; cursor: pointer; }

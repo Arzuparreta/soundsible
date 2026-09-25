@@ -828,17 +828,32 @@ function LibraryView(props: {
   onUse?: (tracks: Track[]) => void;
 }) {
   const [albums] = createResource(() => { void state.catalog.revision; return libraryTab() === 'albums' ? albumBrowseQuery(albumSort(), albumFilter()) : false; }, (params) => api.getLibraryAlbums(params));
+  // The same menu as the Library route: sorting and the downloaded-only
+  // narrowing live together, not in a separate control.
   const sort = () =>
     openActionMenu({
-      title: t('library.sortTitle'),
-      actions: [
-        ['recent', t('library.sortRecent')],
-        ['az', t('library.sortAZ')],
-        ['fav', t('library.sortFavFirst')],
-      ].map(([value, label]) => ({
-        label: `${librarySort() === value ? '✓  ' : ''}${label}`,
-        onSelect: () => setLibrarySort(value),
-      })),
+      sections: [
+        {
+          label: t('library.sortTitle'),
+          actions: [
+            ['recent', t('library.sortRecent')],
+            ['az', t('library.sortAZ')],
+            ['fav', t('library.sortFavFirst')],
+          ].map(([value, label]) => ({
+            label: `${librarySort() === value ? '✓  ' : ''}${label}`,
+            onSelect: () => setLibrarySort(value),
+          })),
+        },
+        {
+          label: t('library.filterTitle'),
+          actions: [
+            {
+              label: `${libraryFilter() === 'downloaded' ? '✓  ' : ''}${t('library.filterDownloaded')}`,
+              onSelect: () => setLibraryFilter(libraryFilter() === 'downloaded' ? 'all' : 'downloaded'),
+            },
+          ],
+        },
+      ],
     });
   // The panel body is the scrolling element; rows inside it are virtualized
   // because a full library used to build every row up front. A signal, not a
@@ -860,7 +875,6 @@ function LibraryView(props: {
           <button class={styles.sort} type="button" aria-label={t('library.sortTitle')} onClick={sort}><SortIcon /></button>
         </Show>
       </div>
-      <Show when={libraryTab() === 'songs'}><select class={styles.libraryFilter} aria-label={t('musicExplorer.filter')} value={libraryFilter()} onChange={(event) => setLibraryFilter(event.currentTarget.value)}><option value="all">{t('musicExplorer.all')}</option><option value="downloaded">{t('musicExplorer.downloaded')}</option></select></Show>
       <Show when={libraryTab() === 'albums'}><Show when={!albums.loading} fallback={<SkeletonRows count={6} />}><For each={collateAlbums(albums() ?? [], albumSort())}>{(album) => <NavigationRow title={album.title} subtitle={album.album_artist} music={albumMusic(album)} cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined} onClick={() => props.onAlbum(album)} />}</For></Show></Show>
       <Show when={libraryTab() !== 'albums'}><Show
         when={libraryTab() === 'songs'}

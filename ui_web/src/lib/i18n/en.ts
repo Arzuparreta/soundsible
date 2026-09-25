@@ -53,8 +53,6 @@ export const en = {
     openAlbum: 'Go to album',
     playNow: 'Play now',
     referencePicking: 'Mix into session',
-    filter: 'Filter',
-    downloaded: 'Downloaded',
     catalog: 'Explore artist',
     library: 'In your library',
   },

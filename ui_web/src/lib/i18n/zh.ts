@@ -54,8 +54,6 @@ export const zh: Dict = {
     openAlbum: '查看专辑',
     playNow: '立即播放',
     referencePicking: '融入当前会话',
-    filter: '筛选',
-    downloaded: '已下载',
     catalog: '探索艺人',
     library: '我的音乐库',
   },
