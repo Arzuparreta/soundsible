@@ -69,6 +69,46 @@ test('an album card opens the record from the line under its cover', async ({ pa
   await expect(page).toHaveURL(/#\/album\/Disco%20de%20prueba\?artist=Artista\+7&view=library&album_id=al-1/);
 });
 
+test('album cards open from their artwork, in the library and in search', async ({ page, isMobile }) => {
+  // The cover fills most of the tile and is positioned (its image is laid over
+  // it), so it is where nearly every tap lands. It used to paint over the
+  // card's link and swallow the tap: the press showed, nothing opened.
+  await page.route('**/api/library/albums**', (route) => route.fulfill({ json: {
+    albums: [{ id: 'al-1', title: 'Disco de prueba', album_artist: 'Artista 7', is_compilation: false,
+      track_count: 12, duration: 2400, cover_track_id: 'library-track-8' }],
+    album: { id: 'al-1', title: 'Disco de prueba', album_artist: 'Artista 7' }, track_ids: ['library-track-8'],
+  } }));
+  await page.route('**/api/catalog/search?**', (route) => route.fulfill({ json: {
+    items: [{ id: 'album:1', type: 'album', source: 'deezer', title: 'Disco buscado', artist: 'Artista 7',
+      external_ids: { deezer_album_id: '20' } }],
+    sections: [{ id: 'albums', item_ids: ['album:1'] }],
+  } }));
+  const tapArtwork = async (link: ReturnType<Page['getByRole']>) => {
+    const box = (await link.boundingBox())!;
+    const point = { x: box.x + box.width / 2, y: box.y + Math.min(box.width, box.height) / 2 };
+    if (isMobile) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
+  };
+
+  await page.goto('/player/#/');
+  if (isMobile) {
+    await page.getByRole('button', { name: 'Menú', exact: true }).click();
+    await page.getByRole('dialog').getByRole('link', { name: 'Álbumes', exact: true }).click();
+  } else {
+    await page.locator('aside').getByRole('link', { name: 'Álbumes', exact: true }).click();
+  }
+  const card = page.getByRole('link', { name: 'Disco de prueba', exact: true });
+  await expect(card).toBeVisible();
+  await tapArtwork(card);
+  await expect(page).toHaveURL(/#\/album\/Disco%20de%20prueba\?.*album_id=al-1/);
+  await expect(page.getByRole('heading', { name: 'Disco de prueba', exact: true })).toBeVisible();
+
+  await page.goto('/player/#/search?q=disco');
+  const result = page.getByRole('link', { name: 'Disco buscado', exact: true });
+  await expect(result).toBeVisible();
+  await tapArtwork(result);
+  await expect(page).toHaveURL(/#\/album\/Disco%20buscado\?.*deezer_id=20/);
+});
+
 test('desktop artist links support keyboard and a separate tab', async ({ page, isMobile, context }) => {
   test.skip(isMobile, 'Desktop keyboard and modifier behavior');
   await page.goto('/player/#/');
