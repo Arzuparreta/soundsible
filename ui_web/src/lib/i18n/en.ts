@@ -1304,7 +1304,6 @@ export const en = {
     globalSearch: 'Return to global search',
     searchLibrary: 'Search your library',
     listenNow: 'Listen now',
-    libraryResults: 'Library results',
     searchEverywhere: 'Search “{query}” everywhere',
   },
 };

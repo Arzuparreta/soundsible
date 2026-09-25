@@ -1306,7 +1306,6 @@ export const es: Dict = {
     globalSearch: 'Volver a la búsqueda global',
     searchLibrary: 'Buscar en tu biblioteca',
     listenNow: 'Escuchar ahora',
-    libraryResults: 'Resultados de Biblioteca',
     searchEverywhere: 'Buscar «{query}» en todo Soundsible',
   },
 };

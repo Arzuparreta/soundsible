@@ -5,7 +5,7 @@ import { useCatalogCollection } from '../lib/catalogItem';
 import { t } from '../lib/i18n';
 import type { CatalogItem, Track } from '../types/music';
 import { openActionMenu } from './ActionMenu';
-import { ChangeSessionIcon, PlayIcon, QueueAddIcon, SourceIcon, menuIcons } from './icons';
+import { ChangeSessionIcon, MoreIcon, PlayIcon, QueueAddIcon, SourceIcon, menuIcons } from './icons';
 import styles from './CollectionActions.module.css';
 
 /** Placement context is shared by every collection nested inside the explorer. */
@@ -77,7 +77,7 @@ export function CollectionActions(props: {
       </span>
     </button>
     <Show when={props.auto && !placement.referenceOnly && placement.intent !== 'auto-route' && !props.hideReferenceMenu}>
-      <button type="button" disabled={busy() || !count()} aria-label={t('autoMode.route.actions', { title: props.title })} onClick={() => openActionMenu({ title: props.title, actions: [{ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => void use('reference') }, { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void use('change') }] })}>•••</button>
+      <button type="button" disabled={busy() || !count()} aria-label={t('autoMode.route.actions', { title: props.title })} onClick={() => openActionMenu({ title: props.title, actions: [{ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => void use('reference') }, { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void use('change') }] })}><MoreIcon size={18} /></button>
     </Show>
   </>;
 }

@@ -57,8 +57,7 @@
 
 .scopeButton,
 .clear,
-.close,
-.sectionHead button {
+.close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -75,7 +74,8 @@
 .scopeButton svg,
 .clear svg,
 .close svg,
-.sectionHead svg {
+.toolbarActions svg,
+.toolbar > button svg {
   width: 18px;
   height: 18px;
   fill: none;
@@ -89,7 +89,8 @@
   .scopeButton:hover,
   .clear:hover,
   .close:hover,
-  .sectionHead button:hover {
+  .toolbarActions button:hover,
+  .toolbar > button:hover {
     color: var(--ink-primary);
     background: var(--stage-material);
   }
@@ -123,7 +124,7 @@
 }
 
 .section > h2,
-.sectionHead h2 {
+.toolbarLabel {
   margin: 0 0 var(--space-sm);
   padding: 0 var(--space-xs);
   color: var(--ink-tertiary);
@@ -133,29 +134,96 @@
   text-transform: uppercase;
 }
 
-.sectionHead {
+/* Every view opens with this one bar: back, a title or a lead, commands. One
+ * height, one button, one type size, whichever tab or depth it sits at. */
+.toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-2xs);
+  min-height: 44px;
+  margin-bottom: var(--space-xs);
 }
 
-.sectionHead h2 {
+.toolbarLead {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.toolbarTitle {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolbarSubtitle {
+  color: var(--ink-tertiary);
+  font-size: var(--text-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolbarLabel {
   margin: 0;
 }
 
-.sectionHead button {
-  width: 32px;
-  height: 32px;
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-2xs);
+}
+
+.toolbar > button,
+.toolbarActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 var(--space-xs);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--fw-semibold);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.toolbar > button {
+  margin-left: calc(-1 * var(--space-xs));
+}
+
+.toolbarActions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toolbarActions button[aria-pressed='true'] {
+  color: var(--accent-ink);
 }
 
 .tabs {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  margin-bottom: var(--space-sm);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .tabs button {
+  flex: none;
   height: 32px;
   padding: 0 var(--space-md);
   color: var(--ink-secondary);
@@ -172,20 +240,6 @@
   color: var(--ink-on-accent);
   background: var(--accent);
   border-color: var(--accent);
-}
-
-.tabs .sort {
-  margin-left: auto;
-  width: 32px;
-  padding: 0;
-}
-
-.tabs .sort svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
 }
 
 .filterChips {
