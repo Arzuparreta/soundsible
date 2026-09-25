@@ -3,6 +3,7 @@ from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 import sqlite3
+import threading
 
 from flask import Flask
 import pytest
@@ -207,16 +208,23 @@ def test_history_connections_close_and_physical_file_is_capped(monkeypatch):
             self.closed = True
             super().close()
 
+    # history.sqlite3 is the sqlite3 module, so this patch is process-wide: a
+    # thread an earlier test left running can open its own connection while
+    # the exchanges run. The history opens and closes on the caller's thread,
+    # so only connections from this thread are the history's.
+    this_thread = threading.get_ident()
+
     def connect(*args, **kwargs):
         conn = real_connect(*args, **kwargs, factory=Connection)
-        connections.append(conn)
+        if threading.get_ident() == this_thread:
+            connections.append(conn)
         return conn
 
     monkeypatch.setattr(history.sqlite3, 'connect', connect)
     body = snapshot().to_public_dict()
     for i in range(8):
         history.exchange('a', str(i), body, str(i - 1))
-    assert all(conn.closed for conn in connections)
+    assert connections and all(conn.closed for conn in connections)
     with history.connection() as db:
         page_size = db.execute('PRAGMA page_size').fetchone()[0]
         assert db.execute('PRAGMA max_page_count').fetchone()[0] * page_size <= history.MAX_BYTES
