@@ -206,17 +206,22 @@ describe('drag to dismiss', () => {
 
 
 describe('history-backed overlay feedback', () => {
-  it('dismisses immediately but waits for popstate before navigating', async () => {
+  it('keeps the previous page covered until popstate commits the selection', async () => {
     const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
     const navigate = vi.fn();
     render(() => <OverlayOutlet />);
     openOverlay(close => <button onClick={() => close(navigate)}>Choose artists</button>, { history: true, ariaLabel: 'Pending navigation' });
     fireEvent.click(screen.getByText('Choose artists'));
-    expect(screen.queryByRole('dialog', { name: 'Pending navigation' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Pending navigation' })).toBeInTheDocument();
+    // A delayed browser history traversal must not reveal the old page.
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    expect(screen.getByRole('dialog', { name: 'Pending navigation' })).toBeInTheDocument();
     expect(back).toHaveBeenCalledOnce();
     expect(navigate).not.toHaveBeenCalled();
     window.dispatchEvent(new PopStateEvent('popstate'));
-    await waitFor(() => expect(navigate).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    expect(navigate).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog', { name: 'Pending navigation' })).toBeNull();
     window.dispatchEvent(new PopStateEvent('popstate'));
     expect(navigate).toHaveBeenCalledOnce();
     back.mockRestore();

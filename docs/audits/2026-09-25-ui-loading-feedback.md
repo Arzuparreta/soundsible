@@ -5,9 +5,10 @@ componentes de carga y paneles de ajustes. Rama `fix/ui-navigation-feedback`.
 
 ## Hallazgos y cambios
 
-- El drawer retiraba su superficie solo después de `history.back()`. Ahora se
-  cierra visualmente al pulsar; la navegación sigue esperando a `popstate` para
-  preservar el historial. El cliente deja de parecer inmóvil durante esa espera.
+- El cierre del drawer y la selección se completan juntos al recibir
+  `popstate`: retirarlo antes exponía brevemente la vista anterior antes del
+  skeleton. Los cierres sin selección siguen siendo inmediatos. Se conserva
+  el historial y una prueba retrasa su resolución para cubrir la regresión.
 - Las rutas divididas en módulos usaban `lazy` sin fallback propio. `asyncPage`
   muestra el destino y su título mientras importa el código, comparte imports
   en vuelo y conserva únicamente el módulo, no la página ni datos de cuenta.
@@ -36,7 +37,7 @@ componentes de carga y paneles de ajustes. Rama `fix/ui-navigation-feedback`.
 
 | Superficie | Dependencia de datos | Feedback |
 | --- | --- | --- |
-| Menú móvil, sidebar, barra inferior | Cliente; historial al cerrar drawer | Cierre inmediato; destino con fallback común si falta el módulo |
+| Menú móvil, sidebar, barra inferior | Cliente; historial al cerrar drawer | Cierre sincronizado con la selección; destino con fallback común si falta el módulo |
 | Canciones, Favoritos, detalle de lista | Store de biblioteca sincronizado | `TrackList` ya tenía skeleton; se conserva |
 | Artistas de biblioteca | Catálogo sincronizado; montaje local de grid | Skeleton redondo durante primera carga y antes de montar |
 | Álbumes de biblioteca | API de álbumes por orden/filtro/revisión | Skeleton inicial, refresco ocupado, fallo con reintento |

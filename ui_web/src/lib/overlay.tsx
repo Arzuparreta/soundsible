@@ -123,10 +123,15 @@ export function openOverlay(
       closing = true;
       pending = afterClose;
       if (window.history.state?.__soundsibleSheet === id) {
-        // Release the surface now; only navigation waits for browser history.
-        closingEntry = entry;
-        setOverlays(list => list.filter(item => item.id !== id));
-        queueMicrotask(() => entry.returnFocus?.focus());
+        // A selection must keep the old page covered until popstate can
+        // commit its destination. Removing the drawer earlier exposes the
+        // previous view for however long browser history takes to settle.
+        // Plain dismissals have no destination and can release immediately.
+        if (!afterClose) {
+          closingEntry = entry;
+          setOverlays(list => list.filter(item => item.id !== id));
+          queueMicrotask(() => entry.returnFocus?.focus());
+        }
         window.history.back();
       }
       else onPop();
