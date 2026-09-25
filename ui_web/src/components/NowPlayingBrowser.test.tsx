@@ -267,6 +267,21 @@ describe('NowPlayingBrowser', () => {
     expect(storeMock.actions.addAutoSource).toHaveBeenCalledWith([storeMock.local], 'Favourites');
   });
 
+  it('keeps the downloaded-only filter in the library sort menu and shows it as a chip', () => {
+    render(() => <NowPlayingBrowser onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Library/ }));
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sort library' }));
+    const options = vi.mocked(openActionMenu).mock.calls.at(-1)![0];
+    const filter = options.sections!.find((section) => section.label === 'Show only')!;
+    filter.actions[0].onSelect();
+
+    const chip = screen.getByRole('button', { name: /^Downloaded/ });
+    fireEvent.click(chip);
+    expect(screen.queryByRole('button', { name: /^Downloaded/ })).not.toBeInTheDocument();
+  });
+
   it('requests a collection at the selected route seam and completes the picker', async () => {
     storeMock.state.favorites = ['local-1'];
     const onPlaced = vi.fn();

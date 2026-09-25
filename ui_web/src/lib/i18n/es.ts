@@ -54,8 +54,6 @@ export const es: Dict = {
     openAlbum: 'Ir al álbum',
     playNow: 'Reproducir ahora',
     referencePicking: 'Mezclar con la sesión',
-    filter: 'Filtrar',
-    downloaded: 'Descargadas',
     catalog: 'Explorar artista',
     library: 'En tu biblioteca',
   },
