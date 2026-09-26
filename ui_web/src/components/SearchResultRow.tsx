@@ -7,6 +7,7 @@ import { t } from '../lib/i18n';
 import { isSavedResult } from '../stores';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { savedFromSearchResult } from '../lib/saved';
+import { resultCredit } from '../lib/queueDiscovery';
 import { FavouriteButton } from './FavouriteButton';
 import { CollectionButton } from './CollectionButton';
 import { RadioIcon } from './icons';
@@ -45,7 +46,7 @@ export default function SearchResultRow(props: SearchResultRowProps) {
       : { background: 'var(--bg-raised)' };
 
   return (
-    <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.r.title} subtitle={props.r.channel} seed={props.r.id} cover={props.r.thumbnail}
+    <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.r.title} subtitle={resultCredit(props.r).artist} seed={props.r.id} cover={props.r.thumbnail}
       active={props.active} entry={entry()} onActivate={props.onPreview}
       onMenu={() => openEntryMenu(entry(), { onRadio: props.onRadio })} />}>
     <div
@@ -65,7 +66,7 @@ export default function SearchResultRow(props: SearchResultRowProps) {
       <div class={styles.cover} style={bg()} />
       <div class={styles.meta}>
         <span class={styles.title}>{props.r.title}</span>
-        <span class={styles.sub}>{props.r.channel}</span>
+        <span class={styles.sub}>{resultCredit(props.r).artist}</span>
       </div>
       <span class={styles.dur}>{fmtDur(props.r.duration)}</span>
       <Show when={isSavedResult(props.r)}>

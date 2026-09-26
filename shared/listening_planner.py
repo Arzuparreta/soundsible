@@ -14,6 +14,8 @@ import random
 import re
 from typing import Any
 
+from shared.music_identity import clean_artist
+
 LISTENING_INTENTS = {"autoplay", "radio", "auto_mode"}
 AUTO_PROFILES = {"familiar", "balanced", "explore"}
 PLANNER_POOLS = ("local", "related", "discovery")
@@ -36,10 +38,6 @@ _AUTO_TEMPERATURE = {
     "balanced": 0.32,
     "explore": 0.55,
 }
-_ARTIST_SUFFIX = re.compile(
-    r"(?:\s*[-–—]\s*)?(?:topic|official(?:\s+music)?|vevo)$",
-    re.IGNORECASE,
-)
 _SOURCE_RANK = {
     "official_audio": 70,
     "artist_audio": 65,
@@ -126,8 +124,9 @@ def _prefer_song_variants(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _artist_key(value: Any) -> str:
-    artist = _ARTIST_SUFFIX.sub("", _clean(value)).strip(" -–—")
-    return re.sub(r"\s+", " ", artist).casefold()
+    # The one channel-label rule every surface shares: "X (Oficial)", "X - Topic"
+    # and "X" must spend the same per-artist budget.
+    return clean_artist(value).casefold()
 
 
 def _artist_keys(value: Any) -> set[str]:

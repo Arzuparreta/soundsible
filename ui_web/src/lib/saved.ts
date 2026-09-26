@@ -1,5 +1,6 @@
 import type { CatalogItem, SavedEntry, SearchResult, Track } from '../types/music';
 import { catalogItemKeys, searchResultKeys, trackKeys } from './playbackIdentity';
+import { resultCredit } from './queueDiscovery';
 
 /**
  * Your collection: every song you have claimed, downloaded or not.
@@ -78,7 +79,7 @@ export function savedFromCatalogItem(item: CatalogItem): SavedEntry {
 
 /** An entry for an online (YouTube) search result. */
 export function savedFromSearchResult(result: SearchResult): SavedEntry {
-  return snapshot(searchResultKeys(result), result.title, result.channel ?? '', {
+  return snapshot(searchResultKeys(result), result.title, resultCredit(result).artist, {
     duration: result.duration,
     thumbnail: result.thumbnail,
   });

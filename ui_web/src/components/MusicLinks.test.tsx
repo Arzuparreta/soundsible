@@ -111,3 +111,10 @@ describe('music navigation', () => {
     expect(navigate).toHaveBeenCalledWith(album.getAttribute('href')!.slice(1));
   });
 });
+
+it('links an adapted YouTube performer while retaining the channel as provenance', () => {
+  render(() => <ArtistLinks music={catalogMusic({ id: 'youtube:43S_qfT6vpo', type: 'track',
+    source: 'youtube', title: 'La vereda', artist: 'Extremoduro',
+    raw: { artist_is_channel: false, source_artist: 'Extremoduro (Oficial)' } })} />);
+  expect(screen.getByRole('link', { name: 'Extremoduro' })).toHaveAttribute('href', '#/artist/Extremoduro?view=discover');
+});

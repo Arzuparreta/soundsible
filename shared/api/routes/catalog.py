@@ -25,6 +25,7 @@ from shared.api.memo import Memo
 from shared.database import DatabaseManager, instance_db
 from shared.library_search import search_text, search_title
 from shared.musicbrainz import normalize_recording_mbid
+from shared.music_identity import youtube_music_metadata
 from shared.providers import deezer
 from shared.hardening import rate_limit
 from shared.resolution_confidence import best_candidate, classify_confidence
@@ -878,6 +879,21 @@ def _local_catalog(query: str, limit: int) -> list[dict[str, Any]]:
     return out
 
 
+def _deezer_track_raw(deezer_id: str, artist_row: dict, album_row: dict) -> dict[str, Any]:
+    """The song's own id plus the artist and album pages it belongs to.
+
+    The artist and album ids go here rather than in ``external_ids``: those are
+    identity keys, and every song by one artist sharing one would collapse them
+    into a single search row. Playback carries these through to the artist and
+    album links, so nothing has to look the artist up by name again.
+    """
+    raw: dict[str, Any] = {"deezer_id": deezer_id}
+    for key, row in (("deezer_artist_id", artist_row), ("deezer_album_id", album_row)):
+        if row.get("id"):
+            raw[key] = str(row["id"])
+    return raw
+
+
 def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
     rows = deezer.rows("search", {"q": query, "limit": min(limit, 25)}, timeout=6)
     out: list[dict[str, Any]] = []
@@ -907,7 +923,7 @@ def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
                     popularity=float(row.get("rank") or 0),
                     external_ids={"deezer_id": deezer_id},
                     attribution_url=row.get("link") or "",
-                    raw={"deezer_id": deezer_id},
+                    raw=_deezer_track_raw(deezer_id, artist_row, album_row),
                 )
             )
         artist_id = str(artist_row.get("id") or "")
@@ -1048,8 +1064,9 @@ def _youtube_search(query: str, limit: int) -> list[dict[str, Any]]:
         if not isinstance(row, dict):
             continue
         video_id = _clean(row.get("id") or row.get("video_id") or row.get("videoId"), 32)
-        title = _clean(row.get("title"))
-        artist = _clean(row.get("channel") or row.get("uploader") or row.get("artist"))
+        music = youtube_music_metadata(row)
+        title = _clean(music["title"])
+        artist = _clean(music["artist"])
         if not video_id or not title:
             continue
         thumbnail = _clean(row.get("thumbnail"), 500)
@@ -1069,6 +1086,7 @@ def _youtube_search(query: str, limit: int) -> list[dict[str, Any]]:
                 playable=True,
                 raw={
                     "id": video_id,
+                    **music,
                     "title": title,
                     "artist": artist,
                     "duration": _duration(row.get("duration")),
@@ -1514,7 +1532,7 @@ def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | 
         in_library=in_library,
         playable=False,
         downloadable=not in_library,
-        raw={"deezer_id": deezer_id},
+        raw=_deezer_track_raw(deezer_id, artist_row, album_row),
     )
 
 

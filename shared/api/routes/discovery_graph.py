@@ -17,6 +17,7 @@ from flask import jsonify, request
 from shared.database import instance_db
 from shared.discovery_intelligence import rank_recommendation_rows
 from shared.hardening import rate_limit
+from shared.music_identity import adapt_youtube_rows
 
 from .discovery_bp import discovery_bp
 from .discovery_common import _get_api
@@ -215,7 +216,7 @@ def discover_feed():
         if cached is not None:
             ready.append({
                 "seed_track_id": tid,
-                "recs": rank_recommendation_rows(cached, source="discover")[:limit],
+                "recs": rank_recommendation_rows(adapt_youtube_rows(cached), source="discover")[:limit],
             })
         else:
             pending.append(tid)

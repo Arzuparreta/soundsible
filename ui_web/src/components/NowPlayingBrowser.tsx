@@ -38,6 +38,7 @@ import {
 import { coverUrl, trackCoverUrl } from '../lib/media';
 import { coverStyle } from '../lib/cover';
 import { parseYouTubeInput } from '../lib/youtube';
+import { resultCredit } from '../lib/queueDiscovery';
 import { ensureNodeFeed, nodeFeed, nodeLoading, refreshNodeFeed } from '../lib/nodeDiscover';
 import { albumSort, albumFilter, filterTracks, libraryFilter, setLibraryFilter, catalogArtists, librarySort, libraryTab, setLibrarySort, setLibraryTab, sortTracks } from '../lib/libraryView';
 import { artistKey, artistPath, albumPath } from '../lib/artistRoute';
@@ -125,8 +126,7 @@ function resultTrack(result: SearchResult): Track {
   return {
     id: result.id,
     title: result.title,
-    artist: result.channel ?? '',
-    artist_is_channel: true,
+    ...resultCredit(result),
     duration: result.duration,
     cover: result.thumbnail,
     source: 'preview',
@@ -1219,7 +1219,7 @@ function YoutubeRow(props: {
   return (
     <BrowserTrackRow
       title={props.result.title}
-      subtitle={props.result.channel ?? ''}
+      subtitle={resultCredit(props.result).artist}
       cover={props.result.thumbnail}
       seed={props.result.id}
       active={isPlayingResult(props.result)}

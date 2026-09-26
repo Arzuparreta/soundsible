@@ -53,8 +53,9 @@ export function libraryTrackMusic(track: Track): MusicMetadata {
 export function catalogMusic(item: CatalogItem): MusicMetadata {
   const owned = item.track_id ? state.library?.find((track) => track.id === item.track_id) : undefined;
   if (owned) return { ...trackMusic(owned), view: item.type === 'library_track' ? 'library' : 'discover' };
+  // An artist or album row is that entity; a song only points at its pages.
   const id = (key: string) => {
-    const value = item.external_ids?.[key];
+    const value = item.external_ids?.[key] ?? item.raw?.[key];
     return typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
   };
   return {
@@ -64,7 +65,7 @@ export function catalogMusic(item: CatalogItem): MusicMetadata {
     albumArtist: item.raw?.album_artist,
     view: item.type === 'library_track' ? 'library' : 'discover',
     deezerArtistId: id('deezer_artist_id'), deezerAlbumId: id('deezer_album_id'),
-    linkable: item.source !== 'youtube' && !isPodcastTrack(item.raw ?? {}),
+    linkable: (item.source !== 'youtube' || item.raw?.artist_is_channel === false) && !isPodcastTrack(item.raw ?? {}),
   };
 }
 

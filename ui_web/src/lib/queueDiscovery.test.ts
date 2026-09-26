@@ -36,6 +36,16 @@ describe('resultToTrack / libraryTrackFor', () => {
     });
   });
 
+  it('credits the performer the server read, keeping bare channels as channels', () => {
+    const read = { ...result, title: 'La vereda', channel: 'Extremoduro (Oficial)', artist: 'Extremoduro', artist_is_channel: false };
+    expect(resultToTrack(read)).toMatchObject({ artist: 'Extremoduro', artist_is_channel: false });
+    const bare = { ...result, channel: 'Music Mirror', artist: 'Music Mirror', artist_is_channel: true };
+    expect(resultToTrack(bare)).toMatchObject({ artist: 'Music Mirror', artist_is_channel: true });
+    // Cached before the server read performers: artist was the channel, with no flag.
+    const cached = { ...result, artist: 'Chan' };
+    expect(resultToTrack(cached)).toMatchObject({ artist: 'Chan', artist_is_channel: true });
+  });
+
   it('finds the downloaded twin of an online result', () => {
     expect(libraryTrackFor([other, libTrack], result)?.id).toBe('lib1');
     expect(libraryTrackFor([other], result)).toBeNull();

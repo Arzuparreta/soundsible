@@ -23,6 +23,7 @@ from shared.discovery_intelligence import (
     rank_recommendation_rows,
 )
 from shared.hardening import rate_limit
+from shared.music_identity import youtube_music_metadata
 from shared.providers import deezer
 from shared.text_utils import identity_key
 
@@ -387,13 +388,11 @@ def _cached_related_feed_candidates(
             if item_id in known_ids:
                 continue
             known_ids.add(item_id)
-            artist = str(row.get("channel") or row.get("uploader") or row.get("artist") or "")
             item = {
                 "id": item_id,
                 "media_type": "music_track",
                 "source": "youtube_related",
-                "title": str(row.get("title") or "Unknown"),
-                "artist": artist,
+                **youtube_music_metadata(row),
                 "duration": int(row.get("duration") or 0),
                 "cover": str(row.get("thumbnail") or ""),
                 "reason": f'Related to "{seed.title}".',

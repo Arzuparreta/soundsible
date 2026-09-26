@@ -151,3 +151,26 @@ describe('playing a catalog row in its collection', () => {
     expect(mocks.playTrack).toHaveBeenCalledWith(expect.objectContaining({ id: 'vid-Song 6' }));
   });
 });
+
+it('keeps Deezer artist and album identity through audio resolution', async () => {
+  mocks.resolve.mockResolvedValue({ video_id: '43S_qfT6vpo' });
+  mocks.playTrack.mockClear();
+  await playCatalogItem({ ...item(1), artist: 'Extremoduro', external_ids: { deezer_id: '707777' },
+    raw: { deezer_id: '707777', deezer_artist_id: '4163', deezer_album_id: '89128' } });
+  expect(mocks.playTrack).toHaveBeenCalledWith(expect.objectContaining({
+    id: '43S_qfT6vpo', artist: 'Extremoduro', artist_is_channel: false,
+    deezer_artist_id: '4163', deezer_album_id: '89128',
+  }));
+});
+
+it('plays an adapted YouTube row directly without another provider lookup', async () => {
+  mocks.resolve.mockClear();
+  mocks.playTrack.mockClear();
+  await playCatalogItem({ id: 'youtube:43S_qfT6vpo', type: 'track', source: 'youtube',
+    title: 'La vereda', artist: 'Extremoduro',
+    raw: { id: '43S_qfT6vpo', artist_is_channel: false, source_artist: 'Extremoduro (Oficial)' } });
+  expect(mocks.resolve).not.toHaveBeenCalled();
+  expect(mocks.playTrack).toHaveBeenCalledWith(expect.objectContaining({
+    artist: 'Extremoduro', artist_is_channel: false, source_artist: 'Extremoduro (Oficial)',
+  }));
+});

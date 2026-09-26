@@ -1635,6 +1635,7 @@ function djItemRef(track: Track): DjItemRef {
     source: track.source,
     title: track.title,
     artist: track.artist,
+    artist_is_channel: track.artist_is_channel,
     duration: track.duration,
   };
 }
@@ -4437,6 +4438,12 @@ function planItemTrack(item: ListeningPlanItem): Track {
       };
   return {
     ...base,
+    artist_is_channel: local ? false : item.artist_is_channel,
+    artists: local?.artists ?? item.artists ?? undefined,
+    deezer_artist_id: base.deezer_artist_id ?? item.deezer_artist_id ?? undefined,
+    deezer_album_id: base.deezer_album_id ?? item.deezer_album_id ?? undefined,
+    source_title: item.source_title,
+    source_artist: item.source_artist,
     youtube_id: item.youtube_id ?? base.youtube_id,
     discovery_youtube_id: item.discovery_youtube_id,
     playback_source_kind: item.playback_source_kind,
