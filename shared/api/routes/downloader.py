@@ -12,6 +12,7 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify
 
 from shared.api.memo import Memo
+from shared.music_identity import adapt_youtube_rows
 from shared.text_utils import sanitize_cli_message
 from shared.hardening import (
     SCOPE_DOWNLOAD_ADD,
@@ -185,7 +186,9 @@ def youtube_related():
         # then go on to extract again.
         persisted = db.get_related_mix(video_id)
         if persisted is not None:
-            return persisted[:limit]
+            # Mixes cached before extraction read the song out of the upload
+            # still say the channel is the artist.
+            return adapt_youtube_rows(persisted[:limit])
         results = _get_api()["get_downloader"](open_browser=False).downloader.get_related_videos(
             video_id, max_results=limit, enrich=enrich
         )

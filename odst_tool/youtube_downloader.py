@@ -27,6 +27,7 @@ import difflib
 from .audio_utils import AudioProcessor
 from .models import Track
 from shared.musicbrainz import normalize_recording_mbid
+from shared.music_identity import youtube_music_metadata
 from shared.stream_resolution import ResolvedStream, resolved_stream
 from shared.venv_utils import get_subprocess_python
 
@@ -36,6 +37,19 @@ _FALSE_ENV_VALUES = {"0", "false", "no", "off"}
 _YTDLP_SOCKET_TIMEOUT_DEFAULT = "30"
 _YTDLP_HTTP_CHUNK_SIZE_DEFAULT = "10M"
 _YTDLP_RETRY_SLEEP_DEFAULT = "exp=1:20"
+
+
+def _music_fields(entry: Dict[str, Any], channel: str) -> Dict[str, Any]:
+    """The song an extracted entry is, keeping `channel` as provenance only.
+
+    yt-dlp's `artist`/`artists` come from YouTube's own music metadata; say so,
+    so the channel is only read for a performer when the entry has none.
+    """
+    return youtube_music_metadata({
+        **entry,
+        "channel": channel,
+        "artist_metadata_explicit": bool(entry.get("artist") or entry.get("artists")),
+    })
 
 
 def _recording_mbid_from_metadata(metadata: Any) -> str | None:
@@ -1065,15 +1079,6 @@ class YouTubeDownloader:
         vid_raw = info.get("id") or _extract_video_id_from_url(url)
         vid_s = str(vid_raw).strip() if vid_raw is not None else ""
         title = (info.get("track") or info.get("title") or "").strip() or "Unknown"
-        raw_creator = info.get("artist") or info.get("channel") or info.get("uploader")
-        if raw_creator is None:
-            channel = ""
-        elif isinstance(raw_creator, str):
-            channel = raw_creator.strip()
-        elif isinstance(raw_creator, (list, tuple)):
-            channel = ", ".join(str(x) for x in raw_creator if x).strip()
-        else:
-            channel = str(raw_creator).strip()
         duration = int(info.get("duration") or 0)
         thumb = (info.get("thumbnail") or "").strip()
         if not thumb and vid_s and _is_valid_youtube_video_id(vid_s):
@@ -1084,6 +1089,7 @@ class YouTubeDownloader:
         elif not webpage:
             webpage = url
         out_id = vid_s if _is_valid_youtube_video_id(vid_s) else vid_raw
+        channel = str(info.get("channel") or info.get("uploader") or "").strip()
         return {
             "id": out_id,
             "title": title,
@@ -1091,7 +1097,7 @@ class YouTubeDownloader:
             "thumbnail": thumb,
             "webpage_url": webpage,
             "channel": channel,
-            "artist": channel,
+            **_music_fields(info, channel),
         }
 
     def search_youtube(
@@ -1103,8 +1109,10 @@ class YouTubeDownloader:
     ) -> List[Dict[str, Any]]:
         """
         Search YouTube or YouTube Music with plain text. Returns yt-dlp-derived dicts:
-        id, title, duration, thumbnail, webpage_url, channel, artist (same value from
-        channel, uploader, or artist — whichever yt-dlp provides).
+        id, duration, thumbnail, webpage_url and channel (channel, uploader or
+        artist — whichever yt-dlp provides), plus the song fields of
+        `youtube_music_metadata`: title and artist are the song, source_title
+        the upload's own title.
         No filtering — pass-through for UI; a proper search layer can be added later.
         use_ytmusic=True: https://music.youtube.com/search?q=...#songs with extract_flat
         (fast; channel/artist may be empty). Full per-video extract was very slow (~tens of
@@ -1181,7 +1189,7 @@ class YouTubeDownloader:
                 'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
                 'webpage_url': webpage_url,
                 'channel': creator,
-                'artist': creator,
+                **_music_fields(entry, creator),
             }
 
         def enrich_missing_creators(items: List[Dict[str, Any]]) -> None:
@@ -1219,6 +1227,7 @@ class YouTubeDownloader:
                     if creator:
                         item["artist"] = creator
                         item["channel"] = creator
+                        item.update(youtube_music_metadata(item))
 
         out: List[Dict[str, Any]] = []
         try:
@@ -1260,12 +1269,15 @@ class YouTubeDownloader:
         query = f"{title} {artist}".strip()
         if not query:
             return []
-        return self.search_youtube(
+        rows = self.search_youtube(
             query,
             max_results=max_results,
             use_ytmusic=False,
             enrich_missing=False,
         )
+        # Matching scores the upload itself — its official/lyrics/version
+        # markers — so it gets the title as uploaded, not the song title.
+        return [{**row, "title": row.get("source_title") or row.get("title")} for row in rows]
 
     def get_related_videos(
         self,
@@ -1284,8 +1296,7 @@ class YouTubeDownloader:
              several seconds. Used as a fallback when RD mix isn't available.
           3. RD mix without flat extraction (full per-entry extract) — last resort.
 
-        Returns same shape as search_youtube: id, title, duration, thumbnail,
-        webpage_url, channel, artist.
+        Returns same shape as search_youtube.
         """
         if not _is_valid_youtube_video_id(seed_video_id):
             return []
@@ -1306,7 +1317,7 @@ class YouTubeDownloader:
                 'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
                 'webpage_url': webpage_url,
                 'channel': channel,
-                'artist': channel,
+                **_music_fields(entry, channel),
             }
 
         def _try_extract(ydl_opts: dict, url: str) -> List[Dict[str, Any]]:

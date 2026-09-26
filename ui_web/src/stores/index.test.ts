@@ -3898,3 +3898,16 @@ describe('preparation ownership after generated queue cleanup', () => {
     expect(preparationOwners[1].ids).toEqual([]);
   });
 });
+
+it('carries catalog navigation and provenance from a DJ plan into its queue', async () => {
+  const response = autoPlan(['43S_qfT6vpo']);
+  Object.assign(response.items[0], { artist: 'Extremoduro', artist_is_channel: false,
+    deezer_artist_id: '4163', deezer_album_id: '89128', source_artist: 'Extremoduro (Oficial)' });
+  const { actions, state } = await loadStore({ planDjQueue: vi.fn().mockResolvedValue(response) });
+  actions.playFrom([t1], 0);
+  actions.enterAutoMode();
+  await vi.waitFor(() => expect(state.playback.queue).toHaveLength(2));
+  expect(state.playback.queue[1]).toMatchObject({ artist: 'Extremoduro', artist_is_channel: false,
+    deezer_artist_id: '4163', deezer_album_id: '89128', source_artist: 'Extremoduro (Oficial)' });
+  actions.exitAutoMode();
+});

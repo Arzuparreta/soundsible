@@ -73,6 +73,7 @@ interface RawResult {
   channel?: string;
   uploader?: string;
   artist?: string;
+  artist_is_channel?: boolean;
   duration?: number;
   thumbnail?: string;
   recommendation_identity?: string;
@@ -86,6 +87,8 @@ function normalizeResult(r: RawResult): SearchResult {
     id: r.id ?? r.videoId ?? r.video_id ?? '',
     title: r.title ?? '',
     channel: r.channel ?? r.uploader ?? r.artist,
+    artist: r.artist,
+    artist_is_channel: r.artist_is_channel,
     duration: typeof r.duration === 'number' ? r.duration : undefined,
     thumbnail: r.thumbnail,
     recommendation_identity: r.recommendation_identity,
@@ -250,6 +253,7 @@ export interface DjItemRef {
   source?: string;
   title: string;
   artist: string;
+  artist_is_channel?: boolean;
   album?: string;
   duration?: number;
 }
@@ -263,6 +267,14 @@ export interface ListeningPlanItem {
   canonical_identity?: string | null;
   title: string;
   artist: string;
+  /** `artist` is only the uploading channel's name, not a known performer. */
+  artist_is_channel?: boolean;
+  artists?: string[] | null;
+  deezer_artist_id?: string | null;
+  deezer_album_id?: string | null;
+  /** The upload as YouTube names it, kept as provenance. */
+  source_title?: string;
+  source_artist?: string;
   album?: string;
   duration?: number;
   cover?: string;
