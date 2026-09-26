@@ -8,6 +8,7 @@ import {
   MIN_LINEAR,
   PEAK_CEILING_DBTP,
   TARGET_LUFS,
+  UNMEASURED_GAIN_DB,
   albumReference,
   gainToLinear,
   levelFor,
@@ -27,20 +28,20 @@ describe('levelGainDb', () => {
   it('brings a modern loud master down to the target', () => {
     // -9 LUFS with 1 dB of headroom: the peak ceiling does not bind, so the
     // full correction applies and it lands exactly on target.
-    expect(levelGainDb(-9, -1)).toBeCloseTo(-5, 5);
+    expect(levelGainDb(-9, -1)).toBeCloseTo(-9, 5);
   });
 
   it('attenuates a clipped loudness-war master and pulls its peak back under', () => {
     const gain = levelGainDb(-5.5, 1.4);
-    expect(gain).toBeCloseTo(-8.5, 5);
+    expect(gain).toBeCloseTo(-12.5, 5);
     // Its true peak drops to -7.1 dBTP, so its intersample clipping stops
     // reaching the output at all. Strictly better than leaving it alone.
     expect(1.4 + gain).toBeLessThan(PEAK_CEILING_DBTP);
   });
 
   it('boosts a quiet recording that has the headroom for it', () => {
-    // -24 LUFS peaking at -8 dBTP: wants +10, capped at +6 by the boost limit.
-    expect(levelGainDb(-24, -8)).toBeCloseTo(MAX_GAIN_DB, 5);
+    // -30 LUFS peaking at -14 dBTP: wants +12, capped at +6 by the boost limit.
+    expect(levelGainDb(-30, -14)).toBeCloseTo(MAX_GAIN_DB, 5);
   });
 
   it('refuses the part of a boost that would breach the peak ceiling', () => {
@@ -51,7 +52,24 @@ describe('levelGainDb', () => {
   });
 
   it('leaves a track already at the target essentially alone', () => {
-    expect(Math.abs(levelGainDb(-14.2, -1.2))).toBeLessThan(0.5);
+    expect(Math.abs(levelGainDb(-18.2, -1.2))).toBeLessThan(0.5);
+  });
+
+  it('brings a loud master and a quiet, full-scale one to the same level', () => {
+    // The reason the target is -18. Most files peak at or above full scale, so
+    // the quiet one cannot be raised at all. At -14 the loud one was pulled
+    // down to -14 and the quiet one stayed at -17.5, 3.5 dB apart; at -18 both
+    // are corrected downwards and meet.
+    const loud = -8 + levelGainDb(-8, 0.6);
+    const quiet = -17.5 + levelGainDb(-17.5, -1);
+    expect(loud).toBeCloseTo(TARGET_LUFS, 5);
+    expect(quiet).toBeCloseTo(TARGET_LUFS, 1);
+  });
+
+  it('reaches the target from the loudest master a file can hold', () => {
+    // Clipped into a near-square wave, about +2 LUFS. The cut floor must not
+    // leave it standing above everything else.
+    expect(2 + levelGainDb(2, 3)).toBeCloseTo(TARGET_LUFS, 5);
   });
 
   it('never exceeds its own bounds, for any input', () => {
@@ -165,10 +183,25 @@ describe('levelFor', () => {
     expect(levelFor(track('a', -8, -1), { ...ctx, enabled: false })).toBe(1);
   });
 
-  it('is exactly 1 for an unmeasured track', () => {
-    expect(levelFor(track('a'), ctx)).toBe(1);
+  it('gives an unmeasured track the fixed unmeasured cut', () => {
+    // Unmeasured audio sits roughly at the old -14 target, so it keeps the place
+    // against the measured library it always had instead of jumping above it.
+    expect(UNMEASURED_GAIN_DB).toBe(-4);
+    const unmeasured = gainToLinear(UNMEASURED_GAIN_DB);
+    expect(levelFor(track('a'), ctx)).toBe(unmeasured);
+    expect(levelFor(track('a', null, null), ctx)).toBe(unmeasured);
+    // A reading the rule cannot stand behind counts as no reading at all.
+    expect(levelFor(track('a', -70, -20), ctx)).toBe(unmeasured);
+    expect(levelFor(track('a', -14, 99), ctx)).toBe(unmeasured);
+  });
+
+  it('is exactly 1 with no track at all', () => {
     expect(levelFor(null, ctx)).toBe(1);
     expect(levelFor(undefined, ctx)).toBe(1);
+  });
+
+  it('is exactly 1 for a measured track already at the target', () => {
+    expect(levelFor(track('a', TARGET_LUFS, -6), ctx)).toBe(1);
   });
 
   it('uses the track gain by default', () => {
@@ -219,8 +252,8 @@ describe('levelFor', () => {
 });
 
 describe('constants', () => {
-  it('targets the streaming standard', () => {
-    expect(TARGET_LUFS).toBe(-14);
+  it('targets the ReplayGain 2.0 reference', () => {
+    expect(TARGET_LUFS).toBe(-18);
     expect(PEAK_CEILING_DBTP).toBe(-1);
   });
 });

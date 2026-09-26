@@ -78,11 +78,11 @@ def test_attenuating_by_six_db_moves_both_numbers_by_six(tmp_path, tone):
 def test_the_policy_levels_two_real_files_to_the_target(tmp_path):
     # Mirror of the player's rule (ui_web/src/lib/loudness.ts) applied to real
     # measurements. Both tones sit above the target, so neither hits the +6 dB
-    # boost cap and both must land on -14 LUFS.
-    target, ceiling = -14.0, -1.0
+    # boost cap and both must land on -18 LUFS.
+    target, ceiling = -18.0, -1.0
 
     def gain_db(m):
-        return min(max(min(target - m.lufs, 6.0), -15.0), ceiling - m.peak_dbtp)
+        return min(max(min(target - m.lufs, 6.0), -20.0), ceiling - m.peak_dbtp)
 
     loudish, louder = tmp_path / "a.flac", tmp_path / "b.flac"
     _synth(loudish, "sine=frequency=1000:duration=8:sample_rate=44100", "volume=10dB")
@@ -96,19 +96,21 @@ def test_the_policy_levels_two_real_files_to_the_target(tmp_path):
     assert b.lufs + gain_db(b) == pytest.approx(target, abs=0.4)
 
 
-def test_the_boost_cap_binds_on_very_quiet_material(tmp_path, tone):
+def test_the_boost_cap_binds_on_very_quiet_material(tmp_path):
     # Two quiet files stay their original distance apart because both are capped
     # at +6 dB. That is the cap doing its job, not the policy failing: beyond
     # +6 dB we would be amplifying noise floor and codec artefacts.
-    target, ceiling = -14.0, -1.0
+    target, ceiling = -18.0, -1.0
 
     def gain_db(m):
-        return min(max(min(target - m.lufs, 6.0), -15.0), ceiling - m.peak_dbtp)
+        return min(max(min(target - m.lufs, 6.0), -20.0), ceiling - m.peak_dbtp)
 
-    quieter = tmp_path / "quieter.flac"
-    _synth(quieter, "sine=frequency=1000:duration=8:sample_rate=44100", "volume=-6dB")
+    # Both well over 6 dB below the target, whatever level the synth defaults to.
+    quiet, quieter = tmp_path / "quiet.flac", tmp_path / "quieter.flac"
+    _synth(quiet, "sine=frequency=1000:duration=8:sample_rate=44100", "volume=-6dB")
+    _synth(quieter, "sine=frequency=1000:duration=8:sample_rate=44100", "volume=-12dB")
 
-    loud, soft = measure_loudness(tone), measure_loudness(quieter)
+    loud, soft = measure_loudness(quiet), measure_loudness(quieter)
     assert loud is not None and soft is not None
     assert gain_db(loud) == pytest.approx(6.0, abs=0.01)
     assert gain_db(soft) == pytest.approx(6.0, abs=0.01)

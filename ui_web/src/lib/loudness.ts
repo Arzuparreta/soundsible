@@ -5,20 +5,39 @@
  * anything plays, and it must be provable in isolation rather than inferred
  * from the mixer's behaviour.
  *
- * The rule is ReplayGain 2.0's, which is also Spotify's and Apple's: correct
- * towards a fixed target, then refuse any part of that correction that would
- * push the file's own true peak past a ceiling. That second step is what makes
- * clipping impossible *without* a limiter — no compression, no pumping, nothing
- * added to the signal that was not in the recording.
+ * The rule is ReplayGain 2.0's: correct towards a fixed target, then refuse
+ * any part of that correction that would push the file's own true peak past a
+ * ceiling. That second step is what makes clipping impossible *without* a
+ * limiter — no compression, no pumping, nothing added to the signal that was
+ * not in the recording. Every result is one constant gain per track, chosen
+ * before it starts; nothing here ever moves the volume inside a song.
  */
 
 import type { Track } from '../types/music';
 
-/** The de-facto streaming target: Spotify, YouTube, Tidal and Amazon all sit
- * here, so a listener's ears arrive already calibrated to it. It is also
- * roughly where YouTube previews land, which keeps an unmeasured preview from
- * jumping against a measured library track. */
-export const TARGET_LUFS = -14;
+/** ReplayGain 2.0's reference level, and the one the Subsonic API already
+ * reports gains against.
+ *
+ * Chosen over the -14 streaming services use because they reach -14 with a
+ * limiter, and this rule has none. Without one, a track can only be raised as
+ * far as its own peak allows, and most files peak at or above full scale — at
+ * -14 a quiet or dynamic recording could not be raised at all while every
+ * modern master was pulled down to meet it, leaving the two several dB apart.
+ * At -18 nearly every track is corrected *downwards*, which the peak never
+ * limits, so they genuinely meet. The cost is a quieter output at the same
+ * volume setting, which the listener's volume knob recovers once. */
+export const TARGET_LUFS = -18;
+
+/** Where unmeasured audio — a YouTube preview, a podcast, a file the sweep has
+ * not reached — is assumed to sit. YouTube previews land roughly here, and it
+ * is where the target used to be, so an unmeasured track keeps exactly the
+ * relationship to the measured library it had before the target moved rather
+ * than jumping 4 dB above it. */
+export const UNMEASURED_ASSUMED_LUFS = -14;
+
+/** The fixed correction for unmeasured audio. Always a cut, and a cut never
+ * needs a peak reading: it can only move the peak further from the ceiling. */
+export const UNMEASURED_GAIN_DB = Math.min(TARGET_LUFS - UNMEASURED_ASSUMED_LUFS, 0);
 
 /** Output ceiling. AES TD1004's number, and far enough below full scale to
  * absorb the intersample overshoot a browser's resampler can add on top of an
@@ -34,8 +53,9 @@ export const PEAK_CEILING_DBTP = -1;
 export const MAX_GAIN_DB = 6;
 
 /** The most extreme loudness-war masters integrate around -4 LUFS and need
- * about -10 dB. Nothing real reaches this. */
-export const MIN_GAIN_DB = -15;
+ * about -14 dB; a master clipped into a near-square wave integrates around
+ * +2 LUFS and needs -20. Nothing real reaches past this. */
+export const MIN_GAIN_DB = -20;
 
 /** The meter's own floor: -70 LUFS is the absolute gate reporting "nothing
  * here", not a reading of the programme. */
@@ -64,26 +84,35 @@ function usable(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+/** Whether a reading is one this rule can stand behind: both numbers present,
+ * finite, and physically possible. */
+export function isMeasured(lufs: unknown, peakDbtp: unknown): boolean {
+  if (!usable(lufs) || !usable(peakDbtp)) return false;
+  if (lufs <= UNMEASURABLE_LUFS || lufs > MAX_VALID_LUFS) return false;
+  return peakDbtp >= MIN_VALID_PEAK_DBTP && peakDbtp <= MAX_VALID_PEAK_DBTP;
+}
+
 /**
  * How many dB to correct this track by. `0` for anything not measured.
  *
- * Never a guess: a track nobody has measured, a reading outside the physically
- * possible, or a value that is not a number at all all come back as no
- * correction rather than an estimate.
+ * Never an estimate of the track itself: a track nobody has measured, a
+ * reading outside the physically possible, or a value that is not a number at
+ * all all come back as no correction. `levelFor` decides what unmeasured audio
+ * plays at.
  */
 export function levelGainDb(lufs: unknown, peakDbtp: unknown): number {
-  if (!usable(lufs) || !usable(peakDbtp)) return 0;
-  if (lufs <= UNMEASURABLE_LUFS || lufs > MAX_VALID_LUFS) return 0;
-  if (peakDbtp < MIN_VALID_PEAK_DBTP || peakDbtp > MAX_VALID_PEAK_DBTP) return 0;
+  if (!isMeasured(lufs, peakDbtp)) return 0;
+  const loudness = lufs as number;
+  const peak = peakDbtp as number;
 
-  const wanted = Math.min(Math.max(TARGET_LUFS - lufs, MIN_GAIN_DB), MAX_GAIN_DB);
+  const wanted = Math.min(Math.max(TARGET_LUFS - loudness, MIN_GAIN_DB), MAX_GAIN_DB);
   // Give up whatever part of the correction would put this file's own true peak
   // over the ceiling. On a loud master this never binds — it is already being
   // attenuated. On a quiet, dynamic recording it binds hard, and that is the
   // right answer: you cannot make a 20 LU-dynamic transfer as loud as a limited
   // pop master without a limiter, and inserting one is the audible false
   // correction this whole design exists to avoid.
-  const gain = Math.min(wanted, PEAK_CEILING_DBTP - peakDbtp);
+  const gain = Math.min(wanted, PEAK_CEILING_DBTP - peak);
   if (!Number.isFinite(gain)) return 0;
   // Re-clamp: a pathological peak could otherwise drive the result below the
   // floor the first clamp established.
@@ -145,10 +174,12 @@ export interface LevelContext {
 }
 
 /**
- * The linear gain for one track. Exactly `1` whenever there is any doubt.
+ * The linear gain for one track, held constant for as long as it plays.
  *
- * Returning literal 1 matters: it is what makes turning the setting off restore
- * the previous output bit for bit, rather than approximately.
+ * Exactly `1` when levelling is off: returning literal 1 is what makes turning
+ * the setting off restore the previous output bit for bit, rather than
+ * approximately. An unmeasured track gets `UNMEASURED_GAIN_DB`, so it keeps its
+ * place relative to the measured library instead of standing out above it.
  */
 export function levelFor(track: (Track & LoudnessFacts) | null | undefined, ctx: LevelContext): number {
   if (!track || !ctx.enabled) return 1;
@@ -163,6 +194,9 @@ export function levelFor(track: (Track & LoudnessFacts) | null | undefined, ctx:
     }
   }
 
+  if (!isMeasured(track.loudness_lufs, track.loudness_peak_dbtp)) {
+    return UNMEASURED_GAIN_DB === 0 ? 1 : gainToLinear(UNMEASURED_GAIN_DB);
+  }
   const db = levelGainDb(track.loudness_lufs, track.loudness_peak_dbtp);
   return db === 0 ? 1 : gainToLinear(db);
 }
