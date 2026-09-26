@@ -48,7 +48,8 @@ test('custom bar persists and settings remain accessible after removal', async (
   await nav.getByRole('link', { name: 'Ajustes' }).click();
   await page.getByRole('button', { name: /Accesibilidad/ }).click();
   await page.locator('summary').filter({ hasText: 'Barra inferior' }).click();
-  await expect(page.getByLabel('Posición 2')).toHaveValue('/search');
+  await expect(page.getByLabel('Posición 2')).toHaveValue('/favourites');
+  await expect(page.getByLabel('Posición 3')).toHaveValue('/search');
   await page.getByLabel('Posición 4').selectOption('/live');
   await expect(page.getByLabel('Posición 4')).toHaveValue('/live');
   await page.getByRole('button', { name: 'Añadir destino' }).click();
