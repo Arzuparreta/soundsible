@@ -84,7 +84,12 @@
   }
 }
 
-.card { position: relative; }
-.activate { position: absolute; inset: 0; background: transparent; border: 0; border-radius: inherit; cursor: pointer; }
+/* The card's link sits above its contents, not behind them. Anything laid
+   after it that is positioned, transformed or translucent paints over a
+   layer-less overlay and takes the tap — the album cards lost their artwork
+   that way (#233). The artist credit rises above the link, and the card
+   keeps both layers to itself. */
+.card { position: relative; isolation: isolate; }
+.activate { position: absolute; inset: 0; z-index: 1; background: transparent; border: 0; border-radius: inherit; cursor: pointer; }
 .activate:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
-.card a:not(.activate) { position: relative; z-index: 1; }
+.card a:not(.activate) { position: relative; z-index: 2; }

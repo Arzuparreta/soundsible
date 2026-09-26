@@ -622,8 +622,9 @@
 }
 
 /* The card's link sits above its contents: the cover is positioned, and would
-   otherwise catch every tap on the artwork. Artist credits rise above it. */
-.entityCard { position: relative; }
+   otherwise catch every tap on the artwork. Artist credits rise above it, and
+   the card keeps both layers to itself. */
+.entityCard { position: relative; isolation: isolate; }
 .entityActivate { position: absolute; inset: 0; z-index: 1; background: transparent; border: 0; border-radius: inherit; cursor: pointer; }
 .entityActivate:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
 .entityCard a:not(.entityActivate) { position: relative; z-index: 2; }
