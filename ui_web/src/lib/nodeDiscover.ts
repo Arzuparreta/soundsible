@@ -182,6 +182,8 @@ function normalizeRec(r: Record<string, unknown>): SearchResult {
     id: String(r.id ?? r.video_id ?? r.videoId ?? ''),
     title: String(r.title ?? ''),
     channel: r.channel ? String(r.channel) : r.uploader ? String(r.uploader) : r.artist ? String(r.artist) : undefined,
+    artist: r.artist ? String(r.artist) : undefined,
+    artist_is_channel: typeof r.artist_is_channel === 'boolean' ? r.artist_is_channel : undefined,
     duration: typeof r.duration === 'number' ? r.duration : undefined,
     thumbnail: r.thumbnail ? String(r.thumbnail) : undefined,
   };

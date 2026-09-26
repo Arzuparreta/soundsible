@@ -21,13 +21,21 @@ export function queueIndexOf(queue: Track[], track: Track): number {
   );
 }
 
+/** Who an online result is by. The server reads the performer out of the
+ * upload ("Artist - Song", "Artist - Topic", "Artist (Oficial)"); a row it could
+ * not read, or one cached before it did, is credited to its channel. */
+export function resultCredit(result: SearchResult): Pick<Track, 'artist' | 'artist_is_channel'> {
+  return result.artist
+    ? { artist: result.artist, artist_is_channel: result.artist_is_channel ?? true }
+    : { artist: result.channel ?? '', artist_is_channel: true };
+}
+
 /** Preview Track for an online result (streams via the preview endpoint). */
 export function resultToTrack(result: SearchResult): Track {
   return {
     id: result.id,
     title: result.title,
-    artist: result.channel ?? '',
-    artist_is_channel: true,
+    ...resultCredit(result),
     duration: result.duration,
     cover: result.thumbnail,
     source: 'preview',

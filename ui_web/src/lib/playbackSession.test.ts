@@ -271,3 +271,11 @@ describe('context continuation in a session', () => {
       .toEqual(['Record', undefined, 'Record']);
   });
 });
+
+it('restores provider navigation and original channel without re-resolving the track', () => {
+  const song = entry('43S_qfT6vpo', { artist: 'Extremoduro', artist_is_channel: false,
+    deezer_artist_id: '4163', deezer_album_id: '89128', source_artist: 'Extremoduro (Oficial)' });
+  const snapshot = buildPlaybackSession(input({ queue: [song], index: 0 }))!;
+  const restored = readPlaybackSession(JSON.parse(JSON.stringify(snapshot)))!;
+  expect(restored.queue[0]).toMatchObject(song);
+});

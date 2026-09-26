@@ -42,7 +42,10 @@ export function itemToTrack(item: CatalogItem): Track | null {
       id: previewId,
       title: String(raw.title || item.title),
       artist: String(raw.artist || itemArtist(item)),
-      artist_is_channel: true,
+      artist_is_channel: raw.artist_is_channel ?? true,
+      artists: raw.artists,
+      source_title: raw.source_title,
+      source_artist: raw.source_artist,
       album: typeof raw.album === 'string' ? raw.album : item.album,
       duration: typeof raw.duration === 'number' ? raw.duration : item.duration,
       youtube_id: typeof raw.youtube_id === 'string' ? raw.youtube_id : undefined,
@@ -199,7 +202,7 @@ export async function resolveCatalogTrack(item: CatalogItem, signal?: AbortSigna
   actions.linkCatalogItem(item.id, resolved.video_id);
   const music = catalogMusic(item);
   return {
-    id: resolved.video_id, title: item.title, artist, album: item.album,
+    id: resolved.video_id, title: item.title, artist, album: item.album, artist_is_channel: false,
     artists: item.raw?.artists, album_artist: item.raw?.album_artist,
     deezer_artist_id: music.deezerArtistId, deezer_album_id: music.deezerAlbumId,
     duration: item.duration, cover: item.cover, source: 'preview', originKeys: catalogItemKeys(item),

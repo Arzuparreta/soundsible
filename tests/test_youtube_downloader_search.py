@@ -70,17 +70,13 @@ def test_ytmusic_search_enriches_flat_entries_with_artist(monkeypatch, tmp_path)
     results = downloader.search_youtube("bohemian rhapsody", max_results=1, use_ytmusic=True)
 
     assert asked == ["bSnlKl_PoQU"]
-    assert results == [
-        {
-            "id": "bSnlKl_PoQU",
-            "title": "Bohemian Rhapsody",
-            "duration": 0,
-            "thumbnail": "https://img.youtube.com/vi/bSnlKl_PoQU/mqdefault.jpg",
-            "webpage_url": "https://www.youtube.com/watch?v=bSnlKl_PoQU",
-            "channel": "Queen - Topic",
-            "artist": "Queen - Topic",
-        }
-    ]
+    assert len(results) == 1
+    assert results[0]["channel"] == "Queen - Topic"
+    assert results[0]["artist"] == "Queen"
+    assert results[0]["source_artist"] == "Queen - Topic"
+    assert results[0]["playback_source_kind"] == "official_audio"
+    assert results[0]["duration"] == 0
+
 
 
 def test_ytmusic_search_can_skip_blocking_artist_enrichment(monkeypatch, tmp_path):
@@ -433,3 +429,31 @@ def test_get_related_videos_falls_back_to_ytmusic_search_when_rd_mix_empty(monke
     # First call was RD flat, second was YTMusic search.
     assert len(instances) == 2
     assert "music.youtube.com/search" in instances[1].urls[0]
+
+
+def test_search_and_mix_preserve_explicit_performer_with_one_extraction(monkeypatch, tmp_path):
+    calls = []
+
+    class Extractor(_FakeYoutubeDL):
+        def extract_info(self, url, download=False):
+            calls.append(url)
+            return {'entries': [{'id': '43S_qfT6vpo', 'title': 'La vereda de la puerta de atrás',
+                                 'artist': 'Extremoduro', 'channel': 'Warner Music Spain', 'duration': 244}]}
+
+    monkeypatch.setattr(yd.yt_dlp, 'YoutubeDL', Extractor)
+    downloader = yd.YouTubeDownloader(output_dir=tmp_path)
+    for result in [downloader.search_youtube('Extremoduro', use_ytmusic=False, enrich_missing=False),
+                   downloader.get_related_videos('43S_qfT6vpo', enrich=False)]:
+        assert result[0]['artist'] == 'Extremoduro'
+        assert result[0]['channel'] == 'Warner Music Spain'
+        assert result[0]['artist_metadata_explicit'] is True
+    assert len(calls) == 2
+
+
+def test_match_scoring_still_receives_original_upload_title(monkeypatch, tmp_path):
+    downloader = yd.YouTubeDownloader(output_dir=tmp_path)
+    monkeypatch.setattr(downloader, 'search_youtube', lambda *args, **kwargs: [{
+        'id': '43S_qfT6vpo', 'title': 'Song', 'source_title': 'Artist - Song (Official Video)',
+        'channel': 'Artist', 'artist': 'Artist',
+    }])
+    assert downloader.search_match_candidates('Artist', 'Song')[0]['title'] == 'Artist - Song (Official Video)'

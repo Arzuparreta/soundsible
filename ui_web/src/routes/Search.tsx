@@ -16,6 +16,7 @@ import { coverUrl } from '../lib/media';
 import { artistPath, albumPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
+import { resultCredit } from '../lib/queueDiscovery';
 import { prefetchPreviews } from '../lib/prefetch';
 import { SearchDiscovery } from '../components/SearchDiscovery';
 import { t as tr } from '../lib/i18n';
@@ -232,7 +233,8 @@ export default function Search() {
         if (current !== requestId) return;
         if (!result || result.id !== capsule.yt) throw new Error('shared-track-unavailable');
         const title = result.title || capsule.title;
-        const artist = result.channel || capsule.artist;
+        const credit = resultCredit(result);
+        const artist = credit.artist || capsule.artist;
         setSharedItem({
           id: `youtube:${capsule.yt}`,
           type: 'track',
@@ -248,6 +250,7 @@ export default function Search() {
             id: capsule.yt,
             title,
             artist,
+            artist_is_channel: credit.artist_is_channel,
             album: capsule.album,
             duration: result.duration ?? capsule.duration,
             youtube_id: capsule.yt,
@@ -637,8 +640,7 @@ export default function Search() {
     actions.playTrack({
       id: result.id,
       title: result.title,
-      artist: result.channel ?? '',
-      artist_is_channel: true,
+      ...resultCredit(result),
       duration: result.duration,
       source: 'preview',
       cover: result.thumbnail,

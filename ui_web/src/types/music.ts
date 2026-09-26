@@ -7,6 +7,8 @@ export interface Track {
   artist: string;
   /** The display credit is an uploader, not a musical performer. */
   artist_is_channel?: boolean;
+  source_title?: string;
+  source_artist?: string;
   artist_id?: string;
   album_id?: string;
   deezer_artist_id?: string;
@@ -109,8 +111,13 @@ export interface LyricsResponse {
 
 export interface SearchResult {
   id: string;
+  /** The song title; the server strips an upload's "(Official Video)" etc. */
   title: string;
   channel?: string;
+  /** The performer the server read out of the upload, when it could. */
+  artist?: string;
+  /** `artist` is only the channel's name: there was nothing better to read. */
+  artist_is_channel?: boolean;
   duration?: number;
   thumbnail?: string;
   recommendation_identity?: string;
