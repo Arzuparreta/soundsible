@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProgramTransportEvent } from '../lib/audio';
 import type { Track } from '../types/music';
+import { UNMEASURED_GAIN_DB, gainToLinear } from '../lib/loudness';
+
+/** What levelling plays anything unmeasured at: the fixtures carry no loudness
+ * readings, so every track here gets this rather than unity. */
+const UNMEASURED_LEVEL = gainToLinear(UNMEASURED_GAIN_DB);
 
 const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
 const t2: Track = { id: 't2', title: 'Two', artist: 'Artist', duration: 200 };
@@ -443,7 +448,7 @@ describe('Solid store library and playback resume', () => {
     expect(state.playback.currentTrack?.id).toBe('t1');
     expect(state.playback.isPlaying).toBe(false);
     expect(state.playback.currentTime).toBe(37);
-    expect(audioService.prime).toHaveBeenCalledWith('/stream/t1', 37, 1);
+    expect(audioService.prime).toHaveBeenCalledWith('/stream/t1', 37, UNMEASURED_LEVEL);
   });
 
   it('keeps other-device playback as an explicit resume banner', async () => {
@@ -484,7 +489,7 @@ describe('Solid store library and playback resume', () => {
     initStore();
     await flush();
 
-    expect(audioService.prime).toHaveBeenCalledWith('/stream/t1', 37, 1);
+    expect(audioService.prime).toHaveBeenCalledWith('/stream/t1', 37, UNMEASURED_LEVEL);
     (deck as unknown as { currentSrc: string }).currentSrc = '/stream/t1';
     fireDeckEvent('error');
 
@@ -570,7 +575,7 @@ describe('volume levelling', () => {
     loudness_lufs: -6, loudness_peak_dbtp: -1,
   };
 
-  it('attenuates a measured track and leaves an unmeasured one alone', async () => {
+  it('attenuates a measured track and gives an unmeasured one the fixed cut', async () => {
     const { actions, audioService } = await loadStore({
       getLibrary: vi.fn().mockResolvedValue({
         tracks: [measured], playlists: {}, settings: {}, podcast_subscriptions: [],
@@ -580,12 +585,13 @@ describe('volume levelling', () => {
 
     actions.playTrack(measured);
     expect(audioService.load).toHaveBeenLastCalledWith('/stream/loud', expect.any(Number));
-    // -6 LUFS against a -14 target, with 0 dB of headroom to the ceiling.
-    expect(audioService.load.mock.lastCall?.[1]).toBeCloseTo(10 ** (-8 / 20), 4);
+    // -6 LUFS against a -18 target, with 0 dB of headroom to the ceiling.
+    expect(audioService.load.mock.lastCall?.[1]).toBeCloseTo(10 ** (-12 / 20), 4);
 
     actions.playTrack(t2);
-    // Nothing has measured t2, so it plays exactly as it always did.
-    expect(audioService.load).toHaveBeenLastCalledWith('/stream/t2', 1);
+    // Nothing has measured t2, so it keeps its place against the measured
+    // library: the fixed unmeasured cut, not unity.
+    expect(audioService.load).toHaveBeenLastCalledWith('/stream/t2', UNMEASURED_LEVEL);
   });
 
   it('reads the measurement from the library when the queue entry predates it', async () => {
@@ -775,7 +781,7 @@ describe('Playback load coalescing', () => {
     actions.playTrack(other);
 
     expect(audioService.load).toHaveBeenCalledTimes(2);
-    expect(audioService.load).toHaveBeenLastCalledWith('/preview/previewid02', 1);
+    expect(audioService.load).toHaveBeenLastCalledWith('/preview/previewid02', UNMEASURED_LEVEL);
     expect(state.playback.currentTrack?.id).toBe('previewid02');
   });
 
@@ -1627,7 +1633,7 @@ describe('Auto Mode store contract', () => {
     expect(state.autoMode.active).toBe(true);
     expect(state.playback.queue.map((track) => track.id)).toEqual(['opening', 'after-opening']);
     expect(planDjQueue.mock.calls[0][0]).not.toHaveProperty('seed');
-    expect(audioService.load).toHaveBeenCalledWith('/preview/opening', 1);
+    expect(audioService.load).toHaveBeenCalledWith('/preview/opening', UNMEASURED_LEVEL);
   });
 
   it.each([false, true])('retries source opening automatically unless the session exited: %s', async (exit) => {
@@ -2212,7 +2218,7 @@ describe('Radio mode', () => {
     await actions.startRadio(seed2);
 
     expect(audioService.load).toHaveBeenCalledTimes(1);
-    expect(audioService.load).toHaveBeenCalledWith('/preview/seed2', 1);
+    expect(audioService.load).toHaveBeenCalledWith('/preview/seed2', UNMEASURED_LEVEL);
     expect(state.playback.radioMode).toBe(true);
     expect(state.playback.radioSeedId).toBe('seed2');
     expect(state.playback.queue.map((t) => t.id)).toEqual(['seed2', 'mix02']);
@@ -2871,7 +2877,7 @@ describe('the end of a track', () => {
     deck.currentTime = 72;
     fireDeckEvent('ended');
 
-    expect(audioService.recover).toHaveBeenCalledWith('/stream/t1', 72, 1);
+    expect(audioService.recover).toHaveBeenCalledWith('/stream/t1', 72, UNMEASURED_LEVEL);
     expect(state.playback.currentTrack?.id).toBe('t1');
     expect(state.playback.phase).toBe('recovering');
   });
@@ -3132,7 +3138,7 @@ describe('cross-device sessions', () => {
     expect(state.playback.queue.map((entry) => entry.id)).toEqual(queue);
     expect(state.playback.isPlaying).toBe(false);
     expect(state.playback.currentTime).toBe(42);
-    expect(audioService.prime).toHaveBeenCalledWith('/stream/current', 42, 1);
+    expect(audioService.prime).toHaveBeenCalledWith('/stream/current', 42, UNMEASURED_LEVEL);
     // Reopening the app lands where the listener left the app, not on the
     // player: the session is back in the shell, waiting, not on screen.
     expect(nowPlayingOpen()).toBe(false);

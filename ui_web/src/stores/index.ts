@@ -213,9 +213,10 @@ function trackPrepared(track: Track): boolean {
 /**
  * The volume levelling for one queue entry, as a linear gain.
  *
- * Always `1` unless there is a measurement to stand on: an unmeasured track, a
- * preview, a podcast or the setting switched off all play exactly as they
- * always did.
+ * One constant gain, decided before the track starts. With the setting off it
+ * is exactly `1`. An unmeasured track, a preview or a podcast gets the fixed
+ * unmeasured cut, which keeps it where it always sat against the measured
+ * library.
  *
  * The library lookup matters. A queue entry is a snapshot taken by
  * `createQueueEntry` when the track was enqueued, so a song measured *after*
