@@ -33,7 +33,7 @@ music import. Some settings belong to each person and some only to an admin;
 
 ### Navigation preferences
 
-The mobile bottom bar starts with **Library, Search, Favourites, Settings**.
+The mobile bottom bar starts with **Library, Favourites, Search, Settings**.
 Open **Settings → Appearance → Bottom bar** to choose between three and five
 sections and set their order. Selecting a section already assigned to another
 position swaps the two. Changes apply immediately and are saved in this browser

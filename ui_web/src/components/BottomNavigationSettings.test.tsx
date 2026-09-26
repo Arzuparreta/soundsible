@@ -8,9 +8,9 @@ beforeEach(async () => { await setLocale('es'); setBottomNavigation(defaultBotto
 describe('bottom navigation editor', () => {
   it('swaps occupied destinations, adds up to five and removes down to three', () => {
     render(() => <BottomNavigationSettings />);
-    expect(screen.getByLabelText('Posición 2')).toHaveValue('/search');
+    expect(screen.getByLabelText('Posición 2')).toHaveValue('/favourites');
     fireEvent.change(screen.getByLabelText('Posición 1'), { target: { value: '/settings' } });
-    expect(bottomNavigation()).toEqual(['/settings', '/search', '/favourites', '/']);
+    expect(bottomNavigation()).toEqual(['/settings', '/favourites', '/search', '/']);
     expect(screen.getByLabelText('Posición 4')).toHaveValue('/');
     expect(screen.getByLabelText('Posición 1')).toHaveValue('/settings');
     fireEvent.click(screen.getByRole('button', { name: 'Añadir destino' }));

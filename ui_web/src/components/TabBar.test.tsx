@@ -50,7 +50,7 @@ describe('mobile tab bar', () => {
   it('exposes the four default destinations', () => {
     const view = renderTabs();
     expect([...view.container.querySelector('nav')!.children].map((tab) => tab.textContent?.trim()))
-      .toEqual(['Biblioteca', 'Buscar', 'Favoritos', 'Ajustes']);
+      .toEqual(['Biblioteca', 'Favoritos', 'Buscar', 'Ajustes']);
   });
 
   it('marks settings subroutes active', () => {
