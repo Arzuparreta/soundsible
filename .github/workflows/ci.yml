@@ -317,7 +317,13 @@ jobs:
           ${{ github.event_name == 'schedule' && '--no-cache' || '--cache-from type=gha,scope=docker-arm64 --cache-to type=gha,mode=max,scope=docker-arm64' }}
           --pull --target runtime --provenance=false --output type=cacheonly .
 
-  ui_accessibility:
+  ui_accessibility_profiles:
+    # Keep one Playwright worker per runner: sharing a runner previously made
+    # browsers crash. Separate machines let all four existing profiles run at once.
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium-mobile, webkit-mobile, chromium-desktop, webkit-desktop]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -349,14 +355,26 @@ jobs:
           pactl load-module module-null-sink sink_name=soundsible
           pactl set-default-sink soundsible
       - name: Validate interface scaling
-        run: npm run test:ui-scale
+        run: npm run test:ui-scale -- --project=${{ matrix.project }}
       - name: Upload browser report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-accessibility-report
+          name: ui-accessibility-report-${{ matrix.project }}
           path: ui_web/playwright-report
           retention-days: 14
+
+  # Preserve the existing check name and require every profile to succeed,
+  # including when a dependency fails or is cancelled.
+  ui_accessibility:
+    needs: ui_accessibility_profiles
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all browser profiles
+        env:
+          RESULT: ${{ needs.ui_accessibility_profiles.result }}
+        run: test "$RESULT" = success
 
   # Everything above proves the image works. This is what makes it reachable.
   # Until this job existed the only way to install Soundsible was to clone the

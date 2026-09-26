@@ -272,9 +272,7 @@ _SAVED = {
 def test_saves_fold_only_the_rows_they_change(library, folds, monkeypatch, change):
     search = library(_base())
     edit, expected = _SAVED[change]
-    proofs = []
-    original = library_search._stored_fingerprint
-    monkeypatch.setattr(library_search, "_stored_fingerprint", lambda conn: proofs.append(1) or original(conn))
+    proofs = _count_fingerprints(monkeypatch, search.db.db_path)
     folds.clear()
     edit(search.metadata.tracks)
     search.db.replace_library(search.metadata)
@@ -284,6 +282,35 @@ def test_saves_fold_only_the_rows_they_change(library, folds, monkeypatch, chang
     assert _state(search.db) == (1, library_search.VERSION)
     for query in ("brand new", "radio", "ra", "various"):
         search.check(query, index=True)
+
+
+def _count_fingerprints(monkeypatch, path):
+    calls = []
+    original = library_search._stored_fingerprint
+    expected_path = str(Path(path).resolve())
+
+    def counted(conn):
+        # Background work can initialize other user/instance databases while
+        # this spy is installed. Only measure the library under test.
+        databases = conn.execute("PRAGMA database_list").fetchall()
+        if any(name == "main" and filename == expected_path for _, name, filename in databases):
+            calls.append(1)
+        return original(conn)
+
+    monkeypatch.setattr(library_search, "_stored_fingerprint", counted)
+    return calls
+
+
+def test_fingerprint_counter_ignores_other_databases(library, monkeypatch, tmp_path):
+    search = library(_base())
+    proofs = _count_fingerprints(monkeypatch, search.db.db_path)
+    # Schema setup also fingerprints an empty index, just as background work
+    # initializing another user's database can do during the measured save.
+    DatabaseManager(str(tmp_path / "other.db"))
+    assert proofs == []
+    search.metadata.tracks[4].album_artist = "Brand New Artist"
+    search.db.replace_library(search.metadata)
+    assert proofs == [1]
 
 
 def test_a_saved_rekey_folds_only_the_new_id(library, folds):
