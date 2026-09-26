@@ -682,6 +682,7 @@ Useful routes:
 | `GET` | `/api/podcasts/subscriptions` | Subscribed feeds |
 | `POST` | `/api/podcasts/subscribe` | Subscribe by feed data |
 | `GET` | `/api/podcasts/feeds/<feed_id>/episodes` | Episodes for a feed |
+| `GET` | `/api/podcasts/episodes-by-url?rss_url=...` | A feed's show (`title`, `author`, `image_url`) and episodes, without subscribing |
 | `POST` | `/api/podcasts/enclosure/peek` | Create a stream token for an enclosure |
 | `GET` | `/api/podcasts/stream/<token>` | Stream podcast audio |
 

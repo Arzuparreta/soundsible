@@ -1270,6 +1270,13 @@ export const api = {
       `/api/podcasts/feeds/${encodeURIComponent(feedId)}/episodes`,
       { timeoutMs: 20000 },
     ),
+  /** A show and its episodes read straight from its feed, for a show opened
+   * before it is followed. */
+  browsePodcastFeed: (rssUrl: string) =>
+    request<{ rss_url?: string; show?: { title?: string; author?: string; image_url?: string }; episodes?: PodcastEpisode[] }>(
+      `/api/podcasts/episodes-by-url?rss_url=${encodeURIComponent(rssUrl)}`,
+      { timeoutMs: 20000 },
+    ),
   searchPodcasts: async (q: string, signal?: AbortSignal): Promise<PodcastSearchResult[]> => {
     const data = await request<{ results?: RawPodcastRow[] }>(
       `/api/discovery/podcasts/search?q=${encodeURIComponent(q)}&limit=20`,

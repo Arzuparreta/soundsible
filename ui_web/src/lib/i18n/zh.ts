@@ -794,6 +794,7 @@ export const zh: Dict = {
     noResults: '无结果。',
     subscribing: '…',
     subscribe: '订阅',
+    subscribeFailed: '无法订阅此播客。',
   },
   podcastShow: {
     fallbackTitle: '播客',

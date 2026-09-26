@@ -113,6 +113,7 @@ function Player() {
       <Route path="/playlists" component={Playlists} />
       <Route path="/playlists/:name" component={PlaylistDetail} />
       <Route path="/podcasts" component={Podcasts} />
+      <Route path="/podcasts/feed" component={PodcastShow} />
       <Route path="/podcasts/:id" component={PodcastShow} />
       <Route path="/live" component={Live} />
       <Route path="/downloads" component={Downloads} />

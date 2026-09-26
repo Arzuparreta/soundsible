@@ -419,6 +419,7 @@
  * song in the list. */
 .card {
   position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -480,7 +481,7 @@
 
 .cardControls {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -660,7 +661,12 @@
   .row[data-current]::before { background: transparent; }
 }
 
-.main { position: relative; }
-.playButton { position: absolute; inset: 0; border: 0; border-radius: inherit; background: transparent; color: inherit; cursor: pointer; }
+/* The play target sits above the row's contents rather than behind them. The
+   playing row's equaliser bars are transformed, which paints them over a
+   layer-less overlay: a click on them did nothing (the same fault as #233).
+   Artist links, and a card's own controls, rise above it; rows and cards keep
+   those layers to themselves. */
+.main { position: relative; isolation: isolate; }
+.playButton { position: absolute; inset: 0; z-index: 1; border: 0; border-radius: inherit; background: transparent; color: inherit; cursor: pointer; }
 .playButton:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
-.main a { position: relative; z-index: 1; }
+.main a { position: relative; z-index: 2; }

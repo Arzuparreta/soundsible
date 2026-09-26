@@ -71,7 +71,7 @@ import {
 import { liveHandoffPending } from '../lib/liveHandoff';
 import { shuffled } from '../lib/shuffle';
 import type { Track, SavedEntry, PlaylistMap, LibrarySettings } from '../types/music';
-import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
+import type { PodcastShowInfo, PodcastEpisode } from '../types/podcast';
 import type { DownloadEvent } from '../types/download';
 import {
   applyVisualPreferences,
@@ -3311,7 +3311,7 @@ export const actions = {
   },
 
   /** Enqueue a podcast episode for download. */
-  async downloadEpisode(ep: PodcastEpisode, sub: PodcastSubscription | null): Promise<void> {
+  async downloadEpisode(ep: PodcastEpisode, sub: PodcastShowInfo | null): Promise<void> {
     const t = toast.loading(tr('toast.addingDownloads'));
     try {
       await api.enqueuePodcastEpisode({

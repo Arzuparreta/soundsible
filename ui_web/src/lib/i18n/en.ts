@@ -801,6 +801,7 @@ export const en = {
     noResults: 'No results.',
     subscribing: '…',
     subscribe: 'Subscribe',
+    subscribeFailed: 'Couldn’t subscribe to this podcast.',
   },
   podcastShow: {
     fallbackTitle: 'Podcast',

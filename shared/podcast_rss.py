@@ -8,7 +8,7 @@ import ipaddress
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 import feedparser
@@ -140,9 +140,31 @@ def _parse_duration(val: Any) -> int:
     return 0
 
 
+def parse_feed_show(feed: Any, feed_url: str = "") -> Dict[str, str]:
+    """The show a parsed feed describes: what a page needs to head its episodes
+    when all it was handed is the feed's URL. The author falls back to the
+    subtitle the way a subscription records it, so a show reads the same before
+    and after it is followed."""
+    return {
+        "title": (getattr(feed, "title", None) or "").strip(),
+        "author": (getattr(feed, "author", None) or getattr(feed, "subtitle", None) or "").strip(),
+        "image_url": parse_feed_image(feed, feed_url),
+    }
+
+
+def parse_feed(feed_xml: bytes, feed_url: str) -> Tuple[Dict[str, str], List[Dict[str, Any]]]:
+    """The show and its episodes from one parse. A long-running show's feed is
+    megabytes of XML, and parsing it twice to get both was the norm."""
+    parsed = feedparser.parse(feed_xml)
+    return parse_feed_show(getattr(parsed, "feed", None), feed_url), _episodes(parsed, feed_url)
+
+
 def parse_feed_episodes(feed_xml: bytes, feed_url: str) -> List[Dict[str, Any]]:
     """Parse RSS/Atom; return episode dicts for UI and download queue."""
-    parsed = feedparser.parse(feed_xml)
+    return _episodes(feedparser.parse(feed_xml), feed_url)
+
+
+def _episodes(parsed: Any, feed_url: str) -> List[Dict[str, Any]]:
     # Per-episode artwork is optional and most shows never set it, so an episode
     # without its own inherits the show's. Nothing downstream has another source
     # to fall back to: the episode dict is the only artwork the player, the

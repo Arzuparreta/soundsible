@@ -126,6 +126,31 @@
 }
 }
 
+/* Following is the one thing a show opened from the directory asks of you, so
+   it carries the accent the unfollow button deliberately does not. */
+.follow {
+  flex-shrink: 0;
+  min-height: var(--control-h);
+  padding: 0 var(--space-md);
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-on-accent);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.follow:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+@media (hover: hover) and (pointer: fine) {
+.follow:not(:disabled):hover {
+  background: var(--accent-hover);
+}
+}
+
 .scroll {
   flex: 1;
   min-height: 0;
@@ -178,6 +203,7 @@
   .epDownloaded,
   .back,
   .unsub,
+  .follow,
   .epPlay {
     min-height: 36px;
     height: 36px;

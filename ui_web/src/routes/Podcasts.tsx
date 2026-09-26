@@ -5,14 +5,14 @@ import { openContextMenu } from '../lib/contextMenu';
 import { createMemo, createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
-import { state, actions } from '../stores';
+import { state } from '../stores';
 import { ensureDiscover, topPodcasts, revalidating } from '../lib/discover';
 import { t } from '../lib/i18n';
 import type { PodcastSearchResult } from '../types/podcast';
 import styles from './Podcasts.module.css';
 import { neutralCoverStyle } from '../lib/cover';
-import { attachContextMenu } from '../lib/contextMenu';
 import type { ActionMenuOptions } from '../components/ActionMenu';
+import { followPodcast, podcastPath } from '../lib/podcasts';
 import { menuIcons } from '../components/icons';
 import { toast } from '../lib/toast';
 import { SkeletonCards, SkeletonRows } from '../components/Skeleton';
@@ -25,7 +25,10 @@ function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
 }
 
-/** Podcasts: your subscriptions grid + iTunes directory search → subscribe. */
+/** Podcasts: your subscriptions grid + iTunes directory search. Every show
+ * opens its page, followed or not; following is a choice made there, in the
+ * row's menu or with the search row's own button — never a side effect of
+ * opening one. */
 export default function Podcasts() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -39,6 +42,23 @@ export default function Podcasts() {
   const recommendedPodcasts = createMemo(() =>
     topPodcasts().filter((podcast) => !subscribedFeeds().has(podcast.feed_url)),
   );
+
+  /** Open a show from its card or row. Touch activates on release like every
+   * other list, and a held press opens the show's menu instead of it. */
+  const openTap = (href: () => string, menu?: () => ActionMenuOptions) => ({
+    ...createResponsiveTap({
+      onTap: (event) => {
+        event.preventDefault();
+        navigate(href());
+      },
+      onLongPress: menu ? () => openContextMenu(menu()) : undefined,
+    }),
+    onContextMenu: (event: MouseEvent) => {
+      if (!menu) return;
+      event.preventDefault();
+      openContextMenu(menu(), event);
+    },
+  });
 
   let aborter: AbortController | undefined;
   let debounce: number | undefined;
@@ -88,24 +108,9 @@ export default function Podcasts() {
   const subscribe = async (r: PodcastSearchResult) => {
     setSubscribing((s) => new Set(s).add(r.feed_url));
     try {
-      await api.subscribePodcast({
-        rss_url: r.feed_url,
-        title: r.title,
-        author: r.author,
-        image_url: r.image_url,
-        itunes_collection_id: r.itunes_collection_id,
-      });
-      void api.emitDiscoveryEvent('podcast_subscribed', {
-        media_type: 'podcast_show',
-        podcast_feed_id: r.feed_url,
-        podcast_show_title: r.title,
-        podcast_author: r.author,
-        itunes_collection_id: r.itunes_collection_id,
-        source: 'podcast_directory',
-      }).catch(() => {});
-      await actions.syncLibrary();
+      await followPodcast(r);
     } catch {
-      // ignore
+      toast.error(t('podcasts.subscribeFailed'));
     } finally {
       setSubscribing((s) => {
         const n = new Set(s);
@@ -115,14 +120,24 @@ export default function Podcasts() {
     }
   };
 
-  const recommendationMenu = (p: PodcastSearchResult): ActionMenuOptions | null => {
-    if (!p.recommendation_identity) return null;
+  const subscribeAction = (p: PodcastSearchResult) => {
+    const subscribed = subscribedFeeds().has(p.feed_url);
+    return {
+      icon: subscribed ? menuIcons.check() : menuIcons.subscribe(),
+      label: t(subscribed ? 'podcasts.subscribed' : 'podcasts.subscribe'),
+      disabled: subscribed || subscribing().has(p.feed_url),
+      onSelect: () => void subscribe(p),
+    };
+  };
+
+  const recommendationMenu = (p: PodcastSearchResult): ActionMenuOptions => {
     return {
       title: p.title,
       subtitle: p.author,
       actions: [
+        subscribeAction(p),
         ...(p.reason ? [{ icon: menuIcons.info(), label: p.reason, disabled: true, onSelect: () => {} }] : []),
-        {
+        ...(p.recommendation_identity ? [{
           icon: menuIcons.feedback(),
           label: t('trackActions.notInterested'),
           onSelect: () => {
@@ -140,7 +155,7 @@ export default function Podcasts() {
               });
             }).catch(() => toast.error(t('trackActions.feedbackFailed')));
           },
-        },
+        }] : []),
       ],
     };
   };
@@ -184,14 +199,8 @@ export default function Podcasts() {
                   <For each={state.podcastSubscriptions}>
                     {(s) => {
                       const href = `/podcasts/${encodeURIComponent(s.id)}`;
-                      const tap = createResponsiveTap({
-                        onTap: (event) => {
-                          event.preventDefault();
-                          navigate(href);
-                        },
-                      });
                       return (
-                        <A href={href} class={styles.card} data-pressable {...tap}>
+                        <A href={href} class={styles.card} data-pressable {...openTap(() => href)}>
                           <div class={styles.cover} style={neutralCoverStyle(s.image_url)} />
                           <span class={styles.name}>{s.title}</span>
                           <span class={styles.author}>{s.author}</span>
@@ -206,29 +215,14 @@ export default function Podcasts() {
                 <h2 class={styles.sectionTitle}>{t('podcasts.top')}</h2>
                 <div class={styles.grid}>
                   <For each={recommendedPodcasts()}>
-                    {(p) => {
-                      const disabled = () => subscribedFeeds().has(p.feed_url) || subscribing().has(p.feed_url);
-                      const tap = createResponsiveTap({
-                        disabled,
-                        onTap: () => void subscribe(p),
-                      });
-                      return (
-                        <button
-                          class={styles.cardBtn}
-                          data-pressable
-                          ref={(el) => attachContextMenu(el, () => recommendationMenu(p))}
-                          type="button"
-                          disabled={disabled()}
-                          {...tap}
-                        >
-                          <div class={styles.cover} style={neutralCoverStyle(p.image_url)} />
-                          <span class={styles.name}>{p.title}</span>
-                          <span class={styles.author}>
-                            {subscribedFeeds().has(p.feed_url) ? t('podcasts.subscribed') : p.author}
-                          </span>
-                        </button>
-                      );
-                    }}
+                    {(p) => (
+                      <A href={podcastPath(p)} class={styles.card} data-pressable
+                        {...openTap(() => podcastPath(p), () => recommendationMenu(p))}>
+                        <div class={styles.cover} style={neutralCoverStyle(p.image_url)} />
+                        <span class={styles.name}>{p.title}</span>
+                        <span class={styles.author}>{p.author}</span>
+                      </A>
+                    )}
                   </For>
                 </div>
               </Show>
@@ -272,21 +266,16 @@ export default function Podcasts() {
                 return (
                   <Show when={!mobileListLayout()} fallback={<MusicListRow title={r.title} subtitle={r.author}
                     seed={r.feed_url} cover={r.image_url} busy={disabled()} busyLabel={t('podcasts.subscribing')}
-                    onActivate={subscribedFeeds().has(r.feed_url) ? () => {
-                      const sub = state.podcastSubscriptions.find((sub) => sub.rss_url === r.feed_url);
-                      if (sub) navigate(`/podcasts/${sub.id}`);
-                    } : undefined}
-                    onMenu={() => openContextMenu({ title: r.title, subtitle: r.author, actions: [
-                      { icon: subscribedFeeds().has(r.feed_url) ? menuIcons.check() : menuIcons.subscribe(),
-                        label: t(subscribedFeeds().has(r.feed_url) ? 'podcasts.subscribed' : 'podcasts.subscribe'),
-                        disabled: disabled() || subscribedFeeds().has(r.feed_url), onSelect: () => void subscribe(r) },
-                    ] })} />}>
+                    onActivate={() => navigate(podcastPath(r))}
+                    onMenu={() => openContextMenu({ title: r.title, subtitle: r.author, actions: [subscribeAction(r)] })} />}>
                   <div class={styles.row}>
-                    <div class={styles.rowCover} style={neutralCoverStyle(r.image_url)} />
-                    <div class={styles.meta}>
-                      <span class={styles.title}>{r.title}</span>
-                      <span class={styles.sub}>{r.author}</span>
-                    </div>
+                    <A href={podcastPath(r)} class={styles.rowOpen} data-pressable {...openTap(() => podcastPath(r))}>
+                      <div class={styles.rowCover} style={neutralCoverStyle(r.image_url)} />
+                      <div class={styles.meta}>
+                        <span class={styles.title}>{r.title}</span>
+                        <span class={styles.sub}>{r.author}</span>
+                      </div>
+                    </A>
                     <Show
                       when={!subscribedFeeds().has(r.feed_url)}
                       fallback={<span class={styles.subbed}>{t('podcasts.subscribed')}</span>}

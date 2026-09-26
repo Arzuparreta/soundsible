@@ -70,7 +70,9 @@
    contents rather than behind them: the cover is positioned (its image fills
    it), and a positioned sibling painted after the link would swallow every tap
    on the artwork. The artist credit is a link of its own, so it is lifted
-   above this one. */
+   above this one. The card isolates the two layers: they order the tile's own
+   contents and nothing else on the page. */
+.card { isolation: isolate; }
 .card > .activate { position: absolute; inset: 0; z-index: 1; min-width: 0; min-height: 0; border-radius: var(--radius-md); }
 .card > .activate:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; text-decoration: none; }
 .card a:not(.activate) { position: relative; z-index: 2; }
