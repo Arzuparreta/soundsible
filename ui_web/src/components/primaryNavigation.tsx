@@ -100,7 +100,7 @@ export const libraryShortcuts: PrimaryNavItem[] = [
 ];
 
 export const navigationItems = [...primaryNavigation, ...libraryShortcuts];
-export const defaultBottomNavigation = ['/', '/search', '/favourites', '/settings'];
+export const defaultBottomNavigation = ['/', '/favourites', '/search', '/settings'];
 export function mobileNavGroup(path: string): string {
   if (['/', '/library'].includes(path) || /^\/(album|artist)\//.test(path)) return '/';
   return navigationItems.find(item => item.href !== '/' && (path === item.href || path.startsWith(`${item.href}/`)))?.href ?? path;
