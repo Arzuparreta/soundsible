@@ -807,6 +807,7 @@ export const fr: Dict = {
     noResults: 'Aucun résultat.',
     subscribing: '…',
     subscribe: "S'abonner",
+    subscribeFailed: 'Impossible de s’abonner à ce podcast.',
   },
   podcastShow: {
     fallbackTitle: 'Podcast',

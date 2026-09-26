@@ -1,4 +1,4 @@
-from shared.podcast_rss import parse_feed_episodes, parse_feed_image
+from shared.podcast_rss import parse_feed, parse_feed_episodes, parse_feed_image
 
 import feedparser
 
@@ -77,3 +77,20 @@ def test_show_cover_reads_itunes_and_plain_rss_images():
 
     assert parse_feed_image(feedparser.parse(_feed()).feed) == ""
     assert parse_feed_image(None) == ""
+
+
+def test_one_parse_yields_the_show_and_its_episodes():
+    xml = _feed(SHOW_ART + "<itunes:author>Host Name</itunes:author>", _item("ep1") + _item("ep2"))
+    show, episodes = parse_feed(xml, "https://example.com/rss")
+    assert show == {"title": "My Show", "author": "Host Name", "image_url": "https://cdn.example.com/show.jpg"}
+    assert [e["guid"] for e in episodes] == ["ep1", "ep2"]
+    assert episodes == parse_feed_episodes(xml, "https://example.com/rss")
+
+
+def test_show_without_an_author_is_credited_to_its_subtitle():
+    # The same fallback a subscription records, so a show opened from the
+    # directory reads the same before and after it is followed.
+    show, _ = parse_feed(_feed("<itunes:subtitle>A weekly show</itunes:subtitle>"), "https://example.com/rss")
+    assert show["author"] == "A weekly show"
+    show, _ = parse_feed(_feed(), "https://example.com/rss")
+    assert show == {"title": "My Show", "author": "", "image_url": ""}

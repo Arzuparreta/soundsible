@@ -7,6 +7,10 @@ export interface PodcastSubscription {
   itunes_collection_id?: string | null;
 }
 
+/** A show as a page that opens it needs it: followed, or opened from the
+ * directory before it is, when it has no subscription `id` yet. */
+export type PodcastShowInfo = Omit<PodcastSubscription, 'id'> & { id?: string };
+
 export interface PodcastEpisode {
   guid: string;
   title: string;

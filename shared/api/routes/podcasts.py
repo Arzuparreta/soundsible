@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.models import LibraryMetadata, PodcastSubscription
 from shared.podcast_preview_token import decode_enclosure_stream_token, mint_enclosure_stream_token
-from shared.podcast_rss import assert_safe_http_url, fetch_episodes_for_feed
+from shared.podcast_rss import assert_safe_http_url, fetch_episodes_for_feed, fetch_feed_body, parse_feed
 
 logger = logging.getLogger(__name__)
 
@@ -77,29 +77,11 @@ def subscribe():
     image_guess = (data.get("image_url") or "").strip()
     itunes_id = (data.get("itunes_collection_id") or "").strip()
 
-    from shared.podcast_rss import fetch_feed_body, parse_feed_episodes, parse_feed_image
-
     try:
-        body = fetch_feed_body(rss_url)
-        eps = parse_feed_episodes(body, rss_url)
-        parsed = None
-        try:
-            import feedparser
-
-            parsed = feedparser.parse(body)
-        except Exception:
-            parsed = None
-        feed_title = title_guess
-        feed_author = author_guess
-        feed_image = image_guess
-        if parsed and getattr(parsed, "feed", None):
-            fd = parsed.feed
-            if not feed_title:
-                feed_title = (getattr(fd, "title", None) or "").strip() or "Podcast"
-            if not feed_author:
-                feed_author = (getattr(fd, "author", None) or getattr(fd, "subtitle", None) or "").strip()
-            if not feed_image:
-                feed_image = parse_feed_image(fd, rss_url)
+        show, eps = parse_feed(fetch_feed_body(rss_url), rss_url)
+        feed_title = title_guess or show["title"]
+        feed_author = author_guess or show["author"]
+        feed_image = image_guess or show["image_url"]
     except Exception as e:
         logger.warning("Podcast subscribe fetch failed: %s", e)
         return jsonify({"error": f"Could not load feed: {e}"}), 400
@@ -201,8 +183,9 @@ def feed_episodes(feed_id: str):
 @rate_limit("podcasts_episodes_browse", limit=120, window_sec=60)
 def episodes_by_feed_url():
     """
-    Episodes for an RSS URL without a subscription (browse / preview).
-    Same SSRF rules as subscribe; does not write library metadata.
+    A show and its episodes from an RSS URL without a subscription, so a show
+    found in the directory can be opened before it is followed. Same SSRF rules
+    as subscribe; does not write library metadata.
     """
     rss_url = (request.args.get("rss_url") or "").strip()
     if not rss_url:
@@ -212,11 +195,11 @@ def episodes_by_feed_url():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     try:
-        episodes = fetch_episodes_for_feed(rss_url)
+        show, episodes = parse_feed(fetch_feed_body(rss_url), rss_url)
     except Exception as e:
         logger.warning("RSS browse fetch failed: %s", e)
         return jsonify({"error": str(e)}), 502
-    return jsonify({"rss_url": rss_url, "episodes": episodes})
+    return jsonify({"rss_url": rss_url, "show": show, "episodes": episodes})
 
 
 @podcasts_bp.route("/api/podcasts/enclosure/peek", methods=["POST"])

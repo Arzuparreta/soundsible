@@ -76,24 +76,13 @@
   gap: var(--space-lg);
 }
 
-.card,
-.cardBtn {
+.card {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
   text-decoration: none;
   text-align: left;
   color: inherit;
-}
-
-.cardBtn {
-  padding: 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-}
-.cardBtn:disabled {
-  cursor: default;
 }
 
 .cover {
@@ -110,8 +99,7 @@
 
 @media (hover: hover) and (pointer: fine) {
 
-.card:hover .cover,
-.cardBtn:hover .cover {
+.card:hover .cover {
   border-color: var(--hairline-strong);
   box-shadow: var(--shadow-2);
   transform: translateY(-3px);
@@ -144,6 +132,26 @@
   height: var(--row-h);
   padding: 0 var(--space-md);
   border-radius: var(--radius-sm);
+}
+
+/* The show itself — artwork and name — opens it; the follow button beside it
+   stays a separate target. */
+.rowOpen {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+  align-self: stretch;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .row:hover {
+    background: var(--bg-hover);
+  }
 }
 
 .rowCover {

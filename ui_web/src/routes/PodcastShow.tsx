@@ -5,18 +5,27 @@ import { openContextMenu } from '../lib/contextMenu';
 import { BackIcon, CheckIcon, DownloadIcon, menuIcons } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
-import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
-import { useParams, useNavigate } from '@solidjs/router';
+import { createEffect, createMemo, createResource, createSignal, For, Show } from 'solid-js';
+import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions, isPlayingEpisode } from '../stores';
 import { t } from '../lib/i18n';
-import type { PodcastEpisode } from '../types/podcast';
+import type { PodcastEpisode, PodcastShowInfo, PodcastSubscription } from '../types/podcast';
 import styles from './PodcastShow.module.css';
 import { neutralCoverStyle } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { followPodcast, shownPodcast } from '../lib/podcasts';
+import { toast } from '../lib/toast';
+
+interface ShowFeed {
+  subscription?: PodcastSubscription;
+  /** What the feed says about a show that is not followed yet. */
+  feed?: { title?: string; author?: string; image_url?: string };
+  episodes?: PodcastEpisode[];
+}
 
 function fmtDur(s?: number): string {
   if (s == null || !Number.isFinite(s) || s <= 0) return '';
@@ -30,24 +39,61 @@ function fmtDate(s?: string): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
 }
 
+/**
+ * One show: `/podcasts/:id` once it is followed, `/podcasts/feed?url=` when it
+ * was opened from the directory before that. The second reads the feed itself
+ * and offers to follow it; the moment the show is followed — here or on any
+ * other device — the page moves to the first, which keeps the episode cache
+ * and the way to unfollow.
+ */
 export default function PodcastShow() {
   const params = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const sub = createMemo(() => state.podcastSubscriptions.find((s) => s.id === params.id) ?? null);
+  const feedUrl = () => (!params.id && typeof searchParams.url === 'string' ? searchParams.url : '');
+  const sub = createMemo(() => state.podcastSubscriptions.find((s) =>
+    params.id ? s.id === params.id : !!feedUrl() && s.rss_url === feedUrl()) ?? null);
+  createEffect(() => {
+    const followed = sub();
+    if (followed && !params.id) navigate(`/podcasts/${encodeURIComponent(followed.id)}`, { replace: true });
+  });
   const [failed, setFailed] = createSignal(false);
   const [data, { refetch }] = createResource(
-    () => params.id,
-    async (id) => {
+    (): { id: string } | { url: string } | false => {
+      const id = params.id;
+      return id ? { id } : feedUrl() ? { url: feedUrl() } : false;
+    },
+    async (source): Promise<ShowFeed | null> => {
       setFailed(false);
-      try { return await api.getPodcastEpisodes(id); }
-      catch { setFailed(true); return null; }
+      try {
+        if ('id' in source) return await api.getPodcastEpisodes(source.id);
+        const feed = await api.browsePodcastFeed(source.url);
+        return { episodes: feed.episodes, feed: feed.show };
+      } catch { setFailed(true); return null; }
     },
   );
 
+  /** A show nobody follows yet, as the directory row that opened it described
+   * it until the feed itself answers. */
+  const preview = createMemo<PodcastShowInfo | null>(() => {
+    const url = feedUrl();
+    if (!url) return null;
+    const row = shownPodcast(url);
+    const feed = data()?.feed;
+    return {
+      rss_url: url,
+      title: row?.title || feed?.title || '',
+      author: row?.author || feed?.author,
+      image_url: row?.image_url || feed?.image_url || null,
+      itunes_collection_id: row?.itunes_collection_id,
+    };
+  });
+
   /** The subscription as the library knows it, or as the feed response reports
    * it while the library list is still syncing. */
-  const show = () => sub() ?? data()?.subscription ?? null;
-  const title = () => show()?.title ?? t('podcastShow.fallbackTitle');
+  const show = (): PodcastShowInfo | null =>
+    sub() ?? data()?.subscription ?? preview();
+  const title = () => show()?.title || t('podcastShow.fallbackTitle');
   const image = () => show()?.image_url ?? null;
 
   const [onlyDownloaded, setOnlyDownloaded] = createSignal(false);
@@ -72,8 +118,28 @@ export default function PodcastShow() {
     else void actions.playEpisode(ep, show()?.title, show()?.id, image());
   };
 
+  const [following, setFollowing] = createSignal(false);
+  const follow = async () => {
+    const info = preview();
+    if (!info || following()) return;
+    setFollowing(true);
+    try {
+      const followed = await followPodcast({
+        title: info.title, author: info.author, feed_url: info.rss_url,
+        image_url: info.image_url ?? undefined, itunes_collection_id: info.itunes_collection_id ?? undefined,
+      });
+      // Normally the library sync has already moved the page; this covers a
+      // sync that has not caught up with the new show yet.
+      if (followed?.id && !sub()) navigate(`/podcasts/${encodeURIComponent(followed.id)}`, { replace: true });
+    } catch {
+      toast.error(t('podcasts.subscribeFailed'));
+    } finally {
+      setFollowing(false);
+    }
+  };
+
   const unsubscribe = async () => {
-    const id = params.id;
+    const id = sub()?.id;
     if (!id) return;
     await api.unsubscribePodcast(id).catch(() => {});
     await actions.syncLibrary();
@@ -98,7 +164,11 @@ export default function PodcastShow() {
           </Show>
           <span class={styles.author}>{show()?.author}</span>
         </div>
-        <Show when={sub()}>
+        <Show when={sub()} fallback={<Show when={feedUrl()}>
+          <button class={styles.follow} type="button" disabled={following()} aria-busy={following() || undefined} onClick={() => void follow()}>
+            {following() ? t('podcasts.subscribing') : t('podcasts.subscribe')}
+          </button>
+        </Show>}>
           <button class={styles.unsub} type="button" onClick={unsubscribe}>
             {t('podcastShow.unsubscribe')}
           </button>
