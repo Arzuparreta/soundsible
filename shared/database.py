@@ -62,6 +62,14 @@ INSTANCE_TABLES = (
     "track_lyrics",
 )
 
+# The background lossless upgrader kept its queue here. It never found a
+# verifiable copy of a commercial recording and was removed.
+RETIRED_TABLES = (
+    "lossless_upgrade_jobs",
+    "lossless_provider_cache",
+    "lossless_daily_budget",
+)
+
 # Note: Migration definitions for schema evolution
 _TRACKS_COLUMNS = {
     "local_mtime_ns": "INTEGER",
@@ -966,6 +974,12 @@ class DatabaseManager:
         )
 
     @staticmethod
+    def _drop_retired_tables(conn):
+        """Remove state left behind by features that no longer exist."""
+        for table in RETIRED_TABLES:
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+    @staticmethod
     def _migrate_related_mix_cache(conn):
         """Discard legacy negative/invalid entries once, preserving new short TTLs."""
         conn.execute("CREATE TABLE IF NOT EXISTS cache_migrations (name TEXT PRIMARY KEY)")
@@ -1028,6 +1042,7 @@ class DatabaseManager:
             self._create_discovery_tables(conn)
             self._create_catalog_tables(conn)
             self._create_performance_indexes(conn)
+            self._drop_retired_tables(conn)
             self._sync_catalog_projection(conn)
             from shared.library_changes import install
             install(conn)

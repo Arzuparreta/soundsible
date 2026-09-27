@@ -1,8 +1,7 @@
 """Idle worker that measures the library's loudness, once per file, forever.
 
-Shaped after :mod:`shared.lossless.service`: one daemon thread that only works
-while nothing else on the instance is, so a full sweep of a large library is
-invisible to whoever is listening.
+One daemon thread that only works while nothing else on the instance is, so a
+full sweep of a large library is invisible to whoever is listening.
 
 The order it works in is the part that matters most to how the feature feels.
 Sweeping a library alphabetically means levelling arrives an hour after install;
@@ -13,12 +12,14 @@ long tail finishes quietly overnight.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
 import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Callable
 
 from shared.path_resolver import resolve_local_track_path
@@ -54,6 +55,35 @@ PRIORITY_BATCH = 4
 #: Ids the priority lane will hold at once. The player asks for five per track
 #: change; anything past this is a backlog, and backlogs belong to the sweep.
 MAX_PRIORITY_IDS = 200
+
+# A player that is really playing republishes its state every 15s. Anything
+# older is a client that went away without saying goodbye (killed tab, phone
+# asleep, network drop) and must not keep the idle worker blocked forever.
+PLAYBACK_STATE_FRESH_SEC = 180
+
+
+def playback_live(users_root: Path, now: float | None = None) -> bool:
+    """True while some device is actually playing something right now.
+
+    Only a *live* player counts. A client that died mid-song leaves
+    ``is_playing`` behind for good, and without the freshness window that one
+    stale file would suspend the sweep for the whole instance, forever.
+    """
+    current = time.time() if now is None else now
+    for path in users_root.glob("*/playback_state*.json"):
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(state, dict) or not state.get("is_playing"):
+            continue
+        try:
+            updated = float(state.get("updated_at") or 0)
+        except (TypeError, ValueError):
+            continue
+        if current - updated <= PLAYBACK_STATE_FRESH_SEC:
+            return True
+    return False
 
 
 def loudness_analysis_enabled() -> bool:
@@ -431,10 +461,9 @@ class LoudnessService:
             return True
 
         try:
-            from shared.lossless.service import LosslessUpgradeService
             from shared.user_context import users_config_root
 
-            return LosslessUpgradeService.playback_live(users_config_root())
+            return playback_live(users_config_root())
         except Exception:
             return True
 

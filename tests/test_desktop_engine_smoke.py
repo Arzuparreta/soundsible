@@ -22,9 +22,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ENGINE_ENTRY = REPO_ROOT / "soundsible_engine.py"
 STARTUP_TIMEOUT_SEC = 120
 # The engine's own shutdown is sequential with bounded waits: the gevent pool
-# (1s), the lossless and loudness idle workers (3s each) and the download drain
-# (5s). A budget below that sum fails a clean exit on a slow runner; what this
-# test guards against is a shutdown that never finishes.
+# (1s), the loudness idle worker (3s) and the download drain (5s). A budget
+# below that sum fails a clean exit on a slow runner; what this test guards
+# against is a shutdown that never finishes.
 SHUTDOWN_TIMEOUT_SEC = 30
 
 

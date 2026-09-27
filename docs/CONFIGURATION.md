@@ -27,7 +27,7 @@ music folder on its own first-run screen.
 ### Settings
 
 Everything else lives in **Settings** in the player: theme, language, playback,
-downloads and lossless upgrades, library rescans, accounts, paired devices and
+downloads, library rescans, accounts, paired devices and
 music import. Some settings belong to each person and some only to an admin;
 [Accounts](#6-accounts-multi-user) lists which.
 
@@ -100,7 +100,6 @@ defaults are listed in [section 7](#7-where-soundsible-keeps-its-files).
 | `SOUNDSIBLE_YTDLP_RETRY_SLEEP` | exponential, 1 to 20 s | yt-dlp `--retry-sleep` expression, e.g. `linear=2:10`. |
 | `SOUNDSIBLE_PREVIEW_CACHE_MB` | `2048` | Disk (not RAM) for the preview-audio LRU cache. `0` disables audio caching while URL warming remains available. |
 | `SOUNDSIBLE_ARTWORK_CACHE_MB` | `512` | MiB of retained resized/cropped cover JPEGs per cache directory. Originals are excluded; `0` serves temporary disk variants without retention. Restart after changing it. See [quota details](performance/artwork-variant-quota.md). |
-| `SOUNDSIBLE_LOSSLESS_UPGRADES` | `true` | Background lossless upgrades; also switchable in Settings. |
 | `SOUNDSIBLE_FFMPEG` | FFmpeg on `PATH` | Explicit path to the FFmpeg binary. |
 
 ### Features
@@ -126,19 +125,6 @@ development, see [ui_web/README.md](../ui_web/README.md).
 Choose the download quality in **Settings → Downloads**; it applies to new
 downloads. The search source is the `SOUNDSIBLE_YT_SEARCH_SOURCE`
 [variable](#youtube-and-downloads).
-
-### Optional lossless sources
-
-The lossless upgrader works without credentials through Wikimedia Commons and
-Internet Archive. Jamendo coverage is enabled with the read-only `client_id`
-assigned to a registered application at
-[`devportal.jamendo.com`](https://devportal.jamendo.com/).
-
-An instance administrator can enter that value in **Settings → Downloads →
-Lossless upgrades → Jamendo Client ID**. Soundsible validates it with Jamendo
-before storing it in the ignored `odst_tool/.env` file, never returns the value
-through the status API, and reloads the provider without a daemon restart.
-OAuth `client_secret` and access tokens are not needed and must not be entered.
 
 ### YouTube cookies
 

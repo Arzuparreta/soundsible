@@ -40,7 +40,6 @@ hiddenimports.extend(
         "cryptography",
         "PIL",
         "watchdog",
-        "pyacoustid",
         "boto3",
         "b2sdk",
     ]
