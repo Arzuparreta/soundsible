@@ -228,7 +228,12 @@ def _starred_track_ids() -> dict[str, str]:
             elif key.startswith("yt:") and key[3:] in by_youtube:
                 track_id = by_youtube[key[3:]]
             if track_id and track_id not in starred:
-                starred[track_id] = serialize.iso(entry.get("added_at")) or serialize.iso(time.time())
+                # When the mark went on. Entries hearted before that was
+                # recorded only know when they were saved.
+                starred[track_id] = (
+                    serialize.iso(entry.get("favourited_at") or entry.get("added_at"))
+                    or serialize.iso(time.time())
+                )
                 break
     return starred
 

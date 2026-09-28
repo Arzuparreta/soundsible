@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Iterable
 from shared.models import Track, LibraryMetadata
+from shared.library_dates import parse as _parse_timestamp
 from shared.library_lifecycle import serialized
 from shared.library_write import disk_staging, staged_rows, sync_rows, sync_tracks
 from shared.runtime import get_config_dir
@@ -226,34 +227,6 @@ class ConnectionPool:
             "idle": self._idle.qsize(),
             "max_size": self._max_size,
         }
-
-
-#: How a library timestamp is written: naive UTC ISO-8601, the same shape
-#: `utc_now_iso_naive` produces and saved songs already carry in
-#: `favourites.json`. One format everywhere is what lets a saved song and a
-#: downloaded file be compared at all — by SQL, which sorts these as text, and
-#: by the player, which parses them.
-_TIMESTAMP_FORMATS = ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S")
-
-
-def _parse_timestamp(value: Any) -> Optional[datetime]:
-    """A stored timestamp as a datetime, or None when it is not one.
-
-    Rows written by SQLite's own `CURRENT_TIMESTAMP` use a space separator and
-    no microseconds; rows written by the engine use `isoformat()`. Both are read
-    here so a library that has seen both keeps one timeline.
-    """
-    if isinstance(value, datetime):
-        return value.replace(tzinfo=None)
-    text = str(value or "").strip()
-    if not text:
-        return None
-    for fmt in _TIMESTAMP_FORMATS:
-        try:
-            return datetime.strptime(text, fmt)
-        except ValueError:
-            continue
-    return None
 
 
 def _format_timestamp(moment: datetime) -> str:

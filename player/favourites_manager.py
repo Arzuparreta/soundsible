@@ -36,8 +36,20 @@ intersect.
 The keys are derived by the client, which already owns that logic; this module
 only stores them, matches on intersection, and knows that `lib:` means "a track
 in this account's library".
+
+Each entry carries two dates, and they answer different questions:
+
+- ``added_at`` — when the song joined the library. It is the same fact the
+  library track of a downloaded song carries, under the one rule in
+  :mod:`shared.library_dates`: set once when an entry is created (adopting the
+  date of a file the library already holds for the song), then never rewritten
+  by anything done to the song.
+- ``favourited_at`` — when the mark went on. Present only while it is on.
+  Hearting a song is not acquiring it, so it has a date of its own rather than
+  borrowing — or moving — the library date.
 """
 
+from shared import library_dates
 from shared.library_lifecycle import serialized
 import json
 import logging
@@ -47,7 +59,6 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set
 
-from shared.time_utils import utc_now_iso_naive
 from shared.user_context import user_config_dir
 
 logger = logging.getLogger(__name__)
@@ -65,6 +76,14 @@ LIB_PREFIX = "lib:"
 #: downloaded is still renderable and playable.
 _TEXT_FIELDS = ("title", "artist", "album", "thumbnail")
 
+#: Dates the engine decides. A client payload never sets them; a stored entry
+#: keeps whatever it was written with.
+_DATE_FIELDS = ("added_at", "favourited_at")
+
+#: "When has this account's library held a song under any of these keys?" —
+#: answered from the library's tracks by the core that owns both stores.
+HeldSince = Callable[[List[str]], Optional[str]]
+
 
 def library_key(track_id: str) -> str:
     """The identity key for a library track id."""
@@ -79,7 +98,11 @@ class FavouritesManager:
     library looks the same after a reload as it did before one.
     """
 
-    def __init__(self):
+    def __init__(self, library_held_since: Optional[HeldSince] = None):
+        """`library_held_since` is how an entry learns that the library already
+        holds its song as a file, and since when. Without it (tests, tools with
+        no library) every new entry is simply dated now."""
+        self._library_held_since = library_held_since
         self._entries: List[Dict[str, Any]] = []
         self._index: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()  # Note: Use reentrant lock to prevent deadlocks with callbacks
@@ -101,13 +124,16 @@ class FavouritesManager:
         return [entry for entry in self.get_entries() if entry.get("favourite")]
 
     @serialized
-    def toggle_saved(self, raw_entry: Dict[str, Any]) -> bool:
+    def toggle_saved(self, raw_entry: Dict[str, Any], *, added_at: Optional[str] = None) -> bool:
         """
         Add or remove a song from the library, matching on key intersection.
 
         Returns True if the song is now saved, False if it was removed. Removing
         takes the favourite mark with it — there is nothing left to mark.
         Raises ValueError when the entry carries no usable identity key.
+
+        `added_at` is what an importer knows about when the song was acquired
+        elsewhere; it only dates a song the library does not already hold.
         """
         entry = _normalise_entry(raw_entry, default_favourite=False)
         if entry is None:
@@ -120,9 +146,7 @@ class FavouritesManager:
                 self._reindex()
                 self._persist()
                 return False
-            self._entries.insert(0, entry)
-            self._reindex()
-            self._persist()
+            self._admit(entry, proposed=added_at)
             return True
 
     @serialized
@@ -142,9 +166,7 @@ class FavouritesManager:
             if existing is None:
                 # Favouriting a song you had not saved saves it, in one act.
                 entry["favourite"] = True if favourite is None else bool(favourite)
-                self._entries.insert(0, entry)
-                self._reindex()
-                self._persist()
+                self._admit(entry)
                 return entry["favourite"]
             resolved = (not existing.get("favourite")) if favourite is None else bool(favourite)
             if bool(existing.get("favourite")) == resolved:
@@ -159,6 +181,7 @@ class FavouritesManager:
                 self._persist()
                 return False
             existing["favourite"] = resolved
+            _stamp_mark(existing)
             # A song saved bare (＋ from a search row) has no snapshot worth the
             # name; the heart usually arrives from a surface that has one.
             for field in _TEXT_FIELDS:
@@ -183,19 +206,6 @@ class FavouritesManager:
                 if entry is not None
             )
 
-    def added_at_for_keys(self, keys: Iterable[str]) -> Optional[str]:
-        """When the song behind these identities was saved, if it was.
-
-        Downloading a song you saved weeks ago gives it a file, not a place in
-        the library — it has had one all along. The library track adopts this
-        date so a download does not shuffle it back to the top of "recently
-        added", which is the same promise `savedToTrack` keeps on the client:
-        the entry is resolved at read time and no order is disturbed.
-        """
-        with self._lock:
-            entry = self._find(keys)
-            return (entry or {}).get("added_at")
-
     @serialized
     def update_keys(self, match_keys: Iterable[str], new_keys: Iterable[str]) -> bool:
         """
@@ -214,6 +224,13 @@ class FavouritesManager:
             if not added:
                 return False
             entry["keys"].extend(added)
+            # The new identity can reveal that the library already held this
+            # song as a file — a Deezer row saved today resolving to a video
+            # downloaded in spring. It is one song, held since the earlier of the
+            # two. (The file is never the later one by more than the few seconds
+            # a fresh entry waits for its video: a download of a saved song
+            # carries the entry's keys and is dated from it when it lands.)
+            entry["added_at"] = library_dates.earliest(entry.get("added_at"), self._held_by_library(added))
             self._reindex()
             self._persist()
             return True
@@ -322,6 +339,29 @@ class FavouritesManager:
 
     # ── Internals ──
 
+    def _admit(self, entry: Dict[str, Any], proposed: Optional[str] = None) -> None:
+        """Put a new entry in the library, dated by the one rule.
+
+        A song the library already holds as a file keeps the date it has been
+        held since — hearting a downloaded song does not make it new. Anything
+        else joins now, or when an importer says it was acquired. Always called
+        under the lock.
+        """
+        entry["added_at"] = self._held_by_library(entry["keys"]) or proposed or library_dates.now()
+        _stamp_mark(entry)
+        self._entries.insert(0, entry)
+        self._reindex()
+        self._persist()
+
+    def _held_by_library(self, keys: List[str]) -> Optional[str]:
+        if self._library_held_since is None:
+            return None
+        try:
+            return self._library_held_since(list(keys))
+        except Exception as exc:  # the library is never load-bearing here
+            logger.debug("Could not read when the library took hold of %s: %s", keys, exc)
+            return None
+
     def _persist(self) -> None:
         """Save, then notify. Always called under the lock."""
         self._save_to_file()
@@ -418,7 +458,7 @@ class FavouritesManager:
                 if isinstance(raw, str) and raw.strip():
                     entry = _bare_entry(library_key(raw))
                 elif isinstance(raw, dict):
-                    entry = _normalise_entry(raw, default_favourite=pre_split)
+                    entry = _stored_entry(raw, default_favourite=pre_split)
                 else:
                     entry = None
                 if entry is not None:
@@ -486,7 +526,30 @@ def _normalise_entry(raw: Any, default_favourite: bool = False) -> Optional[Dict
         duration = None
     if isinstance(duration, (int, float)) and duration > 0:
         entry["duration"] = int(duration)
-
-    added_at = raw.get("added_at")
-    entry["added_at"] = added_at if isinstance(added_at, str) and added_at.strip() else utc_now_iso_naive()
     return entry
+
+
+def _stored_entry(raw: Any, default_favourite: bool) -> Optional[Dict[str, Any]]:
+    """An entry read back from disk: normalised, with the dates it was written with.
+
+    A date that is missing stays missing. An entry from before dates existed
+    has no record of when it was saved, and stamping it with the moment the file
+    happened to be loaded would move it every time the engine restarted.
+    """
+    entry = _normalise_entry(raw, default_favourite=default_favourite)
+    if entry is None:
+        return None
+    for field in _DATE_FIELDS:
+        value = raw.get(field)
+        if isinstance(value, str) and value.strip():
+            entry[field] = value.strip()
+    entry.setdefault("added_at", None)
+    return entry
+
+
+def _stamp_mark(entry: Dict[str, Any]) -> None:
+    """Keep `favourited_at` in step with the mark: set as it goes on, gone with it."""
+    if not entry.get("favourite"):
+        entry.pop("favourited_at", None)
+    elif not entry.get("favourited_at"):
+        entry["favourited_at"] = library_dates.now()

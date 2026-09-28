@@ -2643,6 +2643,62 @@ describe('Solid store favourites', () => {
   });
 });
 
+describe('library dates', () => {
+  // A song's library date is decided by the engine (`shared/library_dates.py`)
+  // and never moves. The player's part is to hand the engine what it needs to
+  // decide — the identity of the song a download is for — and not to show a
+  // date of its own making in the meantime.
+
+  it('downloads a saved song as that song, carrying every key the entry has', async () => {
+    const { actions, api } = await loadStore();
+    const entry = { keys: ['deezer:42', 'yt:dQw4w9WgXcQ'], title: 'Weightless', artist: 'Marconi Union' };
+
+    await actions.downloadSaved(entry);
+
+    const [item] = (api.enqueueDownload as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(item.video_id).toBe('dQw4w9WgXcQ');
+    expect(item.identity_keys).toEqual(expect.arrayContaining(['deezer:42', 'yt:dQw4w9WgXcQ']));
+  });
+
+  it('keeps a saved catalog row\'s identity even when the player had to find its video', async () => {
+    const { actions, api } = await loadStore({
+      resolveCatalogItem: vi.fn().mockResolvedValue({ video_id: 'abcdefghijk' }),
+    });
+
+    await actions.downloadSaved({ keys: ['cat:deezer:track:42', 'deezer:42'], title: 'Weightless', artist: 'Marconi Union' });
+
+    const [item] = (api.enqueueDownload as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(item.identity_keys).toEqual(
+      expect.arrayContaining(['yt:abcdefghijk', 'cat:deezer:track:42', 'deezer:42']),
+    );
+  });
+
+  it('dates a song saved just now as now, so it opens the library before the engine answers', async () => {
+    const older = { id: 'old-file', title: 'Old', artist: 'A', added_at: '2026-01-01T00:00:00' };
+    const { actions, state, musicLibrary } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [older], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+    });
+    await actions.syncLibrary();
+
+    actions.toggleSavedTrack({ id: 'dQw4w9WgXcQ', title: 'Weightless', artist: 'Marconi Union', source: 'preview' });
+
+    expect(state.saved[0].added_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/);
+    expect(musicLibrary().map((t) => t.id)).toEqual(['dQw4w9WgXcQ', 'old-file']);
+  });
+
+  it('dates the entry a heart creates for a downloaded song from the file, not from the heart', async () => {
+    const owned = { id: 'hash9f2a', title: 'Weightless', artist: 'Marconi Union', youtube_id: 'dQw4w9WgXcQ', added_at: '2026-01-01T00:00:00' };
+    const { actions, state } = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [owned], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+    });
+    await actions.syncLibrary();
+
+    actions.toggleFavouriteTrack(owned);
+
+    expect(state.saved[0].added_at).toBe('2026-01-01T00:00:00');
+  });
+});
+
 /** What the engine returns after the track behind a favourite is deleted: the
  * entry is untouched, it simply no longer resolves to anything local. */
 function state_favourite_after_delete() {

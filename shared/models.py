@@ -525,11 +525,11 @@ class LibraryMetadata:
     def add_track(self, track: Track) -> None:
         """Add a track to the library, dating it if the caller has not.
 
-        Every way of acquiring music arrives here — a download, a migration
-        import, a shared track, the ODST tool — so this is where a song learns
-        when it joined. A caller that already knows better (a folder scan
-        reading a file's mtime, a download promoting a song saved weeks ago)
-        sets `added_at` first and is left alone.
+        An account's library is dated before it gets here: every acquisition
+        into one goes through :meth:`shared.library_dates.Holdings.claim`, which
+        knows whether the account already held the song (a download of a song
+        saved weeks ago keeps that day). What still arrives undated — the shared
+        pool's own catalog, the ODST tool — joined just now.
         """
         if not track.added_at:
             track.added_at = utc_now_iso_naive()

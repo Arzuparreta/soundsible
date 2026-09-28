@@ -13,6 +13,7 @@ import {
   isPlayingResult,
 } from '../stores';
 import { coverUrl } from '../lib/media';
+import { catalogItemKeys } from '../lib/playbackIdentity';
 import { artistPath, albumPath } from '../lib/artistRoute';
 import { toast } from '../lib/toast';
 import { parseYouTubeInput } from '../lib/youtube';
@@ -609,6 +610,7 @@ export default function Search() {
         duration: item.duration,
         cover: item.cover,
         external_ids: item.external_ids,
+        identity_keys: catalogItemKeys(item),
         confirm_video_id:
           confirmVideoId ||
           (item.external_ids?.youtube_id ? String(item.external_ids.youtube_id) : undefined),

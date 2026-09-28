@@ -1405,6 +1405,9 @@ def catalog_save():
         "thumbnail_url": data.get("cover") or f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
         "duration_sec": duration_s,
         "metadata_evidence": metadata_evidence,
+        # The row's identity, so a saved row downloaded from here lands as that
+        # saved song (see `parse_intake_item`).
+        "identity_keys": data.get("identity_keys"),
     }
     parsed, err = api["parse_intake_item"](item)
     if err:

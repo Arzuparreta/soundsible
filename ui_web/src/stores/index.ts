@@ -92,6 +92,7 @@ import { levelFor as levelForTrack } from '../lib/loudness';
 import { refreshLinkReading } from '../lib/linkQuality';
 export * from './identity';
 import {
+  claimedAddedAt,
   isFavouriteKeys,
   isSavedKeys,
   ownedTrackForKeys,
@@ -2491,7 +2492,7 @@ export const actions = {
     const has = isSavedKeys(entry.keys);
     const next = has
       ? prev.filter((f) => !f.keys.some((k) => entry.keys.includes(k)))
-      : [entry, ...prev];
+      : [{ ...entry, added_at: claimedAddedAt(entry.keys) }, ...prev];
     setState('saved', next); // optimistic
     api.toggleSaved(entry).catch(() => setState('saved', prev)); // revert on failure
   },
@@ -2517,7 +2518,7 @@ export const actions = {
     const existing = savedEntryForKeys(entry.keys);
     const next = existing
       ? prev.map((f) => (f === existing ? { ...f, favourite: !has } : f))
-      : [{ ...entry, favourite: true }, ...prev];
+      : [{ ...entry, favourite: true, added_at: claimedAddedAt(entry.keys) }, ...prev];
     setState('saved', next); // optimistic
     api.toggleFavourite(entry)
       .then(() => {
@@ -4053,6 +4054,9 @@ export const actions = {
           thumbnail_url: track.cover,
           duration_sec: track.duration,
           metadata_evidence: null,
+          // Everything this song answers to, including the saved entry it was
+          // opened from: the file joins that song instead of arriving as new.
+          identity_keys: trackKeys(track),
         },
       ]);
       void actions.loadDownloads();
@@ -4087,6 +4091,9 @@ export const actions = {
       duration: entry.duration,
       cover: entry.thumbnail,
       source: 'preview',
+      // The entry's own identity rides along with the download, so the file
+      // lands as this saved song even before the entry has learned its video.
+      originKeys: entry.keys,
     });
 
     const known = savedVideoId(entry);

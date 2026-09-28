@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 API_STARTED_AT = time.time()
 
 from shared.library_lifecycle import serialized, drain as drain_audio_cleanup
-from shared import request_scope
+from shared import library_dates, request_scope
 from shared.models import Track, LibraryMetadata
 from shared.constants import STATION_PORT, DEFAULT_OUTPUT_DIR_FALLBACK, SourceType
 from shared.path_resolver import resolve_local_track_path
@@ -597,8 +597,13 @@ def _build_user_core(user_id: str) -> _UserCore:
     # canonical library here as well.
     library.sync_library(silent=True)
 
+    def library_held_since(keys):
+        # Read at call time: the manager swaps `metadata` on every reload.
+        metadata = library.metadata
+        return library_dates.held_since(keys, metadata.tracks if metadata else ())
+
     # Note: API server runs headless; web player uses browser for playback. skip MPV to avoid blocking on display/audio.
-    return _UserCore(library, QueueManager(), FavouritesManager())
+    return _UserCore(library, QueueManager(), FavouritesManager(library_held_since=library_held_since))
 
 
 def get_user_core(user_id: Optional[str] = None) -> _UserCore:
@@ -1115,7 +1120,12 @@ def _process_single_queue_item_bound(item):
                 owner = get_user(item_user_id)
                 if not owner or owner.get('disabled'):
                     raise RuntimeError('The download owner is unavailable')
-                add_tracks_to_user_library([shared_track], user_id=item_user_id, operation_id=item_id)
+                add_tracks_to_user_library(
+                    [shared_track],
+                    user_id=item_user_id,
+                    operation_id=item_id,
+                    song_keys=item.get('identity_keys') or (),
+                )
                 if not queue_manager_dl.complete(item_id, attempt):
                     return
 
@@ -1348,12 +1358,30 @@ def _loaded_user_library():
 
 
 @serialized
-def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None, operation_id=None) -> int:
+def add_tracks_to_user_library(
+    tracks,
+    *,
+    user_id: Optional[str] = None,
+    operation_id=None,
+    song_keys=(),
+    keep_source_dates: bool = False,
+) -> int:
     """Put specific tracks into one person's library.
 
     Downloads land in a pool everyone shares, so what makes a track *yours* is
     this entry. Only the tracks you asked for are added — merging the whole
     ODST catalog would hand you everybody else's downloads.
+
+    Each track is dated by :meth:`shared.library_dates.Holdings.claim`: a song
+    this account already holds — saved without a file, say — keeps the day it
+    was first held; the file is a new form of it, not a new song. The pool's own
+    `added_at` says when *the pool* got the file, which is nobody's library date,
+    so it is dropped unless `keep_source_dates` says the pool is this account's
+    own catalog being merged in whole.
+
+    `song_keys` are the identities the song was asked for under — a download of
+    a saved song carries the entry's keys — so the file joins that song even
+    when it shares no id with it yet (a Deezer row, before its video is known).
     """
     from shared.user_context import current_user_id
 
@@ -1362,13 +1390,16 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None, operati
         logger.debug("API: no user bound; not adding %d track(s) to a library", len(list(tracks)))
         return 0
 
-    lib = get_user_core(target).library
+    core = get_user_core(target)
+    lib = core.library
     if not lib.metadata:
         lib.sync_library(silent=True)
     lib.refresh_if_stale()
     if operation_id and lib.db.has_library_operation(operation_id):
         return 0
 
+    song_keys = [key for key in (song_keys or ()) if isinstance(key, str) and key]
+    holdings = library_dates.Holdings(lib.metadata.tracks, _saved_entries(core))
     added = 0
     newly_added = []
     for track in tracks:
@@ -1377,16 +1408,17 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None, operati
         track_dict = track.to_dict()
         track_dict.pop("local_path", None)
         stored = Track.from_dict(track_dict)
-        # A song already saved as a stream entered the library the day it was
-        # saved; the download only gave it a file. `add_track` stamps the rest.
-        stored.added_at = stored.added_at or _saved_added_at(stored, user_id=target)
+        stored.added_at = holdings.claim(
+            library_dates.track_keys(stored) + song_keys,
+            proposed=stored.added_at if keep_source_dates else None,
+        )
         lib.metadata.add_track(stored)
         newly_added.append(stored)
         added += 1
 
     if added or operation_id:
         lib.require_saved(**({'operation_id': operation_id} if operation_id else {}))
-        promoted = _promote_favourites_to_library(newly_added, user_id=target)
+        promoted = _promote_favourites_to_library(newly_added, user_id=target, song_keys=song_keys)
         with app.app_context():
             emit_to_user('library_updated', user_id=target)
             if promoted:
@@ -1394,30 +1426,16 @@ def add_tracks_to_user_library(tracks, *, user_id: Optional[str] = None, operati
     return added
 
 
-def _saved_added_at(track, *, user_id: str) -> Optional[str]:
-    """The date this song was saved, if it was saved before it was downloaded.
-
-    Matched on the identities a not-yet-downloaded song can have: the video it
-    streams from, and — for a re-download of a track that was in the library
-    once — its library id.
-    """
-    from player.favourites_manager import library_key
-
-    keys = [library_key(track.id)] if track.id else []
-    video_id = getattr(track, "youtube_id", None)
-    if video_id:
-        keys.append(f"yt:{video_id}")
-    if not keys:
-        return None
+def _saved_entries(core) -> list:
     try:
-        return get_favourites_manager(user_id).added_at_for_keys(keys)
+        return core.favourites.get_entries()
     except Exception as exc:  # pragma: no cover — favourites are never load-bearing
-        logger.debug("API: could not read the saved date for %s: %s", track.id, exc)
-        return None
+        logger.debug("API: could not read saved songs: %s", exc)
+        return []
 
 
-def _promote_favourites_to_library(tracks, *, user_id: str) -> int:
-    """Give a favourited song its ``lib:`` key once the file is actually here.
+def _promote_favourites_to_library(tracks, *, user_id: str, song_keys=()) -> int:
+    """Give a saved song its ``lib:`` key once the file is actually here.
 
     Favouriting from a search row saves a bare ``yt:<video id>`` entry, because
     at that moment that is the only identity the song has. Downloading it later
@@ -1429,6 +1447,10 @@ def _promote_favourites_to_library(tracks, *, user_id: str) -> int:
     the Favourites view lists, so a song you had hearted and then downloaded
     disappeared from it: present in the library, present in favourites.json,
     and invisible in both views.
+
+    The entry is found by the file's video *or* by the keys the download was
+    asked for, and learns both the file and its video: a saved catalog row
+    whose video was never resolved still becomes the file it was downloaded as.
     """
     try:
         manager = get_favourites_manager(user_id)
@@ -1441,13 +1463,15 @@ def _promote_favourites_to_library(tracks, *, user_id: str) -> int:
     promoted = 0
     for track in tracks:
         video_id = getattr(track, "youtube_id", None)
-        if not video_id or not track.id:
+        if not track.id or not (video_id or song_keys):
             continue
+        match = ([f"yt:{video_id}"] if video_id else []) + list(song_keys)
+        learned = [library_key(track.id)] + ([f"yt:{video_id}"] if video_id else [])
         try:
-            if manager.update_keys([f"yt:{video_id}"], [library_key(track.id)]):
+            if manager.update_keys(match, learned):
                 promoted += 1
         except Exception as exc:  # pragma: no cover
-            logger.debug("API: could not promote favourite for %s: %s", video_id, exc)
+            logger.debug("API: could not promote saved song %s: %s", track.id, exc)
     return promoted
 
 
@@ -1459,7 +1483,7 @@ def _sync_odst_to_main_core():
     """
     dl = get_downloader()
     _loaded_user_library()
-    return add_tracks_to_user_library(dl.library.tracks)
+    return add_tracks_to_user_library(dl.library.tracks, keep_source_dates=True)
 
 
 @serialized

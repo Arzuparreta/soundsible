@@ -11,6 +11,7 @@ import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { actions, musicLibrary, isPlayingItem, state } from '../stores';
 import { api } from '../lib/api';
 import { trackCoverUrl } from '../lib/media';
+import { catalogItemKeys } from '../lib/playbackIdentity';
 import { trackCount } from '../lib/format';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
@@ -180,6 +181,7 @@ export default function Album() {
         duration: item.duration,
         cover: item.cover,
         external_ids: item.external_ids,
+        identity_keys: catalogItemKeys(item),
       });
       if (response.status === 'queued') {
         toast.success(t('search.addedToDownloads'));

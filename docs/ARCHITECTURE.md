@@ -100,7 +100,7 @@ Catalog resolve queues the winner's stream-URL resolution on the **preview prefe
 
 **Library path**: `player/library.py` loads each account's canonical **`library.db`** and **`~/.config/soundsible/config.json`** for `PlayerConfig`; it can also use storage providers from `setup_tool/` for cloud-backed exports. One SQLite transaction stores the complete library snapshot: ordered tracks and playlists, settings, podcast state, normalized `artists`/`albums`/`track_artists`, and `track_user_state`. Entity IDs are deterministic and albums include their album artist, so unrelated records with the same title do not collapse. After that transaction commits, Soundsible atomically refreshes `library.json` as a portable export; an export failure does not roll back the library.
 
-Each track carries **`added_at`**, the day the song joined *this* library — set by every acquisition path, carried across a re-keyed id, and never rewritten once stored. It is what "recently added" means in the player, in `getAlbumList2`'s `newest`, and in a Subsonic album's `created`. A library from before the column existed is dated once, on open, from each file's own mtime, falling back to its position in the manifest for a file that cannot be reached; `last_updated` is deliberately not used, because every row carries the instant of the last rewrite. The player merges files with saved-but-not-downloaded songs on this one field, which is the only way a library that holds both can be ordered by anything but which list a song happens to be in.
+Each track carries **`added_at`**, the moment *this account* first took hold of the song. One rule, owned by `shared/library_dates.py`, decides it: the date is written once, when a song enters the library, and every other form the same song later takes adopts it. A download of a song you had saved keeps the day you saved it; hearting a downloaded song dates its entry from the file; a folder scan that finds the file of a saved song keeps the save. `Holdings.claim` is the single decision point — an identity the account already holds (as a file or as a saved entry, matched on the same identity keys the player uses) answers with the date it has been held since, and only an identity held nowhere gets a new one. The shared pool's own date is never an account's: it says when *the pool* got the file. Once stored, a track's date is carried across a re-keyed id and never rewritten. Nothing retro-dates a library whose dates were written before this rule; that would be a guess. It is what "recently added" means in the player, in `getAlbumList2`'s `newest`, and in a Subsonic album's `created`. A library from before the column existed is dated once, on open, from each file's own mtime, falling back to its position in the manifest for a file that cannot be reached; `last_updated` is deliberately not used, because every row carries the instant of the last rewrite. The player merges files with saved-but-not-downloaded songs on this one field, and because both forms of one song carry the same date, a download or a heart never moves a song in that order.
 
 `POST /api/library/scan` queues an account-scoped scan on the orchestrator's
 disk-limited background lane. It reads the configured music roots in place and
@@ -293,13 +293,14 @@ Editing a track's tags re-encodes the file and therefore changes its hash, which
 mints a new track id. That is what keeps metadata edits private: your manifest
 follows the new id while everyone else keeps the original.
 
-**Favourites are identity-keyed, not id-keyed.** `favourites.json` (v2) holds
+**Favourites are identity-keyed, not id-keyed.** `favourites.json` (v3) holds
 ordered entries, newest first:
 
 ```json
-{"version": "2.0", "favourites": [
+{"version": "3.0", "saved": [
   {"keys": ["lib:9f2a…", "yt:dQw4w9WgXcQ"], "title": "…", "artist": "…",
-   "duration": 355, "thumbnail": null, "added_at": "…"}
+   "duration": 355, "thumbnail": null, "favourite": true,
+   "added_at": "…", "favourited_at": "…"}
 ]}
 ```
 
@@ -312,6 +313,9 @@ and the entry is resolved against the library *at read time*, so downloading it
 later promotes the same entry to the owned track with nothing rewritten. v1
 files (a flat array of track ids) migrate on load. Key derivation lives in the
 client; `player/favourites_manager.py` only stores, orders and intersects.
+`added_at` is the song's library date (the same one its file carries, see
+above); `favourited_at` is when the heart went on, present only while it is on —
+marking a song is not acquiring it, so it never touches the library date.
 
 Exact filenames and fields may evolve; treat the code under `shared/` and `player/` as the source of truth.
 
