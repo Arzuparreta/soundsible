@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -71,6 +73,41 @@ def _ensure_isolated_consumer_config(music: Path, env: dict[str, str]) -> None:
     reset_runtime()
 
 
+def _exercise_media_tools(ffmpeg: Path, output_dir: Path) -> None:
+    """Use only the shipped pair, never a runner's system ffprobe."""
+    ffprobe = ffmpeg.with_name("ffprobe" + ffmpeg.suffix)
+    assert ffmpeg.is_file(), f"Missing bundled ffmpeg: {ffmpeg}"
+    assert ffprobe.is_file(), f"Missing bundled ffprobe: {ffprobe}"
+    output = output_dir / "prueba música.flac"
+    subprocess.run(
+        [str(ffmpeg), "-v", "error", "-f", "lavfi", "-i",
+         "sine=frequency=440:duration=0.25", "-y", str(output)],
+        check=True, capture_output=True, timeout=30,
+    )
+    result = subprocess.run(
+        [str(ffprobe), "-v", "error", "-show_entries",
+         "stream=codec_name:format=duration", "-of", "json", str(output)],
+        check=True, capture_output=True, text=True, timeout=30,
+    )
+    report = json.loads(result.stdout)
+    assert report["streams"][0]["codec_name"] == "flac"
+    assert float(report["format"]["duration"]) > 0
+
+
+def test_media_tools_round_trip(tmp_path):
+    binary = shutil.which("ffmpeg")
+    if not binary:
+        pytest.skip("FFmpeg is not installed")
+    _exercise_media_tools(Path(binary), tmp_path)
+
+
+def test_media_tools_reject_missing_bundled_probe(tmp_path):
+    binary = tmp_path / "ffmpeg.exe"
+    binary.touch()
+    with pytest.raises(AssertionError, match="Missing bundled ffprobe"):
+        _exercise_media_tools(binary, tmp_path)
+
+
 def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
     reset_runtime()
     env = os.environ.copy()
@@ -98,13 +135,33 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
 
     try:
         health_url = _wait_for_health(config_dir)
-        payload = requests.get(health_url, timeout=5).json()
+        public = requests.get(health_url, timeout=5)
+        public.raise_for_status()
+        public_ffmpeg = public.json().get("ffmpeg") or {}
+        assert "path" not in public_ffmpeg
+        assert "source" not in public_ffmpeg
+
+        state = load_runtime_state(config_dir)
+        assert state is not None
+        # Health deliberately hides machine paths from anonymous callers. Use
+        # this isolated engine's owner credential for the bundle diagnostics.
+        token = Path(state["owner_token_file"]).read_text().strip()
+        response = requests.get(
+            health_url, headers={"Authorization": f"Bearer {token}"}, timeout=5,
+        )
+        response.raise_for_status()
+        payload = response.json()
         assert isinstance(payload, dict)
         ff = payload.get("ffmpeg") or {}
+        # Exercise the authenticated contract in the dev-Python smoke too,
+        # so a missing diagnostic field fails locally before packaging CI.
+        assert "path" in ff and "source" in ff, ff
         if engine_bin is not None and os.environ.get("SOUNDSIBLE_REQUIRE_FFMPEG"):
             assert ff.get("available") is True, (
                 f"sidecar health missing bundled ffmpeg: {ff!r}"
             )
+            assert ff.get("source") in {"bundle", "sibling"}, ff
+            _exercise_media_tools(Path(ff["path"]), tmp_path)
         state = load_runtime_state(config_dir)
         assert state is not None
         player_base = payload.get("base_url") or state["base_url"]

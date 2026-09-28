@@ -9,6 +9,10 @@ on:
     paths: &desktop-paths
       - 'desktop-shell/**'
       - 'shared/**'
+      - 'player/**'
+      - 'odst_tool/**'
+      - 'setup_tool/**'
+      - 'ui_web/**'
       - 'soundsible_engine.py'
       - 'run.py'
       - 'tests/test_desktop_engine_smoke.py'
@@ -65,6 +69,14 @@ jobs:
         env:
           BUNDLE_FFMPEG: "1"
         run: ./desktop-shell/scripts/build-sidecar.sh
+
+      - name: Exercise bundled media tools and engine
+        shell: bash
+        env:
+          PYTHONPATH: .
+          SOUNDSIBLE_REQUIRE_FFMPEG: "1"
+          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-x86_64-unknown-linux-gnu
+        run: pytest tests/test_desktop_engine_smoke.py::test_desktop_engine_smoke_sidecar -q
 
       - name: Build Tauri bundles
         working-directory: desktop-shell
@@ -159,6 +171,14 @@ jobs:
           BUNDLE_FFMPEG: "1"
         run: ./desktop-shell/scripts/build-sidecar.sh
 
+      - name: Exercise bundled media tools and engine
+        shell: bash
+        env:
+          PYTHONPATH: .
+          SOUNDSIBLE_REQUIRE_FFMPEG: "1"
+          SOUNDSIBLE_ENGINE_BIN: desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe
+        run: pytest tests/test_desktop_engine_smoke.py::test_desktop_engine_smoke_sidecar -q
+
       - name: Build Tauri bundles
         working-directory: desktop-shell
         env:
@@ -173,6 +193,7 @@ jobs:
           ./desktop-shell/scripts/verify-pe-architecture.ps1 `
             -Architecture "${{ matrix.arch }}" `
             "desktop-shell/src-tauri/binaries/soundsible-engine-${{ matrix.target }}.exe" `
+            "desktop-shell/src-tauri/binaries/ffprobe-${{ matrix.target }}.exe" `
             "desktop-shell/src-tauri/binaries/ffmpeg-${{ matrix.target }}.exe" `
             "desktop-shell/src-tauri/target/release/soundsible-desktop.exe"
 

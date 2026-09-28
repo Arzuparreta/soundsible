@@ -3,18 +3,22 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 REPO_ROOT = Path(SPEC).resolve().parents[2]
 ENTRY = REPO_ROOT / "soundsible_engine.py"
-VENDOR_FFMPEG = REPO_ROOT / "desktop-shell" / "packaging" / "vendor" / "ffmpeg"
+VENDOR_DIR = REPO_ROOT / "desktop-shell" / "packaging" / "vendor"
 
 pyinstaller_binaries = []
-# Install as bin/ffmpeg — never "." or PyInstaller shadows the ffmpeg-python package.
-if VENDOR_FFMPEG.is_file():
-    pyinstaller_binaries.append((str(VENDOR_FFMPEG), "bin"))
+# Keep the native suffix: Windows tools and yt-dlp discover *.exe by name.
+# Install in bin/ so PyInstaller does not shadow the ffmpeg-python package.
+for tool in ("ffmpeg", "ffprobe"):
+    binary = VENDOR_DIR / (tool + (".exe" if sys.platform == "win32" else ""))
+    if binary.is_file():
+        pyinstaller_binaries.append((str(binary), "bin"))
 
 hiddenimports = []
 curl_cffi_datas, curl_cffi_binaries, curl_cffi_hiddenimports = collect_all("curl_cffi")
