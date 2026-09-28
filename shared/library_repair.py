@@ -52,6 +52,27 @@ DEFAULT_COVER_MAX_BYTES = 150 * 1024
 #: a format we cannot remux losslessly is a format we do not touch.
 REMUXABLE = {".mp4": ".m4a", ".m4a": ".m4a", ".flac": ".flac", ".mp3": ".mp3"}
 
+#: Codecs that store every sample. YouTube never serves one, so a song that came
+#: from YouTube and is stored as one was decoded from a lossy stream and written
+#: back out losslessly: the same sound at up to twelve times the size.
+LOSSLESS_CODECS = frozenset({
+    "flac", "alac", "wavpack", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le",
+    "pcm_s16be", "pcm_s24be", "pcm_s32be",
+})
+
+#: How far a fresh download may drift from the stored file and still be the
+#: same recording. Same video id, so this only catches a re-edited upload.
+RESTORE_DURATION_TOLERANCE_SEC = 3.0
+
+#: Below this a YouTube download is one of the low tiers (itag 139 is 49k AAC,
+#: 249/250 are 54-72k Opus), taken when the client asked could not see the
+#: 130k stream. Worth fetching again.
+LOW_BITRATE_KBPS = 100
+
+#: A lossy replacement must beat what is stored by this much to be worth a new
+#: id; a few kbps either way is the same stream measured twice.
+MIN_BITRATE_GAIN = 1.25
+
 
 @dataclass(frozen=True)
 class FileShape:
@@ -62,6 +83,10 @@ class FileShape:
     #: Real video, never an attached picture.
     video_codecs: tuple[str, ...]
     cover_bytes: int
+    #: First audio stream's codec, empty when there is none.
+    audio_codec: str = ""
+    duration_sec: float = 0.0
+    audio_kbps: int = 0
 
     @property
     def has_video(self) -> bool:
@@ -70,6 +95,14 @@ class FileShape:
     @property
     def needs_repair(self) -> bool:
         return self.has_video or self.cover_bytes > DEFAULT_COVER_MAX_BYTES
+
+    @property
+    def lossless(self) -> bool:
+        return self.audio_codec in LOSSLESS_CODECS
+
+    @property
+    def low_bitrate(self) -> bool:
+        return not self.lossless and 0 < self.audio_kbps < LOW_BITRATE_KBPS
 
 
 @dataclass(frozen=True)
@@ -128,28 +161,44 @@ def inspect_file(path: str | Path) -> Optional[FileShape]:
         return None
     try:
         probe = _run([
-            _ffprobe(), "-v", "error", "-show_entries", "stream=codec_type,codec_name",
-            "-of", "json", str(target),
+            _ffprobe(), "-v", "error", "-show_entries",
+            "stream=codec_type,codec_name,bit_rate:format=duration,bit_rate", "-of", "json", str(target),
         ])
     except (OSError, RepairUnavailable):
         return None
     if probe.returncode != 0:
         return None
     try:
-        streams = json.loads(probe.stdout or "{}").get("streams") or []
+        report = json.loads(probe.stdout or "{}")
     except json.JSONDecodeError:
         return None
+    streams = report.get("streams") or []
+    try:
+        duration = float((report.get("format") or {}).get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = 0.0
     video = tuple(
         str(stream.get("codec_name"))
         for stream in streams
         if stream.get("codec_type") == "video" and stream.get("codec_name") not in STILL_IMAGE_CODECS
     )
+    audio_stream = next((stream for stream in streams if stream.get("codec_type") == "audio"), {})
+    audio = str(audio_stream.get("codec_name") or "")
+    try:
+        # A container without per-stream figures (Opus in WebM) only reports
+        # the whole file's rate, which is still close enough for a threshold.
+        kbps = int(audio_stream.get("bit_rate") or (report.get("format") or {}).get("bit_rate") or 0) // 1000
+    except (TypeError, ValueError):
+        kbps = 0
     cover = extract_cover(target)
     return FileShape(
         path=str(target),
         size_bytes=target.stat().st_size,
         video_codecs=video,
         cover_bytes=len(cover or b""),
+        audio_codec=audio,
+        duration_sec=duration,
+        audio_kbps=kbps,
     )
 
 
@@ -343,6 +392,96 @@ def repair_file(
                 pass
 
 
+def restore_original(
+    track: Any,
+    shape: FileShape,
+    pool: Path,
+    fetch_original: Callable[[str], Optional[Path]],
+    log: Callable[[str], None],
+) -> Optional[Any]:
+    """Replace a badly acquired YouTube file with the stream YouTube serves.
+
+    Two acquisitions went wrong. The old `ultra` profile converted YouTube's
+    Opus or AAC to FLAC: the same sound at up to twelve times the size. And
+    asking only the android, ios and web clients left some downloads with the
+    49k AAC tier, because those clients no longer see the 130k stream. Both
+    are fixed by downloading the same video id again, without converting.
+
+    Returns the track pointing at the new file, or None with the stored file
+    left exactly as it was: when the download fails, when it is not a lossy
+    stream, when it is not clearly better than a lossy file already stored, or
+    when its length says it is not the same recording.
+    """
+    from setup_tool.audio import AudioProcessor
+    from shared.artwork import artwork_store
+
+    try:
+        fetched = fetch_original(track.youtube_id)
+    except Exception as exc:
+        log(f"   could not download the original: {str(exc).strip()[:200]}")
+        return None
+    if not fetched or not Path(fetched).is_file():
+        log("   could not download the original")
+        return None
+    fetched = Path(fetched)
+    try:
+        fresh = inspect_file(fetched)
+        if fresh is None or not fresh.audio_codec or fresh.lossless:
+            log("   the download is not a lossy stream; keeping the stored file")
+            return None
+        if not shape.lossless and fresh.audio_kbps < shape.audio_kbps * MIN_BITRATE_GAIN:
+            log(
+                f"   YouTube still serves {fresh.audio_kbps} kbps against {shape.audio_kbps} "
+                "stored; keeping the stored file"
+            )
+            return None
+        if (
+            shape.duration_sec
+            and fresh.duration_sec
+            and abs(shape.duration_sec - fresh.duration_sec) > RESTORE_DURATION_TOLERANCE_SEC
+        ):
+            log(
+                f"   the download lasts {fresh.duration_sec:.0f}s, the stored file "
+                f"{shape.duration_sec:.0f}s; keeping the stored file"
+            )
+            return None
+
+        store = artwork_store()
+        current = store.ref(track.id)
+        art = current["hash"] if current else None
+        if not art:
+            cover = extract_cover(shape.path)
+            art = store.put(cover) if cover else None
+
+        new_hash = AudioProcessor.calculate_hash(str(fetched))
+        extension = fetched.suffix.lstrip(".").lower()
+        size = fetched.stat().st_size
+        if art:
+            store.bind(new_hash, art, current["source"] if current else "embedded", only_missing=True)
+        pool.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(fetched), str(pool / f"{new_hash}.{extension}"))
+    except Exception as exc:
+        log(f"   could not store the original: {exc}")
+        return None
+    finally:
+        if fetched.exists():
+            fetched.unlink(missing_ok=True)
+
+    duration = fresh.duration_sec or getattr(track, "duration", 0) or 0
+    original_name = getattr(track, "original_filename", None)
+    return replace(
+        track,
+        id=new_hash,
+        file_hash=new_hash,
+        file_size=size,
+        format=extension,
+        bitrate=int(size * 8 / duration / 1000) if duration else getattr(track, "bitrate", 0),
+        original_filename=str(Path(original_name).with_suffix(f".{extension}")) if original_name else original_name,
+        audio_quality="lossy",
+        local_path=None,
+    )
+
+
 def repair_library(
     tracks: Iterable[Any],
     tracks_dir: str | Path,
@@ -352,8 +491,12 @@ def repair_library(
     progress: Optional[Callable[[str], None]] = None,
     cover_max_edge: int = DEFAULT_COVER_MAX_EDGE,
     cover_max_bytes: int = DEFAULT_COVER_MAX_BYTES,
+    fetch_original: Optional[Callable[[str], Optional[Path]]] = None,
 ) -> dict[str, Any]:
     """Repair every stored file that carries video or oversized artwork.
+
+    With `fetch_original`, a song from YouTube stored in a lossless codec or at
+    a low bitrate is also downloaded again (see `restore_original`).
 
     Returns ``{"repaired", "saved_bytes", "id_map", "tracks", "dry_run"}``.
     Repairing changes a file's bytes, and the hash of those bytes *is* the track
@@ -385,6 +528,38 @@ def repair_library(
             continue
         path = resolve_local_track_path(track)
         shape = inspect_file(path) if path else None
+        if (
+            fetch_original is not None
+            and shape is not None
+            and (shape.lossless or shape.low_bitrate)
+            and getattr(track, "youtube_id", None)
+            # A scanned folder is borrowed, never owned: its files stay as they are.
+            and Path(path).resolve().is_relative_to(pool.resolve())
+        ):
+            reason = (
+                f"{shape.audio_codec} decoded from YouTube" if shape.lossless
+                else f"{shape.audio_kbps} kbps {shape.audio_codec}"
+            )
+            log(f"{track.artist} — {track.title}: {reason}, {shape.size_bytes // 1024 // 1024} MB")
+            if dry_run:
+                repaired += 1
+                # The ceiling, as below. A low-bitrate file grows when restored.
+                saved += shape.size_bytes if shape.lossless else 0
+                updated.append(track)
+                continue
+            refreshed = restore_original(track, shape, pool, fetch_original, log)
+            if refreshed is None:
+                updated.append(track)
+                continue
+            if refreshed.id != track.id:
+                from shared.library_lifecycle import retire
+                retire(track)
+                id_map[track.id] = refreshed.id
+            updated.append(refreshed)
+            repaired += 1
+            saved += max(0, shape.size_bytes - refreshed.file_size)
+            log(f"   -> {shape.size_bytes // 1024 // 1024} MB to {refreshed.file_size // 1024 // 1024} MB")
+            continue
         if shape is None or not shape.needs_repair:
             updated.append(track)
             continue

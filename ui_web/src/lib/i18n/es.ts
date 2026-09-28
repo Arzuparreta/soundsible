@@ -508,7 +508,7 @@ export const es: Dict = {
   settings: {
     repair: 'Reparar ficheros',
     repairTitle: 'Reparar los ficheros de la biblioteca',
-    repairMsg: 'Los ficheros con vídeo dentro o con una portada enorme se reescriben sin tocar el audio. Eso cambia sus ids, y las playlists y favoritos van detrás automáticamente.',
+    repairMsg: 'Los ficheros con vídeo dentro o con una portada enorme se reescriben sin tocar el audio. Las canciones de YouTube guardadas como FLAC o con poca calidad se vuelven a descargar con la mejor versión que ofrece YouTube. Eso cambia sus ids, y las playlists y favoritos van detrás automáticamente.',
     repairConfirm: 'Reparar',
     link: {
       label: 'Entrega',

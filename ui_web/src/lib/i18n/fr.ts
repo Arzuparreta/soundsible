@@ -512,7 +512,7 @@ export const fr: Dict = {
   settings: {
     repair: 'Réparer les fichiers',
     repairTitle: 'Réparer les fichiers de la bibliothèque',
-    repairMsg: 'Les fichiers contenant une piste vidéo ou une pochette démesurée seront réécrits sans toucher à l’audio. Leurs identifiants changent, et les playlists et favoris suivent automatiquement.',
+    repairMsg: 'Les fichiers contenant une piste vidéo ou une pochette démesurée seront réécrits sans toucher à l’audio. Les morceaux YouTube stockés en FLAC ou à faible débit sont retéléchargés dans la meilleure version que propose YouTube. Leurs identifiants changent, et les playlists et favoris suivent automatiquement.',
     repairConfirm: 'Réparer',
     link: {
       label: 'Livraison',

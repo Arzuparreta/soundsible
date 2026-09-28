@@ -347,3 +347,201 @@ def test_a_failed_repair_commit_discards_its_unreferenced_copies(tmp_path, pool_
     # The original is still referenced, so it stays; the copy nobody adopted goes.
     assert sorted(p.name for p in pool.iterdir() if p.suffix != ".png") == ["hash-1.mp4"]
     assert library.db.get_track("hash-1")
+
+
+# --- Restoring the stream a YouTube FLAC was decoded from -------------------
+
+
+def _flac(directory, name="decoded.flac", *, seconds=3):
+    """What the old `ultra` profile stored: YouTube's stream decoded to FLAC."""
+    path = directory / name
+    subprocess_run([
+        ffmpeg_executable(), "-y", "-v", "error",
+        "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+        "-c:a", "flac", str(path),
+    ])
+    return path
+
+
+class _Fetcher:
+    """Stands in for yt-dlp: hands back a fresh file the way `_download_audio` does."""
+
+    def __init__(self, directory, make):
+        self.directory = directory
+        self.make = make
+        self.calls = []
+        self.handed_out = []
+
+    def __call__(self, video_id):
+        self.calls.append(video_id)
+        path = self.make(self.directory, f"fetched-{len(self.calls)}")
+        self.handed_out.append(path)
+        return path
+
+
+@pytest.fixture
+def pool(tmp_path):
+    path = tmp_path / "tracks"
+    path.mkdir()
+    return path
+
+
+@pytest.fixture
+def downloads(tmp_path):
+    path = tmp_path / "downloads"
+    path.mkdir()
+    return path
+
+
+def test_a_youtube_flac_is_replaced_by_the_stream_it_came_from(pool, downloads, pool_paths):
+    flac = _flac(pool)
+    track = _track("hash-1", flac)
+    fetch = _Fetcher(downloads, lambda d, n: _audio_only(d, f"{n}.m4a"))
+
+    summary = repair_library([track], pool, dry_run=False, fetch_original=fetch)
+
+    restored = summary["tracks"][0]
+    assert fetch.calls == ["K3JGxj2rvAs"]
+    assert summary["id_map"] == {"hash-1": restored.id}
+    assert restored.format == "m4a" and restored.file_hash == restored.id
+    assert restored.audio_quality == "lossy"
+    assert restored.youtube_id == "K3JGxj2rvAs"
+    assert restored.added_at == "2026-07-02T10:00:00"
+    assert restored.original_filename == "decoded.m4a"
+    assert (pool / f"{restored.id}.m4a").is_file()
+    assert restored.file_size < flac.stat().st_size
+    assert not fetch.handed_out[0].exists()
+    assert flac.exists(), "original stays until canonical references have committed"
+
+
+def test_a_download_of_a_different_length_is_not_the_same_recording(pool, downloads, pool_paths):
+    flac = _flac(pool, seconds=3)
+    before = flac.read_bytes()
+    track = _track("hash-1", flac)
+    fetch = _Fetcher(downloads, lambda d, n: _audio_only(d, f"{n}.m4a", seconds=9))
+
+    summary = repair_library([track], pool, dry_run=False, fetch_original=fetch)
+
+    assert summary["tracks"] == [track] and summary["id_map"] == {}
+    assert flac.read_bytes() == before
+    assert not fetch.handed_out[0].exists()
+
+
+def test_a_download_that_is_lossless_again_changes_nothing(pool, downloads, pool_paths):
+    flac = _flac(pool)
+    track = _track("hash-1", flac)
+    fetch = _Fetcher(downloads, lambda d, n: _flac(d, f"{n}.flac"))
+
+    summary = repair_library([track], pool, dry_run=False, fetch_original=fetch)
+
+    assert summary["tracks"] == [track] and summary["id_map"] == {}
+
+
+def test_a_failed_download_keeps_the_stored_file(pool, pool_paths):
+    flac = _flac(pool)
+    track = _track("hash-1", flac)
+
+    def unavailable(video_id):
+        raise RuntimeError("Video unavailable")
+
+    summary = repair_library([track], pool, dry_run=False, fetch_original=unavailable)
+
+    assert summary["tracks"] == [track] and summary["repaired"] == 0
+    assert flac.exists()
+
+
+def test_a_dry_run_counts_youtube_flacs_without_downloading(pool, downloads, pool_paths):
+    track = _track("hash-1", _flac(pool))
+    fetch = _Fetcher(downloads, lambda d, n: _audio_only(d, f"{n}.m4a"))
+
+    summary = repair_library([track], pool, dry_run=True, fetch_original=fetch)
+
+    assert summary["repaired"] == 1 and fetch.calls == []
+
+
+@pytest.mark.parametrize("case", ["not from youtube", "outside the pool"])
+def test_a_flac_that_is_not_a_youtube_download_is_never_touched(tmp_path, pool, downloads, pool_paths, case):
+    if case == "not from youtube":
+        track = _track("hash-1", _flac(pool))
+        track.youtube_id = None
+    else:
+        external = tmp_path / "external"
+        external.mkdir()
+        track = _track("hash-1", _flac(external))
+    fetch = _Fetcher(downloads, lambda d, n: _audio_only(d, f"{n}.m4a"))
+
+    summary = repair_library([track], pool, dry_run=False, fetch_original=fetch)
+
+    assert fetch.calls == [] and summary["tracks"] == [track]
+
+
+def _aac(directory, name, *, kbps, seconds=3):
+    path = directory / name
+    subprocess_run([
+        ffmpeg_executable(), "-y", "-v", "error",
+        "-f", "lavfi", "-i", f"anoisesrc=duration={seconds}:amplitude=0.5",
+        "-c:a", "aac", "-b:a", f"{kbps}k", str(path),
+    ])
+    return path
+
+
+def test_a_low_bitrate_youtube_download_is_fetched_again(pool, downloads, pool_paths):
+    stored = _aac(pool, "low.m4a", kbps=48)
+    track = _track("hash-1", stored)
+    fetch = _Fetcher(downloads, lambda d, n: _aac(d, f"{n}.m4a", kbps=128))
+
+    summary = repair_library([track], pool, dry_run=False, fetch_original=fetch)
+
+    restored = summary["tracks"][0]
+    assert summary["id_map"] == {"hash-1": restored.id}
+    assert restored.file_size > stored.stat().st_size
+
+
+def test_a_download_no_better_than_the_stored_file_changes_nothing(pool, downloads, pool_paths):
+    track = _track("hash-1", _aac(pool, "low.m4a", kbps=48))
+    fetch = _Fetcher(downloads, lambda d, n: _aac(d, f"{n}.m4a", kbps=48))
+
+    summary = repair_library([track], pool, dry_run=False, fetch_original=fetch)
+
+    assert fetch.calls == ["K3JGxj2rvAs"]
+    assert summary["tracks"] == [track] and summary["id_map"] == {}
+    assert not fetch.handed_out[0].exists()
+
+
+def test_a_good_youtube_download_is_never_fetched_again(pool, downloads, pool_paths):
+    track = _track("hash-1", _aac(pool, "fine.m4a", kbps=128))
+    fetch = _Fetcher(downloads, lambda d, n: _aac(d, f"{n}.m4a", kbps=128))
+
+    repair_library([track], pool, dry_run=False, fetch_original=fetch)
+
+    assert fetch.calls == []
+
+
+def test_the_ultra_profile_never_converts_youtube_audio_to_flac(tmp_path, monkeypatch):
+    """`ultra` means the stream as YouTube serves it. When the native download
+    fails and yt-dlp has to extract, it must keep that codec, not write FLAC."""
+    import odst_tool.youtube_downloader as ytd
+
+    launched = []
+
+    class FailedRun:
+        stdout = iter(())
+        returncode = 1
+
+        def wait(self, timeout=None):
+            return 1
+
+    def popen(args, **kwargs):
+        launched.append(args)
+        return FailedRun()
+
+    monkeypatch.setattr(ytd.subprocess, "Popen", popen)
+    downloader = ytd.YouTubeDownloader(tmp_path, quality="ultra")
+
+    with pytest.raises(Exception):
+        downloader._download_audio("https://www.youtube.com/watch?v=K3JGxj2rvAs")
+
+    extracting = [args for args in launched if "-x" in args]
+    assert extracting, "the fallback extraction ran"
+    for args in extracting:
+        assert args[args.index("--audio-format") + 1] == "best"

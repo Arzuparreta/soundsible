@@ -508,7 +508,7 @@ export const zh: Dict = {
   settings: {
     repair: '修复文件',
     repairTitle: '修复音乐库文件',
-    repairMsg: '含有视频流或超大封面的文件将被重写，音频本身不变。这会改变它们的 id，播放列表和收藏会自动跟随。',
+    repairMsg: '含有视频流或超大封面的文件将被重写，音频本身不变。以 FLAC 或低码率存储的 YouTube 歌曲会重新下载为 YouTube 提供的最佳音频流。这会改变它们的 id，播放列表和收藏会自动跟随。',
     repairConfirm: '修复',
     link: {
       label: '传输',
