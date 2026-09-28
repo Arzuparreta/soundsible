@@ -225,3 +225,6 @@ export function ChevronDownIcon(props: { class?: string }) {
     </svg>
   );
 }
+
+/** Standard bookmark outline, following the shared glyph grid. */
+export const BookmarkIcon = line("M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z");

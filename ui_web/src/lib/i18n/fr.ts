@@ -1,6 +1,7 @@
 import type { Dict } from './en';
 
 export const fr: Dict = {
+  bookmarks: {"title": "Albums enregistrés", "add": "Enregistrer l’album", "remove": "Retirer le signet", "saved": "Enregistré", "error": "Impossible d’enregistrer le signet", "empty": "Enregistrez des albums depuis leur page pour les retrouver ici."},
   searchHome: {
     "artists": "Artistes à découvrir",
     "albums": "Albums pour vous",

@@ -1,6 +1,7 @@
 import type { Dict } from './en';
 
 export const zh: Dict = {
+  bookmarks: {"title": "已收藏专辑", "add": "收藏专辑", "remove": "取消收藏", "saved": "已收藏", "error": "无法保存收藏", "empty": "在专辑页面收藏专辑，即可在此找到。"},
   searchHome: {
     "artists": "发现艺人",
     "albums": "为你推荐的专辑",

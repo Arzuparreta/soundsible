@@ -1,3 +1,6 @@
+import { useAlbumBookmarks, type AlbumBookmark } from '../lib/albumBookmarks';
+import { BookmarkBadge } from '../components/BookmarkBadge';
+import { BookmarkIcon } from '../components/icons';
 import Button from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
 import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
@@ -65,6 +68,13 @@ export default function Album() {
       catch { setProfileError(true); return null; }
     },
   );
+
+  const bookmarks = useAlbumBookmarks();
+  const bookmark = (): AlbumBookmark => ({
+    title: title(), artist: artistName() || currentProfile()?.artist || '',
+    cover: currentProfile()?.cover || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined),
+    albumId: viewParams().albumId, deezerId: viewParams().deezerId, view: view(),
+  });
 
   const currentProfile = () => profile.loading ? null : profile();
 
@@ -234,8 +244,9 @@ export default function Album() {
 
         <div class={styles.hero}>
           <div class={styles.cover} style={{ position: 'relative', background: coverGradient(title()) }}>
-            <CoverImage src={currentProfile()?.cover} eager />
-            <Show when={!currentProfile()?.cover}>
+            <CoverImage src={bookmark().cover} eager />
+            <Show when={bookmarks.find(bookmark())}><BookmarkBadge /></Show>
+            <Show when={!bookmark().cover}>
               <span class={styles.initial}>{(title()[0] ?? '?').toUpperCase()}</span>
             </Show>
           </div>
@@ -247,6 +258,13 @@ export default function Album() {
             <Show when={tracklist().length > 0}>{trackCount(tracklist().length)}</Show>
           </span>
           <div class={styles.actions}>
+            <button class={styles.btnSecondary} type="button"
+              aria-pressed={!!bookmarks.find(bookmark())}
+              disabled={bookmarks.loading() || bookmarks.pending() || (!artistName() && !currentProfile()?.artist && !viewParams().albumId && !viewParams().deezerId)}
+              onClick={() => { if (bookmarks.error()) void bookmarks.refresh(); else void bookmarks.toggle(bookmark()).catch(() => toast.error(t('bookmarks.error'))); }}>
+              <BookmarkIcon size={18} />
+              {bookmarks.error() ? t('common.retry') : t(bookmarks.find(bookmark()) ? 'bookmarks.remove' : 'bookmarks.add')}
+            </button>
             <Show when={state.autoMode.active} fallback={
             <button class={styles.btnPrimary} type="button" disabled={view() === 'library' ? libraryTrackList().length === 0 : tracklist().length === 0} onClick={playAll}>
               <PlayIcon size={16} />

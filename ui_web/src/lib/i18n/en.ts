@@ -1,5 +1,6 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
+  bookmarks: {"title": "Saved albums", "add": "Bookmark album", "remove": "Remove bookmark", "saved": "Bookmarked", "error": "Bookmark could not be saved", "empty": "Bookmark albums from their album page to find them here."},
   searchHome: {
     "artists": "Artists to discover",
     "albums": "Albums for you",

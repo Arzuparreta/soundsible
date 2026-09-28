@@ -7,6 +7,7 @@ import { clearSearchCache } from '../lib/searchCache';
 import { encodeTrackCapsule } from '../lib/trackShare';
 
 const apiMock = vi.hoisted(() => ({
+  request: vi.fn(),
   getDiscoveryMusicFeed: vi.fn(),
   searchCatalog: vi.fn(),
   searchYouTube: vi.fn(),
@@ -32,7 +33,7 @@ vi.mock('@solidjs/router', () => ({
   useNavigate: () => vi.fn(),
   useSearchParams: () => [routerMock.params, routerMock.setParams],
 }));
-vi.mock('../lib/api', () => ({ api: apiMock }));
+vi.mock('../lib/api', () => ({ api: apiMock, request: apiMock.request }));
 vi.mock('../lib/media', () => ({ coverUrl: (id: string) => `/cover/${id}` }));
 vi.mock('../lib/toast', () => ({
   toast: {
@@ -64,6 +65,7 @@ vi.mock('../stores', async () => {
 describe('Search route', () => {
   beforeEach(() => {
     setLocale('en');
+    apiMock.request.mockResolvedValue({ albums: [] });
     // Module scope outlives a test the way it outlives a navigation.
     clearSearchCache();
     vi.useFakeTimers();
@@ -412,6 +414,30 @@ describe('Search route', () => {
     expect(screen.getByRole('heading', { name: 'Artists to discover' })).toBeInTheDocument();
     expect(screen.getByText('New Track')).toBeInTheDocument();
     expect(apiMock.getDiscoveryMusicFeed).toHaveBeenCalled();
+  });
+
+  it('places saved albums after artists and preserves their destination and badge', async () => {
+    apiMock.request.mockResolvedValue({ albums: [{ id: 'saved', title: 'My Record', artist: 'Band', albumId: 'record-id', view: 'library' }] });
+    apiMock.getDiscoveryMusicFeed.mockResolvedValue({ browse_sections: [
+      { id: 'artists', items: [{ id: 'a', type: 'artist', title: 'Artist', source: 'deezer' }] },
+      { id: 'albums', items: [{ id: 'b', type: 'album', title: 'Discovery', artist: 'Band', source: 'deezer' }] },
+    ] });
+    render(() => <Search />);
+    await vi.advanceTimersByTimeAsync(0);
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((el) => el.textContent);
+    expect(headings.indexOf('Saved albums')).toBe(headings.indexOf('Artists to discover') + 1);
+    const link = screen.getByRole('link', { name: 'My Record' });
+    expect(link.getAttribute('href')).toContain('album_id=record-id');
+    expect(link.getAttribute('href')).toContain('view=library');
+    expect(screen.getByRole('img', { name: 'Bookmarked' })).toBeInTheDocument();
+  });
+
+  it('shows saved albums even if discovery fails', async () => {
+    apiMock.request.mockResolvedValue({ albums: [{ id: 'saved', title: 'Offline discovery record', artist: 'Band' }] });
+    apiMock.getDiscoveryMusicFeed.mockRejectedValue(new Error('offline'));
+    render(() => <Search />);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByText('Offline discovery record')).toBeInTheDocument();
   });
 
   it('replaces the cold home when background enrichment finishes, then stops polling', async () => {

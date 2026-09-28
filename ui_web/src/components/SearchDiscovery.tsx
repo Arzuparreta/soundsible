@@ -1,3 +1,6 @@
+import { useAlbumBookmarks } from '../lib/albumBookmarks';
+import { albumPath } from '../lib/artistRoute';
+import { BookmarkBadge } from './BookmarkBadge';
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { api, type DiscoveryBrowseItem, type DiscoveryMusicFeed } from '../lib/api';
@@ -25,6 +28,7 @@ export function SearchDiscovery(props: {
   saving: Set<string>;
 }) {
   const navigate = useNavigate();
+  const bookmarks = useAlbumBookmarks();
   const cacheKey = userKey('home');
   const cached = readSearchCache<DiscoveryMusicFeed>(CACHE, cacheKey);
   const [feed, setFeed] = createSignal<DiscoveryMusicFeed>(cached ?? {});
@@ -37,7 +41,7 @@ export function SearchDiscovery(props: {
   const sections = createMemo(() => feed().browse_sections ?? []);
   const songs = createMemo(() => (feed().items ?? []).slice(0, 10).map(discoveryCatalogItem));
   const hasContent = () => sections().some((section) => section.items.length) || songs().length > 0;
-  const expanded = () => ['artists', 'albums', 'songs'].includes(props.section ?? '') ? props.section : undefined;
+  const expanded = () => ['artists', 'bookmarks', 'albums', 'songs'].includes(props.section ?? '') ? props.section : undefined;
   const title = (id: string, popular = false) => id === 'artists'
     ? t(popular ? 'searchHome.popularArtists' : 'searchHome.artists')
     : id === 'albums' ? t(popular ? 'searchHome.popularAlbums' : 'searchHome.albums') : t('searchHome.songs');
@@ -75,10 +79,26 @@ export function SearchDiscovery(props: {
     <Show when={loading() && !hasContent()}>
       <SkeletonCards count={3} shape="round" /><SkeletonCards count={3} /><SkeletonRows count={5} compact />
     </Show>
-    <For each={sections().filter((section) => !expanded() || expanded() === section.id)}>{(section) =>
+    <For each={sections().filter((section) => section.id === 'artists' && (!expanded() || expanded() === section.id))}>{(section) =>
       <section aria-label={title(section.id, section.popular)}>
         <SectionHeader title={title(section.id, section.popular)} id={section.id} more={!expanded() && section.items.length > 2} />
-        <EntityRail items={section.items} round={section.id === 'artists'} expanded={!!expanded()} label={title(section.id, section.popular)} />
+        <EntityRail items={section.items} round expanded={!!expanded()} label={title(section.id, section.popular)} />
+      </section>
+    }</For>
+    <Show when={!expanded() || expanded() === 'bookmarks'}>
+      <section aria-label={t('bookmarks.title')}>
+        <SectionHeader title={t('bookmarks.title')} id="bookmarks" more={!expanded() && bookmarks.albums().length > 2} />
+        <Show when={bookmarks.loading() && !bookmarks.albums().length}><SkeletonCards count={3} /></Show>
+        <Show when={bookmarks.error()}><p class={styles.notice} role="status">{t('common.loadFailed')}{' '}<button class={styles.retry} onClick={() => void bookmarks.refresh()}>{t('common.retry')}</button></p></Show>
+        <Show when={!bookmarks.loading() && !bookmarks.error() && !bookmarks.albums().length}><p class={styles.notice}>{t('bookmarks.empty')}</p></Show>
+        <Show when={bookmarks.albums().length > 0}><EntityRail items={bookmarks.albums().map((album) => ({ title: album.title, artist: album.artist, cover: album.cover, path: albumPath(album.title, album.artist, album), bookmarked: true }))}
+          round={false} expanded={!!expanded()} label={t('bookmarks.title')} /></Show>
+      </section>
+    </Show>
+    <For each={sections().filter((section) => section.id !== 'artists' && (!expanded() || expanded() === section.id))}>{(section) =>
+      <section aria-label={title(section.id, section.popular)}>
+        <SectionHeader title={title(section.id, section.popular)} id={section.id} more={!expanded() && section.items.length > 2} />
+        <EntityRail items={section.items} round={false} expanded={!!expanded()} label={title(section.id, section.popular)} />
       </section>
     }</For>
     <Show when={songs().length > 0 && (!expanded() || expanded() === 'songs')}>
@@ -107,7 +127,7 @@ function SectionHeader(props: { title: string; id: string; more: boolean }) {
   </Show></div>;
 }
 
-function EntityRail(props: { items: DiscoveryBrowseItem[]; round: boolean; expanded: boolean; label: string }) {
+function EntityRail(props: { items: (DiscoveryBrowseItem | { title: string; artist: string; cover?: string; path: string; bookmarked: boolean })[]; round: boolean; expanded: boolean; label: string }) {
   let rail: HTMLDivElement | undefined;
   const [left, setLeft] = createSignal(false);
   const [right, setRight] = createSignal(false);
@@ -122,6 +142,7 @@ function EntityRail(props: { items: DiscoveryBrowseItem[]; round: boolean; expan
     update();
     onCleanup(() => observer?.disconnect());
   });
+  createEffect(() => { props.items; queueMicrotask(update); });
   return <>
     <Show when={!props.expanded}><div class={styles.controls}>
       <button type="button" disabled={!left()} aria-label={`${t('searchHome.previous')}: ${props.label}`} onClick={() => rail?.scrollBy({ left: -rail.clientWidth * .8 })}>←</button>
@@ -129,8 +150,8 @@ function EntityRail(props: { items: DiscoveryBrowseItem[]; round: boolean; expan
     </div></Show>
     <div ref={rail} onScroll={update} classList={{ [styles.rail]: !props.expanded, [styles.grid]: props.expanded && !props.round,
       [styles.artistList]: props.expanded && props.round }}>
-      <For each={props.items}>{(item) => <MusicLink path={catalogDestination(item)!} class={styles.entity} label={item.title}>
-        <span classList={{ [styles.cover]: true, [styles.round]: props.round }}><CoverImage src={item.cover} /></span>
+      <For each={props.items}>{(item) => <MusicLink path={'path' in item ? item.path : catalogDestination(item)!} class={styles.entity} label={item.title}>
+        <span classList={{ [styles.cover]: true, [styles.round]: props.round }}><CoverImage src={item.cover} /><Show when={'bookmarked' in item && item.bookmarked}><BookmarkBadge /></Show></span>
         <span class={styles.meta}><span class={styles.name}>{item.title}</span>
           <Show when={!props.round}><span class={styles.subtitle}>{item.artist}</span></Show>
         </span>

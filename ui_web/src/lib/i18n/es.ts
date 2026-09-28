@@ -1,6 +1,7 @@
 import type { Dict } from './en';
 
 export const es: Dict = {
+  bookmarks: {"title": "Álbumes guardados", "add": "Guardar álbum", "remove": "Quitar marcador", "saved": "Guardado", "error": "No se pudo guardar el marcador", "empty": "Guarda álbumes desde su página para encontrarlos aquí."},
   searchHome: {
     "artists": "Artistas por descubrir",
     "albums": "Álbumes para ti",

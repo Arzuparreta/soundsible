@@ -1724,6 +1724,8 @@ from shared.api.routes.auth import auth_bp
 from shared.api.routes.loudness import loudness_bp
 from shared.api.routes.community import community_bp
 from shared.api.routes.subsonic import subsonic_bp
+from shared.api.routes.album_bookmarks import album_bookmarks_bp
+app.register_blueprint(album_bookmarks_bp)
 app.register_blueprint(library_bp)
 app.register_blueprint(library_catalog_bp)
 app.register_blueprint(playback_bp)

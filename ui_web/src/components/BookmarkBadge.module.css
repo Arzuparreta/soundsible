@@ -1,0 +1,15 @@
+.badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: white;
+  background: #171717;
+  box-shadow: 0 1px 4px #0008;
+  pointer-events: none;
+}
+.badge svg { fill: currentColor; }
