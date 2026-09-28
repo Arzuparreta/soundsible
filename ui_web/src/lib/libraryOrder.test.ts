@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addedAtMs, byRecency } from './libraryOrder';
+import { addedAtMs, byRecency, libraryNow } from './libraryOrder';
 import type { Track } from '../types/music';
 
 const t = (id: string, added_at?: string | null): Track => ({
@@ -51,5 +51,13 @@ describe('byRecency', () => {
   it('breaks a tie on the order it was given', () => {
     const out = byRecency([t('first', '2026-08-01T00:00:00'), t('second', '2026-08-01T00:00:00')]);
     expect(out.map((x) => x.id)).toEqual(['first', 'second']);
+  });
+});
+
+describe('libraryNow', () => {
+  it('writes the engine’s shape, so it sorts on the same timeline as engine dates', () => {
+    const now = libraryNow();
+    expect(now).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$/);
+    expect(addedAtMs(t('now', now))).not.toBeNull();
   });
 });

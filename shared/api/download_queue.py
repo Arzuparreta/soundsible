@@ -146,6 +146,41 @@ def _merge_display_fields(base: dict, item: dict, effective_video_id: str | None
     return base
 
 
+#: Bounds on the identity a client may attach to a download. A song answers to a
+#: handful of keys (`lib:`, `yt:`, `isrc:`, `mb:`, `deezer:`, `cat:`); anything
+#: past these limits is not an identity.
+_MAX_IDENTITY_KEYS = 16
+_MAX_IDENTITY_KEY_LENGTH = 200
+
+
+def _identity_keys(item: dict) -> list[str]:
+    """The identity keys of the song this download was asked for.
+
+    A saved song downloaded from the library carries its entry's keys here, so
+    that when the file lands it joins that song — keeping the day it was saved —
+    instead of arriving beside it as something new. See
+    :func:`shared.api.add_tracks_to_user_library`.
+    """
+    raw = item.get("identity_keys")
+    if not isinstance(raw, list):
+        return []
+    keys: list[str] = []
+    for key in raw:
+        if not isinstance(key, str):
+            continue
+        key = key.strip()
+        if (
+            key
+            and ":" in key
+            and len(key) <= _MAX_IDENTITY_KEY_LENGTH
+            and key not in keys
+        ):
+            keys.append(key)
+        if len(keys) >= _MAX_IDENTITY_KEYS:
+            break
+    return keys
+
+
 def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
     """Validate and normalize intake schema for /api/downloader/queue."""
     if not isinstance(item, dict):
@@ -236,6 +271,9 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
             "metadata_evidence": metadata_evidence,
             "video_id": effective_video_id,
         }
+        identity_keys = _identity_keys(item)
+        if identity_keys:
+            base["identity_keys"] = identity_keys
         _merge_display_fields(base, item, effective_video_id)
         return base, None
 
@@ -252,6 +290,9 @@ def parse_intake_item(item: dict) -> tuple[dict | None, str | None]:
                 "metadata_evidence": metadata_evidence,
                 "video_id": extracted_id,
             }
+            identity_keys = _identity_keys(item)
+            if identity_keys:
+                base["identity_keys"] = identity_keys
             _merge_display_fields(base, item, extracted_id)
             return base, None
         return {

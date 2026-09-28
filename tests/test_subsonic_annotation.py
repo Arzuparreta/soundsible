@@ -48,6 +48,24 @@ def test_starred_songs_come_back_marked(tmp_path, monkeypatch):
     assert starred[0]["starred"]
 
 
+def test_starred_is_when_the_star_went_on_not_when_the_song_was_saved(tmp_path, monkeypatch):
+    """A song in the library since spring and starred today was starred today.
+    The two dates are kept apart so the star never moves the library date."""
+    from shared.subsonic import serialize
+    from shared.user_context import user_context
+
+    harness = build(tmp_path, monkeypatch, _library())
+    with user_context(harness.user["id"]):
+        harness.favourites().toggle_saved({"keys": ["lib:t2"]}, added_at="2026-03-01T00:00:00")
+    harness.ok("star", id="tr-t2")
+
+    entry = harness.favourites().get_entries()[0]
+    starred = harness.ok("getStarred2")["starred2"]["song"][0]["starred"]
+    assert entry["added_at"] == "2026-03-01T00:00:00"
+    assert starred == serialize.iso(entry["favourited_at"])
+    assert starred != serialize.iso("2026-03-01T00:00:00")
+
+
 def test_a_starred_song_reads_as_starred_everywhere(tmp_path, monkeypatch):
     harness = build(tmp_path, monkeypatch, _library())
     harness.ok("star", id="tr-t1")

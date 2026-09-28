@@ -124,7 +124,10 @@ def test_changed_file_rekeys_references_and_user_state(tmp_path):
             _library_revision=1,
             _export_metadata=lambda _payload: None,
         ),
-        favourites=SimpleNamespace(remap_library_id=lambda old_id, new_id: remapped.append((old_id, new_id))),
+        favourites=SimpleNamespace(
+            remap_library_id=lambda old_id, new_id: remapped.append((old_id, new_id)),
+            get_entries=lambda: [],
+        ),
     )
 
     summary, prewarm = LibraryScanService._merge_result(
@@ -161,7 +164,7 @@ def test_a_scanned_collection_is_dated_from_its_own_files(tmp_path):
         library=SimpleNamespace(
             db=db, metadata=metadata, _library_revision=1, _export_metadata=lambda _payload: None
         ),
-        favourites=SimpleNamespace(remap_library_id=lambda old_id, new_id: None),
+        favourites=SimpleNamespace(remap_library_id=lambda old_id, new_id: None, get_entries=lambda: []),
     )
 
     LibraryScanService._merge_result(

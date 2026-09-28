@@ -58,13 +58,19 @@ def test_downloading_a_saved_song_keeps_the_day_it_was_saved(api):
     """Downloading gives a song a file, not a place in the library — it has had
     one since it was saved. Dating it "now" would push a song you have owned for
     weeks to the top of "recently added", and would do it again for every song
-    you ever get round to downloading."""
+    you ever get round to downloading.
+
+    The track arrives exactly as a finished download hands it over: already
+    stamped by the shared pool the moment the file landed there. That stamp is
+    what used to win."""
     manager = api.get_favourites_manager(TEST_USER_ID)
     manager.toggle_saved(
-        {"keys": ["yt:K3JGxj2rvAs"], "title": "I Follow Rivers", "added_at": "2026-07-02T10:00:00"}
+        {"keys": ["yt:K3JGxj2rvAs"], "title": "I Follow Rivers"}, added_at="2026-07-02T10:00:00"
     )
+    downloaded = _track("hash-6", "K3JGxj2rvAs")
+    downloaded.added_at = "2026-09-28T11:00:00"
 
-    api.add_tracks_to_user_library([_track("hash-6", "K3JGxj2rvAs")])
+    api.add_tracks_to_user_library([downloaded])
 
     library = api.get_user_core(TEST_USER_ID).library
     stored = library.metadata.get_track_by_id("hash-6")

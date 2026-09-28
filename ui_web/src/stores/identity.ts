@@ -23,7 +23,7 @@ import {
   trackKeys,
   withLinkedKeys,
 } from '../lib/playbackIdentity';
-import { byRecency } from '../lib/libraryOrder';
+import { byRecency, libraryNow } from '../lib/libraryOrder';
 import { savedToTrack } from '../lib/saved';
 import { isMusicTrack } from '../lib/track';
 import { futureEntries } from '../lib/playbackQueue';
@@ -198,6 +198,17 @@ export function ownedTrackForKeys(keys: string[]): Track | null {
     if (owned) return owned;
   }
   return null;
+}
+
+/**
+ * The library date a song takes if it is saved right now: the client's copy of
+ * `Holdings.claim` in `shared/library_dates.py`. A song already owned as a file
+ * keeps the day it joined — hearting a download does not make it new — and
+ * anything else joins now. Only ever used for an optimistic entry; the engine's
+ * answer replaces it moments later, and agrees.
+ */
+export function claimedAddedAt(keys: string[]): string {
+  return ownedTrackForKeys(keys)?.added_at || libraryNow();
 }
 
 export const ownedTrackForItem = (item: CatalogItem): Track | null =>

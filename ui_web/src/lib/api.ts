@@ -63,6 +63,10 @@ export interface DownloadItem {
   thumbnail_url?: string;
   duration_sec?: number;
   metadata_evidence?: null;
+  /** Identity keys of the song being downloaded (see `lib/playbackIdentity.ts`).
+   * A saved song carries its entry's keys, so the file joins that song — and
+   * keeps the day it was saved — rather than arriving as a new one. */
+  identity_keys?: string[];
 }
 
 interface RawResult {
@@ -1236,6 +1240,8 @@ export const api = {
     cover?: string;
     external_ids?: Record<string, unknown>;
     confirm_video_id?: string;
+    /** The row's identity keys; see `DownloadItem.identity_keys`. */
+    identity_keys?: string[];
   }) => request<CatalogSaveResponse>('/api/catalog/save', { method: 'POST', body, timeoutMs: 30000 }),
 
   getArtistProfile: (name: string, deezerId?: string, signal?: AbortSignal) =>

@@ -84,7 +84,11 @@ export interface SavedEntry {
   duration?: number;
   thumbnail?: string;
   favourite?: boolean;
+  /** When the song joined the library — the same date its file carries once
+   * downloaded, decided by the engine (`shared/library_dates.py`). */
   added_at?: string | null;
+  /** When the mark went on; absent while it is off. Never moves `added_at`. */
+  favourited_at?: string | null;
 }
 
 export interface RecommendationContext {

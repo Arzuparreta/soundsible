@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from setup_tool.scanner import LibraryScanner, ScanResult
+from shared import library_dates
 from shared.api.orchestrator import orchestrator
 from shared.models import LibraryMetadata, Track
 from shared.path_resolver import configured_scan_roots, path_within_roots, register_scan_roots
@@ -21,12 +22,6 @@ logger = logging.getLogger(__name__)
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _earliest(*dates: Optional[str]) -> Optional[str]:
-    """The oldest library date among these, ignoring the ones that are missing."""
-    known = [date for date in dates if date]
-    return min(known) if known else None
 
 
 def _file_instant(track: Track, path: str) -> Optional[str]:
@@ -212,6 +207,9 @@ class LibraryScanService:
             latest = library.metadata or LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
 
         tracks = list(latest.tracks)
+        # What this account already holds, so a file found for a song it saved
+        # without downloading joins that song instead of arriving as new.
+        holdings = library_dates.Holdings(tracks, core.favourites.get_entries())
         by_id = {track.id: track for track in tracks}
         by_path = {track.local_path: track for track in tracks if track.local_path}
         added = updated = unchanged = 0
@@ -232,7 +230,7 @@ class LibraryScanService:
                     cls._preserve_user_metadata(same_path, current)
                     # Two rows, one song: it has been in the library since the
                     # earlier of them, whichever row survives.
-                    current.added_at = _earliest(current.added_at, same_path.added_at)
+                    current.added_at = library_dates.earliest(current.added_at, same_path.added_at)
                     tracks.remove(same_path)
                     replacements[same_path.id] = current.id
                     by_id.pop(same_path.id, None)
@@ -271,8 +269,12 @@ class LibraryScanService:
             # A folder you already own is not music you acquired just now. The
             # file's own mtime is the closest thing to when each song joined
             # you, and it keeps a scanned collection in a believable order
-            # instead of landing 5,000 songs on one instant.
-            incoming.added_at = incoming.added_at or _file_instant(incoming, scanned.path)
+            # instead of landing 5,000 songs on one instant — unless the account
+            # already held the song, which then keeps the day it did.
+            incoming.added_at = holdings.claim(
+                library_dates.track_keys(incoming),
+                proposed=incoming.added_at or _file_instant(incoming, scanned.path),
+            )
             tracks.append(incoming)
             by_id[incoming.id] = incoming
             by_path[scanned.path] = incoming

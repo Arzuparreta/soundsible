@@ -32,6 +32,15 @@ export function addedAtMs(track: Pick<Track, 'added_at'>): number | null {
 }
 
 /**
+ * This instant as a library date, in the engine's own shape: naive UTC
+ * ISO-8601. Written that way so a date the player stamps optimistically parses
+ * on the same (shifted) timeline as every date the engine sends.
+ */
+export function libraryNow(): string {
+  return new Date().toISOString().replace(/Z$/, '');
+}
+
+/**
  * Newest first, stable, without mutating the input.
  *
  * A song with no date sorts below every dated one and keeps its incoming
