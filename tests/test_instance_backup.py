@@ -89,3 +89,11 @@ def test_symlinks_and_recursive_destination_are_refused(isolated_runtime, tmp_pa
     with pytest.raises(ValueError, match='Symlinks'):
         create_backup(tmp_path / 'backup', roots)
     assert not (tmp_path / 'backup').exists()
+
+
+def test_restore_inside_backup_is_refused(isolated_runtime, tmp_path):
+    backup = create_backup(tmp_path / 'backup', {'config': isolated_runtime.config_dir,
+                                                'data': isolated_runtime.data_dir})
+    with pytest.raises(ValueError, match='outside'):
+        restore_backup(backup, backup / 'restored')
+    verify_backup(backup)

@@ -69,7 +69,7 @@ def create_backup(destination, roots):
     roots = {name: Path(path).expanduser().resolve() for name, path in roots.items()}
     if not {'config', 'data'} <= roots.keys() or not roots.keys() <= ROOTS:
         raise ValueError('Supply config and data, and optionally music')
-    target = Path(destination).absolute()
+    target = Path(destination).expanduser().resolve()
     for name, root in roots.items():
         if not root.is_dir():
             raise ValueError(f'Missing {name} directory: {root}')
@@ -125,10 +125,15 @@ def verify_backup(directory):
         raise ValueError('Unsupported backup manifest')
     if not manifest['roots'].keys() <= ROOTS:
         raise ValueError('Unknown backup root')
+    for root in manifest['roots']:
+        if not (directory / root).is_dir() or (directory / root).is_symlink():
+            raise ValueError('Missing or unsafe backup root')
     actual = set()
     for path in directory.rglob('*'):
         if path.is_symlink():
             raise ValueError('Symlinks are not supported in backups')
+        if path != manifest_path and path.relative_to(directory).parts[0] not in manifest['roots']:
+            raise ValueError('Unexpected backup directory or file')
         if path.is_file() and path != manifest_path:
             actual.add(path.relative_to(directory).as_posix())
     if actual != set(manifest['files']):
@@ -147,7 +152,10 @@ def verify_backup(directory):
 
 def restore_backup(source, destination):
     """Restore into a new root containing config/, data/ and optional music/."""
-    source = Path(source).absolute()
+    source = Path(source).resolve()
+    target = Path(destination).expanduser().resolve()
+    if source == target or source in target.parents:
+        raise ValueError('Restore destination must be outside the backup')
     verify_backup(source)
 
     def populate(stage):
