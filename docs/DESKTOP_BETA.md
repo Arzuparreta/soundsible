@@ -1,6 +1,6 @@
 # Desktop app (beta)
 
-The desktop app packages the Station Engine, the web player and FFmpeg into
+The desktop app packages the Station Engine, the web player, FFmpeg and ffprobe into
 one installer. You do not need Python, Git, Node.js, FFmpeg or a terminal.
 
 It serves the computer it is installed on: its engine listens on `127.0.0.1`
@@ -52,7 +52,7 @@ describes the desktop shell's maturity, not a separate version — see
 | Windows 11 x64 | Native sidecar, FFmpeg, Tauri and NSIS build on `windows-latest`; real UI automation |
 | Windows 11 ARM64 | Native build on `windows-11-arm`; PE architecture checks reject x64 payloads |
 | First run | Official Tauri directory dialog, cancel/retry, Unicode path and scan validation |
-| Engine | Sidecar readiness, health, player route, FFmpeg availability and clean process shutdown |
+| Engine | Sidecar readiness, health, player route, bundled audio conversion/probing and process shutdown |
 | Lifecycle | Silent NSIS install, launch, hide-to-tray, restore, quit and uninstall |
 | Evidence | Screenshots, Windows accessibility tree, logs, checksums and build provenance |
 
@@ -134,3 +134,21 @@ never moves the `latest` container tag. See [RELEASING.md](RELEASING.md).
 4. Validate upgrade from the latest public beta without losing configuration.
 5. Decide and implement the stable update channel before publishing a stable
    desktop release.
+
+## Windows and Linux parity
+
+Both installers use the same Station Engine and web player sources. Windows
+is built for x64 and ARM64; it does not have a separate, older feature branch.
+The desktop package serves localhost on both systems; network/server use is a
+separate installation mode. Linux systemd integration is Linux-specific.
+
+The media bundle includes both `ffmpeg` and `ffprobe`. Library repair uses
+ffprobe to inspect codecs and containers, and DJ analysis uses it to obtain
+track durations. A standalone installation must not rely on a system FFmpeg
+installation to provide the missing probe. Windows keeps the `.exe` suffix
+for both tools, including inside the frozen engine.
+
+Desktop CI and release builds exercise the bundled pair by generating FLAC
+audio at a Unicode path and probing its codec and duration. Desktop checks
+also run when the shared player, downloader, setup or web UI changes. This
+checks media processing, not audible playback through Windows hardware.

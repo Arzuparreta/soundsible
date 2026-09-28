@@ -40,7 +40,8 @@
     "targets": ["nsis"],
     "externalBin": [
       "binaries/soundsible-engine",
-      "binaries/ffmpeg"
+      "binaries/ffmpeg",
+      "binaries/ffprobe"
     ],
     "icon": [
       "icons/32x32.png",

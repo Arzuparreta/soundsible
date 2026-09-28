@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Download a static FFmpeg binary for desktop consumer bundles (optional build step).
+# Download static FFmpeg and ffprobe binaries for desktop consumer bundles (optional build step).
 #
 # Outputs:
-#   desktop-shell/packaging/vendor/ffmpeg          (PyInstaller embed, dev)
-#   desktop-shell/src-tauri/binaries/ffmpeg-${TARGET}  (Tauri externalBin sibling)
+#   desktop-shell/packaging/vendor/{ffmpeg,ffprobe}[.exe] (PyInstaller)
+#   desktop-shell/src-tauri/binaries/{ffmpeg,ffprobe}-${TARGET}[.exe] (Tauri)
 #
 # Usage:
 #   ./desktop-shell/scripts/fetch-ffmpeg.sh
@@ -70,22 +70,21 @@ mkdir -p "$WORK"
 
 if [[ "$ARCHIVE" == *.zip ]]; then
   unzip -q "$ARCHIVE" -d "$WORK"
-  FF="$(find "$WORK" -name ffmpeg.exe -type f | head -1)"
-  OUT_NAME="ffmpeg-${TARGET}.exe"
+  SUFFIX=".exe"
 else
   tar -xJf "$ARCHIVE" -C "$WORK"
-  FF="$(find "$WORK" -name ffmpeg -type f | head -1)"
-  OUT_NAME="ffmpeg-${TARGET}"
+  SUFFIX=""
 fi
 
-if [[ -z "$FF" || ! -f "$FF" ]]; then
-  echo "fetch-ffmpeg: could not find ffmpeg in archive" >&2
-  exit 1
-fi
-
-install -m 755 "$FF" "$VENDOR_DIR/ffmpeg"
-install -m 755 "$FF" "$BIN_DIR/$OUT_NAME"
+for TOOL in ffmpeg ffprobe; do
+  SOURCE="$(find "$WORK" -name "${TOOL}${SUFFIX}" -type f | head -1)"
+  if [[ -z "$SOURCE" || ! -f "$SOURCE" ]]; then
+    echo "fetch-ffmpeg: could not find $TOOL in archive" >&2
+    exit 1
+  fi
+  install -m 755 "$SOURCE" "$VENDOR_DIR/${TOOL}${SUFFIX}"
+  install -m 755 "$SOURCE" "$BIN_DIR/${TOOL}-${TARGET}${SUFFIX}"
+  echo "Media tool vendor: $VENDOR_DIR/${TOOL}${SUFFIX}"
+  echo "Media tool Tauri:  $BIN_DIR/${TOOL}-${TARGET}${SUFFIX}"
+done
 rm -rf "$WORK"
-
-echo "FFmpeg vendor: $VENDOR_DIR/ffmpeg"
-echo "FFmpeg Tauri:  $BIN_DIR/$OUT_NAME"
