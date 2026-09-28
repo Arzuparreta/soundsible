@@ -318,6 +318,48 @@ class LibraryManager:
                 self._reload_canonical()
                 return False
 
+    @serialized
+    def patch_track_metadata(self, track_id: str, changes: dict) -> bool:
+        """Apply only declared fields; update the live model after durable commit."""
+        from dataclasses import replace
+        from shared.library_fingerprint import fingerprint
+        from shared.library_lifecycle import LibraryPersistenceError
+        allowed = {'title', 'artist', 'album', 'album_artist', 'cover_source', 'metadata_modified_by_user'}
+        if not changes or not set(changes) <= allowed:
+            raise ValueError('Unsupported track metadata edit')
+        self.refresh_if_stale()
+        # External SQL/schema reconciliation may invalidate the proof. Re-read
+        # canonical state and use the established full writer for this edit;
+        # never certify an unverified mutable model as an incremental source.
+        full_write = self.db.public_source() is None
+        if full_write:
+            self._reload_canonical()
+        with self._lock:
+            track = self.metadata.get_track_by_id(track_id) if self.metadata else None
+            if track is None:
+                return False
+            self.last_save_error = None
+            before = fingerprint(self.metadata)
+            updated = replace(track, **changes)
+            candidate = replace(self.metadata, tracks=[updated if item.id == track_id else item
+                                                       for item in self.metadata.tracks])
+            try:
+                if full_write:
+                    revision = self.db.replace_library(candidate, expected_revision=self._library_revision)
+                else:
+                    revision = self.db.patch_track_metadata(
+                        track_id, changes, expected_revision=self._library_revision,
+                        previous_fingerprint=before, metadata=candidate)
+            except Exception as exc:
+                self.last_save_error = 'library_conflict' if isinstance(exc, StaleLibraryWrite) else 'library_storage_unavailable'
+                self._reload_canonical()
+                raise LibraryPersistenceError(self.last_save_error) from exc
+            for name, value in changes.items():
+                setattr(track, name, value)
+            self._library_revision = revision
+            after_release(self._export_committed, key=('library-export', id(self)))
+            return True
+
     def _export_committed(self) -> None:
         try:
             self._export_metadata(hold=self._lock)

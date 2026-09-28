@@ -1285,19 +1285,20 @@ def _mirror_track_into_odst_downloader(track: Track) -> None:
     other.podcast_rss_url = getattr(track, "podcast_rss_url", None)
 
 
-def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str] = None) -> bool:
+def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str] = None, *, changes=None) -> bool:
     """Set track metadata flags, save, and emit library_updated. Returns True if track was found."""
     track = get_track_by_id(lib, track_id)
     if not track:
         return False
+    changes = {**(changes or {}), "metadata_modified_by_user": True}
     if cover_source is not None:
-        track.cover_source = cover_source
+        changes["cover_source"] = cover_source
+    if not lib.patch_track_metadata(track_id, changes):
+        raise LibraryPersistenceError("library_conflict")
     if cover_source == "none":
         from shared.artwork import artwork_store
         artwork_store().bind(track_id, None, "none")
-    track.metadata_modified_by_user = True
-    lib.require_saved()
-    _mirror_track_into_odst_downloader(track)
+    _mirror_track_into_odst_downloader(get_track_by_id(lib, track_id))
     emit_to_user('library_updated', payload={'cover_changed': cover_source is not None})
     return True
 
