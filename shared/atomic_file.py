@@ -1,5 +1,6 @@
 """Publish a file whole or not at all, without holding its content in memory."""
 import io
+from shared.file_revision import publication_lock
 import os
 from pathlib import Path
 import secrets
@@ -18,9 +19,10 @@ def publish(path: Path, fill: Callable[[BinaryIO], None]) -> None:
     Readers see the previous file or the complete new one, never a partial
     write. The temporary is closed before the rename, which Windows requires.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    _fill_and_rename(fd, temporary, path, fill, None)
+    with publication_lock(path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        _fill_and_rename(fd, temporary, path, fill, None)
 
 
 def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
@@ -33,6 +35,11 @@ def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
     If the directory refuses a temporary, the file is rewritten in place as
     before rather than not at all.
     """
+    with publication_lock(path):
+        _replace_contents_locked(path, fill)
+
+
+def _replace_contents_locked(path, fill):
     target = path.resolve()
     try:
         mode: Optional[int] = stat.S_IMODE(target.stat().st_mode)

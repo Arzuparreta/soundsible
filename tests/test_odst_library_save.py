@@ -145,3 +145,63 @@ def test_save_reads_podcasts_without_reconstructing_disk_tracks(tmp_path):
         target.save_library()
     assert target.library.podcast_subscriptions == [{'id': 'disk'}]
     assert len(target.library.tracks) == 129
+
+
+def test_stale_snapshot_refuses_to_erase_station_edit(tmp_path):
+    from shared.library_lifecycle import LibraryPersistenceError
+    target = writer(tmp_path, 2)
+    target.save_library()
+    # A separate Station writer edits the file after ODST loaded its model.
+    changed = library(2)
+    changed.tracks[0].title = 'Station edit'
+    from shared.atomic_file import publish, text_pieces
+    publish(target.library_path, text_pieces(changed.iter_json()))
+    with pytest.raises(LibraryPersistenceError) as error:
+        target.save_library()
+    assert error.value.status == 409
+    assert LibraryMetadata.from_json(target.library_path.read_text()).tracks[0].title == 'Station edit'
+    # A targeted acquisition reloads the current pool before adding its result.
+    added = library(3).tracks[2]
+    target.commit_track(added)
+    saved = LibraryMetadata.from_json(target.library_path.read_text())
+    assert len(saved.tracks) == 3
+    assert saved.tracks[0].title == 'Station edit'
+
+
+def test_two_downloaders_do_not_drop_each_others_additions(tmp_path):
+    first = writer(tmp_path, 1)
+    first.save_library()
+    second = writer(tmp_path, 1)
+    second.library = second._load_library()
+    first.commit_track(library(2).tracks[1])
+    second.commit_track(library(3).tracks[2])
+    assert len(LibraryMetadata.from_json(first.library_path.read_text()).tracks) == 3
+
+
+def test_corrupt_manifest_is_never_reinterpreted_as_empty_on_load(tmp_path):
+    target = writer(tmp_path)
+    target.library_path.write_text('{broken')
+    with pytest.raises(ValueError):
+        target._load_library()
+    assert target.library_path.read_text() == '{broken'
+
+
+def test_processes_merge_acquired_tracks_under_publication_lock(tmp_path):
+    import os
+    import subprocess
+    import sys
+    script = '''
+import sys, threading
+from pathlib import Path
+from odst_tool.odst_downloader import ODSTDownloader
+from scripts.benchmark_library_export import library
+writer = ODSTDownloader.__new__(ODSTDownloader)
+writer.library_path = Path(sys.argv[1])
+writer._lock = threading.Lock()
+writer.commit_track(library(3).tracks[int(sys.argv[2])])
+'''
+    processes = [subprocess.Popen([sys.executable, '-c', script, str(tmp_path / 'library.json'), str(i)],
+                                  env={**os.environ, 'PYTHONPATH': '.'}) for i in range(3)]
+    for process in processes:
+        assert process.wait(timeout=30) == 0
+    assert len(LibraryMetadata.from_json((tmp_path / 'library.json').read_text()).tracks) == 3

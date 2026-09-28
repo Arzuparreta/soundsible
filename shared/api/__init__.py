@@ -1086,11 +1086,7 @@ def _process_single_queue_item_bound(item):
             with coordinated():
                 if not queue_manager_dl.active(item_id, attempt):
                     return
-                existing = dl.library.get_track_by_hash(track.file_hash)
-                if existing:
-                    dl.library.remove_track(existing.id)
-                dl.add_track(track)
-                dl.save_library()
+                dl.commit_track(track)
 
             # Note: Pre-cache cover so first request serves it
             track_dict = track.to_dict()
