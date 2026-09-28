@@ -39,6 +39,12 @@ class ODSTDownloader:
         )
 
     def _load_library(self) -> LibraryMetadata:
+        library, token = self.read_snapshot()
+        self._manifest_revision = token
+        return library
+
+    def read_snapshot(self):
+        """An independent model/token for a long operation such as cloud sync."""
         with publication_lock(self.library_path):
             if self.library_path.exists():
                 # Corrupt/unreadable state is not an empty library to overwrite.
@@ -46,19 +52,34 @@ class ODSTDownloader:
                     library = LibraryMetadata.from_dict(json.load(stream))
             else:
                 library = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
-            self._manifest_revision = revision(self.library_path)
-            return library
+            return library, revision(self.library_path)
 
     @serialized
     def commit_track(self, track) -> None:
         """Add acquired audio to the latest pool manifest, never a stale snapshot."""
         with self._lock, publication_lock(self.library_path):
-            self.library = self._load_library()
+            if (not hasattr(self, 'library') or
+                    revision(self.library_path) != getattr(self, '_manifest_revision', object())):
+                self.library = self._load_library()
             existing = self.library.get_track_by_hash(track.file_hash)
             if existing:
                 self.library.remove_track(existing.id)
             self.library.add_track(track)
             self._save_library_locked()
+
+    @serialized
+    def replace_snapshot(self, library, expected_revision):
+        """Publish a long operation only against the exact snapshot it read."""
+        with self._lock, publication_lock(self.library_path):
+            if revision(self.library_path) != expected_revision:
+                raise LibraryPersistenceError('library_conflict')
+            previous = self.library, self._manifest_revision
+            self.library, self._manifest_revision = library, expected_revision
+            try:
+                self._save_library_locked()
+            except BaseException:
+                self.library, self._manifest_revision = previous
+                raise
 
     @serialized
     def save_library(self) -> None:

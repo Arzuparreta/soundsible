@@ -101,3 +101,26 @@ def test_projection_failure_rolls_back_track_and_revision(manager, monkeypatch):
         manager.patch_track_metadata(manager.metadata.tracks[0].id, {'title': 'Never committed'})
     assert manager.db.get_library_revision() == before
     assert manager.db.load_library_metadata().tracks[0].title == title
+
+
+def test_metadata_route_fallback_commits_declared_fields(manager, monkeypatch):
+    import inspect
+    import shared.api as api
+    from shared.api.routes import library as routes
+    from flask import Flask
+    track_id = manager.metadata.tracks[0].id
+    monkeypatch.setattr(manager, 'update_track', lambda *a, **k: False)
+    monkeypatch.setattr(api, '_mirror_track_into_odst_downloader', lambda *a, **k: None)
+    monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: None)
+    monkeypatch.setattr(routes, '_get_api', lambda: {
+        'get_core': lambda: (manager, None, None),
+        'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
+        '_mark_track_metadata_updated': api._mark_track_metadata_updated,
+    })
+    app = Flask(__name__)
+    with app.test_request_context(json={'title': 'Route edit'}):
+        response = inspect.unwrap(routes.update_track_metadata)(track_id)
+    assert response.json == {'status': 'success', 'fallback': 'metadata_only'}
+    saved = manager.db.load_library_metadata().tracks[0]
+    assert saved.title == 'Route edit'
+    assert saved.metadata_modified_by_user

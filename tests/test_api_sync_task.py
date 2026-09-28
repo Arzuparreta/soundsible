@@ -35,7 +35,7 @@ def test_run_sync_task_persists_synced_library():
 
     fake_dl = MagicMock()
     fake_dl.cloud = fake_cloud
-    fake_dl._load_library.return_value = stale
+    fake_dl.read_snapshot.return_value = (stale, b'revision')
     fake_dl.library = stale
 
     fake_orchestrator = MagicMock()
@@ -46,6 +46,7 @@ def test_run_sync_task_persists_synced_library():
             with patch("shared.api.orchestrator", fake_orchestrator):
                 run_sync_task()
 
-    assert fake_dl.library == synced
-    fake_dl.save_library.assert_called_once()
+    fake_cloud.sync_library.assert_called_once()
+    assert fake_cloud.sync_library.call_args.args[0] is stale
+    fake_dl.replace_snapshot.assert_called_once_with(synced, b'revision')
     sync_core.assert_called_once()

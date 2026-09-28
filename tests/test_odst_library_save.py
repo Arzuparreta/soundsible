@@ -205,3 +205,25 @@ writer.commit_track(library(3).tracks[int(sys.argv[2])])
     for process in processes:
         assert process.wait(timeout=30) == 0
     assert len(LibraryMetadata.from_json((tmp_path / 'library.json').read_text()).tracks) == 3
+
+
+def test_sync_snapshot_cannot_erase_download_on_same_downloader(tmp_path):
+    from shared.library_lifecycle import LibraryPersistenceError
+    target = writer(tmp_path, 1)
+    target.save_library()
+    snapshot, token = target.read_snapshot()
+    target.commit_track(library(2).tracks[1])
+    snapshot.tracks[0].title = 'Cloud edit'
+    with pytest.raises(LibraryPersistenceError):
+        target.replace_snapshot(snapshot, token)
+    saved = LibraryMetadata.from_json(target.library_path.read_text())
+    assert len(saved.tracks) == 2
+    assert saved.tracks[0].title != 'Cloud edit'
+
+
+def test_unchanged_manifest_does_not_rebuild_the_resident_library(tmp_path, monkeypatch):
+    target = writer(tmp_path, 1)
+    target.save_library()
+    monkeypatch.setattr(target, '_load_library', lambda: pytest.fail('unnecessary full model reload'))
+    target.commit_track(library(2).tracks[1])
+    assert len(target.library.tracks) == 2

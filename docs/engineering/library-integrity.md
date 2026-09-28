@@ -107,3 +107,9 @@ These rules coordinate cooperating local writers; they are not a distributed loc
 for external programs or remote object-store clients. The pool is not a personal
 library: canonical account membership remains in SQLite, and personal exports remain
 derived snapshots. Native Windows acceptance remains pending.
+
+Cloud sync now holds its own model and revision token throughout the network
+operation. A download on the same downloader cannot advance that token on its
+behalf; sync must still compare the exact revision it read. Acquisitions reuse a
+resident model only when the disk fingerprint still matches, avoiding a second
+full model on every unchanged-manifest download.
