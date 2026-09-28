@@ -88,3 +88,28 @@ Acceptance run: full Python suite 1,557 passing; frontend typecheck and 1,142
 unit tests passing; six Chromium browser cases passing. The final cleanup error
 handling also passed 49 focused library/export tests and a new cache-failure
 regression (nine lifecycle tests total). Ruff and `git diff --check` passed.
+
+## Portable writers
+
+ODST now adds an acquired track with `commit_track`: it reloads the current pool
+manifest, replaces only that acquisition's matching hash and publishes under a
+cross-process directory lock. Two independent downloaders preserve both additions.
+Station's atomic local exports and local provider copies take the same publication
+lock, including symlink aliases. The lock is independent of the canonical lifecycle
+lock, so provider uploads remain outside the instance-wide critical section.
+
+Full ODST saves (including cloud sync) compare the file fingerprint captured at
+load with the current file while holding the publication lock. A concurrent edit
+raises `library_conflict` instead of overwriting it; reload and repeat the operation.
+Corrupt manifests fail on load instead of being reinterpreted as an empty pool.
+Acquisitions already have a durable checkpoint before this step and can be retried.
+These rules coordinate cooperating local writers; they are not a distributed lock
+for external programs or remote object-store clients. The pool is not a personal
+library: canonical account membership remains in SQLite, and personal exports remain
+derived snapshots. Native Windows acceptance remains pending.
+
+Cloud sync now holds its own model and revision token throughout the network
+operation. A download on the same downloader cannot advance that token on its
+behalf; sync must still compare the exact revision it read. Acquisitions reuse a
+resident model only when the disk fingerprint still matches, avoiding a second
+full model on every unchanged-manifest download.

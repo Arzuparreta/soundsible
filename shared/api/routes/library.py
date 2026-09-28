@@ -484,11 +484,14 @@ def update_track_metadata(track_id):
     # This keeps user edits usable in the library UI even if the source audio file is
     # temporarily unavailable from cache/provider.
     if not cover_url and not clear_cover:
-        track.title = str(new_meta.get("title", track.title) or "")
-        track.artist = str(new_meta.get("artist", track.artist) or "")
-        track.album = str(new_meta.get("album", track.album) or "")
-        track.album_artist = str(new_meta.get("album_artist", track.album_artist) or "") if new_meta.get("album_artist", None) is not None else track.album_artist
-        api["_mark_track_metadata_updated"](lib, track_id, cover_source=None)
+        changes = {
+            "title": str(new_meta.get("title", track.title) or ""),
+            "artist": str(new_meta.get("artist", track.artist) or ""),
+            "album": str(new_meta.get("album", track.album) or ""),
+            "album_artist": str(new_meta["album_artist"] or "") if new_meta.get("album_artist") is not None else track.album_artist,
+            "metadata_modified_by_user": True,
+        }
+        api["_mark_track_metadata_updated"](lib, track_id, changes=changes)
         logger.warning("Metadata file rewrite failed for %s; applied metadata-only fallback.", track_id)
         return jsonify({"status": "success", "fallback": "metadata_only"})
     return jsonify({"error": "Failed to update track"}), 500

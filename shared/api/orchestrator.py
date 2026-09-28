@@ -1,6 +1,7 @@
 import os
 import threading
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, Future, wait as wait_futures
 from pathlib import Path
 from typing import Callable, Dict, Optional
@@ -97,6 +98,11 @@ class JobOrchestrator:
         self.state_lock = threading.Lock()
         self.commit_lock = threading.Lock()
         self.active_jobs: Dict[str, Future] = {}
+        self._job_timing = {}
+        self._completed = 0
+        self._cancelled = 0
+        self._max_wait_seconds = 0.0
+        self._max_run_seconds = 0.0
 
         # Downloader pump supervisor — owned by orchestrator so shutdown
         # can join it and double-start is rejected (plan 5A).
@@ -163,9 +169,17 @@ class JobOrchestrator:
         with self.state_lock:
             if task_id in self.active_jobs:
                 return self.active_jobs[task_id]
-            future = self.background_executor.submit(self._wrap_task, task_id, func, *args, **kwargs)
+            self._job_timing[task_id] = {'lane': 'background', 'submitted': time.monotonic(), 'started': None}
+            try:
+                future = self.background_executor.submit(self._wrap_task, task_id, func, *args, **kwargs)
+            except BaseException:
+                self._job_timing.pop(task_id, None)
+                raise
             self.active_jobs[task_id] = future
-            return future
+        # Register outside state_lock: an already-cancelled future invokes its
+        # callback synchronously, and must be able to take that lock.
+        future.add_done_callback(lambda done: self._clear_cancelled(task_id, done))
+        return future
 
     # Backwards-compatible alias — existing call sites route to background pool.
     def submit_task(self, task_id: str, func: Callable, *args, **kwargs) -> Future:
@@ -181,11 +195,49 @@ class JobOrchestrator:
                 with self.commit_lock:
                     return func(*args, **kwargs)
 
-            future = self.metadata_executor.submit(self._wrap_task, task_id, _serialized)
+            self._job_timing[task_id] = {'lane': 'metadata', 'submitted': time.monotonic(), 'started': None}
+            try:
+                future = self.metadata_executor.submit(self._wrap_task, task_id, _serialized)
+            except BaseException:
+                self._job_timing.pop(task_id, None)
+                raise
             self.active_jobs[task_id] = future
-            return future
+        # Register outside state_lock: an already-cancelled future invokes its
+        # callback synchronously, and must be able to take that lock.
+        future.add_done_callback(lambda done: self._clear_cancelled(task_id, done))
+        return future
+
+    def _clear_cancelled(self, task_id, future):
+        if not future.cancelled():
+            return
+        with self.state_lock:
+            if self.active_jobs.get(task_id) is future:
+                self.active_jobs.pop(task_id, None)
+                self._job_timing.pop(task_id, None)
+                self._cancelled += 1
+
+    def resource_snapshot(self):
+        """Constant-size diagnostic counters; no completed task history retained."""
+        now = time.monotonic()
+        with self.state_lock:
+            result = {lane: {'running': 0, 'queued': 0, 'oldest_wait_seconds': 0.0}
+                      for lane in ('background', 'metadata')}
+            for item in self._job_timing.values():
+                lane = result[item['lane']]
+                if item['started'] is None:
+                    lane['queued'] += 1
+                    lane['oldest_wait_seconds'] = max(lane['oldest_wait_seconds'], now - item['submitted'])
+                else:
+                    lane['running'] += 1
+            return {**result, 'completed': self._completed, 'cancelled': self._cancelled,
+                    'max_wait_seconds': self._max_wait_seconds, 'max_run_seconds': self._max_run_seconds}
 
     def _wrap_task(self, task_id: str, func: Callable, *args, **kwargs):
+        started = time.monotonic()
+        with self.state_lock:
+            timing = self._job_timing[task_id]
+            timing['started'] = started
+            self._max_wait_seconds = max(self._max_wait_seconds, started - timing['submitted'])
         try:
             return func(*args, **kwargs)
         except Exception as e:
@@ -195,6 +247,9 @@ class JobOrchestrator:
             with self.state_lock:
                 if task_id in self.active_jobs:
                     del self.active_jobs[task_id]
+                self._job_timing.pop(task_id, None)
+                self._completed += 1
+                self._max_run_seconds = max(self._max_run_seconds, time.monotonic() - started)
 
     def run_serialized(self, func: Callable, *args, **kwargs):
         """Run a task exclusively in the caller's thread (e.g. metadata write)."""

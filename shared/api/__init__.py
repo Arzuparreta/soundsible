@@ -1086,11 +1086,7 @@ def _process_single_queue_item_bound(item):
             with coordinated():
                 if not queue_manager_dl.active(item_id, attempt):
                     return
-                existing = dl.library.get_track_by_hash(track.file_hash)
-                if existing:
-                    dl.library.remove_track(existing.id)
-                dl.add_track(track)
-                dl.save_library()
+                dl.commit_track(track)
 
             # Note: Pre-cache cover so first request serves it
             track_dict = track.to_dict()
@@ -1289,19 +1285,21 @@ def _mirror_track_into_odst_downloader(track: Track) -> None:
     other.podcast_rss_url = getattr(track, "podcast_rss_url", None)
 
 
-def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str] = None) -> bool:
+def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str] = None, *, changes=None) -> bool:
     """Set track metadata flags, save, and emit library_updated. Returns True if track was found."""
     track = get_track_by_id(lib, track_id)
     if not track:
         return False
+    changes = {**(changes or {}), "metadata_modified_by_user": True}
     if cover_source is not None:
-        track.cover_source = cover_source
+        changes["cover_source"] = cover_source
+    if not lib.patch_track_metadata(track_id, changes):
+        from shared.library_lifecycle import LibraryPersistenceError
+        raise LibraryPersistenceError("library_conflict")
     if cover_source == "none":
         from shared.artwork import artwork_store
         artwork_store().bind(track_id, None, "none")
-    track.metadata_modified_by_user = True
-    lib.require_saved()
-    _mirror_track_into_odst_downloader(track)
+    _mirror_track_into_odst_downloader(get_track_by_id(lib, track_id))
     emit_to_user('library_updated', payload={'cover_changed': cover_source is not None})
     return True
 
@@ -1687,16 +1685,15 @@ def _run_sync_task_bound():
             def cb(msg): queue_manager_dl.add_log(f"☁️ {msg}")
             
             # Note: Refresh library from disk before sync to ensure we have latest local changes
-            dl.library = dl._load_library()
-            result = dl.cloud.sync_library(dl.library, progress_callback=cb)
+            snapshot, snapshot_revision = dl.read_snapshot()
+            result = dl.cloud.sync_library(snapshot, progress_callback=cb)
             
             if 'error' in result:
                 queue_manager_dl.add_log(f"❌ Sync Error: {result['error']}")
             else:
                 synced_library = result.get("synced_library")
                 if isinstance(synced_library, LibraryMetadata):
-                    dl.library = synced_library
-                    dl.save_library()
+                    dl.replace_snapshot(synced_library, snapshot_revision)
 
                 queue_manager_dl.add_log("✅ Sync Complete!")
                 queue_manager_dl.add_log(f"   Uploaded: {result.get('uploaded', 0)}, Merged: {result.get('merged', 0)}")

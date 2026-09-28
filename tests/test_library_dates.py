@@ -168,13 +168,12 @@ def test_a_download_through_the_queue_keeps_the_day_the_song_was_saved(isolated_
     downloaded = _track("hash-q", "abcdefghijk")
 
     def pool_add(track):
-        # What `ODSTDownloader.add_track` does to the object it is handed.
+        # What `ODSTDownloader.commit_track` does to the object it is handed.
         track.added_at = POOL_STAMP
 
     fake = SimpleNamespace(
         library=SimpleNamespace(get_track_by_hash=lambda _: None, remove_track=lambda _: None),
-        add_track=pool_add,
-        save_library=lambda: None,
+        commit_track=pool_add,
         downloader=SimpleNamespace(process_video=lambda *a, **k: downloaded),
     )
     queue = DownloadQueueManager(isolated_runtime.config_dir / "dates.json")

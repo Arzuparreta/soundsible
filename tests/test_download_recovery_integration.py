@@ -38,7 +38,7 @@ def test_worker_recovers_checkpoint_without_acquisition(isolated_runtime, monkey
     monkeypatch.setattr(api, 'queue_manager_dl', queue)
     fake = SimpleNamespace(
         library=SimpleNamespace(get_track_by_hash=lambda _: None),
-        add_track=lambda _: None, save_library=lambda: None,
+        commit_track=lambda _: None,
         downloader=SimpleNamespace(process_video=lambda *a, **k: pytest.fail('download repeated')),
     )
     monkeypatch.setattr(api, 'get_downloader', lambda *a, **k: fake)

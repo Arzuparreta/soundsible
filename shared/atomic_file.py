@@ -1,5 +1,6 @@
 """Publish a file whole or not at all, without holding its content in memory."""
 import io
+from shared.file_revision import publication_lock
 import os
 from pathlib import Path
 import secrets
@@ -18,9 +19,10 @@ def publish(path: Path, fill: Callable[[BinaryIO], None]) -> None:
     Readers see the previous file or the complete new one, never a partial
     write. The temporary is closed before the rename, which Windows requires.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    _fill_and_rename(fd, temporary, path, fill, None)
+    with publication_lock(path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        _fill_and_rename(fd, temporary, path, fill, None)
 
 
 def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
@@ -33,6 +35,11 @@ def replace_contents(path: Path, fill: Callable[[BinaryIO], None]) -> None:
     If the directory refuses a temporary, the file is rewritten in place as
     before rather than not at all.
     """
+    with publication_lock(path):
+        _replace_contents_locked(path, fill)
+
+
+def _replace_contents_locked(path, fill):
     target = path.resolve()
     try:
         mode: Optional[int] = stat.S_IMODE(target.stat().st_mode)
@@ -60,13 +67,46 @@ def _create_beside(path: Path) -> Tuple[int, str]:
     raise FileExistsError(f"No free temporary name beside {path}")
 
 
+def sync_file(fd: int) -> None:
+    """Keep durable flushes off gevent's event loop, without weakening fsync.
+
+    The native worker owns a duplicate descriptor so cancellation of the
+    caller cannot close/reuse its descriptor while the flush is still running.
+    Unpatched CLI callers retain the direct synchronous implementation.
+    """
+    try:
+        from gevent import get_hub, monkey
+        hub = get_hub() if monkey.is_module_patched('threading') else None
+    except ImportError:
+        hub = None
+    if hub is None:
+        os.fsync(fd)
+        return
+    duplicate = os.dup(fd)
+
+    def flush():
+        try:
+            os.fsync(duplicate)
+        finally:
+            os.close(duplicate)
+
+    # spawn can fail before a worker takes ownership; get() may be cancelled
+    # afterwards, in which case the worker still closes its own descriptor.
+    try:
+        result = hub.threadpool.spawn(flush)
+    except BaseException:
+        os.close(duplicate)
+        raise
+    result.get()
+
+
 def _fill_and_rename(fd: int, temporary: str, path: Path,
                      fill: Callable[[BinaryIO], None], mode: Optional[int]) -> None:
     try:
         with os.fdopen(fd, "wb") as handle:
             fill(handle)
             handle.flush()
-            os.fsync(handle.fileno())
+            sync_file(handle.fileno())
         if mode is not None:
             os.chmod(temporary, mode)
         os.replace(temporary, path)
