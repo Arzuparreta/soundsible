@@ -304,11 +304,6 @@ export function PlayerStage(props: {
                 <div class={styles.info} data-lyrics-morph="">
                   <div class={styles.titleRow}>
                     <h1 class={styles.title}>{current().title}</h1>
-                    <Show when={current().audio_quality === 'lossless' && current().audio_identity_verified}>
-                      <span class={styles.losslessBadge} title={current().audio_source || 'Lossless'}>
-                        LOSSLESS
-                      </span>
-                    </Show>
                     <Show when={props.mode === 'now-playing'}>
                       <RadioBadge class={styles.radioBadge} loadingClass={styles.radioBadgeLoading} />
                     </Show>

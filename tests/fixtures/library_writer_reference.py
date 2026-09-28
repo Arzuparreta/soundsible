@@ -175,9 +175,8 @@ def replace_library(
                             podcast_feed_id, podcast_episode_guid, podcast_rss_url, artists_json,
                             is_local, local_path, local_mtime_ns, musicbrainz_id, isrc, album_artist,
                             cover_source, metadata_modified_by_user, youtube_id,
-                            audio_quality, audio_source, audio_source_url,
-                            audio_license_url, audio_identity_verified, added_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            audio_quality, added_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -211,10 +210,6 @@ def replace_library(
                             metadata_modified_by_user=excluded.metadata_modified_by_user,
                             youtube_id=excluded.youtube_id,
                             audio_quality=excluded.audio_quality,
-                            audio_source=excluded.audio_source,
-                            audio_source_url=excluded.audio_source_url,
-                            audio_license_url=excluded.audio_license_url,
-                            audio_identity_verified=excluded.audio_identity_verified,
                             -- First seen wins. A manifest that has forgotten the
                             -- date (an older export, a remote copy) must never be
                             -- able to redate a song the library already holds.
@@ -230,8 +225,7 @@ def replace_library(
                         track.is_local, track.local_path, track.local_mtime_ns,
                         track.musicbrainz_id, track.isrc, track.album_artist,
                         track.cover_source, track.metadata_modified_by_user, track.youtube_id,
-                        track.audio_quality, track.audio_source, track.audio_source_url,
-                        track.audio_license_url, track.audio_identity_verified,
+                        track.audio_quality,
                         # A replaced id keeps the date of the row it replaced.
                         # NULL is left as NULL rather than defaulted to now:
                         # undated rows are what `backfill_added_at` recognises,

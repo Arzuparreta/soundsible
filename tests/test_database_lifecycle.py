@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from shared import request_scope
-from shared.database import RETIRED_TABLES, DatabaseManager
+from shared.database import RETIRED_TABLES, RETIRED_TRACK_COLUMNS, DatabaseManager
 
 
 def assert_idle(db):
@@ -129,7 +129,7 @@ from gevent import monkey
 monkey.patch_all()
 import gevent
 from gevent.event import Event
-from shared.database import RETIRED_TABLES, DatabaseManager
+from shared.database import RETIRED_TABLES, RETIRED_TRACK_COLUMNS, DatabaseManager
 import sys
 db = DatabaseManager(sys.argv[1])
 for _ in range(500):
@@ -232,3 +232,15 @@ def test_tables_of_retired_features_are_dropped(tmp_path):
     with db._get_connection() as conn:
         names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert names.isdisjoint(RETIRED_TABLES)
+
+
+def test_columns_of_retired_features_are_dropped(tmp_path):
+    path = tmp_path / "library.db"
+    DatabaseManager(str(path))
+    with sqlite3.connect(path) as conn:
+        for column in RETIRED_TRACK_COLUMNS:
+            conn.execute(f"ALTER TABLE tracks ADD COLUMN {column} TEXT")
+    db = DatabaseManager(str(path))
+    with db._get_connection() as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(tracks)")}
+    assert columns.isdisjoint(RETIRED_TRACK_COLUMNS)

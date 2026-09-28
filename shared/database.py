@@ -70,6 +70,15 @@ RETIRED_TABLES = (
     "lossless_daily_budget",
 )
 
+# Where each track's audio came from, recorded by that upgrader. Nothing
+# writes or reads them any more.
+RETIRED_TRACK_COLUMNS = (
+    "audio_source",
+    "audio_source_url",
+    "audio_license_url",
+    "audio_identity_verified",
+)
+
 # Note: Migration definitions for schema evolution
 _TRACKS_COLUMNS = {
     "local_mtime_ns": "INTEGER",
@@ -80,10 +89,6 @@ _TRACKS_COLUMNS = {
     "cover_source": "TEXT",
     "metadata_modified_by_user": "BOOLEAN DEFAULT 0",
     "audio_quality": "TEXT DEFAULT 'unknown'",
-    "audio_source": "TEXT",
-    "audio_source_url": "TEXT",
-    "audio_license_url": "TEXT",
-    "audio_identity_verified": "BOOLEAN DEFAULT 0",
     "disc_number": "INTEGER",
     "disc_total": "INTEGER",
     "is_compilation": "BOOLEAN NOT NULL DEFAULT 0",
@@ -373,11 +378,7 @@ class DatabaseManager:
                 cover_source TEXT,
                 metadata_modified_by_user BOOLEAN DEFAULT 0,
                 youtube_id TEXT,
-                audio_quality TEXT DEFAULT 'unknown',
-                audio_source TEXT,
-                audio_source_url TEXT,
-                audio_license_url TEXT,
-                audio_identity_verified BOOLEAN DEFAULT 0
+                audio_quality TEXT DEFAULT 'unknown'
             )
         """)
 
@@ -510,6 +511,9 @@ class DatabaseManager:
         for col, defn in _TRACKS_COLUMNS.items():
             if col not in columns:
                 conn.execute(f"ALTER TABLE tracks ADD COLUMN {col} {defn}")
+        for col in RETIRED_TRACK_COLUMNS:
+            if col in columns:
+                conn.execute(f"ALTER TABLE tracks DROP COLUMN {col}")
 
     @staticmethod
     def _create_youtube_cache_table(conn):
@@ -854,7 +858,6 @@ class DatabaseManager:
         data["compressed"] = bool(data.get("compressed"))
         data["is_local"] = bool(data.get("is_local"))
         data["metadata_modified_by_user"] = bool(data.get("metadata_modified_by_user"))
-        data["audio_identity_verified"] = bool(data.get("audio_identity_verified"))
         data["is_compilation"] = bool(data.get("is_compilation"))
         data["artists"] = json.loads(stored_artists) if stored_artists else None
         return Track.from_dict(data)
@@ -1992,7 +1995,6 @@ class DatabaseManager:
         data["compressed"] = bool(data.get("compressed"))
         data["is_local"] = bool(data.get("is_local"))
         data["metadata_modified_by_user"] = bool(data.get("metadata_modified_by_user"))
-        data["audio_identity_verified"] = bool(data.get("audio_identity_verified"))
         data["is_compilation"] = bool(data.get("is_compilation"))
         data["artists"] = artists or (json.loads(stored_artists) if stored_artists else None)
         return Track.from_dict(data)
