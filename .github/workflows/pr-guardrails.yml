@@ -10,6 +10,14 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+
+# One run at a time per pull request, in the order the events arrived, so the
+# run that finishes last is the one GitHub keeps as the answer. Never cancel
+# one in flight: a cancelled `impact_label` is a failing required check.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   # The version a release gets is derived from these labels, so a pull request
@@ -22,10 +30,17 @@ jobs:
     steps:
       - name: Require exactly one impact label
         env:
-          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
         shell: bash
+        # Ask for the labels the pull request has now, not the ones in the
+        # event. `gh pr create --label` opens the pull request and only then
+        # labels it, so the `opened` event carries no labels, and its run can
+        # be created after the `labeled` one and fail last. A re-run replays
+        # that same stale event.
         run: |
           set -euo pipefail
+          LABELS=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '[.labels[].name]')
           mapfile -t impact < <(jq -r '.[] | select(startswith("impact:"))' <<<"$LABELS")
 
           if [ "${#impact[@]}" -eq 1 ]; then
