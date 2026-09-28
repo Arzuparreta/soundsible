@@ -60,7 +60,6 @@ TRACK_COLUMNS = (
     'podcast_feed_id', 'podcast_episode_guid', 'podcast_rss_url', 'artists_json',
     'is_local', 'local_path', 'local_mtime_ns', 'musicbrainz_id', 'isrc', 'album_artist',
     'cover_source', 'metadata_modified_by_user', 'youtube_id', 'audio_quality',
-    'audio_source', 'audio_source_url', 'audio_license_url', 'audio_identity_verified',
     'added_at',
 )
 

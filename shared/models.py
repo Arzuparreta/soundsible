@@ -91,10 +91,6 @@ class Track:
     podcast_episode_guid: Optional[str] = None
     podcast_rss_url: Optional[str] = None
     audio_quality: str = "unknown"  # "unknown" | "lossy" | "lossless"
-    audio_source: Optional[str] = None
-    audio_source_url: Optional[str] = None
-    audio_license_url: Optional[str] = None
-    audio_identity_verified: bool = False
     # When this song entered the library, as naive UTC ISO-8601. Not when the
     # file was made, tagged or last touched: "recently added" is a question
     # about the library, and every other timestamp on a track answers a

@@ -1273,10 +1273,6 @@ def _mirror_track_into_odst_downloader(track: Track) -> None:
     other.bitrate = track.bitrate
     other.format = track.format
     other.audio_quality = track.audio_quality
-    other.audio_source = track.audio_source
-    other.audio_source_url = track.audio_source_url
-    other.audio_license_url = track.audio_license_url
-    other.audio_identity_verified = track.audio_identity_verified
     other.media_kind = getattr(track, "media_kind", None)
     other.podcast_feed_id = getattr(track, "podcast_feed_id", None)
     other.podcast_episode_guid = getattr(track, "podcast_episode_guid", None)

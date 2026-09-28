@@ -38,10 +38,6 @@ export interface Track {
   isrc?: string | null;
   musicbrainz_id?: string | null;
   audio_quality?: 'unknown' | 'lossy' | 'lossless';
-  audio_source?: 'youtube' | 'jamendo' | 'wikimedia' | 'internet_archive' | 'local' | null;
-  audio_source_url?: string | null;
-  audio_license_url?: string | null;
-  audio_identity_verified?: boolean;
   /** Bytes on disk, and the bitrate the encoder was asked for. What has to
    * cross the network is the first one — on a 24-bit FLAC they differ by a lot,
    * which is exactly when it matters. See `lib/linkQuality.ts`. */
