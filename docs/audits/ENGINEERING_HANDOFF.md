@@ -407,3 +407,14 @@ El usuario puede iniciar otra sesión con:
 > docs/audits/ENGINEERING_HANDOFF.md. Propón el siguiente chunk de la lista de
 > pendientes y planéalo antes de implementar.
 > No abras PR ni hagas push; cada implementación terminada debe quedar commiteada.
+
+## Recovery and construction follow-up (2026-09-28)
+
+The four-objective follow-up is recorded in
+[recovery and construction](2026-09-28-recovery-and-construction.md). It adds
+verified offline restoration, portable-writer revision checks, explicit track
+metadata edits, and a measured cooperative export-flush path. That report and
+its raw results supersede the older statement that ODST/Station publication has
+no shared coordination. They do not close physical-device acceptance or the
+full real-listening/Live/remote-provider load matrix. Remaining full-model
+fingerprints and exports are explicitly retained, not silently trusted away.
