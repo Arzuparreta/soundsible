@@ -1694,7 +1694,6 @@ from shared.api.routes.setup import setup_bp
 from shared.api.routes.migration import migration_bp
 from shared.api.routes.car import car_bp
 from shared.api.routes.auth import auth_bp
-from shared.api.routes.lossless import lossless_bp
 from shared.api.routes.loudness import loudness_bp
 from shared.api.routes.community import community_bp
 from shared.api.routes.subsonic import subsonic_bp
@@ -1712,7 +1711,6 @@ app.register_blueprint(setup_bp)
 app.register_blueprint(migration_bp)
 app.register_blueprint(car_bp)
 app.register_blueprint(auth_bp)
-app.register_blueprint(lossless_bp)
 app.register_blueprint(loudness_bp)
 app.register_blueprint(community_bp)
 # `/rest` is not under `/api`, so `_bind_request_user` leaves it anonymous
@@ -1881,13 +1879,6 @@ def stop_api() -> None:
             observer.stop()
         except Exception:
             logger.exception("API: Error stopping music folder watcher")
-
-    try:
-        from shared.lossless import stop_lossless_service_if_started
-
-        stop_lossless_service_if_started()
-    except Exception:
-        logger.exception("API: Error stopping lossless idle worker")
 
     try:
         from shared.loudness import stop_loudness_service_if_started
@@ -2095,19 +2086,8 @@ def start_api(
         except Exception:
             logger.debug("API: Downloader pump start skipped", exc_info=True)
 
-        # Lossless discovery is deliberately detached from search, playback,
-        # resolve and download completion. Its own preemptible worker waits for
-        # a fully idle instance before inventorying or contacting providers.
-        try:
-            from shared.lossless import get_lossless_service
-
-            get_lossless_service().start()
-            logger.info("API: Lossless idle worker scheduled.")
-        except Exception:
-            logger.debug("API: Lossless idle worker start skipped", exc_info=True)
-
-        # Loudness measurement is background work with the same shape: it waits
-        # for a quiet instance, and it reads each file exactly once, ever.
+        # Loudness measurement is background work: it waits for a quiet
+        # instance, and it reads each file exactly once, ever.
         try:
             from shared.loudness import get_loudness_service
 

@@ -61,8 +61,8 @@ Next work:
 - Keep yt-dlp current in containers and add a scheduled extraction canary that
   reports upstream breakage.
 - Extend acquisition source selection so YouTube is replaceable. Existing
-  search provider modules and the lossless provider layer are useful foundations;
-  they do not yet make the main acquisition journey independent of YouTube.
+  search provider modules are a useful foundation; they do not yet make the
+  main acquisition journey independent of YouTube.
 
 Later improvements include smart playlists over listening history, ratings,
 year, genre and BPM, plus richer artist biographies and images.

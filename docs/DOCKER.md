@@ -1,7 +1,7 @@
 # Docker deployment
 
 Soundsible ships a multi-stage production image and a Compose stack. The image
-contains FFmpeg, Chromaprint, Python dependencies, and the compiled SolidJS
+contains FFmpeg, Python dependencies, and the compiled SolidJS
 player; Node.js and build tools do not remain in the runtime image.
 
 Images are published to the GitHub Container Registry for `linux/amd64` and

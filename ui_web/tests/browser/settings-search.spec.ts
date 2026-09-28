@@ -61,14 +61,16 @@ test('a result lands on its row, and the search survives the way back', async ({
   const search = page.getByPlaceholder('Buscar en ajustes');
   const desktop = page.viewportSize()!.width >= 1024;
 
-  await search.fill('yt-dlp');
-  const result = settings.getByRole('button', { name: /Auto-actualizar yt-dlp/ });
+  await search.fill('vaciar');
+  const result = settings
+    .getByRole('group', { name: 'Resultados de la búsqueda' })
+    .getByRole('button', { name: /Vaciar biblioteca/ });
   await expect(result).toBeVisible();
-  await expect(result.locator('mark')).toHaveText(['yt', 'dlp']);
+  await expect(result.locator('mark')).toHaveText(['Vaciar']);
 
   await result.click();
-  await expect(page).toHaveURL(/#\/settings\/downloads\?q=yt-dlp&setting=auto-update-ytdlp$/);
-  const row = settings.locator('[data-setting="auto-update-ytdlp"]');
+  await expect(page).toHaveURL(/#\/settings\/library\?q=vaciar&setting=empty-library$/);
+  const row = settings.locator('[data-setting="empty-library"]');
   await expect(row).toHaveAttribute('data-setting-flash', '');
   await expect(row).toBeInViewport();
   // It was below the fold: the submenu scrolled to it rather than opening at the top.
@@ -76,40 +78,20 @@ test('a result lands on its row, and the search survives the way back', async ({
   expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
   if (desktop) {
-    await expect(search).toHaveValue('yt-dlp');
+    await expect(search).toHaveValue('vaciar');
     await expect(result).toHaveAttribute('aria-current', 'true');
     return;
   }
 
   await page.goBack();
-  await expect(page).toHaveURL(/#\/settings\?q=yt-dlp$/);
-  await expect(search).toHaveValue('yt-dlp');
+  await expect(page).toHaveURL(/#\/settings\?q=vaciar$/);
+  await expect(search).toHaveValue('vaciar');
   await result.click();
   await expect(row).toBeInViewport();
 
   await page.locator('[data-app-bar]').getByRole('button', { name: 'Volver', exact: true }).click();
-  await expect(page).toHaveURL(/#\/settings\?q=yt-dlp$/);
+  await expect(page).toHaveURL(/#\/settings\?q=vaciar$/);
   await expect(result).toBeVisible();
-});
-
-test('search landing waits for the lossless panel above its target', async ({ page }) => {
-  let release!: () => void;
-  const pending = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/api/lossless/status', async route => {
-    await pending;
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
-  await page.goto('/player/#/settings');
-  await page.getByPlaceholder('Buscar en ajustes').fill('yt-dlp');
-  await page.getByRole('button', { name: /Auto-actualizar yt-dlp/ }).click();
-  const row = page.locator('[data-setting="auto-update-ytdlp"]');
-  await expect(row).toBeAttached();
-  await expect(page.locator('[data-settings-page] [aria-busy="true"]')).toBeVisible();
-  await page.waitForTimeout(1700); // Longer than the missing-anchor timeout.
-  await expect(row).not.toHaveAttribute('data-setting-flash');
-  release();
-  await expect(row).toHaveAttribute('data-setting-flash', '');
-  await expect(row).toBeInViewport();
 });
 
 test('a result opens the disclosure its row is folded into', async ({ page }) => {

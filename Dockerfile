@@ -54,7 +54,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SOUNDSIBLE_CONTAINER_AUTO_CONFIGURE=true
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y ffmpeg libchromaprint-tools \
+    && apt-get install --no-install-recommends -y ffmpeg \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1000 soundsible \
     && useradd --uid 1000 --gid soundsible --create-home --shell /usr/sbin/nologin soundsible

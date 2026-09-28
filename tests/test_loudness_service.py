@@ -6,13 +6,14 @@ Everything here injects a fake meter, so no test spawns ffmpeg.
 
 from __future__ import annotations
 
+import json
 import time
 from types import SimpleNamespace
 
 import pytest
 
 from shared.loudness.measure import LoudnessMeasurement, MeasurementError
-from shared.loudness.service import LoudnessService, loudness_analysis_enabled
+from shared.loudness.service import LoudnessService, loudness_analysis_enabled, playback_live
 from shared.loudness.store import MAX_ATTEMPTS, LoudnessStore, reset_connections
 
 MEASUREMENT = LoudnessMeasurement(lufs=-9.4, peak_dbtp=-0.8, lra=4.2)
@@ -318,3 +319,19 @@ def test_status_reports_progress(library):
 
 def test_stop_is_safe_when_never_started(library):
     build(library).stop()
+
+
+def test_a_client_that_died_mid_song_does_not_block_the_sweep_forever(tmp_path):
+    users = tmp_path / "users"
+    (users / "alice").mkdir(parents=True)
+    state = users / "alice" / "playback_state.json"
+
+    state.write_text(
+        json.dumps({"is_playing": True, "updated_at": time.time()}), encoding="utf-8"
+    )
+    assert playback_live(users) is True
+
+    state.write_text(
+        json.dumps({"is_playing": True, "updated_at": time.time() - 3600}), encoding="utf-8"
+    )
+    assert playback_live(users) is False

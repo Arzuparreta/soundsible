@@ -454,29 +454,6 @@ export interface RemotePlaybackState {
   updated_at?: number;
 }
 
-/** Lossless upgrade worker snapshot (`/api/lossless/status`). */
-export interface LosslessStatus {
-  enabled: boolean;
-  /** stopped · disabled · waiting · idle · inventory · processing · paused · budget_exhausted · unavailable */
-  activity: string;
-  current_track_id?: string | null;
-  running?: boolean;
-  /** An explicitly requested run, as opposed to the automatic idle one. */
-  manual?: { state: 'off' | 'paused' | 'running' | string; processed: number; started_at?: number | null };
-  /** Jobs the worker could pick up right now. */
-  queued?: number;
-  budget?: {
-    tracks_examined: number;
-    bytes_downloaded: number;
-    max_tracks: number;
-    max_bytes: number;
-  };
-  providers: Array<{ name: string; available: boolean }>;
-  identity_verifier_available: boolean;
-  counts: Record<string, number>;
-  latest?: { last_error?: string | null } | null;
-}
-
 /** A pairing session as the owner sees it (`_session_response`). */
 export interface PairingSession {
   session_id: string;
@@ -1416,30 +1393,6 @@ export const api = {
     output_dir?: string;
   }) =>
     request<{ status?: string }>('/api/downloader/config', { method: 'POST', body: cfg }),
-  getLosslessStatus: () => request<LosslessStatus>('/api/lossless/status'),
-  setLosslessEnabled: (enabled: boolean) =>
-    request<{ status: string; enabled: boolean }>('/api/lossless/config', {
-      method: 'PATCH',
-      body: { enabled },
-    }),
-  setJamendoClientId: (jamendoClientId: string) =>
-    request<{ status: string; enabled: boolean; jamendo_configured: boolean }>(
-      '/api/lossless/config',
-      {
-        method: 'PATCH',
-        body: { jamendo_client_id: jamendoClientId },
-      },
-    ),
-  /** Run the upgrade queue now. `recheck` also re-asks the providers about
-   * tracks that came back empty, instead of replaying the cached verdict. */
-  runLosslessNow: (recheck = false) =>
-    request<LosslessStatus & { requeued?: number }>('/api/lossless/run', {
-      method: 'POST',
-      body: { recheck },
-    }),
-  pauseLossless: () => request<LosslessStatus>('/api/lossless/pause', { method: 'POST' }),
-  resumeLossless: () => request<LosslessStatus>('/api/lossless/resume', { method: 'POST' }),
-  cancelLossless: () => request<LosslessStatus>('/api/lossless/cancel', { method: 'POST' }),
   /** Drop video streams and cap artwork on the files this library holds.
    * `dry_run` reports without touching anything, which is how it should be read
    * first: the pass rewrites files and re-keys track ids. */

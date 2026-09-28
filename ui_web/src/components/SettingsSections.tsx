@@ -23,7 +23,6 @@ import {
 import { DevicesPanel } from './DeviceSheet';
 import { PairedDevicesPanel } from './PairDevice';
 import { DisplayPreferences } from './DisplayPreferences';
-import { LosslessUpgrades } from './LosslessUpgrades';
 import { UsersPanel } from './UsersPanel';
 import { SubsonicAccessPanel } from './SubsonicAccessPanel';
 import {
@@ -608,8 +607,6 @@ function DownloadsSection() {
           onChange={changeQuality}
         />
       </SettingsGroup>
-
-      <LosslessUpgrades />
 
       <SettingsGroup label={t('settings.group.updates')} note={t('settings.note.updates')}>
         <SwitchRow
