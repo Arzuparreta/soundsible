@@ -135,9 +135,27 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
 
     try:
         health_url = _wait_for_health(config_dir)
-        payload = requests.get(health_url, timeout=5).json()
+        public = requests.get(health_url, timeout=5)
+        public.raise_for_status()
+        public_ffmpeg = public.json().get("ffmpeg") or {}
+        assert "path" not in public_ffmpeg
+        assert "source" not in public_ffmpeg
+
+        state = load_runtime_state(config_dir)
+        assert state is not None
+        # Health deliberately hides machine paths from anonymous callers. Use
+        # this isolated engine's owner credential for the bundle diagnostics.
+        token = Path(state["owner_token_file"]).read_text().strip()
+        response = requests.get(
+            health_url, headers={"Authorization": f"Bearer {token}"}, timeout=5,
+        )
+        response.raise_for_status()
+        payload = response.json()
         assert isinstance(payload, dict)
         ff = payload.get("ffmpeg") or {}
+        # Exercise the authenticated contract in the dev-Python smoke too,
+        # so a missing diagnostic field fails locally before packaging CI.
+        assert "path" in ff and "source" in ff, ff
         if engine_bin is not None and os.environ.get("SOUNDSIBLE_REQUIRE_FFMPEG"):
             assert ff.get("available") is True, (
                 f"sidecar health missing bundled ffmpeg: {ff!r}"
