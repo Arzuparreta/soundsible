@@ -16,6 +16,11 @@ python -m shared.instance_backup restore /backups/before-update /recovery/instan
 The backup is a private directory containing `config/`, `data/`, optional
 `music/`, and a manifest with the producing release, source locations, sizes and
 SHA-256 checksums. It includes account credentials: protect it like the instance.
+Encrypted storage credentials include their key as `config/.credentials.key`
+inside the private backup. Current code uses that key after restoration even if
+the replacement container has a different machine identity. Older releases that
+do not understand the key file still require the original machine identity for
+credential decryption. The source configuration is never rewritten by backup.
 SQLite databases are copied through SQLite's backup API (including committed
 WAL contents) and checked for integrity. Cache/log directories are not required.
 Include music when it is the only copy of the audio. External scanned folders,
@@ -40,6 +45,8 @@ normal download recovery. Do not replay a legacy queue JSON over a newer DB.
 The automated recovery rehearsal creates a real account, canonical library,
 playlist and pending download, copies settings/favourites/artwork/audio, damages
 the original database, and reopens the restored library through schema setup.
-It separately covers committed WAL, damaged backups and refusal to overwrite.
+It also upgrades and restores the legacy single-user layout through the real
+account migration, and verifies credential decryption after changing machine
+identity. It separately covers committed WAL, damaged backups and refusal to overwrite.
 This proves recovery of the fixture with current code, not compatibility with
 all historical releases, physical power-loss durability or Windows acceptance.

@@ -16,7 +16,7 @@ import shutil
 import sqlite3
 import tempfile
 
-from shared.version import __version__
+from shared.version import resolve_version
 
 
 MANIFEST = 'backup-manifest.json'
@@ -107,7 +107,28 @@ def create_backup(destination, roots):
                 else:
                     shutil.copy2(source, output)
                 files[relative.as_posix()] = {'sha256': _digest(output), 'size': output.stat().st_size}
-        manifest = {'format': 1, 'soundsible': __version__,
+        # Storage credentials historically depended on machine-id/username.
+        # Carry their key inside the private backup so a replacement container
+        # can decrypt them. Resolve against the supplied config, never the
+        # operator's unrelated active runtime. The source is not modified.
+        config = stage / 'config/config.json'
+        if config.is_file():
+            try:
+                settings = json.loads(config.read_text(encoding='utf-8'))
+            except (ValueError, UnicodeError):
+                settings = {}  # Preserve damaged configuration byte-for-byte.
+            if isinstance(settings, dict) and settings.get('is_encrypted'):
+                from shared.crypto import CredentialManager
+                key = CredentialManager.key_for_config(roots['config'])
+                for field in ('access_key_id', 'secret_access_key'):
+                    value = settings.get(field)
+                    if value and CredentialManager.decrypt(value, key=key) is None:
+                        raise ValueError('Storage credentials cannot be decrypted on this host; retain the original host/key')
+                key_path = stage / 'config/.credentials.key'
+                key_path.write_bytes(key)
+                key_path.chmod(0o600)
+                files['config/.credentials.key'] = {'sha256': _digest(key_path), 'size': key_path.stat().st_size}
+        manifest = {'format': 1, 'soundsible': resolve_version(),
                     'roots': {name: str(root) for name, root in roots.items()}, 'files': files}
         (stage / MANIFEST).write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
         verify_backup(stage)

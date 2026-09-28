@@ -182,6 +182,10 @@ docker run --rm \
 docker compose start soundsible
 ```
 
+For checksummed copies, SQLite validation and restoration into a fresh directory,
+see [verified offline recovery](engineering/instance-recovery.md). That procedure
+also carries the key for encrypted storage credentials to a replacement container.
+
 Back up the music volume separately when it contains the only copy of your
 audio. The cache and logs volumes are optional in backups.
 

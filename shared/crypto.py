@@ -33,9 +33,24 @@ class CredentialManager:
     
     @staticmethod
     def generate_machine_key() -> bytes:
-        """
-        Generate a machine-specific encryption key.
-        """
+        """Use a restored instance key when present; preserve legacy encryption."""
+        from shared.runtime import get_config_dir
+        return CredentialManager.key_for_config(get_config_dir())
+
+    @staticmethod
+    def key_for_config(config_dir) -> bytes:
+        """Resolve the key for an explicit offline config directory."""
+        from pathlib import Path
+        path = Path(config_dir) / '.credentials.key'
+        if path.exists():
+            key = path.read_bytes().strip()
+            Fernet(key)  # Refuse corrupt key material rather than guessing.
+            return key
+        return CredentialManager._legacy_machine_key()
+
+    @staticmethod
+    def _legacy_machine_key() -> bytes:
+        """Derive the original key for installations without a saved key."""
         if os.name == 'nt':
             # Note: Windows use computername and username
             machine_id = os.getenv('COMPUTERNAME', 'default-windows-machine')

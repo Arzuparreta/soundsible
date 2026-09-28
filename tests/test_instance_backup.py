@@ -14,14 +14,19 @@ from shared.users import create_user, get_user
 
 def test_restore_after_failed_upgrade(isolated_runtime, tmp_path):
     runtime = isolated_runtime
-    user = create_user('owner', role='admin', user_id='owner')
+    user = create_user('owner', role='admin', user_id='owner', password='backup-test-passphrase')
     db_path = runtime.config_dir / 'users/owner/library.db'
     db = DatabaseManager(str(db_path))
     track = Track(id='song', title='Original', artist='Artist', album='Album', duration=3,
                   file_hash='song', original_filename='song.flac', compressed=False,
                   file_size=5, bitrate=100, format='flac')
     db.replace_library(LibraryMetadata(1, [track], {'Mix': ['song']}, {'theme': 'dark'}))
-    (runtime.config_dir / 'users/owner/favourites.json').write_text('{"saved": ["song"]}')
+    from player.favourites_manager import FavouritesManager
+    from shared.user_context import user_context
+    with user_context('owner'):
+        favourites = FavouritesManager()
+        favourites.set_favourite({'keys': ['lib:song'], 'title': 'Original'})
+        saved_entries = favourites.get_entries()
     from shared.api.download_queue import DownloadQueueManager
     queue = DownloadQueueManager()
     queue.add({'id': 'pending-song', 'url': 'https://youtu.be/abcdefghijk'}, user_id=user['id'])
@@ -46,7 +51,11 @@ def test_restore_after_failed_upgrade(isolated_runtime, tmp_path):
     assert recovered.settings == {'theme': 'dark'}
     assert get_user('owner')['username'] == 'owner'
     assert DownloadQueueManager().list_items(user_id='owner')[0]['id'] == job_id
-    assert json.loads((restored / 'config/users/owner/favourites.json').read_text()) == {'saved': ['song']}
+    with user_context('owner'):
+        assert FavouritesManager().get_entries() == saved_entries
+        assert FavouritesManager().is_favourite('song')
+    from shared.users import verify_password
+    assert verify_password('owner', 'backup-test-passphrase')
     assert (restored / 'music/song.flac').read_bytes() == b'audio'
     assert (restored / 'data/artwork/cover').read_bytes() == b'cover'
 
@@ -97,3 +106,40 @@ def test_restore_inside_backup_is_refused(isolated_runtime, tmp_path):
     with pytest.raises(ValueError, match='outside'):
         restore_backup(backup, backup / 'restored')
     verify_backup(backup)
+
+
+def test_storage_credentials_survive_changed_machine_identity(isolated_runtime, tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    from shared.crypto import CredentialManager
+    runtime = isolated_runtime
+    original_key = Fernet.generate_key()
+    monkeypatch.setattr(CredentialManager, '_legacy_machine_key', lambda: original_key)
+    encrypted = CredentialManager.encrypt('private-storage-secret')
+    (runtime.config_dir / 'config.json').write_text(json.dumps({
+        'is_encrypted': True, 'access_key_id': '', 'secret_access_key': encrypted}))
+    backup = create_backup(tmp_path / 'backup', {'config': runtime.config_dir, 'data': runtime.data_dir})
+    assert not (runtime.config_dir / '.credentials.key').exists()
+    restored = restore_backup(backup, tmp_path / 'restored')
+    monkeypatch.setattr(CredentialManager, '_legacy_machine_key', Fernet.generate_key)
+    configure_runtime(replace(runtime, config_dir=restored / 'config'))
+    assert CredentialManager.decrypt(encrypted) == 'private-storage-secret'
+    assert CredentialManager.decrypt(CredentialManager.encrypt('new-secret')) == 'new-secret'
+
+
+def test_upgrade_and_restore_preserves_legacy_layout(isolated_runtime, tmp_path):
+    from shared.multiuser_migration import ensure_multiuser_layout
+    runtime = isolated_runtime
+    # Real pre-account layout; migration creates an account and moves these files.
+    original = LibraryMetadata(1, [], {'Legacy mix': []}, {}).to_json()
+    (runtime.config_dir / 'library.json').write_text(original)
+    backup = create_backup(tmp_path / 'backup', {'config': runtime.config_dir, 'data': runtime.data_dir})
+    result = ensure_multiuser_layout()
+    assert result['adopted_existing_library']
+    assert not (runtime.config_dir / 'library.json').exists()
+    restored = restore_backup(backup, tmp_path / 'restored')
+    assert (restored / 'config/library.json').read_text() == original
+    assert not (restored / 'config/instance.db').exists()
+    # A new attempt at the real migration works on the restored state.
+    reset_database_managers()
+    configure_runtime(replace(runtime, config_dir=restored / 'config', data_dir=restored / 'data'))
+    assert ensure_multiuser_layout()['adopted_existing_library']
