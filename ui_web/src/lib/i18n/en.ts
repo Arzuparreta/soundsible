@@ -508,7 +508,7 @@ export const en = {
   settings: {
     repair: 'Repair files',
     repairTitle: 'Repair library files',
-    repairMsg: 'Files that carry a video stream or an oversized cover will be rewritten with the audio untouched. This changes their ids, and playlists and favourites follow automatically.',
+    repairMsg: 'Files that carry a video stream or an oversized cover will be rewritten with the audio untouched. Songs from YouTube stored as FLAC or at a low bitrate are downloaded again as the best stream YouTube serves. This changes their ids, and playlists and favourites follow automatically.',
     repairConfirm: 'Repair',
     link: {
       label: 'Delivery',

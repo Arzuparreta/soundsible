@@ -937,14 +937,21 @@ class YouTubeDownloader:
                 "-f", YDL_FORMAT_AUDIO,
             ]
             if not native:
-                codec = profile['format'] if profile['format'] != 'best' else 'flac'
+                # `best` keeps the stream's own codec. Converting YouTube's
+                # Opus or AAC to FLAC stores the same sound at up to twelve
+                # times the size.
+                codec = profile['format']
                 args.extend(["-x", "--audio-format", codec])
                 if profile.get('bitrate', 0) > 0 and codec == 'mp3':
                     args.extend(["--audio-quality", str(profile['bitrate'])])
             _add_ytdlp_cli_network_args(args)
             args.extend(_ytdlp_download_resilience_args())
             args.extend([
-                "--extractor-args", "youtube:player_client=android,ios,web",
+                # yt-dlp's own default first, as the stream resolver does. The
+                # android and ios responses now arrive without their audio URLs
+                # (no PO token), and web alone may offer only the 49k AAC
+                # (itag 139), which `bestaudio[ext=m4a]` then happily picks.
+                "--extractor-args", "youtube:player_client=default,android,ios",
                 "--add-metadata",
                 "--embed-thumbnail",
                 "--parse-metadata", "playlist_index:%(track_number)s",

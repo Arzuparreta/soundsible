@@ -1559,6 +1559,9 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
     change the bytes, and the hash of those bytes is the track id, so the id map
     it returns has to reach every place that names a track: the manifests, the
     playlists (through `replace_library`) and the favourites.
+
+    Songs from YouTube stored as FLAC are downloaded again as the stream they
+    were decoded from, which re-keys them the same way.
     """
     from shared.user_context import current_user_id, user_context
 
@@ -1582,6 +1585,7 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
                     dry_run=dry_run,
                     limit=limit,
                     progress=lambda message: queue_manager_dl.add_log(f"🔧 {message}"),
+                    fetch_original=_fetch_youtube_original,
                 )
 
                 if not dry_run and summary["id_map"]:
@@ -1617,6 +1621,12 @@ def run_library_repair_task(dry_run: bool = True, limit: int = 0):
                 queue_manager_dl.add_log(f"❌ Library repair error: {exc}")
 
     orchestrator.submit_task("library_repair", _task)
+
+
+def _fetch_youtube_original(video_id: str) -> Optional[Path]:
+    """The video's own audio stream, downloaded without converting it."""
+    service = get_downloader()
+    return service.downloader._download_audio(f"https://www.youtube.com/watch?v={video_id}")
 
 
 def get_output_dir_for_repair() -> Path:
