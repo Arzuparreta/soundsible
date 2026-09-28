@@ -215,3 +215,33 @@ def test_background_tasks_return_database_loans(orch, tmp_path, fail):
         else:
             future.result(timeout=3)
         assert db.pool_stats()["idle"] == db.pool_stats()["created"]
+
+
+def test_cancelled_queued_job_releases_identity_and_metrics():
+    import threading
+    started, release = threading.Event(), threading.Event()
+    target = JobOrchestrator(profile=PROFILE_HDD)
+    def block():
+        started.set()
+        release.wait(5)
+    try:
+        running = target.submit_background('running', block)
+        assert started.wait(2)
+        cancelled = target.submit_background('reuse', lambda: pytest.fail('cancelled work ran'))
+        snapshot = target.resource_snapshot()
+        assert snapshot['background']['running'] == 1
+        assert snapshot['background']['queued'] == 1
+        assert cancelled.cancel()
+        replacement = target.submit_background('reuse', lambda: 'fresh')
+        assert replacement is not cancelled
+        release.set()
+        running.result(timeout=3)
+        assert replacement.result(timeout=3) == 'fresh'
+        snapshot = target.resource_snapshot()
+        assert snapshot['cancelled'] == 1
+        assert snapshot['completed'] == 2
+        assert snapshot['background']['running'] == snapshot['background']['queued'] == 0
+        assert not target._job_timing
+    finally:
+        release.set()
+        target.shutdown()

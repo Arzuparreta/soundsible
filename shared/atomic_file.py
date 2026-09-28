@@ -67,13 +67,46 @@ def _create_beside(path: Path) -> Tuple[int, str]:
     raise FileExistsError(f"No free temporary name beside {path}")
 
 
+def sync_file(fd: int) -> None:
+    """Keep durable flushes off gevent's event loop, without weakening fsync.
+
+    The native worker owns a duplicate descriptor so cancellation of the
+    caller cannot close/reuse its descriptor while the flush is still running.
+    Unpatched CLI callers retain the direct synchronous implementation.
+    """
+    try:
+        from gevent import get_hub, monkey
+        hub = get_hub() if monkey.is_module_patched('threading') else None
+    except ImportError:
+        hub = None
+    if hub is None:
+        os.fsync(fd)
+        return
+    duplicate = os.dup(fd)
+
+    def flush():
+        try:
+            os.fsync(duplicate)
+        finally:
+            os.close(duplicate)
+
+    # spawn can fail before a worker takes ownership; get() may be cancelled
+    # afterwards, in which case the worker still closes its own descriptor.
+    try:
+        result = hub.threadpool.spawn(flush)
+    except BaseException:
+        os.close(duplicate)
+        raise
+    result.get()
+
+
 def _fill_and_rename(fd: int, temporary: str, path: Path,
                      fill: Callable[[BinaryIO], None], mode: Optional[int]) -> None:
     try:
         with os.fdopen(fd, "wb") as handle:
             fill(handle)
             handle.flush()
-            os.fsync(handle.fileno())
+            sync_file(handle.fileno())
         if mode is not None:
             os.chmod(temporary, mode)
         os.replace(temporary, path)

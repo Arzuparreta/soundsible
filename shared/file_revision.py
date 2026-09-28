@@ -2,6 +2,8 @@
 from contextlib import contextmanager
 from hashlib import sha256
 import os
+import errno
+import time
 from pathlib import Path
 import threading
 import weakref
@@ -48,10 +50,24 @@ def publication_lock(path):
             handle.seek(0)
             if os.name == 'nt':
                 import msvcrt
-                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+                while True:
+                    try:
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError as exc:
+                        if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                            raise
+                        time.sleep(.01)
             else:
                 import fcntl
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                while True:
+                    try:
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except BlockingIOError:
+                        # time.sleep is cooperative in the patched engine and
+                        # an ordinary bounded wait in standalone/native callers.
+                        time.sleep(.01)
             held.add(key)
             try:
                 yield
