@@ -31,6 +31,10 @@ function playbackSourceRevision() {
  * generated dist/index.html from /player/ and /player/desktop/.
  * Dev: `npm run dev` proxies /api and Socket.IO to the Flask server.
  */
+// Where `npm run dev` and `npm run preview` proxy the engine. The browser tests
+// point it at a closed port (playwright.config.ts).
+const engine = process.env.SOUNDSIBLE_DEV_ENGINE || 'http://127.0.0.1:5005';
+
 export default defineConfig(({ command }) => ({
   root,
   base: '/player/',
@@ -64,8 +68,8 @@ export default defineConfig(({ command }) => ({
         port: 5173,
         strictPort: true,
         proxy: {
-          '/api': { target: 'http://127.0.0.1:5005', changeOrigin: true },
-          '/socket.io': { target: 'http://127.0.0.1:5005', ws: true, changeOrigin: true },
+          '/api': { target: engine, changeOrigin: true },
+          '/socket.io': { target: engine, ws: true, changeOrigin: true },
         },
       }
     : undefined,

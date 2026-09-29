@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import base from './playwright.config';
+import base, { closedEngine } from './playwright.config';
 
 // Exercise the actual bundle produced by ui_build (or the engine's automatic
 // rebuild locally). Vite dev has no external stylesheets or offline cache.
@@ -12,5 +12,6 @@ export default defineConfig({
     command: 'npm run preview -- --host 127.0.0.1 --port 4174 --strictPort',
     url: 'http://127.0.0.1:4174/player/',
     reuseExistingServer: false,
+    env: { SOUNDSIBLE_DEV_ENGINE: closedEngine },
   },
 });
