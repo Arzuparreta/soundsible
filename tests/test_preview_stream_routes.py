@@ -10,18 +10,33 @@
   drumming on a preview row cannot fan out into N yt-dlp extractions.
 """
 
+import os
 import threading
 import time
 from types import SimpleNamespace
 
+import pytest
 from flask import Flask
 
 from shared import preview_cache
 from shared.api.routes import playback as playback_routes
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
 from shared.stream_resolution import resolved_stream
+from tests.test_preview_cache import _fragmented_mp4
 
 VID = "dQw4w9WgXcQ"
+
+
+@pytest.fixture(autouse=True)
+def _no_fill_outlives_its_test():
+    yield
+    # A progressive response can be read to the end before its fill commits.
+    # A fill still registered would be joined by the next test's request for
+    # the same id, and committed into this test's cache directory.
+    deadline = time.time() + 5
+    while preview_cache._fills and time.time() < deadline:
+        time.sleep(0.01)
+    assert not preview_cache._fills
 
 
 def _patch_upstream(monkeypatch, fake_get):
@@ -274,6 +289,119 @@ def test_long_preview_streams_from_one_growing_local_spool(tmp_path, monkeypatch
     while time.time() < deadline and preview_cache.get_cached(VID) is None:
         time.sleep(0.01)
     assert preview_cache.get_cached(VID) is not None
+    # Bytes were served from the spool, so the file keeps the offsets the
+    # listener was given; no flattening is even attempted.
+    meta = preview_cache.cached_metadata(VID)
+    assert meta["layout"] == preview_cache.SOURCE_LAYOUT
+    assert "flatten_failed" not in meta
+    assert preview_cache.get_cached(VID)[0].read_bytes() == data
+
+
+def test_a_cold_mp4_the_listener_waited_for_is_served_flat(tmp_path, monkeypatch):
+    """A listener who waited for the whole file never saw the source layout.
+
+    YouTube's audio is fragmented MP4, and iOS reads such a file fragment by
+    fragment before it plays: on the phone that measured a median of 31
+    requests and 7.8 s, against 5 requests and 2.1 s for a flat file.
+    """
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    source = tmp_path / "youtube.m4a"
+    _fragmented_mp4(source)
+    data = source.read_bytes()
+    assert data.count(b"moof") > 1
+    monkeypatch.setattr(
+        playback_routes,
+        "_get_preview_stream_cached",
+        lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
+    )
+    _patch_upstream(
+        monkeypatch,
+        lambda url, **kwargs: _FakeUpstream(
+            data, "audio/mp4", status_code=206, content_range=f"bytes 0-{len(data) - 1}/{len(data)}"
+        ),
+    )
+
+    response = _make_app().test_client().get(f"/api/preview/stream/{VID}", headers={"Range": "bytes=0-1"})
+
+    assert response.status_code == 206
+    assert response.headers["X-Soundsible-Playback-Cache"] == "cold"
+    path, _content_type = preview_cache.get_cached(VID)
+    flat = path.read_bytes()
+    assert flat.count(b"moof") == 0
+    assert response.data == flat[:2]
+    assert int(response.headers["Content-Range"].rsplit("/", 1)[1]) == len(flat)
+    assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.FLAT_MP4_LAYOUT
+
+
+def test_a_request_arriving_during_the_commit_gets_the_committed_file(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    source = tmp_path / "youtube.m4a"
+    _fragmented_mp4(source)
+    data = source.read_bytes()
+    monkeypatch.setattr(
+        playback_routes,
+        "_get_preview_stream_cached",
+        lambda api, vid, **_kw: resolved_stream("http://upstream.invalid/a", egress="direct"),
+    )
+    _patch_upstream(
+        monkeypatch,
+        lambda url, **kwargs: _FakeUpstream(
+            data, "audio/mp4", status_code=206, content_range=f"bytes 0-{len(data) - 1}/{len(data)}"
+        ),
+    )
+    committing = threading.Event()
+    release = threading.Event()
+
+    def decodable(_path):
+        committing.set()
+        return release.wait(timeout=5)
+
+    def fast_complete_ends_mid_commit(self, timeout=None):
+        # The route's five-second wait runs out while the commit is still
+        # checking and flattening the finished file.
+        assert committing.wait(timeout=5)
+        threading.Timer(0.2, release.set).start()
+
+    monkeypatch.setattr(preview_cache, "_preview_is_decodable", decodable)
+    monkeypatch.setattr(preview_cache.ProgressiveHandle, "wait_for_fast_complete", fast_complete_ends_mid_commit)
+
+    response = _make_app().test_client().get(f"/api/preview/stream/{VID}")
+
+    assert response.status_code == 200
+    assert response.headers["X-Soundsible-Playback-Cache"] == "cold"
+    path, _content_type = preview_cache.get_cached(VID)
+    assert response.data == path.read_bytes()
+    assert response.data.count(b"moof") == 0
+
+
+def test_only_a_new_playback_flattens_an_idle_source_layout(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    root = preview_cache.preview_cache_dir()
+    root.mkdir(parents=True)
+    path = preview_cache._audio_path(VID)
+    _fragmented_mp4(path)
+    preview_cache._meta_path(VID).write_text(
+        f'{{"content_type": "audio/mp4", "layout": "{preview_cache.SOURCE_LAYOUT}"}}'
+    )
+    idle = time.time() - preview_cache._SOURCE_FLATTEN_IDLE_SEC - 60
+    client = _make_app().test_client()
+
+    os.utime(path, (idle, idle))
+    inside_the_song = client.get(f"/api/preview/stream/{VID}", headers={"Range": "bytes=1000-"})
+    assert inside_the_song.status_code == 206
+    assert path.read_bytes().count(b"moof") > 0
+
+    os.utime(path, (idle, idle))
+    new_playback = client.get(f"/api/preview/stream/{VID}", headers={"Range": "bytes=0-1"})
+    assert new_playback.status_code == 206
+    assert path.read_bytes().count(b"moof") == 0
+    assert int(new_playback.headers["Content-Range"].rsplit("/", 1)[1]) == path.stat().st_size
 
 
 def test_progressive_future_range_waits_locally_without_second_upstream_get(tmp_path, monkeypatch):

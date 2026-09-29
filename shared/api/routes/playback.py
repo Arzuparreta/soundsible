@@ -421,6 +421,12 @@ def _range_observation(value: str | None) -> dict:
     return observed
 
 
+def _reads_from_start(value: str | None) -> bool:
+    """True for a request that begins at byte 0, as a new playback does."""
+    observed = _range_observation(value)
+    return observed["range_kind"] == "none" or observed.get("range_start") == 0
+
+
 def _clean_attempt_id() -> str | None:
     value = request.args.get("attempt_id", "").strip()
     if not value or len(value) > 128:
@@ -610,7 +616,10 @@ def preview_stream_proxy(video_id):
     # Fully cached preview: serve straight from disk (instant, seekable). Checked
     # before the rate limit on purpose — a disk hit costs nothing upstream, so
     # replaying a cached preview must never be what trips the ceiling.
-    cached = preview_cache.get_cached(video_id)
+    cached = preview_cache.get_cached(
+        video_id,
+        from_start=_reads_from_start(request.headers.get("Range")),
+    )
     if cached:
         return _serve_cached_preview(video_id, cached)
 
@@ -651,6 +660,13 @@ def preview_stream_proxy(video_id):
             logger.warning("API: [Preview acquisition] Error for %s: %s", video_id, exc)
             return jsonify({"error": "Preview unavailable"}), 502
         acquired = preview_cache.get_cached(video_id)
+        if acquired is None and not handle.pin_source_layout():
+            # The whole file arrived and its commit has begun, which may
+            # flatten it. Serve the committed file, not the spool's layout.
+            if not handle.wait_until_done():
+                handle.close()
+                return jsonify({"error": "Preview unavailable"}), 502
+            acquired = preview_cache.get_cached(video_id)
         if acquired:
             handle.close()
             return _serve_cached_preview(
