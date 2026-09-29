@@ -39,6 +39,29 @@
   from the boot sequence and on every page render, so the running engine is
   already serving the current sources. Local checks are `npm test`; CI's
   `ui_build` job covers the bundle.
+- Before opening a pull request that touches `ui_web/`, run the **whole**
+  browser suite on all four CI profiles, not only the specs you think you
+  touched. CI's `ui_accessibility` job is every spec in `ui_web/tests/browser`,
+  not an axe gate, and its red runs have mostly been specs still asserting
+  behaviour the pull request changed on purpose. WebKit — the iPhone's engine —
+  runs from the Playwright image over a read-only mount, so it leaves no
+  root-owned files in `node_modules/.vite` or `test-results`:
+
+  ```sh
+  cd ui_web
+  SOUNDSIBLE_DEV_ENGINE=http://127.0.0.1:9 npm run dev -- --host 127.0.0.1 --port 4173 --strictPort &
+  npx playwright test --project=chromium-mobile --project=chromium-desktop
+  docker run --rm --network host --ipc host -v "$PWD/..:/work:ro" -w /work/ui_web \
+    "mcr.microsoft.com/playwright:v$(node -p "require('@playwright/test/package.json').version")-noble" \
+    npx playwright test --project=webkit-mobile --project=webkit-desktop --workers=1 --output=/tmp/results
+  ```
+
+  Run them one after the other: WebKit times out under parallel load, which is
+  why it gets one worker, as in CI. Both runs reuse that dev server; stop it
+  afterwards. `SOUNDSIBLE_DEV_ENGINE` sends requests no fixture answers to a
+  closed port, as in CI, instead of to the engine running on this machine. A
+  failing spec is either a regression or a test your change made obsolete: say
+  which, and fix it in the same pull request.
 - **The AltStore PAL path has never been executed.** `.github/workflows/ios-altstore-pal.yml`,
   `ios/exportOptions/app-store-connect.plist` and the `--marketplace-id` half of
   `scripts/altstore_source.py` were written from documentation, not from a
