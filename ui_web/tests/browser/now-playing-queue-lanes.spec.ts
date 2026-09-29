@@ -98,7 +98,7 @@ test('opening the context card goes to the collection and leaves the music playi
   if (isMobile) await open.tap();
   else await open.click();
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
-  await expect(page).toHaveURL(/#\/$/);
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
   await expect(page.locator('[data-omni-player]')).toContainText('Canción de biblioteca 320');
 });
 

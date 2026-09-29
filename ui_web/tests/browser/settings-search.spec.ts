@@ -75,7 +75,8 @@ test('a result lands on its row, and the search survives the way back', async ({
   await expect(row).toBeInViewport();
   // It was below the fold: the submenu scrolled to it rather than opening at the top.
   const scroller = settings.locator('[data-primary-scroll]');
-  expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  // WebKit applies the landing a frame after the row is already on screen.
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
   if (desktop) {
     await expect(search).toHaveValue('vaciar');
