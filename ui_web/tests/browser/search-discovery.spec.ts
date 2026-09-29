@@ -45,7 +45,7 @@ test('home has distinct entities, bounded songs, working sections and restoratio
   await expect(page).toHaveURL(/browse=albums/);
   await expect(home.getByRole('link', { name: /^Un disco por descubrir / })).toHaveCount(10);
   await expect(home.getByRole('region', { name: 'Artistas por descubrir' })).toHaveCount(0);
-  await home.getByRole('button', { name: 'Volver a Buscar' }).click();
+  await home.getByRole('button', { name: 'Volver a Descubrir' }).click();
   await expect(artists).toBeVisible();
   await expect.poll(() => scroll.evaluate(el => el.scrollTop)).toBeCloseTo(offset, -1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

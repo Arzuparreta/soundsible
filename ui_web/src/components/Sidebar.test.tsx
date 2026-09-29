@@ -22,13 +22,13 @@ beforeEach(async () => {
 
 
 describe('desktop sidebar', () => {
-  it.each(['/', '/library', '/search', '/artist/example'])('opens Songs from %s even after choosing another view', async (path) => {
+  it.each(['/', '/library', '/search', '/artist/example'])('opens the Library root from %s without selecting Songs', async (path) => {
     window.history.replaceState({}, '', path);
     setLibraryTab('albums');
     const view = renderSidebar();
     fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
-    await waitFor(() => expect(libraryTab()).toBe('songs'));
-    await waitFor(() => expect(['/', '/library']).toContain(window.location.pathname));
+    await waitFor(() => expect(libraryTab()).toBe('albums'));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 
   it('exposes the complete grouped navigation', () => {
@@ -37,7 +37,7 @@ describe('desktop sidebar', () => {
     expect(within(groups[0]).getAllByRole('link').map(link => link.textContent?.trim()))
       .toEqual(['Biblioteca', 'Canciones', 'Álbumes', 'Artistas', 'Favoritos', 'Listas']);
     expect(within(groups[1]).getAllByRole('link').map(link => link.textContent?.trim()))
-      .toEqual(['Buscar', 'Podcasts', 'Live']);
+      .toEqual(['Descubrir', 'Podcasts', 'Live']);
     expect(within(groups[2]).getAllByRole('link').map(link => link.textContent?.trim()))
       .toEqual(['Descargas', 'Ajustes']);
   });

@@ -1,3 +1,5 @@
+import { savedEntityAction } from './savedEntityActions';
+import { artistPath } from '../lib/artistRoute';
 import { artistDestination, navigateMusic } from '../lib/musicNavigation';
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
@@ -9,6 +11,8 @@ import { artistKey } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 
 export interface ArtistMenuContext {
+  artistId?: string;
+  cover?: string;
   navigate?: (path: string) => void;
 }
 
@@ -58,6 +62,7 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
       },
     });
   list.push({ icon: menuIcons.artist(), label: t('artistActions.goToArtist'), onSelect: () => navigateMusic(artistDestination({ artist, view: 'library' }, artist)) });
+  list.push(savedEntityAction({ kind: 'artist', name: artist, cover: _ctx.cover, destination: artistPath(artist, { view: 'library', artistId: _ctx.artistId }) }));
   return { title: artist, actions: list };
 }
 

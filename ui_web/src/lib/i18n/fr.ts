@@ -1,6 +1,24 @@
 import type { Dict } from './en';
 
 export const fr: Dict = {
+  savedEntities: {
+    albums: "Albums enregistrés",
+    artists: "Artistes enregistrés",
+    back: "Retour à la bibliothèque",
+    inLibrary: "Dans votre bibliothèque",
+    library: "Votre bibliothèque",
+
+    "title": "Enregistrés",
+    "save": "Enregistrer",
+    "saved": "Enregistré ✓",
+    "remove": "Retirer des enregistrements",
+    "removed": "Retiré des enregistrements",
+    "undo": "Annuler",
+    "failed": "Impossible d’enregistrer la modification. Réessayez.",
+    "empty": "Enregistrez un album ou un artiste depuis sa page pour le retrouver ici.",
+    "showLess": "Voir moins",
+    "options": "Options"
+},
   searchHome: {
     "artists": "Artistes à découvrir",
     "albums": "Albums pour vous",
@@ -9,7 +27,7 @@ export const fr: Dict = {
     "popularAlbums": "Albums populaires",
     "related": "Similaire à {artist}",
     "seeAll": "Tout voir",
-    "back": "Retour à la recherche",
+    "back": "Retour à Découvrir",
     "previous": "Précédent",
     "next": "Suivant",
     "preparing": "Recherche d’artistes et d’albums pour vous…",
@@ -82,7 +100,7 @@ export const fr: Dict = {
 
     more: 'Plus',
     mobile: 'Navigation principale',
-    search: 'Rechercher',
+    search: "Découvrir",
     favourites: 'Favoris',
     playlists: 'Listes',
     podcasts: 'Podcasts',

@@ -11,7 +11,7 @@ test('automatically uploads evidence, retries persisted batches after reload, an
     if (fail) await route.abort();
     else await route.fulfill({ json: { id: batch.id, enabled: true } });
   });
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await expect.poll(() => attempts.length).toBeGreaterThan(0);
   const original = attempts[0];
   expect(original.events[0].event).toBe('capture.start');
@@ -44,7 +44,7 @@ test('automatically uploads evidence, retries persisted batches after reload, an
   await page.goto('about:blank');
   const boundary = attempts.length;
   fail = false;
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await expect.poll(() => attempts.slice(boundary).some((b) => b.userId === 'second-account')).toBe(true);
   expect(attempts.slice(boundary).every((b) => b.userId === 'second-account')).toBe(true);
 });
@@ -56,7 +56,7 @@ test('server telemetry opt-out stops automatic collection and uploads', async ({
     requests++;
     return route.fulfill({ json: { id: route.request().postDataJSON().id, enabled: false } });
   });
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await expect.poll(() => requests).toBe(1);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await page.waitForTimeout(5500);

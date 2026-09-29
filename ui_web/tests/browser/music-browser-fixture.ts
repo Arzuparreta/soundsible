@@ -21,6 +21,8 @@ export async function mockMusicEngine(page: Page) {
       };
     } else if (path === '/api/library') {
       body = { tracks: TRACKS, playlists: {}, settings: {}, podcast_subscriptions: [] };
+    } else if (path === '/api/library/saved-entities') {
+      body = { entities: [] };
     } else if (path === '/api/library/favourites') {
       body = [];
     } else if (path === '/api/downloader/queue') {
@@ -99,7 +101,7 @@ export async function openMiniPlayer(page: Page, name: RegExp): Promise<void> {
 }
 
 export async function openMusicPlayer(page: Page) {
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await openMiniPlayer(page, /^NORMAL:/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();

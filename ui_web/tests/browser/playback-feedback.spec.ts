@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('a large queue remains bounded and transport updates preserve its rows in the pill, NORMAL and DJ', async ({ page }) => {
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   // Named by what it does. Keyed off `aria-busy` the locator described a state
   // rather than a control, so it stopped matching the moment the state changed
@@ -51,7 +51,7 @@ test('touch selection uses the orange treatment before audio loads and scrolling
     await route.fulfill({ contentType: 'audio/wav', body: silentWav });
   });
   try {
-    await page.goto('/player/#/');
+    await page.goto('/player/#/library?view=songs');
     const row = page.locator('[data-music-list-row]').first();
     const main = row.locator('[data-row-main]');
     const pointer = { pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: 40, clientY: 100 };

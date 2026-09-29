@@ -68,7 +68,7 @@ test.beforeEach(async ({ page }) => { await mockEngine(page); });
 
 test('the library never reads through the mini-player', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'the floating pill is the compact layout');
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción 39/ }).click();
   const pill = page.locator('[data-omni-player]');
   await expect(pill).toBeVisible();

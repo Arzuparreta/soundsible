@@ -78,7 +78,7 @@ async function rowUnder(page: Page, x: number, y: number): Promise<string | null
 
 async function openLibrary(page: Page) {
   await mockEngine(page);
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await expect(row(page, 1)).toBeVisible();
 }
 

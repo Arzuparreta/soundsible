@@ -1,3 +1,5 @@
+import { savedEntities, entitiesError, entitiesLoading, syncSavedEntities } from '../lib/savedEntities';
+import { openSavedEntityMenu } from './savedEntityActions';
 import { ArtistLinks, MusicLink } from './MusicLinks';
 import { albumMusic, albumDestination, catalogDestination, catalogMusic, libraryTrackMusic, navigateMusic, type MusicMetadata } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
@@ -544,6 +546,8 @@ export function NowPlayingBrowser(props: {
     void view; void q; void type;
   });
 
+  createEffect(() => { if (currentView().kind === 'bookmarks') void syncSavedEntities(); });
+
   const renderTrack = (
     track: Track,
     onPlay: () => void,
@@ -621,8 +625,8 @@ export function NowPlayingBrowser(props: {
       </header>
 
       <nav class={styles.destinations} aria-label={t('musicExplorer.title')}>
-        <For each={(['library', 'favourites', 'playlists', 'root'] as const)}>{(section) =>
-          <button type="button" aria-current={navigation.section() === section ? 'page' : undefined} onClick={() => selectSection(section)}>{section === 'root' ? t('musicExplorer.explore') : t(`nav.${section}`)}</button>
+        <For each={(['library', 'favourites', 'playlists', 'bookmarks', 'root'] as const)}>{(section) =>
+          <button type="button" aria-current={navigation.section() === section ? 'page' : undefined} onClick={() => selectSection(section)}>{section === 'root' ? t('musicExplorer.explore') : section === 'bookmarks' ? t('savedEntities.title') : t(`nav.${section}`)}</button>
         }</For>
       </nav>
       <Show when={routeMode() || referenceMode()}>
@@ -700,6 +704,27 @@ export function NowPlayingBrowser(props: {
           <Switch>
             <Match when={currentView().kind === 'root'}>
               <RootView autoRow={autoRow} />
+            </Match>
+            <Match when={currentView().kind === 'bookmarks'}>
+              <div class={styles.body} data-browser-body>
+                <Show when={entitiesError()}><p role="status">{t('common.loadFailed')} <button type="button" onClick={() => void syncSavedEntities()}>{t('common.retry')}</button></p></Show>
+                <Show when={!entitiesLoading() || savedEntities().length} fallback={<SkeletonRows count={4} />}>
+                  <For each={savedEntities()} fallback={<p class={styles.empty}>{t('savedEntities.empty')}</p>}>{entry =>
+                    <NavigationRow title={entry.name} subtitle={entry.artist ?? ''} cover={entry.cover} round={entry.kind === 'artist'}
+                      onMenu={event => openSavedEntityMenu(entry, event)} onClick={() => {
+                        const params = new URLSearchParams(entry.destination.split('?')[1]);
+                        const deezerId = params.get('deezer_id') ?? undefined;
+                        const localId = params.get(`${entry.kind}_id`);
+                        if (entry.kind === 'artist') push(localId && params.get('view') === 'library'
+                          ? { kind: 'libraryArtist', name: entry.name, artistId: localId }
+                          : { kind: 'catalogArtist', name: entry.name, deezerId });
+                        else push(localId && params.get('view') === 'library'
+                          ? { kind: 'libraryAlbum', name: entry.name, artist: entry.artist ?? '', albumId: localId }
+                          : { kind: 'catalogAlbum', name: entry.name, artist: entry.artist ?? '', deezerId });
+                      }} />
+                  }</For>
+                </Show>
+              </div>
             </Match>
             <Match when={currentView().kind === 'library'}>
               <LibraryView

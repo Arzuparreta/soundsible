@@ -291,12 +291,34 @@ Useful library routes:
 | `GET` | `/api/library/years` | Release years present, with album and track counts |
 | `POST` | `/api/library/scan` | Start an asynchronous scan of configured music roots; optional body `{"path":"..."}` must stay inside one |
 | `GET` | `/api/library/scan` | Current or last scan state and counters |
+| `GET` | `/api/library/saved-entities` | This account's bookmarked albums and artists, newest first: `{"entities":[...]}` |
+| `PUT` | `/api/library/saved-entities` | Idempotent save/remove, body `{"saved":true,"entry":{"kind":"album","name":"Record","artist":"Band","destination":"/album/Record?artist=Band&deezer_id=123","cover":"https://..."}}`; requires `library:write` |
 | `GET` | `/api/library/favourites` | Favorite track IDs (only the ones you own a file for) |
 | `GET` | `/api/library/favourites/entries` | All saved songs, downloaded or not: `{"version":2,"favourites":[{"keys":[...],"title","artist",...}]}` |
 | `POST` | `/api/library/favourites/toggle` | Toggle favorite, body `{"track_id":"..."}` or `{"favourite":{"keys":["yt:<video_id>"],"title":"...","artist":"..."}}` |
 | `POST` | `/api/library/playlists` | Create playlist, body `{"name":"..."}` |
 | `POST` | `/api/library/playlists/<name>/tracks` | Add track to playlist, body `{"track_id":"..."}` |
 | `DELETE` | `/api/library/playlists/<name>/tracks/<track_id>` | Remove track from playlist |
+
+Album and artist bookmarks are navigation references, independent of saved songs,
+favourites and downloads. `kind` is `album` or `artist`; `name` and an internal
+`destination` are required. Optional `artist` and `cover` preserve display metadata.
+The server derives identity keys from `album_id`/`artist_id` and `deezer_id` in the
+destination, and assigns `id` and `added_at`. References without ids remain
+unresolved; names alone never merge with identified editions or artists. Both
+methods return the full collection. Use `saved: false` with the same entry to
+remove it. The per-user `saved_entities_updated` event invalidates cached reads.
+Failed persistence returns an error without discarding the previous collection;
+instance backups include the account's `saved_entities.json` automatically.
+
+The web Library root (`#/`, also `#/library`) contains collection shortcuts and
+saved album/artist rows. Songs, albums and artists open at
+`#/library?view=songs|albums|artists`; saved collections open at
+`#/?saved=albums|artists`. All of these subentries are selectable in the bottom
+bar settings. Selecting Library itself always returns to its root. The NORMAL/DJ
+browser retains its existing sections, with an additional Saved section. On
+desktop, the sidebar subentries switch between songs, albums and artists; the
+library search sits below the title beside the sorting control.
 
 Mutation routes may require admin authorization or trusted LAN/Tailscale access.
 

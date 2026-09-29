@@ -75,7 +75,7 @@ describe('integrated settings routes', () => {
     await screen.findByRole('heading', { name: 'Ajustes' });
     window.history.forward();
     await screen.findByRole('heading', { name: 'Dispositivos' });
-    fireEvent.click(screen.getByRole('link', { name: 'Buscar' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Descubrir' }));
     await screen.findByRole('heading', { name: 'Buscar música' });
   });
 

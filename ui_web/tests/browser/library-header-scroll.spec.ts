@@ -66,7 +66,7 @@ test('tapping the library header returns a scrolled track list to the top', asyn
     localStorage.clear();
     localStorage.setItem('lang', 'en');
   });
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
 
   const heading = page.viewportSize()!.width < 1024
     ? page.getByRole('link', { name: 'Library', exact: true })
@@ -83,4 +83,24 @@ test('tapping the library header returns a scrolled track list to the top', asyn
   await heading.click();
 
   await expect.poll(() => surface.evaluate((element) => element.scrollTop)).toBe(0);
+});
+
+
+test('desktop library search sits below the title and view changes use the sidebar', async ({ page }) => {
+  test.skip(page.viewportSize()!.width < 1024, 'Desktop layout');
+  await mockEngine(page);
+  await page.addInitScript(() => localStorage.setItem('lang', 'en'));
+  await page.goto('/player/#/library?view=songs');
+  const heading = page.getByRole('heading', { name: 'Your library' });
+  const search = page.getByRole('textbox', { name: 'Search songs and artists' });
+  await expect(search).toBeVisible();
+  const titleBox = await heading.boundingBox();
+  const searchBox = await search.boundingBox();
+  expect(searchBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height);
+  for (const name of ['Songs', 'Albums', 'Artists']) {
+    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+    await page.locator('aside').getByRole('link', { name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp('view=' + name.toLowerCase() + '$'));
+    await expect(search).toBeVisible();
+  }
 });

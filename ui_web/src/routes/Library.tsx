@@ -49,6 +49,10 @@ import { libraryContext } from '../lib/playbackContext';
 /** Library view: songs (sortable, virtualized) or artists browser. */
 export default function Library() {
   const [searchParams, setSearchParams] = useSearchParams();
+  createEffect(() => {
+    const view = searchParams.view;
+    setLibraryTab(view === 'albums' || view === 'artists' ? view : 'songs');
+  });
   let viewRef: HTMLDivElement | undefined;
   const active = createMemo(() => downloadCounts().active);
   // Keyed off the resolved rows rather than library ids, so "favourites first"
@@ -201,11 +205,9 @@ export default function Library() {
       : undefined;
   const searchHidden = () => isMobile() && searchProgress() === 0;
 
-  /** The library filter. Desktop puts it on the header row, where there is idle
-   * space next to the title; mobile keeps it under the header, inside the strip
-   * the swipe gesture reveals. */
-  const searchField = (inHeader: boolean) => (
-    <div class={styles.localSearch} classList={{ [styles.headerSearch]: inHeader }}>
+  /** Desktop keeps the filter below the title; mobile reveals it on swipe. */
+  const searchField = (desktop: boolean) => (
+    <div class={styles.localSearch} classList={{ [styles.desktopSearch]: desktop }}>
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-4-4" />
@@ -312,7 +314,7 @@ export default function Library() {
           }]
         : []),
     ],
-    onTitleTap: () => reselectPrimaryTab('/'),
+    onTitleTap: () => reselectPrimaryTab('/library'),
     onViewChange: () => {
       setQuery('');
       setSearchProgress(0);
@@ -325,11 +327,10 @@ export default function Library() {
       <Show when={!isMobile()}>
       <ViewHeader
         title={t('library.title')}
-        onTitleTap={() => reselectPrimaryTab('/')}
+        onTitleTap={() => reselectPrimaryTab('/library')}
         meta={state.loading && songs().length === 0 ? t('common.loading') : trackCount(songs().length)}
         actions={
           <>
-            {searchField(true)}
             <A class={styles.headerAction} href="/favourites" aria-label={t('library.favourites')} data-pressable>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z" />
@@ -364,35 +365,10 @@ export default function Library() {
         </div>
       </Show>
 
-      <Show when={!searching() && !isMobile()}>
+      <Show when={!isMobile()}>
         <div class={styles.toolbar}>
-          <div class={styles.tabs}>
-            <button
-              class={styles.tab}
-              classList={{ [styles.tabActive]: libraryTab() === 'songs' }}
-              type="button"
-              onClick={() => setLibraryTab('songs')}
-            >
-              {t('library.songs')}
-            </button>
-            <button
-              class={styles.tab}
-              classList={{ [styles.tabActive]: libraryTab() === 'albums' }}
-              type="button"
-              onClick={() => setLibraryTab('albums')}
-            >
-              {t('library.albums')}
-            </button>
-            <button
-              class={styles.tab}
-              classList={{ [styles.tabActive]: libraryTab() === 'artists' }}
-              type="button"
-              onClick={() => setLibraryTab('artists')}
-            >
-              {t('library.artists')}
-            </button>
-          </div>
-          {sortControl()}
+          {searchField(true)}
+          <Show when={!searching()}>{sortControl()}</Show>
         </div>
       </Show>
 
@@ -474,7 +450,7 @@ export default function Library() {
           </Match>
         </Switch>
       }>
-        <LibrarySearchResults results={searchResults()} />
+        <LibrarySearchResults results={searchResults()} query={query().trim()} />
       </Show>
     </div>
   );

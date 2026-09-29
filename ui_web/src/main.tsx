@@ -2,15 +2,16 @@
 import { render } from 'solid-js/web';
 import { Show, createEffect, onMount } from 'solid-js';
 import type { ParentProps } from 'solid-js';
-import { HashRouter, Route, useNavigate } from '@solidjs/router';
+import { HashRouter, Route, useNavigate, useSearchParams } from '@solidjs/router';
 import Shell from './app';
 import { asyncPage } from './components/AsyncPage';
-// Library is the landing route; Login and Invite are the pre-auth screens. All
+// The Library root is the landing route; Login and Invite are the pre-auth screens. All
 // three stay in the entry chunk. Other routes show their destination shell
 // while their module loads. Every other route is split out: the import
 // wizard alone is ~40 KB that most sessions never open, and it was downloaded
 // and parsed before the first track list could paint.
-import Library from './routes/Library';
+import LibraryHome from './routes/LibraryHome';
+const Library = asyncPage(() => import('./routes/Library'), () => t('nav.library'));
 import Login from './routes/Login';
 import Invite from './routes/Invite';
 
@@ -100,11 +101,16 @@ function DiscoverRedirect() {
   return <Search />;
 }
 
+function LibraryRoute() {
+  const [params] = useSearchParams();
+  return <Show when={['songs', 'albums', 'artists'].includes(String(params.view))} fallback={<LibraryHome />}><Library /></Show>;
+}
+
 function Player() {
   return (
     <HashRouter root={Shell}>
-      <Route path="/" component={Library} />
-      <Route path="/library" component={Library} />
+      <Route path="/" component={LibraryHome} />
+      <Route path="/library" component={LibraryRoute} />
       <Route path="/favourites" component={Favourites} />
       <Route path="/search" component={Search} />
       <Route path="/settings" component={Settings} />

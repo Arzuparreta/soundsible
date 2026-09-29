@@ -1,3 +1,5 @@
+import { CatalogCollectionStatus } from './CatalogCollectionStatus';
+import { catalogCollectionLabel } from '../lib/catalogCollection';
 import { ArtistLinks } from './MusicLinks';
 import { catalogMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
@@ -23,6 +25,7 @@ export interface CatalogResultRowProps {
   saving?: boolean;
   index?: number;
   showSource?: boolean;
+  showLibraryStatus?: boolean;
   showArtist?: boolean;
   onPlay: () => void;
   onDownload: () => void;
@@ -45,6 +48,7 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
   return (
     <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.item.title} subtitle={props.showArtist === false ? undefined : props.item.subtitle || itemArtist(props.item)}
       music={props.showArtist === false ? undefined : catalogMusic(props.item)} seed={props.item.id} cover={props.item.cover || (props.item.track_id ? coverUrl(props.item.track_id, 'thumb') : undefined)}
+      annotation={props.showLibraryStatus ? catalogCollectionLabel(props.item) : undefined}
       index={props.index} active={props.active} busy={busy() || props.saving} entry={entry()}
       onActivate={props.onPlay} onMenu={() => openEntryMenu(entry(), { music: catalogMusic(props.item), track: itemToTrack(props.item) ?? undefined,
         onDownload: props.onDownload, busy: props.saving })} />}>
@@ -81,6 +85,7 @@ export function CatalogResultRow(props: CatalogResultRowProps) {
         <Show when={props.showArtist !== false}>
           <ArtistLinks class={styles.subtitle} music={catalogMusic(props.item)} fallback={props.item.subtitle || itemArtist(props.item)} />
         </Show>
+        <Show when={props.showLibraryStatus}><CatalogCollectionStatus item={props.item} /></Show>
       </span>
       <Show when={props.showSource}>
         <span class={styles.source}>{props.item.source}</span>

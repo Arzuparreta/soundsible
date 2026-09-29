@@ -1,3 +1,6 @@
+import SavedEntities from './SavedEntities';
+import { savedEntities } from '../lib/savedEntities';
+import { normalizeLibraryQuery } from '../lib/librarySearch';
 import { libraryTrackMusic } from '../lib/musicNavigation';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from './MusicListRow';
@@ -34,7 +37,7 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
     <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.result.artist.name}
       subtitle={t('library.artistTrackCount', { count: props.result.artist.count })} seed={props.result.artist.name}
       cover={coverUrl(props.result.artist.coverId, 'thumb')} round onActivate={props.onOpen}
-      onMenu={(event) => openArtistMenu(props.result.artist.name, {}, event)} />}>
+      onMenu={(event) => openArtistMenu(props.result.artist.name, { artistId: props.result.artist.id }, event)} />}>
     <div
       class={styles.artistRow}
       data-pressable
@@ -65,7 +68,7 @@ function ArtistResult(props: { result: Extract<LibrarySearchResult, { kind: 'art
   );
 }
 
-export default function LibrarySearchResults(props: { results: LibrarySearchResult[] }) {
+export default function LibrarySearchResults(props: { results: LibrarySearchResult[]; query?: string }) {
   let scrollRef: HTMLDivElement | undefined;
   const navigate = useNavigate();
   const [rowH, setRowH] = createSignal(readRowHeight());
@@ -111,7 +114,8 @@ export default function LibrarySearchResults(props: { results: LibrarySearchResu
       data-library-scroll
       data-primary-scroll
     >
-      <Show when={props.results.length > 0} fallback={<EmptyState>{t('library.noSearchResults')}</EmptyState>}>
+      <Show when={props.query}><SavedEntities query={props.query} /></Show>
+      <Show when={props.results.length > 0} fallback={<Show when={!props.query || !savedEntities().some(entry => normalizeLibraryQuery(`${entry.name} ${entry.artist ?? ''}`).includes(normalizeLibraryQuery(props.query!)))}><EmptyState>{t('library.noSearchResults')}</EmptyState></Show>}>
         <div class={styles.canvas} style={{ height: `${virtualizer.getTotalSize()}px` }}>
           <For each={virtualizer.getVirtualItems()}>
             {(item) => {

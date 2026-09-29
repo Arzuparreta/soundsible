@@ -1,3 +1,5 @@
+import { openSavedEntityMenu } from '../components/savedEntityActions';
+import SaveEntityButton from '../components/SaveEntityButton';
 import RetryButton from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
 import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
@@ -105,7 +107,9 @@ export default function Artist() {
   const singlesEps = createMemo(() => currentProfile()?.singles_eps ?? []);
   const related = createMemo(() => currentProfile()?.related_artists ?? []);
   const candidates = createMemo(() => currentProfile()?.candidates ?? []);
-  const inLibrary = createMemo(() => currentProfile()?.in_library ?? libraryTrackList().length > 0);
+  const inLibrary = createMemo(() => viewParams().artistId
+    ? libraryTrackList().length > 0
+    : currentProfile()?.in_library ?? libraryTrackList().length > 0);
 
 
 
@@ -295,6 +299,7 @@ export default function Artist() {
             </Show>
           </span>
           <div class={styles.actions}>
+            <SaveEntityButton entry={{ kind: 'artist', name: name(), cover: currentProfile()?.metadata?.picture || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: artistPath(name(), { view: view(), artistId: viewParams().artistId, deezerId: viewParams().deezerId }) }} />
             <Show when={state.autoMode.active} fallback={
             <Button onClick={playAll} disabled={view() === 'library' ? libraryTrackList().length === 0 : topTracks().length === 0}>
               <PlayIcon size={16} />
@@ -447,7 +452,7 @@ function DiscoverView(props: {
             <For each={props.albums}>
               {(al) => {
                 return (
-                  <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })}>
+                  <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })} onMenu={(event) => void openSavedEntityMenu({ kind: 'album', name: al.title, artist: props.artistName, cover: al.cover, destination: albumPath(al.title, props.artistName, { view: 'discover', deezerId: al.deezer_id }) }, event)}>
                     <span class={styles.albumCover} style={{ position: 'relative', background: coverGradient(al.title) }}><CoverImage src={al.cover} /></span>
                     <span class={styles.albumName}>{al.title}</span>
                     <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
@@ -466,7 +471,7 @@ function DiscoverView(props: {
             <For each={props.singlesEps}>
               {(al) => {
                 return (
-                  <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })}>
+                  <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })} onMenu={(event) => void openSavedEntityMenu({ kind: 'album', name: al.title, artist: props.artistName, cover: al.cover, destination: albumPath(al.title, props.artistName, { view: 'discover', deezerId: al.deezer_id }) }, event)}>
                     <span class={styles.albumCover} style={{ position: 'relative', background: coverGradient(al.title) }}><CoverImage src={al.cover} /></span>
                     <span class={styles.albumName}>{al.title}</span>
                     <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
@@ -485,7 +490,7 @@ function DiscoverView(props: {
             <For each={props.related}>
               {(artist) => {
                 return (
-                  <MusicLink class={styles.albumCard} path={artistPath(artist.name, { view: "discover", deezerId: artist.deezer_id })}>
+                  <MusicLink class={styles.albumCard} path={artistPath(artist.name, { view: "discover", deezerId: artist.deezer_id })} onMenu={(event) => void openSavedEntityMenu({ kind: 'artist', name: artist.name, cover: artist.picture, destination: artistPath(artist.name, { view: 'discover', deezerId: artist.deezer_id }) }, event)}>
                     <span classList={{ [styles.albumCover]: true, [styles.roundCover]: true }} style={{ position: 'relative', background: coverGradient(artist.name) }}><CoverImage src={artist.picture} /></span>
                     <span class={styles.albumName}>{artist.name}</span>
                     <span class={styles.albumCount}>{formatFans(artist.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}</span>

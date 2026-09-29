@@ -1,3 +1,4 @@
+import SaveEntityButton from '../components/SaveEntityButton';
 import Button from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
 import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
@@ -100,7 +101,9 @@ export default function Album() {
   });
 
   const tracklist = createMemo<CatalogItem[]>(() => currentProfile()?.tracklist ?? []);
-  const inLibrary = createMemo(() => currentProfile()?.in_library ?? libraryTrackList().length > 0);
+  const inLibrary = createMemo(() => viewParams().albumId
+    ? libraryTrackList().length > 0
+    : currentProfile()?.in_library ?? libraryTrackList().length > 0);
   const showToggle = createMemo(() => inLibrary());
 
   // See Artist.tsx: the router reuses this component across :name changes, so
@@ -247,6 +250,7 @@ export default function Album() {
             <Show when={tracklist().length > 0}>{trackCount(tracklist().length)}</Show>
           </span>
           <div class={styles.actions}>
+            <SaveEntityButton entry={{ kind: 'album', name: title(), artist: artistName(), cover: currentProfile()?.cover || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }} />
             <Show when={state.autoMode.active} fallback={
             <button class={styles.btnPrimary} type="button" disabled={view() === 'library' ? libraryTrackList().length === 0 : tracklist().length === 0} onClick={playAll}>
               <PlayIcon size={16} />

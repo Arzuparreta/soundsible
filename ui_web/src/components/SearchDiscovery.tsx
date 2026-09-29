@@ -1,3 +1,6 @@
+import { prioritizeDiscoveries } from '../lib/catalogCollection';
+import { CatalogCollectionStatus } from './CatalogCollectionStatus';
+import { openCatalogEntityMenu } from './savedEntityActions';
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
 import { api, type DiscoveryBrowseItem, type DiscoveryMusicFeed } from '../lib/api';
@@ -34,8 +37,8 @@ export function SearchDiscovery(props: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
   let attempts = 0;
-  const sections = createMemo(() => feed().browse_sections ?? []);
-  const songs = createMemo(() => (feed().items ?? []).slice(0, 10).map(discoveryCatalogItem));
+  const sections = createMemo(() => (feed().browse_sections ?? []).map(section => ({ ...section, items: prioritizeDiscoveries(section.items) })));
+  const songs = createMemo(() => prioritizeDiscoveries((feed().items ?? []).map(discoveryCatalogItem)).slice(0, 10));
   const hasContent = () => sections().some((section) => section.items.length) || songs().length > 0;
   const expanded = () => ['artists', 'albums', 'songs'].includes(props.section ?? '') ? props.section : undefined;
   const title = (id: string, popular = false) => id === 'artists'
@@ -85,7 +88,7 @@ export function SearchDiscovery(props: {
       <section aria-label={title('songs')}>
         <SectionHeader title={title('songs')} id="songs" more={!expanded() && songs().length > 5} />
         <div class={styles.songs}><For each={expanded() ? songs() : songs().slice(0, 5)}>{(item) =>
-          <CatalogResultRow item={item} active={isPlayingItem(item)} saving={props.saving.has(item.id)}
+          <CatalogResultRow showLibraryStatus item={item} active={isPlayingItem(item)} saving={props.saving.has(item.id)}
             onPlay={() => props.onPlay(item)} onDownload={() => props.onSave(item)} />
         }</For></div>
       </section>
@@ -129,10 +132,11 @@ function EntityRail(props: { items: DiscoveryBrowseItem[]; round: boolean; expan
     </div></Show>
     <div ref={rail} onScroll={update} classList={{ [styles.rail]: !props.expanded, [styles.grid]: props.expanded && !props.round,
       [styles.artistList]: props.expanded && props.round }}>
-      <For each={props.items}>{(item) => <MusicLink path={catalogDestination(item)!} class={styles.entity} label={item.title}>
+      <For each={props.items}>{(item) => <MusicLink path={catalogDestination(item)!} class={styles.entity} label={item.title} onMenu={(event) => openCatalogEntityMenu(item, event)}>
         <span classList={{ [styles.cover]: true, [styles.round]: props.round }}><CoverImage src={item.cover} /></span>
         <span class={styles.meta}><span class={styles.name}>{item.title}</span>
           <Show when={!props.round}><span class={styles.subtitle}>{item.artist}</span></Show>
+          <CatalogCollectionStatus item={item} />
         </span>
       </MusicLink>}</For>
     </div>

@@ -1,3 +1,4 @@
+import { setSavedEntities } from '../lib/savedEntities';
 import { registerMusicNavigator } from '../lib/musicNavigation';
 import { fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ const listLayoutMock = vi.hoisted(() => ({ mobile: false }));
 vi.mock('../lib/listLayout', () => ({ mobileListLayout: () => listLayoutMock.mobile }));
 
 const apiMock = vi.hoisted(() => ({
+  getSavedEntities: vi.fn().mockResolvedValue([]),
   searchCatalog: vi.fn(),
   searchYouTube: vi.fn(),
   peekYouTube: vi.fn(),
@@ -471,4 +473,22 @@ describe('direction picker on mobile and desktop', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Change session: Local Song' }));
     expect(storeMock.actions.changeAutoSession).toHaveBeenCalledWith([storeMock.local], 'Local Song');
   });
+});
+
+
+it.each(['browse', 'auto-neutral'] as const)('keeps %s inside its existing browser and opens bookmarks as a subentry', async purpose => {
+  apiMock.getSavedEntities.mockResolvedValue([{ kind: 'artist', name: 'Bookmarked artist', destination: '/artist/Bookmarked%20artist?deezer_id=12' }]);
+  setSavedEntities([]);
+  apiMock.getArtistProfile.mockResolvedValue({ name: 'Bookmarked artist', top_tracks: [], albums: [], singles_eps: [], related_artists: [] });
+  const navigate = vi.fn();
+  const unregister = registerMusicNavigator(navigate);
+  render(() => <NowPlayingBrowser purpose={purpose} onClose={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Saved albums' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Saved' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Bookmarked artist' }));
+  expect(navigation.current().view).toEqual({ kind: 'bookmarks' });
+  expect(navigate).toHaveBeenCalledWith('/artist/Bookmarked%20artist?view=discover&deezer_id=12');
+  unregister();
+  expect(storeMock.actions.placeAutoTrack).not.toHaveBeenCalled();
 });

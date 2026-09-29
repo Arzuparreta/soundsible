@@ -19,8 +19,18 @@ describe('bottom navigation editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Quitar Ajustes' }));
     fireEvent.click(screen.getByRole('button', { name: 'Quitar Biblioteca' }));
     expect(screen.getAllByRole('combobox')).toHaveLength(3);
-    expect(screen.getByRole('button', { name: 'Quitar Buscar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Quitar Descubrir' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Restablecer predeterminados' }));
     expect(bottomNavigation()).toEqual(defaultBottomNavigation);
   });
+});
+
+it('offers every library subentry as a direct bottom-bar destination', () => {
+  render(() => <BottomNavigationSettings />);
+  const select = screen.getByLabelText('Posición 1');
+  for (const href of ['/library?view=songs', '/library?view=albums', '/library?view=artists', '/?saved=albums', '/?saved=artists']) {
+    fireEvent.change(select, { target: { value: href } });
+    expect(bottomNavigation()[0]).toBe(href);
+    expect(JSON.parse(localStorage.getItem('navigation:bottom')!)[0]).toBe(href);
+  }
 });

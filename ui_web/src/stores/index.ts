@@ -1,3 +1,4 @@
+import { syncSavedEntities } from '../lib/savedEntities';
 import { user } from '../lib/session';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import {
@@ -5044,6 +5045,7 @@ export function initStore(): void {
 
   socket = createSocket();
   socket.on('connect', () => {
+    void syncSavedEntities();
     revalidatePreparation();
     setState('online', true);
     socket!.emit('playback_register', state.device);
@@ -5082,6 +5084,7 @@ export function initStore(): void {
   // The collection changes without the library changing — a song saved or
   // hearted on another device, or a catalog row that just finished resolving to
   // a playable video.
+  socket.on('saved_entities_updated', () => void syncSavedEntities());
   socket.on('favourites_updated', () => {
     void api.getSaved()
       .then((saved) => setState('saved', saved))

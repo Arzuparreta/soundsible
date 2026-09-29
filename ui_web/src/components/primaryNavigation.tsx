@@ -1,6 +1,6 @@
 import type { JSX } from 'solid-js';
 import { t } from '../lib/i18n';
-import { DownloadIcon } from './icons';
+import { DownloadIcon, menuIcons } from './icons';
 
 export interface PrimaryNavItem {
   href: string;
@@ -12,15 +12,8 @@ export interface PrimaryNavItem {
 /** Canonical destinations and icons; desktop and mobile choose their own grouping. */
 export const primaryNavigation: PrimaryNavItem[] = [
   {
-    href: '/',
-    label: () => t('nav.library'),
-    end: true,
-    icon: () => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M4 19a2 2 0 012-2h12" />
-        <path d="M6 2h12v20H6a2 2 0 01-2-2V4a2 2 0 012-2z" />
-      </svg>
-    ),
+    href: '/', label: () => t('nav.library'), end: true,
+    icon: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" /></svg>,
   },
   {
     href: '/search',
@@ -99,10 +92,22 @@ export const libraryShortcuts: PrimaryNavItem[] = [
   },
 ];
 
-export const navigationItems = [...primaryNavigation, ...libraryShortcuts];
+/** Direct collection destinations are also selectable in the bottom bar. */
+export const libraryViews: PrimaryNavItem[] = [
+  { href: '/library?view=songs', label: () => t('library.songs'), icon: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg> },
+  { href: '/library?view=albums', label: () => t('library.albums'), icon: menuIcons.album },
+  { href: '/library?view=artists', label: () => t('library.artists'), icon: menuIcons.artist },
+  { href: '/?saved=albums', label: () => t('savedEntities.albums'), icon: menuIcons.album },
+  { href: '/?saved=artists', label: () => t('savedEntities.artists'), icon: menuIcons.artist },
+];
+export const navigationItems = [...primaryNavigation, ...libraryShortcuts, ...libraryViews];
 export const defaultBottomNavigation = ['/', '/favourites', '/search', '/settings'];
-export function mobileNavGroup(path: string): string {
-  if (['/', '/library'].includes(path) || /^\/(album|artist)\//.test(path)) return '/';
+export function mobileNavGroup(path: string, search = ''): string {
+  const params = new URLSearchParams(search);
+  if (path === '/library' && ['songs', 'albums', 'artists'].includes(params.get('view') ?? '')) return `/library?view=${params.get('view')}`;
+  if (['/', '/library'].includes(path) && ['albums', 'artists'].includes(params.get('saved') ?? '')) return `/?saved=${params.get('saved')}`;
+  if (path === '/') return '/';
+  if (path === '/library' || /^\/(album|artist)\//.test(path)) return '/';
   return navigationItems.find(item => item.href !== '/' && (path === item.href || path.startsWith(`${item.href}/`)))?.href ?? path;
 }
 export const navigationGroups = [

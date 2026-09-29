@@ -1,3 +1,4 @@
+import type { SavedEntity } from './savedEntities';
 import { apiOrigin, ownerToken } from './config';
 import type {
   CatalogAlbum,
@@ -20,6 +21,11 @@ import type {
 import type { PodcastSubscription, PodcastEpisode, PodcastSearchResult } from '../types/podcast';
 import type { DownloadQueueItem } from '../types/download';
 import type { PlaybackSessionSnapshot } from './playbackSession';
+
+function savedEntityResponse(response: { entities: SavedEntity[] }): SavedEntity[] {
+  if (!Array.isArray(response.entities)) throw new Error('Invalid saved entities response');
+  return response.entities;
+}
 
 export interface SubsonicAccess {
   username: string;
@@ -784,6 +790,11 @@ export const api = {
   },
   /** The songs in the library that have no file of their own — identity plus
    * snapshot, newest first, each carrying whether it is marked a favourite. */
+  getSavedEntities: () => request<{ entities: SavedEntity[] }>('/api/library/saved-entities').then(savedEntityResponse),
+  setSavedEntity: (entry: SavedEntity, saved: boolean) =>
+    request<{ entities: SavedEntity[] }>('/api/library/saved-entities', {
+      method: 'PUT', body: { entry, saved },
+    }).then(savedEntityResponse),
   getSaved: () =>
     request<{ version?: number; saved?: SavedEntry[] }>(
       `/api/library/saved?t=${Date.now()}`,

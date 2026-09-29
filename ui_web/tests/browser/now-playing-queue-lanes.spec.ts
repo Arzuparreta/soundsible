@@ -26,7 +26,7 @@ async function openQueuePanel(page: Page, song = /Canción de biblioteca 320/) {
 
 /** Play the song at the top of the library — the list reads newest first. */
 async function playFromLibrary(page: Page) {
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   return openQueuePanel(page);
 }
@@ -34,7 +34,7 @@ async function playFromLibrary(page: Page) {
 /** Come back to a paused session with a long lane of requests. */
 async function restoreLongQueue(page: Page) {
   await restoreQueueSession(page, { current: newest, requests: REQUESTS, context: TRACKS.slice(0, 5) });
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   return openQueuePanel(page);
 }
 
@@ -88,7 +88,7 @@ test('removing the context keeps the song and hands over to Autoplay, which swit
 });
 
 test('opening the context card goes to the collection and leaves the music playing', async ({ page, isMobile }) => {
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await page.goto('/player/#/playlists');
   const queue = await openQueuePanel(page);
