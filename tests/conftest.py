@@ -56,6 +56,24 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     try:
         yield runtime
     finally:
+        # A test that boots the API starts the download pump and the loudness
+        # worker, and ending them is `stop_api`'s job, which such tests stub
+        # out. Left running they carried on through every later test, writing
+        # to whichever runtime was configured: another test's instance.db —
+        # a backup test read its SQLite journal mid-write and failed the
+        # v0.16.0 tag — and, between tests, the real one under $HOME.
+        try:
+            from shared.api.orchestrator import orchestrator
+
+            orchestrator.stop_downloader_pump(wait=True)
+        except Exception:
+            pass
+        try:
+            from shared.loudness import stop_loudness_service_if_started
+
+            stop_loudness_service_if_started()
+        except Exception:
+            pass
         unbind_user(token)
         try:
             import shared.api as api_mod
