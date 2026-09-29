@@ -32,6 +32,10 @@ export interface TrackMenuContext {
    * start, and no second device to hand the set to — offering any of them is
    * offering to break the thing the listener is currently running. */
   auto?: boolean;
+  /** An occurrence in the DJ route. The route decides where the song plays and
+   * its own menu moves or drops it, so this leaves out everything that plays,
+   * places or deletes it, and keeps what having the song means. */
+  inRoute?: boolean;
 }
 
 /** The links a menu offers into the music itself: one entry per performer, then
@@ -58,14 +62,15 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   const isLibrary = track.source !== 'preview';
   const isSaved = isLibrary || isSavedTrack(track);
   const isPodcast = isPodcastTrack(track);
-  const inAuto = ctx.auto === true || state.autoMode.active;
+  const inRoute = ctx.inRoute === true;
+  const inAuto = inRoute || ctx.auto === true || state.autoMode.active;
   // A streamed podcast episode plays via a minted token, not a `previewUrl`, so
   // the generic queue can't re-load it — keep it out of queue/playlist flows.
   // Downloaded episodes are real library files and queue fine.
   const queueable = (!isPodcast || isLibrary) && !inAuto;
   const list: MenuAction[] = [];
 
-  if (inAuto && !isPodcast) {
+  if (inAuto && !isPodcast && !inRoute) {
     list.push({ icon: icons.playNext(), label: t('musicExplorer.playNow'), onSelect: () => actions.playNow(track) });
     list.push({ icon: icons.queue(), label: t('autoMode.dj.routeAction'), onSelect: () => void actions.placeAutoTrack(track) });
     list.push({ icon: icons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) });
@@ -76,7 +81,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
   }
   if (ctx.onAddToPlaylist && !isPodcast)
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
-  if (!isPodcast)
+  if (!isPodcast && !inRoute)
     list.push({ icon: icons.radio(), label: inAuto ? t('modeChange.startRadio') : t('trackActions.startRadio'), onSelect: () => void actions.startRadio(track) });
   list.push(...musicLinkActions(ctx.music ?? trackMusic(track)));
   // The heart only makes sense over songs you have: it marks some of them out
@@ -142,7 +147,9 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.device(), label: t('trackActions.playOnDevice'), onSelect: () => ctx.onPlayOnDevice!(track) });
   if (ctx.playlistName && ctx.onRemoveFromPlaylist)
     list.push({ icon: icons.remove(), label: t('trackActions.removeFromPlaylist'), danger: true, onSelect: () => ctx.onRemoveFromPlaylist!(track) });
-  if (isLibrary)
+  // Deleting strips the song out of the queue directly, behind the route's back:
+  // its bridges and planned transition would be left pointing at nothing.
+  if (isLibrary && !inRoute)
     list.push({ icon: icons.trash(), label: t('trackActions.deleteFromLibrary'), danger: true, onSelect: () => void confirmDelete(track) });
 
   return list;

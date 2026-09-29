@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, within } from '@solidjs/testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
+const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPicker, state } = vi.hoisted(() => ({
+  buildTrackMenu: vi.fn(() => [{ label: 'trackMenu', onSelect: () => {} }]),
+  openPlaylistPicker: vi.fn(),
   actions: {
     removeAutoSource: vi.fn(), useAutoTrackAsSource: vi.fn(), placeAutoTrack: vi.fn(),
     removeAutoRouteOccurrence: vi.fn(), avoidAutoTrackForSession: vi.fn(), moveAutoRoute: vi.fn(),
@@ -33,6 +35,10 @@ const { actions, openActionMenu, openContextMenu, state } = vi.hoisted(() => ({
 vi.mock('../stores', () => ({ actions, state }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu }));
 vi.mock('./ActionMenu', () => ({ openActionMenu }));
+// What the track menu offers is `trackActions.test.ts`'s business. Here it is
+// one entry, so the route's own composition and order stay readable.
+vi.mock('./trackActions', () => ({ buildTrackMenu }));
+vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker }));
 vi.mock('../lib/media', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/media')>()),
   coverUrl: (id: string) => `/cover/${id}`,
@@ -96,12 +102,23 @@ describe('AutoMode workspace', () => {
     fireEvent.contextMenu(container.querySelector('[data-drag-row="q-next"]')!);
     const options = openContextMenu.mock.calls.at(-1)![0];
     expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
-      'musicList.move', 'musicExplorer.reference', 'musicExplorer.change', 'autoMode.route.remove',
+      'musicList.move', 'musicExplorer.reference', 'musicExplorer.change', 'trackMenu', 'autoMode.route.remove',
     ]);
     options.actions[1].onSelect();
-    options.actions[3].onSelect();
+    options.actions[4].onSelect();
     expect(actions.useAutoTrackAsSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'next' }));
     expect(actions.removeAutoRouteOccurrence).toHaveBeenCalledWith('q-next');
+  });
+
+  /* Keeping what the DJ found used to mean waiting for it to play and reaching
+   * for the stage's menu. The row offers it, as the route's own occurrence. */
+  it('lets a route row be saved, downloaded or put in a playlist where it stands', () => {
+    const { container } = renderAuto('route');
+    fireEvent.contextMenu(container.querySelector('[data-drag-row="q-next"]')!);
+    expect(buildTrackMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'next', queueId: 'q-next' }),
+      { inRoute: true, onAddToPlaylist: openPlaylistPicker },
+    );
   });
 
   it('offers the route repair beside Add once there is more than one seam', () => {
@@ -255,7 +272,7 @@ describe('AutoMode workspace', () => {
       // Loaded and mixing: it cannot be moved, and taking it out of the route
       // no longer means anything. Everything else still applies.
       expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
-        'musicExplorer.reference', 'musicExplorer.change',
+        'musicExplorer.reference', 'musicExplorer.change', 'trackMenu',
       ]);
       options.actions[0].onSelect();
       expect(actions.useAutoTrackAsSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'next' }));

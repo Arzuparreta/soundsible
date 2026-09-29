@@ -59,6 +59,25 @@ describe('buildTrackMenu — podcast coherence', () => {
     expect(l).not.toContain('Add to queue');
   });
 
+  it('keeps a DJ route occurrence to having the song, never to playing, placing or deleting it', () => {
+    // The route owns where the song plays. Its row menu moves and drops it;
+    // this half only offers what keeping it means.
+    const found: Track = { id: 'dj2', title: 'Song', artist: 'A', album: 'Record', source: 'preview',
+      recommendation: { identity: 'music:track:dj2', source: 'auto_mode', reason: 'Following the thread of Root' } };
+    const l = labels(found, { ...ctx, inRoute: true });
+    expect(l).toEqual(['Add to playlist', 'Go to artist', 'Go to album', 'Share',
+      'Following the thread of Root', 'Not interested', 'Save to your library', 'Download']);
+
+    // Deleting a file would strip the song out of the queue behind the route.
+    const owned: Track = { id: 'lib3', title: 'Song', artist: 'A' };
+    const o = labels(owned, { ...ctx, inRoute: true, onPlayOnDevice: () => {} });
+    expect(o).toContain('Add to favourites');
+    for (const label of ['Play now', 'Add to route', 'Mix into session', 'Change session', 'Play next',
+      'Add to queue', 'Start radio', 'Switch and start Radio', 'Play on device', 'Delete from library']) {
+      expect(o).not.toContain(label);
+    }
+  });
+
   it('withholds the heart until a song is in the library, and offers saving instead', () => {
     // A search result the user has never claimed. Marking it out among "your
     // songs" would presuppose the thing the ＋ above it is there to do.
@@ -84,6 +103,7 @@ describe('menu icons', () => {
     for (const track of [preview, owned]) {
       expect(unlabelled(buildTrackMenu(track, full))).toEqual([]);
       expect(unlabelled(buildTrackMenu(track, { ...full, auto: true }))).toEqual([]);
+      expect(unlabelled(buildTrackMenu(track, { ...full, inRoute: true }))).toEqual([]);
     }
   });
 
