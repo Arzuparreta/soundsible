@@ -4,6 +4,38 @@ Status: candidate iOS output and source-retirement correction, **not a device-ve
 proves what Now Playing, CarPlay or the head unit displays, or that sound reaches
 the speakers. Device acceptance is still required.
 
+## September 29: podcast skip on iPhone PWA
+
+The listener reports that +/-15-second taps briefly replay or loop the previous
+audio buffer before the requested position becomes audible; desktop PWA seeks
+feel immediate. The roughly 100 ms duration is a listening estimate, not a trace.
+The inspected seek path assigned `currentTime` without gating programme output.
+[WebKit bug 288879](https://bugs.webkit.org/show_bug.cgi?id=288879) documents a
+similar stale-buffer symptom through MediaElementAudioSourceNode and was fixed
+upstream in March 2025. It is precedent, not proof of the cause on this device.
+
+The candidate change gates the selected deck before assigning `currentTime`,
+then restores its existing gain only after `seeked`, `seeking=false`, and
+`readyState >= HAVE_FUTURE_DATA`. It leaves source playback and context running;
+there is no fixed delay, resource reload, suspend/resume, or deferred `play()`.
+The gate applies through the existing mix gain (including Live) and through
+native mute when no graph is available. Source replacement, release, media error,
+and ineffective seeks clear it. A user pause remains paused on completion.
+
+Unit tests cover readiness/event ordering, repeated taps, mute/volume changes,
+source replacement, no-op seeks and pause precedence. The podcast browser test
+also seeks while playing and checks that the media clock continues, alongside
+the existing paused seeks and saved-progress cases. Its silent WAV cannot prove
+that old decoded samples are absent from physical iPhone output. In particular,
+a WebKit buffer retained *after* its readiness declarations could outlive this
+gate; do not call the acoustic symptom resolved without listening acceptance.
+
+On the affected iPhone PWA, repeat forward/backward and consecutive taps while
+playing, both within buffered audio and into an unbuffered position. Expect
+silence while seeking rather than repeated old audio, then the requested
+position. Check a paused seek, pause during buffering, change episode during a
+seek, and the actual speaker/headphone/Bluetooth route used for the report.
+
 ## September 19: lock regression and rejected reconnect corrections
 
 The listener reports Safari PWA on the same iPhone with wired CarPlay. During
