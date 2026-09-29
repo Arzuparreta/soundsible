@@ -642,3 +642,86 @@ def test_background_prefetch_uses_the_same_rejection_refresh_as_playback(runtime
     assert preview_cache.preparation_status(video_id).state == "ready"
     assert calls == ["http://example.invalid/fast", "http://example.invalid/fallback"]
     assert refreshed == [video_id]
+
+
+def _wait_until(predicate, timeout=5.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline and not predicate():
+        time.sleep(0.02)
+    return predicate()
+
+
+def test_prefetch_jobs_resolve_as_the_user_who_queued_them(runtime, monkeypatch):
+    """A worker thread has nobody bound; the resolver must still run as the requester.
+
+    The resolver is route code: on a fresh engine its first `get_downloader()`
+    builds the downloader from the requesting user's core, which raises
+    `NoUserBound` without a user. That failed every "prepare the next song"
+    request after each restart, until some ordinary request happened to build
+    the downloader first.
+    """
+    from shared.user_context import require_user_id, user_context
+
+    _patch_upstream(monkeypatch, lambda url, **kw: _FakeResponse(b"next-song"))
+    seen = {}
+
+    def resolver(vid: str) -> str:
+        seen[vid] = require_user_id()
+        return "http://example.invalid/stream"
+
+    with user_context("alice"):
+        assert preview_cache.request_prefetch(["aliceNext01"], download=True, resolver=resolver) == ["aliceNext01"]
+    with user_context("bob"):
+        assert preview_cache.request_prefetch(["bobWarmUrl1"], download=False, resolver=resolver) == ["bobWarmUrl1"]
+
+    assert _wait_until(lambda: preview_cache.get_cached("aliceNext01") is not None)
+    assert _wait_until(lambda: "bobWarmUrl1" in seen)
+    assert seen == {"aliceNext01": "alice", "bobWarmUrl1": "bob"}
+    assert preview_cache.preparation_status("aliceNext01").state == "ready"
+
+
+def test_a_prefetch_queued_with_nobody_bound_runs_with_nobody_bound(runtime):
+    from shared.user_context import current_user_id, user_context
+
+    seen = {}
+    with user_context("alice"):
+        preview_cache.request_prefetch(
+            ["aliceFirst1"], download=False, resolver=lambda vid: seen.setdefault(vid, current_user_id())
+        )
+    assert _wait_until(lambda: "aliceFirst1" in seen)
+    with user_context(None):
+        preview_cache.request_prefetch(
+            ["unboundJob1"], download=False, resolver=lambda vid: seen.setdefault(vid, current_user_id())
+        )
+
+    assert _wait_until(lambda: "unboundJob1" in seen)
+    assert seen == {"aliceFirst1": "alice", "unboundJob1": None}
+
+
+def test_progressive_fill_refreshes_a_rejected_url_as_the_listener(runtime, monkeypatch):
+    from shared.user_context import require_user_id, user_context
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/rejected"):
+            return _FakeResponse(b"", status_code=403)
+        return _FakeResponse(b"fresh-audio")
+
+    _patch_upstream(monkeypatch, fake_get)
+    monkeypatch.setattr(preview_cache, "retire_upstream_session", lambda: None)
+    refreshed_as = []
+
+    def refresh(vid: str) -> str:
+        refreshed_as.append(require_user_id())
+        return "http://example.invalid/fresh"
+
+    with user_context("alice"):
+        handle = preview_cache.start_progressive(
+            VID, "http://example.invalid/rejected", refresh_resolver=refresh
+        )
+    try:
+        assert _wait_until(lambda: handle.done)
+    finally:
+        handle.close()
+
+    assert refreshed_as == ["alice"]
+    assert preview_cache.get_cached(VID)[0].read_bytes() == b"fresh-audio"
