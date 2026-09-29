@@ -15,6 +15,7 @@ from shared.constants import DEFAULT_CONFIG_DIR
 
 _TOKEN_TTL_SEC = 900
 _TOKEN_VER = "v1"
+_SIG_LEN = hashlib.sha256().digest_size
 
 
 def _signing_key_bytes() -> bytes:
@@ -54,9 +55,13 @@ def decode_enclosure_stream_token(token: str) -> Optional[Dict[str, Any]]:
         raw = base64.urlsafe_b64decode(token + pad)
     except Exception:
         return None
-    if b"." not in raw:
+    # The signature is raw HMAC bytes, any of which can be a "." as well, so it
+    # is cut off by its length. Searching for the separator instead refused
+    # about one token in nine the moment it was minted, and with it the play
+    # of an episode that was not downloaded.
+    if len(raw) <= _SIG_LEN or raw[-_SIG_LEN - 1:-_SIG_LEN] != b".":
         return None
-    body_b, sig_b = raw.rsplit(b".", 1)
+    body_b, sig_b = raw[:-_SIG_LEN - 1], raw[-_SIG_LEN:]
     exp_sig = hmac.new(_signing_key_bytes(), body_b, hashlib.sha256).digest()
     if not hmac.compare_digest(exp_sig, sig_b):
         return None
