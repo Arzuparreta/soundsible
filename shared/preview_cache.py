@@ -73,6 +73,13 @@ class PreviewFillCancelled(Exception):
 
 
 _PROGRESSIVE_FAST_COMPLETE_SEC = 5.0
+# A file committed in its source layout is flattened only once nobody has read
+# it for this long, so a listener still inside the song keeps the offsets they
+# were served.
+_SOURCE_FLATTEN_IDLE_SEC = 15 * 60
+# Covers a commit's worst case: two decode checks (15 s each) around the
+# flattening remux (30 s). A real song takes well under a second.
+_COMMIT_WAIT_SEC = 60.0
 _PROGRESSIVE_MIN_BUFFER_SEC = 6.0
 _PROGRESSIVE_RATE_MARGIN = 1.25
 
@@ -99,6 +106,12 @@ class _FillState:
         self.progressive_requested = False
         self.readers = 0
         self.keep_warm = False
+        # A progressive response computes its headers and offsets from the
+        # source bytes, so once one has started the commit keeps that layout.
+        # Once the commit has begun, no new progressive response may start:
+        # it is served the committed file from disk instead.
+        self.source_layout_pinned = False
+        self.committing = False
 
     def update(self, downloaded: int) -> None:
         with self.condition:
@@ -127,6 +140,24 @@ class _FillState:
             if elapsed <= 0:
                 return 0.0
             return max(0.0, (self.downloaded_bytes - started_bytes) / elapsed)
+
+    def pin_source_layout(self) -> bool:
+        """Claim the source byte layout for a progressive reader.
+
+        False once the commit has started: the finished file may be flattened,
+        and the reader must wait for it instead.
+        """
+        with self.condition:
+            if self.committing:
+                return False
+            self.source_layout_pinned = True
+            return True
+
+    def begin_commit(self) -> bool:
+        """Close progressive admission; True when the file may be flattened."""
+        with self.condition:
+            self.committing = True
+            return not self.source_layout_pinned
 
     def finish(self, error: BaseException | None = None) -> None:
         with self.condition:
@@ -384,12 +415,28 @@ def _remux_flat_mp4(source: Path, video_id: str) -> Optional[Path]:
         return None
 
 
-def _normalize_legacy_mp4(video_id: str, path: Path, content_type: str) -> dict:
-    """Normalize one old cache entry once; concurrent readers share the result."""
+def _is_legacy_layout(meta: dict) -> bool:
+    return meta.get("layout") not in {FLAT_MP4_LAYOUT, SOURCE_LAYOUT}
+
+
+def _is_unflattened_source(meta: dict) -> bool:
+    return meta.get("layout") == SOURCE_LAYOUT and not meta.get("flatten_failed")
+
+
+def _flatten_cached_mp4(
+    video_id: str,
+    path: Path,
+    content_type: str,
+    eligible: Callable[[dict], bool],
+) -> dict:
+    """Flatten one cache entry once; concurrent readers share the result.
+
+    A failed remux leaves the playable source in place and is not retried.
+    """
     lock = _normalizer_for(video_id)
     with lock:
         meta = _read_meta(video_id)
-        if meta.get("layout") in {FLAT_MP4_LAYOUT, SOURCE_LAYOUT}:
+        if not eligible(meta):
             return meta
         if not path.is_file():
             return meta
@@ -403,12 +450,26 @@ def _normalize_legacy_mp4(video_id: str, path: Path, content_type: str) -> dict:
             "size": path.stat().st_size,
             "layout": layout,
         })
+        if replacement is None:
+            meta["flatten_failed"] = True
         _write_meta(video_id, meta)
         return meta
 
 
-def get_cached(video_id: str) -> Optional[tuple[Path, str]]:
+def _idle_for(path: Path, seconds: float) -> bool:
+    try:
+        return time.time() - path.stat().st_mtime >= seconds
+    except OSError:
+        return False
+
+
+def get_cached(video_id: str, *, from_start: bool = False) -> Optional[tuple[Path, str]]:
     """Return (path, content_type) for a fully cached preview, or None.
+
+    ``from_start`` says the caller is about to read the file from byte 0, as a
+    new playback does. Only such a reader may be handed a file whose layout
+    changed since it was last served: anyone mid-song holds offsets into the
+    old one.
 
     Touches the file so LRU eviction treats it as recently used.
     """
@@ -419,14 +480,27 @@ def get_cached(video_id: str) -> Optional[tuple[Path, str]]:
     meta = _read_meta(video_id)
     if isinstance(meta.get("content_type"), str):
         content_type = meta["content_type"]
-    if _is_mp4(content_type) and meta.get("layout") not in {FLAT_MP4_LAYOUT, SOURCE_LAYOUT}:
+    eligible = None
+    if _is_mp4(content_type) and _is_legacy_layout(meta):
+        eligible = _is_legacy_layout
+    elif (
+        from_start
+        and _is_mp4(content_type)
+        and _is_unflattened_source(meta)
+        and _idle_for(path, _SOURCE_FLATTEN_IDLE_SEC)
+    ):
+        # Kept in YouTube's fragmented layout because a listener was streaming
+        # it while it downloaded. iOS reads such a file fragment by fragment
+        # before it plays, so a new playback gets the flat file instead.
+        eligible = _is_unflattened_source
+    if eligible is not None:
         try:
-            _normalize_legacy_mp4(video_id, path, content_type)
+            _flatten_cached_mp4(video_id, path, content_type, eligible)
         except OSError as exc:
             # Cache layout is an optimisation. Serving the already validated
             # source file is safer than turning an atomic remux failure into an
             # unavailable track.
-            logger.warning("[PreviewCache] Legacy normalization failed for %s: %s", video_id, exc)
+            logger.warning("[PreviewCache] MP4 normalization failed for %s: %s", video_id, exc)
     try:
         os.utime(path, None)
     except OSError:
@@ -867,9 +941,11 @@ def _download_once(
                             state.update(writer._bytes)
                             if state.progressive_requested:
                                 _maybe_mark_streamable(state, writer._part)
+                    # A listener who waited for the whole file never saw the
+                    # source bytes, so their song is flattened like any other.
                     if not writer.commit(
                         _preview_is_decodable,
-                        normalize=not state.progressive_requested,
+                        normalize=state.begin_commit(),
                     ):
                         return None
                     state.update(expected or writer._bytes)
@@ -994,6 +1070,12 @@ class ProgressiveHandle:
     @property
     def done(self) -> bool:
         return self.state.done.is_set()
+
+    def pin_source_layout(self) -> bool:
+        return self.state.pin_source_layout()
+
+    def wait_until_done(self, timeout: float = _COMMIT_WAIT_SEC) -> bool:
+        return self.state.done.wait(timeout)
 
     def wait_for_fast_complete(self, timeout: float = _PROGRESSIVE_FAST_COMPLETE_SEC) -> None:
         """Give ordinary songs their existing whole-file fast path first."""

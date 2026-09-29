@@ -725,3 +725,78 @@ def test_progressive_fill_refreshes_a_rejected_url_as_the_listener(runtime, monk
 
     assert refreshed_as == ["alice"]
     assert preview_cache.get_cached(VID)[0].read_bytes() == b"fresh-audio"
+
+
+def test_a_progressive_reader_keeps_the_source_layout_only_if_it_came_first():
+    streamed = preview_cache._FillState(VID)
+    assert streamed.pin_source_layout() is True
+    assert streamed.begin_commit() is False
+
+    waited = preview_cache._FillState(VID)
+    assert waited.begin_commit() is True
+    assert waited.pin_source_layout() is False
+
+
+def _seed_source_layout(runtime, *, idle_seconds: float) -> Path:
+    root = preview_cache.preview_cache_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    path = preview_cache._audio_path(VID)
+    _fragmented_mp4(path)
+    preview_cache._meta_path(VID).write_text(json.dumps({
+        "content_type": "audio/mp4",
+        "layout": preview_cache.SOURCE_LAYOUT,
+        "size": path.stat().st_size,
+    }))
+    _age(path, idle_seconds)
+    return path
+
+
+def _age(path: Path, seconds: float) -> None:
+    then = time.time() - seconds
+    os.utime(path, (then, then))
+
+
+def test_an_idle_source_layout_is_flattened_for_a_new_playback(runtime):
+    idle = preview_cache._SOURCE_FLATTEN_IDLE_SEC + 60
+    path = _seed_source_layout(runtime, idle_seconds=idle)
+    original_packets = _packet_hashes(path)
+
+    # A request that does not start at byte 0 is somebody inside the song.
+    assert preview_cache.get_cached(VID) == (path, "audio/mp4")
+    assert path.read_bytes().count(b"moof") > 0
+
+    _age(path, idle)
+    assert preview_cache.get_cached(VID, from_start=True) == (path, "audio/mp4")
+    assert path.read_bytes().count(b"moof") == 0
+    assert path.read_bytes().count(b"mdat") == 1
+    assert _packet_hashes(path) == original_packets
+    meta = preview_cache.cached_metadata(VID)
+    assert meta["layout"] == preview_cache.FLAT_MP4_LAYOUT
+    assert meta["size"] == path.stat().st_size
+
+
+def test_a_recently_served_source_layout_keeps_its_offsets(runtime):
+    path = _seed_source_layout(runtime, idle_seconds=60)
+    before = path.read_bytes()
+
+    assert preview_cache.get_cached(VID, from_start=True) == (path, "audio/mp4")
+    assert path.read_bytes() == before
+    assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.SOURCE_LAYOUT
+
+
+def test_a_failed_source_flatten_is_not_retried(runtime, monkeypatch):
+    idle = preview_cache._SOURCE_FLATTEN_IDLE_SEC + 60
+    path = _seed_source_layout(runtime, idle_seconds=idle)
+    before = path.read_bytes()
+    calls = []
+    monkeypatch.setattr(preview_cache, "_remux_flat_mp4", lambda *_args: calls.append(True) or None)
+
+    assert preview_cache.get_cached(VID, from_start=True) == (path, "audio/mp4")
+    _age(path, idle)
+    assert preview_cache.get_cached(VID, from_start=True) == (path, "audio/mp4")
+
+    assert calls == [True]
+    assert path.read_bytes() == before
+    meta = preview_cache.cached_metadata(VID)
+    assert meta["layout"] == preview_cache.SOURCE_LAYOUT
+    assert meta["flatten_failed"] is True
