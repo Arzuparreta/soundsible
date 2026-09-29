@@ -4,6 +4,16 @@ import { mockMusicEngine } from './music-browser-fixture';
 import type { SavedEntity } from '../../src/lib/savedEntities';
 
 test('save artist and album, reload, browse, remove and undo without changing songs', async ({ page }) => {
+  await page.addInitScript(() => {
+    const animate = Element.prototype.animate;
+    const pulses: string[] = [];
+    Object.assign(window, { navPulses: pulses });
+    Element.prototype.animate = function (...args) {
+      const href = this.closest('[data-nav-href]')?.getAttribute('data-nav-href');
+      if (href) pulses.push(href);
+      return animate.apply(this, args);
+    };
+  });
   await mockMusicEngine(page);
   let entities: SavedEntity[] = [];
   const writes: string[] = [];
@@ -28,12 +38,11 @@ test('save artist and album, reload, browse, remove and undo without changing so
   await page.goto('/player/#/artist/Radiohead?deezer_id=1');
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { navPulses: string[] }).navPulses)).toContain('/');
   await page.getByRole('link', { name: /In Rainbows/ }).click();
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect.poll(() => entities.length).toBe(2);
-  await expect(page.getByText('Guardado en Biblioteca', { exact: true }).last()).toBeVisible();
-  await page.getByRole('button', { name: 'Ver', exact: true }).last().click();
-  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/');
+  await page.goto('/player/#/');
   const saved = page.getByRole('region', { name: 'Álbumes guardados', exact: true });
   await expect(saved.getByRole('link', { name: 'In Rainbows', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Artistas guardados' }).getByRole('link', { name: 'Radiohead', exact: true })).toBeVisible();
@@ -44,7 +53,16 @@ test('save artist and album, reload, browse, remove and undo without changing so
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).include('section[aria-label="Álbumes guardados"]').analyze()).violations).toEqual([]);
   await saved.getByRole('button', { name: 'Opciones: In Rainbows', exact: true }).click();
-  await page.getByRole('button', { name: 'Quitar de guardados', exact: true }).click();
+  const remove = page.getByRole('button', { name: 'Quitar de guardados', exact: true });
+  await expect(remove.locator('mask')).toHaveCount(1);
+  expect(await remove.evaluate((button) => {
+    const probe = button.appendChild(document.createElement('span'));
+    probe.style.color = 'var(--danger)';
+    const danger = getComputedStyle(probe).color;
+    probe.remove();
+    return getComputedStyle(button).color === danger;
+  })).toBe(true);
+  await remove.click();
   await expect(saved.getByRole('link', { name: 'In Rainbows', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Deshacer', exact: true }).click();
   await expect(saved.getByRole('link', { name: 'In Rainbows', exact: true })).toBeVisible();

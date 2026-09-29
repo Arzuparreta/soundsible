@@ -2,6 +2,7 @@ import { createSignal } from 'solid-js';
 import { api } from './api';
 import { t } from './i18n';
 import { toast } from './toast';
+import { pulseNavigation } from './tabNavigation';
 
 export interface SavedEntity {
   kind: 'artist' | 'album';
@@ -80,10 +81,7 @@ export async function setEntitySaved(entry: SavedEntity, saved: boolean): Promis
   try {
     setSavedEntities(await api.setSavedEntity(entry, saved));
     setEntitiesError(false);
-    if (saved) toast.action(t('savedEntities.savedToLibrary'), t('savedEntities.viewLibrary'), () => {
-      // Lazy: musicNavigation reads the store at load time, and the store imports this module.
-      void import('./musicNavigation').then(({ navigateMusic }) => navigateMusic('/'));
-    });
+    if (saved) pulseNavigation(['/', entry.kind === 'album' ? '/?saved=albums' : '/?saved=artists']);
     if (!saved) toast.action(t('savedEntities.removed'), t('savedEntities.undo'), () => void setEntitySaved(entry, true));
   } catch {
     setSavedEntities(previous);

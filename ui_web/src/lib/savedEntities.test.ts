@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { entitiesBusy, sameEntity, savedEntities, setSavedEntities, setEntitySaved, syncSavedEntities, type SavedEntity } from './savedEntities';
 import { toast } from './toast';
+import { pulseNavigation } from './tabNavigation';
 
 vi.mock('./api', () => ({ api: { getSavedEntities: vi.fn(), setSavedEntity: vi.fn() } }));
 vi.mock('./toast', () => ({ toast: { action: vi.fn(), error: vi.fn() } }));
+vi.mock('./tabNavigation', () => ({ pulseNavigation: vi.fn() }));
 const album = (id: string): SavedEntity => ({ kind: 'album', name: 'Greatest Hits', artist: 'Artist', destination: `/album/Greatest%20Hits?deezer_id=${id}` });
 beforeEach(() => { vi.clearAllMocks(); setSavedEntities([]); });
 
@@ -13,6 +15,18 @@ describe('saved entities', () => {
     expect(sameEntity(album('1'), { ...album('1'), destination: album('1').destination + '&view=library' })).toBe(true);
     expect(sameEntity(album('1'), album('2'))).toBe(false);
     expect(sameEntity(album('1'), { ...album('1'), destination: '/album/Greatest%20Hits' })).toBe(false);
+  });
+  it('points at Library when a save lands, and only then', async () => {
+    vi.mocked(api.setSavedEntity).mockResolvedValue([album('1')]);
+    await setEntitySaved(album('1'), true);
+    expect(pulseNavigation).toHaveBeenCalledWith(['/', '/?saved=albums']);
+    expect(toast.action).not.toHaveBeenCalled();
+    vi.mocked(pulseNavigation).mockClear();
+    vi.mocked(api.setSavedEntity).mockResolvedValue([]);
+    await setEntitySaved(album('1'), false);
+    vi.mocked(api.setSavedEntity).mockRejectedValue(new Error('disk full'));
+    await setEntitySaved(album('2'), true);
+    expect(pulseNavigation).not.toHaveBeenCalled();
   });
   it('rolls back a failed write without losing other bookmarks', async () => {
     setSavedEntities([album('1')]);

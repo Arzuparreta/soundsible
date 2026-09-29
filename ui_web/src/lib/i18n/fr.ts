@@ -2,8 +2,6 @@ import type { Dict } from './en';
 
 export const fr: Dict = {
   savedEntities: {
-    savedToLibrary: "Enregistré dans la bibliothèque",
-    viewLibrary: "Voir",
     albums: "Albums enregistrés",
     artists: "Artistes enregistrés",
     back: "Retour à la bibliothèque",

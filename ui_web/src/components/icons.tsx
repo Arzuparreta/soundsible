@@ -1,4 +1,4 @@
-import type { JSX } from 'solid-js';
+import { createUniqueId, type JSX } from 'solid-js';
 
 /**
  * Shared inline glyphs. Icons live next to their button in most of this
@@ -103,6 +103,25 @@ export function DeviceIcon(props: GlyphProps) {
     </Glyph>
   );
 }
+const BOOKMARK = 'M6 3h12v18l-6-4-6 4Z';
+const BOOKMARK_STRIKE = 'M3 6l18 12';
+/** Keep an album or artist at hand in Library. Its button fills it once saved. */
+export const BookmarkIcon = line(BOOKMARK);
+/** The same bookmark struck through. The strike is cut out of the outline so
+ * the two never merge into one blot at menu size. */
+export function BookmarkOffIcon(props: GlyphProps) {
+  const cut = createUniqueId();
+  return (
+    <Glyph {...props}>
+      <mask id={cut}>
+        <rect width="24" height="24" fill="white" stroke="none" />
+        <path d={BOOKMARK_STRIKE} stroke="black" stroke-width="5" />
+      </mask>
+      <path d={BOOKMARK} mask={`url(#${cut})`} />
+      <path d={BOOKMARK_STRIKE} />
+    </Glyph>
+  );
+}
 /** Save to the library: claim the song, no file yet. */
 export const SaveIcon = line('M12 5v14M5 12h14');
 /** Take something out of a collection it was added to — the library, a
@@ -154,6 +173,8 @@ export const menuIcons = {
   share: () => <ShareIcon size={MENU} />,
   device: () => <DeviceIcon size={MENU} />,
   save: () => <SaveIcon size={MENU} />,
+  bookmark: () => <BookmarkIcon size={MENU} />,
+  unbookmark: () => <BookmarkOffIcon size={MENU} />,
   remove: () => <RemoveIcon size={MENU} />,
   download: () => <DownloadIcon size={MENU} />,
   check: () => <CheckIcon size={MENU} />,

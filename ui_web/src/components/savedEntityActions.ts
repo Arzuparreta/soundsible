@@ -8,8 +8,9 @@ import type { MenuAction } from './ActionMenu';
 
 export function savedEntityAction(entry: SavedEntity): MenuAction {
   return {
-    icon: entry.kind === 'artist' ? menuIcons.artist() : menuIcons.album(),
+    get icon() { return isEntitySaved(entry) ? menuIcons.unbookmark() : menuIcons.bookmark(); },
     get label() { return t(isEntitySaved(entry) ? 'savedEntities.remove' : 'savedEntities.save'); },
+    get danger() { return isEntitySaved(entry); },
     get disabled() { return entitiesBusy(); },
     onSelect: () => void setEntitySaved(entry, !isEntitySaved(entry)),
   };

@@ -31,7 +31,7 @@ export function TabBar() {
           });
           return (
             <A href={href()} end class={styles.tab} activeClass="" classList={{ [styles.active]: selected() }}
-              aria-current={selected() ? 'page' : undefined} data-pressable {...tap}>
+              aria-current={selected() ? 'page' : undefined} data-nav-href={tab.href} data-pressable {...tap}>
               {tab.icon()}<span class={styles.label}>{tab.label()}<Show when={tab.href === '/downloads' && active() > 0}><span class={styles.badge}> ({active()})</span></Show></span>
             </A>
           );

@@ -15,7 +15,7 @@ export function NavigationLinks(props: { path: string; search?: string; select?:
     <nav aria-label={group.label()}><For each={group.hrefs}>{href => {
       const item = navigationItems.find(item => item.href === href)!;
       return <>
-        <a href={`#${href}`} class={styles.item}
+        <a href={`#${href}`} class={styles.item} data-nav-href={href}
           classList={{ [styles.active]: mobileNavGroup(props.path) === href }}
           aria-current={mobileNavGroup(props.path) === href ? 'page' : undefined}
           onClick={event => { if (props.select) { event.preventDefault(); props.select(href); } }}>

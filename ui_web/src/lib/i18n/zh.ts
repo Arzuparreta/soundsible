@@ -2,8 +2,6 @@ import type { Dict } from './en';
 
 export const zh: Dict = {
   savedEntities: {
-    savedToLibrary: "已收藏到音乐库",
-    viewLibrary: "查看",
     albums: "已收藏专辑",
     artists: "已收藏艺人",
     back: "返回音乐库",

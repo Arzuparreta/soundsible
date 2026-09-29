@@ -1,8 +1,6 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
   savedEntities: {
-    savedToLibrary: "Saved in Library",
-    viewLibrary: "View",
     albums: "Saved albums",
     artists: "Saved artists",
     back: "Back to Library",
