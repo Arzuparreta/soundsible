@@ -47,6 +47,17 @@ The engine limits tempo stretching and falls back safely instead of forcing two
 incompatible recordings together. Loudness levelling sits inside the same
 program path, so a transition does not need a sudden volume jump to feel alive.
 
+### Whole songs, without mixing
+
+**Settings → DJ → Mix between songs** is on by default. Switched off, the DJ
+keeps choosing the same music in the same route, but every song plays to the
+end of its file and the next starts from its beginning, with no fade, effect or
+tempo change between them. **Next** and **Play now** cut straight to their
+song, and **Fix mix** is hidden: there are no transitions to rebuild.
+
+The switch is an account preference. It applies from the next song the DJ has
+not prepared yet; a mix already prepared still plays.
+
 ## Make the set yours
 
 - **Add to session** requests specific songs without changing the musical direction.

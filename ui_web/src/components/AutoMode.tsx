@@ -151,7 +151,9 @@ export function AutoMode(props: {
       // from, the same session as the row above it, was taking the width of the
       // artist's name.
       locked: committed,
-      stale: !committed && staleSeams().has(track.queueId),
+      // With the mixing off every join is a plain cut, planned or not: a
+      // seam with no transition of its own is nothing to point out.
+      stale: !committed && state.playback.djMixing && staleSeams().has(track.queueId),
       draggable: !committed,
       before: gap,
       onDragStart: (event) => writeAutoTrackTransfer(event, { track, queueId: track.queueId }),
@@ -241,7 +243,9 @@ export function AutoMode(props: {
       dragHandle={dragHandle}
       placing={Boolean(carriedTrack())}
       headAction={[
-        {
+        // Fix mix rebuilds transitions and the bridges that carry them. With
+        // the mixing off there are none to hear, so there is nothing to fix.
+        ...(state.playback.djMixing ? [{
           label: state.autoMode.repairing ? t('autoMode.route.fixing') : t('autoMode.route.fix'),
           // Reordering opens joins the DJ never chose. The button says so
           // rather than waiting for a plain fade to announce it on arrival.
@@ -251,7 +255,7 @@ export function AutoMode(props: {
             || state.autoMode.pendingDirection
             || routeEntries().filter((entry) => !entry.locked).length < 2,
           onClick: () => void actions.repairAutoRoute(),
-        },
+        }] : []),
         {
           label: t('autoMode.route.add'),
           onClick: () => carriedTrack() ? placeCarriedInRoute() : openDestination('route'),

@@ -992,6 +992,78 @@ describe('Playback load coalescing', () => {
     expect(armTransition.mock.calls[0][0]).toBe('/preview/route-00002');
   });
 
+  it('plays each Auto song to the end of its file and cuts into the next when mixing is off', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan([
+      'route-00001', 'route-00002', 'route-00003', 'route-00004',
+      'route-00005', 'route-00006', 'route-00007', 'route-00008',
+    ]));
+    const armTransition = vi.fn();
+    const refineDjTransition = vi.fn().mockResolvedValue({ measured: false });
+    const setDjMixing = vi.fn().mockResolvedValue({ dj_mixing: false });
+    const { actions, state, initStore, fireDeckEvent, deck } = await loadStore(
+      { planDjQueue, refineDjTransition, setDjMixing, __previewPreparationState: () => 'ready' },
+      { armTransition },
+    );
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', duration: 180 };
+    initStore();
+    expect(await actions.setDjMixing(false)).toBe(true);
+    expect(setDjMixing).toHaveBeenCalledWith(false);
+    expect(localStorage.getItem('djMixing')).toBe('off');
+    actions.playFrom([current], 0);
+    fireDeckEvent('playing');
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    // A mix out of this song would already be committed here: its cue sits
+    // before the end. A whole song is committed against the end of its file.
+    (deck as unknown as { currentTime: number }).currentTime = 130;
+    fireDeckEvent('timeupdate');
+    expect(armTransition).not.toHaveBeenCalled();
+
+    (deck as unknown as { currentTime: number }).currentTime = 136;
+    fireDeckEvent('timeupdate');
+    expect(armTransition).toHaveBeenCalledOnce();
+    expect(armTransition.mock.calls[0][1]).toEqual({
+      technique: 'direct', out_cue: 180, in_cue: 0, overlap_seconds: 0, overlap_bars: 0, playback_rate: 1, confidence: 0,
+    });
+    expect(state.autoMode.transition.technique).toBe('direct');
+    // Measuring the pair only serves a blend, and there will be none.
+    expect(refineDjTransition).not.toHaveBeenCalled();
+  });
+
+  it('skips straight into the next Auto song when mixing is off', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan([
+      'route-00001', 'route-00002', 'route-00003', 'route-00004',
+      'route-00005', 'route-00006', 'route-00007', 'route-00008',
+    ]));
+    const armTransition = vi.fn();
+    const { actions, state } = await loadStore(
+      { planDjQueue, setDjMixing: vi.fn().mockResolvedValue({ dj_mixing: false }) },
+      { armTransition },
+    );
+    const current: Track = { id: 'current', title: 'Current', artist: 'Artist', duration: 180 };
+    await actions.setDjMixing(false);
+    actions.playFrom([current], 0);
+    actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(9));
+
+    await actions.autoSkip();
+    expect(armTransition).toHaveBeenCalledOnce();
+    expect(armTransition.mock.calls[0][1]).toMatchObject({
+      technique: 'direct', out_cue: 0, in_cue: 0, overlap_seconds: 0, playback_rate: 1,
+    });
+  });
+
+  it('keeps the DJ mixing when the account cannot save the change', async () => {
+    const { actions, state, toastError } = await loadStore({
+      setDjMixing: vi.fn().mockRejectedValue(new Error('offline')),
+    });
+    expect(await actions.setDjMixing(false)).toBe(false);
+    expect(state.playback.djMixing).toBe(true);
+    expect(localStorage.getItem('djMixing')).toBe('on');
+    expect(toastError).toHaveBeenCalled();
+  });
+
   it('stops on the exact Auto track that failed after handoff instead of cascading', async () => {
     const planDjQueue = vi.fn().mockResolvedValue(autoPlan([
       'route-00001', 'route-00002', 'route-00003', 'route-00004',

@@ -17,7 +17,7 @@ const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPi
       queue: [
         { id: 'current', queueId: 'q-current', title: 'Current song', artist: 'Artist' },
         { id: 'next', queueId: 'q-next', title: 'Next song', artist: 'Next artist', source: 'preview' as const },
-      ], index: 0, isPlaying: true,
+      ], index: 0, isPlaying: true, djMixing: true,
     },
     autoMode: {
       active: true,
@@ -255,6 +255,26 @@ describe('AutoMode workspace', () => {
       expect(container.querySelector('[data-drag-row="q-later"]')).toHaveAttribute('data-stale', '');
       expect(container.querySelector('[data-drag-row="q-next"]')).not.toHaveAttribute('data-stale');
     } finally {
+      state.autoMode.staleSeams = [];
+      state.playback.queue.pop();
+    }
+  });
+
+  /* With the mixing off every join is a cut. A join that lost its transition
+   * sounds like any other, and a repair of transitions has nothing to do. */
+  it('neither flags joins nor offers the repair when the DJ does not mix', () => {
+    state.playback.queue.push({
+      id: 'later', queueId: 'q-later', title: 'Later song', artist: 'Later artist', source: 'preview' as const,
+    });
+    state.autoMode.staleSeams = ['q-later'];
+    state.playback.djMixing = false;
+    try {
+      const { container } = renderAuto('route');
+      expect(screen.queryByRole('button', { name: 'autoMode.route.fix' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'autoMode.route.add' })).toBeInTheDocument();
+      expect(container.querySelector('[data-drag-row="q-later"]')).not.toHaveAttribute('data-stale');
+    } finally {
+      state.playback.djMixing = true;
       state.autoMode.staleSeams = [];
       state.playback.queue.pop();
     }

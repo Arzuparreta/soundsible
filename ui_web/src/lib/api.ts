@@ -1365,11 +1365,17 @@ export const api = {
       learning_enabled?: boolean;
       autoplay_enabled?: boolean;
       volume_leveling?: boolean;
+      dj_mixing?: boolean;
     }>('/api/discovery/settings'),
   setVolumeLeveling: (enabled: boolean) =>
     request<{ volume_leveling?: boolean }>('/api/discovery/settings', {
       method: 'PATCH',
       body: { volume_leveling: enabled },
+    }),
+  setDjMixing: (enabled: boolean) =>
+    request<{ dj_mixing?: boolean }>('/api/discovery/settings', {
+      method: 'PATCH',
+      body: { dj_mixing: enabled },
     }),
   /** Ask the engine to measure these tracks ahead of its idle sweep. Advisory:
    * the player never waits on the answer. */
