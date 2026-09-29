@@ -774,6 +774,8 @@ export const fr: Dict = {
     empty: 'Liste vide.',
   },
   podcasts: {
+    skipBack: 'Reculer de 15 secondes',
+    skipForward: 'Avancer de 15 secondes',
     searchPlaceholder: 'Rechercher des podcasts…',
     yourShows: 'Vos émissions',
     top: 'Podcasts populaires',

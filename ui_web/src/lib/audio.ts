@@ -1617,7 +1617,7 @@ export const audioService = {
    * a newer load — the shape of a listener tapping through several previews
    * before any of them starts — resolves quietly instead.
    */
-  load(url: string, level: number): Promise<void> {
+  load(url: string, level: number, positionSec = 0): Promise<void> {
     cancelOutputRecovery();
     playbackRequested = true;
     cancelMix('load');
@@ -1634,6 +1634,15 @@ export const audioService = {
     // fetch. No explicit detach: it would emit a spurious `pause` between the
     // two tracks and flicker the transport controls.
     diagnosticSource(a, () => { a.src = url; });
+    if (Number.isFinite(positionSec) && positionSec > 0) {
+      const applyPosition = () => {
+        if (token !== loadSeq) return;
+        a.currentTime = Number.isFinite(a.duration) && a.duration > 0
+          ? Math.min(positionSec, a.duration) : positionSec;
+      };
+      if (a.readyState >= 1) applyPosition();
+      else a.addEventListener('loadedmetadata', applyPosition, { once: true });
+    }
     return playProgramDeck(a).catch((err: unknown) => {
       if (token !== loadSeq) return; // superseded — the newer load owns the deck
       if (err instanceof Error && err.name === 'AbortError') return;

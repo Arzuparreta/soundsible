@@ -768,6 +768,8 @@ export const es: Dict = {
     empty: 'Lista vacía.',
   },
   podcasts: {
+    skipBack: 'Retroceder 15 segundos',
+    skipForward: 'Avanzar 15 segundos',
     searchPlaceholder: 'Buscar podcasts…',
     yourShows: 'Tus shows',
     top: 'Podcasts populares',

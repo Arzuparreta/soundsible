@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { actions, state } = vi.hoisted(() => ({
   actions: {
     autoSkip: vi.fn(), cycleRepeat: vi.fn(), next: vi.fn(), prev: vi.fn(),
-    seek: vi.fn(), setVolume: vi.fn(), startRadio: vi.fn(), toggleMute: vi.fn(),
+    seekBy: vi.fn(), seek: vi.fn(), setVolume: vi.fn(), startRadio: vi.fn(), toggleMute: vi.fn(),
     togglePlay: vi.fn(), toggleShuffle: vi.fn(),
   },
   state: {
@@ -76,5 +76,24 @@ describe('PlayerStage lyrics transition', () => {
 
     fireEvent.input(slider, { target: { value: '50' } });
     expect(actions.setVolume).toHaveBeenCalledWith(expect.closeTo(0.1, 10));
+  });
+});
+
+
+describe('podcast transport', () => {
+  it('uses time jumps for episodes and track navigation for music', () => {
+    const original = state.playback.currentTrack;
+    state.playback.currentTrack = { ...original, media_kind: 'podcast_episode' } as typeof original;
+    actions.seekBy.mockClear();
+    const view = render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+    fireEvent.click(screen.getByRole('button', { name: 'podcasts.skipBack' }));
+    fireEvent.click(screen.getByRole('button', { name: 'podcasts.skipForward' }));
+    expect(actions.seekBy.mock.calls).toEqual([[-15], [15]]);
+    expect(screen.queryByRole('button', { name: 'common.next' })).not.toBeInTheDocument();
+    view.unmount();
+    state.playback.currentTrack = original;
+    render(() => <PlayerStage mode="now-playing" surfaceOpen />);
+    fireEvent.click(screen.getByRole('button', { name: 'common.next' }));
+    expect(actions.next).toHaveBeenCalled();
   });
 });

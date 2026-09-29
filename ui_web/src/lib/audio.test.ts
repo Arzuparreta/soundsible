@@ -1473,3 +1473,20 @@ describe('CarPlay interruption recovery', () => {
     audioService.stop();
   });
 });
+
+
+describe('episode position on load', () => {
+  it('waits for metadata, clamps resume to the duration and ignores superseded loads', async () => {
+    const { audioService } = await import('./audio');
+    await audioService.load('/initial', 1);
+    const deck = created.find((audio) => audio.src === '/initial')!;
+    deck.readyState = 0;
+    await audioService.load('/episode-a', 1, 90);
+    expect(deck.currentTime).toBe(0);
+    await audioService.load('/episode-b', 1, 500);
+    deck.duration = 200;
+    deck.readyState = 1;
+    deck.dispatchEvent(new Event('loadedmetadata'));
+    expect(deck.currentTime).toBe(200);
+  });
+});

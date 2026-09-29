@@ -763,6 +763,8 @@ export const zh: Dict = {
     empty: '歌单为空。',
   },
   podcasts: {
+    skipBack: '后退15秒',
+    skipForward: '前进15秒',
     searchPlaceholder: '搜索播客…',
     yourShows: '你的节目',
     top: '热门播客',
