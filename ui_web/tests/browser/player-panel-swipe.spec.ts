@@ -38,7 +38,7 @@ test.beforeEach(async ({ page }) => { await mockEngine(page); });
 
 test('a scrolled player panel still hands a sideways swipe to the pager', async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium' || (page.viewportSize()?.width ?? 1024) > 1023, 'real Chromium touch input');
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await openMiniPlayer(page, /Canción de biblioteca 320/);
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
 

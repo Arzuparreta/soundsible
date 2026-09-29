@@ -84,7 +84,7 @@ async function openLibrary(page: Page) {
     localStorage.clear();
     localStorage.setItem('lang', 'en');
   });
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   const row = page.getByRole('button', { name: 'Play Luz de verano by Mar Abierta' });
   await expect(row).toBeVisible();
   return row;

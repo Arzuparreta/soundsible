@@ -1,6 +1,24 @@
 import type { Dict } from './en';
 
 export const zh: Dict = {
+  savedEntities: {
+    albums: "已收藏专辑",
+    artists: "已收藏艺人",
+    back: "返回音乐库",
+    inLibrary: "已在音乐库中",
+    library: "你的音乐库",
+
+    "title": "已收藏",
+    "save": "收藏",
+    "saved": "已收藏",
+    "remove": "取消收藏",
+    "removed": "已取消收藏",
+    "undo": "撤销",
+    "failed": "无法保存更改，请重试。",
+    "empty": "在专辑或艺人页面收藏，即可在此找到。",
+    "showLess": "收起",
+    "options": "选项"
+},
   searchHome: {
     "artists": "发现艺人",
     "albums": "为你推荐的专辑",
@@ -9,7 +27,7 @@ export const zh: Dict = {
     "popularAlbums": "热门专辑",
     "related": "与 {artist} 相似",
     "seeAll": "查看全部",
-    "back": "返回搜索",
+    "back": "返回发现",
     "previous": "上一页",
     "next": "下一页",
     "preparing": "正在为你寻找艺人和专辑…",
@@ -82,7 +100,7 @@ export const zh: Dict = {
 
     more: '更多',
     mobile: '主导航',
-    search: '搜索',
+    search: "发现",
     favourites: '收藏',
     playlists: '歌单',
     podcasts: '播客',

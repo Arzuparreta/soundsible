@@ -90,7 +90,7 @@ test('shared examples retain geometry, nonredundant states and accessible target
 
 test('library moves actions into the menu, keeps keyboard actions separate, and omits favourite marks in Favourites', async ({ page }, info) => {
   test.skip(!info.project.name.includes('mobile'));
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await assertRows(page);
   const row = page.locator('[data-music-list-row]').first();
   const title = await row.locator('[data-row-meta]').innerText();
@@ -109,7 +109,7 @@ test('library moves actions into the menu, keeps keyboard actions separate, and 
 
 test('the cover plays its song and holds open its menu, from outside the button', async ({ page }, info) => {
   test.skip(!info.project.name.includes('mobile'));
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   const row = page.locator('[data-music-list-row]').first();
   const cover = row.locator('[data-row-cover]');
   await expect(cover).toBeVisible();
@@ -130,7 +130,7 @@ test('the cover plays its song and holds open its menu, from outside the button'
 
 test('scroll cancellation and long press do not play the row or click through its menu', async ({ page }, info) => {
   test.skip(!info.project.name.includes('mobile'));
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   const row = page.locator('[data-music-list-row]').first();
   const main = row.locator('[data-row-main]');
   await expect(main).toBeVisible();
@@ -150,7 +150,7 @@ test('scroll cancellation and long press do not play the row or click through it
 
 test('breakpoint changes restore desktop controls without losing virtual rows', async ({ page }) => {
   await page.setViewportSize({ width: 1023, height: 900 });
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await expect(page.locator('[data-music-list-row]').first()).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 900 });
   await expect(page.locator('[data-music-list-row]')).toHaveCount(0);
@@ -189,7 +189,7 @@ test('a native thumb scroll starting over the title leaves playback and favourit
   test.skip(info.project.name !== 'chromium-mobile', 'CDP native touch injection is Chromium-specific');
   const favouriteChanges: string[] = [];
   page.on('request', (request) => { if (request.url().includes('/favourites/toggle')) favouriteChanges.push(request.url()); });
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await expect(page.locator('[data-music-list-row]').first()).toBeVisible();
   const scroll = page.locator('[data-library-scroll]');
   const bounds = await scroll.boundingBox();
@@ -210,7 +210,7 @@ test('a native thumb scroll starting over the title leaves playback and favourit
 
 test('queue editing follows an occurrence through consecutive moves and returns focus to its menu', async ({ page }, info) => {
   test.skip(!info.project.name.includes('mobile'));
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.locator('[data-row-main]').first().click();
   // What the queue lets you move is what you asked for: the rest of the
   // library it was played from is one card, and a card does not move.

@@ -5,23 +5,24 @@ import { dragTouch } from './playerGestures';
 test.beforeEach(async ({ page }, info) => {
   test.skip(!info.project.name.includes('mobile'));
   await mockMusicEngine(page);
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await expect(page.locator('#startup-screen')).toHaveCount(0);
 });
 
-test('complete menu and independent favourites', async ({ page }) => {
+test('complete menu and independent favourites', async ({ page }, info) => {
   const nav = page.getByRole('navigation', { name: 'Navegación principal' });
   await expect(nav.locator(':scope > *')).toHaveCount(4);
   await page.getByRole('button', { name: 'Menú', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Menú' });
   await expect(panel.getByRole('link')).toHaveCount(11);
-  await page.screenshot({ animations: 'disabled', path: 'test-results/navigation-drawer.png' });
+  await page.screenshot({ animations: 'disabled', path: info.outputPath('navigation-drawer.png') });
   await panel.getByRole('link', { name: 'Álbumes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Álbumes', exact: true })).toBeVisible();
-  await nav.getByRole('link', { name: 'Favoritos' }).click();
-  await expect(nav.getByRole('link', { name: 'Favoritos' })).toHaveAttribute('aria-current', 'page');
+  await nav.getByRole('link', { name: 'Favoritos', exact: true }).click();
+  await expect(page).toHaveURL(/#\/favourites$/);
   await nav.getByRole('link', { name: 'Biblioteca' }).click();
-  await expect(page.getByRole('heading', { name: 'Canciones', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Biblioteca', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Tu biblioteca' })).toBeVisible();
 });
 
 test('drawer closes on Back and Escape and restores focus', async ({ page }) => {
@@ -39,11 +40,11 @@ test('drawer closes on Back and Escape and restores focus', async ({ page }) => 
   await page.getByRole('dialog').getByRole('link', { name: 'Descargas', exact: true }).click();
   await expect(page).toHaveURL(/#\/downloads$/);
   await page.goBack();
-  await expect(page).toHaveURL(/#\/$/);
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('custom bar persists and settings remain accessible after removal', async ({ page }) => {
+test('custom bar persists and settings remain accessible after removal', async ({ page }, info) => {
   const nav = page.getByRole('navigation', { name: 'Navegación principal' });
   await nav.getByRole('link', { name: 'Ajustes' }).click();
   await page.getByRole('button', { name: /Accesibilidad/ }).click();
@@ -54,7 +55,7 @@ test('custom bar persists and settings remain accessible after removal', async (
   await expect(page.getByLabel('Posición 4')).toHaveValue('/live');
   await page.getByRole('button', { name: 'Añadir destino' }).click();
   await expect(nav.getByRole('link')).toHaveCount(5);
-  await page.screenshot({ animations: 'disabled', path: 'test-results/navigation-editor.png' });
+  await page.screenshot({ animations: 'disabled', path: info.outputPath('navigation-editor.png') });
   await page.reload();
   await expect(nav.getByRole('link')).toHaveCount(5);
   await nav.getByRole('link', { name: 'Biblioteca' }).click();
@@ -120,7 +121,7 @@ test('five custom destinations fit a narrow viewport and preserve order', async 
 
 for (const width of [320, 390, 430]) {
   for (const size of ['compact', 'normal', 'large']) {
-    test(`one header row and accessible controls at ${width}px, ${size}`, async ({ page }) => {
+    test(`one header row and accessible controls at ${width}px, ${size}`, async ({ page }, info) => {
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate((size) => document.documentElement.dataset.interfaceSize = size, size);
       const header = page.locator('[data-app-bar]');
@@ -132,7 +133,7 @@ for (const width of [320, 390, 430]) {
       expect(first!.height).toBeGreaterThanOrEqual(43.9);
       expect(last!.x + last!.width).toBeLessThanOrEqual(width);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
-      await page.screenshot({ path: `test-results/mobile-library-${width}-${size}.png` });
+      await page.screenshot({ path: info.outputPath(`mobile-library-${width}-${size}.png`) });
     });
   }
 }
@@ -155,6 +156,6 @@ test('the drawer closes when it is dragged back off the edge it came from', asyn
   await expect(page.getByRole('dialog')).toHaveCount(0);
   // Closed through the overlay's own handle, so the history entry it pushed was
   // consumed rather than left behind for the next Back to trip over.
-  await expect(page).toHaveURL(/#\/$/);
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
   await expect(menu).toBeFocused();
 });

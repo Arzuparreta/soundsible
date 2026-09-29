@@ -1,5 +1,23 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
+  savedEntities: {
+    albums: "Saved albums",
+    artists: "Saved artists",
+    back: "Back to Library",
+    inLibrary: "In your library",
+    library: "Your library",
+
+    "title": "Saved",
+    "save": "Save",
+    "saved": "Saved",
+    "remove": "Remove from saved",
+    "removed": "Removed from saved",
+    "undo": "Undo",
+    "failed": "Could not save this change. Try again.",
+    "empty": "Save an album or artist from its page to find it here.",
+    "showLess": "Show less",
+    "options": "Options"
+},
   searchHome: {
     "artists": "Artists to discover",
     "albums": "Albums for you",
@@ -8,7 +26,7 @@ export const en = {
     "popularAlbums": "Popular albums",
     "related": "Related to {artist}",
     "seeAll": "See all",
-    "back": "Back to Search",
+    "back": "Back to Discover",
     "previous": "Previous",
     "next": "Next",
     "preparing": "Finding artists and albums for you…",
@@ -82,7 +100,7 @@ export const en = {
 
     more: 'More',
     mobile: 'Main navigation',
-    search: 'Search',
+    search: "Discover",
     favourites: 'Favourites',
     playlists: 'Playlists',
     podcasts: 'Podcasts',

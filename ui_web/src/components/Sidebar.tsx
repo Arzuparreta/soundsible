@@ -22,7 +22,7 @@ export function Sidebar() {
         <span class={styles.wordmark}>Soundsible</span>
       </A>
 
-      <NavigationLinks path={location.pathname} select={(href, view) => { if (view) setLibraryTab(view); navigate(href); }} />
+      <NavigationLinks path={location.pathname} search={location.search} select={(href, view) => { if (view) setLibraryTab(view); navigate(href); }} />
 
       <div class={styles.spacer} />
     </aside>

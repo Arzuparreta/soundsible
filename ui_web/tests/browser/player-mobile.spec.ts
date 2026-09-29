@@ -53,7 +53,7 @@ async function mockEngine(page: Page) {
 }
 
 async function openNowPlaying(page: Page) {
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Una canción/ }).click();
   await page.getByRole('button', { name: /Una canción con un título/ }).last().click();
   const surface = page.locator('[data-player-surface-open]');
@@ -251,7 +251,7 @@ test('DJ reuses the compact workspace, pager and touch lifecycle', async ({ page
 test('the compact mini-player overlays DJ state without taking title width', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Una canción/ }).click();
 
   const mini = page.locator('[data-omni-player]');
@@ -543,7 +543,7 @@ test('left swipe dismisses the mobile deck and another song restores it', async 
   wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32);
   wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(samples * 2, 40);
   await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: wav }));
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   const bar = page.locator('[data-omni-player]');
   await expect(bar).toBeHidden();
   await page.getByRole('button', { name: /Reproducir Una canción/ }).click();
@@ -567,7 +567,7 @@ test('left swipe dismisses the mobile deck and another song restores it', async 
 
 test('desktop keeps its deck visible and ignores touch swipes', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) < 1024, 'desktop transport');
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   const bar = page.locator('[data-omni-player]');
   await expect(bar).toBeVisible();
   await page.getByRole('button', { name: /Reproducir Una canción/ }).click();

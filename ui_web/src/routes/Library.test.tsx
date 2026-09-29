@@ -25,6 +25,7 @@ const show = () => render(() => <Router><Route path="/" component={Library} /></
 
 describe('library initial feedback', () => {
   it('shows artist placeholders until the catalog arrives, never a false empty state', async () => {
+    window.history.replaceState({}, '', '/?view=artists');
     setLibraryTab('artists');
     setState('catalog', 'loading', true);
     show();
@@ -38,6 +39,7 @@ describe('library initial feedback', () => {
   it('shows album placeholders while pending and offers retry on failure', async () => {
     let reject!: (error: Error) => void;
     const request = vi.spyOn(api, 'getLibraryAlbums').mockImplementationOnce(() => new Promise<CatalogAlbum[]>((_yes, no) => { reject = no; })).mockResolvedValue([]);
+    window.history.replaceState({}, '', '/?view=albums');
     setLibraryTab('albums');
     show();
     expect(screen.getByRole('status')).toBeInTheDocument();

@@ -3,29 +3,29 @@ import { useLocation, useNavigate } from '@solidjs/router';
 import { t } from '../lib/i18n';
 import { openOverlay } from '../lib/overlay';
 import { desktopShell } from '../lib/shellLayout';
-import { libraryTab, setLibraryTab } from '../lib/libraryView';
+import { setLibraryTab } from '../lib/libraryView';
 import { downloadCounts } from '../stores';
 import { CloseIcon, MenuIcon } from './icons';
 import { navigationGroups, navigationItems, mobileNavGroup } from './primaryNavigation';
 import styles from './NavigationMenu.module.css';
 
-export function NavigationLinks(props: { path: string; select?: (href: string, view?: string) => void }) {
+export function NavigationLinks(props: { path: string; search?: string; select?: (href: string, view?: string) => void }) {
   return <For each={navigationGroups}>{group => <section class={styles.group}>
     <h2>{group.label()}</h2>
     <nav aria-label={group.label()}><For each={group.hrefs}>{href => {
       const item = navigationItems.find(item => item.href === href)!;
       return <>
-        <a href={`#${href}`} class={styles.item}
+        <a href={`#${href}`} class={styles.item} data-nav-href={href}
           classList={{ [styles.active]: mobileNavGroup(props.path) === href }}
           aria-current={mobileNavGroup(props.path) === href ? 'page' : undefined}
-          onClick={event => { if (props.select) { event.preventDefault(); props.select(href, href === '/' ? 'songs' : undefined); } else if (href === '/') setLibraryTab('songs'); }}>
+          onClick={event => { if (props.select) { event.preventDefault(); props.select(href); } }}>
           <span class={styles.icon}>{item.icon()}</span><span>{item.label()}</span>
           <Show when={href === '/downloads' && downloadCounts().active > 0}><span class={styles.badge}>{downloadCounts().active}</span></Show>
         </a>
         <Show when={href === '/'}><div class={styles.views}><For each={['songs', 'albums', 'artists']}>{view =>
-          <a href="#/" class={styles.item}
-            aria-current={['/', '/library'].includes(props.path) && libraryTab() === view ? 'page' : undefined}
-            onClick={event => { if (props.select) { event.preventDefault(); props.select('/', view); } else setLibraryTab(view); }}>
+          <a href={`#/library?view=${view}`} class={styles.item}
+            aria-current={props.path === '/library' && new URLSearchParams(props.search).get('view') === view ? 'page' : undefined}
+            onClick={event => { if (props.select) { event.preventDefault(); props.select(`/library?view=${view}`, view); } else setLibraryTab(view); }}>
             <span class={styles.icon}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
               <Show when={view === 'songs'}><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></Show>
               <Show when={view === 'albums'}><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></Show>
@@ -38,7 +38,7 @@ export function NavigationLinks(props: { path: string; select?: (href: string, v
   </section>}</For>;
 }
 
-function Drawer(props: { path: () => string; close: (after?: () => void) => void; navigate: (href: string) => void; onViewChange?: () => void }) {
+function Drawer(props: { path: () => string; search: () => string; close: (after?: () => void) => void; navigate: (href: string) => void; onViewChange?: () => void }) {
   createEffect(() => { if (desktopShell()) props.close(); });
   // Overlay lives outside the app root, so background controls cannot receive focus.
   const root = document.getElementById('app');
@@ -47,7 +47,7 @@ function Drawer(props: { path: () => string; close: (after?: () => void) => void
   onCleanup(() => { if (root) root.inert = wasInert ?? false; });
   return <div class={styles.drawer}>
     <header class={styles.head}><strong>Soundsible</strong><button type="button" class={styles.close} aria-label={t('common.close')} onClick={() => props.close()}><CloseIcon /></button></header>
-    <NavigationLinks path={props.path()} select={(href, view) => props.close(() => {
+    <NavigationLinks path={props.path()} search={props.search()} select={(href, view) => props.close(() => {
       if (view) { props.onViewChange?.(); setLibraryTab(view); }
       props.navigate(href);
     })} />
@@ -60,7 +60,7 @@ export function NavigationMenuButton(props: { onViewChange?: () => void; class?:
   return <Show when={!desktopShell()}><button type="button" class={props.class ?? styles.trigger}
     aria-label={t('nav.menu')} aria-haspopup="dialog" data-pressable
     onClick={event => { event.currentTarget.focus(); openOverlay(close =>
-      <Drawer path={() => location.pathname} close={close} navigate={navigate} onViewChange={props.onViewChange} />,
+      <Drawer path={() => location.pathname} search={() => location.search} close={close} navigate={navigate} onViewChange={props.onViewChange} />,
       { variant: 'drawer', history: true, ariaLabel: () => t('nav.menu') }); }}>
     <MenuIcon />
   </button></Show>;

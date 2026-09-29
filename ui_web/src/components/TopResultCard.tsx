@@ -1,3 +1,5 @@
+import { CatalogCollectionStatus } from './CatalogCollectionStatus';
+import { openCatalogEntityMenu } from './savedEntityActions';
 import { ArtistLinks, MusicLink } from './MusicLinks';
 import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
 import { Show, type JSX } from 'solid-js';
@@ -41,7 +43,7 @@ export function TopResultCard(props: TopResultCardProps) {
       data-pressable
       data-now-playing={props.active ? '' : undefined}
     >
-      <Show when={catalogDestination(props.item)} fallback={<button class={styles.activate} type="button" aria-label={props.item.title} {...tap} />}>{(path) => <MusicLink class={styles.activate} path={path()} label={props.item.title} />}</Show>
+      <Show when={catalogDestination(props.item)} fallback={<button class={styles.activate} type="button" aria-label={props.item.title} {...tap} />}>{(path) => <MusicLink class={styles.activate} path={path()} label={props.item.title} onMenu={event => openCatalogEntityMenu(props.item, event)} />}</Show>
       <span
         classList={{ [styles.cover]: true, [styles.coverRound]: round() }}
         style={props.coverStyle(props.item, round())}
@@ -49,6 +51,7 @@ export function TopResultCard(props: TopResultCardProps) {
       <span class={styles.meta}>
         <span class={styles.title}>{props.item.title}</span>
         <span class={styles.subtitle}>{label()}<Show when={!round() && itemArtist(props.item)}> · <ArtistLinks music={catalogMusic(props.item)} fallback={itemArtist(props.item)} /></Show></span>
+        <CatalogCollectionStatus item={props.item} />
       </span>
     </div>
   );

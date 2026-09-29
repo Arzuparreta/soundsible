@@ -20,7 +20,7 @@ export default function ArtistGrid(props: { artists: ArtistEntry[] }) {
             <MusicLink
               path={href}
               class={styles.card}
-              onMenu={(event) => openArtistMenu(a.name, {}, event)}
+              onMenu={(event) => openArtistMenu(a.name, { artistId: a.id, cover: coverUrl(a.coverId) }, event)}
             >
               <div class={styles.avatar} style={{ position: 'relative', background: coverGradient(a.name) }}><CoverImage src={coverUrl(a.coverId)} /></div>
               <span class={styles.name}>{a.name}</span>

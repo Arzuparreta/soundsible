@@ -1,0 +1,10 @@
+.body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-md) var(--gutter) var(--space-xl); }
+.library { margin-bottom: var(--space-xl); }
+.library h2 { margin: 0 0 var(--space-md); font-size: var(--text-h2); }
+.shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
+.shortcut { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; min-height: 60px; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); background: var(--bg-raised); color: var(--ink-primary); text-decoration: none; font-weight: var(--fw-semibold); }
+.shortcut span { flex: 0 0 24px; height: 24px; color: var(--ink-secondary); }
+.shortcut svg { width: 24px; height: 24px; }
+@media (hover: hover) and (pointer: fine) { .shortcut:hover { background: var(--bg-elevated); } }
+.back { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: var(--space-md); color: var(--ink-secondary); }
+@media (min-width: 768px) { .shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

@@ -879,3 +879,26 @@ def repair_library_files():
         limit = 0
     run_library_repair_task(bool(dry_run), limit)
     return jsonify({"status": "started", "dry_run": bool(dry_run), "limit": limit})
+
+
+@library_bp.route('/api/library/saved-entities', methods=['GET'])
+def get_saved_entities():
+    from player.saved_entities import get_entries
+    return jsonify({'entities': get_entries()})
+
+
+@library_bp.route('/api/library/saved-entities', methods=['PUT'])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit('library_saved_entities', limit=120, window_sec=60)
+def update_saved_entity():
+    from player.saved_entities import set_saved
+    from shared.api import emit_to_user
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Expected an object'}), 400
+    try:
+        entries = set_saved(data.get('entry'), data.get('saved'))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    emit_to_user('saved_entities_updated')
+    return jsonify({'entities': entries})

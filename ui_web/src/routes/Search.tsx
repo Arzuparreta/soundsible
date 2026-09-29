@@ -1,3 +1,6 @@
+import { syncSavedEntities } from '../lib/savedEntities';
+import { CatalogCollectionStatus } from '../components/CatalogCollectionStatus';
+import { openCatalogEntityMenu } from '../components/savedEntityActions';
 import { CoverImage } from '../components/CoverImage';
 import { ArtistLinks, MusicLink } from '../components/MusicLinks';
 import { catalogMusic, catalogDestination } from '../lib/musicNavigation';
@@ -124,6 +127,7 @@ function candidateVideoId(candidate: Record<string, unknown>): string {
 }
 
 export default function Search() {
+  onMount(() => void syncSavedEntities());
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialDomain: SearchDomain = searchParams.domain === 'youtube' ? 'youtube' : 'music';
@@ -769,7 +773,7 @@ export default function Search() {
                 {(item) => (
                   <section class={styles.section}>
                     <h2 class={styles.sectionTitle}>{tr('search.sharedSection')}</h2>
-                    <CatalogResultRow
+                    <CatalogResultRow showLibraryStatus
                       item={item()}
                       active={isPlayingItem(item())}
                       saving={saving().has(item().id)}
@@ -899,7 +903,7 @@ export default function Search() {
                       <h2 class={styles.sectionTitle}>{tr('search.tabSongs')}</h2>
                       <For each={songsPreview()}>
                         {(item) => (
-                          <CatalogResultRow
+                          <CatalogResultRow showLibraryStatus
                             item={item}
                             active={isPlayingItem(item)}
                             saving={saving().has(item.id)}
@@ -934,7 +938,7 @@ export default function Search() {
                         <h2 class={styles.sectionTitle}>{sectionTitle(section.id)}</h2>
                         <For each={section.items}>
                           {(item) => (
-                            <CatalogResultRow
+                            <CatalogResultRow showLibraryStatus
                               item={item}
                               active={isPlayingItem(item)}
                               saving={saving().has(item.id)}
@@ -1055,12 +1059,13 @@ function EntityCard(props: {
   const tap = createResponsiveTap({ onTap: props.onPick });
   return (
     <div class={styles.entityCard}>
-      <Show when={catalogDestination(props.item)} fallback={<button class={styles.entityActivate} type="button" aria-label={props.item.title} data-pressable {...tap} />}>{(path) => <MusicLink class={styles.entityActivate} path={path()} label={props.item.title} />}</Show>
+      <Show when={catalogDestination(props.item)} fallback={<button class={styles.entityActivate} type="button" aria-label={props.item.title} data-pressable {...tap} />}>{(path) => <MusicLink class={styles.entityActivate} path={path()} label={props.item.title} onMenu={(event) => openCatalogEntityMenu(props.item, event)} />}</Show>
       <span
         classList={{ [styles.entityCover]: true, [styles.entityCoverRound]: props.round }}
         style={{ position: 'relative', background: 'var(--bg-raised)' }}
       ><CoverImage src={props.item.track_id ? coverUrl(props.item.track_id) : props.item.cover} /></span>
       <span class={styles.entityTitle}>{props.item.title}</span>
+      <CatalogCollectionStatus item={props.item} />
       <span class={styles.entitySub}><Show when={props.item.type === "album"} fallback={props.item.subtitle || itemArtist(props.item)}><ArtistLinks music={catalogMusic(props.item)} /></Show></span>
     </div>
   );

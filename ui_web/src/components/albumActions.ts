@@ -1,3 +1,4 @@
+import { savedEntityAction } from './savedEntityActions';
 import { type ActionMenuOptions, type MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
 import { openContextMenu } from '../lib/contextMenu';
@@ -84,6 +85,7 @@ export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {
         navigateMusic(albumDestination(albumMusic(album))),
     });
   }
+  list.push(savedEntityAction({ kind: 'album', name: album.title, artist: album.album_artist, destination: albumDestination(albumMusic(album)), cover: album.cover_track_id ? coverUrl(album.cover_track_id) : undefined }));
   return { title: album.title, subtitle: album.album_artist, actions: list };
 }
 

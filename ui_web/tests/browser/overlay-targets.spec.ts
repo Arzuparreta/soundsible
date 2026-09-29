@@ -59,7 +59,7 @@ test('search result cards take a press anywhere on them', async ({ page }) => {
 test('the playing song in the queue answers a click on its equaliser', async ({ page, isMobile }) => {
   test.skip(isMobile, 'the phone lists the queue with its own rows');
   await mockMusicEngine(page);
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await openMiniPlayer(page, /Canción de biblioteca 320/);
   const queue = page.locator('[data-now-playing-tile="queue"]');

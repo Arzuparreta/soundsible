@@ -45,6 +45,7 @@ vi.mock('../lib/toast', () => ({
 vi.mock('../stores', async () => {
   const { identityMock } = await import('../lib/identityMock');
   return {
+    musicLibrary: () => storeMock.library,
     actions: {
       playTrack: storeMock.playTrack,
       loadDownloads: vi.fn(),

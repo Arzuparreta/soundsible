@@ -43,6 +43,8 @@ async function mockEngine(page: Page, authenticated: boolean) {
         settings: {},
         podcast_subscriptions: [],
       };
+    } else if (path === '/api/library/saved-entities') {
+      body = { entities: [] };
     } else if (path === '/api/library/favourites') {
       body = ['track-2'];
     } else if (path === '/api/downloader/queue') {
@@ -162,7 +164,7 @@ test.describe('interface scale geometry', () => {
     test(`${size} keeps the player and navigation usable through settings`, async ({ page }) => {
       await mockEngine(page, true);
       await installPreferences(page, size);
-      await page.goto('/player/#/');
+      await page.goto('/player/#/library?view=songs');
       await page.getByRole('button', { name: /Reproducir Una canción/ }).click();
       const player = page.locator('[data-omni-player]');
       await expect(player).toBeVisible();
@@ -203,7 +205,7 @@ test.describe('interface scale geometry', () => {
       await settingsLink.click();
       await expect(page).toHaveURL(/#\/settings$/);
       await page.getByRole('link', { name: 'Biblioteca', exact: true }).filter({ visible: true }).click();
-      await expect(page.getByRole('heading', { name: page.viewportSize()!.width < 1024 ? 'Canciones' : 'Tu biblioteca' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Biblioteca', exact: true })).toBeVisible();
       expect(await player.evaluate((element, original) => element === original, originalPlayer)).toBe(true);
     });
   }
@@ -282,7 +284,7 @@ test.describe('interface scale geometry', () => {
 
     await page.keyboard.press('Escape');
     await expect(settings).toBeVisible();
-    await page.getByRole('link', { name: 'Buscar', exact: true }).filter({ visible: true }).click();
+    await page.getByRole('link', { name: 'Descubrir', exact: true }).filter({ visible: true }).click();
     await expect(page).toHaveURL(/#\/search$/);
     await expect(settings).toHaveCount(0);
   });
@@ -290,7 +292,7 @@ test.describe('interface scale geometry', () => {
   test('back and forward traverse settings routes inside the shell', async ({ page }) => {
     await mockEngine(page, true);
     await installPreferences(page, 'normal');
-    await page.goto('/player/#/');
+    await page.goto('/player/#/library?view=songs');
     await expect(page.getByRole('heading', { name: page.viewportSize()!.width < 1024 ? 'Canciones' : 'Tu biblioteca' })).toBeVisible();
     await page.getByRole('link', { name: 'Ajustes', exact: true }).filter({ visible: true }).click();
     const settings = page.locator('[data-settings-page]');
@@ -391,7 +393,7 @@ test.describe('interface scale geometry', () => {
   test('large Now Playing surface reflows after selecting a library track', async ({ page }) => {
     await mockEngine(page, true);
     await installPreferences(page, 'large');
-    await page.goto('/player/#/');
+    await page.goto('/player/#/library?view=songs');
     const track = page.getByRole('button', {
       name: /Reproducir Una canción con un título deliberadamente largo.*Artista con nombre especialmente largo/,
     });

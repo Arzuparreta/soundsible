@@ -38,19 +38,19 @@ afterEach(() => {
 });
 
 describe('mobile tab bar', () => {
-  it.each(['/', '/library', '/search', '/artist/example'])('opens Songs from %s even after choosing another view', async (path) => {
+  it.each(['/', '/library', '/search', '/artist/example'])('opens the Library root from %s without selecting Songs', async (path) => {
     window.history.replaceState({}, '', path);
     setLibraryTab('albums');
     const view = renderTabs();
     fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
-    await waitFor(() => expect(libraryTab()).toBe('songs'));
-    await waitFor(() => expect(['/', '/library']).toContain(window.location.pathname));
+    await waitFor(() => expect(libraryTab()).toBe('albums'));
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
   });
 
   it('exposes the four default destinations', () => {
     const view = renderTabs();
     expect([...view.container.querySelector('nav')!.children].map((tab) => tab.textContent?.trim()))
-      .toEqual(['Biblioteca', 'Favoritos', 'Buscar', 'Ajustes']);
+      .toEqual(['Biblioteca', 'Favoritos', 'Descubrir', 'Ajustes']);
   });
 
   it('marks settings subroutes active', () => {
@@ -70,14 +70,14 @@ describe('mobile tab bar', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('resets Library through the mobile drawer after closing it', async () => {
+  it('opens the Library root through the mobile drawer without resetting its subview', async () => {
     setLibraryTab('artists');
     renderTabs();
     fireEvent.click(screen.getByRole('button', { name: 'Menú' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('link', { name: 'Biblioteca' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    await waitFor(() => expect(libraryTab()).toBe('songs'));
+    await waitFor(() => expect(libraryTab()).toBe('artists'));
   });
 
   it('keeps Library independent from the old Favourites preference', async () => {
@@ -101,4 +101,18 @@ describe('mobile tab bar', () => {
 
     expect(surface.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
   });
+});
+
+it('opens a configured subentry directly and highlights it instead of the root', async () => {
+  setBottomNavigation(['/', '/library?view=artists', '/?saved=albums', '/search']);
+  const view = renderTabs();
+  fireEvent.click(view.getByRole('link', { name: 'Artistas' }));
+  await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/library?view=artists'));
+  expect(view.getByRole('link', { name: 'Artistas' })).toHaveAttribute('aria-current', 'page');
+  expect(view.getByRole('link', { name: 'Biblioteca' })).not.toHaveAttribute('aria-current');
+  fireEvent.click(view.getByRole('link', { name: 'Álbumes guardados' }));
+  await waitFor(() => expect(window.location.search).toBe('?saved=albums'));
+  expect(view.getByRole('link', { name: 'Álbumes guardados' })).toHaveAttribute('aria-current', 'page');
+  fireEvent.click(view.getByRole('link', { name: 'Biblioteca' }));
+  await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/'));
 });

@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('artist links navigate without playing and preserve browser history', async ({ page, isMobile }) => {
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   const link = page.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await expect(link).toBeVisible();
   await expect(page.locator('button a, [role="button"] a, a a')).toHaveCount(0);
@@ -25,7 +25,7 @@ test('artist links navigate without playing and preserve browser history', async
   await expect(page.getByRole('heading', { name: 'Artista 7', exact: true })).toBeVisible();
   await expect(page.locator('[data-omni-player]')).not.toContainText('Canción de biblioteca');
   await page.goBack();
-  await expect(page).toHaveURL(/#\/$/);
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
   await expect(page.getByRole('link', { name: 'Artista 7', exact: true }).first()).toBeVisible();
 });
 
@@ -54,7 +54,7 @@ test('an album card opens the record from the line under its cover', async ({ pa
     id: 'al-1', title: 'Disco de prueba', album_artist: 'Artista 7', is_compilation: false,
     track_count: 12, duration: 2400, cover_track_id: null,
   }] } }));
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   if (isMobile) {
     await page.getByRole('button', { name: 'Menú', exact: true }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'Álbumes', exact: true }).click();
@@ -89,7 +89,7 @@ test('album cards open from their artwork, in the library and in search', async 
     if (isMobile) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
   };
 
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   if (isMobile) {
     await page.getByRole('button', { name: 'Menú', exact: true }).click();
     await page.getByRole('dialog').getByRole('link', { name: 'Álbumes', exact: true }).click();
@@ -111,7 +111,7 @@ test('album cards open from their artwork, in the library and in search', async 
 
 test('desktop artist links support keyboard and a separate tab', async ({ page, isMobile, context }) => {
   test.skip(isMobile, 'Desktop keyboard and modifier behavior');
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   const link = page.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await expect(link).toBeVisible();
   const opened = context.waitForEvent('page');
@@ -119,7 +119,7 @@ test('desktop artist links support keyboard and a separate tab', async ({ page, 
   const tab = await opened;
   await expect(tab).toHaveURL(/#\/artist\/Artista%207\?view=library/);
   await tab.close();
-  await expect(page).toHaveURL(/#\/$/);
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
   await link.focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#\/artist\/Artista%207\?view=library/);
@@ -128,7 +128,7 @@ test('desktop artist links support keyboard and a separate tab', async ({ page, 
 
 test('miniplayer artist navigates independently from expansion', async ({ page, isMobile }) => {
   test.skip(isMobile, 'the compact pill is one press to open the player; see the mobile case below');
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   const mini = page.locator('[data-omni-player]');
   const link = mini.getByRole('link', { name: 'Artista 7', exact: true });
@@ -145,7 +145,7 @@ test('miniplayer artist navigates independently from expansion', async ({ page, 
    nothing at all because it painted over the open button. */
 test('every inert part of the compact pill opens the player on a phone', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'the desktop bar keeps the artist link');
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   const mini = page.locator('[data-omni-player]');
   const surface = page.locator('[data-player-surface-open]');
@@ -161,7 +161,7 @@ test('every inert part of the compact pill opens the player on a phone', async (
     const box = await settledBox(page, mini.locator(part));
     await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
     await expect(surface).toHaveCount(1);
-    await expect(page).toHaveURL(/#\/$/);
+    await expect(page).toHaveURL(/#\/library\?view=songs$/);
     await page.keyboard.press('Escape');
     await expect(surface).toHaveCount(0);
   }
@@ -169,7 +169,7 @@ test('every inert part of the compact pill opens the player on a phone', async (
 
 test('a native scroll starting on an artist link does not navigate or play', async ({ page, context }, info) => {
   test.skip(info.project.name !== 'chromium-mobile', 'Native touch injection uses CDP');
-  await page.goto('/player/#/');
+  await page.goto('/player/#/library?view=songs');
   const links = page.getByRole('link', { name: /^Artista / });
   await expect(links.first()).toBeVisible();
   const link = links.nth(5);
@@ -182,7 +182,7 @@ test('a native scroll starting on an artist link does not navigate or play', asy
   });
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect.poll(() => page.locator('[data-library-scroll]').evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-  await expect(page).toHaveURL(/#\/$/);
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
   await expect(page.locator('[data-now-playing]')).toHaveCount(0);
   await session.detach();
 });

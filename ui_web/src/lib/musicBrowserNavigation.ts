@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js';
 
-export type BrowserSection = 'library' | 'favourites' | 'playlists' | 'root';
+export type BrowserSection = 'library' | 'favourites' | 'playlists' | 'bookmarks' | 'root';
 export type BrowserView =
   | { kind: BrowserSection }
   | { kind: 'libraryArtist'; name: string; artistId?: string }
@@ -18,7 +18,7 @@ export interface BrowserFrame {
   scroll: number;
 }
 const frame = (view: BrowserView): BrowserFrame => ({ view, query: '', scope: 'global', filter: 'all', scroll: 0 });
-const initial = () => ({ library: [frame({ kind: 'library' })], favourites: [frame({ kind: 'favourites' })], playlists: [frame({ kind: 'playlists' })], root: [frame({ kind: 'root' })] });
+const initial = () => ({ library: [frame({ kind: 'library' })], favourites: [frame({ kind: 'favourites' })], playlists: [frame({ kind: 'playlists' })], bookmarks: [frame({ kind: 'bookmarks' })], root: [frame({ kind: 'root' })] });
 const [sections, setSections] = createSignal(initial());
 const [section, setSection] = createSignal<BrowserSection>('library');
 export const musicBrowserNavigation = {
