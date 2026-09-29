@@ -1,0 +1,85 @@
+/* The album's save control and the step after it, read as one pill split in two. */
+.control { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 14px;
+  color: var(--ink-primary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  /* Set like the bookmark beside it, so the pair reads as one control. */
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.step:disabled { opacity: .5; cursor: default; }
+.step[data-step='owned'] { color: var(--accent-ink); cursor: default; }
+.step[data-step='review'], .step[data-step='missing'] { color: var(--accent-ink); border-color: var(--accent); }
+@media (hover: hover) and (pointer: fine) {
+  button.step:hover:not(:disabled) { background: var(--bg-hover); }
+}
+/* On a phone the icon says ⬇ and ✓ by itself, and once the album is saved the
+   pair takes a line of its own above Play and Shuffle rather than pushing one
+   of them onto a line alone. */
+@media (max-width: 519px) {
+  .control:has(.step) { flex-basis: 100%; justify-content: center; }
+  .step[data-step='download'] .label, .step[data-step='owned'] .label { display: none; }
+  .step[data-step='download'], .step[data-step='owned'] { padding-inline: 12px; }
+}
+
+.sheet { display: flex; flex-direction: column; gap: var(--space-md); }
+.head { display: flex; flex-direction: column; gap: var(--space-2xs); padding-bottom: var(--space-sm); border-bottom: 1px solid var(--hairline); }
+.title { font-size: var(--text-title); font-weight: var(--fw-semibold); color: var(--ink-primary); }
+.status { font-size: var(--text-caption); color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
+
+.section { display: flex; flex-direction: column; gap: var(--space-sm); }
+.sectionTitle { margin: 0; font-size: var(--text-body); font-weight: var(--fw-semibold); color: var(--ink-primary); }
+.hint { margin: 0; font-size: var(--text-caption); color: var(--ink-secondary); }
+
+.song { display: flex; flex-direction: column; gap: var(--space-2xs); padding-block: var(--space-xs); border-top: 1px solid var(--hairline); }
+.songTitle { font-weight: var(--fw-semibold); color: var(--ink-primary); overflow-wrap: anywhere; }
+
+.candidate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--control-h);
+  padding: var(--space-xs) var(--space-md);
+  text-align: start;
+  color: var(--ink-primary);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .candidate:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+}
+.candidateTitle { overflow-wrap: anywhere; }
+.candidateMeta { font-size: var(--text-caption); color: var(--ink-secondary); }
+
+.skip, .action, .stop {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 8px 14px;
+  color: var(--ink-primary);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  font: inherit;
+  cursor: pointer;
+}
+.skip { border-color: transparent; color: var(--ink-secondary); padding-inline: 0; }
+.stop { color: var(--danger); }
+.skip:disabled, .action:disabled, .stop:disabled, .candidate:disabled { opacity: .5; cursor: default; }
+
+.missingList { display: flex; flex-direction: column; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
+.missingList li { display: flex; flex-direction: column; gap: 2px; }

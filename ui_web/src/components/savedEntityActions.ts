@@ -1,5 +1,6 @@
 import type { CatalogItem } from '../types/music';
 import { catalogSavedEntity } from '../lib/catalogCollection';
+import { toggleAlbumFromLink } from '../lib/albumCollection';
 import { openContextMenu } from '../lib/contextMenu';
 import { entitiesBusy, isEntitySaved, setEntitySaved, syncSavedEntities, type SavedEntity } from '../lib/savedEntities';
 import { t } from '../lib/i18n';
@@ -12,7 +13,9 @@ export function savedEntityAction(entry: SavedEntity): MenuAction {
     get label() { return t(isEntitySaved(entry) ? 'savedEntities.remove' : 'savedEntities.save'); },
     get danger() { return isEntitySaved(entry); },
     get disabled() { return entitiesBusy(); },
-    onSelect: () => void setEntitySaved(entry, !isEntitySaved(entry)),
+    // An album is saved with its songs and taken out with them; an artist is
+    // a bookmark.
+    onSelect: () => void (entry.kind === 'album' ? toggleAlbumFromLink(entry) : setEntitySaved(entry, !isEntitySaved(entry))),
   };
 }
 

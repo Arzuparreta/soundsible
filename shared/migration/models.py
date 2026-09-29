@@ -34,13 +34,21 @@ class SourceTrack:
     isrc: str = ""
     added_at: str = ""
     local_only: bool = False
+    # Where a catalog collection places the song, and the identities its row
+    # answers to. Exports carry none of these; they stay out of `to_dict` when
+    # empty so an export's fingerprint is what it always was.
+    album_artist: str = ""
+    track_number: int = 0
+    disc_number: int = 0
+    year: int = 0
+    identity_keys: tuple[str, ...] = ()
 
     def key(self, provider: str = "external") -> str:
         identity = self.source_id or self.source_uri or metadata_key(self.title, self.artist, self.album)
         return f"{provider}:{identity}"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "title": _clean(self.title),
             "artist": _clean(self.artist),
             "album": _clean(self.album),
@@ -51,6 +59,15 @@ class SourceTrack:
             "added_at": _clean(self.added_at, 80),
             "local_only": bool(self.local_only),
         }
+        if self.album_artist:
+            out["album_artist"] = _clean(self.album_artist)
+        for name in ("track_number", "disc_number", "year"):
+            value = _whole(getattr(self, name))
+            if value:
+                out[name] = value
+        if self.identity_keys:
+            out["identity_keys"] = list(_identity_keys(self.identity_keys))
+        return out
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SourceTrack":
@@ -64,7 +81,33 @@ class SourceTrack:
             isrc=_clean(data.get("isrc"), 32),
             added_at=_clean(data.get("added_at"), 80),
             local_only=bool(data.get("local_only")),
+            album_artist=_clean(data.get("album_artist")),
+            track_number=_whole(data.get("track_number")),
+            disc_number=_whole(data.get("disc_number")),
+            year=_whole(data.get("year")),
+            identity_keys=_identity_keys(data.get("identity_keys")),
         )
+
+
+def _whole(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        number = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return number if number > 0 else 0
+
+
+def _identity_keys(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    keys: list[str] = []
+    for key in value:
+        key = _clean(key, 200)
+        if key and ":" in key and key not in keys:
+            keys.append(key)
+    return tuple(keys[:16])
 
 
 @dataclass

@@ -92,6 +92,12 @@ export const identity = createRoot(() => {
   // are three ids for one song. Matching on keys is what makes every surface
   // agree about what you own without any of them knowing where the song lives.
   const savedKeys = createMemo(() => new Set(state.saved.flatMap((f) => f.keys)));
+  // Key → the entry that answers to it. First entry wins, as in the library.
+  const savedIndex = createMemo(() => {
+    const index = new Map<string, SavedEntry>();
+    for (const entry of state.saved) for (const key of entry.keys) if (!index.has(key)) index.set(key, entry);
+    return index as ReadonlyMap<string, SavedEntry>;
+  });
   // The mark is a strict subset — a property of a saved song, never a way of
   // holding one.
   const favouriteKeys = createMemo(
@@ -158,6 +164,7 @@ export const identity = createRoot(() => {
     playingKeys,
     queuedKeys,
     savedKeys,
+    savedIndex,
     savedRows,
     favouriteKeys,
     favouriteRows,
@@ -193,9 +200,23 @@ export const isQueuedResult = (result: SearchResult): boolean =>
 /** The library track this identity is owned as, if it is owned at all. */
 export function ownedTrackForKeys(keys: string[]): Track | null {
   const index = identity.libraryIndex();
-  for (const key of withLinkedKeys(keys, catalogLinks())) {
+  const linked = withLinkedKeys(keys, catalogLinks());
+  for (const key of linked) {
     const owned = index.get(key);
     if (owned) return owned;
+  }
+  // A catalog row knows its song only by catalog ids, and the link to the
+  // video it resolved to lives in this tab's memory. The entry the song was
+  // saved as learns the file's `lib:` key when the download lands, so the row
+  // finds its file through that entry — after a reload, and from another page.
+  const saved = identity.savedIndex();
+  for (const key of linked) {
+    const entry = saved.get(key);
+    if (!entry) continue;
+    for (const entryKey of entry.keys) {
+      const owned = index.get(entryKey);
+      if (owned) return owned;
+    }
   }
   return null;
 }

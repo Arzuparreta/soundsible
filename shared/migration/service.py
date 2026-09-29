@@ -45,6 +45,18 @@ def _run_bound(job_id: str, user_id: str) -> None:
             _active.discard((user_id, job_id))
 
 
+def _placement(source: SourceTrack) -> dict[str, Any]:
+    """Where a catalog collection puts the song, for the download to file it there."""
+    placement: dict[str, Any] = {}
+    if source.album_artist:
+        placement["album_artist"] = source.album_artist
+    for name in ("track_number", "disc_number", "year"):
+        value = getattr(source, name)
+        if value:
+            placement[name] = value
+    return placement
+
+
 def _candidate_payload(candidate: dict[str, Any]) -> dict[str, Any]:
     video_id = str(candidate.get("video_id") or candidate.get("id") or "").strip()
     return {
@@ -79,9 +91,7 @@ class MigrationRunner:
         for source_key, source in self.manifest.tracks.items():
             if source_key not in selected_keys:
                 continue
-            state = self.store.job_state(self.job_id)
-            if state in {"paused", "cancelled"}:
-                self._sync_playlists()
+            if self._stopped():
                 return
             row = self.store.get_track(self.job_id, source_key)
             if row["state"] in {"existing", "completed", "skipped", "unavailable"}:
@@ -90,15 +100,39 @@ class MigrationRunner:
                 continue
             if row["state"] == "needs_review":
                 continue
-            try:
-                self._process_track(source_key, source, row)
-            except Exception as exc:
-                logger.warning("Migration track %s failed: %s", source_key, exc)
-                self.store.update_track(self.job_id, source_key, state="failed", error=str(exc))
-            self._sync_playlists()
+            self._attempt(source_key, source, row)
+
+        # A version chosen while that pass ran left its song pending behind it.
+        # Only `pending` qualifies: a song that just failed is not retried here,
+        # so this ends once every decision has been acted on.
+        while True:
+            pending = [
+                (key, source) for key, source in self.manifest.tracks.items()
+                if key in selected_keys and self.store.get_track(self.job_id, key)["state"] == "pending"
+            ]
+            if not pending:
+                break
+            for source_key, source in pending:
+                if self._stopped():
+                    return
+                self._attempt(source_key, source, self.store.get_track(self.job_id, source_key))
 
         self._sync_playlists()
         self._finish()
+
+    def _stopped(self) -> bool:
+        if self.store.job_state(self.job_id) in {"paused", "cancelled"}:
+            self._sync_playlists()
+            return True
+        return False
+
+    def _attempt(self, source_key: str, source: SourceTrack, row: dict[str, Any]) -> None:
+        try:
+            self._process_track(source_key, source, row)
+        except Exception as exc:
+            logger.warning("Migration track %s failed: %s", source_key, exc)
+            self.store.update_track(self.job_id, source_key, state="failed", error=str(exc))
+        self._sync_playlists()
 
     def _library(self):
         from shared.api import get_user_core
@@ -150,7 +184,9 @@ class MigrationRunner:
             if shared_track is not None:
                 from shared.api import add_tracks_to_user_library
 
-                add_tracks_to_user_library([shared_track], user_id=self.user_id)
+                add_tracks_to_user_library(
+                    [shared_track], user_id=self.user_id, song_keys=source.identity_keys,
+                )
                 self.store.update_track(
                     self.job_id,
                     source_key,
@@ -242,7 +278,10 @@ class MigrationRunner:
                 "duration_sec": source.duration or candidate.get("duration"),
                 "migration_job_id": self.job_id,
                 "migration_provider": self.manifest.provider,
+                **_placement(source),
             },
+            # The row's identities, so the file joins the song saved from it.
+            "identity_keys": list(source.identity_keys),
         }
         item, error = api.parse_intake_item(raw)
         if error or not item:
@@ -273,6 +312,18 @@ class MigrationRunner:
         return None, failed.get("error_message") or failed.get("error") or "The downloaded track was not added"
 
     def _apply_track(self, source_key: str, track_id: str) -> None:
+        source = self.manifest.tracks.get(source_key)
+        if source is not None and source.identity_keys:
+            # A song saved from a catalog row is known only by that row's ids.
+            # Teaching its entry the file it now has is what lets the row, and
+            # the album around it, say the song is here.
+            try:
+                from player.favourites_manager import library_key
+                from shared.api import get_favourites_manager
+
+                get_favourites_manager(self.user_id).update_keys(source.identity_keys, [library_key(track_id)])
+            except Exception as exc:
+                logger.warning("Could not link saved song to track %s: %s", track_id, exc)
         if source_key in set(self.manifest.favourite_keys):
             try:
                 from shared.api import get_favourites_manager

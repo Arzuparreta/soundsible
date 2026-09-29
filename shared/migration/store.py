@@ -266,13 +266,25 @@ class MigrationStore:
             "error": row["error"],
         }
 
-    def list_jobs(self, limit: int = 20) -> list[dict[str, Any]]:
+    def list_jobs(self, limit: int = 20, *, include_collections: bool = True) -> list[dict[str, Any]]:
+        # A catalog collection's job is named `<kind>:<id>`; an export's provider
+        # has no colon (see `shared.migration.collections`).
+        where = "" if include_collections else "WHERE instr(provider, ':') = 0"
         with self._connect() as db:
             rows = db.execute(
-                "SELECT id FROM migration_jobs ORDER BY updated_at DESC LIMIT ?",
+                f"SELECT id FROM migration_jobs {where} ORDER BY updated_at DESC LIMIT ?",
                 (max(1, min(int(limit), 100)),),
             ).fetchall()
         return [self.get_job(str(row["id"]), include_tracks=False) for row in rows]
+
+    def latest_job(self, provider: str, *, include_tracks: bool = False) -> dict[str, Any] | None:
+        """The newest job for one provider, or None."""
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT id FROM migration_jobs WHERE provider = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+                (provider,),
+            ).fetchone()
+        return self.get_job(str(row["id"]), include_tracks=include_tracks) if row else None
 
     @staticmethod
     def selected_track_keys(manifest: MigrationManifest, selection: dict[str, Any]) -> set[str]:
