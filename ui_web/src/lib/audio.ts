@@ -47,6 +47,27 @@ let playbackRequested = false;
 let seekGeneration = 0;
 const expectedPauses = new WeakSet<HTMLAudioElement>();
 const pendingStarts = new WeakMap<HTMLAudioElement, object>();
+/** Keep transport intent intact while the decoder changes position. */
+const pendingSeeks = new WeakMap<HTMLAudioElement, { settled: boolean }>();
+
+function applySeekGate(deck: HTMLAudioElement): void {
+  const index = elements?.indexOf(deck) ?? -1;
+  if (index >= 0) setDeckGain(index, mixGains[index]);
+  applyDeckMute(deck);
+}
+
+function clearSeekGate(deck: HTMLAudioElement): void {
+  if (!pendingSeeks.delete(deck)) return;
+  applySeekGate(deck);
+}
+
+function finishSeek(deck: HTMLAudioElement): void {
+  const pending = pendingSeeks.get(deck);
+  // canplay can precede seeked, or a queued event can belong to a previous
+  // tap. Neither permits the old position to reach the programme output.
+  if (!pending?.settled || deck.seeking || deck.readyState < 3) return;
+  clearSeekGate(deck);
+}
 
 function pauseDeck(deck: HTMLAudioElement): void {
   pendingStarts.delete(deck);
@@ -59,7 +80,8 @@ const participatingDecks = new WeakSet<HTMLAudioElement>();
 let sourcesSettledPending = false;
 
 function applyDeckMute(deck: HTMLAudioElement): void {
-  deck.muted = !participatingDecks.has(deck) || (!(monitorGain && audioContext) && allMuted);
+  deck.muted = !participatingDecks.has(deck)
+    || (!(monitorGain && audioContext) && (allMuted || pendingSeeks.has(deck)));
 }
 
 function setDeckParticipation(deck: HTMLAudioElement, participating: boolean): void {
@@ -209,6 +231,14 @@ function createDeck(index: number): HTMLAudioElement {
   observeDiagnosticMedia(deck, 'deck', index);
   deck.preload = 'auto';
   if ('preservesPitch' in deck) deck.preservesPitch = true;
+  deck.addEventListener('seeked', () => {
+    const pending = pendingSeeks.get(deck);
+    if (pending && !deck.seeking) pending.settled = true;
+    finishSeek(deck);
+  });
+  deck.addEventListener('canplay', () => finishSeek(deck));
+  deck.addEventListener('error', () => clearSeekGate(deck));
+  deck.addEventListener('emptied', () => clearSeekGate(deck));
   for (const binding of deckBindings) deck.addEventListener(binding.type, binding.handler);
   return deck;
 }
@@ -341,7 +371,7 @@ function setDeckGain(index: number, value: number): void {
     const param = deckGains[index].gain;
     const now = audioContext.currentTime;
     param.cancelScheduledValues(now);
-    param.setValueAtTime(clamped, now);
+    param.setValueAtTime(pendingSeeks.has(decks()[index]) ? 0 : clamped, now);
     return;
   }
   const deck = decks()[index];
@@ -1322,6 +1352,7 @@ function detach(deck: HTMLAudioElement): void {
   // Stop competing for Now Playing before the native pause can publish a
   // stopped source as the programme. Audio gain alone does not exclude it.
   setDeckParticipation(deck, false);
+  clearSeekGate(deck);
   pauseDeck(deck);
   deck.playbackRate = 1;
   if (deck.getAttribute('src') === null && !deck.currentSrc) return;
@@ -1633,6 +1664,7 @@ export const audioService = {
     // Assigning src runs the media load algorithm, which aborts the previous
     // fetch. No explicit detach: it would emit a spurious `pause` between the
     // two tracks and flicker the transport controls.
+    clearSeekGate(a);
     diagnosticSource(a, () => { a.src = url; });
     if (Number.isFinite(positionSec) && positionSec > 0) {
       const applyPosition = () => {
@@ -1669,6 +1701,7 @@ export const audioService = {
     activeIndex = toIndex;
     setDeckGain(toIndex, 1);
     setDeckGain(fromIndex, 0);
+    clearSeekGate(a);
     diagnosticSource(a, () => { a.src = url; });
     releaseDeck(fromIndex);
     const resumeAtPosition = async () => {
@@ -1734,6 +1767,7 @@ export const audioService = {
     // deck — would otherwise carry that play straight into the track being
     // primed, and a session put back on boot would start sounding on its own.
     pauseDeck(a);
+    clearSeekGate(a);
     diagnosticSource(a, () => { a.src = url; });
     diagnosticLoad(a);
     setDeckParticipation(a, true);
@@ -1803,11 +1837,29 @@ export const audioService = {
     releaseDeck(1 - activeIndex);
   },
   seek(t: number): void {
+    if (!Number.isFinite(t)) return;
     seekGeneration += 1;
     resetClockSample();
     cancelMix('seek');
     const a = audioEl();
-    if (Number.isFinite(t)) a.currentTime = Math.max(0, t);
+    const target = Math.max(0, t);
+    if (target === a.currentTime) return;
+    // Mute before assigning currentTime: seeking is delivered asynchronously,
+    // and WebKit can keep rendering the old decoder buffer in that window.
+    // Leave the source/context running and never issue a delayed play().
+    if (a.readyState >= 1) {
+      pendingSeeks.set(a, { settled: false });
+      applySeekGate(a);
+    }
+    try {
+      a.currentTime = target;
+      // No seekable resource (or an effective no-op): no completion event is
+      // owed by the browser, so do not leave the output gated forever.
+      if (!a.seeking) clearSeekGate(a);
+    } catch (error) {
+      clearSeekGate(a);
+      throw error;
+    }
   },
   /**
    * How far the active deck has buffered, in seconds — the furthest edge it

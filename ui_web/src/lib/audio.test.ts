@@ -133,6 +133,7 @@ class FakeAudio extends EventTarget {
   networkState = 2;
   paused = true;
   ended = false;
+  seeking = false;
   volume = 1;
   muted = false;
   playbackRate = 1;
@@ -249,6 +250,83 @@ afterEach(() => {
 });
 
 describe('two-deck mixer', () => {
+  it.each([false, true])('gates a seek until completion and new-position readiness without restarting playback (graph=%s)', async (graph) => {
+    if (graph) vi.stubGlobal('AudioContext', FakeAudioContext);
+    vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
+    const { audioService, audioEl } = await import('./audio');
+    audioService.unlockAudio();
+    await audioService.load('/podcast', 1);
+    const deck = audioEl() as unknown as FakeAudio;
+    let position = 30;
+    Object.defineProperty(deck, 'currentTime', {
+      get: () => position,
+      set: (value: number) => { position = value; deck.seeking = true; },
+    });
+    const audibleGain = () => graph ? contexts[0].gains[2].gain.value : Number(!deck.muted);
+    const starts = deck.play.mock.calls.length;
+    const pauses = deck.pause.mock.calls.length;
+    audioService.seek(45);
+    expect(audibleGain()).toBe(0);
+    expect(deck.currentTime).toBe(45);
+    // User changes to volume/mute must not expose the stale buffer.
+    audioService.setVolume(0.5);
+    audioService.setMuted(true);
+    audioService.setMuted(false);
+    expect(audibleGain()).toBe(0);
+    deck.dispatchEvent(new Event('canplay'));
+    expect(audibleGain()).toBe(0);
+    // A second tap supersedes the first while its events are still queued.
+    audioService.seek(60);
+    deck.dispatchEvent(new Event('seeked'));
+    expect(audibleGain()).toBe(0);
+    deck.seeking = false;
+    deck.readyState = 2;
+    deck.dispatchEvent(new Event('seeked'));
+    expect(audibleGain()).toBe(0);
+    deck.readyState = 3;
+    deck.dispatchEvent(new Event('canplay'));
+    expect(audibleGain()).toBe(1);
+    expect(deck.play.mock.calls.length).toBe(starts);
+    expect(deck.pause.mock.calls.length).toBe(pauses);
+    expect(deck.paused).toBe(false);
+  });
+
+  it('clears pending seeks on source replacement and never resumes a user pause', async () => {
+    const { audioService, audioEl } = await import('./audio');
+    await audioService.load('/podcast', 1);
+    const deck = audioEl() as unknown as FakeAudio;
+    let position = 0;
+    Object.defineProperty(deck, 'currentTime', {
+      get: () => position,
+      set: (value: number) => { position = value; deck.seeking = true; },
+    });
+    audioService.seek(15);
+    audioService.pause();
+    const starts = deck.play.mock.calls.length;
+    deck.seeking = false;
+    deck.dispatchEvent(new Event('seeked'));
+    expect(deck.paused).toBe(true);
+    expect(deck.play.mock.calls.length).toBe(starts);
+    audioService.seek(30);
+    expect(deck.muted).toBe(true);
+    await audioService.load('/music', 1);
+    expect(deck.muted).toBe(false);
+    // A late completion from the old stream cannot alter the new programme.
+    deck.dispatchEvent(new Event('seeked'));
+    expect(deck.muted).toBe(false);
+  });
+
+  it('does not gate ineffective, same-position or invalid seeks', async () => {
+    const { audioService, audioEl } = await import('./audio');
+    await audioService.load('/podcast', 1);
+    const deck = audioEl() as unknown as FakeAudio;
+    audioService.seek(NaN);
+    audioService.seek(0);
+    // Models a resource with no seekable ranges: setter does not start seeking.
+    audioService.seek(15);
+    expect(deck.muted).toBe(false);
+  });
+
   it.each([false, true])('keeps idle sources muted through volume, reuse and hidden retirement (graph=%s)', async (graph) => {
     if (graph) vi.stubGlobal('AudioContext', FakeAudioContext);
     vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });

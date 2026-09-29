@@ -95,7 +95,7 @@ test('a search result opens its show, and its own button still follows without o
 });
 
 
-test('podcast buttons jump 15 seconds and each show resumes after switching and reloading', async ({ page }) => {
+test('podcast buttons jump 15 seconds and each show resumes after switching and reloading', async ({ page, isMobile }) => {
   await mockPodcasts(page);
   await page.route('**/api/podcasts/enclosure/peek', route => route.fulfill({ json: { stream_token: 'episode' } }));
   await page.route('**/api/podcasts/stream/**', route => {
@@ -122,9 +122,18 @@ test('podcast buttons jump 15 seconds and each show resumes after switching and 
     const { audioService } = await import('/player/src/lib/audio.ts');
     return audioService.snapshot().duration;
   })).toBe(180);
+  const forward = stage.getByRole('button', { name: 'Avanzar 15 segundos' });
+  const playingPosition = await position();
+  if (isMobile) await forward.tap(); else await forward.click();
+  await expect.poll(position).toBeGreaterThanOrEqual(playingPosition + 14);
+  await expect.poll(() => page.evaluate(async () => {
+    const { audioService } = await import('/player/src/lib/audio.ts');
+    return audioService.snapshot().playing;
+  })).toBe(true);
+  const jumpedPosition = await position();
+  await expect.poll(position).toBeGreaterThan(jumpedPosition + 0.1);
   await stage.getByRole('button', { name: 'Pausar', exact: true }).click();
   const startPosition = await position();
-  const forward = stage.getByRole('button', { name: 'Avanzar 15 segundos' });
   await forward.click();
   await forward.click();
   await expect.poll(position).toBeCloseTo(startPosition + 30, 0);
