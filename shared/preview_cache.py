@@ -41,6 +41,7 @@ import requests
 
 from shared.runtime import get_cache_dir
 from shared.stream_resolution import ResolvedStream, resolved_stream
+from shared.user_context import current_user_id, user_context
 
 logger = logging.getLogger(__name__)
 
@@ -611,7 +612,10 @@ _QUEUE_MAX = 32
 ResolutionValue = Union[ResolvedStream, str, None]
 Resolver = Callable[[str], ResolutionValue]
 RefreshResolver = Callable[[str], ResolutionValue]
-PrefetchJob = tuple[str, Resolver, Optional[RefreshResolver]]
+# The last field is the user who asked. Resolvers are the caller's code and may
+# need that user's core (the downloader is built from it the first time), but a
+# worker thread starts with nobody bound — so each job carries its requester.
+PrefetchJob = tuple[str, Resolver, Optional[RefreshResolver], Optional[str]]
 _resolve_queue: "queue.Queue[PrefetchJob]" = queue.Queue(maxsize=_QUEUE_MAX)
 _download_queue: "queue.Queue[PrefetchJob]" = queue.Queue(maxsize=_QUEUE_MAX)
 _pending_lock = threading.Lock()
@@ -1093,6 +1097,10 @@ def start_progressive(
             active.cancel.set()
 
     if owner:
+        # The fill thread starts with nobody bound; a refreshed URL is resolved
+        # as the listener who started it, the same as the route's first one.
+        requester = current_user_id()
+
         def run() -> None:
             current = resolved
             try:
@@ -1105,7 +1113,7 @@ def start_progressive(
                             # connection after fallback URL resolution.
                             from shared import request_scope
 
-                            with request_scope.request_scope():
+                            with request_scope.request_scope(), user_context(requester):
                                 refreshed = _coerce_resolution(refresh_resolver(video_id))
                             if refreshed is not None:
                                 current = refreshed
@@ -1153,33 +1161,44 @@ def _download_to_cache(video_id: str, stream: Union[ResolvedStream, str]) -> Non
     ensure_cached(video_id, stream)
 
 
+def _run_prefetch_job(
+    video_id: str,
+    resolver: Resolver,
+    refresh_resolver: Optional[RefreshResolver],
+    *,
+    download: bool,
+) -> None:
+    if not download:
+        resolver(video_id)
+        return
+    if cache_limit_bytes() <= 0:
+        _record_preparation_failure(video_id, "cache_disabled")
+        return
+    cached, stream = acquire_cached(
+        video_id,
+        resolver,
+        refresh_resolver=refresh_resolver,
+        keep_warm=True,
+    )
+    if cached:
+        _clear_preparation_failure(video_id)
+        return
+    retry = upstream_backoff_remaining()
+    _record_preparation_failure(
+        video_id,
+        "upstream_backoff" if retry else (
+            "resolution_failed" if stream is None else "download_failed"
+        ),
+        retry,
+    )
+
+
 def _worker_loop(jobs: "queue.Queue[PrefetchJob]", *, download: bool) -> None:
     while True:
-        video_id, resolver, refresh_resolver = jobs.get()
+        video_id, resolver, refresh_resolver, requester = jobs.get()
         try:
-            if download:
-                if cache_limit_bytes() <= 0:
-                    _record_preparation_failure(video_id, "cache_disabled")
-                else:
-                    cached, stream = acquire_cached(
-                        video_id,
-                        resolver,
-                        refresh_resolver=refresh_resolver,
-                        keep_warm=True,
-                    )
-                    if cached:
-                        _clear_preparation_failure(video_id)
-                    else:
-                        retry = upstream_backoff_remaining()
-                        _record_preparation_failure(
-                            video_id,
-                            "upstream_backoff" if retry else (
-                                "resolution_failed" if stream is None else "download_failed"
-                            ),
-                            retry,
-                        )
-            else:
-                resolver(video_id)
+            with user_context(requester):
+                _run_prefetch_job(video_id, resolver, refresh_resolver, download=download)
         except PreviewUpstreamRejected as e:
             _record_preparation_failure(
                 video_id,
@@ -1249,6 +1268,7 @@ def request_prefetch(
     _ensure_worker()
     queued: list[str] = []
     jobs = _download_queue if download else _resolve_queue
+    requester = current_user_id()
     for video_id in video_ids:
         if download and get_cached(video_id):
             continue
@@ -1260,7 +1280,7 @@ def request_prefetch(
         if download:
             _clear_preparation_failure(video_id)
         try:
-            jobs.put_nowait((video_id, resolver, refresh_resolver))
+            jobs.put_nowait((video_id, resolver, refresh_resolver, requester))
             queued.append(video_id)
         except queue.Full:
             with _pending_lock:
