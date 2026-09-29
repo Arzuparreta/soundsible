@@ -25,6 +25,8 @@ interface ShowFeed {
   /** What the feed says about a show that is not followed yet. */
   feed?: { title?: string; author?: string; image_url?: string };
   episodes?: PodcastEpisode[];
+  /** The feed was too large to read whole, so the list stops short of it. */
+  partial?: boolean;
 }
 
 function fmtDur(s?: number): string {
@@ -68,7 +70,7 @@ export default function PodcastShow() {
       try {
         if ('id' in source) return await api.getPodcastEpisodes(source.id);
         const feed = await api.browsePodcastFeed(source.url);
-        return { episodes: feed.episodes, feed: feed.show };
+        return { episodes: feed.episodes, feed: feed.show, partial: feed.partial };
       } catch { setFailed(true); return null; }
     },
   );
@@ -276,6 +278,10 @@ export default function PodcastShow() {
               );
             }}
           </For>
+          {/* Where the list ends is where someone looks for the rest. */}
+          <Show when={data()?.partial}>
+            <p class={styles.partial}>{t('podcastShow.partial')}</p>
+          </Show>
         </Show>
       </div>
     </div>

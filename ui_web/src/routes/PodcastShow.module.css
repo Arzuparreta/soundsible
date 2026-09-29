@@ -158,6 +158,13 @@
   padding: 0 var(--space-sm) var(--space-lg);
 }
 
+.partial {
+  margin: 0;
+  padding: var(--space-md);
+  font-size: var(--text-caption);
+  color: var(--ink-secondary);
+}
+
 .ep {
   border: 1px solid transparent;
   display: flex;

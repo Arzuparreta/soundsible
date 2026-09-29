@@ -767,6 +767,7 @@ export const en = {
     unsubscribe: 'Unfollow',
     downloadedOnly: 'Downloaded only',
     empty: 'No episodes.',
+    partial: 'This show’s feed is too large to load in full, so not every episode is listed.',
     ariaPlay: 'Play episode',
     ariaDownload: 'Download episode',
     ariaDownloaded: 'Downloaded',

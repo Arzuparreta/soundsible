@@ -8,7 +8,7 @@ import ipaddress
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 import feedparser
@@ -18,7 +18,31 @@ logger = logging.getLogger(__name__)
 
 _PODCAST_UA = "SoundsiblePodcast/1.0 (+https://github.com/soundsible)"
 _FETCH_TIMEOUT = (5, 45)
+# How much of a feed one read takes. A show that has run for a decade can have a
+# feed of tens of megabytes, and feedparser holds several times the XML it
+# parses; past this the feed is cut to the episodes that fit instead of being
+# refused whole (#250).
 _MAX_FEED_BYTES = 8 * 1024 * 1024
+
+# The markup a feed is cut by. CDATA and comments are passed over whole, so an
+# `</item>` quoted in show notes is not taken for the end of an episode, and one
+# the cut lands inside runs to the end rather than being read as markup.
+_MARKUP = re.compile(
+    rb"<!\[CDATA\[.*?(?:\]\]>|\Z)"
+    rb"|<!--.*?(?:-->|\Z)"
+    rb"|<[?!][^>]*>"
+    rb"|<(/?)([A-Za-z_][-\w.:]*)(?:\"[^\"]*\"|'[^']*'|[^'\">])*?(/?)>",
+    re.S,
+)
+
+
+class FeedBody(NamedTuple):
+    """A feed as read. `partial` when it ran past `_MAX_FEED_BYTES`: `xml` then
+    holds only the episodes that arrived whole, closed into a document of its
+    own."""
+
+    xml: bytes
+    partial: bool
 
 
 def assert_safe_http_url(url: str) -> None:
@@ -42,19 +66,67 @@ def assert_safe_http_url(url: str) -> None:
         raise ValueError("Host not allowed")
 
 
-def fetch_feed_body(feed_url: str) -> bytes:
+def fetch_feed_body(feed_url: str) -> FeedBody:
     assert_safe_http_url(feed_url)
-    resp = requests.get(
+    # Streamed so the limit bounds what is held, not just what is parsed: the
+    # whole body used to be downloaded before its size was even looked at.
+    with requests.get(
         feed_url,
         headers={"User-Agent": _PODCAST_UA},
         timeout=_FETCH_TIMEOUT,
         allow_redirects=True,
-    )
-    resp.raise_for_status()
-    data = resp.content
-    if len(data) > _MAX_FEED_BYTES:
+        stream=True,
+    ) as resp:
+        resp.raise_for_status()
+        body = bytearray()
+        for chunk in resp.iter_content(chunk_size=65536):
+            body += chunk
+            if len(body) > _MAX_FEED_BYTES:
+                break
+        else:
+            return FeedBody(bytes(body), False)
+    # Closing the response with the rest unread drops the connection instead of
+    # downloading the remainder of a feed nothing is going to parse.
+    del body[_MAX_FEED_BYTES:]
+    return FeedBody(_leading_items(bytes(body)), True)
+
+
+def _leading_items(prefix: bytes) -> bytes:
+    """The start of a feed that was cut short, as a document of its own:
+    everything up to the end of the last episode that arrived whole, then the
+    elements still open around it closed. Podcast feeds nearly always list
+    their newest episodes first, so what survives is the part of a show people
+    open it for; a feed in the opposite order keeps its oldest instead. The
+    tags are closed rather than left open because feedparser reads an
+    unfinished document twice, the second time with its slower loose parser.
+
+    Only ASCII-compatible encodings are read this way; in any other, or when not
+    one episode fits, the feed is refused as it always was."""
+    stack: List[bytes] = []
+    item: Optional[bytes] = None
+    parents: Optional[Tuple[bytes, ...]] = None
+    cut = 0
+    for match in _MARKUP.finditer(prefix):
+        closing, name, empty = match.group(1, 2, 3)
+        if name is None or empty:
+            continue
+        if not closing:
+            if item is None:
+                # The root says what an episode is: an `entry` under an Atom
+                # `feed`, an `item` in RSS. Only those beside the first count.
+                item = b"entry" if name == b"feed" else b"item"
+            elif parents is None and name == item:
+                parents = tuple(stack)
+            stack.append(name)
+        elif name in stack:
+            # Whatever an element left unclosed ends with it, the way a lenient
+            # parser reads the same markup.
+            del stack[len(stack) - 1 - stack[::-1].index(name):]
+            if name == item and tuple(stack) == parents:
+                cut = match.end()
+    if not cut or parents is None:
         raise ValueError("Feed too large")
-    return data
+    return prefix[:cut] + b"".join(b"</" + tag + b">" for tag in reversed(parents))
 
 
 def _first_audio_enclosure(entry: Any) -> Optional[str]:
@@ -214,8 +286,3 @@ def _episodes(parsed: Any, feed_url: str) -> List[Dict[str, Any]]:
             }
         )
     return out
-
-
-def fetch_episodes_for_feed(feed_url: str) -> List[Dict[str, Any]]:
-    body = fetch_feed_body(feed_url)
-    return parse_feed_episodes(body, feed_url)

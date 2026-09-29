@@ -1260,15 +1260,17 @@ export const api = {
     ),
 
   // ── Podcasts ──
+  /** `partial` when the show's feed was too large to read whole and
+   * `episodes` holds only the ones at its start. */
   getPodcastEpisodes: (feedId: string) =>
-    request<{ feed_id?: string; subscription?: PodcastSubscription; episodes?: PodcastEpisode[] }>(
+    request<{ feed_id?: string; subscription?: PodcastSubscription; episodes?: PodcastEpisode[]; partial?: boolean }>(
       `/api/podcasts/feeds/${encodeURIComponent(feedId)}/episodes`,
       { timeoutMs: 20000 },
     ),
   /** A show and its episodes read straight from its feed, for a show opened
    * before it is followed. */
   browsePodcastFeed: (rssUrl: string) =>
-    request<{ rss_url?: string; show?: { title?: string; author?: string; image_url?: string }; episodes?: PodcastEpisode[] }>(
+    request<{ rss_url?: string; show?: { title?: string; author?: string; image_url?: string }; episodes?: PodcastEpisode[]; partial?: boolean }>(
       `/api/podcasts/episodes-by-url?rss_url=${encodeURIComponent(rssUrl)}`,
       { timeoutMs: 20000 },
     ),

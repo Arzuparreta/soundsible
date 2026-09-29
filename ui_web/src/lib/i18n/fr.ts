@@ -773,6 +773,7 @@ export const fr: Dict = {
     unsubscribe: 'Se désabonner',
     downloadedOnly: 'Téléchargés uniquement',
     empty: 'Aucun épisode.',
+    partial: 'Le flux de cette émission est trop volumineux pour être chargé en entier : tous les épisodes ne sont pas affichés.',
     ariaPlay: 'Lire l’épisode',
     ariaDownload: 'Télécharger l’épisode',
     ariaDownloaded: 'Téléchargé',

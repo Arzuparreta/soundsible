@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.models import LibraryMetadata, PodcastSubscription
 from shared.podcast_preview_token import decode_enclosure_stream_token, mint_enclosure_stream_token
-from shared.podcast_rss import assert_safe_http_url, fetch_episodes_for_feed, fetch_feed_body, parse_feed
+from shared.podcast_rss import assert_safe_http_url, fetch_feed_body, parse_feed, parse_feed_episodes
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,8 @@ def subscribe():
     itunes_id = (data.get("itunes_collection_id") or "").strip()
 
     try:
-        show, eps = parse_feed(fetch_feed_body(rss_url), rss_url)
+        feed = fetch_feed_body(rss_url)
+        show, eps = parse_feed(feed.xml, rss_url)
         feed_title = title_guess or show["title"]
         feed_author = author_guess or show["author"]
         feed_image = image_guess or show["image_url"]
@@ -102,6 +103,7 @@ def subscribe():
     metadata.podcast_episode_cache[subscription_id] = {
         "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "episodes": eps[:500],
+        "partial": feed.partial,
     }
     lib.require_saved()
     api["emit_to_user"]("library_updated")
@@ -158,10 +160,14 @@ def feed_episodes(feed_id: str):
         need_fetch = need_fetch or not cache
 
     episodes: List[Dict[str, Any]] = []
+    # A feed too large to read whole lists only its leading episodes, and the
+    # page says so rather than let the list look complete (#250).
+    partial = isinstance(cache, dict) and bool(cache.get("partial"))
     if need_fetch:
         with _fetch_lock:
             try:
-                episodes = fetch_episodes_for_feed(rss_url)
+                feed = fetch_feed_body(rss_url)
+                episodes, partial = parse_feed_episodes(feed.xml, rss_url), feed.partial
             except Exception as e:
                 logger.warning("RSS refresh failed for %s: %s", feed_id, e)
                 if isinstance(cache, dict) and isinstance(cache.get("episodes"), list):
@@ -171,12 +177,13 @@ def feed_episodes(feed_id: str):
             metadata.podcast_episode_cache[feed_id] = {
                 "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "episodes": episodes[:500],
+                "partial": partial,
             }
             lib.require_saved()
     else:
         episodes = (cache or {}).get("episodes") or []
 
-    return jsonify({"feed_id": feed_id, "subscription": sub, "episodes": episodes})
+    return jsonify({"feed_id": feed_id, "subscription": sub, "episodes": episodes, "partial": partial})
 
 
 @podcasts_bp.route("/api/podcasts/episodes-by-url", methods=["GET"])
@@ -195,11 +202,12 @@ def episodes_by_feed_url():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     try:
-        show, episodes = parse_feed(fetch_feed_body(rss_url), rss_url)
+        feed = fetch_feed_body(rss_url)
+        show, episodes = parse_feed(feed.xml, rss_url)
     except Exception as e:
         logger.warning("RSS browse fetch failed: %s", e)
         return jsonify({"error": str(e)}), 502
-    return jsonify({"rss_url": rss_url, "show": show, "episodes": episodes})
+    return jsonify({"rss_url": rss_url, "show": show, "episodes": episodes, "partial": feed.partial})
 
 
 @podcasts_bp.route("/api/podcasts/enclosure/peek", methods=["POST"])
