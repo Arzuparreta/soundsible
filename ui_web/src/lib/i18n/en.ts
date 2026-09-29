@@ -767,6 +767,7 @@ export const en = {
     unsubscribe: 'Unfollow',
     downloadedOnly: 'Downloaded only',
     empty: 'No episodes.',
+    loadMore: 'Load more episodes',
     ariaPlay: 'Play episode',
     ariaDownload: 'Download episode',
     ariaDownloaded: 'Downloaded',

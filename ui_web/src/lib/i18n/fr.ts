@@ -773,6 +773,7 @@ export const fr: Dict = {
     unsubscribe: 'Se désabonner',
     downloadedOnly: 'Téléchargés uniquement',
     empty: 'Aucun épisode.',
+    loadMore: 'Charger plus d’épisodes',
     ariaPlay: 'Lire l’épisode',
     ariaDownload: 'Télécharger l’épisode',
     ariaDownloaded: 'Téléchargé',

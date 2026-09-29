@@ -1260,16 +1260,19 @@ export const api = {
     ),
 
   // ── Podcasts ──
+  /** `next` when the show's feed goes on past `episodes`: hand it to
+   * `browsePodcastFeed` for the page that follows. */
   getPodcastEpisodes: (feedId: string) =>
-    request<{ feed_id?: string; subscription?: PodcastSubscription; episodes?: PodcastEpisode[] }>(
+    request<{ feed_id?: string; subscription?: PodcastSubscription; episodes?: PodcastEpisode[]; next?: number | null }>(
       `/api/podcasts/feeds/${encodeURIComponent(feedId)}/episodes`,
       { timeoutMs: 20000 },
     ),
   /** A show and its episodes read straight from its feed, for a show opened
-   * before it is followed. */
-  browsePodcastFeed: (rssUrl: string) =>
-    request<{ rss_url?: string; show?: { title?: string; author?: string; image_url?: string }; episodes?: PodcastEpisode[] }>(
-      `/api/podcasts/episodes-by-url?rss_url=${encodeURIComponent(rssUrl)}`,
+   * before it is followed. A feed too long to read at once comes a page at a
+   * time: `after` is the `next` of the page before. */
+  browsePodcastFeed: (rssUrl: string, after?: number) =>
+    request<{ rss_url?: string; show?: { title?: string; author?: string; image_url?: string }; episodes?: PodcastEpisode[]; next?: number | null }>(
+      `/api/podcasts/episodes-by-url?rss_url=${encodeURIComponent(rssUrl)}${after ? `&after=${after}` : ''}`,
       { timeoutMs: 20000 },
     ),
   searchPodcasts: async (q: string, signal?: AbortSignal): Promise<PodcastSearchResult[]> => {

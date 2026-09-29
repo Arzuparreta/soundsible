@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.models import LibraryMetadata, PodcastSubscription
 from shared.podcast_preview_token import decode_enclosure_stream_token, mint_enclosure_stream_token
-from shared.podcast_rss import assert_safe_http_url, fetch_episodes_for_feed, fetch_feed_body, parse_feed
+from shared.podcast_rss import assert_safe_http_url, fetch_feed_body, parse_feed, parse_feed_episodes
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ podcasts_bp = Blueprint("podcasts", __name__, url_prefix="")
 
 _ITUNES_SEARCH = "https://itunes.apple.com/search"
 _CACHE_TTL_SEC = 1800
+_CACHED_EPISODES = 500
 _fetch_lock = threading.Lock()
 
 
@@ -35,6 +36,19 @@ def _get_api():
         "_ensure_lib_metadata": _ensure_lib_metadata,
         "socketio": socketio,
         "emit_to_user": emit_to_user,
+    }
+
+
+def _cached_episodes(episodes: List[Dict[str, Any]], next_after: Optional[int]) -> Dict[str, Any]:
+    """What a followed show keeps of its feed: its first episodes, and where the
+    rest of the feed picks up after them (#250). Past a list cut here the count
+    is of episodes, which can only fall short of the entries they came from, so
+    the page that follows may repeat a few the list has but never skips one."""
+    kept = episodes[:_CACHED_EPISODES]
+    return {
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "episodes": kept,
+        "next": len(kept) if len(episodes) > len(kept) else next_after,
     }
 
 
@@ -78,7 +92,8 @@ def subscribe():
     itunes_id = (data.get("itunes_collection_id") or "").strip()
 
     try:
-        show, eps = parse_feed(fetch_feed_body(rss_url), rss_url)
+        page = fetch_feed_body(rss_url)
+        show, eps = parse_feed(page.xml, rss_url)
         feed_title = title_guess or show["title"]
         feed_author = author_guess or show["author"]
         feed_image = image_guess or show["image_url"]
@@ -99,10 +114,7 @@ def subscribe():
     # Dedupe by rss_url
     metadata.podcast_subscriptions = [s for s in metadata.podcast_subscriptions if isinstance(s, dict) and s.get("rss_url") != rss_url]
     metadata.podcast_subscriptions.append(sub)
-    metadata.podcast_episode_cache[subscription_id] = {
-        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "episodes": eps[:500],
-    }
+    metadata.podcast_episode_cache[subscription_id] = _cached_episodes(eps, page.next)
     lib.require_saved()
     api["emit_to_user"]("library_updated")
     return jsonify({"status": "success", "subscription": sub})
@@ -158,25 +170,26 @@ def feed_episodes(feed_id: str):
         need_fetch = need_fetch or not cache
 
     episodes: List[Dict[str, Any]] = []
+    # Where the rest of the feed picks up, for the page to offer (#250).
+    cached_next = cache.get("next") if isinstance(cache, dict) else None
+    next_after = cached_next if isinstance(cached_next, int) else None
     if need_fetch:
         with _fetch_lock:
             try:
-                episodes = fetch_episodes_for_feed(rss_url)
+                page = fetch_feed_body(rss_url)
+                episodes, next_after = parse_feed_episodes(page.xml, rss_url), page.next
             except Exception as e:
                 logger.warning("RSS refresh failed for %s: %s", feed_id, e)
                 if isinstance(cache, dict) and isinstance(cache.get("episodes"), list):
                     episodes = cache["episodes"]
                 else:
                     return jsonify({"error": str(e)}), 502
-            metadata.podcast_episode_cache[feed_id] = {
-                "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "episodes": episodes[:500],
-            }
+            metadata.podcast_episode_cache[feed_id] = _cached_episodes(episodes, next_after)
             lib.require_saved()
     else:
         episodes = (cache or {}).get("episodes") or []
 
-    return jsonify({"feed_id": feed_id, "subscription": sub, "episodes": episodes})
+    return jsonify({"feed_id": feed_id, "subscription": sub, "episodes": episodes, "next": next_after})
 
 
 @podcasts_bp.route("/api/podcasts/episodes-by-url", methods=["GET"])
@@ -186,6 +199,10 @@ def episodes_by_feed_url():
     A show and its episodes from an RSS URL without a subscription, so a show
     found in the directory can be opened before it is followed. Same SSRF rules
     as subscribe; does not write library metadata.
+
+    A feed too long to read at once comes a page at a time: `next` in the
+    answer, handed back as `after`, asks for the page that follows. Followed
+    shows read their further pages here too (#250).
     """
     rss_url = (request.args.get("rss_url") or "").strip()
     if not rss_url:
@@ -194,12 +211,14 @@ def episodes_by_feed_url():
         assert_safe_http_url(rss_url)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    after = max(0, request.args.get("after", 0, type=int))
     try:
-        show, episodes = parse_feed(fetch_feed_body(rss_url), rss_url)
+        page = fetch_feed_body(rss_url, after)
+        show, episodes = parse_feed(page.xml, rss_url)
     except Exception as e:
         logger.warning("RSS browse fetch failed: %s", e)
         return jsonify({"error": str(e)}), 502
-    return jsonify({"rss_url": rss_url, "show": show, "episodes": episodes})
+    return jsonify({"rss_url": rss_url, "show": show, "episodes": episodes, "next": page.next})
 
 
 @podcasts_bp.route("/api/podcasts/enclosure/peek", methods=["POST"])

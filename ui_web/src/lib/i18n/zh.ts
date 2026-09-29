@@ -761,6 +761,7 @@ export const zh: Dict = {
     unsubscribe: '取消关注',
     downloadedOnly: '仅已下载',
     empty: '没有剧集。',
+    loadMore: '加载更多剧集',
     ariaPlay: '播放剧集',
     ariaDownload: '下载剧集',
     ariaDownloaded: '已下载',

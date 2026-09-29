@@ -5,7 +5,7 @@ import { openContextMenu } from '../lib/contextMenu';
 import { BackIcon, CheckIcon, DownloadIcon, menuIcons } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
-import { createEffect, createMemo, createResource, createSignal, For, Show } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, Show } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions, isPlayingEpisode } from '../stores';
@@ -15,6 +15,7 @@ import styles from './PodcastShow.module.css';
 import { neutralCoverStyle } from '../lib/cover';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
+import { VirtualRows } from '../components/VirtualRows';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { followPodcast, shownPodcast } from '../lib/podcasts';
@@ -25,6 +26,8 @@ interface ShowFeed {
   /** What the feed says about a show that is not followed yet. */
   feed?: { title?: string; author?: string; image_url?: string };
   episodes?: PodcastEpisode[];
+  /** Where the rest of a feed too long to read at once picks up. */
+  next?: number | null;
 }
 
 function fmtDur(s?: number): string {
@@ -68,7 +71,7 @@ export default function PodcastShow() {
       try {
         if ('id' in source) return await api.getPodcastEpisodes(source.id);
         const feed = await api.browsePodcastFeed(source.url);
-        return { episodes: feed.episodes, feed: feed.show };
+        return { episodes: feed.episodes, feed: feed.show, next: feed.next };
       } catch { setFailed(true); return null; }
     },
   );
@@ -97,6 +100,7 @@ export default function PodcastShow() {
   const image = () => show()?.image_url ?? null;
 
   const [onlyDownloaded, setOnlyDownloaded] = createSignal(false);
+  const [scroller, setScroller] = createSignal<HTMLDivElement | null>(null);
   const localByGuid = createMemo(
     () =>
       new Map(
@@ -106,8 +110,40 @@ export default function PodcastShow() {
       ),
   );
   const isDownloaded = (ep: PodcastEpisode) => localByGuid().has(ep.guid);
+
+  /** The rest of a feed too long to read at once, a page per request, only
+   * when asked for (#250). Starts over with every answer the page loads. */
+  const [more, setMore] = createSignal<PodcastEpisode[]>([]);
+  const [next, setNext] = createSignal<number | null>(null);
+  const [loadingMore, setLoadingMore] = createSignal(false);
+  createEffect(() => {
+    const feed = data();
+    setMore([]);
+    setNext(feed?.next ?? null);
+  });
+  const loadMore = async () => {
+    const after = next();
+    const url = show()?.rss_url;
+    if (after == null || !url || loadingMore()) return;
+    const base = data();
+    setLoadingMore(true);
+    try {
+      const page = await api.browsePodcastFeed(url, after);
+      if (data() !== base) return;
+      // A followed show's cached list can end before the entry the next page
+      // starts from, so the two may overlap.
+      const seen = new Set([...(base?.episodes ?? []), ...more()].map((e) => e.guid));
+      setMore((eps) => [...eps, ...(page.episodes ?? []).filter((e) => !seen.has(e.guid))]);
+      setNext(page.next ?? null);
+    } catch {
+      if (data() === base) toast.error(t('common.loadFailed'));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   const episodes = createMemo<PodcastEpisode[]>(() => {
-    const eps = data()?.episodes ?? [];
+    const eps = [...(data()?.episodes ?? []), ...more()];
     return onlyDownloaded() ? eps.filter((e) => localByGuid().has(e.guid)) : eps;
   });
 
@@ -187,7 +223,10 @@ export default function PodcastShow() {
       </div>
 
       <div
-        ref={(element) => registerPrimaryScroll(element, () => !data.loading)}
+        ref={(element) => {
+          setScroller(element);
+          registerPrimaryScroll(element, () => !data.loading);
+        }}
         class={styles.scroll}
         data-primary-scroll
       >
@@ -195,8 +234,14 @@ export default function PodcastShow() {
           when={!data.loading}
           fallback={<SkeletonRows count={8} compact />}
         >
-          <For each={episodes()} fallback={<EmptyState tone={failed() ? 'danger' : undefined}>{failed() ? t('common.loadFailed') : t('podcastShow.empty')} <Show when={failed()}><Button variant="secondary" onClick={() => void refetch()}>{t('common.retry')}</Button></Show></EmptyState>}>
-            {(ep) => {
+          <Show when={episodes().length} fallback={<EmptyState tone={failed() ? 'danger' : undefined}>{failed() ? t('common.loadFailed') : t('podcastShow.empty')} <Show when={failed()}><Button variant="secondary" onClick={() => void refetch()}>{t('common.retry')}</Button></Show></EmptyState>}>
+          {/* Only the rows in view are built. A show that has run for years
+            * lists thousands of episodes, most with artwork of their own, and
+            * a cover is a background image the browser downloads the moment
+            * its row exists: a whole feed's worth was a gigabyte of 3000px
+            * JPEGs that took the connection from playback for minutes (#250). */}
+          <VirtualRows items={episodes()} scrollElement={scroller} rowHeight={{ cssVar: '--row-h', fallback: 56 }} measureRows>
+            {(item) => <Show when={item()} keyed>{(ep) => {
               const id = ep.guid || ep.enclosure_url;
               const downloaded = () => isDownloaded(ep);
               const downloading = () => state.downloads.queue.some((item) => item.song_str === ep.enclosure_url
@@ -274,8 +319,16 @@ export default function PodcastShow() {
                 </div>
                 </Show>
               );
-            }}
-          </For>
+            }}</Show>}
+          </VirtualRows>
+          </Show>
+          <Show when={next() != null}>
+            <div class={styles.more}>
+              <Button variant="secondary" disabled={loadingMore()} aria-busy={loadingMore() || undefined} onClick={() => void loadMore()}>
+                {loadingMore() ? t('common.loading') : t('podcastShow.loadMore')}
+              </Button>
+            </div>
+          </Show>
         </Show>
       </div>
     </div>

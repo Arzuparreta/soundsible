@@ -158,6 +158,12 @@
   padding: 0 var(--space-sm) var(--space-lg);
 }
 
+.more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-md);
+}
+
 .ep {
   border: 1px solid transparent;
   display: flex;

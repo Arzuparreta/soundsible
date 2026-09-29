@@ -1,6 +1,8 @@
-from shared.podcast_rss import parse_feed, parse_feed_episodes, parse_feed_image
-
 import feedparser
+import pytest
+
+from shared import podcast_rss
+from shared.podcast_rss import fetch_feed_body, parse_feed, parse_feed_episodes, parse_feed_image
 
 
 def _feed(channel_extra: str = "", items: str = "") -> bytes:
@@ -94,3 +96,169 @@ def test_show_without_an_author_is_credited_to_its_subtitle():
     assert show["author"] == "A weekly show"
     show, _ = parse_feed(_feed(), "https://example.com/rss")
     assert show == {"title": "My Show", "author": "", "image_url": ""}
+
+
+class _Stream:
+    """A response that hands its body over a few bytes at a time and counts
+    what was taken, so a test can see the read stop."""
+
+    def __init__(self, body: bytes, chunk: int = 64):
+        self.chunks = [body[i:i + chunk] for i in range(0, len(body), chunk)]
+        self.taken = 0
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.closed = True
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size):
+        for chunk in self.chunks:
+            self.taken += 1
+            yield chunk
+
+
+def _serve(monkeypatch, body: bytes, limit: int) -> _Stream:
+    stream = _Stream(body)
+    monkeypatch.setattr(podcast_rss, "_MAX_FEED_BYTES", limit)
+    monkeypatch.setattr(podcast_rss.requests, "get", lambda *args, **kwargs: stream)
+    return stream
+
+
+def _page(xml: bytes, ends_at: bytes, first: bytes = b"<item>") -> int:
+    """A page size that runs out at `ends_at`. Pages are measured from the
+    first entry; the feed's head comes with every one of them."""
+    return xml.index(ends_at) - xml.index(first)
+
+
+def _all_pages(url: str = "https://example.com/rss"):
+    after, pages = 0, []
+    while True:
+        page = fetch_feed_body(url, after)
+        pages.append(page)
+        if page.next is None:
+            return pages
+        after = page.next
+
+
+def test_a_feed_within_the_limit_is_read_whole(monkeypatch):
+    xml = _feed(SHOW_ART, _item("ep1") + _item("ep2"))
+    _serve(monkeypatch, xml, limit=len(xml))
+    assert fetch_feed_body("https://example.com/rss") == (xml, None)
+
+
+def test_a_feed_past_the_limit_opens_with_the_episodes_that_arrived_whole(monkeypatch):
+    # #250: a decade-old show's feed ran past the limit and the show opened
+    # with no episodes at all.
+    xml = _feed(SHOW_ART, "".join(_item(f"ep{n}") for n in range(1, 6)))
+    stream = _serve(monkeypatch, xml, limit=_page(xml, b"<guid>ep3</guid>"))
+
+    page = fetch_feed_body("https://example.com/rss")
+
+    assert page.next == 2
+    # Closed into a whole document, so feedparser reads it once, strictly.
+    assert not feedparser.parse(page.xml).bozo
+    show, episodes = parse_feed(page.xml, "https://example.com/rss")
+    assert show == {"title": "My Show", "author": "", "image_url": "https://cdn.example.com/show.jpg"}
+    assert episodes == parse_feed_episodes(xml, "https://example.com/rss")[:2]
+    # The rest of the feed is left on the server.
+    assert stream.taken < len(stream.chunks)
+    assert stream.closed
+
+
+def test_each_page_picks_up_where_the_last_one_ended(monkeypatch):
+    # An entry with no audio is no episode, but it is still passed over: the
+    # count that says where a page starts is of entries.
+    no_audio = "<item><title>Housekeeping</title><guid>note</guid></item>"
+    items = [_item(f"ep{n}") for n in range(1, 8)]
+    items.insert(2, no_audio)
+    xml = _feed(SHOW_ART, "".join(items))
+    _serve(monkeypatch, xml, limit=_page(xml, b"<guid>ep3</guid>"))
+
+    pages = _all_pages()
+
+    assert len(pages) > 2
+    assert all(not feedparser.parse(page.xml).bozo for page in pages)
+    episodes = [e for page in pages for e in parse_feed_episodes(page.xml, "https://example.com/rss")]
+    assert episodes == parse_feed_episodes(xml, "https://example.com/rss")
+    assert [parse_feed(page.xml, "https://example.com/rss")[0]["title"] for page in pages] == ["My Show"] * len(pages)
+
+
+def test_a_page_past_the_end_of_the_feed_is_empty(monkeypatch):
+    xml = _feed(SHOW_ART, "".join(_item(f"ep{n}") for n in range(1, 4)))
+    _serve(monkeypatch, xml, limit=_page(xml, b"<guid>ep3</guid>"))
+
+    page = fetch_feed_body("https://example.com/rss", after=10)
+
+    assert page.next is None
+    assert parse_feed_episodes(page.xml, "https://example.com/rss") == []
+
+
+def test_a_feed_whose_first_episode_does_not_fit_is_refused(monkeypatch):
+    xml = _feed(SHOW_ART, _item("ep1") + _item("ep2"))
+    _serve(monkeypatch, xml, limit=_page(xml, b"</item>"))
+    with pytest.raises(ValueError, match="Feed too large"):
+        fetch_feed_body("https://example.com/rss")
+
+
+def test_markup_quoted_in_show_notes_is_not_where_an_episode_ends(monkeypatch):
+    notes = "<description><![CDATA[<p>Mailbag</p></item><item>]]></description>"
+    xml = _feed(SHOW_ART, _item("ep1", notes) + _item("ep2", notes))
+    # The limit falls just past the `</item>` quoted in the second episode.
+    _serve(monkeypatch, xml, limit=xml.rindex(b"<item>]]>") - xml.index(b"<item>"))
+
+    page = fetch_feed_body("https://example.com/rss")
+
+    first_episode_ends = xml.index(b"</item>", xml.index(b"]]>")) + len(b"</item>")
+    assert page.xml == xml[:first_episode_ends] + b"</channel></rss>"
+    parsed = feedparser.parse(page.xml)
+    assert not parsed.bozo
+    assert [e.id for e in parsed.entries] == ["ep1"]
+
+
+def test_an_rss_feed_is_cut_by_its_items_whatever_else_it_names_entry(monkeypatch):
+    xml = _feed("<entry>Not an episode</entry>", "".join(_item(f"ep{n}") for n in range(1, 4)))
+    _serve(monkeypatch, xml, limit=_page(xml, b"<guid>ep3</guid>"))
+
+    page = fetch_feed_body("https://example.com/rss")
+
+    assert [e["guid"] for e in parse_feed_episodes(page.xml, "https://example.com/rss")] == ["ep1", "ep2"]
+
+
+ATOM = b"""<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>My Show</title>
+  <entry><title>Episode 1</title><id>ep1</id>
+    <link rel="enclosure" type="audio/mpeg" href="https://cdn.example.com/ep1.mp3"/></entry>
+  <entry><title>Episode 2</title><id>ep2</id>
+    <link rel="enclosure" type="audio/mpeg" href="https://cdn.example.com/ep2.mp3"/></entry>
+  <entry><title>Episode 3</title><id>ep3</id>
+    <link rel="enclosure" type="audio/mpeg" href="https://cdn.example.com/ep3.mp3"/></entry>
+</feed>
+"""
+
+# RSS 1.0 keeps its episodes beside the channel rather than inside it.
+RDF = b"""<?xml version="1.0" encoding="utf-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/">
+  <channel rdf:about="https://example.com/"><title>My Show</title></channel>
+  <item rdf:about="https://example.com/ep1"><title>Episode 1</title><link>https://example.com/ep1</link></item>
+  <item rdf:about="https://example.com/ep2"><title>Episode 2</title><link>https://example.com/ep2</link></item>
+  <item rdf:about="https://example.com/ep3"><title>Episode 3</title><link>https://example.com/ep3</link></item>
+</rdf:RDF>
+"""
+
+
+@pytest.mark.parametrize("xml, first", [(ATOM, b"<entry>"), (RDF, b"<item ")], ids=["atom", "rss1"])
+def test_every_feed_format_is_paged_by_its_own_entries(monkeypatch, xml, first):
+    _serve(monkeypatch, xml, limit=_page(xml, b"Episode 3", first))
+
+    pages = _all_pages()
+
+    parsed = [feedparser.parse(page.xml) for page in pages]
+    assert not any(p.bozo for p in parsed)
+    assert [p.feed.title for p in parsed] == ["My Show", "My Show"]
+    assert [[e.title for e in p.entries] for p in parsed] == [["Episode 1", "Episode 2"], ["Episode 3"]]

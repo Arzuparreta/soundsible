@@ -766,6 +766,7 @@ export const es: Dict = {
     unsubscribe: 'Dejar de seguir',
     downloadedOnly: 'Solo descargados',
     empty: 'Sin episodios.',
+    loadMore: 'Cargar más episodios',
     ariaPlay: 'Reproducir episodio',
     ariaDownload: 'Descargar episodio',
     ariaDownloaded: 'Descargado',
