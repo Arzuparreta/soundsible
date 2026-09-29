@@ -171,6 +171,21 @@ export default function Album() {
     }
   };
 
+  /** This record, as the place a downloaded song is filed: without it the
+   * song lands under whatever release YouTube tags it with, as its track 1. */
+  const albumEvidence = (item: CatalogItem) => {
+    const profile = currentProfile();
+    if (!profile?.resolved) return {};
+    const position = (value: unknown) => (typeof value === 'number' && value > 0 ? value : undefined);
+    return {
+      album: profile.title || title(),
+      album_artist: profile.artist || artistName() || undefined,
+      track_number: position(item.raw?.track_number),
+      disc_number: position(item.raw?.disc_number),
+      year: profile.year ?? undefined,
+    };
+  };
+
   const saveItem = async (item: CatalogItem) => {
     const artist = itemArtist(item);
     if (!artist || !item.title) return;
@@ -185,6 +200,7 @@ export default function Album() {
         cover: item.cover,
         external_ids: item.external_ids,
         identity_keys: catalogItemKeys(item),
+        ...albumEvidence(item),
       });
       if (response.status === 'queued') {
         toast.success(t('search.addedToDownloads'));

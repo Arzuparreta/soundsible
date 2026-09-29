@@ -308,6 +308,16 @@ def _strip_hint_str(value: Any) -> str:
     return str(value).strip()
 
 
+def _hint_positive_int(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
 def _extract_video_id_from_url(url: str) -> Optional[str]:
     """Extract YouTube video ID from youtube.com or youtu.be URL."""
     if not url or not isinstance(url, str):
@@ -632,6 +642,16 @@ class YouTubeDownloader:
                 if metadata_hint.get("album") is not None:
                     alb = _strip_hint_str(metadata_hint.get("album"))
                     clean_meta["album"] = alb
+                # Where the catalog placed the song, when it was saved from a
+                # record. Authoritative over the upload's own tags, which name
+                # whatever release YouTube filed it under.
+                album_artist = _strip_hint_str(metadata_hint.get("album_artist"))
+                if album_artist:
+                    clean_meta["album_artist"] = album_artist
+                for key in ("track_number", "disc_number", "year"):
+                    position = _hint_positive_int(metadata_hint.get(key))
+                    if position:
+                        clean_meta[key] = position
                 musicbrainz_id = _recording_mbid_from_metadata(metadata_hint)
                 if musicbrainz_id:
                     clean_meta["musicbrainz_id"] = musicbrainz_id
