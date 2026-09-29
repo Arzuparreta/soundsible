@@ -300,12 +300,20 @@ function PlaybackSection() {
   };
   const [autoplay, setAutoplay] = createSignal(state.playback.autoplayEnabled);
   const [leveling, setLeveling] = createSignal(state.playback.volumeLeveling);
+  const [mixing, setMixing] = createSignal(state.playback.djMixing);
 
   const load = async () => {
     const d = await api.getDiscoverySettings();
     if (typeof d.learning_enabled === 'boolean') setLearning(d.learning_enabled);
     if (typeof d.autoplay_enabled === 'boolean') setAutoplay(d.autoplay_enabled);
     if (typeof d.volume_leveling === 'boolean') setLeveling(d.volume_leveling);
+    if (typeof d.dj_mixing === 'boolean') setMixing(d.dj_mixing);
+  };
+
+  const toggleMixing = async () => {
+    const next = !mixing();
+    setMixing(next);
+    if (!(await actions.setDjMixing(next))) setMixing(!next);
   };
 
   const toggleLeveling = async () => {
@@ -368,6 +376,15 @@ function PlaybackSection() {
           label={t('settings.autoplay')}
           checked={autoplay()}
           onChange={toggleAutoplay}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup label={t('settings.group.dj')} note={t('settings.note.djMixing')}>
+        <SwitchRow
+          anchor="dj-mixing"
+          label={t('settings.djMixing')}
+          checked={mixing()}
+          onChange={toggleMixing}
         />
       </SettingsGroup>
 

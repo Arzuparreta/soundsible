@@ -109,6 +109,10 @@ export interface PlaybackState {
    * localStorage at startup so the first track of a session is already levelled
    * rather than waiting on a round trip. */
   volumeLeveling: boolean;
+  /** Let the DJ mix between songs. Off, the DJ keeps its route and plays each
+   * song whole, one after another. Account preference, mirrored in
+   * localStorage like `volumeLeveling` for a session restored near a seam. */
+  djMixing: boolean;
 }
 
 export interface CatalogState {
@@ -228,6 +232,12 @@ function loadVolumeLeveling(): boolean {
   return localStorage.getItem(VOLUME_LEVELING_KEY) !== 'off';
 }
 
+export const DJ_MIXING_KEY = 'djMixing';
+
+function loadDjMixing(): boolean {
+  return localStorage.getItem(DJ_MIXING_KEY) !== 'off';
+}
+
 const initialVisualPreferences = loadVisualPreferences();
 
 const [state, setState] = createStore<AppState>({
@@ -275,6 +285,7 @@ const [state, setState] = createStore<AppState>({
     autoplayEnabled: true,
     autoplayLoading: false,
     volumeLeveling: loadVolumeLeveling(),
+    djMixing: loadDjMixing(),
   },
   autoMode: {
     active: false,

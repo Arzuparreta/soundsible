@@ -6,6 +6,7 @@ import type {
   ListeningPlanProfile,
   ListeningPlanResponse,
 } from './api';
+import type { LiveTransitionPlan } from './audio';
 import type { PlaybackQueueEntry } from './playbackQueue';
 import type { Track } from '../types/music';
 
@@ -66,7 +67,7 @@ export interface AutoModeState {
     /** `armed`: the next track is loaded, cued and no longer replannable.
      * `mixing`: the incoming deck already owns playback. */
     status: 'idle' | 'armed' | 'mixing';
-    technique?: DjTransitionPlan['technique'];
+    technique?: LiveTransitionPlan['technique'];
     nextTrackId?: string;
     /** Position in the playing track at which the blend begins, so the booth can
      * count down to a mix the listener can already see coming. */

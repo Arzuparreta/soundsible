@@ -29,6 +29,9 @@ DEFAULT_SETTINGS = {
     # thing listeners notice, and every correction is measured, peak-limited and
     # reversible from Settings.
     "volume_leveling": True,
+    # Let the DJ mix between songs. Off, it keeps the same route and plays each
+    # song whole, one after another; nothing about what it picks changes.
+    "dj_mixing": True,
 }
 
 POSITIVE_LISTENING_EVENTS = {
@@ -326,6 +329,8 @@ def _read_discovery_settings() -> dict[str, Any]:
         out["autoplay_enabled"] = data["autoplay_enabled"]
     if isinstance(data.get("volume_leveling"), bool):
         out["volume_leveling"] = data["volume_leveling"]
+    if isinstance(data.get("dj_mixing"), bool):
+        out["dj_mixing"] = data["dj_mixing"]
     return out
 
 
@@ -337,6 +342,8 @@ def save_discovery_settings(patch: dict[str, Any]) -> dict[str, Any]:
         current["autoplay_enabled"] = bool(patch["autoplay_enabled"])
     if "volume_leveling" in patch:
         current["volume_leveling"] = bool(patch["volume_leveling"])
+    if "dj_mixing" in patch:
+        current["dj_mixing"] = bool(patch["dj_mixing"])
     current["v"] = SETTINGS_VERSION
     path = _settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)

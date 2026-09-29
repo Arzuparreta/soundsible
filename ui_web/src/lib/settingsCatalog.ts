@@ -151,6 +151,13 @@ export const SETTINGS_CATALOG = {
         aliases: ['settings.searchAliases.autoplay'],
       },
       {
+        id: 'dj-mixing',
+        label: 'settings.djMixing',
+        group: 'settings.group.dj',
+        hint: 'settings.note.djMixing',
+        aliases: ['settings.djMixingSearch'],
+      },
+      {
         id: 'learn-activity',
         label: 'settings.learnActivity',
         group: 'settings.group.recommendations',

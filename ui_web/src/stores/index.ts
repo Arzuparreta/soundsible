@@ -110,6 +110,7 @@ import {
   resumeState,
   setResumeState,
   VOLUME_LEVELING_KEY,
+  DJ_MIXING_KEY,
   type PlaybackState,
   type RepeatMode,
   type Theme,
@@ -268,6 +269,17 @@ function applyVolumeLeveling(enabled: boolean): void {
     /* private mode / storage disabled */
   }
   audioService.setLevelingEnabled(enabled);
+}
+
+/** Apply the DJ mixing preference everywhere it is remembered. It is read at
+ * the next seam that is not cued yet; the one already cued plays as planned. */
+function applyDjMixing(enabled: boolean): void {
+  setState('playback', 'djMixing', enabled);
+  try {
+    localStorage.setItem(DJ_MIXING_KEY, enabled ? 'on' : 'off');
+  } catch {
+    /* private mode / storage disabled */
+  }
 }
 
 /** Ids already sent to the engine. Cleared when it announces new measurements. */
@@ -1509,6 +1521,11 @@ function playingDuration(): number {
  * - a low-confidence analysis is never beatmatched, only faded.
  *
  * The result is that a bad plan degrades to a plain fade. It never cuts.
+ *
+ * With the mixing switched off there is no mix to make safe: the song plays to
+ * the end of its file. The analysis is no guide to that end — its cues mark
+ * where a mix could begin, and its last active frame is measured against the
+ * song's own loudness, which would clip a fade-out short.
  */
 function resolveTransition(
   fromKey: string,
@@ -1516,6 +1533,9 @@ function resolveTransition(
   item: AutoPlanItem | undefined,
 ): LiveTransitionPlan | null {
   if (!Number.isFinite(duration) || duration <= 4) return null;
+  if (!state.playback.djMixing) {
+    return { technique: 'direct', out_cue: duration, in_cue: 0, overlap_seconds: 0, overlap_bars: 0, playback_rate: 1, confidence: 0 };
+  }
   const chained = item?.fromKey === fromKey ? item.transition : undefined;
   const trusted = (chained?.confidence ?? 0) >= TRUSTED_CONFIDENCE;
   const requested = chained?.overlap_seconds ?? 6;
@@ -1537,13 +1557,23 @@ function resolveTransition(
   };
 }
 
+/**
+ * The same seam with the mixing switched off: the outgoing song stops, the next
+ * starts from its first second at its own tempo, and nothing is blended. When
+ * it happens is kept, so a skip or a Play now still lands at once.
+ */
+function unmixed(plan: LiveTransitionPlan): LiveTransitionPlan {
+  return { ...plan, technique: 'direct', in_cue: 0, overlap_seconds: 0, overlap_bars: 0, playback_rate: 1 };
+}
+
 /** Hand the runway over to the mixer and freeze it there. */
 function commitTransition(
   next: PlaybackQueueEntry,
   fromKey: string,
-  plan: LiveTransitionPlan,
+  planned: LiveTransitionPlan,
   manual: boolean,
 ): void {
+  const plan = state.playback.djMixing ? planned : unmixed(planned);
   const toKey = queueIdentity(next);
   const outgoing = state.playback.currentTrack;
   const outgoingDuration = playingDuration();
@@ -1725,7 +1755,8 @@ function evaluateDjRunway(): void {
   const fromKey = queueIdentity(current);
   const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[next.queueId]);
   if (!plan) return;
-  if (pb.currentTime >= plan.out_cue - COMMIT_LEAD_SECONDS - REFINE_LEAD_SECONDS) {
+  // A measured blend is only worth asking for when there will be a blend.
+  if (state.playback.djMixing && pb.currentTime >= plan.out_cue - COMMIT_LEAD_SECONDS - REFINE_LEAD_SECONDS) {
     maybeRefineTransition(current, next, fromKey);
   }
   if (pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS) return;
@@ -4065,6 +4096,20 @@ export const actions = {
     }
   },
 
+  async setDjMixing(enabled: boolean): Promise<boolean> {
+    const previous = state.playback.djMixing;
+    if (enabled === previous) return true;
+    applyDjMixing(enabled);
+    try {
+      await api.setDjMixing(enabled);
+      return true;
+    } catch {
+      applyDjMixing(previous);
+      toast.error(tr('toast.updateFailed'));
+      return false;
+    }
+  },
+
   // ── Downloads ──
   /** Enqueue a preview track for download into the library. `source` labels the
    * surface it was asked from, for the discovery signals. */
@@ -4866,6 +4911,9 @@ export function initStore(): void {
         if (typeof settings.volume_leveling === 'boolean'
           && settings.volume_leveling !== state.playback.volumeLeveling) {
           applyVolumeLeveling(settings.volume_leveling);
+        }
+        if (typeof settings.dj_mixing === 'boolean' && settings.dj_mixing !== state.playback.djMixing) {
+          applyDjMixing(settings.dj_mixing);
         }
       })
       .catch(() => {});

@@ -979,6 +979,102 @@ describe('two-deck mixer', () => {
 });
 
 /**
+ * The DJ with its mixing switched off: the same seams, no blend at any of them.
+ * The outgoing song plays to the end of its file and the next starts from its
+ * own first second.
+ */
+describe('cut without mixing', () => {
+  const cut = {
+    technique: 'direct' as const, out_cue: 240, in_cue: 0, overlap_seconds: 0, overlap_bars: 0, playback_rate: 1, confidence: 0,
+  };
+
+  async function cued(graph: boolean) {
+    if (graph) vi.stubGlobal('AudioContext', FakeAudioContext);
+    const module = await import('./audio');
+    if (graph) module.audioService.unlockAudio();
+    const outgoing = module.audioEl() as unknown as FakeAudio;
+    await module.audioService.load('/current', 1);
+    outgoing.currentTime = 200;
+    const handlers = callbacks();
+    module.audioService.armTransition('/next', cut, handlers, { level: 1 });
+    const incoming = created.find((deck) => deck !== outgoing)!;
+    return { ...module, outgoing, incoming, handlers };
+  }
+
+  function end(deck: FakeAudio) {
+    deck.currentTime = deck.duration;
+    deck.ended = true;
+    deck.dispatchEvent(new Event('ended'));
+  }
+
+  it.each([false, true])('plays the song out and starts the next at full level, then hands over (graph=%s)', async (graph) => {
+    const { audioEl, audioService, outgoing, incoming, handlers } = await cued(graph);
+    let started!: () => void;
+    incoming.play = vi.fn(() => {
+      incoming.paused = false;
+      return new Promise<void>((resolve) => { started = resolve; });
+    });
+
+    // No head start and no early exit: the last second still belongs to it.
+    await play(outgoing, 239.5);
+    expect(audioService.mixPhase()).toBe('armed');
+    expect(incoming.play).not.toHaveBeenCalled();
+
+    end(outgoing);
+    expect(incoming.play).toHaveBeenCalledOnce();
+    // Heard from its first sample, but not the owner until it is really playing.
+    expect(audioService.mixPhase()).toBe('prerolling');
+    expect(handlers.onDominant).not.toHaveBeenCalled();
+    if (graph) {
+      expect(contexts[0].gains[4].gain.value).toBe(1);
+      expect(contexts[0].gains[2].gain.value).toBe(0);
+    } else {
+      expect(incoming.volume).toBeGreaterThan(0);
+      expect(outgoing.volume).toBe(0);
+    }
+
+    started();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handlers.onDominant).toHaveBeenCalledOnce();
+    expect(handlers.onComplete).toHaveBeenCalledOnce();
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+    expect(outgoing.src).toBe('');
+    // From its own first second, at its own tempo, with nothing drawn on it.
+    expect(incoming.currentTime).toBe(0);
+    expect(incoming.playbackRate).toBe(1);
+    expect(automatedCurves).toHaveLength(0);
+  });
+
+  it('stays on the song that ended when the next one will not start', async () => {
+    const { audioEl, audioService, outgoing, incoming, handlers } = await cued(false);
+    incoming.play = vi.fn(async () => { throw new Error('NotAllowedError'); });
+
+    end(outgoing);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(handlers.onError).toHaveBeenCalledOnce();
+    expect(handlers.onDominant).not.toHaveBeenCalled();
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+    expect(incoming.src).toBe('');
+  });
+
+  it('lets a listener skip straight to the next song, from its first second', async () => {
+    const { audioEl, audioService, outgoing, incoming, handlers } = await cued(false);
+
+    expect(audioService.startMixNow()).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(handlers.onDominant).toHaveBeenCalledOnce();
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+    expect(incoming.currentTime).toBe(0);
+    expect(outgoing.src).toBe('');
+    expect(automatedCurves).toHaveLength(0);
+  });
+});
+
+/**
  * Volume levelling.
  *
  * The graph builds master and monitor before it walks the decks, then for each

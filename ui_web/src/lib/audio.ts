@@ -1077,7 +1077,8 @@ function setBlendLimiter(active: boolean): void {
 }
 
 export interface LiveTransitionPlan {
-  technique: 'long_blend' | 'bass_swap' | 'filter_blend' | 'echo_cut' | 'structural_fade' | 'safe_fade';
+  /** `direct` is no mix at all: see `cutOver`. */
+  technique: 'long_blend' | 'bass_swap' | 'filter_blend' | 'echo_cut' | 'structural_fade' | 'safe_fade' | 'direct';
   /** Position in the *outgoing* deck at which the blend begins. */
   out_cue: number;
   in_cue: number;
@@ -1538,6 +1539,25 @@ function failMix(error: unknown): void {
 }
 
 /**
+ * Hand over without mixing: the outgoing song stops where it is, and the next
+ * sounds from its own first second — no overlap, no curve, no effect, no
+ * retiming.
+ *
+ * The incoming deck is heard at full level from its first sample, because a
+ * gain still at zero when it starts would swallow that sample. Ownership only
+ * moves once it is actually playing, so a start that fails still falls back on
+ * the outgoing song, as a failed blend does.
+ */
+function cutOver(current: ActiveMix): void {
+  setDeckGain(current.fromIndex, 0);
+  setDeckGain(current.toIndex, 1);
+  void playProgramDeck(decks()[current.toIndex]).then(
+    () => { if (mix === current) finishMix(); },
+    (error) => { if (mix === current) failMix(error); },
+  );
+}
+
+/**
  * One tick of the mixer.
  *
  * Every decision reads a *media* clock — `deck.currentTime` — rather than wall
@@ -1568,10 +1588,17 @@ function tick(): void {
       return;
     }
     current.phase = 'prerolling';
+    if (current.technique === 'direct') {
+      cutOver(current);
+      return;
+    }
     void playProgramDeck(to).catch((error) => failMix(error));
     // A requested skip has no head start to wait out: fall straight through.
     if (!current.manual) return;
   }
+  // A cut has nothing to supervise between starting the next song and handing
+  // over to it: `cutOver` finishes it the moment that song is playing.
+  if (current.technique === 'direct') return;
 
   // A pause anywhere holds the blend where it is; the gains stay put because
   // the incoming media clock is what drives them.

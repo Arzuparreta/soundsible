@@ -91,10 +91,13 @@ def discovery_settings_patch():
         return jsonify({"error": "autoplay_enabled must be boolean"}), 400
     if "volume_leveling" in data and not isinstance(data.get("volume_leveling"), bool):
         return jsonify({"error": "volume_leveling must be boolean"}), 400
+    if "dj_mixing" in data and not isinstance(data.get("dj_mixing"), bool):
+        return jsonify({"error": "dj_mixing must be boolean"}), 400
     saved = save_discovery_settings(data)
-    # Volume levelling has nothing to do with what gets recommended, so a patch
-    # that only touches it must not throw away a warm personalized feed.
-    if set(data) - {"volume_leveling"}:
+    # Volume levelling and DJ mixing have nothing to do with what gets
+    # recommended, so a patch that only touches them must not throw away a warm
+    # personalized feed.
+    if set(data) - {"volume_leveling", "dj_mixing"}:
         _invalidate_personalized_cache()
     return jsonify(saved)
 
