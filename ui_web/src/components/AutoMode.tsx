@@ -25,6 +25,8 @@ import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
 import { AutoReferences } from './AutoReferences';
+import { openPlaylistPicker } from './PlaylistPicker';
+import { buildTrackMenu } from './trackActions';
 import { SourceIcon, menuIcons } from './icons';
 import styles from './AutoMode.module.css';
 
@@ -122,9 +124,14 @@ export function AutoMode(props: {
     // the one thing that no longer applies to it. The rest still does, and the
     // menu is reached the same way on every row — by holding it, or by
     // right-clicking it with a pointer.
+    //
+    // Keeping a song the DJ found — saving it, downloading it, a playlist — is
+    // the track menu's, and none of it touches the route: a finished download
+    // never replaces the occurrence, so even the cued handoff can be kept.
     const menu = () => [
       { icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
       { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) },
+      ...buildTrackMenu(track, { inRoute: true, onAddToPlaylist: openPlaylistPicker }),
       ...(committed ? [] : [{
         icon: menuIcons.remove(), label: t('autoMode.route.remove'), danger: true,
         onSelect: () => actions.removeAutoRouteOccurrence(track.queueId),
