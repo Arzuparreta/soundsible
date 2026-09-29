@@ -27,11 +27,13 @@ test('save artist and album, reload, browse, remove and undo without changing so
   } }));
   await page.goto('/player/#/artist/Radiohead?deezer_id=1');
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardado ✓', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('link', { name: /In Rainbows/ }).click();
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect.poll(() => entities.length).toBe(2);
-  await page.goto('/player/#/');
+  await expect(page.getByText('Guardado en Biblioteca', { exact: true }).last()).toBeVisible();
+  await page.getByRole('button', { name: 'Ver', exact: true }).last().click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/');
   const saved = page.getByRole('region', { name: 'Álbumes guardados', exact: true });
   await expect(saved.getByRole('link', { name: 'In Rainbows', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Artistas guardados' }).getByRole('link', { name: 'Radiohead', exact: true })).toBeVisible();
@@ -68,6 +70,9 @@ test('small viewport keeps the collection usable and can leave it after removing
   await page.getByRole('button', { name: 'Quitar de guardados', exact: true }).click();
   await expect(saved.getByRole('link')).toHaveCount(0);
   await page.getByRole('link', { name: /Volver a Biblioteca/ }).click();
+  await expect(page.getByRole('region', { name: 'Tu biblioteca', exact: true })).toBeVisible();
+  await expect(saved).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reintentar', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Canciones', exact: true }).click();
   await expect(page.getByText('Canción de biblioteca 320', { exact: true })).toBeVisible();
 });

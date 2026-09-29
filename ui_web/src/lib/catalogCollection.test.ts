@@ -11,9 +11,9 @@ describe('discovery membership', () => {
   it('distinguishes bookmarks from song holdings and keeps different editions apart', () => {
     setSavedEntities([{ kind: 'album', name: 'Same title', artist: 'Artist', destination: '/album/Same%20title?deezer_id=1' }]);
     expect(catalogInLibrary(album('1'))).toBe(false);
-    expect(catalogCollectionLabel(album('1'))).toBe('Saved ✓');
+    expect(catalogCollectionLabel(album('1'))).toBe('Saved');
     setState('library', [{ id: 'song', title: 'Song', artist: 'Artist', deezer_album_id: '1' } as Track]);
-    expect(catalogCollectionLabel(album('1'))).toBe('Saved ✓ · In your library');
+    expect(catalogCollectionLabel(album('1'))).toBe('Saved · In your library');
     expect(catalogInLibrary(album('2'))).toBe(false);
   });
   it('prefers discoveries without excluding or shuffling the known results', () => {

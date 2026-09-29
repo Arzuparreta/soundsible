@@ -17,10 +17,10 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
       `${entry.name} ${entry.artist ?? ''}`.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().includes(query));
   };
   return <div aria-busy={entitiesLoading()}>
-    <Show when={entitiesError()}><p role="status">{t('common.loadFailed')} <button type="button" onClick={() => void syncSavedEntities()}>{t('common.retry')}</button></p></Show>
-    <Show when={entitiesLoading() && !savedEntities().length}><SkeletonCards count={3} /></Show>
+    <Show when={props.expanded && entitiesError()}><p role="status">{t('common.loadFailed')} <button type="button" onClick={() => void syncSavedEntities()}>{t('common.retry')}</button></p></Show>
+    <Show when={props.expanded && entitiesLoading() && !savedEntities().length}><SkeletonCards count={3} /></Show>
     <For each={props.kind ? [props.kind] : ['album', 'artist'] as const}>{kind =>
-      <Show when={!props.query || entries(kind).length}>
+      <Show when={props.expanded || entries(kind).length}>
         <section class={styles.section} aria-label={t(kind === 'album' ? 'savedEntities.albums' : 'savedEntities.artists')}>
           <div class={styles.header}><h2>{t(kind === 'album' ? 'savedEntities.albums' : 'savedEntities.artists')}</h2>
             <Show when={!props.expanded && !props.query && entries(kind).length}>

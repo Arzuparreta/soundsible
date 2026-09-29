@@ -1,6 +1,8 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
   savedEntities: {
+    savedToLibrary: "Saved in Library",
+    viewLibrary: "View",
     albums: "Saved albums",
     artists: "Saved artists",
     back: "Back to Library",
@@ -9,7 +11,7 @@ export const en = {
 
     "title": "Saved",
     "save": "Save",
-    "saved": "Saved ✓",
+    "saved": "Saved",
     "remove": "Remove from saved",
     "removed": "Removed from saved",
     "undo": "Undo",

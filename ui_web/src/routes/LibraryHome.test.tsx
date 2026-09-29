@@ -32,3 +32,20 @@ it('has library shortcuts and separate saved rows, with a reloadable collection 
   expect(screen.queryByRole('region', { name: 'Saved artists' })).toBeNull();
   expect(screen.getByRole('link', { name: /Back to Library/ })).toBeInTheDocument();
 });
+
+it('hides both saved rows when the collection is empty', async () => {
+  vi.mocked(api.getSavedEntities).mockResolvedValue([]);
+  show();
+  await waitFor(() => expect(api.getSavedEntities).toHaveBeenCalled());
+  expect(screen.queryByRole('region', { name: 'Saved albums' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Saved artists' })).toBeNull();
+  expect(screen.queryByText('Save an album or artist from its page to find it here.')).toBeNull();
+});
+it('keeps an unavailable optional collection quiet on the Library root', async () => {
+  vi.mocked(api.getSavedEntities).mockRejectedValue(new Error('unavailable'));
+  show();
+  await waitFor(() => expect(api.getSavedEntities).toHaveBeenCalled());
+  expect(screen.queryByRole('region', { name: 'Saved albums' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Saved artists' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+});

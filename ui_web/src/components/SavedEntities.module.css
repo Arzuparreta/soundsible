@@ -11,6 +11,9 @@
 .name, .credit { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 44px; margin-top: 6px; }
 .credit { color: var(--ink-secondary); font-size: var(--text-caption); }
 .save, .menu { color: var(--ink-primary); background: var(--bg-raised); border: 1px solid var(--hairline); border-radius: 20px; min-height: 44px; padding: 8px 14px; cursor: pointer; }
+.save { display: inline-flex; align-items: center; gap: var(--space-xs); }
+.save svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.save[aria-pressed='true'] svg { fill: currentColor; }
 .save:disabled { opacity: .5; cursor: default; }
 .menu { position: absolute; right: 0; bottom: 0; padding: 0; min-width: 44px; background: transparent; border: 0; }
 @media (min-width: 768px) { .card { flex-basis: 180px; } }
