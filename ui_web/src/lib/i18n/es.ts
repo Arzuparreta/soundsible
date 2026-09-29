@@ -766,7 +766,7 @@ export const es: Dict = {
     unsubscribe: 'Dejar de seguir',
     downloadedOnly: 'Solo descargados',
     empty: 'Sin episodios.',
-    partial: 'El feed de este programa es demasiado grande para cargarlo entero, así que no aparecen todos los episodios.',
+    loadMore: 'Cargar más episodios',
     ariaPlay: 'Reproducir episodio',
     ariaDownload: 'Descargar episodio',
     ariaDownloaded: 'Descargado',

@@ -25,8 +25,8 @@ interface ShowFeed {
   /** What the feed says about a show that is not followed yet. */
   feed?: { title?: string; author?: string; image_url?: string };
   episodes?: PodcastEpisode[];
-  /** The feed was too large to read whole, so the list stops short of it. */
-  partial?: boolean;
+  /** Where the rest of a feed too long to read at once picks up. */
+  next?: number | null;
 }
 
 function fmtDur(s?: number): string {
@@ -70,7 +70,7 @@ export default function PodcastShow() {
       try {
         if ('id' in source) return await api.getPodcastEpisodes(source.id);
         const feed = await api.browsePodcastFeed(source.url);
-        return { episodes: feed.episodes, feed: feed.show, partial: feed.partial };
+        return { episodes: feed.episodes, feed: feed.show, next: feed.next };
       } catch { setFailed(true); return null; }
     },
   );
@@ -108,8 +108,40 @@ export default function PodcastShow() {
       ),
   );
   const isDownloaded = (ep: PodcastEpisode) => localByGuid().has(ep.guid);
+
+  /** The rest of a feed too long to read at once, a page per request, only
+   * when asked for (#250). Starts over with every answer the page loads. */
+  const [more, setMore] = createSignal<PodcastEpisode[]>([]);
+  const [next, setNext] = createSignal<number | null>(null);
+  const [loadingMore, setLoadingMore] = createSignal(false);
+  createEffect(() => {
+    const feed = data();
+    setMore([]);
+    setNext(feed?.next ?? null);
+  });
+  const loadMore = async () => {
+    const after = next();
+    const url = show()?.rss_url;
+    if (after == null || !url || loadingMore()) return;
+    const base = data();
+    setLoadingMore(true);
+    try {
+      const page = await api.browsePodcastFeed(url, after);
+      if (data() !== base) return;
+      // A followed show's cached list can end before the entry the next page
+      // starts from, so the two may overlap.
+      const seen = new Set([...(base?.episodes ?? []), ...more()].map((e) => e.guid));
+      setMore((eps) => [...eps, ...(page.episodes ?? []).filter((e) => !seen.has(e.guid))]);
+      setNext(page.next ?? null);
+    } catch {
+      if (data() === base) toast.error(t('common.loadFailed'));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   const episodes = createMemo<PodcastEpisode[]>(() => {
-    const eps = data()?.episodes ?? [];
+    const eps = [...(data()?.episodes ?? []), ...more()];
     return onlyDownloaded() ? eps.filter((e) => localByGuid().has(e.guid)) : eps;
   });
 
@@ -278,9 +310,12 @@ export default function PodcastShow() {
               );
             }}
           </For>
-          {/* Where the list ends is where someone looks for the rest. */}
-          <Show when={data()?.partial}>
-            <p class={styles.partial}>{t('podcastShow.partial')}</p>
+          <Show when={next() != null}>
+            <div class={styles.more}>
+              <Button variant="secondary" disabled={loadingMore()} aria-busy={loadingMore() || undefined} onClick={() => void loadMore()}>
+                {loadingMore() ? t('common.loading') : t('podcastShow.loadMore')}
+              </Button>
+            </div>
           </Show>
         </Show>
       </div>
