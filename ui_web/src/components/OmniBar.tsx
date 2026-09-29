@@ -1,3 +1,5 @@
+import { PodcastSkipIcon } from './PodcastSkipIcon';
+import { isPodcastTrack } from '../lib/track';
 import { ArtistLinks } from './MusicLinks';
 import { trackMusic } from '../lib/musicNavigation';
 import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } from 'solid-js';
@@ -15,6 +17,7 @@ import styles from './OmniBar.module.css';
 /** Persistent mini-player. Progress line + tap-to-expand + play/pause + next. */
 export function OmniBar() {
   const current = createMemo(() => state.playback.currentTrack);
+  const podcast = createMemo(() => Boolean(current() && isPodcastTrack(current()!)));
   const [swipeOffset, setSwipeOffset] = createSignal(0);
   let swipe: { id: number; x: number; y: number; captured: boolean } | null = null;
   let suppressClick = false;
@@ -217,13 +220,13 @@ export function OmniBar() {
       <button
         class={styles.ctrl}
         type="button"
-        aria-label={t('common.next')}
+        aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')}
         disabled={!current()}
-        onClick={() => state.autoMode.active ? void actions.autoSkip() : actions.next()}
+        onClick={() => podcast() ? actions.seekBy(15) : state.autoMode.active ? void actions.autoSkip() : actions.next()}
       >
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-          <path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z" />
-        </svg>
+        <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z" /></svg>}>
+          <PodcastSkipIcon size={22} />
+        </Show>
       </button>
 
       <div class={styles.soundBlade} style={volumeStyle()} onWheel={adjustVolumeByWheel}>

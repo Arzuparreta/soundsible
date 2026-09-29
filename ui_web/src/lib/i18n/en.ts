@@ -769,6 +769,8 @@ export const en = {
     empty: 'Empty playlist.',
   },
   podcasts: {
+    skipBack: 'Skip back 15 seconds',
+    skipForward: 'Skip forward 15 seconds',
     searchPlaceholder: 'Search podcasts…',
     yourShows: 'Your shows',
     top: 'Popular podcasts',

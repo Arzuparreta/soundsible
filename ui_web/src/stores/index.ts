@@ -1,3 +1,4 @@
+import { PodcastProgress } from '../lib/podcastProgress';
 import { syncSavedEntities } from '../lib/savedEntities';
 import { user } from '../lib/session';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
@@ -815,13 +816,10 @@ function updatePositionState(reason: MediaSessionSyncReason = 'position'): void 
   updateMediaSession(state.playback.currentTrack, reason);
 }
 
-/** Fallback jump for the OS skip buttons, when the platform names no offset of
- * its own. Podcast listeners expect a bigger hop than music listeners — a 10s
- * nudge through a two-hour episode is useless — and a bigger one forward (skip
- * the ad) than back (catch the sentence you missed). */
-function osSeekStep(direction: 'forward' | 'backward'): number {
+/** Fallback jump shared by podcast controls and platform seek actions. */
+function osSeekStep(): number {
   const track = state.playback.currentTrack;
-  if (track && isPodcastTrack(track)) return direction === 'forward' ? 30 : 15;
+  if (track && isPodcastTrack(track)) return 15;
   return 10;
 }
 
@@ -859,6 +857,8 @@ function loadIndex(i: number, opts: LoadOptions = {}): void {
   userPlaybackStartedThisSession = true;
   releasePreparation();
   const generation = beginLoad();
+  podcastProgressOwner = user()?.id;
+  podcastSourcePending = track.source === 'preview' && isPodcastTrack(track) && Boolean(track.podcast_enclosure_url);
   // A deck already holding this exact stream takes over without a request and
   // without an `src` assignment. From `ended` that keeps the handover inside the
   // media event, which is what lets it continue at all on a locked phone.
@@ -890,10 +890,18 @@ function loadIndex(i: number, opts: LoadOptions = {}): void {
   updateMediaSession(track);
   const previewId = track.source === 'preview' ? playbackYoutubeId(track) : null;
   currentPreparation.update(previewId ? [previewId] : []);
-  const start = staged
+  const resumePosition = podcastProgress.position(track, user()?.id);
+  const start = track.source === 'preview' && isPodcastTrack(track) && track.podcast_enclosure_url
+    ? api.podcastPeek(track.podcast_enclosure_url).then(({ stream_token }) => {
+        if (generation !== loadGeneration) return;
+        if (!stream_token) throw new Error('no podcast stream token');
+        podcastSourcePending = false;
+        return audioService.load(podcastStreamUrl(stream_token), 1, resumePosition);
+      })
+    : staged
     ?? (opts.freshDeck
-      ? audioService.recover(trackUrl(track), 0, level)
-      : audioService.load(trackUrl(track), level));
+      ? audioService.recover(trackUrl(track), resumePosition, level)
+      : (isPodcastTrack(track) ? audioService.load(trackUrl(track), level, resumePosition) : audioService.load(trackUrl(track), level)));
   void Promise.resolve(start)
     .catch(() => onPlaybackFailed(generation, 'load'));
   // `waiting` is not guaranteed for a media element whose play promise never
@@ -943,7 +951,24 @@ function flushWhenAudible(): void {
  * duplicate is ignored.
  */
 let loadGeneration = 0;
-const beginLoad = (): number => ++loadGeneration;
+const podcastProgress = new PodcastProgress();
+let podcastProgressSavedAt = 0;
+let podcastProgressOwner: string | undefined;
+let podcastSourcePending = false;
+function savePodcastProgress(completed = false, position?: number): void {
+  const track = state.playback.currentTrack;
+  if (!track || !isPodcastTrack(track) || podcastSourcePending || user()?.id !== podcastProgressOwner) return;
+  // A source awaiting metadata must not erase the position it is restoring.
+  const snapshot = audioService.snapshot();
+  if (position === undefined && snapshot.readyState < 1) return;
+  if (position === undefined && activeAttempt && activeAttempt.audibleAt === null && state.playback.isLoading) return;
+  podcastProgress.save(track, user()?.id, position ?? snapshot.position, snapshot.duration || state.playback.duration, completed);
+  podcastProgressSavedAt = Date.now();
+}
+const beginLoad = (): number => {
+  savePodcastProgress();
+  return ++loadGeneration;
+};
 
 /** Consecutive unplayable tracks, so a broken stretch of the queue skips
  * forward a few entries and then stops instead of racing to the end. */
@@ -1399,6 +1424,7 @@ function primeRestored(entry: PlaybackQueueEntry, position: number): void {
     unmatchedSelection = { queueId: entry.queueId, paused: true };
     return;
   }
+  podcastProgressOwner = user()?.id;
   audioService.prime(trackUrl(entry), position, levelFor(entry));
 }
 
@@ -2406,6 +2432,7 @@ function onEnded(): void {
     emitPlaybackEvent('ui_premature_end', { position_sec: Math.round(position) });
     return;
   }
+  savePodcastProgress(!premature, position);
   const pb = state.playback;
   if (pb.repeat === 'one') {
     audioService.seek(0);
@@ -3282,6 +3309,8 @@ export const actions = {
     if (pb.currentTrack?.id === track.id && (pb.isLoading || pb.isPlaying)) return;
     userPlaybackStartedThisSession = true;
     const generation = beginLoad();
+    podcastProgressOwner = user()?.id;
+    podcastSourcePending = true;
     releasePreparation();
     runWhenAudible = null;
     createPlaybackAttempt(track, generation, 'podcast');
@@ -3306,8 +3335,10 @@ export const actions = {
     updateMediaSession(track);
     try {
       const { stream_token } = await api.podcastPeek(ep.enclosure_url);
+      if (generation !== loadGeneration) return;
       if (!stream_token) throw new Error('no token');
-      await audioService.load(podcastStreamUrl(stream_token), 1);
+      podcastSourcePending = false;
+      await audioService.load(podcastStreamUrl(stream_token), 1, podcastProgress.position(track, user()?.id));
     } catch {
       onPlaybackFailed(generation, 'load');
     }
@@ -3376,6 +3407,10 @@ export const actions = {
       audioService.unlockAudio();
       setState('playback', 'needsGesture', false);
       resumeFromStarved();
+      return;
+    }
+    if (podcastSourcePending && isPodcastTrack(pb.currentTrack)) {
+      loadIndex(pb.index, { restart: true, trigger: 'resume' });
       return;
     }
     // Paused before its match came back: the deck is still holding whatever
@@ -3497,9 +3532,17 @@ export const actions = {
     else actions.seek(0);
   },
 
+  seekBy(delta: number): void {
+    actions.seek(audioService.snapshot().position + delta);
+  },
+
   seek(t: number): void {
-    audioService.seek(t);
-    setState('playback', 'currentTime', Math.max(0, t));
+    if (!Number.isFinite(t) || (podcastSourcePending && state.playback.currentTrack && isPodcastTrack(state.playback.currentTrack))) return;
+    const duration = audioService.snapshot().duration || state.playback.duration;
+    const target = Math.max(0, duration > 0 ? Math.min(t, duration) : t);
+    audioService.seek(target);
+    setState('playback', 'currentTime', target);
+    savePodcastProgress(false, target);
     pushPlaybackState();
   },
 
@@ -4964,6 +5007,7 @@ export function initStore(): void {
   a.addEventListener('timeupdate', (snapshot) => {
     const position = snapshot.position;
     setState('playback', 'currentTime', position);
+    if (Date.now() - podcastProgressSavedAt >= 5000) savePodcastProgress();
     listeningLearning.update(state.playback.currentTrack, position, snapshot.playing);
     if (snapshot.playing) rememberDjExploration();
     evaluateDjRunway();
@@ -4985,6 +5029,7 @@ export function initStore(): void {
   a.addEventListener('ratechange', () => updatePositionState());
   let hiddenSince: number | null = null;
   document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') savePodcastProgress();
     if (document.visibilityState === 'hidden') {
       hiddenSince = Date.now();
       return;
@@ -5038,9 +5083,9 @@ export function initStore(): void {
     previous: () => actions.prev(),
     seekTo: (position) => actions.seek(position),
     seekBackward: (offset) =>
-      actions.seek(Math.max(0, state.playback.currentTime - (offset ?? osSeekStep('backward')))),
+      actions.seekBy(-(offset ?? osSeekStep())),
     seekForward: (offset) =>
-      actions.seek(state.playback.currentTime + (offset ?? osSeekStep('forward'))),
+      actions.seekBy(offset ?? osSeekStep()),
   });
 
   socket = createSocket();
@@ -5147,6 +5192,7 @@ export function initStore(): void {
   }, 15000);
 
   const pushStateOnUnload = () => {
+    savePodcastProgress();
     if (!state.playback.currentTrack) return;
     pushPlaybackState({
       keepalive: true,

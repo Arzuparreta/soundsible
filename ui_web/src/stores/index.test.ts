@@ -3967,3 +3967,74 @@ it('carries catalog navigation and provenance from a DJ plan into its queue', as
     deezer_artist_id: '4163', deezer_album_id: '89128', source_artist: 'Extremoduro (Oficial)' });
   actions.exitAutoMode();
 });
+
+
+describe('podcast progress and time jumps', () => {
+  const episode = (guid: string) => ({ guid, title: guid, enclosure_url: `https://example.com/${guid}.mp3`, duration_sec: 180 });
+
+  it('stacks rapid jumps from the live media clock and clamps at both ends', async () => {
+    const { actions, audioService, deck, state } = await loadStore();
+    actions.playFrom([t1, t2], 0);
+    deck.currentTime = 40; // The store clock can be stale after background playback.
+    audioService.seek.mockImplementation((position: number) => { deck.currentTime = position; });
+    actions.seekBy(15);
+    actions.seekBy(15);
+    expect(state.playback.currentTime).toBe(70);
+    actions.seekBy(-100);
+    expect(deck.currentTime).toBe(0);
+    actions.seekBy(500);
+    expect(deck.currentTime).toBe(180);
+    expect(state.playback.currentTrack?.id).toBe(t1.id);
+  });
+
+  it('saves each episode before a show switch and restores streaming and downloaded copies', async () => {
+    const { actions, audioService, deck, fireDeckEvent, initStore } = await loadStore({ podcastPeek: vi.fn().mockResolvedValue({ stream_token: 'token' }) });
+    initStore();
+    await actions.playEpisode(episode('a'), 'Show A');
+    fireDeckEvent('playing');
+    deck.currentTime = 87;
+    await actions.playEpisode(episode('b'), 'Show B');
+    deck.currentTime = 0;
+    fireDeckEvent('playing');
+    deck.currentTime = 31;
+    await actions.playEpisode(episode('a'), 'Show A');
+    expect(audioService.load).toHaveBeenLastCalledWith('/podcast/token', 1, 87);
+    // Metadata for the restored source is still pending: it cannot erase 87.
+    deck.currentTime = 0;
+    actions.playFrom([{ id: 'download-a', title: 'A', artist: 'Show A', media_kind: 'podcast_episode', podcast_enclosure_url: episode('a').enclosure_url }], 0);
+    expect(audioService.load).toHaveBeenLastCalledWith('/stream/download-a', UNMEASURED_LEVEL, 87);
+  });
+
+  it('does not let a late token replace the newly selected episode', async () => {
+    const pending = deferred<{ stream_token: string }>();
+    const { actions, audioService } = await loadStore({ podcastPeek: vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue({ stream_token: 'b' }) });
+    const first = actions.playEpisode(episode('a'));
+    await actions.playEpisode(episode('b'));
+    pending.resolve({ stream_token: 'a' });
+    await first;
+    expect(audioService.load).toHaveBeenCalledTimes(1);
+    expect(audioService.load).toHaveBeenLastCalledWith('/podcast/b', 1, 0);
+  });
+
+  it('reloads the selected episode when paused before its token arrives', async () => {
+    const pending = deferred<{ stream_token: string }>();
+    const { actions, audioService, deck } = await loadStore({ podcastPeek: vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue({ stream_token: 'resumed' }) });
+    deck.currentTime = 90; // Still the outgoing source's clock.
+    const first = actions.playEpisode(episode('a'));
+    actions.pausePlayback();
+    pending.resolve({ stream_token: 'old' });
+    await first;
+    expect(audioService.load).not.toHaveBeenCalled();
+    actions.resumePlayback();
+    await flush();
+    expect(audioService.load).toHaveBeenLastCalledWith('/podcast/resumed', 1, 0);
+  });
+
+  it('reloads queued streamed episodes through a podcast token', async () => {
+    const { actions, audioService, api } = await loadStore({ podcastPeek: vi.fn().mockResolvedValue({ stream_token: 'queued' }) });
+    actions.playFrom([{ id: 'episode', title: 'Episode', artist: 'Show', source: 'preview', media_kind: 'podcast_episode', podcast_enclosure_url: episode('a').enclosure_url }], 0);
+    await flush();
+    expect(api.podcastPeek).toHaveBeenCalledWith(episode('a').enclosure_url);
+    expect(audioService.load).toHaveBeenCalledWith('/podcast/queued', 1, 0);
+  });
+});

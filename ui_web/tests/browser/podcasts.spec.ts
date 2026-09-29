@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { mockMusicEngine, TRACKS } from './music-browser-fixture';
+import { mockMusicEngine, TRACKS, silentWav } from './music-browser-fixture';
 
 const FOLLOWED = { id: 'show-1', title: 'Programa seguido', author: 'Autora', rss_url: 'https://feeds.example.com/seguido.xml', image_url: null };
 const POPULAR = { title: 'Programa popular', author: 'Alguien', feed_url: 'https://feeds.example.com/popular.xml', recommendation_identity: 'podcast:popular' };
@@ -92,4 +92,54 @@ test('a search result opens its show, and its own button still follows without o
   await expect(page.getByText('Episodio de Programa buscado', { exact: true })).toBeVisible();
   // Followed a moment ago on desktop, so it opens as the followed show.
   await expect(page).toHaveURL(isMobile ? /#\/podcasts\/feed\?url=/ : /#\/podcasts\/show-2$/);
+});
+
+
+test('podcast buttons jump 15 seconds and each show resumes after switching and reloading', async ({ page }) => {
+  await mockPodcasts(page);
+  await page.route('**/api/podcasts/enclosure/peek', route => route.fulfill({ json: { stream_token: 'episode' } }));
+  await page.route('**/api/podcasts/stream/**', route => {
+    const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '');
+    const start = range ? Number(range[1]) : 0;
+    const end = range?.[2] ? Math.min(Number(range[2]), silentWav.length - 1) : silentWav.length - 1;
+    return route.fulfill({
+      status: range ? 206 : 200, contentType: 'audio/wav', body: silentWav.subarray(start, end + 1),
+      headers: { 'Accept-Ranges': 'bytes', ...(range ? { 'Content-Range': `bytes ${start}-${end}/${silentWav.length}` } : {}) },
+    });
+  });
+  await page.goto('/player/#/podcasts/show-1');
+  await page.getByRole('button', { name: /^Reproducir episodio:/ }).click();
+  const pill = page.locator('[data-omni-player]');
+  await expect(pill.getByRole('button', { name: 'Pausar', exact: true })).toBeVisible();
+  await pill.getByRole('button', { name: /^NORMAL:/ }).click();
+  const stage = page.locator('[data-player-stage-mode="now-playing"]');
+  const position = () => page.evaluate(async () => {
+    // Read the real media clock, so these assertions include the browser seek.
+    const { audioService } = await import('/player/src/lib/audio.ts');
+    return audioService.snapshot().position;
+  });
+  await expect.poll(() => page.evaluate(async () => {
+    const { audioService } = await import('/player/src/lib/audio.ts');
+    return audioService.snapshot().duration;
+  })).toBe(180);
+  await stage.getByRole('button', { name: 'Pausar', exact: true }).click();
+  const startPosition = await position();
+  const forward = stage.getByRole('button', { name: 'Avanzar 15 segundos' });
+  await forward.click();
+  await forward.click();
+  await expect.poll(position).toBeCloseTo(startPosition + 30, 0);
+  await stage.getByRole('button', { name: 'Retroceder 15 segundos' }).click();
+  await expect.poll(position).toBeCloseTo(startPosition + 15, 0);
+  await forward.click();
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { location.hash = '/podcasts/feed?url=https%3A%2F%2Ffeeds.example.com%2Fpopular.xml'; });
+  await page.getByRole('button', { name: /^Reproducir episodio:/ }).click();
+  await expect.poll(position).toBeLessThan(5);
+  await page.evaluate(() => { location.hash = '/podcasts/show-1'; });
+  await page.getByRole('button', { name: /^Reproducir episodio:/ }).click();
+  await expect.poll(position).toBeGreaterThanOrEqual(29);
+  await page.reload();
+  await page.getByRole('button', { name: /^Reproducir episodio:/ }).click();
+  await expect.poll(position).toBeGreaterThanOrEqual(29);
+  await expect(pill.getByRole('button', { name: 'Avanzar 15 segundos' })).toBeVisible();
 });

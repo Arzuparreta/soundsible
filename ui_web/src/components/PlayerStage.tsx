@@ -1,3 +1,4 @@
+import { PodcastSkipIcon } from './PodcastSkipIcon';
 import { ArtistLinks } from './MusicLinks';
 import { trackMusic } from '../lib/musicNavigation';
 import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Suspense, Switch, untrack, type JSX } from 'solid-js';
@@ -344,10 +345,10 @@ export function PlayerStage(props: {
                     </button>
                   </Show>
 
-                  <button class={styles.ctrl} type="button" aria-label={t('common.prev')} onClick={() => actions.prev()}>
-                    <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
-                      <path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
-                    </svg>
+                  <button class={styles.ctrl} type="button" aria-label={podcast() ? t('podcasts.skipBack') : t('common.prev')} onClick={() => podcast() ? actions.seekBy(-15) : actions.prev()}>
+                    <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>}>
+                      <PodcastSkipIcon backward />
+                    </Show>
                   </button>
 
                   <button
@@ -379,10 +380,10 @@ export function PlayerStage(props: {
                     </Switch>
                   </button>
 
-                  <button class={styles.ctrl} type="button" aria-label={t('common.next')} onClick={next}>
-                    <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
-                      <path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" />
-                    </svg>
+                  <button class={styles.ctrl} type="button" aria-label={podcast() ? t('podcasts.skipForward') : t('common.next')} onClick={() => podcast() ? actions.seekBy(15) : next()}>
+                    <Show when={podcast()} fallback={<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M16 6h2v12h-2zm-1.5 6L6 6v12z" /></svg>}>
+                      <PodcastSkipIcon />
+                    </Show>
                   </button>
 
                   <Show when={props.mode === 'now-playing'}>
