@@ -104,10 +104,12 @@ async function assertGeometry(page: Page, within?: string) {
         return rect.left < -1 || rect.right > innerWidth + 1;
       })
       .map((element) => `${element.tagName}:${element.getAttribute('aria-label') ?? element.textContent?.trim()}`);
+    // WCAG 2.5.8's 24px floor. Scaled layouts land an exact 24px box on
+    // 23.999998, so allow float error, not a smaller target.
     const undersized = controls
       .filter((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.width < 24 || rect.height < 24;
+        return rect.width < 24 - 0.01 || rect.height < 24 - 0.01;
       })
       .map((element) => {
         const rect = element.getBoundingClientRect();

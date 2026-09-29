@@ -127,6 +127,9 @@ for (const width of [320, 390, 430]) {
       const header = page.locator('[data-app-bar]');
       await expect(header).toBeVisible();
       const buttons = header.getByRole('button');
+      // The bar re-renders for the new size; measure the buttons it settles on.
+      await expect(buttons.first()).toBeVisible();
+      await expect(buttons.last()).toBeVisible();
       const first = await buttons.first().boundingBox();
       const last = await buttons.last().boundingBox();
       expect(Math.abs(first!.y + first!.height / 2 - last!.y - last!.height / 2)).toBeLessThan(2);
