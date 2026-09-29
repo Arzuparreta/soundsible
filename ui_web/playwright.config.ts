@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const port = Number(process.env.SOUNDSIBLE_UI_TEST_PORT || 4173);
+/** Requests no fixture answers fail here, as they do in CI, instead of reaching
+ * whatever engine runs on this machine's 5005 — a developer's live library. */
+export const closedEngine = 'http://127.0.0.1:9';
 
 export default defineConfig({
   testDir: './tests/browser',
@@ -38,6 +41,7 @@ export default defineConfig({
     url: `http://127.0.0.1:${port}/player/`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    env: { SOUNDSIBLE_DEV_ENGINE: closedEngine },
   },
   projects: [
     {

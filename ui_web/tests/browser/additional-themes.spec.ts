@@ -22,7 +22,7 @@ for (const theme of EXTRA_THEMES) {
     await page.emulateMedia({ colorScheme: 'light' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await expect(page.locator('#startup-screen')).toHaveCount(0);
-    await page.screenshot({ animations: 'disabled', path: `test-results/${theme}-${info.project.name}.png` });
+    await page.screenshot({ animations: 'disabled', path: info.outputPath(`${theme}.png`) });
     expect((await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa']).analyze()).violations).toEqual([]);
     await page.getByRole('button', { name: 'Sistema', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
@@ -43,10 +43,10 @@ for (const theme of EXTRA_THEMES) {
     await openMusicPlayer(page);
     await expect(page.locator('[data-player-stage]').first()).toBeVisible();
     await expect.poll(() => page.locator('[data-player-surface-open]').evaluate(el => Math.round(el.getBoundingClientRect().top))).toBe(0);
-    await page.screenshot({ animations: 'disabled', path: `test-results/${theme}-player-${info.project.name}.png` });
+    await page.screenshot({ animations: 'disabled', path: info.outputPath(`${theme}-player.png`) });
     await page.getByRole('tab', { name: 'DJ', exact: true }).click();
     await expect(page.locator('[data-player-stage-mode="auto"]')).toBeVisible();
-    await page.screenshot({ animations: 'disabled', path: `test-results/${theme}-dj-${info.project.name}.png` });
+    await page.screenshot({ animations: 'disabled', path: info.outputPath(`${theme}-dj.png`) });
     if (theme === 'pure-black') {
       expect(await page.locator('[data-player-stage]').first().evaluate(el => getComputedStyle(el).getPropertyValue('--stage-backdrop-opacity').trim())).toBe('0');
     }
