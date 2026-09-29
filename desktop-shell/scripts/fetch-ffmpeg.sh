@@ -44,7 +44,12 @@ esac
 
 if [[ ! -f "$ARCHIVE" ]]; then
   echo "Downloading FFmpeg for $TARGET …"
-  if ! curl -fsSL "$URL" -o "$ARCHIVE"; then
+  # On Windows curl asks the certificate's revocation server too, and a hosted
+  # runner that cannot reach it fails the whole build (CRYPT_E_REVOCATION_OFFLINE
+  # on the v0.16.0 release PR). Best effort still refuses a certificate it can
+  # see is revoked, and the Windows archives are held to the pinned checksums
+  # below either way. Other builds ignore the flag.
+  if ! curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --ssl-revoke-best-effort "$URL" -o "$ARCHIVE"; then
     rm -f "$ARCHIVE"
     echo "fetch-ffmpeg: could not download $URL" >&2
     echo "if this is a 404, the pinned upstream release was pruned — repin to a" >&2
