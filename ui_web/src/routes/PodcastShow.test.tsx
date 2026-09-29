@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import PodcastShow from './PodcastShow';
 import { setLocale } from '../lib/i18n';
 
@@ -35,6 +35,13 @@ vi.mock('../lib/toast', () => ({ toast: { error: vi.fn() } }));
 const RSS = 'https://example.com/rss';
 const episode = (n: number) => ({ guid: `ep${n}`, title: `Episode ${n}`, enclosure_url: `https://cdn.example.com/ep${n}.mp3` });
 const LOAD_MORE = { name: 'Load more episodes' };
+
+beforeAll(() => {
+  // jsdom reports every element as zero-sized, so the virtual list would
+  // decide nothing fits and render no episodes at all.
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 400 });
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 600 });
+});
 
 describe('PodcastShow feed too long to read at once (#250)', () => {
   beforeEach(() => {
@@ -82,6 +89,22 @@ describe('PodcastShow feed too long to read at once (#250)', () => {
     expect(await screen.findByText('Episode 3')).toBeInTheDocument();
     expect(apiMock.browsePodcastFeed).toHaveBeenCalledWith(RSS, 2);
     expect(screen.getAllByText('Episode 2')).toHaveLength(1);
+  });
+
+  it('builds only the rows in view, so it does not download every cover at once', async () => {
+    // Every row carries its own artwork as a background image, which the
+    // browser fetches as soon as the row exists. A whole feed's worth of rows
+    // was over a gigabyte of covers that starved playback for minutes.
+    const episodes = Array.from({ length: 2000 }, (_, n) => ({ ...episode(n + 1), image: `https://cdn.example.com/${n + 1}.jpg` }));
+    apiMock.browsePodcastFeed.mockResolvedValue({ episodes, show: { title: 'My Show' }, next: 2000 });
+    const { container } = render(() => <PodcastShow />);
+
+    expect(await screen.findByText('Episode 1')).toBeInTheDocument();
+    const rows = container.querySelectorAll('[data-index]');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(60);
+    expect(container.innerHTML).not.toContain('https://cdn.example.com/2000.jpg');
+    expect(screen.getByRole('button', LOAD_MORE)).toBeInTheDocument();
   });
 
   it('offers nothing more when the whole feed was read', async () => {

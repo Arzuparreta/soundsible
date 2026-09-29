@@ -7,14 +7,17 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, NamedTuple, Optional, Tuple, TypeVar
 from urllib.parse import urljoin, urlparse
 
 import feedparser
 import requests
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 _PODCAST_UA = "SoundsiblePodcast/1.0 (+https://github.com/soundsible)"
 _FETCH_TIMEOUT = (5, 45)
@@ -118,7 +121,7 @@ def _read_page(chunks: Iterator[bytes], after: int) -> FeedPage:
     while True:
         ended = _fill(buf, chunks)
         page = bytes(buf[:_MAX_FEED_BYTES])
-        ends = _entry_ends(page, shape)
+        ends = _off_loop(_entry_ends, page, shape)
         # Everything the feed has left is in this page.
         last = ended and len(buf) <= _MAX_FEED_BYTES
         if not to_pass:
@@ -133,6 +136,19 @@ def _read_page(chunks: Iterator[bytes], after: int) -> FeedPage:
             raise ValueError("Feed too large")
         del buf[:ends[passed - 1]]
         to_pass -= passed
+
+
+def _off_loop(fn: Callable[..., _T], *args: Any) -> _T:
+    """Runs pure computation on a native thread when the engine serves under
+    gevent. Reading a page of a long feed is seconds of Python, and on the
+    event loop those seconds stall every other request the engine is serving,
+    the audio it is streaming included. Elsewhere it runs where it is called."""
+    monkey = sys.modules.get("gevent.monkey")
+    if monkey is not None and monkey.is_module_patched("threading"):
+        from gevent import get_hub
+
+        return get_hub().threadpool.apply(fn, args)
+    return fn(*args)
 
 
 def _fill(buf: bytearray, chunks: Iterator[bytes]) -> bool:
@@ -293,13 +309,17 @@ def parse_feed_show(feed: Any, feed_url: str = "") -> Dict[str, str]:
 def parse_feed(feed_xml: bytes, feed_url: str) -> Tuple[Dict[str, str], List[Dict[str, Any]]]:
     """The show and its episodes from one parse. A long-running show's feed is
     megabytes of XML, and parsing it twice to get both was the norm."""
-    parsed = feedparser.parse(feed_xml)
-    return parse_feed_show(getattr(parsed, "feed", None), feed_url), _episodes(parsed, feed_url)
+    return _off_loop(_parse_feed, feed_xml, feed_url)
 
 
 def parse_feed_episodes(feed_xml: bytes, feed_url: str) -> List[Dict[str, Any]]:
     """Parse RSS/Atom; return episode dicts for UI and download queue."""
-    return _episodes(feedparser.parse(feed_xml), feed_url)
+    return parse_feed(feed_xml, feed_url)[1]
+
+
+def _parse_feed(feed_xml: bytes, feed_url: str) -> Tuple[Dict[str, str], List[Dict[str, Any]]]:
+    parsed = feedparser.parse(feed_xml)
+    return parse_feed_show(getattr(parsed, "feed", None), feed_url), _episodes(parsed, feed_url)
 
 
 def _episodes(parsed: Any, feed_url: str) -> List[Dict[str, Any]]:
