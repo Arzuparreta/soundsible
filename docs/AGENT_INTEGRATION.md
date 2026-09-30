@@ -299,6 +299,9 @@ Useful library routes:
 | `POST` | `/api/library/saved/set` | Save or remove many songs at once, body `{"saved":true,"entries":[{"keys":[...],"title":"...","artist":"..."}]}`, at most 500 entries. Never flips a song: saving skips songs already saved, and removing keeps favourites and songs held as files. Returns `{"changed":N}`; requires `library:write` |
 | `POST` | `/api/catalog/album/download` | Download every song on a Deezer album the library does not hold yet, body `{"deezer_id":"302127"}`. Returns `202` with the job. An open job for the album is returned as is, a stopped one is resumed, and a finished one gives way to a new pass; requires `library:write` |
 | `GET` | `/api/catalog/album/download?deezer_id=` | That album's latest download, song by song (`state`, `candidates`), or `null`. Doubtful matches wait in `needs_review`: decide them with `POST /api/migration/jobs/<id>/decision`, and resume with `POST /api/migration/jobs/<id>/control` `{"action":"resume"}` |
+| `GET` | `/api/catalog/artist/discography?deezer_id=` | An artist's albums, then singles and EPs, as one `tracklist` with each recording once (one ISRC); compilations are left out. Also `releases` (with their `track_ids`), `partial_failures` (releases that could not be read) and `truncated` (past 2000 songs) |
+| `POST` | `/api/catalog/artist/download` | Download that discography: every song the library lacks, each filed on its own release. Same job rules as the album route; requires `library:write` |
+| `GET` | `/api/catalog/artist/download?deezer_id=` | That artist's latest download, song by song, or `null` |
 | `POST` | `/api/library/playlists` | Create playlist, body `{"name":"..."}` |
 | `POST` | `/api/library/playlists/<name>/tracks` | Add track to playlist, body `{"track_id":"..."}` |
 | `DELETE` | `/api/library/playlists/<name>/tracks/<track_id>` | Remove track from playlist |
@@ -311,8 +314,9 @@ destination, and assigns `id` and `added_at`. References without ids remain
 unresolved; names alone never merge with identified editions or artists. Both
 methods return the full collection. Use `saved: false` with the same entry to
 remove it. The per-user `saved_entities_updated` event invalidates cached reads.
-The route touches only the bookmark. The web player treats an album in the
-library as one fact: saving it also saves its songs through
+The route touches only the bookmark. The web player treats an album or an
+artist in the library as one fact: saving it also saves its songs (an artist's
+are its discography, after a confirmation that says how many) through
 `/api/library/saved/set`, and removing it removes the songs that are only
 streamed, while favourites and downloaded songs stay.
 Failed persistence returns an error without discarding the previous collection;

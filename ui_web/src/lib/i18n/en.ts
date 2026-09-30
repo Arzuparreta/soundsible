@@ -461,11 +461,16 @@ export const en = {
     retry: 'Try again',
   },
   /** Having a song, and having its bytes: two steps, one control. */
-  albumCollection: {
+  collectionControl: {
     started: 'Downloading “{title}”',
     failed: 'That did not go through. Try again.',
     download: 'Download',
     downloadAlbum: 'Download the album',
+    downloadAll: 'Download all',
+    downloadArtist: 'Download everything by {title}',
+    downloadArtistMessage: '{n} songs you have not downloaded yet, about {size}. They arrive one at a time while you keep listening.',
+    saveArtistTitle: 'Save {title}',
+    saveArtistMessage: '{n} songs from their albums, singles and EPs join your library, streaming until you download them.',
     downloading: 'Downloading {done} of {total}',
     owned: 'Downloaded',
     review: 'Review {n}',

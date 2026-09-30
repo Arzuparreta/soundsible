@@ -26,6 +26,17 @@ import type { MigrationJob } from './migrationApi';
 /** What `/api/library/saved/set` takes at once. */
 const SAVED_BATCH = 500;
 
+export interface ArtistDiscography {
+  artist: string;
+  deezer_id: string;
+  releases: Array<{ deezer_id: string; title: string; record_type: string; year?: number | null; track_ids: string[] }>;
+  tracklist: CatalogItem[];
+  /** Releases whose listing could not be read. */
+  partial_failures: string[];
+  /** The catalogue ran past what one collection holds. */
+  truncated: boolean;
+}
+
 function savedEntityResponse(response: { entities: SavedEntity[] }): SavedEntity[] {
   if (!Array.isArray(response.entities)) throw new Error('Invalid saved entities response');
   return response.entities;
@@ -1293,6 +1304,17 @@ export const api = {
     }),
   getAlbumDownload: (deezerId: string) =>
     request<{ job: MigrationJob | null }>(`/api/catalog/album/download?deezer_id=${encodeURIComponent(deezerId)}`),
+  /** An artist's albums, singles and EPs as one list of songs, each once. */
+  getArtistDiscography: (deezerId: string) =>
+    request<ArtistDiscography>(`/api/catalog/artist/discography?deezer_id=${encodeURIComponent(deezerId)}`, { timeoutMs: 60000 }),
+  startArtistDownload: (deezerId: string) =>
+    request<{ job: MigrationJob }>('/api/catalog/artist/download', {
+      method: 'POST',
+      body: { deezer_id: deezerId },
+      timeoutMs: 60000,
+    }),
+  getArtistDownload: (deezerId: string) =>
+    request<{ job: MigrationJob | null }>(`/api/catalog/artist/download?deezer_id=${encodeURIComponent(deezerId)}`),
 
   getAlbumProfile: (name: string, artist: string, deezerId?: string, signal?: AbortSignal) =>
     request<AlbumProfile>(

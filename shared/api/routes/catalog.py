@@ -1559,6 +1559,7 @@ def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | 
     if library_keys is not None:
         in_library = _key(title, artist) in library_keys
     raw = _deezer_track_raw(deezer_id, artist_row, album_row)
+    isrc = re.sub(r"[\s-]", "", str(row.get("isrc") or "")).upper()[:15]
     # Only `album/{id}/tracks` rows carry these: where the song sits on the
     # record, which a download needs to file it there.
     for key, field in (("track_number", "track_position"), ("disc_number", "disk_number")):
@@ -1576,7 +1577,10 @@ def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | 
         duration=_duration(row.get("duration")),
         cover=album_row.get("cover_xl") or album_row.get("cover_big") or album_row.get("cover_medium") or "",
         popularity=float(row.get("rank") or 0),
-        external_ids={"deezer_id": deezer_id},
+        # The recording code rides along where Deezer gives it (album listings
+        # do): it is the key that bridges catalogs, and one recording released
+        # twice shares it.
+        external_ids={"deezer_id": deezer_id, **({"isrc": isrc} if isrc else {})},
         attribution_url=row.get("link") or "",
         in_library=in_library,
         playable=False,
@@ -1745,6 +1749,138 @@ def _deezer_album_tracks(album_id: str, embedded: list[dict[str, Any]]) -> list[
     except Exception as exc:
         logger.info("Album tracklist fetch failed for %s: %s", album_id, exc)
     return rows if len(rows) >= len(embedded) else embedded
+
+
+#: What an artist released under their own name. A compilation is somebody
+#: else's record that happens to include them.
+_DISCOGRAPHY_RELEASE_TYPES = ("album", "single", "ep")
+#: Listings fetched at once: well inside Deezer's quota with room for pages.
+_DISCOGRAPHY_WORKERS = 3
+#: No artist anyone means to keep whole runs past this; it bounds a runaway.
+_DISCOGRAPHY_MAX_SONGS = 2000
+_discography_memo = Memo(ttl_sec=600, maxsize=64)
+
+
+def _deezer_artist_discography(artist_id: str) -> dict[str, Any]:
+    """Everything an artist released under their own name, each song once.
+
+    Albums come first, then singles and EPs, so a recording that came out on a
+    single and again on its album (one ISRC) is kept once, on the album. A
+    release whose listing cannot be read is named in `partial_failures` rather
+    than silently missing.
+    """
+    artist = _deezer_get(f"artist/{artist_id}")
+    name = _clean(artist.get("name"))
+    releases = _deezer_artist_releases(artist_id)
+    ordered = [
+        release
+        for kind in _DISCOGRAPHY_RELEASE_TYPES
+        for release in releases["albums"] + releases["singles_eps"]
+        if release["record_type"] == kind
+    ]
+    with ThreadPoolExecutor(max_workers=_DISCOGRAPHY_WORKERS) as pool:
+        listings = list(pool.map(lambda release: _deezer_album_tracks(release["deezer_id"], []), ordered))
+
+    seen: set[str] = set()
+    kept_releases: list[dict[str, Any]] = []
+    tracklist: list[dict[str, Any]] = []
+    failures: list[str] = []
+    truncated = False
+    for release, rows in zip(ordered, listings):
+        if not rows:
+            failures.append(release["title"])
+            continue
+        this_release = {"id": release["deezer_id"], "title": release["title"], "cover_xl": release["cover"]}
+        songs: list[dict[str, Any]] = []
+        for row in rows:
+            item = _deezer_track_to_catalog_item({**row, "album": this_release})
+            if not item:
+                continue
+            isrc = item["external_ids"].get("isrc")
+            identity = f"isrc:{isrc}" if isrc else item["id"]
+            if identity in seen:
+                continue
+            if len(tracklist) + len(songs) >= _DISCOGRAPHY_MAX_SONGS:
+                truncated = True
+                break
+            seen.add(identity)
+            songs.append(item)
+        if songs:
+            kept_releases.append({
+                "deezer_id": release["deezer_id"],
+                "title": release["title"],
+                "record_type": release["record_type"],
+                "year": release["year"],
+                "track_ids": [song["id"] for song in songs],
+            })
+            tracklist.extend(songs)
+        if truncated:
+            break
+    return {
+        "artist": name,
+        "deezer_id": artist_id,
+        "releases": kept_releases,
+        "tracklist": tracklist,
+        "partial_failures": failures,
+        "truncated": truncated,
+    }
+
+
+@catalog_bp.route("/api/catalog/artist/discography", methods=["GET"])
+@rate_limit("catalog_artist_discography", limit=30, window_sec=60)
+def catalog_artist_discography():
+    """An artist's albums, singles and EPs as one list of songs, each once."""
+    from shared.migration.collections import valid_deezer_id
+
+    deezer_id = valid_deezer_id(request.args.get("deezer_id"))
+    if not deezer_id:
+        return jsonify({"error": "deezer_id is required"}), 400
+    try:
+        body, _cached = _memo_resolve(
+            _discography_memo, f"discography:{deezer_id}", lambda: _deezer_artist_discography(deezer_id)
+        )
+    except Exception as exc:
+        logger.info("Discography of %s could not be read: %s", deezer_id, exc)
+        return jsonify({"error": "The discography could not be read"}), 502
+    return jsonify(body)
+
+
+@catalog_bp.route("/api/catalog/artist/download", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("catalog_artist_download", limit=10, window_sec=60)
+def catalog_artist_download():
+    """Download an artist's albums, singles and EPs: every song the library lacks."""
+    from shared.migration.collections import artist_manifest, start_collection_download, valid_deezer_id
+    from shared.user_context import require_user_id
+
+    data = request.get_json(silent=True) or {}
+    deezer_id = valid_deezer_id(data.get("deezer_id"))
+    if not deezer_id:
+        return jsonify({"error": "deezer_id is required"}), 400
+    try:
+        discography, _cached = _memo_resolve(
+            _discography_memo, f"discography:{deezer_id}", lambda: _deezer_artist_discography(deezer_id)
+        )
+    except Exception as exc:
+        logger.info("Artist download could not read %s: %s", deezer_id, exc)
+        return jsonify({"error": "The discography could not be read"}), 502
+    manifest = artist_manifest(deezer_id, discography)
+    if not manifest.tracks:
+        return jsonify({"error": "The artist has no songs"}), 404
+    job = start_collection_download(manifest, _library_tracks(), require_user_id())
+    return jsonify({"job": job}), 202
+
+
+@catalog_bp.route("/api/catalog/artist/download", methods=["GET"])
+@rate_limit("catalog_artist_download_status", limit=240, window_sec=60)
+def catalog_artist_download_status():
+    """The latest download of an artist's discography, song by song, or null."""
+    from shared.migration.collections import artist_provider, collection_job, valid_deezer_id
+
+    deezer_id = valid_deezer_id(request.args.get("deezer_id"))
+    if not deezer_id:
+        return jsonify({"error": "deezer_id is required"}), 400
+    return jsonify({"job": collection_job(artist_provider(deezer_id))})
 
 
 def _extract_year(release_date: Any) -> int | None:

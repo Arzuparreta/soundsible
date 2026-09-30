@@ -464,11 +464,16 @@ export const fr: Dict = {
     retry: 'Réessayer',
   },
   /** Avoir un morceau, et avoir ses octets : deux étapes, un contrôle. */
-  albumCollection: {
+  collectionControl: {
     started: 'Téléchargement de « {title} »',
     failed: "Cela n'a pas abouti. Réessayez.",
     download: 'Télécharger',
     downloadAlbum: "Télécharger l'album",
+    downloadAll: 'Tout télécharger',
+    downloadArtist: 'Tout télécharger de {title}',
+    downloadArtistMessage: "{n} morceaux que vous n'avez pas encore téléchargés, environ {size}. Ils arrivent un par un pendant que vous écoutez.",
+    saveArtistTitle: 'Enregistrer {title}',
+    saveArtistMessage: "{n} morceaux de ses albums, singles et EP rejoignent votre bibliothèque, en streaming jusqu'à leur téléchargement.",
     downloading: 'Téléchargement {done} sur {total}',
     owned: 'Téléchargé',
     review: 'Vérifier {n}',

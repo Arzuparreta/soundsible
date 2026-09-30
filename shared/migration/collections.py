@@ -38,6 +38,10 @@ def album_provider(deezer_id: str) -> str:
     return f"album:{deezer_id}"
 
 
+def artist_provider(deezer_id: str) -> str:
+    return f"artist:{deezer_id}"
+
+
 def is_collection_provider(provider: str) -> bool:
     return ":" in provider
 
@@ -72,36 +76,62 @@ def catalog_identity_keys(item: dict[str, Any]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(keys))
 
 
+def _placed_source(item: dict[str, Any], *, album: str, album_artist: str, year: object) -> SourceTrack | None:
+    """One catalog row as a track to fetch, placed on the record it is from."""
+    if not isinstance(item, dict) or not item.get("title"):
+        return None
+    raw = item.get("raw") if isinstance(item.get("raw"), dict) else {}
+    external = item.get("external_ids") if isinstance(item.get("external_ids"), dict) else {}
+    track_id = _text(raw.get("deezer_id")) or _text(external.get("deezer_id")) or ""
+    return SourceTrack(
+        title=str(item["title"]),
+        artist=str(item.get("artist") or album_artist),
+        album=album,
+        source_id=f"deezer:{track_id}" if track_id else "",
+        duration=int(item.get("duration") or 0),
+        isrc=_text(external.get("isrc")) or "",
+        album_artist=album_artist,
+        track_number=raw.get("track_number") or 0,
+        disc_number=raw.get("disc_number") or 0,
+        year=year if isinstance(year, int) else 0,
+        identity_keys=catalog_identity_keys(item),
+    )
+
+
+def _add(manifest: MigrationManifest, source: SourceTrack | None) -> None:
+    if source is None:
+        return
+    key = source.key(manifest.provider)
+    if key in manifest.tracks:
+        return
+    manifest.tracks[key] = source
+    manifest.library_keys.append(key)
+
+
 def album_manifest(deezer_id: str, profile: dict[str, Any]) -> MigrationManifest:
     """One album, as the manifest of an import that holds every song on it."""
-    provider = album_provider(deezer_id)
     title = str(profile.get("title") or "")
     album_artist = str(profile.get("artist") or "")
-    year = profile.get("year") or 0
-    manifest = MigrationManifest(provider=provider, source_name=title or "Album")
+    manifest = MigrationManifest(provider=album_provider(deezer_id), source_name=title or "Album")
     for item in profile.get("tracklist") or []:
-        if not isinstance(item, dict) or not item.get("title"):
-            continue
-        raw = item.get("raw") if isinstance(item.get("raw"), dict) else {}
-        external = item.get("external_ids") if isinstance(item.get("external_ids"), dict) else {}
-        track_id = _text(raw.get("deezer_id")) or _text(external.get("deezer_id")) or ""
-        source = SourceTrack(
-            title=str(item["title"]),
-            artist=str(item.get("artist") or album_artist),
-            album=title,
-            source_id=f"deezer:{track_id}" if track_id else "",
-            duration=int(item.get("duration") or 0),
-            album_artist=album_artist,
-            track_number=raw.get("track_number") or 0,
-            disc_number=raw.get("disc_number") or 0,
-            year=year if isinstance(year, int) else 0,
-            identity_keys=catalog_identity_keys(item),
-        )
-        key = source.key(provider)
-        if key in manifest.tracks:
-            continue
-        manifest.tracks[key] = source
-        manifest.library_keys.append(key)
+        _add(manifest, _placed_source(item, album=title, album_artist=album_artist, year=profile.get("year") or 0))
+    return manifest
+
+
+def artist_manifest(deezer_id: str, discography: dict[str, Any]) -> MigrationManifest:
+    """An artist's albums, singles and EPs, each song placed on its own record.
+
+    The discography has already kept each recording once, on its album before
+    its single; this only files every song where that left it.
+    """
+    name = str(discography.get("artist") or "")
+    manifest = MigrationManifest(provider=artist_provider(deezer_id), source_name=name or "Artist")
+    songs = {item.get("id"): item for item in discography.get("tracklist") or [] if isinstance(item, dict)}
+    for release in discography.get("releases") or []:
+        for song_id in release.get("track_ids") or []:
+            _add(manifest, _placed_source(
+                songs.get(song_id), album=str(release.get("title") or ""), album_artist=name, year=release.get("year") or 0,
+            ))
     return manifest
 
 

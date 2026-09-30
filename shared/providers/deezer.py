@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from typing import Any, Optional
 
 import requests
@@ -43,6 +44,18 @@ _session: Optional[requests.Session] = None
 _POOL_MAXSIZE = 16
 
 _memo: Memo[dict] = Memo(ttl_sec=DEFAULT_TTL_SEC, maxsize=MAX_ENTRIES)
+
+#: Deezer answers a burst past its quota (about 50 requests in five seconds)
+#: with HTTP 200 and this error code in the body. The window is short, so it is
+#: waited out rather than handed on as an empty answer — which the cache would
+#: then have kept for ten minutes.
+QUOTA_ERROR_CODE = 4
+_QUOTA_RETRIES = 3
+_QUOTA_BACKOFF_SEC = 1.5
+
+
+class DeezerQuotaError(RuntimeError):
+    """Deezer kept refusing for quota after every retry."""
 
 
 def session() -> requests.Session:
@@ -85,10 +98,18 @@ def get(
     key = _cache_key(path, params)
 
     def fetch() -> dict[str, Any]:
-        response = session().get(f"{HOST}/{path}", params=params, timeout=timeout)
-        response.raise_for_status()
-        data = response.json()
-        return data if isinstance(data, dict) else {}
+        for attempt in range(_QUOTA_RETRIES + 1):
+            response = session().get(f"{HOST}/{path}", params=params, timeout=timeout)
+            response.raise_for_status()
+            data = response.json()
+            data = data if isinstance(data, dict) else {}
+            error = data.get("error") if isinstance(data.get("error"), dict) else None
+            if not error or error.get("code") != QUOTA_ERROR_CODE:
+                return data
+            if attempt < _QUOTA_RETRIES:
+                time.sleep(_QUOTA_BACKOFF_SEC * (attempt + 1))
+        logger.info("Deezer quota still exceeded after %d retries for %s", _QUOTA_RETRIES, path)
+        raise DeezerQuotaError(path)
 
     if not use_cache:
         return fetch()

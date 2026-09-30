@@ -1,9 +1,10 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
 import {
-  albumStep, jobMissingCount, jobReviewCount, jobRunning, saveAlbum, unsaveAlbum,
-} from '../lib/albumCollection';
+  collectionStep, discographyOf, jobMissingCount, jobReviewCount, jobRunning, saveCollection, unsaveCollection,
+} from '../lib/collection';
 import { api } from '../lib/api';
-import { formatDuration } from '../lib/format';
+import { confirmDialog } from '../lib/confirm';
+import { formatBytes, formatDuration } from '../lib/format';
 import { t } from '../lib/i18n';
 import { migrationApi, type MigrationCandidate, type MigrationJob, type MigrationTrack } from '../lib/migrationApi';
 import { openOverlay } from '../lib/overlay';
@@ -15,34 +16,59 @@ import type { CatalogItem } from '../types/music';
 import { BookmarkIcon, CheckIcon, DownloadIcon } from './icons';
 import { Spinner } from './Spinner';
 import saveStyles from './SavedEntities.module.css';
-import styles from './AlbumCollection.module.css';
+import styles from './CollectionControl.module.css';
 
-/** How often a running album download is looked at again. */
+/** How often a running download is looked at again. */
 const WATCH_MS = 3000;
+/** What the engine assumes per second of audio when it sizes a download. */
+const BYTES_PER_SECOND = 192_000 / 8;
 
 /** Songs of the download already in the library, fetched now or held before. */
 const arrivedOf = (job: MigrationJob | null) =>
   (job?.selected_counts.completed ?? 0) + (job?.selected_counts.existing ?? 0);
 
+const downloads = {
+  album: { get: api.getAlbumDownload, start: api.startAlbumDownload },
+  artist: { get: api.getArtistDownload, start: api.startArtistDownload },
+};
+
 /**
- * The album's place in your library, as one control: saved or not, and then
- * the next step for its songs — download them, watch them arrive, choose a
- * version where the match was doubtful, or see that they are all here.
+ * An album's or an artist's place in your library, as one control: saved or
+ * not, and then the next step for its songs — download them, watch them
+ * arrive, choose a version where the match was doubtful, or see that they are
+ * all here.
+ *
+ * An album page hands over its tracklist. An artist's songs are their albums,
+ * singles and EPs, read once the artist is saved, or when saving it asks how
+ * many there are.
  */
-export function AlbumCollection(props: { entity: SavedEntity; tracklist: CatalogItem[]; deezerId?: string }) {
+export function CollectionControl(props: { entity: SavedEntity; deezerId?: string; tracklist?: CatalogItem[] }) {
   onMount(() => void syncSavedEntities());
+  const artist = () => props.entity.kind === 'artist';
   const saved = () => isEntitySaved(props.entity);
-  const total = () => props.tracklist.length;
-  const owned = createMemo(() => props.tracklist.filter((item) => ownedTrackForItem(item)).length);
+  const [discography, setDiscography] = createSignal<CatalogItem[] | null>(null);
+  const songs = () => (artist() ? discography() ?? [] : props.tracklist ?? []);
+  const total = () => songs().length;
+  const owned = createMemo(() => songs().filter((item) => ownedTrackForItem(item)).length);
   const [job, setJob] = createSignal<MigrationJob | null>(null);
   const [starting, setStarting] = createSignal(false);
   const [changing, setChanging] = createSignal(false);
+
+  const readDiscography = async (): Promise<CatalogItem[]> => {
+    const id = props.deezerId;
+    if (!artist() || !id) return songs();
+    const known = discography();
+    if (known) return known;
+    const read = await discographyOf(id);
+    if (props.deezerId === id) setDiscography(read);
+    return read;
+  };
 
   const refresh = async () => {
     const id = props.deezerId;
     if (!id) return;
     try {
-      const { job: latest } = await api.getAlbumDownload(id);
+      const { job: latest } = await downloads[props.entity.kind].get(id);
       if (props.deezerId === id) setJob(latest);
     } catch {
       /* looked at again on the next change */
@@ -50,8 +76,11 @@ export function AlbumCollection(props: { entity: SavedEntity; tracklist: Catalog
   };
   createEffect(on(() => [props.deezerId, saved()] as const, ([id, isSaved]) => {
     setJob(null);
-    if (id && isSaved) void refresh();
+    if (!id || !isSaved) return;
+    void refresh();
+    if (artist()) void readDiscography();
   }));
+  createEffect(on(() => props.deezerId, () => setDiscography(null), { defer: true }));
   let watch: number | undefined;
   createEffect(() => {
     window.clearInterval(watch);
@@ -59,40 +88,57 @@ export function AlbumCollection(props: { entity: SavedEntity; tracklist: Catalog
   });
   onCleanup(() => window.clearInterval(watch));
 
-  const step = () => albumStep({ saved: saved(), total: total(), owned: owned(), job: job() });
+  const step = () => collectionStep({ saved: saved(), total: total(), owned: owned(), job: job() });
   const arrived = () => arrivedOf(job());
 
   const toggleSaved = async () => {
     if (changing()) return;
     setChanging(true);
     try {
-      await (saved() ? unsaveAlbum(props.entity, props.tracklist) : saveAlbum(props.entity, props.tracklist));
+      const list = await readDiscography();
+      await (saved() ? unsaveCollection(props.entity, list) : saveCollection(props.entity, list));
     } finally {
       setChanging(false);
     }
   };
 
+  /** A whole catalogue is worth a look before it lands on the disk. */
+  const confirmDownload = () => {
+    if (!artist()) return Promise.resolve(true);
+    const missing = songs().filter((item) => !ownedTrackForItem(item));
+    const seconds = missing.reduce((sum, item) => sum + (item.duration ?? 0), 0);
+    return confirmDialog({
+      title: t('collectionControl.downloadArtist', { title: props.entity.name }),
+      message: t('collectionControl.downloadArtistMessage', { n: missing.length, size: formatBytes(seconds * BYTES_PER_SECOND) }),
+      confirmLabel: t('collectionControl.download'),
+    });
+  };
+
   const download = async () => {
     const id = props.deezerId;
-    if (!id || starting()) return;
+    if (!id || starting() || !(await confirmDownload())) return;
     setStarting(true);
     try {
-      setJob((await api.startAlbumDownload(id)).job);
-      toast.success(t('albumCollection.started', { title: props.entity.name }));
+      setJob((await downloads[props.entity.kind].start(id)).job);
+      toast.success(t('collectionControl.started', { title: props.entity.name }));
     } catch {
-      toast.error(t('albumCollection.failed'));
+      toast.error(t('collectionControl.failed'));
     } finally {
       setStarting(false);
     }
   };
 
   const details = () => openOverlay((close) => (
-    <AlbumDownloadSheet title={props.entity.name} job={job} onJob={setJob} close={close} />
+    <CollectionDownloadSheet title={props.entity.name} job={job} onJob={setJob} close={close} />
   ), { ariaLabel: () => props.entity.name });
+
+  const downloadName = () => artist()
+    ? t('collectionControl.downloadArtist', { title: props.entity.name })
+    : t('collectionControl.downloadAlbum');
 
   return (
     <span class={styles.control}>
-      <button type="button" class={saveStyles.save} aria-pressed={saved()}
+      <button type="button" class={saveStyles.save} aria-pressed={saved()} aria-busy={changing() || undefined}
         disabled={entitiesBusy() || changing()} onClick={() => void toggleSaved()}>
         <BookmarkIcon />
         {saved() ? t('savedEntities.saved') : t('savedEntities.save')}
@@ -100,31 +146,32 @@ export function AlbumCollection(props: { entity: SavedEntity; tracklist: Catalog
       <Show when={saved() && props.deezerId && total() > 0}>
         <Switch>
           <Match when={step() === 'owned'}>
-            <span class={styles.step} data-step="owned" role="status" title={t('albumCollection.owned')}>
-              <CheckIcon size={18} /><span class={styles.label}>{t('albumCollection.owned')}</span>
+            <span class={styles.step} data-step="owned" role="status" title={t('collectionControl.owned')}>
+              <CheckIcon size={18} /><span class={styles.label}>{t('collectionControl.owned')}</span>
             </span>
           </Match>
           <Match when={step() === 'downloading'}>
             <button type="button" class={styles.step} data-step="downloading" onClick={details}
-              aria-label={t('albumCollection.downloading', { done: arrived(), total: job()?.selected_track_count ?? total() })}>
+              aria-label={t('collectionControl.downloading', { done: arrived(), total: job()?.selected_track_count ?? total() })}>
               <Spinner size={18} />
               <span class={styles.label}>{arrived()}/{job()?.selected_track_count ?? total()}</span>
             </button>
           </Match>
           <Match when={step() === 'review'}>
             <button type="button" class={styles.step} data-step="review" onClick={details}>
-              {t('albumCollection.review', { n: jobReviewCount(job()) })}
+              {t('collectionControl.review', { n: jobReviewCount(job()) })}
             </button>
           </Match>
           <Match when={step() === 'missing'}>
             <button type="button" class={styles.step} data-step="missing" onClick={details}>
-              {t('albumCollection.missing', { n: jobMissingCount(job()) })}
+              {t('collectionControl.missing', { n: jobMissingCount(job()) })}
             </button>
           </Match>
           <Match when={true}>
             <button type="button" class={styles.step} data-step="download" disabled={starting()}
-              aria-label={t('albumCollection.downloadAlbum')} title={t('albumCollection.downloadAlbum')} onClick={() => void download()}>
-              <DownloadIcon size={18} /><span class={styles.label}>{t('albumCollection.download')}</span>
+              aria-label={downloadName()} title={downloadName()} onClick={() => void download()}>
+              <DownloadIcon size={18} />
+              <span class={styles.label}>{artist() ? t('collectionControl.downloadAll') : t('collectionControl.download')}</span>
             </button>
           </Match>
         </Switch>
@@ -134,7 +181,7 @@ export function AlbumCollection(props: { entity: SavedEntity; tracklist: Catalog
 }
 
 /** What the download is doing, and the songs that need a hand from you. */
-function AlbumDownloadSheet(props: {
+function CollectionDownloadSheet(props: {
   title: string;
   job: () => MigrationJob | null;
   onJob: (job: MigrationJob) => void;
@@ -153,7 +200,7 @@ function AlbumDownloadSheet(props: {
     try {
       props.onJob((await work(id)).job);
     } catch {
-      toast.error(t('albumCollection.failed'));
+      toast.error(t('collectionControl.failed'));
     } finally {
       setBusy(false);
     }
@@ -173,16 +220,16 @@ function AlbumDownloadSheet(props: {
       <header class={styles.head}>
         <span class={styles.title}>{props.title}</span>
         <span class={styles.status} role="status">
-          {t(jobRunning(props.job()) ? 'albumCollection.downloading' : 'albumCollection.summary', {
+          {t(jobRunning(props.job()) ? 'collectionControl.downloading' : 'collectionControl.summary', {
             done: arrivedOf(props.job()), total: props.job()?.selected_track_count ?? 0,
           })}
         </span>
       </header>
 
       <Show when={review().length > 0}>
-        <section class={styles.section} aria-label={t('albumCollection.chooseTitle')}>
-          <h3 class={styles.sectionTitle}>{t('albumCollection.chooseTitle')}</h3>
-          <p class={styles.hint}>{t('albumCollection.chooseHint')}</p>
+        <section class={styles.section} aria-label={t('collectionControl.chooseTitle')}>
+          <h3 class={styles.sectionTitle}>{t('collectionControl.chooseTitle')}</h3>
+          <p class={styles.hint}>{t('collectionControl.chooseHint')}</p>
           <For each={review()}>
             {(row) => (
               <div class={styles.song}>
@@ -201,7 +248,7 @@ function AlbumDownloadSheet(props: {
                   }}
                 </For>
                 <button type="button" class={styles.skip} disabled={busy()} onClick={() => decide(row)}>
-                  {t('albumCollection.skip')}
+                  {t('collectionControl.skip')}
                 </button>
               </div>
             )}
@@ -210,15 +257,15 @@ function AlbumDownloadSheet(props: {
       </Show>
 
       <Show when={failed().length > 0 || unfound().length > 0}>
-        <section class={styles.section} aria-label={t('albumCollection.missingTitle')}>
-          <h3 class={styles.sectionTitle}>{t('albumCollection.missingTitle')}</h3>
+        <section class={styles.section} aria-label={t('collectionControl.missingTitle')}>
+          <h3 class={styles.sectionTitle}>{t('collectionControl.missingTitle')}</h3>
           <ul class={styles.missingList}>
             <For each={[...failed(), ...unfound()]}>
               {(row) => (
                 <li>
                   <span class={styles.songTitle}>{row.source?.title}</span>
                   <span class={styles.candidateMeta}>
-                    {row.state === 'failed' ? t('albumCollection.failedSong') : t('albumCollection.unfoundSong')}
+                    {row.state === 'failed' ? t('collectionControl.failedSong') : t('collectionControl.unfoundSong')}
                   </span>
                 </li>
               )}
@@ -227,7 +274,7 @@ function AlbumDownloadSheet(props: {
           <Show when={failed().length > 0 && !jobRunning(props.job())}>
             <button type="button" class={styles.action} disabled={busy()}
               onClick={() => void act((id) => migrationApi.control(id, 'retry'))}>
-              {t('albumCollection.retry')}
+              {t('collectionControl.retry')}
             </button>
           </Show>
         </section>
@@ -236,7 +283,7 @@ function AlbumDownloadSheet(props: {
       <Show when={jobRunning(props.job())}>
         <button type="button" class={styles.stop} disabled={busy()}
           onClick={() => void act((id) => migrationApi.control(id, 'cancel'))}>
-          {t('albumCollection.stop')}
+          {t('collectionControl.stop')}
         </button>
       </Show>
     </div>

@@ -461,11 +461,16 @@ export const es: Dict = {
     retry: 'Reintentar',
   },
   /** Tener una canción, y tener sus bytes: dos pasos, un control. */
-  albumCollection: {
+  collectionControl: {
     started: 'Descargando «{title}»',
     failed: 'No se pudo completar. Inténtalo de nuevo.',
     download: 'Descargar',
     downloadAlbum: 'Descargar el álbum',
+    downloadAll: 'Descargar todo',
+    downloadArtist: 'Descargar todo de {title}',
+    downloadArtistMessage: '{n} canciones que aún no tienes descargadas, unos {size}. Llegan de una en una mientras sigues escuchando.',
+    saveArtistTitle: 'Guardar a {title}',
+    saveArtistMessage: '{n} canciones de sus álbumes, singles y EPs entran en tu biblioteca, en streaming hasta que las descargues.',
     downloading: 'Descargando {done} de {total}',
     owned: 'Descargado',
     review: 'Revisar {n}',
