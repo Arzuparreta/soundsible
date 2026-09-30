@@ -55,7 +55,17 @@ else:
 assert path.read_text() == 'new'
 assert not list(path.parent.glob('.library.json.*'))
 
-atomic_file.os.fsync = slow
+# Hold the native flush until cancellation has been checked. Fixed sleeps
+# cannot prove completion on a busy CI runner (real fsync may take longer).
+release_flush = monkey.get_original('_thread', 'allocate_lock')()
+release_flush.acquire()
+
+def blocked(fd):
+    started.append(fd)
+    with release_flush:
+        real_fsync(fd)
+
+atomic_file.os.fsync = blocked
 started.clear()
 writer = gevent.spawn(atomic_file.publish, path, atomic_file.text_pieces(['cancelled']))
 while not started:
@@ -64,7 +74,9 @@ writer.kill()
 assert path.read_text() == 'new'
 # The native worker keeps a valid descriptor despite cancellation/temporary cleanup.
 os.fstat(started[0])
-gevent.sleep(.25)
+release_flush.release()
+with gevent.Timeout(5):
+    gevent.get_hub().threadpool.join()
 try:
     os.fstat(started[0])
 except OSError:
