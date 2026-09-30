@@ -176,6 +176,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # GitHub's run listing is not reliably newest-first: it has handed back a
+      # March run whose artifacts had long expired while newer runs held a
+      # valid one, failing the job on `no artifacts found`. Searching makes the
+      # action skip any run that does not still list `openssl-arm64`.
       - name: Provision OpenSSL for Python cryptography (Windows ARM64)
         if: matrix.arch == 'arm64'
         uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151
@@ -184,6 +188,7 @@ jobs:
           workflow: build-windows-openssl.yml
           branch: main
           workflow_conclusion: success
+          search_artifacts: true
           name: openssl-arm64
           path: C:/openssl-arm64
           github_token: ${{ github.token }}
