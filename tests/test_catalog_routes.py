@@ -11,6 +11,7 @@ from flask import Flask
 from shared.api.memo import Memo
 from shared.models import LibraryMetadata, Track
 from shared.runtime import RuntimeConfig, configure_runtime, reset_runtime
+from shared.text_utils import fold_text
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SPEC = importlib.util.spec_from_file_location("catalog_routes_under_test", _ROOT / "shared/api/routes/catalog.py")
@@ -1213,7 +1214,7 @@ def test_resolve_album_id_matches_across_diacritics(monkeypatch):
 
 
 def _naive_artist_keys(tracks, name):
-    norm, key = catalog_routes._norm, catalog_routes._key
+    norm, key = fold_text, catalog_routes._key
     name_key = norm(name)
     keys = set()
     for track in tracks:
@@ -1225,7 +1226,7 @@ def _naive_artist_keys(tracks, name):
 
 
 def _naive_album_keys(tracks, album_name, artist):
-    norm, key = catalog_routes._norm, catalog_routes._key
+    norm, key = fold_text, catalog_routes._key
     album_key, artist_key = norm(album_name), norm(artist)
     keys = set()
     for track in tracks:
@@ -1281,6 +1282,25 @@ def test_album_keys_match_a_full_scan(indexed_library, album, artist):
         assert catalog_routes._library_album_keys(album, artist) == _naive_album_keys(
             indexed_library, album, artist
         )
+
+
+def test_songs_held_under_an_undecorated_name_are_owned_on_the_catalog_page(monkeypatch):
+    from shared import request_scope
+
+    tracks = [_track_full("t1", "(Don't Fear) The Reaper", "Blue Oyster Cult", album="Agents of Fortune")]
+    monkeypatch.setattr(catalog_routes, "_load_library_tracks", lambda: tracks)
+    row = {
+        "id": 3135556, "title": "(Don't Fear) The Reaper",
+        "artist": {"id": 692, "name": "Blue Öyster Cult"},
+        "album": {"id": 302127, "title": "Agents Of Fortune"},
+    }
+
+    with request_scope.request_scope():
+        for page_name in ("Blue Öyster Cult", "Blue Oyster Cult"):
+            keys = catalog_routes._library_artist_keys(page_name)
+            assert keys, page_name
+            assert catalog_routes._deezer_track_to_catalog_item(row, keys)["action_state"]["in_library"]
+        assert catalog_routes._library_album_keys("Agents Of Fortune", "Blue Öyster Cult")
 
 
 def test_library_is_loaded_once_per_request(monkeypatch):

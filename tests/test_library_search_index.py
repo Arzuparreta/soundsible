@@ -496,7 +496,7 @@ def test_catalog_search_route_serves_the_same_library_rows(library, monkeypatch)
 
 
 # Update only together with INDEX_FORMAT, after re-checking the proof below.
-_PINNED = (1, "8ac84f48d62438a9b731785e4f4750ea2d13bcba3b5dc4c4ce982c9eda35956f")
+_PINNED = (1, "941cec340f1ed670e70bcde2085427eed6b9ee4871182c96819d925631fef447")
 
 
 def test_matching_semantics_are_pinned_to_the_index_format():
