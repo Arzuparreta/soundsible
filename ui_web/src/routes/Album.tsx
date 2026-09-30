@@ -280,7 +280,7 @@ export default function Album() {
           <div class={styles.actions}>
             <CollectionControl
               onMenuReady={(open) => { openCollectionMenu = open; }}
-              entity={{ kind: 'album', name: title(), artist: artistName(), cover: currentProfile()?.cover || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }}
+              entity={{ kind: 'album', name: title(), artist: artistName(), cover: profile.loading ? undefined : currentProfile()?.cover || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }}
               tracklist={tracklist()}
               deezerId={viewParams().deezerId ?? currentProfile()?.deezer_id ?? undefined} />
             <Show when={state.autoMode.active} fallback={

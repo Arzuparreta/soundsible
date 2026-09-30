@@ -313,7 +313,7 @@ export default function Artist() {
           <div class={styles.actions}>
             <CollectionControl
               onMenuReady={(open) => { openCollectionMenu = open; }}
-              entity={{ kind: 'artist', name: name(), cover: currentProfile()?.metadata?.picture || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: artistPath(name(), { view: view(), artistId: viewParams().artistId, deezerId: viewParams().deezerId }) }}
+              entity={{ kind: 'artist', name: name(), cover: profile.loading ? undefined : currentProfile()?.metadata?.picture || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: artistPath(name(), { view: view(), artistId: viewParams().artistId, deezerId: viewParams().deezerId }) }}
               deezerId={viewParams().deezerId ?? (currentProfile()?.deezer_id || undefined)} />
             <Show when={state.autoMode.active} fallback={
             <Button onClick={playAll} disabled={view() === 'library' ? libraryTrackList().length === 0 : topTracks().length === 0}>

@@ -15,6 +15,7 @@ single-flight, one timeout policy.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from typing import Any, Optional
@@ -135,3 +136,28 @@ def rows(path: str, params: dict[str, Any] | None = None, **kwargs: Any) -> list
 def clear_cache() -> None:
     """Drop every cached response. Tests and manual refreshes."""
     _memo.clear()
+
+
+#: Deezer builds every picture URL from a hash and leaves the hash empty when it
+#: has none (`/images/artist//1000x1000-….jpg`). That URL still answers 200 with
+#: Deezer's own grey silhouette, so it looks like a picture to everything
+#: downstream and replaces the gradient we draw for a missing one.
+_PLACEHOLDER = re.compile(r"/images/[a-z]+//")
+
+
+def is_placeholder_image(url: object) -> bool:
+    """True for Deezer's stand-in picture: a URL with an empty image hash."""
+    return isinstance(url, str) and bool(_PLACEHOLDER.search(url))
+
+
+def image(row: dict[str, Any], field: str) -> str:
+    """The largest real picture of `row` (`field` is `picture` or `cover`), or "".
+
+    The bare `field` is only a fallback for rows that carry no sized URL: when
+    they do, it names the same picture, so it is just as empty.
+    """
+    sized = [row.get(f"{field}_{size}") for size in ("xl", "big", "medium")]
+    for url in sized if any(sized) else [row.get(field)]:
+        if isinstance(url, str) and url and not is_placeholder_image(url):
+            return url
+    return ""

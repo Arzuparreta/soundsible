@@ -39,7 +39,7 @@ def build_browse_sections(seed_names: list[str], limit: int = 10) -> dict:
             return None
         return {"id": f"deezer:artist:{aid}", "type": "artist", "source": "deezer",
                 "title": name, "artist": name,
-                "cover": row.get("picture_xl") or row.get("picture_big") or row.get("picture_medium") or "",
+                "cover": deezer.image(row, "picture"),
                 "external_ids": {"deezer_artist_id": aid},
                 "reason_artist": reason}
 
@@ -106,7 +106,7 @@ def build_browse_sections(seed_names: list[str], limit: int = 10) -> dict:
             per_artist[owner_id] += 1
             albums.append({"id": f"deezer:album:{aid}", "type": "album", "source": "deezer",
                            "title": title, "artist": name, "subtitle": name,
-                           "cover": row.get("cover_xl") or row.get("cover_big") or row.get("cover_medium") or "",
+                           "cover": deezer.image(row, "cover"),
                            "external_ids": {"deezer_album_id": aid, "deezer_artist_id": owner_id},
                            "reason_artist": row.get("reason_artist", "")})
     return {"browse_sections": [

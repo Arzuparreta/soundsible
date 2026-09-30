@@ -6,6 +6,9 @@
 .rail { display: flex; gap: 16px; overflow-x: auto; padding: 12px 0; }
 .expanded { display: grid; grid-template-columns: repeat(auto-fill, minmax(144px, 1fr)); gap: 24px 16px; }
 .card { position: relative; flex: 0 0 156px; min-width: 0; }
+/* A link shrinks to its name by default, and the cover's 100% with it: every
+ * card would size to its title. */
+.card .link { display: block; }
 .cover { width: 100%; aspect-ratio: 1; position: relative; border-radius: 8px; overflow: hidden; }
 .round { border-radius: 50%; }
 .name, .credit { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 44px; margin-top: 6px; }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
-import { entitiesBusy, sameEntity, savedEntities, setSavedEntities, setEntitySaved, syncSavedEntities, type SavedEntity } from './savedEntities';
+import { entitiesBusy, fillEntityCover, sameEntity, savedEntities, setSavedEntities, setEntitySaved, syncSavedEntities, type SavedEntity } from './savedEntities';
 import { toast } from './toast';
 import { pulseNavigation } from './tabNavigation';
 
@@ -27,6 +27,24 @@ describe('saved entities', () => {
     vi.mocked(api.setSavedEntity).mockRejectedValue(new Error('disk full'));
     await setEntitySaved(album('2'), true);
     expect(pulseNavigation).not.toHaveBeenCalled();
+  });
+  it('fills a missing picture quietly and never replaces one', async () => {
+    setSavedEntities([album('1')]);
+    const pictured = { ...album('1'), cover: 'https://example.org/cover.jpg' };
+    vi.mocked(api.setSavedEntity).mockResolvedValue([pictured]);
+    await fillEntityCover(pictured);
+    expect(api.setSavedEntity).toHaveBeenCalledWith(pictured, true);
+    expect(savedEntities()).toEqual([pictured]);
+    expect(pulseNavigation).not.toHaveBeenCalled();
+    await fillEntityCover({ ...album('1'), cover: 'https://example.org/other.jpg' });
+    await fillEntityCover({ ...album('2'), cover: 'https://example.org/other.jpg' });
+    expect(api.setSavedEntity).toHaveBeenCalledTimes(1);
+    setSavedEntities([album('3')]);
+    vi.mocked(api.setSavedEntity).mockRejectedValue(new Error('offline'));
+    await fillEntityCover({ ...album('3'), cover: 'https://example.org/cover.jpg' });
+    expect(savedEntities()).toEqual([album('3')]);
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(entitiesBusy()).toBe(false);
   });
   it('rolls back a failed write without losing other bookmarks', async () => {
     setSavedEntities([album('1')]);
