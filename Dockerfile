@@ -1,4 +1,6 @@
-FROM node:22-bookworm-slim AS ui-build
+# Only static browser assets leave this stage. Run Node/Vite natively rather
+# than under QEMU when the runtime image targets another architecture.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS ui-build
 
 WORKDIR /build/ui_web
 COPY ui_web/package.json ui_web/package-lock.json ./
