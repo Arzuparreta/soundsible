@@ -221,7 +221,7 @@ html[data-hold-gesture] *:not(input):not(textarea) {
   [data-mini-player] [data-primary-scroll]::after {
     display: block;
     flex: 0 0 auto;
-    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2);
+    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px);
     content: '';
   }
 }
