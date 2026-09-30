@@ -13,6 +13,25 @@ test('a song the DJ found is downloaded from its route row, and stays where the 
     ],
     requests: [], pool_counts: {},
   } }));
+  await page.route((url) => url.pathname === '/api/library', (route) => route.fulfill({ json: {
+    tracks: TRACKS, playlists: { Pruebas: [] }, settings: {}, podcast_subscriptions: [],
+  } }));
+  const saved: Array<{ entry: { keys: string[] } }> = [];
+  await page.route('**/api/library/saved/toggle', async (route) => {
+    saved.push(route.request().postDataJSON());
+    await route.fulfill({ json: { is_saved: true } });
+  });
+  const favourites: Array<{ favourite: { keys: string[] } }> = [];
+  await page.route('**/api/library/favourites/toggle', async (route) => {
+    favourites.push(route.request().postDataJSON());
+    await route.fulfill({ json: { is_favourite: true } });
+  });
+  const playlist: Array<{ track_id: string }> = [];
+  await page.route('**/api/library/playlists/Pruebas/tracks', async (route) => {
+    const body = route.request().postDataJSON();
+    playlist.push(body);
+    await route.fulfill({ json: { playlists: { Pruebas: [body.track_id] } } });
+  });
   const enqueued: Array<{ items: Array<{ video_id?: string }> }> = [];
   await page.route((url) => url.pathname === '/api/downloader/queue', async (route) => {
     if (route.request().method() === 'POST') {
@@ -31,21 +50,28 @@ test('a song the DJ found is downloaded from its route row, and stays where the 
   const row = route.locator('[data-drag-row]').filter({ hasText: FOUND.title });
   await expect(row).toBeVisible();
 
-  // The panel draws no ⋯: a phone holds the row (or asks with the menu key),
-  // a pointer right-clicks it.
-  if (mobile) {
-    await row.locator('[data-row-main]').focus();
-    await page.keyboard.press('Shift+F10');
-  } else {
-    await row.click({ button: 'right' });
-  }
+  await row.locator('[data-row-menu]').click();
   const menu = page.getByRole('dialog');
   await expect(menu.getByText('Guardar en tu biblioteca', { exact: true })).toBeVisible();
   await expect(menu.getByText('Añadir a playlist', { exact: true })).toBeVisible();
   // Deleting and placing belong to the route, not to the song.
   await expect(menu.getByText('Eliminar de la biblioteca', { exact: true })).toHaveCount(0);
   await expect(menu.getByText('Reproducir ahora', { exact: true })).toHaveCount(0);
-  await menu.getByText('Descargar', { exact: true }).click();
+  await menu.getByText('Guardar en tu biblioteca', { exact: true }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0].entry.keys).toContain(`yt:${FOUND.id}`);
+  await expect(row).toBeVisible();
+  await row.locator('[data-row-menu]').click();
+  await page.getByRole('dialog').getByText('Añadir a favoritos', { exact: true }).click();
+  await expect.poll(() => favourites.length).toBe(1);
+  expect(favourites[0].favourite.keys).toContain(`yt:${FOUND.id}`);
+  await row.locator('[data-row-menu]').click();
+  await page.getByRole('dialog').getByText('Añadir a playlist', { exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: /^Pruebas/ }).click();
+  await expect.poll(() => playlist).toEqual([{ track_id: FOUND.id }]);
+  await expect(row).toBeVisible();
+  await row.locator('[data-row-menu]').click();
+  await page.getByRole('dialog').getByText('Descargar', { exact: true }).click();
 
   await expect.poll(() => enqueued.flatMap((body) => body.items.map((item) => item.video_id))).toEqual([FOUND.id]);
   await expect(row).toBeVisible();

@@ -79,7 +79,8 @@ not prepared yet; a mix already prepared still plays.
   their chosen order and depth.
 - **Skip without leaving DJ.** Next asks the DJ for a short handoff to the next
   route item instead of dropping back to ordinary playback.
-- **Keep what the DJ finds.** A Route row's menu saves the song to your
+- **Keep what the DJ finds.** Every Route row has a visible ⋯ menu (also
+  available by right-click or mobile long press). The menu saves the song to your
   library, downloads it, marks it as a favourite or adds it to a playlist
   without moving it in the route, including the song already cued.
 - **Choose music from anywhere.** Song and collection menus offer the same

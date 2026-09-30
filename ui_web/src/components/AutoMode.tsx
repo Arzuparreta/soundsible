@@ -25,6 +25,7 @@ import { PlayerStage } from './PlayerStage';
 import { PlayerTrackList, type PlayerTrackListEntry } from './PlayerTrackList';
 import { PlayerWorkspace } from './PlayerWorkspace';
 import { AutoReferences } from './AutoReferences';
+import { openMetadataEditor } from './MetadataEditor';
 import { openPlaylistPicker } from './PlaylistPicker';
 import { buildTrackMenu } from './trackActions';
 import { SourceIcon, menuIcons } from './icons';
@@ -122,7 +123,7 @@ export function AutoMode(props: {
     );
     // A cued handoff is already loaded and mixing: taking it out of the route is
     // the one thing that no longer applies to it. The rest still does, and the
-    // menu is reached the same way on every row — by holding it, or by
+    // menu is reached the same way on every row — through its ⋯ button, by holding it, or by
     // right-clicking it with a pointer.
     //
     // Keeping a song the DJ found — saving it, downloading it, a playlist — is
@@ -131,7 +132,7 @@ export function AutoMode(props: {
     const menu = () => [
       { icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
       { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) },
-      ...buildTrackMenu(track, { inRoute: true, onAddToPlaylist: openPlaylistPicker }),
+      ...buildTrackMenu(track, { inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor }),
       ...(committed ? [] : [{
         icon: menuIcons.remove(), label: t('autoMode.route.remove'), danger: true,
         onSelect: () => actions.removeAutoRouteOccurrence(track.queueId),

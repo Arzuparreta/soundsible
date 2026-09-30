@@ -65,9 +65,8 @@ describe('content-first mobile rows', () => {
       { id: 'second', title: 'Repeated song', artist: 'Artist', onMove: move, canMoveUp: true,
         menu: () => [{ label: 'Remove', onSelect: secondRemove }] },
     ] }]} />);
-    // A panel row draws no ⋯; the menu answers a right-click, a hold and the
-    // menu key against the same handler.
-    fireEvent.contextMenu(screen.getAllByRole('button', { name: /Repeated song/ })[1]);
+    // Duplicate titles still act on the selected queue occurrence.
+    fireEvent.click(container.querySelector('[data-drag-row="second"] [data-row-menu]')!);
     const options = menu.open.mock.calls[0][0];
     options.actions.find((action: { label: string }) => action.label === 'Remove').onSelect();
     expect(secondRemove).toHaveBeenCalledOnce(); expect(firstRemove).not.toHaveBeenCalled();
@@ -99,5 +98,9 @@ describe('content-first mobile rows', () => {
     fireEvent.click(screen.getByRole('button', { name: 'musicList.moveDown' }));
     expect(order()).toEqual(['a', 'b', 'c']);
     expect(container.querySelector('[data-drag-row="b"] [data-editing]')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'musicList.done' }));
+    await Promise.resolve();
+    expect(document.activeElement).toHaveAttribute('data-row-menu');
+    expect(document.activeElement?.closest('[data-drag-row]')).toHaveAttribute('data-drag-row', 'b');
   });
 });
