@@ -54,6 +54,8 @@ export function PlayerStage(props: {
   listLabel?: string;
   onTrackDragStart?: (event: DragEvent, track: Track) => void;
   onCarryTrack?: (track: Track) => void;
+  /** What the stage says with no track. Auto tells the story of its opening. */
+  empty?: JSX.Element;
 }) {
   const track = createMemo(() => state.playback.currentTrack);
   const podcast = createMemo(() => Boolean(track() && isPodcastTrack(track()!)));
@@ -215,7 +217,7 @@ export function PlayerStage(props: {
         data-player-stage-mode={props.mode}
         data-lyrics-stage={desktopLyricsActive() ? '' : undefined}
       >
-        <Show when={track()} fallback={<div class={styles.empty}>{t('common.nothingPlaying')}</div>}>
+        <Show when={track()} fallback={props.empty ?? <div class={styles.empty}>{t('nowPlaying.nothingPlaying')}</div>}>
           {(current) => (
             <>
               <div class={styles.media}>

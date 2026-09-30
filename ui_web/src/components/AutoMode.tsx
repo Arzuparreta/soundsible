@@ -207,6 +207,42 @@ export function AutoMode(props: {
     </Show>
   );
 
+  /** The stage before the first song: the DJ choosing it, failing to and
+   * trying again, or — with nothing at all to open from — asking for music. */
+  const stageEmpty = () => (
+    <div class={styles.stageOpening}>
+      <Show
+        when={state.autoMode.phase === 'planning' || state.autoMode.phase === 'warming' || state.autoMode.phase === 'degraded'}
+        fallback={<>
+          <p>{state.autoMode.activity?.status === 'error' ? t(state.autoMode.activity.key) : t('nowPlaying.nothingPlaying')}</p>
+          <button type="button" onClick={() => openDestination('reference')}>{t('musicExplorer.referenceEmpty')}</button>
+        </>}
+      >
+        <div
+          class={styles.routeLoading}
+          data-route-loading={state.autoMode.phase}
+          data-stage-opening=""
+          role="status"
+          aria-live="polite"
+          aria-busy={state.autoMode.phase !== 'degraded'}
+        >
+          <span class={styles.routeLoadingMark} aria-hidden="true"><i /><i /><i /></span>
+          <strong>{state.autoMode.phase === 'degraded' ? t('autoMode.agent.openingFailed') : t('autoMode.booth.opening')}</strong>
+          <span>
+            {state.autoMode.phase === 'degraded'
+              ? t('autoMode.route.retryingHint')
+              : state.autoMode.sources.length
+                ? t('autoMode.source.added', { title: state.autoMode.sources[0].label })
+                : t('autoMode.booth.openingHint')}
+          </span>
+        </div>
+        <Show when={state.autoMode.phase === 'degraded'}>
+          <button type="button" onClick={() => actions.retryAutoRoute()}>{t('common.retry')}</button>
+        </Show>
+      </Show>
+    </div>
+  );
+
   const Browser = (dragHandle: JSX.Element) => (
     <section class={styles.sourcePanel}>
       <div class={styles.sourceBrowser}>
@@ -234,6 +270,7 @@ export function AutoMode(props: {
       listLabel={t('autoMode.mobile.route')}
       onTrackDragStart={(event, track) => writeAutoTrackTransfer(event, { track })}
       onCarryTrack={(track) => setCarriedTrack({ track })}
+      empty={stageEmpty()}
     />
   );
   const Route = (dragHandle: JSX.Element) => (

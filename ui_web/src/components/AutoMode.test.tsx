@@ -14,7 +14,7 @@ const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPi
   openContextMenu: vi.fn(),
   state: {
     playback: {
-      currentTrack: { id: 'current', title: 'Current song', artist: 'Artist' },
+      currentTrack: { id: 'current', title: 'Current song', artist: 'Artist' } as null | { id: string; title: string; artist: string },
       queue: [
         { id: 'current', queueId: 'q-current', title: 'Current song', artist: 'Artist' },
         { id: 'next', queueId: 'q-next', title: 'Next song', artist: 'Next artist', source: 'preview' as const },
@@ -27,6 +27,7 @@ const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPi
       repairing: false,
       pendingDirection: false,
       phase: 'ready' as 'idle' | 'following_queue' | 'planning' | 'ready' | 'exhausted' | 'warming' | 'degraded',
+      activity: null as null | { id: number; status: 'working' | 'done' | 'error'; key: string },
       staleSeams: [] as string[],
       plan: { 'q-next': { trackId: 'next', fromKey: 'current', source: 'related' as const, reasonKey: '', sourceSetLabel: 'Warehouse techno', lineage: ['root', 'next'] } },
     },
@@ -46,7 +47,9 @@ vi.mock('../lib/media', async (importOriginal) => ({
   coverUrl: (id: string) => `/cover/${id}`,
 }));
 vi.mock('../lib/i18n', () => ({ t: (key: string, params?: Record<string, string | number>) => params ? `${key}:${Object.values(params).join(',')}` : key }));
-vi.mock('./PlayerStage', () => ({ PlayerStage: (props: { mode: string }) => <div data-testid="shared-stage" data-mode={props.mode} /> }));
+vi.mock('./PlayerStage', () => ({ PlayerStage: (props: { mode: string; empty?: unknown }) => (
+  <div data-testid="shared-stage" data-mode={props.mode}>{state.playback.currentTrack ? null : props.empty as never}</div>
+) }));
 vi.mock('./NowPlayingBrowser', () => ({ NowPlayingBrowser: (props: { purpose?: string }) => <aside aria-label="source-browser" data-purpose={props.purpose} /> }));
 
 import { AutoMode, titleFit } from './AutoMode';
@@ -362,4 +365,49 @@ it('shows warming feedback without a terminal retry button', () => {
     state.autoMode.phase = 'ready';
     state.playback.queue.push(next);
   }
+});
+
+/* Nothing is playing yet: the stage is where the listener who pressed "Start a
+ * DJ session" looks, so it tells them what the DJ is doing about the first song. */
+describe('the stage before the first song', () => {
+  const withoutTrack = (phase: typeof state.autoMode.phase, run: () => void) => {
+    const current = state.playback.currentTrack;
+    state.playback.currentTrack = null;
+    state.autoMode.phase = phase;
+    try {
+      run();
+    } finally {
+      state.playback.currentTrack = current;
+      state.autoMode.phase = 'ready';
+      state.autoMode.activity = null;
+    }
+  };
+
+  it('says the DJ is choosing the opening, and from what', () => withoutTrack('planning', () => {
+    renderAuto('stage');
+    const stage = within(screen.getByTestId('shared-stage'));
+    expect(stage.getByRole('status')).toHaveTextContent('autoMode.booth.opening');
+    expect(stage.getByRole('status')).toHaveTextContent('autoMode.source.added:Warehouse techno');
+    expect(stage.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    expect(stage.queryByRole('button')).not.toBeInTheDocument();
+  }));
+
+  it('offers to retry an opening that failed rather than waiting on the backoff', () => withoutTrack('degraded', () => {
+    renderAuto('stage');
+    const stage = within(screen.getByTestId('shared-stage'));
+    expect(stage.getByRole('status')).toHaveTextContent('autoMode.agent.openingFailed');
+    fireEvent.click(stage.getByRole('button', { name: 'common.retry' }));
+    expect(actions.retryAutoRoute).toHaveBeenCalledOnce();
+  }));
+
+  it('asks for music when there was nothing to open from', () => withoutTrack('idle', () => {
+    state.autoMode.activity = { id: 1, status: 'error', key: 'autoMode.noSeed' };
+    const onPanelChange = vi.fn();
+    render(() => <AutoMode panel="stage" onPanelChange={onPanelChange} surfaceOpen />);
+    const stage = within(screen.getByTestId('shared-stage'));
+    expect(stage.getByText('autoMode.noSeed')).toBeInTheDocument();
+    fireEvent.click(stage.getByRole('button', { name: 'musicExplorer.referenceEmpty' }));
+    expect(onPanelChange).toHaveBeenCalledWith('browser');
+    expect(screen.getByRole('complementary', { name: 'source-browser' })).toHaveAttribute('data-purpose', 'auto-reference');
+  }));
 });

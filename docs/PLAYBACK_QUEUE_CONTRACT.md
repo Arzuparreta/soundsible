@@ -80,8 +80,14 @@ Unmatched occurrences travel in published sessions and are matched on play.
   sound; a persisted session influence steers generation. The same song may participate
   in both without either fact implying the other. Sources may be tracks,
   selections, filtered views, favourites, playlists, albums or artists.
-- DJ may be entered empty. Its first selected music starts playback and becomes
-  the initial visible influence; entering over a current track uses that track.
+- Entering DJ over a current track uses that track. Entering with nothing
+  playing asks the DJ to choose: it takes a shuffled sample of the listener's
+  own music as the first influence — favourites once there are enough of them
+  to vary, else the library, else Discover's recommendations — and the planner
+  picks the opening inside it, as for music chosen by hand. Music the listener
+  chooses before that answers wins. With nothing to open from, the session
+  stays empty and says so; its first selected music then starts playback and
+  becomes the initial visible influence.
   **Add to session** creates requested occurrences, **Mix into session** adds
   influences, and **Change session** replaces influences and generated runway.
   Requested occurrences retain their IDs and relative order across a change.
