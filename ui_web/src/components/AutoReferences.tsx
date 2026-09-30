@@ -5,6 +5,7 @@ import { openOverlay } from '../lib/overlay';
 import { coverStyle } from '../lib/cover';
 import { trackCoverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
+import { isPodcastTrack } from '../lib/track';
 import type { Track } from '../types/music';
 import { ChangeSessionIcon, SourceIcon } from './icons';
 import styles from './AutoMode.module.css';
@@ -25,13 +26,23 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
     onDragLeave={() => { depth = Math.max(0, depth - 1); if (!depth) setOver(false); }}
     onDragOver={(event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'; }}
     onDrop={(event) => { event.preventDefault(); event.stopPropagation(); depth = 0; setOver(false); const transfer = readAutoTrackTransfer(event); if (transfer) props.onUse(transfer.track); }}>
-    <header><strong>{t('musicExplorer.references')}</strong><Show when={state.autoMode.sources.length}>
-      <button type="button" onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}><SourceIcon size={16} />{t('musicExplorer.mixWith')}</button>
-      <button type="button" onClick={props.onChange}><ChangeSessionIcon size={16} />{t('musicExplorer.changeShort')}</button>
-    </Show></header>
+    <header><strong>{t('musicExplorer.references')}</strong><div class={styles.sessionActions}>
+      <button type="button" title={t('musicExplorer.startFromCurrent')}
+        disabled={!state.playback.currentTrack || isPodcastTrack(state.playback.currentTrack)}
+        onClick={() => { const track = state.playback.currentTrack; if (track) void actions.startDjFromTrack(track); }}>
+        <ChangeSessionIcon size={16} /><span>{t('musicExplorer.startFromCurrent')}</span>
+      </button>
+      <button type="button" title={t('musicExplorer.mixWith')} onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}><SourceIcon size={16} /><span>{t('musicExplorer.mixWith')}</span></button>
+      <button type="button" title={t('musicExplorer.changeShort')} onClick={props.onChange}><ChangeSessionIcon size={16} /><span>{t('musicExplorer.changeShort')}</span></button>
+    </div></header>
     <Show when={state.autoMode.sessionChange}>{(change) => <div role="status" aria-live="polite">
-      <span>{t(change().status === 'working' ? 'musicExplorer.changing' : 'musicExplorer.changeFailed', { title: change().label })}</span>
-      <Show when={change().status === 'error'}><button type="button" onClick={() => actions.retryAutoSessionChange()}>{t('musicExplorer.retryChange')}</button></Show>
+      <span>{t(change().status === 'working' ? 'musicExplorer.changing'
+        : change().reason === 'timeout' ? 'musicExplorer.changeTimedOut'
+        : change().reason === 'exhausted' ? 'musicExplorer.changeExhausted'
+        : 'musicExplorer.changeFailed', { title: change().label })}</span>
+      <Show when={change().status === 'error'} fallback={<button type="button" onClick={() => actions.cancelAutoSessionChange()}>{t('common.cancel')}</button>}>
+        <button type="button" onClick={() => actions.retryAutoSessionChange()}>{t('musicExplorer.retryChange')}</button>
+      </Show>
     </div>}</Show>
     <Show when={state.autoMode.sources.length} fallback={<button type="button" class={styles.referenceEmpty} onClick={props.onAdd}>{t('musicExplorer.referenceEmpty')}</button>}>
       <div class={styles.referenceRows}>{rows()}</div>

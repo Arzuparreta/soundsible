@@ -131,7 +131,7 @@ export function AutoMode(props: {
     // never replaces the occurrence, so even the cued handoff can be kept.
     const menu = () => [
       { icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
-      { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession([track], track.title) },
+      { icon: menuIcons.changeSession(), label: t('musicExplorer.startDjFromCurrent'), onSelect: () => void actions.startDjFromTrack(track) },
       ...buildTrackMenu(track, { inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor }),
       ...(committed ? [] : [{
         icon: menuIcons.remove(), label: t('autoMode.route.remove'), danger: true,

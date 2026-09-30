@@ -54,7 +54,7 @@ export interface AutoPlanItem {
 
 export interface AutoModeState {
   active: boolean;
-  sessionChange?: { label: string; status: 'working' | 'error' };
+  sessionChange?: { label: string; status: 'working' | 'error'; reason?: 'timeout' | 'exhausted' | 'failed' };
   profile: AutoProfile;
   djProfile: DjProfile;
   direction: DjDirection;

@@ -4,6 +4,7 @@ import { user } from '../lib/session';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import {
   api,
+  ApiError,
   type DjDirection,
   type DjItemRef,
   type DjPlanResponse,
@@ -2158,6 +2159,43 @@ const REPLAN_DEBOUNCE_MS = 800;
  */
 let replanNote = '';
 
+const SESSION_CHANGE_BUDGET_MS = 60_000;
+const SESSION_CHANGE_RETRY_DELAYS = [2_000, 5_000, 15_000, 30_000];
+
+class SessionChangeError extends Error {
+  constructor(readonly reason: 'timeout' | 'exhausted' | 'failed') { super(reason); }
+}
+
+/** Release pending work immediately even if a provider ignores cancellation. */
+function sessionChangeTask<T>(task: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const aborted = () => reject(new DOMException('Session change cancelled', 'AbortError'));
+    if (signal.aborted) { aborted(); return; }
+    signal.addEventListener('abort', aborted, { once: true });
+    task.then(resolve, reject).finally(() => signal.removeEventListener('abort', aborted));
+  });
+}
+
+function sessionChangeDelay(delay: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const finish = () => { signal.removeEventListener('abort', aborted); resolve(); };
+    const timer = setTimeout(finish, delay);
+    const aborted = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', aborted);
+      reject(new DOMException('Session change cancelled', 'AbortError'));
+    };
+    if (signal.aborted) aborted();
+    else signal.addEventListener('abort', aborted, { once: true });
+  });
+}
+
+function transientSessionChangeError(error: unknown): boolean {
+  if (error instanceof ApiError) return error.status === 408 || error.status === 429 || error.status >= 500;
+  return error instanceof TypeError
+    || (error != null && typeof error === 'object' && 'name' in error && error.name === 'AbortError');
+}
+
 let sessionChangeAborter: AbortController | null = null;
 let failedSessionChange: { tracks: Track[]; label: string } | null = null;
 
@@ -2176,6 +2214,8 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
   cancelSessionChange();
   cancelRunwayReplan();
   autoOpeningAborter?.abort();
+  if (autoOpeningRetry) clearTimeout(autoOpeningRetry);
+  autoOpeningRetry = null;
   autoSessionEpoch += 1;
   const epoch = autoSessionEpoch;
   const aborter = new AbortController();
@@ -2193,35 +2233,66 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
   const revision = (state.autoMode.directionRevision ?? 0) + 1;
   // Keep ordinary refills running during preparation. A blend that never
   // settles or a changing anchor must still reach an actionable error.
-  const deadline = Date.now() + 60_000;
-  let planAttempts = 0;
+  const deadline = Date.now() + SESSION_CHANGE_BUDGET_MS;
+  let timedOut = false;
+  const budgetTimer = setTimeout(() => { timedOut = true; aborter.abort(); }, SESSION_CHANGE_BUDGET_MS);
+  const sessionId = randomId();
+  let unstableAttempts = 0;
+  let retryStep = 0;
+  const retry = async (retryAfter?: number | null) => {
+    const delay = Math.max(
+      SESSION_CHANGE_RETRY_DELAYS[Math.min(retryStep++, SESSION_CHANGE_RETRY_DELAYS.length - 1)],
+      retryAfter != null && Number.isFinite(retryAfter) ? Math.max(0, retryAfter * 1000) : 0,
+    );
+    await sessionChangeDelay(Math.min(delay, Math.max(0, deadline - Date.now())), aborter.signal);
+  };
   try {
     while (current()) {
-      if (Date.now() > deadline) throw new Error('change did not settle');
+      if (Date.now() >= deadline) throw new SessionChangeError('timeout');
       // An audible blend belongs to the two sounding decks. Wait for it to settle.
       if (audioService.mixPhase() === 'crossfading') {
-        await new Promise<void>((resolve) => setTimeout(resolve, 100));
+        await sessionChangeDelay(100, aborter.signal);
         continue;
       }
-      if (planAttempts++ >= 6) throw new Error('change did not settle');
       const anchor = state.playback.currentTrack;
       const before = signature();
       const explicit = state.playback.queue.slice(state.playback.index + 1).filter((row) => row.queueLane === 'manual' || row.autoRoute?.kind === 'user');
-      const response = await api.planDjQueue({
-        dj_profile: state.autoMode.djProfile, direction: state.autoMode.direction,
-        source_policy: 'explicit',
-        exploration: [],
-        direction_revision: revision,
-        sources: [source], heard: state.autoMode.heard,
-        seed: anchor ? djItemRef(anchor) : undefined,
-        session_id: randomId(), segment_index: 0,
-        exclude: [...state.autoMode.avoidedIdentities, ...explicit.flatMap((row) => [queueIdentity(row), row.id, row.youtube_id ?? ''])],
-        limit: 8,
-      }, aborter.signal);
+      let response: DjPlanResponse;
+      try {
+        response = await sessionChangeTask(api.planDjQueue({
+          dj_profile: state.autoMode.djProfile, direction: state.autoMode.direction,
+          source_policy: 'explicit',
+          exploration: [],
+          direction_revision: revision,
+          sources: [source], heard: state.autoMode.heard,
+          seed: anchor ? djItemRef(anchor) : undefined,
+          session_id: sessionId, segment_index: 0,
+          exclude: [...state.autoMode.avoidedIdentities, ...explicit.flatMap((row) => [queueIdentity(row), row.id, row.youtube_id ?? ''])],
+          limit: 8,
+        }, aborter.signal, Math.min(20_000, deadline - Date.now())), aborter.signal);
+      } catch (error) {
+        if (!current() || !transientSessionChangeError(error)) throw error;
+        await retry();
+        continue;
+      }
       if (!current()) return false;
-      if (Date.now() > deadline) throw new Error('change did not settle');
+      if (Date.now() >= deadline) throw new SessionChangeError('timeout');
       if (response.direction_revision != null && response.direction_revision !== revision) throw new Error('stale direction');
-      if (before !== signature() || audioService.mixPhase() === 'crossfading') continue;
+      if (before !== signature() || audioService.mixPhase() === 'crossfading') {
+        if (++unstableAttempts >= 6) throw new SessionChangeError('failed');
+        continue;
+      }
+      const retained = [...state.playback.queue.slice(0, state.playback.index + 1), ...explicit];
+      const usablePlan = anchor
+        ? response.items.some((item) => queueIndexOf(retained, planItemTrack(item)) === -1)
+        : Boolean(response.opening);
+      if (!usablePlan) {
+        if (response.empty_reason === 'exhausted' && !response.warming && !response.degraded) {
+          throw new SessionChangeError('exhausted');
+        }
+        await retry(response.retry_after);
+        continue;
+      }
       controller.suspendPlanning();
       const previousContext = { exploration: state.autoMode.exploration ?? [], directionRevision: state.autoMode.directionRevision ?? 0 };
       if (!anchor) {
@@ -2233,8 +2304,6 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
           throw new Error('no playable opening');
         }
       } else {
-        const retained = [...state.playback.queue.slice(0, state.playback.index + 1), ...explicit];
-        if (!response.items.some((item) => queueIndexOf(retained, planItemTrack(item)) === -1)) throw new Error('no replacement');
         // A cued but silent transition may be discarded; a sounding blend never is.
         if (audioService.mixPhase() !== 'idle') audioService.cancelMix('superseded');
         committedTransition = null;
@@ -2271,12 +2340,15 @@ async function changeAutoSession(tracks: Track[], label: string): Promise<boolea
       return true;
     }
     return false;
-  } catch {
-    if (!current()) return false;
+  } catch (error) {
+    if (!state.autoMode.active || autoSessionEpoch !== epoch || sessionChangeAborter !== aborter
+      || (aborter.signal.aborted && !timedOut)) return false;
     failedSessionChange = { tracks: usable, label: source.label };
-    setState('autoMode', 'sessionChange', { label: source.label, status: 'error' });
+    const reason = timedOut ? 'timeout' : error instanceof SessionChangeError ? error.reason : 'failed';
+    setState('autoMode', 'sessionChange', { label: source.label, status: 'error', reason });
     return false;
   } finally {
+    clearTimeout(budgetTimer);
     if (sessionChangeAborter === aborter) {
       sessionChangeAborter = null;
       controller.resumePlanning();
@@ -2719,9 +2791,9 @@ export const actions = {
 
   /** Enter the DJ workspace. With nothing playing, the DJ picks the opening
    * from the listener's own music (`openAutoFromCollection`). */
-  enterAutoMode(): void {
+  enterAutoMode(options?: { source: Track; deferPlanning: boolean }): void {
     const current = state.playback.currentTrack;
-    if (state.autoMode.active || (current && isPodcastTrack(current))) return;
+    if (state.autoMode.active || (current && isPodcastTrack(current)) || (options && isPodcastTrack(options.source))) return;
     // Asking for Auto is asking to see it. This lives here rather than in a
     // reaction to `autoMode.active`, because the flag also turns on when a
     // session is restored on boot — and a restore has no one asking for
@@ -2756,7 +2828,8 @@ export const actions = {
       phase: current ? 'planning' : 'idle',
       activity: null,
       plan: {},
-      sources: current ? [{ id: randomId(), label: current.title, tracks: [current], activation: 1 }] : [],
+      sources: options ? [{ id: randomId(), label: options.source.title, tracks: [options.source], activation: 1 }]
+        : current ? [{ id: randomId(), label: current.title, tracks: [current], activation: 1 }] : [],
       heard: current ? [current] : [],
       exploration: [],
       directionRevision: (state.autoMode.directionRevision ?? 0) + 1,
@@ -2783,6 +2856,7 @@ export const actions = {
     // after the press that asked for it, and on a phone this press is the only
     // gesture that will ever vouch for that playback.
     audioService.unlockAudio();
+    if (options?.deferPlanning) { generatedQueue?.stop(); return; }
     if (current) void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);
     else void openAutoFromCollection();
   },
@@ -2852,6 +2926,14 @@ export const actions = {
   beginAutoSessionChange(): number {
     cancelSessionChange();
     return ++autoSessionEpoch;
+  },
+
+  startDjFromTrack(track: Track): Promise<boolean> {
+    if (isPodcastTrack(track) || (state.playback.currentTrack && isPodcastTrack(state.playback.currentTrack))) {
+      return Promise.resolve(false);
+    }
+    if (!state.autoMode.active) actions.enterAutoMode({ source: track, deferPlanning: true });
+    return changeAutoSession([track], track.title);
   },
 
   changeAutoSession(tracks: Track[], label: string): Promise<boolean> {

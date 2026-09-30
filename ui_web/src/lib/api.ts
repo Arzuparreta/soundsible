@@ -1145,13 +1145,14 @@ export const api = {
       limit?: number;
     },
     signal?: AbortSignal,
+    timeoutMs = 20_000,
   ) =>
     request<DjPlanResponse>('/api/discovery/music/dj-plan', {
       method: 'POST',
       body,
       // The planner answers from measured features or a conservative fallback,
       // never from a decode it has to wait for.
-      timeoutMs: 20000,
+      timeoutMs,
       signal,
     }),
   placeDjTrack: (

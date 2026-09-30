@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProgramTransportEvent } from '../lib/audio';
 import type { Track } from '../types/music';
 import { UNMEASURED_GAIN_DB, gainToLinear } from '../lib/loudness';
@@ -61,6 +61,8 @@ function stubMediaSession() {
   vi.stubGlobal('MediaMetadata', class { constructor(init: unknown) { Object.assign(this, init); } });
   return { mediaSession, press: (action: string) => handlers.get(action)?.() };
 }
+
+const playbackCleanups: Array<() => void> = [];
 
 async function loadStore(
   apiOverrides: Record<string, unknown> = {},
@@ -239,7 +241,9 @@ async function loadStore(
 
   // `request` is the raw helper the discover cache uses directly; initStore
   // warms it, so the mock has to cover it too.
-  vi.doMock('../lib/api', () => ({ api, request: vi.fn().mockResolvedValue({}) }));
+  vi.doMock('../lib/api', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/api')>()), api, request: vi.fn().mockResolvedValue({}),
+  }));
   deck = {
     duration: 180,
     currentTime: 0,
@@ -381,6 +385,7 @@ async function loadStore(
   }));
 
   const store = await import('./index');
+  playbackCleanups.push(() => store.actions.dismissPlayback());
   const fireSocketEvent = (event: string, data?: unknown) => socketHandlers.get(event)?.(data);
   const fireProgramTransport = (event: Partial<ProgramTransportEvent>) => programTransportReporter?.({
     kind: 'pause',
@@ -424,6 +429,12 @@ async function loadStore(
 
 beforeEach(() => {
   vi.restoreAllMocks();
+});
+
+// Retire real recovery timers before the next test restores their audio mocks.
+// Longer session-change tests otherwise inherit startup watchdogs from old stores.
+afterEach(() => {
+  for (const cleanup of playbackCleanups.splice(0)) cleanup();
 });
 
 describe('Solid store library and playback resume', () => {
@@ -3826,7 +3837,7 @@ describe('DJ session direction replacement', () => {
 
   it('keeps the previous direction and queue on failure and can retry', async () => {
     const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old-1', 'old-2']))
-      .mockRejectedValueOnce(new Error('offline')).mockResolvedValue(autoPlan(['new-1']));
+      .mockResolvedValueOnce({ ...autoPlan([]), empty_reason: 'exhausted' }).mockResolvedValue(autoPlan(['new-1']));
     const { actions, state } = await loadStore({ planDjQueue });
     actions.playFrom([t1], 0); actions.enterAutoMode();
     await vi.waitFor(() => expect(state.playback.queue.length).toBe(3));
@@ -3838,6 +3849,206 @@ describe('DJ session direction replacement', () => {
     actions.retryAutoSessionChange();
     await vi.waitFor(() => expect(state.autoMode.sources[0].label).toBe('Oliver'));
     actions.exitAutoMode();
+  });
+
+  it('automatically recovers a cold reference after two warming responses and honours retry hints', async () => {
+    const cold = { ...autoPlan([]), warming: true, degraded: true, empty_reason: 'temporary_failure', retry_after: 4 };
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old']))
+      .mockResolvedValueOnce(cold).mockResolvedValueOnce(cold).mockResolvedValue(autoPlan(['new']));
+    const { actions, state, audioService } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    vi.useFakeTimers();
+    try {
+      audioService.load.mockClear();
+      const position = state.playback.currentTime;
+      const changing = actions.changeAutoSession([oliver], 'Oliver');
+      await vi.advanceTimersByTimeAsync(3999);
+      expect(planDjQueue).toHaveBeenCalledTimes(2);
+      expect(state.autoMode.sessionChange?.status).toBe('working');
+      expect(state.playback.queue.map(row => row.id)).toEqual(['t1', 'old']);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(planDjQueue).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await changing).toBe(true);
+      expect(state.playback.queue.map(row => row.id)).toEqual(['t1', 'new']);
+      expect(state.playback.currentTime).toBe(position);
+      expect(audioService.load).not.toHaveBeenCalled();
+      expect(planDjQueue.mock.calls[1][0].session_id).toBe(planDjQueue.mock.calls[2][0].session_id);
+    } finally { actions.exitAutoMode(); vi.useRealTimers(); }
+  });
+
+  it.each(['network', 'timeout', 408, 429, 503])('recovers a transient %s failure without manual Retry', async (failure) => {
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    const { ApiError } = await import('../lib/api');
+    planDjQueue.mockRejectedValueOnce(typeof failure === 'number' ? new ApiError(failure, 'unavailable')
+      : failure === 'timeout' ? new DOMException('timeout', 'AbortError') : new TypeError('offline'))
+      .mockResolvedValue(autoPlan(['new']));
+    vi.useFakeTimers();
+    try {
+      const changing = actions.changeAutoSession([oliver], 'Oliver');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await changing).toBe(true);
+      expect(state.autoMode.sources[0].label).toBe('Oliver');
+      expect(state.autoMode.sessionChange).toBeUndefined();
+    } finally { actions.exitAutoMode(); vi.useRealTimers(); }
+  });
+
+  it('keeps preparing when the first request times out after 20 seconds, then succeeds automatically', async () => {
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    vi.useFakeTimers();
+    try {
+      planDjQueue.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+        setTimeout(() => reject(new DOMException('timeout', 'AbortError')), 20_000);
+      })).mockResolvedValue(autoPlan(['new']));
+      const changing = actions.changeAutoSession([oliver], 'Oliver');
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(state.autoMode.sessionChange?.status).toBe('working');
+      expect(state.playback.queue.map(row => row.id)).toEqual(['t1', 'old']);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await changing).toBe(true);
+      expect(state.autoMode.sessionChange).toBeUndefined();
+    } finally { actions.exitAutoMode(); vi.useRealTimers(); }
+  });
+
+  it.each([400, 401, 403])('does not retry a permanent HTTP %s error', async status => {
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    const { ApiError } = await import('../lib/api');
+    planDjQueue.mockRejectedValueOnce(new ApiError(status, 'invalid request'));
+    expect(await actions.changeAutoSession([oliver], 'Oliver')).toBe(false);
+    expect(planDjQueue).toHaveBeenCalledTimes(2);
+    expect(state.autoMode.sessionChange).toMatchObject({ status: 'error', reason: 'failed' });
+    actions.exitAutoMode();
+  });
+
+  it('aborts an in-flight request at the total deadline, rejects late results, and gives manual Retry a fresh budget', async () => {
+    const gate = deferred<ReturnType<typeof autoPlan>>();
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old'])).mockReturnValueOnce(gate.promise);
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    vi.useFakeTimers();
+    try {
+      const changing = actions.changeAutoSession([oliver], 'Oliver');
+      const signal = planDjQueue.mock.calls[1][1] as AbortSignal;
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(signal.aborted).toBe(false);
+      expect(state.autoMode.sessionChange?.status).toBe('working');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await changing).toBe(false);
+      expect(signal.aborted).toBe(true);
+      expect(state.autoMode.sessionChange).toMatchObject({ status: 'error', reason: 'timeout' });
+      gate.resolve(autoPlan(['late']));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(state.playback.queue.map(row => row.id)).toEqual(['t1', 'old']);
+      planDjQueue.mockResolvedValue(autoPlan(['new']));
+      actions.retryAutoSessionChange();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(state.autoMode.sources[0].label).toBe('Oliver');
+      expect(state.autoMode.sessionChange).toBeUndefined();
+    } finally { actions.exitAutoMode(); vi.useRealTimers(); }
+  });
+
+  it('caps the last request by the remaining budget instead of waiting another 20 seconds', async () => {
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    planDjQueue.mockResolvedValueOnce({ ...autoPlan([]), warming: true, retry_after: 55 })
+      .mockReturnValue(new Promise(() => {}));
+    vi.useFakeTimers();
+    try {
+      const changing = actions.changeAutoSession([oliver], 'Oliver');
+      await vi.advanceTimersByTimeAsync(55_000);
+      expect(planDjQueue.mock.calls.at(-1)![2]).toBe(5000);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await changing).toBe(false);
+      expect(state.autoMode.sessionChange?.reason).toBe('timeout');
+    } finally { actions.exitAutoMode(); vi.useRealTimers(); }
+  });
+
+  it.each(['cancel', 'exit', 'supersede'])('cancels a scheduled retry when the listener chooses to %s', async action => {
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old']));
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    planDjQueue.mockResolvedValueOnce({ ...autoPlan([]), warming: true }).mockResolvedValue(autoPlan(['latest']));
+    vi.useFakeTimers();
+    try {
+      const changing = actions.changeAutoSession([oliver], 'Oliver');
+      await vi.advanceTimersByTimeAsync(0);
+      if (action === 'cancel') actions.cancelAutoSessionChange();
+      else if (action === 'exit') actions.exitAutoMode();
+      else expect(await actions.changeAutoSession([t2], 'Latest')).toBe(true);
+      expect(await changing).toBe(false);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(planDjQueue).toHaveBeenCalledTimes(action === 'supersede' ? 3 : 2);
+      expect(state.autoMode.sessionChange).toBeUndefined();
+      expect(state.autoMode.sources.some(source => source.label === 'Oliver')).toBe(false);
+    } finally { actions.exitAutoMode(); vi.useRealTimers(); }
+  });
+
+  it('accepts usable music even while other recommendations are warming', async () => {
+    const planDjQueue = vi.fn().mockResolvedValueOnce(autoPlan(['old']))
+      .mockResolvedValueOnce({ ...autoPlan(['new']), warming: true, degraded: true });
+    const { actions, state } = await loadStore({ planDjQueue });
+    actions.playFrom([t1], 0); actions.enterAutoMode();
+    await vi.waitFor(() => expect(state.playback.queue.length).toBe(2));
+    expect(await actions.changeAutoSession([oliver], 'Oliver')).toBe(true);
+    expect(state.playback.queue.map(row => row.id)).toEqual(['t1', 'new']);
+    actions.exitAutoMode();
+  });
+
+  it('starts DJ from a selected NORMAL song without planning from the playing song first', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue(autoPlan(['new']));
+    const { actions, state, audioService } = await loadStore({ planDjQueue });
+    actions.playFrom([t1, t2], 0);
+    actions.enqueue({ id: 'request', title: 'Request', artist: 'A' });
+    const requestId = state.playback.queue.find(row => row.id === 'request')!.queueId;
+    const position = state.playback.currentTime;
+    const playing = state.playback.isPlaying;
+    audioService.load.mockClear(); audioService.resume.mockClear();
+    expect(await actions.startDjFromTrack(oliver)).toBe(true);
+    expect(planDjQueue).toHaveBeenCalledTimes(1);
+    expect(planDjQueue.mock.calls[0][0]).toMatchObject({ sources: [{ tracks: [oliver] }], seed: { id: 't1' } });
+    expect(state.autoMode.active).toBe(true);
+    expect(state.autoMode.sources[0].tracks).toEqual([oliver]);
+    expect(state.playback.currentTrack?.id).toBe('t1');
+    expect(state.playback.currentTime).toBe(position);
+    expect(state.playback.isPlaying).toBe(playing);
+    expect(state.playback.queue.find(row => row.id === 'request')?.queueId).toBe(requestId);
+    expect(audioService.load).not.toHaveBeenCalled(); expect(audioService.resume).not.toHaveBeenCalled();
+    actions.exitAutoMode();
+  });
+
+  it('uses the selected song as the opening when starting DJ without playback', async () => {
+    const planDjQueue = vi.fn().mockResolvedValue({ ...autoPlan(Array.from({ length: 8 }, (_, i) => `new-${i}`)), opening: { ...oliver, source_pool: 'local' } });
+    const { actions, state } = await loadStore({ planDjQueue });
+    expect(await actions.startDjFromTrack(oliver)).toBe(true);
+    expect(planDjQueue).toHaveBeenCalledTimes(1);
+    expect(planDjQueue.mock.calls[0][0].seed).toBeUndefined();
+    expect(state.playback.currentTrack?.id).toBe('oliver');
+    actions.exitAutoMode();
+  });
+
+  it('withholds DJ starts for podcast references and podcast playback', async () => {
+    const planDjQueue = vi.fn();
+    const { actions, state } = await loadStore({ planDjQueue });
+    const episode = { ...t1, media_kind: 'podcast_episode' as const };
+    expect(await actions.startDjFromTrack(episode)).toBe(false);
+    actions.playTrack(episode);
+    expect(await actions.startDjFromTrack(oliver)).toBe(false);
+    expect(state.autoMode.active).toBe(false);
+    expect(planDjQueue).not.toHaveBeenCalled();
   });
 
   it('only applies the latest change even if the first request ignores cancellation', async () => {

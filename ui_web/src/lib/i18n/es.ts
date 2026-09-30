@@ -35,6 +35,10 @@ export const es: Dict = {
     "error": "No se pudieron cargar algunas recomendaciones."
 },
   musicExplorer: {
+    startFromCurrent: 'Empezar desde la canción actual',
+    startDjFromCurrent: 'Empezar DJ desde la canción actual',
+    changeTimedOut: 'La sesión está tardando demasiado. Puedes reintentar.',
+    changeExhausted: 'No hay una ruta disponible desde {title}. Prueba otra canción.',
     change: 'Cambiar la sesión',
     mixWith: 'Mezclar con…',
     changeShort: 'Cambiar…',
