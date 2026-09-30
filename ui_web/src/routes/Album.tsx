@@ -1,4 +1,4 @@
-import { AlbumCollection } from '../components/AlbumCollection';
+import { CollectionControl } from '../components/CollectionControl';
 import Button from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
 import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
@@ -266,7 +266,7 @@ export default function Album() {
             <Show when={tracklist().length > 0}>{trackCount(tracklist().length)}</Show>
           </span>
           <div class={styles.actions}>
-            <AlbumCollection
+            <CollectionControl
               entity={{ kind: 'album', name: title(), artist: artistName(), cover: currentProfile()?.cover || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }}
               tracklist={tracklist()}
               deezerId={viewParams().deezerId ?? currentProfile()?.deezer_id ?? undefined} />

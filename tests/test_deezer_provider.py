@@ -146,3 +146,37 @@ def test_session_is_pooled_and_reused():
     assert first.headers["User-Agent"] == deezer.USER_AGENT
     adapter = first.get_adapter("https://api.deezer.com/")
     assert adapter._pool_maxsize > 1
+
+
+def test_a_quota_refusal_is_waited_out_and_never_cached(monkeypatch):
+    quota = _response({"error": {"type": "Exception", "message": "Quota limit exceeded", "code": 4}})
+    answers = [quota, quota, _response({"id": 5, "title": "Record"})]
+    get = MagicMock(side_effect=lambda *a, **k: answers.pop(0))
+    monkeypatch.setattr(deezer, "session", lambda: MagicMock(get=get))
+    waits = []
+    monkeypatch.setattr(deezer.time, "sleep", waits.append)
+
+    assert deezer.get("album/5") == {"id": 5, "title": "Record"}
+    assert get.call_count == 3
+    assert waits == [1.5, 3.0]
+
+
+def test_a_quota_that_never_lifts_raises_instead_of_caching_an_empty_answer(monkeypatch):
+    quota = _response({"error": {"code": 4, "message": "Quota limit exceeded"}})
+    get = MagicMock(return_value=quota)
+    monkeypatch.setattr(deezer, "session", lambda: MagicMock(get=get))
+    monkeypatch.setattr(deezer.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(deezer.DeezerQuotaError):
+        deezer.get("album/6")
+    get.return_value = _response({"id": 6})
+    assert deezer.get("album/6") == {"id": 6}
+
+
+def test_other_error_bodies_are_answers_as_before(monkeypatch):
+    missing = {"error": {"type": "DataException", "message": "no data", "code": 800}}
+    get = MagicMock(return_value=_response(missing))
+    monkeypatch.setattr(deezer, "session", lambda: MagicMock(get=get))
+
+    assert deezer.get("album/404") == missing
+    assert get.call_count == 1

@@ -1,5 +1,5 @@
 import { openSavedEntityMenu } from '../components/savedEntityActions';
-import SaveEntityButton from '../components/SaveEntityButton';
+import { CollectionControl } from '../components/CollectionControl';
 import RetryButton from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
 import { BackIcon, PlayIcon, ShuffleIcon } from '../components/icons';
@@ -299,7 +299,9 @@ export default function Artist() {
             </Show>
           </span>
           <div class={styles.actions}>
-            <SaveEntityButton entry={{ kind: 'artist', name: name(), cover: currentProfile()?.metadata?.picture || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: artistPath(name(), { view: view(), artistId: viewParams().artistId, deezerId: viewParams().deezerId }) }} />
+            <CollectionControl
+              entity={{ kind: 'artist', name: name(), cover: currentProfile()?.metadata?.picture || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: artistPath(name(), { view: view(), artistId: viewParams().artistId, deezerId: viewParams().deezerId }) }}
+              deezerId={viewParams().deezerId ?? (currentProfile()?.deezer_id || undefined)} />
             <Show when={state.autoMode.active} fallback={
             <Button onClick={playAll} disabled={view() === 'library' ? libraryTrackList().length === 0 : topTracks().length === 0}>
               <PlayIcon size={16} />

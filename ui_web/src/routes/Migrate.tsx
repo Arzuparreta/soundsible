@@ -10,6 +10,7 @@ import {
 import { useNavigate } from '@solidjs/router';
 import { registerPrimaryScroll } from '../lib/scrollHistory';
 import { ApiError } from '../lib/api';
+import { formatBytes } from '../lib/format';
 import {
   migrationApi,
   type MigrationCandidate,
@@ -84,12 +85,6 @@ function detectAppleDevice(): AppleDevice {
   if (/iphone|ipad|ipod|android/.test(platform)) return 'mobile';
   if (platform.includes('win')) return 'windows';
   return 'mac';
-}
-
-function formatBytes(bytes: number): string {
-  if (!bytes) return '0 MB';
-  const mb = bytes / (1024 * 1024);
-  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.max(1, Math.round(mb))} MB`;
 }
 
 export default function Migrate() {

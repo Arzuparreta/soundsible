@@ -461,11 +461,16 @@ export const zh: Dict = {
     retry: '重试',
   },
   /** 拥有一首歌，和拥有它的文件：两个步骤，一个控件。 */
-  albumCollection: {
+  collectionControl: {
     started: '正在下载“{title}”',
     failed: '操作没有完成，请重试。',
     download: '下载',
     downloadAlbum: '下载整张专辑',
+    downloadAll: '全部下载',
+    downloadArtist: '下载{title}的全部歌曲',
+    downloadArtistMessage: '尚未下载的 {n} 首歌曲，约 {size}。它们会逐首下载，你可以继续收听。',
+    saveArtistTitle: '收藏{title}',
+    saveArtistMessage: '其专辑、单曲和 EP 中的 {n} 首歌曲将加入你的资料库，下载前以流媒体播放。',
     downloading: '正在下载 {done}/{total}',
     owned: '已下载',
     review: '需确认 {n}',
