@@ -59,6 +59,13 @@ export const SETTINGS_CATALOG = {
         group: 'settings.group.profile',
         aliases: ['settings.searchAliases.password'],
       },
+      {
+        id: 'search-history',
+        label: 'settings.searchHistory',
+        group: 'settings.group.searchHistory',
+        hint: 'settings.note.searchHistory',
+        aliases: ['search.recentsSection', 'settings.searchAliases.searchHistory'],
+      },
       { id: 'sign-out', label: 'account.signOut', aliases: ['settings.searchAliases.signOut'] },
     ],
   },

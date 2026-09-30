@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Search from './Search';
 import { setLocale } from '../lib/i18n';
 import { clearSearchCache } from '../lib/searchCache';
+import { setSearchHistoryEnabled } from '../lib/searchHistory';
 import { encodeTrackCapsule } from '../lib/trackShare';
 
 const apiMock = vi.hoisted(() => ({
@@ -457,6 +458,31 @@ describe('Search route', () => {
     expect(apiMock.searchCatalog).toHaveBeenCalledWith('Marea', expect.any(AbortSignal));
     expect(screen.queryByRole('button', { name: 'Marea' })).not.toBeInTheDocument();
     localStorage.removeItem('catalog_search_recents');
+  });
+
+  it('removes one recent search from the dropdown without closing it', async () => {
+    localStorage.setItem('catalog_search_recents', JSON.stringify(['Marea', 'Extremoduro']));
+    render(() => <Search />);
+    fireEvent.focus(screen.getByRole('searchbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove “Marea” from recent searches' }));
+    expect(screen.queryByRole('button', { name: 'Marea' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Extremoduro' })).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('catalog_search_recents') || '[]')).toEqual(['Extremoduro']);
+    expect(apiMock.searchCatalog).not.toHaveBeenCalled();
+    localStorage.removeItem('catalog_search_recents');
+  });
+
+  it('neither shows nor saves recent searches once history is off', async () => {
+    setSearchHistoryEnabled(false);
+    render(() => <Search />);
+    const field = screen.getByRole('searchbox');
+    fireEvent.focus(field);
+    fireEvent.keyDown(field, { key: 'Enter', target: { value: 'Marea' } });
+    expect(localStorage.getItem('catalog_search_recents')).toBeNull();
+    fireEvent.input(field, { target: { value: '' } });
+    fireEvent.focus(field);
+    expect(screen.queryByText('Recent searches')).not.toBeInTheDocument();
+    setSearchHistoryEnabled(true);
   });
 
   it('treats pasted YouTube URLs as exact YouTube items', async () => {

@@ -24,7 +24,13 @@ import { resultCredit } from '../lib/queueDiscovery';
 import { prefetchPreviews } from '../lib/prefetch';
 import { SearchDiscovery } from '../components/SearchDiscovery';
 import { t as tr } from '../lib/i18n';
-import { userKey } from '../lib/session';
+import {
+  forgetSearch,
+  loadRecentSearches,
+  rememberSearch,
+  searchHistoryEnabled,
+} from '../lib/searchHistory';
+import { CloseIcon } from '../components/icons';
 import {
   catalogPreviewId,
   itemArtist,
@@ -88,9 +94,6 @@ const SECTION_TITLE: Record<string, () => string> = {
  */
 const SONGS_PREVIEW = 5;
 
-const RECENTS_KEY = 'catalog_search_recents';
-const RECENTS_KEY_YOUTUBE = 'youtube_search_recents';
-
 // Power-user escape hatch: prefixing a query with `yt:` forces the plain-YouTube
 // engine (e.g. `yt: some rare bootleg`). Invisible to everyone else.
 const YT_PREFIX = /^yt:\s*/i;
@@ -101,25 +104,6 @@ function parseSearchInput(raw: string): { query: string; forceYt: boolean } {
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
-}
-
-function recentsKey(domain: SearchDomain): string {
-  // Search history is personal, and a browser profile can be shared by the
-  // whole household — namespace it by account so nobody reads anyone else's.
-  return userKey(domain === 'youtube' ? RECENTS_KEY_YOUTUBE : RECENTS_KEY);
-}
-
-function loadRecents(domain: SearchDomain): string[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(recentsKey(domain)) || '[]');
-    return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string').slice(0, 8) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveRecents(domain: SearchDomain, values: string[]): void {
-  localStorage.setItem(recentsKey(domain), JSON.stringify(values.slice(0, 8)));
 }
 
 function candidateVideoId(candidate: Record<string, unknown>): string {
@@ -152,7 +136,7 @@ export default function Search() {
   const [searchFocused, setSearchFocused] = createSignal(false);
   const [discoveryReady, setDiscoveryReady] = createSignal(false);
   const [lastRun, setLastRun] = createSignal('');
-  const [recents, setRecents] = createSignal<string[]>(loadRecents(initialDomain));
+  const [recents, setRecents] = createSignal<string[]>(loadRecentSearches(initialDomain));
   const [saving, setSaving] = createSignal<Set<string>>(new Set());
   const [review, setReview] = createSignal<{ item: CatalogItem; response: CatalogSaveResponse } | null>(null);
   const [sharedCapsule, setSharedCapsule] = createSignal<TrackShareCapsuleV1 | null>(null);
@@ -510,10 +494,14 @@ export default function Search() {
     clearTimeout(suggestDebounce);
     runSearch(query, nextDomain);
     if (query.length >= 2) {
-      const next = [query, ...recents().filter((x) => x.toLowerCase() !== query.toLowerCase())].slice(0, 8);
-      setRecents(next);
-      saveRecents(nextDomain, next);
+      setRecents(rememberSearch(nextDomain, query));
     }
+  };
+
+  const forgetRecent = (value: string) => {
+    setRecents(forgetSearch(domain(), value));
+    // The button just pressed is gone; keep the field, and so the list, focused.
+    searchInput?.focus();
   };
 
   const onInput = (value: string) => {
@@ -534,7 +522,7 @@ export default function Search() {
     const nextDomain = inputDomain(value);
     if (nextDomain !== domain()) {
       setDomain(nextDomain);
-      setRecents(loadRecents(nextDomain));
+      setRecents(loadRecentSearches(nextDomain));
     }
     setQ(value);
     clearTimeout(debounce);
@@ -573,7 +561,7 @@ export default function Search() {
     invalidatePending();
     explicitDomain = next;
     setDomain(next);
-    setRecents(loadRecents(next));
+    setRecents(loadRecentSearches(next));
     setShowSuggest(false);
     setSuggestions([]);
     runSearch(parseSearchInput(q()).query, next);
@@ -691,13 +679,21 @@ export default function Search() {
             }}
           />
         </div>
-        <Show when={searchFocused() && !q().trim() && recents().length > 0}>
+        <Show when={searchHistoryEnabled() && searchFocused() && !q().trim() && recents().length > 0}>
           <div class={styles.suggest} aria-label={tr('search.recentsSection')}>
             <h2 class={styles.recentHeading}>{tr('search.recentsSection')}</h2>
-            <For each={recents()}>{(value) => <button class={styles.suggestItem} type="button"
-              onMouseDown={(event) => event.preventDefault()} onClick={() => commit(value)}>
-              <SearchIcon /><span>{value}</span>
-            </button>}</For>
+            <For each={recents()}>{(value) => <div class={styles.recentRow}>
+              <button class={styles.suggestItem} type="button"
+                onMouseDown={(event) => event.preventDefault()} onClick={() => commit(value)}>
+                <SearchIcon /><span>{value}</span>
+              </button>
+              <button class={styles.recentRemove} type="button"
+                aria-label={tr('search.removeRecent', { query: value })}
+                title={tr('search.removeRecent', { query: value })}
+                onMouseDown={(event) => event.preventDefault()} onClick={() => forgetRecent(value)}>
+                <CloseIcon size={16} />
+              </button>
+            </div>}</For>
           </div>
         </Show>
         <Show when={domain() === 'youtube' && showSuggest() && q().trim().length >= 2 && suggestions().length > 0}>
