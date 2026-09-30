@@ -296,6 +296,9 @@ Useful library routes:
 | `GET` | `/api/library/favourites` | Favorite track IDs (only the ones you own a file for) |
 | `GET` | `/api/library/favourites/entries` | All saved songs, downloaded or not: `{"version":2,"favourites":[{"keys":[...],"title","artist",...}]}` |
 | `POST` | `/api/library/favourites/toggle` | Toggle favorite, body `{"track_id":"..."}` or `{"favourite":{"keys":["yt:<video_id>"],"title":"...","artist":"..."}}` |
+| `POST` | `/api/library/saved/set` | Save or remove many songs at once, body `{"saved":true,"entries":[{"keys":[...],"title":"...","artist":"..."}]}`, at most 500 entries. Never flips a song: saving skips songs already saved, and removing keeps favourites and songs held as files. Returns `{"changed":N}`; requires `library:write` |
+| `POST` | `/api/catalog/album/download` | Download every song on a Deezer album the library does not hold yet, body `{"deezer_id":"302127"}`. Returns `202` with the job. An open job for the album is returned as is, a stopped one is resumed, and a finished one gives way to a new pass; requires `library:write` |
+| `GET` | `/api/catalog/album/download?deezer_id=` | That album's latest download, song by song (`state`, `candidates`), or `null`. Doubtful matches wait in `needs_review`: decide them with `POST /api/migration/jobs/<id>/decision`, and resume with `POST /api/migration/jobs/<id>/control` `{"action":"resume"}` |
 | `POST` | `/api/library/playlists` | Create playlist, body `{"name":"..."}` |
 | `POST` | `/api/library/playlists/<name>/tracks` | Add track to playlist, body `{"track_id":"..."}` |
 | `DELETE` | `/api/library/playlists/<name>/tracks/<track_id>` | Remove track from playlist |
@@ -308,6 +311,10 @@ destination, and assigns `id` and `added_at`. References without ids remain
 unresolved; names alone never merge with identified editions or artists. Both
 methods return the full collection. Use `saved: false` with the same entry to
 remove it. The per-user `saved_entities_updated` event invalidates cached reads.
+The route touches only the bookmark. The web player treats an album in the
+library as one fact: saving it also saves its songs through
+`/api/library/saved/set`, and removing it removes the songs that are only
+streamed, while favourites and downloaded songs stay.
 Failed persistence returns an error without discarding the previous collection;
 instance backups include the account's `saved_entities.json` automatically.
 

@@ -653,6 +653,38 @@ def toggle_saved():
     return jsonify({"status": "success", "is_saved": is_saved})
 
 
+#: Longer than any record; an artist's catalogue arrives in several of these.
+_MAX_SAVED_BATCH = 500
+
+
+@library_bp.route("/api/library/saved/set", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_set_saved", limit=30, window_sec=60)
+def set_saved():
+    """Save many songs, or take them out, by identity — an album in one act.
+
+    Never flips a song: see `FavouritesManager.set_saved` for what removing
+    leaves alone.
+    """
+    api = _get_api()
+    api["get_core"]()
+    data = request.json or {}
+    entries = data.get("entries")
+    saved = data.get("saved")
+    if not isinstance(entries, list) or not isinstance(saved, bool):
+        return jsonify({"error": "entries must be an array and saved a boolean"}), 400
+    if len(entries) > _MAX_SAVED_BATCH:
+        return jsonify({"error": f"at most {_MAX_SAVED_BATCH} entries at once"}), 400
+
+    changed = api["favourites_manager"].set_saved(entries, saved)
+    if saved:
+        for entry in changed:
+            _schedule_favourite_resolve(entry)
+    if changed:
+        api["emit_to_user"]("favourites_updated")
+    return jsonify({"status": "success", "changed": len(changed)})
+
+
 @library_bp.route("/api/library/favourites/toggle", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_toggle_favourite", limit=120, window_sec=60)

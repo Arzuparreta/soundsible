@@ -27,7 +27,7 @@ from shared.library_search import search_text, search_title
 from shared.musicbrainz import normalize_recording_mbid
 from shared.music_identity import youtube_music_metadata
 from shared.providers import deezer
-from shared.hardening import rate_limit
+from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.resolution_confidence import best_candidate, classify_confidence
 from shared.text_utils import (
     collapse_text,
@@ -1963,6 +1963,46 @@ def catalog_album():
     return jsonify(body)
 
 
+@catalog_bp.route("/api/catalog/album/download", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("catalog_album_download", limit=20, window_sec=60)
+def catalog_album_download():
+    """Download every song on an album that the library does not hold yet.
+
+    The tracklist is read here rather than taken from the page, so what is
+    downloaded is the record itself, whole, and nothing a client made up.
+    """
+    from shared.migration.collections import album_manifest, start_collection_download, valid_deezer_id
+    from shared.user_context import require_user_id
+
+    data = request.get_json(silent=True) or {}
+    deezer_id = valid_deezer_id(data.get("deezer_id"))
+    if not deezer_id:
+        return jsonify({"error": "deezer_id is required"}), 400
+    try:
+        profile = _deezer_album_profile(deezer_id)
+    except Exception as exc:
+        logger.info("Album download could not read %s: %s", deezer_id, exc)
+        return jsonify({"error": "The album could not be read"}), 502
+    manifest = album_manifest(deezer_id, profile)
+    if not manifest.tracks:
+        return jsonify({"error": "The album has no songs"}), 404
+    job = start_collection_download(manifest, _library_tracks(), require_user_id())
+    return jsonify({"job": job}), 202
+
+
+@catalog_bp.route("/api/catalog/album/download", methods=["GET"])
+@rate_limit("catalog_album_download_status", limit=240, window_sec=60)
+def catalog_album_download_status():
+    """The latest download of an album, song by song, or null."""
+    from shared.migration.collections import album_provider, collection_job, valid_deezer_id
+
+    deezer_id = valid_deezer_id(request.args.get("deezer_id"))
+    if not deezer_id:
+        return jsonify({"error": "deezer_id is required"}), 400
+    return jsonify({"job": collection_job(album_provider(deezer_id))})
+
+
 def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None) -> dict[str, Any]:
     now = time.time()
     library_keys = _library_album_keys(name, artist or "")
@@ -2004,6 +2044,9 @@ def _album_profile_uncached(name: str, artist: str | None, deezer_id: str | None
         "year": year,
         "genre": genre,
         "tracklist": tracklist,
+        # The record the page settled on, when the link only named it: what a
+        # download of the whole album asks for.
+        "deezer_id": deezer_id if resolved else None,
         "in_library": bool(library_keys),
         "resolved": resolved,
         "partial_failures": failures,

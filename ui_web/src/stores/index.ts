@@ -2556,6 +2556,39 @@ export const actions = {
     api.toggleSaved(entry).catch(() => setState('saved', prev)); // revert on failure
   },
 
+  /**
+   * Save many songs, or take them out, in one act — an album's worth.
+   *
+   * Never flips a song, unlike `toggleSaved`: saving skips what is saved
+   * already, and taking out keeps a marked song and one held as a file, which
+   * is what the engine does too (`FavouritesManager.set_saved`). Resolves to
+   * whether the change stuck.
+   */
+  async setSongsSaved(entries: SavedEntry[], saved: boolean): Promise<boolean> {
+    const usable = entries.filter((entry) => entry.keys.length);
+    if (!usable.length) return true;
+    const prev = state.saved.slice();
+    if (saved) {
+      const fresh = usable
+        .filter((entry) => !savedEntryForKeys(entry.keys))
+        .map((entry) => ({ ...entry, added_at: claimedAddedAt(entry.keys) }));
+      setState('saved', [...fresh, ...prev]);
+    } else {
+      const leaving = new Set(prev.filter((held) => !held.favourite
+        && !held.keys.some((key) => key.startsWith('lib:'))
+        && usable.some((entry) => entry.keys.some((key) => held.keys.includes(key)))));
+      setState('saved', prev.filter((held) => !leaving.has(held)));
+    }
+    try {
+      await api.setSavedEntries(usable, saved);
+      return true;
+    } catch {
+      setState('saved', prev);
+      toast.error(tr('toast.updateFailed'));
+      return false;
+    }
+  },
+
   /** Save or unsave the song this track is, whatever id the surface holds. */
   toggleSavedTrack(track: Track): void {
     actions.toggleSaved(savedFromTrack(track));

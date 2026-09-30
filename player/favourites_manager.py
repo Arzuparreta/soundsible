@@ -150,6 +150,47 @@ class FavouritesManager:
             return True
 
     @serialized
+    def set_saved(self, raw_entries: Iterable[Dict[str, Any]], saved: bool) -> List[Dict[str, Any]]:
+        """
+        Put many songs in the library, or take them out, in one write.
+
+        Unlike `toggle_saved` this never flips: saving skips songs already held,
+        removing skips songs that are not. Removing also keeps a song that is
+        marked — the heart is a choice of its own — and one the library holds as
+        a file, since unsaving a downloaded song would mean deleting it. Returns
+        the entries that changed.
+        """
+        changed: List[Dict[str, Any]] = []
+        # Newest first: saving from the end keeps a record's songs in its order.
+        ordered = list(raw_entries)
+        if saved:
+            ordered.reverse()
+        with self._lock:
+            for raw in ordered:
+                entry = _normalise_entry(raw, default_favourite=False) if isinstance(raw, dict) else None
+                if entry is None:
+                    continue
+                matches = self._find_all(entry["keys"])
+                if saved:
+                    if matches:
+                        continue
+                    entry["added_at"] = self._held_by_library(entry["keys"]) or library_dates.now()
+                    _stamp_mark(entry)
+                    self._entries.insert(0, entry)
+                    self._reindex()
+                    changed.append(entry)
+                    continue
+                for match in matches:
+                    if match.get("favourite") or any(key.startswith(LIB_PREFIX) for key in match["keys"]):
+                        continue
+                    self._entries.remove(match)
+                    self._reindex()
+                    changed.append(match)
+            if changed:
+                self._persist()
+        return [dict(entry, keys=list(entry["keys"])) for entry in changed]
+
+    @serialized
     def set_favourite(self, raw_entry: Dict[str, Any], favourite: Optional[bool] = None) -> bool:
         """
         Mark or unmark a song, saving it first if it is not in the library yet.

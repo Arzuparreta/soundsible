@@ -295,6 +295,8 @@ export interface AlbumProfile {
   year?: number | null;
   genre?: string;
   tracklist: CatalogItem[];
+  /** The Deezer record the page settled on, when the link only named it. */
+  deezer_id?: string | null;
   in_library: boolean;
   resolved: boolean;
   partial_failures?: Array<{ source: string; error: string }>;

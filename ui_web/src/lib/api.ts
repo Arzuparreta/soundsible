@@ -21,6 +21,10 @@ import type {
 import type { PodcastSubscription, PodcastEpisode, PodcastSearchResult } from '../types/podcast';
 import type { DownloadQueueItem } from '../types/download';
 import type { PlaybackSessionSnapshot } from './playbackSession';
+import type { MigrationJob } from './migrationApi';
+
+/** What `/api/library/saved/set` takes at once. */
+const SAVED_BATCH = 500;
 
 function savedEntityResponse(response: { entities: SavedEntity[] }): SavedEntity[] {
   if (!Array.isArray(response.entities)) throw new Error('Invalid saved entities response');
@@ -800,6 +804,16 @@ export const api = {
       `/api/library/saved?t=${Date.now()}`,
     ).then((res) => res.saved ?? []),
   /** Put a song in the library, or take it out. Nothing is downloaded. */
+  /** Save many songs, or take them out, without flipping any — an album in
+   * one act. Sent in batches the engine accepts. */
+  setSavedEntries: async (entries: SavedEntry[], saved: boolean) => {
+    for (let start = 0; start < entries.length; start += SAVED_BATCH) {
+      await request<{ changed?: number }>('/api/library/saved/set', {
+        method: 'POST',
+        body: { entries: entries.slice(start, start + SAVED_BATCH), saved },
+      });
+    }
+  },
   toggleSaved: (entry: SavedEntry) =>
     request<{ is_saved?: boolean }>('/api/library/saved/toggle', {
       method: 'POST',
@@ -1268,6 +1282,17 @@ export const api = {
         (deezerId ? `&deezer_id=${encodeURIComponent(deezerId)}` : ''),
       { signal, timeoutMs: 15000 },
     ),
+
+  /** Download every song on an album the library does not hold yet. The
+   * engine reads the tracklist itself; this only names the record. */
+  startAlbumDownload: (deezerId: string) =>
+    request<{ job: MigrationJob }>('/api/catalog/album/download', {
+      method: 'POST',
+      body: { deezer_id: deezerId },
+      timeoutMs: 30000,
+    }),
+  getAlbumDownload: (deezerId: string) =>
+    request<{ job: MigrationJob | null }>(`/api/catalog/album/download?deezer_id=${encodeURIComponent(deezerId)}`),
 
   getAlbumProfile: (name: string, artist: string, deezerId?: string, signal?: AbortSignal) =>
     request<AlbumProfile>(

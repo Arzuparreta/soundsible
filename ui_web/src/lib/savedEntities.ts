@@ -70,7 +70,9 @@ function flushQueuedRefresh(): void {
   void syncSavedEntities();
 }
 
-export async function setEntitySaved(entry: SavedEntity, saved: boolean): Promise<void> {
+/** `quiet` leaves the "removed" toast to a caller that says more (an album
+ * takes its songs with it, and its undo has to bring them back too). */
+export async function setEntitySaved(entry: SavedEntity, saved: boolean, opts: { quiet?: boolean } = {}): Promise<void> {
   if (entitiesBusy()) return;
   ++generation;
   setEntitiesBusy(true);
@@ -82,7 +84,7 @@ export async function setEntitySaved(entry: SavedEntity, saved: boolean): Promis
     setSavedEntities(await api.setSavedEntity(entry, saved));
     setEntitiesError(false);
     if (saved) pulseNavigation(['/', entry.kind === 'album' ? '/?saved=albums' : '/?saved=artists']);
-    if (!saved) toast.action(t('savedEntities.removed'), t('savedEntities.undo'), () => void setEntitySaved(entry, true));
+    if (!saved && !opts.quiet) toast.action(t('savedEntities.removed'), t('savedEntities.undo'), () => void setEntitySaved(entry, true));
   } catch {
     setSavedEntities(previous);
     toast.error(t('savedEntities.failed'));

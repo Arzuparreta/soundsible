@@ -2471,6 +2471,23 @@ describe('Solid store playback identity', () => {
     expect(ownedTrackForItem(row)?.id).toBe('sha256');
   });
 
+  it('recognises the downloaded copy through the entry the row was saved as, with no link', async () => {
+    // A reload keeps no catalog→video link. The entry saved from the row
+    // learned the file's `lib:` key when the download landed, and that is
+    // what carries the row to its file — on an album page as much as here.
+    const { actions, ownedTrackForItem } = await loadStore({
+      getLibrary: vi
+        .fn()
+        .mockResolvedValue({ tracks: [downloaded], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      getSaved: vi.fn().mockResolvedValue([
+        { keys: ['cat:deezer:track:12345', 'deezer:12345', 'lib:sha256'], title: 'Song A', artist: 'Artist A' },
+      ]),
+    });
+    await actions.syncLibrary();
+    expect(ownedTrackForItem(row)?.id).toBe('sha256');
+    expect(ownedTrackForItem({ ...row, id: 'deezer:track:999', external_ids: { deezer_id: '999' } })).toBeNull();
+  });
+
   it('stops marking rows when playback stops', async () => {
     const { actions, isPlayingResult } = await loadStore();
     actions.playTrack(preview);
@@ -2552,6 +2569,44 @@ describe('Solid store favourites', () => {
     expect(favouriteTracks()[0].id).toBe('hash9f2a');
     expect(favouriteTracks()[0].source).toBeUndefined();
     expect([...favouriteLibraryIds()]).toEqual(['hash9f2a']);
+  });
+
+  it('saves a whole album in one act, in its order, without flipping a song already saved', async () => {
+    const setSavedEntries = vi.fn().mockResolvedValue(undefined);
+    const { actions, state } = await loadStore({
+      setSavedEntries,
+      toggleSaved: vi.fn().mockResolvedValue({ is_saved: true }),
+    });
+    actions.toggleSaved({ keys: ['deezer:2'], title: 'Song 2', artist: 'A' });
+    const album = [1, 2, 3].map((n) => ({ keys: [`deezer:${n}`], title: `Song ${n}`, artist: 'A' }));
+
+    expect(await actions.setSongsSaved(album, true)).toBe(true);
+
+    expect(state.saved.map((entry) => entry.keys[0])).toEqual(['deezer:1', 'deezer:3', 'deezer:2']);
+    expect(setSavedEntries).toHaveBeenCalledWith(album, true);
+  });
+
+  it('takes an album out but keeps its hearts and files, and restores it all if the engine refuses', async () => {
+    let refuse!: (error: Error) => void;
+    const setSavedEntries = vi.fn(() => new Promise<void>((_resolve, reject) => { refuse = reject; }));
+    const { actions, state, toastError } = await loadStore({
+      setSavedEntries,
+      getSaved: vi.fn().mockResolvedValue([
+        { keys: ['deezer:1'], title: 'Streamed', artist: 'A' },
+        { keys: ['deezer:2'], title: 'Marked', artist: 'A', favourite: true },
+        { keys: ['deezer:3', 'lib:file3'], title: 'Downloaded', artist: 'A' },
+      ]),
+    });
+    await actions.syncLibrary();
+    const album = [1, 2, 3].map((n) => ({ keys: [`deezer:${n}`] }));
+
+    const done = actions.setSongsSaved(album, false);
+    expect(state.saved.map((entry) => entry.keys[0])).toEqual(['deezer:2', 'deezer:3']);
+    refuse(new Error('offline'));
+
+    expect(await done).toBe(false);
+    expect(state.saved.map((entry) => entry.keys[0])).toEqual(['deezer:1', 'deezer:2', 'deezer:3']);
+    expect(toastError).toHaveBeenCalled();
   });
 
   it('unmarks by identity, not by the id the surface happens to hold', async () => {

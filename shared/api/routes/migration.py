@@ -107,7 +107,8 @@ def migration_job_upload():
 @migration_bp.route("/api/migration/jobs", methods=["GET"])
 @require_scope(SCOPE_LIBRARY_READ, allow_trusted_network=True)
 def migration_jobs_list():
-    return jsonify({"jobs": _store().list_jobs()})
+    # Album downloads run on the same machinery but belong to their album page.
+    return jsonify({"jobs": _store().list_jobs(include_collections=False)})
 
 
 @migration_bp.route("/api/migration/jobs/<job_id>", methods=["GET"])
