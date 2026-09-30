@@ -630,3 +630,39 @@
 .entityCard a:not(.entityActivate) { position: relative; z-index: 2; }
 
 .recentHeading { margin: 10px 12px 4px; color: var(--ink-secondary); font-size: var(--text-caption); }
+
+.recentRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.recentRow .suggestItem {
+  flex: 1;
+}
+
+.recentRemove {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  color: var(--ink-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.recentRemove:focus-visible {
+  color: var(--ink-primary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+
+.recentRemove:hover {
+  color: var(--ink-primary);
+  background: var(--bg-hover);
+}
+}

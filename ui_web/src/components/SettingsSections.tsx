@@ -14,6 +14,7 @@ import { trackCount } from '../lib/format';
 import { changePassword, isAdmin, logout, updateProfile, user } from '../lib/session';
 import { associationUrl } from '../lib/trackShare';
 import { communityConfig, loadCommunityConfig } from '../lib/community';
+import { searchHistoryEnabled, setSearchHistoryEnabled } from '../lib/searchHistory';
 import { accessibleSections, findSectionById } from '../lib/settingsIndex';
 import {
   SETTINGS_CATALOG,
@@ -172,6 +173,15 @@ function AccountSection() {
               label={t('account.changePassword')}
               hint={me().has_password ? undefined : t('settings.note.noPassword')}
               onClick={updatePassword}
+            />
+          </SettingsGroup>
+
+          <SettingsGroup label={t('settings.group.searchHistory')} note={t('settings.note.searchHistory')}>
+            <SwitchRow
+              anchor="search-history"
+              label={t('settings.searchHistory')}
+              checked={searchHistoryEnabled()}
+              onChange={() => setSearchHistoryEnabled(!searchHistoryEnabled())}
             />
           </SettingsGroup>
 
