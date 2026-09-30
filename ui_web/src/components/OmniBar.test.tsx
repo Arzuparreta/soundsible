@@ -208,11 +208,11 @@ describe('seek and pill gesture arbitration', () => {
     const slider = screen.getByRole('slider', { name: 'nowPlaying.seekLabel' });
     vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400 } as DOMRect);
     pointer(slider, 'pointerdown', 300, 20);
-    vi.advanceTimersByTime(180);
+    vi.advanceTimersByTime(400);
     pointer(slider, 'pointermove', 140, 20);
     pointer(slider, 'pointerup', 140, 20);
     fireEvent.click(slider);
-    expect(actions.seek).toHaveBeenCalledExactlyOnceWith(42);
+    expect(actions.seek).toHaveBeenCalledExactlyOnceWith(0);
     expect(actions.dismissPlayback).not.toHaveBeenCalled();
     expect(setNowPlayingOpen).not.toHaveBeenCalled();
     expect(container.querySelector('[data-omni-player]')).not.toHaveStyle({ transform: 'translateX(-160px)' });
@@ -227,8 +227,55 @@ describe('seek and pill gesture arbitration', () => {
     pointer(slider, 'pointerdown', 300, 20);
     pointer(slider, 'pointermove', 140, 20);
     pointer(bar, 'pointerup', 140, 20);
-    vi.advanceTimersByTime(180);
+    vi.advanceTimersByTime(400);
     expect(actions.dismissPlayback).toHaveBeenCalledOnce();
     expect(actions.seek).not.toHaveBeenCalled();
   });
+});
+
+
+describe('whole-pill hold', () => {
+  beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); setMediaQuery(MOBILE, true); });
+  afterEach(() => { vi.runOnlyPendingTimers(); vi.useRealTimers(); setMediaQuery(MOBILE, false); });
+
+  it.each(['open', 'pause', 'next', 'edge'])('captures a hold starting on %s without triggering its tap or dismissal', target => {
+    const { container } = render(() => <OmniBar />);
+    const bar = container.querySelector('[data-omni-player]')!;
+    const slider = screen.getByRole('slider', { name: 'nowPlaying.seekLabel' });
+    vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400 } as DOMRect);
+    const origin = target === 'edge' ? bar : screen.getByRole('button', { name: target === 'open' ? /A track/ : target === 'pause' ? 'common.pause' : 'common.next' });
+    pointer(origin, 'pointerdown', 280, 35);
+    vi.advanceTimersByTime(250);
+    expect(bar).not.toHaveAttribute('data-seek-active');
+    vi.advanceTimersByTime(150);
+    expect(bar).toHaveAttribute('data-seek-active');
+    if (origin !== bar) pointer(origin, 'lostpointercapture', 280, 35);
+    expect(bar).toHaveAttribute('data-seek-active');
+    pointer(bar, 'pointermove', 200, 35);
+    pointer(bar, 'pointerup', 200, 35);
+    fireEvent.click(origin, { detail: 1 });
+    expect(actions.seek).toHaveBeenCalledExactlyOnceWith(6);
+    expect(actions.dismissPlayback).not.toHaveBeenCalled();
+    expect(actions.togglePlay).not.toHaveBeenCalled();
+    expect(actions.next).not.toHaveBeenCalled();
+    expect(setNowPlayingOpen).not.toHaveBeenCalled();
+  });
+
+  it('cancelling a claimed hold never falls through to the original button', () => {
+    const { container } = render(() => <OmniBar />);
+    const bar = container.querySelector('[data-omni-player]')!;
+    const pause = screen.getByRole('button', { name: 'common.pause' });
+    pointer(pause, 'pointerdown', 280, 35);
+    vi.advanceTimersByTime(400);
+    pointer(bar, 'lostpointercapture', 280, 35);
+    pointer(pause, 'pointerup', 280, 35);
+    fireEvent.click(pause, { detail: 1 });
+    expect(actions.togglePlay).not.toHaveBeenCalled();
+    expect(actions.seek).not.toHaveBeenCalled();
+    pointer(pause, 'pointerdown', 280, 35);
+    pointer(pause, 'pointerup', 280, 35);
+    fireEvent.click(pause, { detail: 1 });
+    expect(actions.togglePlay).toHaveBeenCalledOnce();
+  });
+
 });

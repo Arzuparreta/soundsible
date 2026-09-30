@@ -605,3 +605,10 @@
   .seekControl .progressFill { height: 2px; }
   .seekControl[data-seeking] .progressFill { height: 3px; }
 }
+
+/* Touch seeking belongs to the whole pill. The native range remains available
+   to keyboard/assistive input, but cannot run a second native touch gesture. */
+@media (pointer: coarse) {
+  .seekInput { pointer-events: none; }
+}
+.omni[data-seek-active] .ctrl:active { transform: none; }

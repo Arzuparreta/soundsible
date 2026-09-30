@@ -56,22 +56,43 @@ test('mouse seeks without opening the full player', async ({ page, isMobile }) =
   await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
 });
 
-test('real touch holds, previews and releases without dismissing the pill', async ({ page, context, browserName, isMobile }) => {
+test('holding anywhere acquires one relative seek and never triggers the underlying control', async ({ page, context, browserName, isMobile }) => {
   test.skip(!isMobile || browserName !== 'chromium', 'CDP provides real multi-event touch input');
-  const seek = page.locator('[data-omni-seek] input');
-  const box = (await seek.boundingBox())!;
+  const pill = page.locator('[data-omni-player]');
+  await pill.getByRole('button', { name: 'Pausar', exact: true }).click();
+  const box = (await pill.boundingBox())!;
   const client = await context.newCDPSession(page);
-  const point = { x: box.x + box.width * 0.7, y: box.y + 18 };
-  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
-  await expect(page.locator('[data-omni-seek]')).toHaveAttribute('data-seeking', '');
-  await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...point, x: box.x + box.width * 0.3 }] });
-  await expect.poll(async () => Number(await seek.inputValue())).toBeGreaterThan(50);
-  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await expect(page.locator('[data-omni-player]')).toBeVisible();
-  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
-  await expect.poll(async () => Number(await seek.inputValue())).toBeGreaterThan(50);
-  await expect(page.locator('[data-omni-seek]')).not.toHaveAttribute('data-seeking');
-  await expect.poll(() => mediaPosition(page)).toBeGreaterThan(50);
+  const targets = [pill.locator('[data-omni-cover]'), pill.locator('[data-omni-meta]'),
+    pill.getByRole('button', { name: 'Reproducir', exact: true }), pill.getByRole('button', { name: 'Siguiente', exact: true })];
+  const points = [{ x: box.x + box.width / 2, y: box.y + 2 },
+    { x: box.x + 2, y: box.y + box.height / 2 }, { x: box.x + box.width - 2, y: box.y + box.height / 2 }];
+  for (const target of targets) {
+    const rect = (await target.boundingBox())!;
+    points.push({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
+  }
+  for (const point of points) {
+    await page.evaluate(async () => {
+      const { actions } = await import('/player/src/stores/index.ts');
+      actions.seek(100);
+    });
+    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+    await page.waitForTimeout(250);
+    await expect(page.locator('[data-omni-seek]')).not.toHaveAttribute('data-seeking');
+    await expect.poll(() => mediaPosition(page)).toBeCloseTo(100, 0);
+    await expect(page.locator('[data-omni-seek]')).toHaveAttribute('data-seeking', '');
+    const delta = point.x < 120 ? 60 : -60;
+    await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...point, x: point.x + delta }] });
+    const preview = Number(await page.locator('[data-omni-seek] input').inputValue());
+    expect(delta < 0 ? preview < 100 : preview > 100).toBe(true);
+    await expect.poll(() => mediaPosition(page)).toBeCloseTo(100, 0);
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect.poll(() => mediaPosition(page)).toBeCloseTo(preview, 0);
+    await expect(pill).toBeVisible();
+    await expect(pill).toContainText('Canción de biblioteca 320');
+    await expect(pill.getByRole('button', { name: 'Reproducir', exact: true })).toBeVisible();
+    await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+    await expect(page.locator('[data-omni-seek]')).not.toHaveAttribute('data-seeking');
+  }
 });
 
 
@@ -110,4 +131,25 @@ test('small and landscape viewports retain separate seek and button hit areas', 
       }
     }
   }
+});
+
+
+test('an early touch drag cannot run the native range without seek feedback', async ({ page, context, browserName, isMobile }) => {
+  test.skip(!isMobile || browserName !== 'chromium', 'real Chromium touch sequence');
+  const pill = page.locator('[data-omni-player]');
+  await pill.getByRole('button', { name: 'Pausar', exact: true }).click();
+  await page.evaluate(async () => {
+    const { actions } = await import('/player/src/stores/index.ts');
+    actions.seek(100);
+  });
+  const box = (await pill.boundingBox())!;
+  const client = await context.newCDPSession(page);
+  const point = { x: box.x + box.width * 0.4, y: box.y + 2 };
+  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+  await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...point, x: point.x + 70 }] });
+  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(page.locator('[data-omni-seek]')).not.toHaveAttribute('data-seeking');
+  await expect.poll(() => mediaPosition(page)).toBeCloseTo(100, 0);
+  await expect(pill).toBeVisible();
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
 });

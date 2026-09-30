@@ -38,7 +38,7 @@ describe('deliberate mini-player seeking', () => {
   });
   it('previews locally after the hold and commits once at release', () => {
     const { slider, claim } = setup();
-    pointer(slider, 'pointerdown'); vi.advanceTimersByTime(180);
+    pointer(slider, 'pointerdown'); vi.advanceTimersByTime(400);
     expect(claim).toHaveBeenCalledOnce();
     pointer(slider, 'pointermove', 150);
     expect(slider).toHaveValue('90'); expect(spies.seek).not.toHaveBeenCalled();
@@ -50,7 +50,7 @@ describe('deliberate mini-player seeking', () => {
   });
   it('does not seek or open when a hold ends without dragging', () => {
     const { slider } = setup();
-    pointer(slider, 'pointerdown', 150); vi.advanceTimersByTime(180); pointer(slider, 'pointerup', 150);
+    pointer(slider, 'pointerdown', 150); vi.advanceTimersByTime(400); pointer(slider, 'pointerup', 150);
     expect(spies.seek).not.toHaveBeenCalled(); expect(spies.open).not.toHaveBeenCalled();
   });
   it('leaves early swipes unclaimed', () => {
@@ -61,16 +61,16 @@ describe('deliberate mini-player seeking', () => {
   });
   it.each(['pointercancel', 'lostpointercapture'])('cancels on %s', type => {
     const { slider } = setup();
-    pointer(slider, 'pointerdown'); vi.advanceTimersByTime(180); pointer(slider, 'pointermove', 150);
-    pointer(slider, type); pointer(slider, 'pointerup', 150);
+    pointer(slider, 'pointerdown'); vi.advanceTimersByTime(400); pointer(slider, 'pointermove', 150);
+    pointer(type === 'lostpointercapture' ? slider.parentElement! : slider, type); pointer(slider, 'pointerup', 150);
     expect(spies.seek).not.toHaveBeenCalled(); expect(slider).toHaveValue('30');
   });
   it('cancels on track replacement and secondary contact elsewhere', () => {
     const { slider } = setup();
-    pointer(slider, 'pointerdown'); vi.advanceTimersByTime(180); pointer(slider, 'pointermove', 150);
+    pointer(slider, 'pointerdown'); vi.advanceTimersByTime(400); pointer(slider, 'pointermove', 150);
     setState('playback', 'currentTrack', { id: 'two' }); pointer(slider, 'pointerup', 150);
     expect(spies.seek).not.toHaveBeenCalled();
-    pointer(slider, 'pointerdown'); vi.advanceTimersByTime(180); pointer(slider, 'pointermove', 150);
+    pointer(slider, 'pointerdown'); vi.advanceTimersByTime(400); pointer(slider, 'pointermove', 150);
     pointer(document.body, 'pointerdown', 10, { isPrimary: false, pointerId: 2 }); pointer(slider, 'pointerup', 150);
     expect(spies.seek).not.toHaveBeenCalled();
   });
@@ -92,7 +92,7 @@ describe('deliberate mini-player seeking', () => {
 
 it.each(['blur', 'loading', 'duration', 'unmount'])('abandons an edit on %s', reason => {
   const { slider, unmount } = setup();
-  pointer(slider, 'pointerdown'); vi.advanceTimersByTime(180); pointer(slider, 'pointermove', 150);
+  pointer(slider, 'pointerdown'); vi.advanceTimersByTime(400); pointer(slider, 'pointermove', 150);
   if (reason === 'blur') fireEvent(window, new Event('blur'));
   if (reason === 'loading') setState('playback', 'isLoading', true);
   if (reason === 'duration') setState('playback', 'duration', 0);
