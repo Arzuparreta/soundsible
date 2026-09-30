@@ -118,11 +118,9 @@
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  /* Visible and tappable by default (touch). Desktop hides it until row hover. */
-  opacity: 1;
   transition:
     color var(--dur-short) var(--ease-out),
-    opacity var(--dur-short) var(--ease-out);
+    background var(--dur-short) var(--ease-out);
 }
 
 .row:active {
@@ -157,24 +155,26 @@
   flex-shrink: 0;
 }
 
-/* Never revealed on hover, unlike its neighbours. This control is only rendered
- * at all when the song has no file yet, so it is the one thing on the row that
- * says so — hiding it until the pointer arrives would make a library of streams
- * look identical to a library of files. */
+/* Never revealed on hover. This control is only rendered at all when the song
+ * has no file yet, so it is the one thing on the row that says so — hiding it
+ * until the pointer arrives would make a library of streams look identical to a
+ * library of files. */
 .rowCollect {
   opacity: 1;
 }
 
-/* Reveal-on-hover is a pointer-only nicety; touch devices always show the heart
- * so it stays tappable (no hover state to trigger). */
+/* The ⋯ menu is never hidden either: it is where every other song action lives,
+ * and a row that shows nothing to click until the pointer finds it reads as a
+ * row with no actions. It answers the pointer with a highlight instead, like
+ * the download arrow beside it.
+ *
+ * Reveal-on-hover is a pointer-only nicety for the unsaved heart; touch devices
+ * always show it so it stays tappable (no hover state to trigger). */
 @media (hover: hover) and (pointer: fine) {
-  .iconBtn,
   .rowHeart {
     opacity: 0;
   }
-  .row:hover .iconBtn,
   .row:hover .rowHeart,
-  .iconBtn:focus-visible,
   .rowHeart:focus-visible {
     opacity: 1;
   }
@@ -228,7 +228,6 @@
 .row[data-compact] .actionStripe { gap: 2px; }
 .primaryAction { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: var(--text-caption); padding: 0 8px; min-height: 40px; cursor: pointer; }
 .primaryAction:disabled { opacity: 0.5; }
-.row[data-compact] .iconBtn { opacity: 1; }
 
 .titleButton { min-height: min(25px, calc(var(--row-h) - 28px)); display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .titleButton .title { display: block; }
