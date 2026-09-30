@@ -1253,6 +1253,13 @@ export const api = {
     confirm_video_id?: string;
     /** The row's identity keys; see `DownloadItem.identity_keys`. */
     identity_keys?: string[];
+    /** The record the song is saved from, so the download files it there
+     * rather than under whatever release YouTube tags. */
+    album?: string;
+    album_artist?: string;
+    track_number?: number;
+    disc_number?: number;
+    year?: number;
   }) => request<CatalogSaveResponse>('/api/catalog/save', { method: 'POST', body, timeoutMs: 30000 }),
 
   getArtistProfile: (name: string, deezerId?: string, signal?: AbortSignal) =>

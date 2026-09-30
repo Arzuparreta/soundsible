@@ -166,6 +166,17 @@ def _duration(value: object) -> int | None:
     return num if num > 0 else None
 
 
+def _positive_int(value: object, upper: int) -> int | None:
+    """A whole number in ``1..upper``, or None for anything else."""
+    if isinstance(value, bool):
+        return None
+    try:
+        num = int(value)
+    except (TypeError, ValueError):
+        return None
+    return num if 0 < num <= upper else None
+
+
 def _track_dict(track) -> dict[str, Any]:
     return track.to_dict() if hasattr(track, "to_dict") else dict(track)
 
@@ -1342,6 +1353,33 @@ def catalog_resolve():
     })
 
 
+def _album_evidence(data: dict[str, Any]) -> dict[str, Any]:
+    """The record a song is saved from, when the request names one.
+
+    Without it the download files the song under whatever release YouTube tags
+    it with, as its track 1, and an album saved song by song comes apart in the
+    library. Nothing here is guessed: absent fields stay absent.
+    """
+    def text(value: object) -> str:
+        return _clean(value, 200) if isinstance(value, str) else ""
+
+    album = text(data.get("album"))
+    if not album:
+        return {}
+    evidence: dict[str, Any] = {"album": album}
+    album_artist = text(data.get("album_artist"))
+    if album_artist:
+        evidence["album_artist"] = album_artist
+    for key, upper in (("track_number", 999), ("disc_number", 99)):
+        value = _positive_int(data.get(key), upper)
+        if value:
+            evidence[key] = value
+    year = _positive_int(data.get("year"), 9999)
+    if year and year >= 1000:
+        evidence["year"] = year
+    return evidence
+
+
 @catalog_bp.route("/api/catalog/save", methods=["POST"])
 @rate_limit("catalog_save", limit=60, window_sec=60)
 def catalog_save():
@@ -1397,6 +1435,7 @@ def catalog_save():
         # path can consume the same trusted scalar without understanding a
         # catalog response's nested shape.
         metadata_evidence["musicbrainz_id"] = musicbrainz_id
+    metadata_evidence.update(_album_evidence(data))
     item = {
         "source_type": "ytmusic_search",
         "video_id": video_id,
@@ -1519,6 +1558,13 @@ def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | 
     in_library = False
     if library_keys is not None:
         in_library = _key(title, artist) in library_keys
+    raw = _deezer_track_raw(deezer_id, artist_row, album_row)
+    # Only `album/{id}/tracks` rows carry these: where the song sits on the
+    # record, which a download needs to file it there.
+    for key, field in (("track_number", "track_position"), ("disc_number", "disk_number")):
+        position = _positive_int(row.get(field), 999)
+        if position:
+            raw[key] = position
     return _catalog_item(
         item_id=f"deezer:track:{deezer_id}",
         item_type="track",
@@ -1535,7 +1581,7 @@ def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | 
         in_library=in_library,
         playable=False,
         downloadable=not in_library,
-        raw=_deezer_track_raw(deezer_id, artist_row, album_row),
+        raw=raw,
     )
 
 
@@ -1645,11 +1691,21 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
             genre_names.append(str(g["name"]).strip())
 
     track_rows = data.get("tracks") if isinstance(data.get("tracks"), dict) else {}
-    track_list = track_rows.get("data") if isinstance(track_rows.get("data"), list) else []
+    embedded = track_rows.get("data") if isinstance(track_rows.get("data"), list) else []
+    embedded = [row for row in embedded if isinstance(row, dict)]
+    # The tracks endpoint names each song's own artist but not the record it is
+    # on, which is this one.
+    this_album = {
+        "id": data.get("id") or album_id,
+        "title": title,
+        "cover_xl": data.get("cover_xl"),
+        "cover_big": data.get("cover_big"),
+        "cover_medium": data.get("cover_medium"),
+    }
     tracklist: list[dict[str, Any]] = []
-    for row in track_list:
-        if not isinstance(row, dict):
-            continue
+    for row in _deezer_album_tracks(album_id, embedded):
+        if not isinstance(row.get("album"), dict):
+            row = {**row, "album": this_album}
         item = _deezer_track_to_catalog_item(row, library_keys)
         if item:
             tracklist.append(item)
@@ -1662,6 +1718,33 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
         "genre": ", ".join(genre_names) if genre_names else "",
         "tracklist": tracklist,
     }
+
+
+_ALBUM_TRACKS_PAGE = 100
+# No release runs this long; it bounds a malformed `total`.
+_ALBUM_TRACKS_MAX = 500
+
+
+def _deezer_album_tracks(album_id: str, embedded: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every song on the record, each with its disc and position.
+
+    `album/{id}` embeds at most 25 tracks and says nothing about the rest, so a
+    47-track reissue showed 25 on its page. `album/{id}/tracks` lists them all,
+    with the disc and position a download needs. The embedded rows stay the
+    answer when that listing fails before it has more to offer.
+    """
+    rows: list[dict[str, Any]] = []
+    try:
+        while len(rows) < _ALBUM_TRACKS_MAX:
+            page = _deezer_get(f"album/{album_id}/tracks", {"limit": _ALBUM_TRACKS_PAGE, "index": len(rows)})
+            listed = page.get("data") if isinstance(page.get("data"), list) else []
+            listed = [row for row in listed if isinstance(row, dict)]
+            rows.extend(listed)
+            if not listed or len(rows) >= int(page.get("total") or 0):
+                break
+    except Exception as exc:
+        logger.info("Album tracklist fetch failed for %s: %s", album_id, exc)
+    return rows if len(rows) >= len(embedded) else embedded
 
 
 def _extract_year(release_date: Any) -> int | None:

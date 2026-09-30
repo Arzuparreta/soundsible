@@ -1337,3 +1337,123 @@ def test_local_selection_handles_cache_eviction_and_concurrent_queries(monkeypat
     with ThreadPoolExecutor(max_workers=4) as pool:
         actual = list(pool.map(lambda query: catalog_routes._local_catalog(query, 30), queries))
     assert actual == expected
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Whole albums: every track, and the record a downloaded song belongs to
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _album_track_row(track_id: int, disc: int | None = None, position: int | None = None) -> dict:
+    row = {
+        "id": track_id,
+        "title": f"Song {track_id}",
+        "title_short": f"Song {track_id}",
+        "duration": 200,
+        "artist": {"id": 27, "name": "Daft Punk"},
+    }
+    if disc is not None:
+        row["disk_number"] = disc
+        row["track_position"] = position
+    return row
+
+
+def _long_album(monkeypatch, *, tracks_fail: bool = False):
+    """A 47-track reissue: `album/<id>` embeds 25 of them and says nothing more;
+    `album/<id>/tracks` pages through all of them, with disc and position."""
+    listing = [_album_track_row(n, 1 if n <= 25 else 2, n if n <= 25 else n - 25) for n in range(1, 48)]
+    calls = []
+
+    def fake_get(path, params=None, timeout=8):
+        calls.append((path, dict(params or {})))
+        if path == "album/302127":
+            embedded = [_album_track_row(n) for n in range(1, 26)]
+            for row in embedded:
+                row["album"] = {"id": 302127, "title": "Discovery", "cover_xl": "http://x/discovery.jpg"}
+            return {
+                "id": 302127, "title": "Discovery", "artist": {"id": 27, "name": "Daft Punk"},
+                "cover_xl": "http://x/discovery.jpg", "release_date": "2001-03-07",
+                "tracks": {"data": embedded},
+            }
+        if path == "album/302127/tracks":
+            if tracks_fail:
+                raise RuntimeError("deezer down")
+            start = int(params["index"])
+            return {"data": listing[start:start + int(params["limit"])], "total": len(listing)}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(catalog_routes, "_deezer_get", fake_get)
+    monkeypatch.setattr(catalog_routes, "_ALBUM_TRACKS_PAGE", 20)
+    return calls
+
+
+def test_album_profile_lists_every_track_with_its_disc_and_position(monkeypatch):
+    calls = _long_album(monkeypatch)
+
+    profile = catalog_routes._deezer_album_profile("302127")
+
+    assert len(profile["tracklist"]) == 47
+    last = profile["tracklist"][-1]
+    assert last["raw"]["disc_number"] == 2
+    assert last["raw"]["track_number"] == 22
+    # The listing names each song's artist but not its record, which is this one.
+    assert last["album"] == "Discovery"
+    assert last["cover"] == "http://x/discovery.jpg"
+    assert last["raw"]["deezer_album_id"] == "302127"
+    assert [params["index"] for path, params in calls if path.endswith("/tracks")] == [0, 20, 40]
+
+
+def test_album_profile_keeps_the_embedded_tracks_when_the_listing_fails(monkeypatch):
+    _long_album(monkeypatch, tracks_fail=True)
+
+    profile = catalog_routes._deezer_album_profile("302127")
+
+    assert len(profile["tracklist"]) == 25
+    assert "track_number" not in profile["tracklist"][0]["raw"]
+
+
+def test_catalog_save_files_the_download_under_the_record_it_came_from(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fake_api = _fake_api(metadata)
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+
+    response = _make_app().test_client().post(
+        "/api/catalog/save",
+        json={
+            "artist": "Daft Punk",
+            "title": "Digital Love",
+            "confirm_video_id": "abcdefghijk",
+            "album": "Discovery",
+            "album_artist": "Daft Punk",
+            "track_number": 3,
+            "disc_number": 1,
+            "year": 2001,
+        },
+    )
+
+    assert response.status_code == 200
+    evidence = fake_api["queue_manager_dl"].add.call_args.args[0]["metadata_evidence"]
+    assert evidence["album"] == "Discovery"
+    assert evidence["album_artist"] == "Daft Punk"
+    assert (evidence["track_number"], evidence["disc_number"], evidence["year"]) == (3, 1, 2001)
+
+
+def test_catalog_save_drops_album_evidence_it_cannot_trust(monkeypatch):
+    metadata = LibraryMetadata(version=1, tracks=[], playlists={}, settings={})
+    fake_api = _fake_api(metadata)
+    monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
+
+    client = _make_app().test_client()
+    base = {"artist": "Daft Punk", "title": "Digital Love", "confirm_video_id": "abcdefghijk"}
+    client.post("/api/catalog/save", json={**base, "track_number": 3, "album_artist": "Daft Punk"})
+    evidence = fake_api["queue_manager_dl"].add.call_args.args[0]["metadata_evidence"]
+    # A position means nothing without the record it is a position on.
+    assert not {"album", "album_artist", "track_number"} & set(evidence)
+
+    client.post(
+        "/api/catalog/save",
+        json={**base, "album": "Discovery", "track_number": -1, "disc_number": "two", "year": 99, "album_artist": True},
+    )
+    evidence = fake_api["queue_manager_dl"].add.call_args.args[0]["metadata_evidence"]
+    assert evidence["album"] == "Discovery"
+    assert not {"album_artist", "track_number", "disc_number", "year"} & set(evidence)
