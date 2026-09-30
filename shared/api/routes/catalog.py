@@ -1950,21 +1950,22 @@ def _build_library_key_index() -> dict[str, Any]:
         artist = getattr(track, "artist", "") or getattr(track, "album_artist", "") or ""
         album = getattr(track, "album", "") or ""
         key = _key(getattr(track, "title", "") or "", artist)
-        artist_key = _norm(artist)
+        artist_key = fold_text(artist)
         everything.add(key)
         by_artist.setdefault(artist_key, set()).add(key)
-        by_album.setdefault((_norm(album), artist_key), set()).add(key)
+        by_album.setdefault((fold_text(album), artist_key), set()).add(key)
     return {"by_artist": by_artist, "by_album": by_album, "all": everything}
 
 
 def _library_artist_keys(name: str) -> set[str]:
-    """Normalized artist\x00title keys for library tracks credited to an artist.
+    """Owned-track keys for library tracks credited to an artist, however either
+    side spells its diacritics.
 
     Callers only need these keys (to badge catalog rows as already-owned) and
     whether the set is empty.
     """
     index = _library_key_index()
-    name_key = _norm(name)
+    name_key = fold_text(name)
     if not name_key:
         return set(index["all"])
     return set(index["by_artist"].get(name_key, ()))
@@ -1973,8 +1974,8 @@ def _library_artist_keys(name: str) -> set[str]:
 def _library_album_keys(album_name: str, artist: str) -> set[str]:
     """Normalized artist\x00title keys for library tracks on a given album."""
     index = _library_key_index()
-    album_key = _norm(album_name)
-    artist_key = _norm(artist)
+    album_key = fold_text(album_name)
+    artist_key = fold_text(artist)
     if album_key and artist_key:
         return set(index["by_album"].get((album_key, artist_key), ()))
 

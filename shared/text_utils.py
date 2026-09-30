@@ -59,9 +59,9 @@ _RELEASE_JUNK = re.compile(
 def fold_text(value: object) -> str:
     """`normalize_text` with diacritics folded away. For matching, never display.
 
-    Deliberately separate from `normalize_text`, which backs `identity_key` and
-    therefore decides what counts as the same recording app-wide: folding
-    accents there would silently change ownership matching everywhere.
+    Deliberately separate from `normalize_text`, which many exact comparisons
+    rely on: folding accents there would change what matches what in each of
+    them at once.
 
     Case is folded *before* decomposition so `Straße` still reaches `strasse`,
     and only combining marks are dropped rather than forcing ASCII — an
@@ -92,7 +92,11 @@ def strip_release_junk(value: object) -> str:
 def identity_key(title: object, artist: object) -> str:
     """The `artist\\x00title` key used to match catalog rows against the library.
 
+    It only answers "is this catalog song already held?", so it is folded: tags
+    drop diacritics the catalog keeps, and a library's "Blue Oyster Cult" song
+    is Deezer's "Blue Öyster Cult" one.
+
     The separator is a NUL so it cannot occur inside either field, which keeps
     ("a b", "c") and ("a", "b c") distinct.
     """
-    return f"{normalize_text(artist)}\x00{normalize_text(title)}"
+    return f"{fold_text(artist)}\x00{fold_text(title)}"

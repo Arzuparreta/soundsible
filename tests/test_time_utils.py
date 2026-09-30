@@ -79,12 +79,19 @@ def test_fold_text_leaves_scripts_without_an_ascii_form_intact():
 
 
 def test_normalize_text_was_left_alone():
-    """`identity_key` decides what counts as the same recording app-wide.
+    """Many exact comparisons rely on `normalize_text`.
 
-    Folding accents there would silently change ownership matching everywhere,
-    which is why `fold_text` is a separate function rather than an upgrade.
+    Folding accents there would change all of them at once, which is why
+    `fold_text` is a separate function rather than an upgrade.
     """
     assert normalize_text("José") != normalize_text("Jose")
+
+
+def test_identity_key_matches_across_diacritics_only():
+    """It only asks whether a catalog song is already held, and tags drop the
+    diacritics the catalog keeps."""
+    assert identity_key("(Don't Fear) The Reaper", "Blue Oyster Cult") == identity_key("(Don't Fear) The Reaper", "Blue Öyster Cult")
+    assert identity_key("Creep", "Radiohead") != identity_key("Creep", "Radiohed")
 
 
 def test_match_tokens_splits_the_folded_text():
