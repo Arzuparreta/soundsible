@@ -45,6 +45,42 @@
   cursor: pointer;
 }
 
+/* The stage before the first song. Centred in the space the cover will take. */
+.stageOpening {
+  display: grid;
+  flex: 1;
+  place-content: center;
+  justify-items: center;
+  gap: 1rem;
+  padding: 24px;
+  color: var(--ink-secondary);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.stageOpening p {
+  max-width: 22rem;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.stageOpening button {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--stage-line);
+  border-radius: var(--radius-full);
+  color: var(--ink-primary);
+  background: var(--stage-material);
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .stageOpening button:hover {
+    background: var(--stage-material-hover);
+  }
+}
+
 .routeLoading {
   display: grid;
   width: min(100%, 24rem);

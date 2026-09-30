@@ -1004,7 +1004,7 @@ function LibraryAlbumView(props: {
   const [album] = createResource(() => props.view.albumId, (id) => api.getLibraryAlbum(id));
   const tracks = createMemo(() => tracksByIds(album()?.track_ids ?? []));
   return <Show when={!album.loading} fallback={<SkeletonRows count={8} />}>
-    <TrackCollectionView title={props.view.name} tracks={tracks()} empty={t('album.noCatalogData')}
+    <TrackCollectionView title={props.view.name} tracks={tracks()} empty={t('album.empty')}
       context={{
         id: `album:${props.view.albumId}`,
         kind: 'album',
@@ -1347,7 +1347,7 @@ function CatalogAlbumView(props: {
         <CollectionActions title={props.view.name} items={profile()?.tracklist ?? []} auto={Boolean(props.inAuto)} onPlay={() => { const tracks = profile()?.tracklist ?? []; if (tracks[0]) play(tracks[0], tracks); }} />
       </Toolbar>
       <Show when={!profile.loading} fallback={<SkeletonRows count={8} />}>
-        <Show when={profile()} fallback={<div class={styles.empty}>{t('album.noCatalogData')}</div>}>
+        <Show when={profile()} fallback={<div class={styles.empty}>{t('album.noTracklist')}</div>}>
           {(data) => (
             <For each={data().tracklist}>
               {(item) => (

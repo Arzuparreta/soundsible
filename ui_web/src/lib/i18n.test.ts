@@ -54,3 +54,24 @@ describe('on-demand dictionaries', () => {
     expect(t('nav.library')).toBe(first);
   });
 });
+
+describe('keys the source asks for', () => {
+  /* A key missing from the dictionary does not fail anything: `t` hands the key
+   * back and the screen shows `common.nothingPlaying` where a sentence belongs.
+   * Component tests mock `t` to echo keys, so they cannot notice either. This
+   * reads every literal key the app passes to `t`/`tr` and looks it up. */
+  it('finds every literal key in the English dictionary', () => {
+    const sources = import.meta.glob<string>(['../**/*.{ts,tsx}', '!../**/*.test.{ts,tsx}', '!./i18n/**'], {
+      query: '?raw', import: 'default', eager: true,
+    });
+    const missing: string[] = [];
+    for (const [file, text] of Object.entries(sources)) {
+      for (const [, key] of text.matchAll(/\b(?:t|tr)\(\s*['"]([a-zA-Z]\w*(?:\.\w+)+)['"]/g)) {
+        const value = key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], en);
+        if (typeof value !== 'string') missing.push(`${file}: ${key}`);
+      }
+    }
+    expect(Object.keys(sources).length).toBeGreaterThan(100);
+    expect(missing).toEqual([]);
+  });
+});

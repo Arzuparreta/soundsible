@@ -23,7 +23,7 @@ const PlaylistDetail = asyncPage(() => import('./routes/PlaylistDetail'), () => 
 const Podcasts = asyncPage(() => import('./routes/Podcasts'), () => t('nav.podcasts'), 'cards');
 const PodcastShow = asyncPage(() => import('./routes/PodcastShow'), () => t('nav.podcasts'));
 const Downloads = asyncPage(() => import('./routes/Downloads'), () => t('downloads.title'));
-const Migrate = asyncPage(() => import('./routes/Migrate'), () => t('nav.import'));
+const Migrate = asyncPage(() => import('./routes/Migrate'), () => t('migrate.title'));
 const Artist = asyncPage(() => import('./routes/Artist'), () => t('library.artists'));
 const Album = asyncPage(() => import('./routes/Album'), () => t('library.albums'));
 const Live = asyncPage(() => import('./routes/Live'), () => t('live.title'));

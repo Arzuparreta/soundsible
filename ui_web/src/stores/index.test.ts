@@ -1807,6 +1807,110 @@ describe('Auto Mode store contract', () => {
     expect(state.autoMode.sources[0]).toMatchObject({ label: 'My selection', activation: 1 });
   });
 
+  describe('entering with nothing playing', () => {
+    const openingPlan = () => ({
+      ...autoPlan(['after-opening']),
+      v: 6 as const,
+      opening: {
+        id: 'opening', title: 'Opening', artist: 'Selector', source: 'preview' as const,
+        source_pool: 'local' as const,
+        recommendation_identity: 'music:youtube:opening', recommendation_source: 'auto_mode' as const,
+      },
+    });
+    const favourite = (index: number): Track => ({
+      id: `favourite0${index}`, title: `Favourite ${index}`, artist: 'Artist', source: 'preview',
+    });
+
+    it('lets the DJ choose the first song from the library and starts it', async () => {
+      const planDjQueue = vi.fn().mockResolvedValue(openingPlan());
+      const { actions, state, audioService } = await loadStore({
+        planDjQueue,
+        getLibrary: vi.fn().mockResolvedValue({ tracks: [t1, t2], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      });
+      await actions.syncLibrary();
+
+      actions.enterAutoMode();
+
+      // The press is the only gesture that will ever vouch for this playback.
+      expect(audioService.unlockAudio).toHaveBeenCalled();
+      expect(state.autoMode.sources).toEqual([expect.objectContaining({ label: 'Library' })]);
+      await vi.waitFor(() => expect(state.playback.currentTrack?.id).toBe('opening'));
+      const body = planDjQueue.mock.calls[0][0];
+      expect(body).not.toHaveProperty('seed');
+      expect(body.sources[0].tracks.map((track: Track) => track.id).sort()).toEqual(['t1', 't2']);
+      expect(state.playback.queue.map((entry) => entry.id)).toEqual(['opening', 'after-opening']);
+      expect(audioService.load).toHaveBeenCalledWith('/preview/opening', UNMEASURED_LEVEL);
+    });
+
+    it('prefers the songs marked out once there are enough of them to vary', async () => {
+      const planDjQueue = vi.fn().mockResolvedValue(openingPlan());
+      const { actions, state } = await loadStore({
+        planDjQueue,
+        getLibrary: vi.fn().mockResolvedValue({ tracks: [t1], playlists: {}, settings: {}, podcast_subscriptions: [] }),
+      });
+      await actions.syncLibrary();
+      for (let index = 0; index < 8; index += 1) actions.toggleFavouriteTrack(favourite(index));
+
+      actions.enterAutoMode();
+
+      expect(state.autoMode.sources).toHaveLength(1);
+      expect(state.autoMode.sources[0].label).toBe('Favourites');
+      expect(state.autoMode.sources[0].tracks.map((track) => track.id).sort())
+        .toEqual(Array.from({ length: 8 }, (_, index) => `favourite0${index}`));
+      await vi.waitFor(() => expect(state.playback.currentTrack?.id).toBe('opening'));
+    });
+
+    it('opens from Discover when the listener has no music yet', async () => {
+      const planDjQueue = vi.fn().mockResolvedValue(openingPlan());
+      const getDiscoveryMusicFeed = vi.fn().mockResolvedValue({
+        items: [
+          { id: 'rec', title: 'Recommended', artist: 'Someone', external_ids: { youtube_id: 'rec' } },
+          { id: 'unplayable', title: 'Unresolved', artist: 'Someone', external_ids: {} },
+        ],
+      });
+      const { actions, state } = await loadStore({ planDjQueue, getDiscoveryMusicFeed });
+
+      actions.enterAutoMode();
+
+      expect(state.autoMode.phase).toBe('planning');
+      await vi.waitFor(() => expect(state.playback.currentTrack?.id).toBe('opening'));
+      expect(state.autoMode.sources).toEqual([expect.objectContaining({
+        label: 'Discover',
+        tracks: [expect.objectContaining({ id: 'rec', source: 'preview' })],
+      })]);
+    });
+
+    it('says so when there is nothing at all to open from', async () => {
+      const planDjQueue = vi.fn();
+      const { actions, state } = await loadStore({
+        planDjQueue,
+        getDiscoveryMusicFeed: vi.fn().mockResolvedValue({ items: [] }),
+      });
+
+      actions.enterAutoMode();
+
+      await vi.waitFor(() => expect(state.autoMode.activity).toMatchObject({ status: 'error', key: 'autoMode.noSeed' }));
+      expect(state.autoMode.phase).toBe('idle');
+      expect(state.autoMode.active).toBe(true);
+      expect(planDjQueue).not.toHaveBeenCalled();
+    });
+
+    it('gives way to music the listener chose while it was still looking', async () => {
+      const feed = deferred<{ items: unknown[] }>();
+      const { actions, state } = await loadStore({
+        planDjQueue: vi.fn().mockResolvedValue(openingPlan()),
+        getDiscoveryMusicFeed: vi.fn(() => feed.promise),
+      });
+      actions.enterAutoMode();
+
+      actions.addAutoSource([{ id: 'chosen', title: 'Chosen', artist: 'Listener' }], 'My pick');
+      feed.resolve({ items: [{ id: 'rec', title: 'Recommended', artist: 'Someone', external_ids: { youtube_id: 'rec' } }] });
+      await flush();
+
+      expect(state.autoMode.sources.map((source) => source.label)).toEqual(['My pick']);
+    });
+  });
+
   it('starts an empty Auto session only when a song is placed in the route', async () => {
     const { actions, state } = await loadStore();
     actions.enterAutoMode();

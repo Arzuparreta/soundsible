@@ -95,8 +95,10 @@ import { refreshLinkReading } from '../lib/linkQuality';
 export * from './identity';
 import {
   claimedAddedAt,
+  favouriteTracks,
   isFavouriteKeys,
   isSavedKeys,
+  musicLibrary,
   ownedTrackForKeys,
   savedEntryForKeys,
   setCatalogLinks,
@@ -1999,6 +2001,87 @@ async function startAutoFromSources(retryStep = 0): Promise<void> {
   }
 }
 
+/** Enough marked songs for an automatic opening not to be the same one every time. */
+const AUTO_OPENING_MIN_FAVOURITES = 8;
+/** How many songs an automatic opening hands the planner as its source. */
+const AUTO_OPENING_SAMPLE = 40;
+
+/**
+ * Open a DJ session nobody gave a source to.
+ *
+ * Entering with nothing playing is the listener asking the DJ to choose — the
+ * mini-player says as much — so the DJ does what the listener would otherwise
+ * have to: it hands itself some of their own music as the session's first
+ * source, and the planner picks the opening inside it exactly as it does for a
+ * collection chosen by hand. The songs they marked out come first, once there
+ * are enough of them to vary; otherwise everything they have; and a listener
+ * with nothing yet gets what Discover recommends. The source is an ordinary
+ * one, visible in the session and replaceable like any other.
+ *
+ * A shuffled sample rather than the whole collection: the planner walks the
+ * graph from the last few songs of a source, so the same full list would open
+ * every session in the same neighbourhood, and a whole library is a heavy
+ * request to put behind one press.
+ */
+async function openAutoFromCollection(): Promise<void> {
+  const epoch = autoSessionEpoch;
+  // A song or a source the listener chose while this was looking wins.
+  const unanswered = () => state.autoMode.active && autoSessionEpoch === epoch
+    && !state.playback.currentTrack && state.autoMode.sources.length === 0;
+  const open = (tracks: Track[], label: string) => {
+    actions.addAutoSource(shuffled(tracks).slice(0, AUTO_OPENING_SAMPLE), label);
+  };
+  const favourites = favouriteTracks().filter((track) => !isPodcastTrack(track));
+  const library = musicLibrary();
+  if (favourites.length >= AUTO_OPENING_MIN_FAVOURITES || (favourites.length && !library.length)) {
+    open(favourites, tr('nav.favourites'));
+    return;
+  }
+  if (library.length) {
+    open(library, tr('nav.library'));
+    return;
+  }
+  const aborter = new AbortController();
+  autoOpeningAborter?.abort();
+  autoOpeningAborter = aborter;
+  setState('autoMode', {
+    phase: 'planning',
+    activity: { id: ++generatedActivityId, status: 'working', key: 'autoMode.agent.openingSource' },
+  });
+  let recommended: Track[] = [];
+  try {
+    const feed = await api.getDiscoveryMusicFeed(aborter.signal);
+    recommended = (feed.items ?? []).flatMap((item): Track[] => {
+      const owned = item.track_id ? state.library.find((track) => track.id === item.track_id) : undefined;
+      if (owned) return isPodcastTrack(owned) ? [] : [owned];
+      const videoId = String(item.external_ids?.youtube_id ?? '');
+      if (!videoId) return [];
+      return [{
+        id: videoId,
+        title: item.title,
+        artist: item.artist,
+        album: item.album,
+        duration: item.duration,
+        cover: item.cover,
+        source: 'preview',
+      }];
+    });
+  } catch {
+    // Nothing to open from, which is said below.
+  } finally {
+    if (autoOpeningAborter === aborter) autoOpeningAborter = null;
+  }
+  if (aborter.signal.aborted || !unanswered()) return;
+  if (recommended.length) {
+    open(recommended, tr('nav.search'));
+    return;
+  }
+  setState('autoMode', {
+    phase: 'idle',
+    activity: { id: ++generatedActivityId, status: 'error', key: 'autoMode.noSeed' },
+  });
+}
+
 async function confirmNormalMode(
   kind: 'podcast' | 'radio',
   proceed: () => void | Promise<void>,
@@ -2634,7 +2717,8 @@ export const actions = {
     actions.toggleFavourite(savedFromTrack(track));
   },
 
-  /** Enter the DJ workspace. It may be empty; Auto no longer invents a seed. */
+  /** Enter the DJ workspace. With nothing playing, the DJ picks the opening
+   * from the listener's own music (`openAutoFromCollection`). */
   enterAutoMode(): void {
     const current = state.playback.currentTrack;
     if (state.autoMode.active || (current && isPodcastTrack(current))) return;
@@ -2690,14 +2774,17 @@ export const actions = {
     // back on boot. In every one of them Auto opened with an empty route that
     // only a play press would fill — the transport driving the mode instead of
     // the other way round.
-    if (current) {
-      // Normally a no-op — the graph was built at the session's first touch —
-      // but it also covers a listener who reached Auto Mode without one (a
-      // keyboard shortcut, a restored session) and resumes a context that was
-      // interrupted while the app sat in the background.
-      audioService.unlockAudio();
-      void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);
-    }
+    //
+    // Normally a no-op — the graph was built at the session's first touch —
+    // but it also covers a listener who reached Auto Mode without one (a
+    // keyboard shortcut, a restored session) and resumes a context that was
+    // interrupted while the app sat in the background. With nothing playing it
+    // matters more: the opening only starts once the planner answers, long
+    // after the press that asked for it, and on a phone this press is the only
+    // gesture that will ever vouch for that playback.
+    audioService.unlockAudio();
+    if (current) void ensureGeneratedQueue().start('auto_mode', current, state.autoMode.profile);
+    else void openAutoFromCollection();
   },
 
   /** Leave Auto: generated guesses disappear; user route occurrences survive. */

@@ -71,8 +71,8 @@ export function OmniBar() {
       if (prep && (prep.state === 'pending' || prep.state === 'streamable')) {
         const pct = prep.progress == null ? null : Math.round(prep.progress * 100);
         const eta = prep.eta_seconds == null ? null : Math.max(0, Math.round(prep.eta_seconds));
-        if (pct !== null && eta !== null) return t('omnibar.preparingProgressEta', { progress: pct, eta });
-        if (pct !== null) return t('omnibar.preparingProgress', { progress: pct });
+        if (pct !== null && eta !== null) return t('common.preparingProgressEta', { progress: pct, eta });
+        if (pct !== null) return t('common.preparingProgress', { progress: pct });
       }
       return t('omnibar.loading');
     }
