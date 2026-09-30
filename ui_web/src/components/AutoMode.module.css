@@ -322,12 +322,12 @@
 .references header { display: flex; align-items: center; gap: 8px; }
 .references header strong { flex: 0 0 auto; font-size: var(--text-label); }
 .sessionActions { display: flex; flex: 1; min-width: 0; gap: 4px; }
-.references header button { display: inline-flex; flex: 1 1 0; min-width: 0; align-items: center; justify-content: center; gap: 4px; padding: 0 2px; font-size: var(--text-caption); }
+.references header button { display: inline-flex; flex: 1 1 auto; min-width: 0; align-items: center; justify-content: center; gap: 4px; padding: 0 2px; font-size: var(--text-caption); }
 .references header button svg { flex: 0 0 auto; }
-.references header button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.references header button span { flex: 1; text-align: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .references button:disabled { opacity: 0.4; cursor: default; }
 /* Let the labels use the full remaining width on narrow panels. */
-@container (max-width: 340px) { .references header button svg { display: none; } }
+@container (max-width: 420px) { .references header button svg { display: none; } }
 .references [role="status"] { font-size: var(--text-caption); overflow-wrap: anywhere; }
 .references button { color: var(--ink-secondary); font: inherit; background: none; border: 0; min-width: 36px; min-height: 36px; cursor: pointer; }
 .references p { margin: 0 0 4px; font-size: var(--text-caption); color: var(--ink-secondary); }
