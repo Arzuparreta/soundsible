@@ -424,7 +424,9 @@ export function PlayerStage(props: {
 
 
                   <Show when={!podcast() && isSavedTrack(current())}>
-                    <FavouriteButton favourite={savedFromTrack(current())} class={styles.actBtn} tooltip />
+                    <span class={styles.favouriteAction}>
+                      <FavouriteButton favourite={savedFromTrack(current())} class={styles.actBtn} tooltip />
+                    </span>
                   </Show>
 
                   <Show when={!podcast()}>
@@ -479,17 +481,19 @@ export function PlayerStage(props: {
                         </svg>
                       </Show>
                     </button>
-                    <input
-                      class={styles.volRange}
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={volPct()}
-                      style={{ '--fill': `${volPct()}%` }}
-                      aria-label={t('omnibar.volume')}
-                      aria-valuetext={`${volPct()}%`}
-                      onInput={(event) => actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
-                    />
+                    <span class={styles.volumePopover}>
+                      <input
+                        class={styles.volRange}
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={volPct()}
+                        style={{ '--fill': `${volPct()}%` }}
+                        aria-label={t('omnibar.volume')}
+                        aria-valuetext={`${volPct()}%`}
+                        onInput={(event) => actions.setVolume(volumePositionToGain(Number(event.currentTarget.value) / 100))}
+                      />
+                    </span>
                   </div>
 
                   <button
