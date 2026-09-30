@@ -26,7 +26,7 @@ const reviewJob = {
   ],
 };
 
-test('an album is saved with its songs, downloaded in one go, and a doubtful song is settled from its page', async ({ page }) => {
+test('an album bookmark is independent of bulk actions and download review', async ({ page }) => {
   await mockMusicEngine(page);
   await page.route('**/api/catalog/album?**', (route) => route.fulfill({ json: {
     title: 'Discovery', artist: 'Daft Punk', cover: '', year: 2001, genre: '', resolved: true, deezer_id: '302127',
@@ -65,9 +65,42 @@ test('an album is saved with its songs, downloaded in one go, and a doubtful son
 
   await page.goto('/player/#/album/Discovery?artist=Daft+Punk&view=discover&deezer_id=302127');
 
-  // One save: the record, and every song on it.
+  // Photo and heading share the overflow tray for clicks and touch holds.
+  for (const target of ['collection-header-cover', 'collection-header-name']) {
+    const trigger = page.getByTestId(target);
+    for (const button of ['left', 'right'] as const) {
+      await trigger.click({ button });
+      await expect(page.getByRole('dialog').getByRole('button', { name: 'Guardar', exact: true })).toBeVisible();
+      await expect(page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+    }
+    const touch = { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: 120, clientY: 180 };
+    await trigger.dispatchEvent('pointerdown', touch);
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-hold-gesture', '');
+    await trigger.dispatchEvent('pointerup', touch);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect.poll(() => page.locator('html').getAttribute('data-hold-gesture')).toBeNull();
+  }
+
+  // A bookmark adds only the entity and can be removed without touching Songs.
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  expect(bookmarked).toHaveLength(1);
+  expect(savedSets).toHaveLength(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Guardado', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  expect(bookmarked).toHaveLength(0);
+  expect(savedSets).toHaveLength(0);
+
+  // Bulk saving is an explicit overflow action, independent of the bookmark.
+  await page.getByRole('button', { name: 'Opciones', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true }).click();
+  await expect(page.getByRole('dialog').getByText(/^3 canciones aparecerán/)).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true }).click();
   await expect.poll(() => savedSets.length).toBe(1);
   expect(savedSets[0].saved).toBe(true);
   expect(savedSets[0].entries.map((entry) => entry.keys[0])).toEqual([
@@ -75,6 +108,14 @@ test('an album is saved with its songs, downloaded in one go, and a doubtful son
   ]);
 
   // Then the next step, for all of them at once.
+  // Removing a bookmark after bulk saving leaves every saved song alone.
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Guardado', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  expect(savedSets).toHaveLength(1);
+  expect(bookmarked).toHaveLength(0);
+  await page.getByRole('button', { name: 'Opciones', exact: true }).click();
   await page.getByRole('button', { name: 'Descargar el álbum', exact: true }).click();
   await expect.poll(() => downloads).toEqual([{ deezer_id: '302127' }]);
 

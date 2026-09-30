@@ -1,3 +1,4 @@
+import { createResponsiveTap } from '../lib/responsiveTap';
 import { openSavedEntityMenu } from '../components/savedEntityActions';
 import { CollectionControl } from '../components/CollectionControl';
 import RetryButton from '../components/Button';
@@ -230,6 +231,13 @@ export default function Artist() {
   };
 
   const back = () => navigateBackOr(navigate, '/search');
+  let openCollectionMenu = () => {};
+  const coverMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });
+  const titleMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });
+  const headerContextMenu = (event: MouseEvent) => {
+    event.preventDefault();
+    openCollectionMenu();
+  };
   const [heading, setHeading] = createSignal<HTMLElement>();
   useAppBar({ title: name, back, backLabel: () => t('artist.ariaBack'), heading });
 
@@ -248,14 +256,18 @@ export default function Artist() {
         </Show>
 
         <div class={styles.hero}>
-          <div class={styles.avatar} style={{ position: 'relative', background: coverGradient(name()) }}>
+          <button type="button" class={styles.avatar} data-testid="collection-header-cover"
+            aria-label={`${t('savedEntities.options')}: ${name()}`} aria-haspopup="dialog"
+            {...coverMenuTap} onContextMenu={headerContextMenu} style={{ position: 'relative', background: coverGradient(name()) }}>
             <CoverImage src={currentProfile()?.metadata?.picture} eager />
             <Show when={!currentProfile()?.metadata?.picture}>
               <span class={styles.initial}>{(name()[0] ?? '?').toUpperCase()}</span>
             </Show>
-          </div>
+          </button>
           <div class={styles.titleRow}>
-            <h1 ref={setHeading} class={styles.title}>{name()}</h1>
+            <h1 ref={setHeading} class={styles.title}><button type="button" class={styles.titleButton}
+              data-testid="collection-header-name" aria-haspopup="dialog" title={t('savedEntities.options')}
+              {...titleMenuTap} onContextMenu={headerContextMenu}>{name()}</button></h1>
             <Show when={candidates().length > 0}>
               <div class={styles.disambigWrap}>
                 <button
@@ -300,6 +312,7 @@ export default function Artist() {
           </span>
           <div class={styles.actions}>
             <CollectionControl
+              onMenuReady={(open) => { openCollectionMenu = open; }}
               entity={{ kind: 'artist', name: name(), cover: currentProfile()?.metadata?.picture || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: artistPath(name(), { view: view(), artistId: viewParams().artistId, deezerId: viewParams().deezerId }) }}
               deezerId={viewParams().deezerId ?? (currentProfile()?.deezer_id || undefined)} />
             <Show when={state.autoMode.active} fallback={

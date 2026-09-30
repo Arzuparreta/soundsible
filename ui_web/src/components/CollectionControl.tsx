@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
 import {
-  collectionStep, discographyOf, jobMissingCount, jobReviewCount, jobRunning, saveCollection, unsaveCollection,
+  collectionStep, discographyOf, jobMissingCount, jobReviewCount, jobRunning, saveCollection,
 } from '../lib/collection';
 import { api } from '../lib/api';
 import { confirmDialog } from '../lib/confirm';
@@ -9,12 +9,13 @@ import { t } from '../lib/i18n';
 import { migrationApi, type MigrationCandidate, type MigrationJob, type MigrationTrack } from '../lib/migrationApi';
 import { openOverlay } from '../lib/overlay';
 import { createResponsiveTap } from '../lib/responsiveTap';
-import { entitiesBusy, isEntitySaved, syncSavedEntities, type SavedEntity } from '../lib/savedEntities';
+import { entitiesBusy, isEntitySaved, setEntitySaved, syncSavedEntities, type SavedEntity } from '../lib/savedEntities';
 import { toast } from '../lib/toast';
 import { ownedTrackForItem } from '../stores';
 import type { CatalogItem } from '../types/music';
-import { BookmarkIcon, CheckIcon, DownloadIcon } from './icons';
+import { BookmarkIcon, CheckIcon, MoreIcon, menuIcons } from './icons';
 import { Spinner } from './Spinner';
+import { openActionMenu } from './ActionMenu';
 import saveStyles from './SavedEntities.module.css';
 import styles from './CollectionControl.module.css';
 
@@ -32,18 +33,12 @@ const downloads = {
   artist: { get: api.getArtistDownload, start: api.startArtistDownload },
 };
 
-/**
- * An album's or an artist's place in your library, as one control: saved or
- * not, and then the next step for its songs — download them, watch them
- * arrive, choose a version where the match was doubtful, or see that they are
- * all here.
- *
- * An album page hands over its tracklist. An artist's songs are their albums,
- * singles and EPs, read once the artist is saved, or when saving it asks how
- * many there are.
- */
-export function CollectionControl(props: { entity: SavedEntity; deezerId?: string; tracklist?: CatalogItem[] }) {
-  onMount(() => void syncSavedEntities());
+/** Bookmark first; explicit bulk song actions live in the overflow menu. */
+export function CollectionControl(props: { entity: SavedEntity; deezerId?: string; tracklist?: CatalogItem[]; onMenuReady?: (open: () => void) => void }) {
+  onMount(() => {
+    void syncSavedEntities();
+    props.onMenuReady?.(openMenu);
+  });
   const artist = () => props.entity.kind === 'artist';
   const saved = () => isEntitySaved(props.entity);
   const [discography, setDiscography] = createSignal<CatalogItem[] | null>(null);
@@ -69,16 +64,20 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
     if (!id) return;
     try {
       const { job: latest } = await downloads[props.entity.kind].get(id);
-      if (props.deezerId === id) setJob(latest);
+      if (props.deezerId === id) {
+        setJob(latest);
+        // A restored download needs its full tracklist for progress and ownership.
+        // A bookmark alone never fetches the artist's discography.
+        if (latest && artist()) void readDiscography();
+      }
     } catch {
       /* looked at again on the next change */
     }
   };
-  createEffect(on(() => [props.deezerId, saved()] as const, ([id, isSaved]) => {
+  createEffect(on(() => props.deezerId, (id) => {
     setJob(null);
-    if (!id || !isSaved) return;
+    if (!id) return;
     void refresh();
-    if (artist()) void readDiscography();
   }));
   createEffect(on(() => props.deezerId, () => setDiscography(null), { defer: true }));
   let watch: number | undefined;
@@ -88,15 +87,14 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
   });
   onCleanup(() => window.clearInterval(watch));
 
-  const step = () => collectionStep({ saved: saved(), total: total(), owned: owned(), job: job() });
+  const step = () => collectionStep({ total: total(), owned: owned(), job: job() });
   const arrived = () => arrivedOf(job());
 
   const toggleSaved = async () => {
     if (changing()) return;
     setChanging(true);
     try {
-      const list = await readDiscography();
-      await (saved() ? unsaveCollection(props.entity, list) : saveCollection(props.entity, list));
+      await setEntitySaved(props.entity, !saved());
     } finally {
       setChanging(false);
     }
@@ -116,9 +114,15 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
 
   const download = async () => {
     const id = props.deezerId;
-    if (!id || starting() || !(await confirmDownload())) return;
+    if (!id || starting()) return;
     setStarting(true);
     try {
+      const list = await readDiscography();
+      if (!list.length) {
+        toast.error(t('collectionControl.failed'));
+        return;
+      }
+      if (!(await confirmDownload())) return;
       setJob((await downloads[props.entity.kind].start(id)).job);
       toast.success(t('collectionControl.started', { title: props.entity.name }));
     } catch {
@@ -132,9 +136,39 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
     <CollectionDownloadSheet title={props.entity.name} job={job} onJob={setJob} close={close} />
   ), { ariaLabel: () => props.entity.name });
 
+  const addSongs = async () => {
+    if (changing()) return;
+    setChanging(true);
+    try {
+      const list = await readDiscography();
+      if (!list.length) {
+        toast.error(t('collectionControl.failed'));
+        return;
+      }
+      await saveCollection(props.entity, list);
+    } finally {
+      setChanging(false);
+    }
+  };
+
   const downloadName = () => artist()
     ? t('collectionControl.downloadArtist', { title: props.entity.name })
     : t('collectionControl.downloadAlbum');
+
+  const openMenu = () => openActionMenu({
+    title: props.entity.name,
+    actions: [
+      { icon: saved() ? menuIcons.unbookmark() : menuIcons.bookmark(),
+        label: t(saved() ? 'savedEntities.remove' : 'savedEntities.save'),
+        disabled: entitiesBusy() || changing(), onSelect: () => void toggleSaved() },
+      ...(props.deezerId || (props.tracklist?.length ?? 0) > 0 ? [
+        { icon: menuIcons.save(), label: t('collectionControl.addSongs'),
+          disabled: starting() || changing(), onSelect: () => void addSongs() },
+      ] : []),
+      ...(props.deezerId ? [{ icon: menuIcons.download(), label: downloadName(),
+        disabled: starting() || changing(), onSelect: () => void download() }] : []),
+    ],
+  });
 
   return (
     <span class={styles.control}>
@@ -143,7 +177,9 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
         <BookmarkIcon />
         {saved() ? t('savedEntities.saved') : t('savedEntities.save')}
       </button>
-      <Show when={saved() && props.deezerId && total() > 0}>
+      <button type="button" class={styles.step} aria-label={t('savedEntities.options')}
+        aria-haspopup="dialog" onClick={openMenu}><MoreIcon size={18} /></button>
+      <Show when={job()}>
         <Switch>
           <Match when={step() === 'owned'}>
             <span class={styles.step} data-step="owned" role="status" title={t('collectionControl.owned')}>
@@ -165,13 +201,6 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
           <Match when={step() === 'missing'}>
             <button type="button" class={styles.step} data-step="missing" onClick={details}>
               {t('collectionControl.missing', { n: jobMissingCount(job()) })}
-            </button>
-          </Match>
-          <Match when={true}>
-            <button type="button" class={styles.step} data-step="download" disabled={starting()}
-              aria-label={downloadName()} title={downloadName()} onClick={() => void download()}>
-              <DownloadIcon size={18} />
-              <span class={styles.label}>{artist() ? t('collectionControl.downloadAll') : t('collectionControl.download')}</span>
             </button>
           </Match>
         </Switch>

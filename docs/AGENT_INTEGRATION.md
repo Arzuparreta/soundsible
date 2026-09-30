@@ -314,11 +314,12 @@ destination, and assigns `id` and `added_at`. References without ids remain
 unresolved; names alone never merge with identified editions or artists. Both
 methods return the full collection. Use `saved: false` with the same entry to
 remove it. The per-user `saved_entities_updated` event invalidates cached reads.
-The route touches only the bookmark. The web player treats an album or an
-artist in the library as one fact: saving it also saves its songs (an artist's
-are its discography, after a confirmation that says how many) through
-`/api/library/saved/set`, and removing it removes the songs that are only
-streamed, while favourites and downloaded songs stay.
+The route and the web player's bookmark controls touch only the bookmark.
+Adding every song to Songs and downloading a collection are separate, explicit
+commands in the album or artist page's overflow menu. The same tray opens from
+the header photo or name with a left/right click, keyboard activation, or a
+mobile long press. Removing a bookmark never
+removes saved songs or downloads.
 Failed persistence returns an error without discarding the previous collection;
 instance backups include the account's `saved_entities.json` automatically.
 
