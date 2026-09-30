@@ -63,9 +63,8 @@
     box-shadow: var(--shadow-2), inset 0 1px var(--glass-rim);
     backdrop-filter: var(--glass-filter);
     -webkit-backdrop-filter: var(--glass-filter);
-    /* .progress is absolute at the top edge; without this it would keep its
-       square corners and poke out past the rounded ones. */
-    overflow: hidden;
+    /* The seek hit area and feedback extend beyond the painted surface. */
+    overflow: visible;
   }
 }
 
@@ -527,3 +526,82 @@
    On touch there is none: OmniBar renders the artist as plain text below the
    desktop breakpoint, because the whole pill is one press to open the player. */
 .meta a { position: relative; z-index: 2; }
+
+/* The hit area extends upward, leaving the centered transport targets intact.
+   Only the painted rail clips to the pill; the focus and preview stay visible. */
+.seekControl {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  z-index: 3;
+}
+.seekControl .progress { overflow: hidden; border-radius: var(--radius-full); }
+.seekInput {
+  position: absolute;
+  top: -16px;
+  left: 0;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+  touch-action: pan-y pinch-zoom;
+  -webkit-touch-callout: none;
+}
+.seekInput:disabled { pointer-events: none; }
+.seekControl:focus-within::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0 auto;
+  height: 8px;
+  border-radius: var(--radius-full);
+  outline: 2px solid var(--accent-ink);
+  pointer-events: none;
+}
+.seekControl[data-seeking] .progress { height: 3px; }
+.seekControl[data-seeking] .progressFill { transition: none; }
+.seekHandle {
+  position: absolute;
+  top: 1px;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--accent-ink);
+  pointer-events: none;
+}
+.seekTime {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--ink-primary);
+  font: var(--text-caption) var(--font-mono);
+  white-space: nowrap;
+  box-shadow: var(--shadow-1);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .progressFill { transition: none; }
+}
+
+@media (pointer: coarse) {
+  .seekInput { user-select: none; -webkit-user-select: none; }
+}
+/* Preserve the original rail's clipping against the rounded mobile surface. */
+@media (max-width: 1023px) {
+  .seekControl .progress {
+    height: var(--mini-player-h);
+    border-radius: var(--radius-panel);
+    background: linear-gradient(var(--hairline) 0 2px, transparent 2px);
+    pointer-events: none;
+  }
+  .seekControl .progressFill { height: 2px; }
+  .seekControl[data-seeking] .progressFill { height: 3px; }
+}

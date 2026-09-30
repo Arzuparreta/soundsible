@@ -6,7 +6,7 @@ import { createMemo, createSignal, onCleanup, Match, Show, Switch, type JSX } fr
 import { state, actions, setNowPlayingOpen } from '../stores';
 import { trackCoverUrl } from '../lib/media';
 import { mobileListLayout } from '../lib/listLayout';
-import { pageVisible } from '../lib/pageVisibility';
+import { OmniSeek } from './OmniSeek';
 import { t } from '../lib/i18n';
 import { linkFits, linkReading, mbps, trackKbps } from '../lib/linkQuality';
 import { gainToVolumePosition, nudgeVolumeGain, volumePositionToGain } from '../lib/volumeScale';
@@ -93,12 +93,6 @@ export function OmniBar() {
   };
   const audibleVolume = createMemo(() => (state.playback.muted ? 0 : state.playback.volume));
   const volumePct = createMemo(() => Math.round(gainToVolumePosition(audibleVolume()) * 100));
-  const pct = createMemo<number>((previous) => {
-    if (!pageVisible()) return previous ?? 0;
-    const d = state.playback.duration;
-    return d > 0 ? Math.min(100, (state.playback.currentTime / d) * 100) : 0;
-  });
-
   /**
    * On a phone the pill is one thing you press to open the player, so nothing
    * inside it may quietly be a second destination: an artist link there took
@@ -145,12 +139,7 @@ export function OmniBar() {
         element.addEventListener('click', consumeSwipeClick, true);
         onCleanup(() => element.removeEventListener('click', consumeSwipeClick, true));
       }}>
-      {/* The line only ever reports position. Loading is already said by the
-          transport spinner and the subtitle, so it stays quiet until there is a
-          real position to show. */}
-      <div class={styles.progress}>
-        <div class={styles.progressFill} style={{ '--p': pct() / 100 }} />
-      </div>
+      <OmniSeek onClaim={resetSwipe} />
 
       <div class={styles.openArea}><button
         class={styles.openButton}

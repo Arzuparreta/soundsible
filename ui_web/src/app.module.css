@@ -68,7 +68,7 @@
 @media (max-width: 1023px) {
   .app[data-mini-player] .outlet:not(:has(:global(.view)))::after {
     display: block;
-    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2);
+    height: calc(var(--mini-player-h) + var(--mini-player-inset) * 2 + 16px);
     content: '';
   }
 }

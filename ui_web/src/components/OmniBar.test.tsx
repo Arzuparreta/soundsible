@@ -12,6 +12,7 @@ const { actions, setNowPlayingOpen, state } = vi.hoisted(() => ({
     toggleMute: vi.fn(),
     stopRadio: vi.fn(),
     dismissPlayback: vi.fn(),
+    seek: vi.fn(),
   },
   setNowPlayingOpen: vi.fn(),
   state: {
@@ -194,5 +195,40 @@ describe('what the compact pill does with a tap', () => {
     const cover = view.container.querySelector<HTMLElement>('[data-omni-cover]')!;
     expect(cover).not.toHaveAttribute('role', 'button');
     expect(cover.querySelector('button, a')).toBeNull();
+  });
+});
+
+
+describe('seek and pill gesture arbitration', () => {
+  beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); setMediaQuery(MOBILE, true); });
+  afterEach(() => { vi.runOnlyPendingTimers(); vi.useRealTimers(); setMediaQuery(MOBILE, false); });
+
+  it('a claimed seek cannot dismiss or open the pill and leaves transport usable', () => {
+    const { container } = render(() => <OmniBar />);
+    const slider = screen.getByRole('slider', { name: 'nowPlaying.seekLabel' });
+    vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 400 } as DOMRect);
+    pointer(slider, 'pointerdown', 300, 20);
+    vi.advanceTimersByTime(180);
+    pointer(slider, 'pointermove', 140, 20);
+    pointer(slider, 'pointerup', 140, 20);
+    fireEvent.click(slider);
+    expect(actions.seek).toHaveBeenCalledExactlyOnceWith(42);
+    expect(actions.dismissPlayback).not.toHaveBeenCalled();
+    expect(setNowPlayingOpen).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-omni-player]')).not.toHaveStyle({ transform: 'translateX(-160px)' });
+    fireEvent.click(screen.getByRole('button', { name: 'common.pause' }));
+    expect(actions.togglePlay).toHaveBeenCalledOnce();
+  });
+
+  it('a swipe begun on the rail before the hold still dismisses the pill', () => {
+    const { container } = render(() => <OmniBar />);
+    const slider = screen.getByRole('slider', { name: 'nowPlaying.seekLabel' });
+    const bar = container.querySelector('[data-omni-player]')!;
+    pointer(slider, 'pointerdown', 300, 20);
+    pointer(slider, 'pointermove', 140, 20);
+    pointer(bar, 'pointerup', 140, 20);
+    vi.advanceTimersByTime(180);
+    expect(actions.dismissPlayback).toHaveBeenCalledOnce();
+    expect(actions.seek).not.toHaveBeenCalled();
   });
 });
