@@ -1,3 +1,4 @@
+import { createResponsiveTap } from '../lib/responsiveTap';
 import { CollectionControl } from '../components/CollectionControl';
 import Button from '../components/Button';
 import { CollectionActions } from '../components/CollectionActions';
@@ -229,6 +230,13 @@ export default function Album() {
     navigate,
     artistName() ? artistPath(artistName(), { view: 'discover' }) : '/search',
   );
+  let openCollectionMenu = () => {};
+  const coverMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });
+  const titleMenuTap = createResponsiveTap({ onTap: () => openCollectionMenu(), onLongPress: () => openCollectionMenu() });
+  const headerContextMenu = (event: MouseEvent) => {
+    event.preventDefault();
+    openCollectionMenu();
+  };
   const [heading, setHeading] = createSignal<HTMLElement>();
   useAppBar({
     title: () => currentProfile()?.title || title(),
@@ -252,13 +260,17 @@ export default function Album() {
         </Show>
 
         <div class={styles.hero}>
-          <div class={styles.cover} style={{ position: 'relative', background: coverGradient(title()) }}>
+          <button type="button" class={styles.cover} data-testid="collection-header-cover"
+            aria-label={`${t('savedEntities.options')}: ${currentProfile()?.title || title()}`} aria-haspopup="dialog"
+            {...coverMenuTap} onContextMenu={headerContextMenu} style={{ position: 'relative', background: coverGradient(title()) }}>
             <CoverImage src={currentProfile()?.cover} eager />
             <Show when={!currentProfile()?.cover}>
               <span class={styles.initial}>{(title()[0] ?? '?').toUpperCase()}</span>
             </Show>
-          </div>
-          <h1 ref={setHeading} class={styles.title}>{currentProfile()?.title || title()}</h1>
+          </button>
+          <h1 ref={setHeading} class={styles.title}><button type="button" class={styles.titleButton}
+              data-testid="collection-header-name" aria-haspopup="dialog" title={t('savedEntities.options')}
+              {...titleMenuTap} onContextMenu={headerContextMenu}>{currentProfile()?.title || title()}</button></h1>
           <ArtistLinks class={styles.artistLink} music={{ artist: currentProfile()?.artist || artistName(), view: view(), artistId: catalogTracks()?.album?.album_artist_id ?? undefined }} />
           <span class={styles.meta}>
             <Show when={currentProfile()?.year}>{currentProfile()!.year}</Show>
@@ -267,6 +279,7 @@ export default function Album() {
           </span>
           <div class={styles.actions}>
             <CollectionControl
+              onMenuReady={(open) => { openCollectionMenu = open; }}
               entity={{ kind: 'album', name: title(), artist: artistName(), cover: currentProfile()?.cover || (libraryTrackList()[0] ? trackCoverUrl(libraryTrackList()[0], 'thumb') : undefined), destination: albumPath(title(), artistName(), { view: view(), albumId: viewParams().albumId, deezerId: viewParams().deezerId }) }}
               tracklist={tracklist()}
               deezerId={viewParams().deezerId ?? currentProfile()?.deezer_id ?? undefined} />

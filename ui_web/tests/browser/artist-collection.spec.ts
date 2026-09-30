@@ -16,13 +16,17 @@ const DISCOGRAPHY = {
   tracklist: [song(1, 'One More Time', 'Discovery'), song(2, 'Digital Love', 'Discovery'), song(5, 'Something About Us (Live)', 'Alive EP')],
 };
 
-test('an artist is saved with every song they released, and downloaded whole after saying how much', async ({ page }) => {
+test('an artist bookmark is independent of explicit bulk saving and downloading', async ({ page }) => {
   await mockMusicEngine(page);
   await page.route('**/api/catalog/artist?**', (route) => route.fulfill({ json: {
     name: 'Daft Punk', resolved: true, deezer_id: '27', top_tracks: [], albums: [], singles_eps: [],
     related_artists: [], candidates: [],
   } }));
-  await page.route('**/api/catalog/artist/discography?**', (route) => route.fulfill({ json: DISCOGRAPHY }));
+  let discographyReads = 0;
+  await page.route('**/api/catalog/artist/discography?**', (route) => {
+    discographyReads++;
+    return route.fulfill({ json: DISCOGRAPHY });
+  });
   let bookmarked: unknown[] = [];
   await page.route((url) => url.pathname === '/api/library/saved-entities', async (route) => {
     if (route.request().method() === 'PUT') {
@@ -52,19 +56,58 @@ test('an artist is saved with every song they released, and downloaded whole aft
 
   await page.goto('/player/#/artist/Daft%20Punk?deezer_id=27&view=discover');
 
-  // Saving an artist says how many songs will arrive, and nothing does on "no".
+  // Photo and heading share the overflow tray for clicks and touch holds.
+  for (const target of ['collection-header-cover', 'collection-header-name']) {
+    const trigger = page.getByTestId(target);
+    for (const button of ['left', 'right'] as const) {
+      await trigger.click({ button });
+      await expect(page.getByRole('dialog').getByRole('button', { name: 'Guardar', exact: true })).toBeVisible();
+      await expect(page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+    }
+    const touch = { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: 120, clientY: 180 };
+    await trigger.dispatchEvent('pointerdown', touch);
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-hold-gesture', '');
+    await trigger.dispatchEvent('pointerup', touch);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect.poll(() => page.locator('html').getAttribute('data-hold-gesture')).toBeNull();
+  }
+
+  // A bookmark adds only the entity and can be removed without touching Songs.
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  const confirm = page.getByRole('dialog');
-  await expect(confirm.getByText('Guardar a Daft Punk', { exact: true })).toBeVisible();
-  await expect(confirm.getByText(/^3 canciones de sus álbumes, singles y EPs/)).toBeVisible();
-  await confirm.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  expect(bookmarked).toHaveLength(1);
+  expect(savedSets).toHaveLength(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Guardado', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  expect(bookmarked).toHaveLength(0);
+  expect(savedSets).toHaveLength(0);
+
+  expect(discographyReads).toBe(0);
+
+  // Bulk saving is an explicit overflow action, independent of the bookmark.
+  await page.getByRole('button', { name: 'Opciones', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true }).click();
+  await expect(page.getByRole('dialog').getByText(/^3 canciones aparecerán/)).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Añadir todas las canciones', exact: true }).click();
   await expect.poll(() => savedSets.length).toBe(1);
   expect(savedSets[0].entries.map((entry) => entry.keys[0])).toEqual([
     'cat:deezer:track:1', 'cat:deezer:track:2', 'cat:deezer:track:5',
   ]);
 
   // Downloading all of it says how much, then hands it to the engine.
+  // Removing a bookmark after bulk saving leaves every saved song alone.
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Guardado', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Guardado', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Guardar', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  expect(savedSets).toHaveLength(1);
+  expect(bookmarked).toHaveLength(0);
+  await page.getByRole('button', { name: 'Opciones', exact: true }).click();
   await page.getByRole('button', { name: 'Descargar todo de Daft Punk', exact: true }).click();
   await expect(page.getByRole('dialog').getByText(/^3 canciones que aún no tienes descargadas, unos 41 MB/)).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Descargar', exact: true }).click();

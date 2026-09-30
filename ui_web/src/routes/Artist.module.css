@@ -45,6 +45,10 @@
 }
 
 .avatar {
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -468,4 +472,19 @@
   padding: var(--space-3xl) var(--gutter);
   text-align: center;
   color: var(--ink-secondary);
+}
+
+.titleButton {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: inherit;
+  cursor: pointer;
 }

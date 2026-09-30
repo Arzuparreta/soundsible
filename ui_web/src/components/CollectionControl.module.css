@@ -1,4 +1,4 @@
-/* The album's save control and the step after it, read as one pill split in two. */
+/* Primary bookmark, overflow actions and any active download status. */
 .control { display: inline-flex; align-items: center; gap: var(--space-2xs); }
 
 .step {
@@ -23,9 +23,7 @@
 @media (hover: hover) and (pointer: fine) {
   button.step:hover:not(:disabled) { background: var(--bg-hover); }
 }
-/* On a phone the icon says ⬇ and ✓ by itself, and once the album is saved the
-   pair takes a line of its own above Play and Shuffle rather than pushing one
-   of them onto a line alone. */
+/* Keep the collection controls together above playback actions on phones. */
 @media (max-width: 519px) {
   .control:has(.step) { flex-basis: 100%; justify-content: center; }
   .step[data-step='download'] .label, .step[data-step='owned'] .label { display: none; }

@@ -70,8 +70,7 @@ function flushQueuedRefresh(): void {
   void syncSavedEntities();
 }
 
-/** `quiet` leaves the "removed" toast to a caller that says more (an album
- * takes its songs with it, and its undo has to bring them back too). */
+/** Save or remove only the navigation bookmark, independently of songs. */
 export async function setEntitySaved(entry: SavedEntity, saved: boolean, opts: { quiet?: boolean } = {}): Promise<void> {
   if (entitiesBusy()) return;
   ++generation;
