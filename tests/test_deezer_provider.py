@@ -180,3 +180,17 @@ def test_other_error_bodies_are_answers_as_before(monkeypatch):
 
     assert deezer.get("album/404") == missing
     assert get.call_count == 1
+
+
+def test_image_skips_the_silhouette_deezer_serves_for_no_picture():
+    empty = "https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg"
+    real = "https://cdn-images.dzcdn.net/images/artist/b3e9b6db23e8291f89e01257b5f468c3/1000x1000-000000-80-0-0.jpg"
+    assert deezer.is_placeholder_image(empty)
+    assert not deezer.is_placeholder_image(real)
+    assert deezer.image({"picture_xl": empty, "picture_big": empty.replace("1000x1000", "500x500")}, "picture") == ""
+    assert deezer.image({"picture_xl": real, "picture_big": "x"}, "picture") == real
+    assert deezer.image({"cover_xl": "", "cover_big": "https://b"}, "cover") == "https://b"
+    # The bare field only stands in when no sized URL was given at all.
+    assert deezer.image({"cover": "https://api.deezer.com/album/1/image"}, "cover") == "https://api.deezer.com/album/1/image"
+    assert deezer.image({"cover": "https://api.deezer.com/album/1/image", "cover_xl": empty}, "cover") == ""
+    assert deezer.image({}, "cover") == ""

@@ -134,3 +134,22 @@ test('Library opens its root and every subentry can be pinned to the bottom bar'
     await page.screenshot({ path: info.outputPath('library-custom-bottom-bar.png') });
   }
 });
+
+test('every saved card is the same size, whatever the length of its name', async ({ page }) => {
+  await mockMusicEngine(page);
+  const entities: SavedEntity[] = ['Halo', 'Abel York', 'Extremoduro', 'Blue Oyster Cult'].flatMap((name, index) => [
+    { kind: 'artist', name, destination: `/artist/${encodeURIComponent(name)}?deezer_id=${index + 1}` },
+    { kind: 'album', name: `${name} Live`, artist: name, destination: `/album/${encodeURIComponent(name)}?deezer_id=${index + 10}` },
+  ]);
+  await page.route('**/api/library/saved-entities', (route) => route.fulfill({ json: { entities } }));
+  const coverSizes = (region: string) => page.getByRole('region', { name: region, exact: true }).locator('article > a > div').evaluateAll(
+    (covers) => covers.map((cover) => `${Math.round(cover.getBoundingClientRect().width)}x${Math.round(cover.getBoundingClientRect().height)}`));
+  await page.goto('/player/#/');
+  for (const region of ['Artistas guardados', 'Álbumes guardados']) {
+    await expect.poll(() => coverSizes(region)).toHaveLength(4);
+    expect(new Set(await coverSizes(region)).size, region).toBe(1);
+  }
+  await page.goto('/player/#/?saved=artists');
+  await expect.poll(() => coverSizes('Artistas guardados')).toHaveLength(4);
+  expect(new Set(await coverSizes('Artistas guardados')).size).toBe(1);
+});

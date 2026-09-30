@@ -120,3 +120,23 @@ def test_repeat_save_without_provider_metadata_keeps_snapshot(isolated_runtime):
         store.set_saved({**album(), 'cover': 'https://example.org/cover.jpg'}, True)
         entries = store.set_saved(album(), True)
         assert entries[0]['cover'] == 'https://example.org/cover.jpg'
+
+
+SILHOUETTE = 'https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg'
+
+
+def test_deezer_silhouette_is_no_cover_and_a_later_picture_fills_it(isolated_runtime):
+    with user_context('owner'):
+        assert store.set_saved({**album(), 'cover': SILHOUETTE}, True)[0]['cover'] == ''
+        entries = store.set_saved({**album(), 'cover': 'https://example.org/cover.jpg'}, True)
+        assert entries[0]['cover'] == 'https://example.org/cover.jpg'
+
+
+def test_silhouette_saved_earlier_is_read_as_no_cover(isolated_runtime):
+    with user_context('owner'):
+        store.set_saved(album(), True)
+        path = user_config_dir() / 'saved_entities.json'
+        payload = json.loads(path.read_text(encoding='utf-8'))
+        payload['entities'][0]['cover'] = SILHOUETTE
+        path.write_text(json.dumps(payload), encoding='utf-8')
+        assert store.get_entries()[0]['cover'] == ''

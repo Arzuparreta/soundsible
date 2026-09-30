@@ -66,13 +66,7 @@ def _deezer_track_to_feed_item(row: dict, *, source: str, reason: str, reason_co
     if not deezer_id or not title or not artist:
         return None
     album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
-    cover = (
-        album_row.get("cover_xl")
-        or album_row.get("cover_big")
-        or album_row.get("cover_medium")
-        or row.get("cover")
-        or ""
-    )
+    cover = deezer.image(album_row, "cover") or str(row.get("cover") or "")
     return {
         "id": f"deezer:{deezer_id}",
         "media_type": "music_track",

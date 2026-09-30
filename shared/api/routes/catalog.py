@@ -930,7 +930,7 @@ def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
                     artist=artist,
                     album=album,
                     duration=_duration(row.get("duration")),
-                    cover=album_row.get("cover_xl") or album_row.get("cover_big") or album_row.get("cover_medium") or "",
+                    cover=deezer.image(album_row, "cover"),
                     popularity=float(row.get("rank") or 0),
                     external_ids={"deezer_id": deezer_id},
                     attribution_url=row.get("link") or "",
@@ -948,7 +948,7 @@ def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
                     title=artist,
                     subtitle="Artist",
                     artist=artist,
-                    cover=artist_row.get("picture_xl") or artist_row.get("picture_big") or artist_row.get("picture_medium") or "",
+                    cover=deezer.image(artist_row, "picture"),
                     external_ids={"deezer_artist_id": artist_id},
                     attribution_url=artist_row.get("link") or "",
                     downloadable=False,
@@ -967,7 +967,7 @@ def _deezer_search(query: str, limit: int) -> list[dict[str, Any]]:
                     subtitle=artist,
                     artist=artist,
                     album=album,
-                    cover=album_row.get("cover_xl") or album_row.get("cover_big") or album_row.get("cover_medium") or "",
+                    cover=deezer.image(album_row, "cover"),
                     external_ids={"deezer_album_id": album_id},
                     attribution_url=album_row.get("link") or "",
                     downloadable=False,
@@ -1499,7 +1499,7 @@ def _deezer_artist_search(name: str, limit: int = 10) -> list[dict[str, Any]]:
         out.append({
             "deezer_id": artist_id,
             "name": artist_name,
-            "picture": row.get("picture_xl") or row.get("picture_big") or row.get("picture_medium") or "",
+            "picture": deezer.image(row, "picture"),
             "nb_fans": int(row.get("nb_fan") or 0),
             "nb_album": int(row.get("nb_album") or 0),
         })
@@ -1515,8 +1515,11 @@ def _resolve_artist_id(name: str, deezer_id: str | None = None) -> tuple[str | N
     if not candidates:
         return None, []
 
-    name_norm = _norm(name)
-    exact = [c for c in candidates if _norm(c["name"]) == name_norm]
+    # Tags drop diacritics as often as they keep them: "Blue Oyster Cult" is
+    # Deezer's "Blue Öyster Cult", while an undecorated namesake with no fans
+    # and no picture also exists. Match folded, then let popularity decide.
+    name_folded = fold_text(name)
+    exact = [c for c in candidates if fold_text(c["name"]) == name_folded]
     if exact:
         exact.sort(key=lambda c: c["nb_fans"], reverse=True)
         return exact[0]["deezer_id"], exact[1:]
@@ -1529,7 +1532,7 @@ def _deezer_artist_profile(artist_id: str) -> dict[str, Any]:
     data = _deezer_get(f"artist/{artist_id}")
     return {
         "name": (data.get("name") or "").strip(),
-        "picture": data.get("picture_xl") or data.get("picture_big") or data.get("picture_medium") or "",
+        "picture": deezer.image(data, "picture"),
         "nb_fans": int(data.get("nb_fan") or 0),
     }
 
@@ -1575,7 +1578,7 @@ def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | 
         artist=artist,
         album=_clean(album_row.get("title")),
         duration=_duration(row.get("duration")),
-        cover=album_row.get("cover_xl") or album_row.get("cover_big") or album_row.get("cover_medium") or "",
+        cover=deezer.image(album_row, "cover"),
         popularity=float(row.get("rank") or 0),
         # The recording code rides along where Deezer gives it (album listings
         # do): it is the key that bridges catalogs, and one recording released
@@ -1612,7 +1615,7 @@ def _deezer_artist_releases(artist_id: str, limit: int = 100) -> dict[str, list[
         entry = {
             "deezer_id": album_id,
             "title": title,
-            "cover": row.get("cover_xl") or row.get("cover_big") or row.get("cover_medium") or "",
+            "cover": deezer.image(row, "cover"),
             "year": _extract_year(row.get("release_date")),
             "record_type": record_type or "album",
         }
@@ -1674,7 +1677,7 @@ def _deezer_related_artists(artist_id: str, limit: int = 20) -> list[dict[str, A
         out.append({
             "deezer_id": aid,
             "name": aname,
-            "picture": row.get("picture_xl") or row.get("picture_big") or row.get("picture_medium") or "",
+            "picture": deezer.image(row, "picture"),
             "nb_fans": int(row.get("nb_fan") or 0),
         })
     return out
@@ -1685,7 +1688,7 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
     artist_row = data.get("artist") if isinstance(data.get("artist"), dict) else {}
     title = _clean(data.get("title"))
     artist = _clean(artist_row.get("name"))
-    cover = data.get("cover_xl") or data.get("cover_big") or data.get("cover_medium") or ""
+    cover = deezer.image(data, "cover")
     year = _extract_year(data.get("release_date"))
     genre_names: list[str] = []
     genres = data.get("genres") if isinstance(data.get("genres"), dict) else {}
@@ -1990,14 +1993,14 @@ def _resolve_album_deezer_id(name: str, artist: str) -> str | None:
     q = f'album:"{name}" artist:"{artist}"' if artist else f'album:"{name}"'
     data = _deezer_get("search", {"q": q, "limit": 5})
     rows = data.get("data") if isinstance(data.get("data"), list) else []
-    name_norm = _norm(name)
+    name_folded = fold_text(name)
     for row in rows:
         if not isinstance(row, dict):
             continue
         album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
         album_title = _clean(album_row.get("title"))
         album_id = str(album_row.get("id") or "")
-        if album_id and _norm(album_title) == name_norm:
+        if album_id and fold_text(album_title) == name_folded:
             return album_id
     # Fuzzy: first result with an album id
     for row in rows:

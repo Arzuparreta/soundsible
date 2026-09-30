@@ -92,3 +92,20 @@ export async function setEntitySaved(entry: SavedEntity, saved: boolean, opts: {
     flushQueuedRefresh();
   }
 }
+
+/** Give a saved bookmark that has no picture the one its page now shows. Quiet:
+ * it is not the person saving anything, so a failure waits for the next visit. */
+export async function fillEntityCover(entry: SavedEntity): Promise<void> {
+  const stored = savedEntities().find((item) => sameEntity(item, entry));
+  if (!stored || stored.cover || !entry.cover || entitiesBusy()) return;
+  ++generation;
+  setEntitiesBusy(true);
+  try {
+    setSavedEntities(await api.setSavedEntity({ ...stored, cover: entry.cover }, true));
+  } catch {
+    /* tried again on the next visit */
+  } finally {
+    setEntitiesBusy(false);
+    flushQueuedRefresh();
+  }
+}

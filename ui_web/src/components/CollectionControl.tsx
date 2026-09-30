@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js';
 import {
   collectionStep, discographyOf, jobMissingCount, jobReviewCount, jobRunning, saveCollection,
 } from '../lib/collection';
@@ -9,7 +9,7 @@ import { t } from '../lib/i18n';
 import { migrationApi, type MigrationCandidate, type MigrationJob, type MigrationTrack } from '../lib/migrationApi';
 import { openOverlay } from '../lib/overlay';
 import { createResponsiveTap } from '../lib/responsiveTap';
-import { entitiesBusy, isEntitySaved, setEntitySaved, syncSavedEntities, type SavedEntity } from '../lib/savedEntities';
+import { entitiesBusy, fillEntityCover, isEntitySaved, setEntitySaved, syncSavedEntities, type SavedEntity } from '../lib/savedEntities';
 import { toast } from '../lib/toast';
 import { ownedTrackForItem } from '../stores';
 import type { CatalogItem } from '../types/music';
@@ -41,6 +41,15 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
   });
   const artist = () => props.entity.kind === 'artist';
   const saved = () => isEntitySaved(props.entity);
+  // A bookmark saved without a picture takes the one this page shows, once per
+  // picture: a failed write waits for the next visit instead of looping.
+  let offeredCover: string | undefined;
+  createEffect(() => {
+    const cover = props.entity.cover;
+    if (!saved() || !cover || cover === offeredCover) return;
+    offeredCover = cover;
+    untrack(() => void fillEntityCover(props.entity));
+  });
   const [discography, setDiscography] = createSignal<CatalogItem[] | null>(null);
   const songs = () => (artist() ? discography() ?? [] : props.tracklist ?? []);
   const total = () => songs().length;

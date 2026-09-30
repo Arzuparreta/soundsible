@@ -6,6 +6,7 @@ from urllib.parse import urlsplit, parse_qs
 
 from shared.atomic_file import publish, text_pieces
 from shared.library_lifecycle import serialized, LibraryPersistenceError
+from shared.providers.deezer import is_placeholder_image
 from shared.user_context import user_config_dir
 
 
@@ -20,6 +21,10 @@ def normalise(raw):
         entry[field] = value.strip()
     if not entry['name']:
         raise ValueError('name is required')
+    if is_placeholder_image(entry['cover']):
+        # Deezer's grey silhouette is no picture: without it the card draws its
+        # own placeholder and a later save can supply the real one.
+        entry['cover'] = ''
     path = urlsplit(entry['destination'])
     if path.scheme or path.netloc or not path.path.startswith(f"/{entry['kind']}/") or path.fragment:
         raise ValueError('Invalid destination')
@@ -48,6 +53,9 @@ def get_entries():
             raise ValueError('Invalid entities')
         for entry in entries:
             normalise(entry)
+            if is_placeholder_image(entry.get('cover')):
+                # Saved before the silhouette was recognised as no picture.
+                entry['cover'] = ''
             if (not isinstance(entry.get('keys'), list) or not entry['keys']
                     or any(not isinstance(key, str) for key in entry['keys'])
                     or not isinstance(entry.get('id'), str)

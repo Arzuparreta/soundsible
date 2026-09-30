@@ -30,7 +30,7 @@ export default function SavedEntities(props: { kind?: SavedEntity['kind']; expan
           <Show when={entries(kind).length} fallback={<Show when={!entitiesLoading() && !entitiesError()}><p>{t('savedEntities.empty')}</p></Show>}>
             <div class={styles.rail} data-horizontal-scroll={props.expanded ? undefined : ''} classList={{ [styles.expanded]: props.expanded || !!props.query }}>
               <For each={entries(kind)}>{entry => <article class={styles.card}>
-                <MusicLink path={entry.destination} label={entry.name} onMenu={event => openSavedEntityMenu(entry, event)}>
+                <MusicLink class={styles.link} path={entry.destination} label={entry.name} onMenu={event => openSavedEntityMenu(entry, event)}>
                   <div class={styles.cover} classList={{ [styles.round]: entry.kind === 'artist' }} style={{ background: coverGradient(entry.name) }}><CoverImage src={entry.cover} /></div>
                   <span class={styles.name}>{entry.name}</span>
                   <Show when={entry.kind === 'album' && entry.artist}><span class={styles.credit}>{entry.artist}</span></Show>

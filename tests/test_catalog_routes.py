@@ -1176,6 +1176,35 @@ def test_resolve_artist_id_returns_other_exact_matches_as_candidates(monkeypatch
     assert [c["deezer_id"] for c in candidates] == ["1"]
 
 
+def test_resolve_artist_id_matches_across_diacritics(monkeypatch):
+    # Deezer's real search for a tag written without the umlaut.
+    monkeypatch.setattr(
+        catalog_routes,
+        "_deezer_artist_search",
+        lambda name, limit=10: [
+            {"deezer_id": "692", "name": "Blue Öyster Cult", "picture": "https://x/b.jpg", "nb_fans": 143273, "nb_album": 50},
+            {"deezer_id": "412304431", "name": "Blue Oyster Cult", "picture": "", "nb_fans": 0, "nb_album": 1},
+            {"deezer_id": "462297", "name": "Karaoke - Blue Öyster Cult", "picture": "", "nb_fans": 13, "nb_album": 1},
+        ],
+    )
+
+    resolved, candidates = catalog_routes._resolve_artist_id("Blue Oyster Cult")
+
+    assert resolved == "692", "the band, not its empty namesake"
+    assert [c["deezer_id"] for c in candidates] == ["412304431"]
+
+
+def test_resolve_album_id_matches_across_diacritics(monkeypatch):
+    rows = [
+        {"album": {"id": 1, "title": "Something Else"}},
+        {"album": {"id": 2, "title": "Agents of Fortune"}},
+        {"album": {"id": 3, "title": "Sólo pienso en ti"}},
+    ]
+    monkeypatch.setattr(catalog_routes, "_deezer_get", lambda path, params=None, timeout=8: {"data": rows})
+
+    assert catalog_routes._resolve_album_deezer_id("Solo pienso en ti", "Víctor Manuel") == "3"
+
+
 # ── Owned-track key lookups ────────────────────────────────────────────────
 #
 # These used to walk the whole library per call, and a single /api/catalog/artist
