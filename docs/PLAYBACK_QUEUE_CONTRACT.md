@@ -150,3 +150,19 @@ between browsers or restored as a server queue.
 
 A full **Change session** may cancel a prepared, still silent handoff once its
 replacement is ready. It never cancels an audible blend or resumes paused audio.
+
+## Song actions
+
+Each song in the NORMAL queue has a visible ⋯ menu, including the current
+song. It offers the song's applicable collection actions: save or download a
+streamed song, favourites, existing or new playlists, metadata editing for local
+files, sharing, artist and album navigation, recommendation feedback, and
+playback on another device. The same menu remains available through right-click
+or a mobile long press. Queue movement and removal identify the occurrence by
+`queueId`; collection actions do not move it or replace it when a download lands.
+
+DJ Route rows expose the same collection controls and metadata editing for local
+files alongside the route's own session actions. A cued handoff retains its
+collection menu; route actions that would invalidate that committed transition
+remain unavailable. Deleting a file is kept out of the route menu because it
+would bypass the route's occurrence bookkeeping.

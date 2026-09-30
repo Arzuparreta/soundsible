@@ -91,3 +91,27 @@ describe('continuation cards', () => {
     expect(menu.open).toHaveBeenCalledWith(expect.objectContaining({ title: 'Record' }), undefined);
   });
 });
+
+
+describe('song menus', () => {
+  it.each([false, true])('exposes collection actions without playing or carrying songs (mobile: %s)', (mobile) => {
+    layout.mobile = mobile;
+    const activate = vi.fn();
+    const carry = vi.fn();
+    const { container } = list(() => [{ id: 'songs', entries: [
+      { id: 'next', title: 'Next', artist: 'Artist', onActivate: activate, onCarry: carry,
+        menu: () => [{ label: 'Download', onSelect: vi.fn() }] },
+      { id: 'current', title: 'Current', artist: 'Artist', current: true,
+        menu: () => [{ label: 'Add to playlist', onSelect: vi.fn() }] },
+      { id: 'cued', title: 'Cued', artist: 'Artist', locked: true,
+        menu: () => [{ label: 'Save', onSelect: vi.fn() }] },
+    ] }]);
+    for (const title of ['Next', 'Current', 'Cued']) {
+      fireEvent.click(screen.getByRole('button', { name: `songRow.ariaMore: ${title}` }));
+      expect(menu.open).toHaveBeenLastCalledWith(expect.objectContaining({ title }));
+    }
+    expect(container.querySelectorAll('[data-row-menu]')).toHaveLength(3);
+    expect(activate).not.toHaveBeenCalled();
+    expect(carry).not.toHaveBeenCalled();
+  });
+});

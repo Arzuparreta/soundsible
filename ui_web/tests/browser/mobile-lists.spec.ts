@@ -233,7 +233,7 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   await expect(queue).not.toHaveAttribute('inert', '');
   const second = queue.locator('[data-drag-row]').nth(1);
   const id = await second.getAttribute('data-drag-row');
-  // The panels draw no ⋯; a hold is how the menu opens there.
+  // The visible menu and a hold share the same occurrence actions.
   await holdForMenu(page, second);
   await page.getByRole('dialog').getByRole('button', { name: 'Mover', exact: true }).click();
   const editing = queue.locator(`[data-drag-row="${id}"]`);
@@ -248,6 +248,6 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   await expect(queue.locator('[data-drag-row]').nth(3)).toHaveAttribute('data-drag-row', id!);
   await expect(editing.getByRole('button', { name: 'Bajar', exact: true })).toBeDisabled();
   await editing.getByRole('button', { name: 'Listo', exact: true }).click();
-  // Left on the song that was being moved, rather than on nothing.
-  await expect(editing.locator('[data-row-main]')).toBeFocused();
+  // Return to the visible menu of the occurrence that was being moved.
+  await expect(editing.locator('[data-row-menu]')).toBeFocused();
 });

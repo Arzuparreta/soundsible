@@ -7,7 +7,7 @@ import { openContextMenu } from '../lib/contextMenu';
 import { coverStyle } from '../lib/cover';
 import { t } from '../lib/i18n';
 import type { MenuAction } from './ActionMenu';
-import { menuIcons } from './icons';
+import { MoreIcon, menuIcons } from './icons';
 import type { SavedEntry } from '../types/music';
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import { createResponsiveTap, responsiveTapConstants } from '../lib/responsiveTap';
@@ -151,8 +151,8 @@ export function PlayerTrackList(props: {
     const preferred = command ? row?.querySelector<HTMLButtonElement>(`[data-edit-command="${command}"]:not(:disabled)`) : null;
     // Tried in this order, one selector at a time: a selector list would answer
     // in document order instead, and the row's own button comes before its edit
-    // controls. Last of them is the row itself — the panels draw no ⋯ any more,
-    // and the song being moved is a better place to be left than nothing.
+    // controls. Leaving edit mode returns to the occurrence's menu, with the
+    // main song button as a fallback for rows that have no menu.
     const fallback = ['[data-edit-command]:not(:disabled)', '[data-row-menu]', '[data-row-main]']
       .reduce<HTMLButtonElement | null>(
         (found, selector) => found ?? row?.querySelector<HTMLButtonElement>(selector) ?? null,
@@ -429,6 +429,10 @@ function PlayerTrackListRow(props: {
     });
     if (actions.length) openContextMenu({ title: props.entry.title, subtitle: props.entry.artist, actions });
   };
+  const menuTap = createResponsiveTap({ onTap: (event) => {
+    event.stopPropagation();
+    openMenu();
+  } });
   let carryTimer: number | undefined;
   let carryStart: { x: number; y: number } | null = null;
   let releaseHold: (() => void) | undefined;
@@ -455,16 +459,15 @@ function PlayerTrackListRow(props: {
       onDragStart={props.entry.onDragStart}
       onDragOver={props.entry.onDragOver}
       onDrop={props.entry.onDrop}
-      // The panel draws no ⋯, so this is the pointer's way in. The mobile row
-      // carries its own (MusicListRow wires hold, right-click and the menu key
-      // against the same `onMenu`), which is why this only answers on desktop.
+      // Keep right-click alongside the visible menu. Mobile rows own their
+      // context and hold gestures through MusicListRow.
       onContextMenu={(event) => {
         if (mobileListLayout()) return;
         event.preventDefault();
         openMenu();
       }}
       onPointerDown={(event) => {
-        if ((event.target as Element).closest("a") || mobileListLayout() || !props.entry.onCarry) return;
+        if ((event.target as Element).closest("a, [data-row-menu]") || mobileListLayout() || !props.entry.onCarry) return;
         cancelCarry();
         carryStart = { x: event.clientX, y: event.clientY };
         // Touch only: a mouse hold has no selection gesture to head off, and
@@ -487,7 +490,7 @@ function PlayerTrackListRow(props: {
       onPointerUp={cancelCarry}
       onPointerCancel={cancelCarry}
     >
-      <Show when={!mobileListLayout()} fallback={<MusicListRow playback menuOnHold title={props.entry.title} subtitle={props.entry.artist} music={props.entry.music}
+      <Show when={!mobileListLayout()} fallback={<MusicListRow playback title={props.entry.title} subtitle={props.entry.artist} music={props.entry.music}
         seed={props.entry.id} cover={props.entry.cover} index={props.entry.current ? undefined : props.entry.position}
         active={props.entry.current} disabled={disabled() || props.editing} entry={props.entry.entry}
         annotation={props.entry.current && props.entry.paused ? t('musicList.paused') : props.entry.badge ?? props.entry.annotation}
@@ -523,8 +526,16 @@ function PlayerTrackListRow(props: {
           </Show>
         </span>
       </div>
-      <Show when={props.entry.trailing}>
-        <span class={styles.trailing}>{props.entry.trailing}</span>
+      <Show when={props.entry.trailing || props.entry.menu || props.entry.onMove || props.entry.onCarry}>
+        <span class={styles.trailing}>
+          <Show when={props.entry.menu || props.entry.onMove || props.entry.onCarry}>
+            <button type="button" class={styles.menuButton} data-row-menu data-pressable
+              aria-label={`${t('songRow.ariaMore')}: ${props.entry.title}`} aria-haspopup="dialog" {...menuTap}>
+              <MoreIcon size={20} />
+            </button>
+          </Show>
+          {props.entry.trailing}
+        </span>
       </Show>
       </Show>
     </div>

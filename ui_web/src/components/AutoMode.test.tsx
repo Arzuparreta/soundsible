@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, within } from '@solidjs/testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPicker, state } = vi.hoisted(() => ({
+const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPicker, openMetadataEditor, state } = vi.hoisted(() => ({
   buildTrackMenu: vi.fn(() => [{ label: 'trackMenu', onSelect: () => {} }]),
   openPlaylistPicker: vi.fn(),
+  openMetadataEditor: vi.fn(),
   actions: {
     removeAutoSource: vi.fn(), useAutoTrackAsSource: vi.fn(), placeAutoTrack: vi.fn(),
     removeAutoRouteOccurrence: vi.fn(), avoidAutoTrackForSession: vi.fn(), moveAutoRoute: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock('./ActionMenu', () => ({ openActionMenu }));
 // What the track menu offers is `trackActions.test.ts`'s business. Here it is
 // one entry, so the route's own composition and order stay readable.
 vi.mock('./trackActions', () => ({ buildTrackMenu }));
+vi.mock('./MetadataEditor', () => ({ openMetadataEditor }));
 vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker }));
 vi.mock('../lib/media', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/media')>()),
@@ -91,15 +93,13 @@ describe('AutoMode workspace', () => {
     expect(screen.queryByRole('button', { name: 'autoMode.source.title' })).not.toBeInTheDocument();
   });
 
-  /* The route draws no ⋯ any more: a 44px control on a 280px panel cost more
-   * width than it gave, and the row already opens its menu on a hold and on a
-   * right-click. */
-  it('keeps session actions in one route menu, reached without a button', () => {
+  /* Visible row menus expose collection and session actions together. */
+  it('keeps session actions in one route menu, reached from the visible button', () => {
     const { container } = renderAuto('route');
     expect(screen.queryByRole('button', { name: /^autoMode.route.actions/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'autoMode.route.useAsSource' })).not.toBeInTheDocument();
 
-    fireEvent.contextMenu(container.querySelector('[data-drag-row="q-next"]')!);
+    fireEvent.click(container.querySelector('[data-drag-row="q-next"] [data-row-menu]')!);
     const options = openContextMenu.mock.calls.at(-1)![0];
     expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
       'musicList.move', 'musicExplorer.reference', 'musicExplorer.change', 'trackMenu', 'autoMode.route.remove',
@@ -117,7 +117,7 @@ describe('AutoMode workspace', () => {
     fireEvent.contextMenu(container.querySelector('[data-drag-row="q-next"]')!);
     expect(buildTrackMenu).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'next', queueId: 'q-next' }),
-      { inRoute: true, onAddToPlaylist: openPlaylistPicker },
+      { inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor },
     );
   });
 

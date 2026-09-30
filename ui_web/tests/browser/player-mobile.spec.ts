@@ -298,7 +298,7 @@ test('the compact mini-player overlays DJ state without taking title width', asy
  * as the row above it, and between them and a 44px ⋯ there was no width left
  * for the artist's name. The row is the song now: number, artwork, title,
  * artist. The menu it still has answers a hold. */
-test('a route row is the song and nothing else, and its menu answers a hold', async ({ page }) => {
+test('a route row exposes its menu and still answers a hold', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
   await openNowPlaying(page);
   await page.getByRole('tab', { name: 'DJ' }).click();
@@ -318,7 +318,7 @@ test('a route row is the song and nothing else, and its menu answers a hold', as
 
   const row = route.locator('[data-music-list-row]').first();
   await expect(row).toBeVisible();
-  await expect(route.locator('[data-row-menu]')).toHaveCount(0);
+  await expect(row.locator('[data-row-menu]')).toBeVisible();
   // Number, then the artist, and nothing appended to either.
   await expect(row.locator('[data-row-detail]')).toHaveText(/^\d+ · \S/);
 

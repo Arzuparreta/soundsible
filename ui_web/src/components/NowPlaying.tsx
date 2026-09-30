@@ -1,3 +1,6 @@
+import { openPlaylistPicker } from './PlaylistPicker';
+import { openMetadataEditor } from './MetadataEditor';
+import { openPlayOnDevice } from './DeviceSheet';
 import { navigateMusic, trackMusic } from '../lib/musicNavigation';
 import { buildTrackMenu } from './trackActions';
 import { menuIcons } from './icons';
@@ -131,7 +134,11 @@ export function NowPlaying(props: {
       get trailing() { return current ? undefined : removeButton(entry); },
       get entry() { return savedFromTrack(entry); },
       menu: () => [
-        ...buildTrackMenu(entry),
+        ...buildTrackMenu(entry, {
+          onAddToPlaylist: openPlaylistPicker,
+          onEditMetadata: openMetadataEditor,
+          onPlayOnDevice: openPlayOnDevice,
+        }),
         ...(!current ? [{ icon: menuIcons.remove(), label: t('nowPlaying.removeFromQueue'), danger: true,
           onSelect: () => actions.removeQueueEntry(entry.queueId) }] : []),
       ],
