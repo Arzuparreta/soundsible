@@ -35,6 +35,10 @@ export const zh: Dict = {
     "error": "部分推荐无法加载。"
 },
   musicExplorer: {
+    startFromCurrent: '从当前曲目',
+    startDjFromCurrent: '从当前歌曲开始 DJ',
+    changeTimedOut: '会话准备耗时过长，可以重试。',
+    changeExhausted: '无法从 {title} 生成可用路线，请尝试其他歌曲。',
     change: '更换会话',
     mixWith: '融入音乐…',
     changeShort: '更换…',

@@ -35,6 +35,10 @@ export const fr: Dict = {
     "error": "Certaines recommandations n’ont pas pu être chargées."
 },
   musicExplorer: {
+    startFromCurrent: 'Depuis ce titre',
+    startDjFromCurrent: 'Démarrer le DJ à partir du titre actuel',
+    changeTimedOut: 'La préparation prend trop de temps. Vous pouvez réessayer.',
+    changeExhausted: 'Aucun parcours disponible à partir de {title}. Essayez un autre titre.',
     change: 'Changer de session',
     mixWith: 'Mélanger avec…',
     changeShort: 'Changer…',

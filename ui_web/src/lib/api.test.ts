@@ -44,6 +44,19 @@ describe('request abort handling', () => {
     await assertion;
   });
 
+  it('limits a DJ request to the remaining session-change budget', async () => {
+    const { api } = await import('./api');
+    vi.useFakeTimers();
+    hangingFetch();
+    const caller = new AbortController();
+    const pending = api.planDjQueue({ dj_profile: 'adaptive', direction: { energy: 0, familiarity: 0, prompt: '', include: [], exclude: [] } }, caller.signal, 5000);
+    const assertion = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(caller.signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await assertion;
+  });
+
   it('aborts as soon as the caller does, without waiting for the timeout', async () => {
     vi.useFakeTimers();
     hangingFetch();

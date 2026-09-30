@@ -72,10 +72,19 @@ describe('buildTrackMenu — podcast coherence', () => {
     const owned: Track = { id: 'lib3', title: 'Song', artist: 'A' };
     const o = labels(owned, { ...ctx, inRoute: true, onPlayOnDevice: () => {} });
     expect(o).toContain('Add to favourites');
-    for (const label of ['Play now', 'Add to route', 'Mix into session', 'Change session', 'Play next',
+    for (const label of ['Play now', 'Add to route', 'Mix into session', 'Start DJ from current song', 'Play next',
       'Add to queue', 'Start radio', 'Switch and start Radio', 'Play on device', 'Delete from library']) {
       expect(o).not.toContain(label);
     }
+  });
+
+  it('offers a contextual DJ start in both NORMAL and DJ song menus', () => {
+    const song: Track = { id: 'song', title: 'Selected song', artist: 'A' };
+    for (const context of [{}, { auto: true }]) {
+      expect(labels(song, context)).toContain('Start DJ from current song');
+      expect(labels(song, context)).not.toContain('Change session');
+    }
+    expect(labels({ ...song, media_kind: 'podcast_episode' }, { auto: true })).not.toContain('Start DJ from current song');
   });
 
   it('withholds the heart until a song is in the library, and offers saving instead', () => {

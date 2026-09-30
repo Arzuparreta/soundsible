@@ -34,6 +34,10 @@ export const en = {
     "error": "Some recommendations could not be loaded."
 },
   musicExplorer: {
+    startFromCurrent: 'From current',
+    startDjFromCurrent: 'Start DJ from current song',
+    changeTimedOut: 'Session preparation took too long. You can retry.',
+    changeExhausted: 'No available route from {title}. Try another song.',
     change: 'Change session',
     mixWith: 'Mix with…',
     changeShort: 'Change…',
