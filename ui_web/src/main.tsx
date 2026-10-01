@@ -83,6 +83,12 @@ function StartupReady(props: ParentProps) {
   return props.children;
 }
 
+// Compile one alternate entry URL for recovery. WebKit can retain a rejected
+// module fetch even across reloads; importing its original URL repeats the error.
+const recoveryPlayer = import.meta.glob<Component>('./AuthenticatedPlayer.tsx', {
+  query: '?recovery', import: 'default',
+})['./AuthenticatedPlayer.tsx'];
+
 /** Keep playback and sockets out of login, including the accessibility overlay. */
 function AuthenticatedBoundary() {
   const [player, setPlayer] = createSignal<Component>();
@@ -90,11 +96,12 @@ function AuthenticatedBoundary() {
   const [attempted, setAttempted] = createSignal(false);
   let disposed = false;
   onCleanup(() => { disposed = true; });
-  // A failed native module import remains cached by the browser; retry by
-  // reloading the shell rather than importing the same rejected URL.
-  const load = () => {
+  let retried = false;
+  const load = (recover = false) => {
     setFailed(false);
-    void import('./AuthenticatedPlayer').then(module => {
+    const module = recover ? recoveryPlayer().then(defaultExport => ({ default: defaultExport }))
+      : import('./AuthenticatedPlayer');
+    void module.then(module => {
       if (!disposed) setPlayer(() => module.default);
     }, () => {
       if (!disposed) {
@@ -103,9 +110,13 @@ function AuthenticatedBoundary() {
       }
     });
   };
-  onMount(load);
+  const retry = () => {
+    if (retried) window.location.reload();
+    else { retried = true; load(true); }
+  };
+  onMount(() => load());
   return <Show when={player()} keyed fallback={
-    <Show when={attempted()}><StartupReady><ConnectionRecovery busy={!failed()} retry={() => window.location.reload()} /></StartupReady></Show>
+    <Show when={attempted()}><StartupReady><ConnectionRecovery busy={!failed()} retry={retry} /></StartupReady></Show>
   }>{Player => <Player />}</Show>;
 }
 

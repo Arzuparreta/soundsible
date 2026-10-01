@@ -46,8 +46,10 @@ async function cached(request) {
   try {
   const entries = await generations();
   entries.sort((a, b) => Number(b.name === CACHE) - Number(a.name === CACHE));
+  // Only same-origin public shell/assets enter these caches. Their decoded
+  // bodies are identical across transport encodings and Origin headers.
   for (const entry of entries) {
-    const response = await (await caches.open(entry.name)).match(request);
+    const response = await (await caches.open(entry.name)).match(request, { ignoreVary: true });
     if (response) return response;
   }
   } catch { /* unavailable storage must not block a network response */ }
@@ -202,7 +204,7 @@ self.addEventListener('message', event => {
       if (url.origin !== self.location.origin || !(url.pathname in ASSET_SIZES) || bypassed(url)) continue;
       const request = new Request(url.href);
       const cache = await caches.open(CACHE);
-      if (await cache.match(request)) continue;
+      if (await cache.match(request, { ignoreVary: true })) continue;
       const response = await fetch(request).catch(() => undefined);
       if (response) await storeOptional(request, response);
     }

@@ -8,7 +8,14 @@ import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
 import type { NowPlayingMobilePanel } from './NowPlaying';
 import { deferredComponent } from '../lib/deferredComponent';
-const NowPlaying = deferredComponent<Parameters<typeof import('./NowPlaying').NowPlaying>[0]>(async () => ({ default: (await import('./NowPlaying')).NowPlaying }));
+const recoverNowPlaying = import.meta.glob<typeof import('./NowPlaying').NowPlaying>('./NowPlaying.tsx', {
+  query: '?recovery', import: 'NowPlaying',
+})['./NowPlaying.tsx'];
+const NowPlaying = deferredComponent<Parameters<typeof import('./NowPlaying').NowPlaying>[0]>(
+  async () => ({ default: (await import('./NowPlaying')).NowPlaying }),
+  async () => ({ default: await recoverNowPlaying() }),
+  styles.autoLoading,
+);
 import styles from './PlayerSurface.module.css';
 
 const AutoMode = lazy(() => import('./AutoMode').then((module) => ({ default: module.AutoMode })));

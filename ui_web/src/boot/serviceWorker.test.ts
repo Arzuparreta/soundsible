@@ -9,10 +9,18 @@ const key = (request: string | Request) => new URL(typeof request === 'string' ?
 class Cache {
   entries = new Map<string, Response>();
   fail = false;
-  async match(request: string | Request) { return this.entries.get(key(request))?.clone(); }
+  headers = new Map<string, Headers>();
+  async match(request: string | Request, options?: { ignoreVary?: boolean }) {
+    const response = this.entries.get(key(request));
+    const incoming = new Headers(typeof request === 'string' ? undefined : request.headers);
+    const stored = this.headers.get(key(request));
+    if (!options?.ignoreVary && response?.headers.get('Vary')?.split(',').some(name => incoming.get(name.trim()) !== stored?.get(name.trim()))) return;
+    return response?.clone();
+  }
   async put(request: string | Request, response: Response) {
     if (this.fail) throw new Error('quota');
     this.entries.set(key(request), response.clone());
+    this.headers.set(key(request), new Headers(typeof request === 'string' ? undefined : request.headers));
   }
   async delete(request: string | Request) { return this.entries.delete(key(request)); }
 }
@@ -154,4 +162,17 @@ describe('navigation', () => {
     expect(await (await app.dispatch('fetch', { request }))!.text()).toContain('new');
     expect(await (await (await app.storage.open(app.name)).match('/player/'))!.text()).toContain('shell');
   });
+});
+
+
+it('reopens bootstrap assets offline across encoding and Origin variants', async () => {
+  const w = worker();
+  w.fetch.mockImplementation(async request => key(request).endsWith('/player/')
+    ? new Response(`<meta name="soundsible-build" content="${'a'.repeat(64)}">`)
+    : new Response('asset', { headers: { Vary: 'Origin, Accept-Encoding' } }));
+  await w.dispatch('install');
+  w.fetch.mockRejectedValue(new Error('offline'));
+  const response = await w.dispatch('fetch', { request: w.request('/player/assets/core.js', { headers: { Origin: origin, 'Accept-Encoding': 'br' } }) });
+  expect(await response!.text()).toBe('asset');
+  expect(w.fetch).toHaveBeenCalledTimes(2);
 });

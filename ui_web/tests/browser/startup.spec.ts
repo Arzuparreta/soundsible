@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { mockMusicEngine } from './music-browser-fixture';
 
 function gate() {
   let release!: () => void;
@@ -47,6 +48,10 @@ async function captureLoader(page: Page, name: string) {
   }
   await test.info().attach(name, { path, contentType: 'image/png' });
 }
+
+// Recovery tests control network failures directly; an active worker can bypass
+// Playwright routing in WebKit. The dedicated offline test opts into workers.
+test.use({ serviceWorkers: 'block' });
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('lang', 'es'));
@@ -137,12 +142,16 @@ test('an authenticated module failure has an accessible retry that clears failed
   const player = /\/AuthenticatedPlayer[^/]*\.(?:js|tsx)(?:\?|$)/;
   let failed = false;
   await page.route(player, async route => {
-    if (!failed) { failed = true; await route.abort(); }
+    if (!failed) {
+      failed = true;
+      await route.fulfill({ status: 503, body: 'temporary module failure', headers: { 'Cache-Control': 'no-store' } });
+    }
     else await route.continue();
   });
   await page.goto('/player/');
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.locator('#startup-screen')).toHaveCount(0);
+  await page.unroute(player);
   await page.getByRole('button', { name: 'Reintentar', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Biblioteca', exact: true })).toBeVisible();
 });
@@ -231,6 +240,9 @@ test('production CSS failure exposes recovery', async ({ page }) => {
   await expect(page.locator('#app')).toHaveAttribute('inert', '');
 });
 
+test.describe('offline PWA', () => {
+  test.use({ serviceWorkers: 'allow' });
+
 test('cached PWA shell includes the loader and reopens offline', async ({ page, context, browserName }) => {
   test.skip(!test.info().config.metadata.startupProduction, 'Service workers are disabled in development.');
   test.skip(browserName === 'webkit', 'Playwright WebKit offline navigation fails with an internal browser error before returning the cached document.');
@@ -256,14 +268,16 @@ test('cached PWA shell includes the loader and reopens offline', async ({ page, 
   const response = await page.reload({ waitUntil: 'commit' });
   expect(response?.fromServiceWorker()).toBe(true);
   expect(await response!.text()).toContain('id="startup-screen"');
-  // Auth keeps its existing offline fallback. WebKit service-worker requests
-  // bypass Playwright routing, so that screen can be the disconnected player.
-  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  // The navigation deadline plus the HTTP authentication timeout are bounded;
+  // offline browsers can take the full timeout before rejecting that request.
+  await expect(page.locator('#startup-screen')).toHaveCount(0, { timeout: 15_000 });
   await expect(page.locator('#app')).not.toHaveAttribute('inert');
   await context.setOffline(false);
   await page.reload();
   await expect(page.locator('#startup-screen')).toHaveCount(0);
   await expect(page.locator('#app')).not.toHaveAttribute('inert');
+});
+
 });
 
 
@@ -287,4 +301,22 @@ test('changing the authenticated account replaces the runtime and its library', 
   await expect(page.getByRole('button', { name: /Reproducir Song second/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Reproducir Song first/ })).toHaveCount(0);
   expect(libraryReads).toBe(2);
+});
+
+
+test('a failed lazy player view retries without restarting playback', async ({ page }) => {
+  await mockMusicEngine(page);
+  const view = /\/NowPlaying(?:-[^/]+)?\.(?:js|tsx)(?:\?|$)/;
+  await page.route(view, route => route.fulfill({ status: 503, body: 'temporary view failure', headers: { 'Cache-Control': 'no-store' } }));
+  await page.goto('/player/#/library?view=songs');
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  const playing = page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true });
+  await expect(playing).toBeVisible();
+  await page.getByRole('button', { name: /^NORMAL:/ }).click();
+  await expect(page.getByRole('button', { name: 'Reintentar', exact: true })).toBeVisible();
+  await expect(playing).toHaveAttribute('aria-label', 'Pausar');
+  await page.unroute(view);
+  await page.getByRole('button', { name: 'Reintentar', exact: true }).click();
+  await expect(page.locator('[data-player-stage-mode="now-playing"]').getByRole('heading', { name: 'Canción de biblioteca 320', exact: true })).toBeVisible();
+  await expect(page.locator('[data-player-stage-mode="now-playing"]').getByRole('button', { name: 'Pausar', exact: true })).toBeVisible();
 });

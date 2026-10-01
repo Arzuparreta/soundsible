@@ -26,3 +26,20 @@ it('does not mount a view when its owner closes during import', async () => {
   await Promise.resolve();
   expect(mounted).not.toHaveBeenCalled();
 });
+
+
+it('uses a distinct recovery loader and keeps a failed view mounted', async () => {
+  const initial = vi.fn().mockRejectedValue(new Error('cached failure'));
+  const recover = vi.fn().mockRejectedValueOnce(new Error('still offline'))
+    .mockResolvedValue({ default: () => <p>recovered panel</p> });
+  const View = deferredComponent(initial, recover);
+  render(() => <View />);
+  await waitFor(() => expect(screen.getByRole('button')).toBeVisible());
+  fireEvent.click(screen.getByRole('button'));
+  await waitFor(() => expect(recover).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'false'));
+  fireEvent.click(screen.getByRole('button'));
+  await screen.findByText('recovered panel');
+  expect(initial).toHaveBeenCalledTimes(1);
+  expect(recover).toHaveBeenCalledTimes(2);
+});
