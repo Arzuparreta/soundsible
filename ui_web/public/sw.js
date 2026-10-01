@@ -1,168 +1,210 @@
-/**
- * Soundsible offline shell.
- *
- * The player was installable long before it was launchable: tapping the home
- * screen icon with the station out of reach — asleep laptop, phone off Wi-Fi,
- * Tailscale not up yet — produced the browser's dinosaur, not the app. This
- * caches the shell so the app always opens, reports honestly that it cannot
- * reach the station, and recovers the moment it can.
- *
- * Deliberately conservative:
- *
- * - **The network always wins for navigations.** The cache is a fallback, never
- *   a shortcut. A running station can never be shadowed by a stale shell.
- * - **Nothing from `/api` is ever cached.** Library, playback, and auth are
- *   live state; a service worker replaying them would be lying about the
- *   listener's own music. Audio is excluded for the same reason plus a
- *   practical one: range requests and a music library do not belong in a
- *   quota-limited cache.
- * - **`/player/desktop/` is never cached.** The engine injects an owner token
- *   into that HTML, and a token belongs in exactly one place: the response
- *   that was minted for it.
- *
- * Written as plain JS with a stable filename: it is copied verbatim from
- * `public/`, because a service worker's URL determines the scope it may
- * control and a hashed name would move that scope on every build.
- */
-
-// Bump to invalidate everything this worker has stored.
-const CACHE = 'soundsible-shell-v1';
-
-/** The app entry point — one HTML document behind every route. */
+/** Offline shell generations; never cache account data or media. Build substitutes the manifest. */
+const BUILD = '__BUILD_ID__';
+const CORE = __CORE_ASSETS__;
+const ASSET_SIZES = __ASSET_SIZES__;
+const PREFIX = 'soundsible-shell-';
+const CACHE = PREFIX + BUILD;
+const LEGACY = 'soundsible-shell-v1';
 const SHELL_URL = '/player/';
-
-/** How long a navigation waits for the station before falling back to the
- * cached shell. Long enough for a sleepy home server on the same LAN, short
- * enough that a dead one does not look like a hung app. */
+const STATE_URL = '/player/__shell_cache_state__';
+const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_ENTRIES = 256;
 const NAVIGATION_TIMEOUT_MS = 3500;
+const coreUrls = new Set([SHELL_URL, ...CORE]);
+let writes = Promise.resolve();
 
-/** Live state and media: always straight to the network, never stored. */
-function isBypassed(url) {
-  return (
-    url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/socket.io/') ||
-    url.pathname.startsWith('/player/desktop')
-  );
+function serialize(task) {
+  const next = writes.then(task);
+  writes = next.catch(() => {});
+  return next;
 }
-
-/** Build output: content-hashed filenames, so a hit is always the right bytes. */
-function isImmutableAsset(url) {
-  return url.pathname.startsWith('/player/assets/');
+function bypassed(url) {
+  return url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')
+    || url.pathname.startsWith('/player/desktop');
 }
-
-/** Stable-name shipped files: icons, the manifest, branding. Safe to serve from
- * cache while a fresh copy is fetched for next time. */
-function isRevalidatedAsset(url) {
-  return (
-    url.pathname.startsWith('/player/icons/') ||
-    url.pathname.startsWith('/player/branding/') ||
-    url.pathname === '/player/manifest.webmanifest'
-  );
+function immutable(url) { return url.pathname.startsWith('/player/assets/'); }
+function revalidated(url) {
+  return url.pathname.startsWith('/player/icons/') || url.pathname.startsWith('/player/branding/')
+    || url.pathname === '/player/manifest.webmanifest';
 }
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    (async () => {
-      const cache = await caches.open(CACHE);
-      // Best-effort: a first load with the station already unreachable should
-      // still install the worker, so the *next* launch is covered.
-      await cache.add(new Request(SHELL_URL, { cache: 'reload' })).catch(() => {});
-      await self.skipWaiting();
-    })(),
-  );
-});
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      const names = await caches.keys();
-      await Promise.all(names.filter((n) => n !== CACHE).map((n) => caches.delete(n)));
-      await self.clients.claim();
-    })(),
-  );
-});
-
-/** Fetch, but give up after `ms` so a black-holed connection cannot hang the
- * launch. A TCP connection to a machine that is asleep fails slowly. */
-function fetchWithTimeout(request, ms) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('timeout')), ms);
-    fetch(request).then(
-      (response) => {
-        clearTimeout(timer);
-        resolve(response);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
+function owned(name) { return name === LEGACY || /^soundsible-shell-[a-f0-9]{64}$/.test(name); }
+async function readState(cache) {
+  try {
+    const response = await cache.match(STATE_URL);
+    return response ? await response.json() : null;
+  } catch { return null; }
 }
-
-/** Network first, cached shell second. Every successful navigation refreshes
- * the stored shell, so the offline copy tracks the deployed one. */
-async function handleNavigation(event) {
+async function writeState(cache, state) {
+  await cache.put(STATE_URL, new Response(JSON.stringify(state), { headers: { 'Content-Type': 'application/json' } }));
+}
+async function generations() {
+  const names = (await caches.keys()).filter(name => owned(name) && name !== LEGACY);
+  const entries = await Promise.all(names.map(async (name, order) => ({ name, order, state: await readState(await caches.open(name)) })));
+  return entries.filter(entry => entry.state?.ready).sort((a, b) => b.state.created - a.state.created || b.order - a.order);
+}
+async function cached(request) {
+  try {
+  const entries = await generations();
+  entries.sort((a, b) => Number(b.name === CACHE) - Number(a.name === CACHE));
+  for (const entry of entries) {
+    const response = await (await caches.open(entry.name)).match(request);
+    if (response) return response;
+  }
+  } catch { /* unavailable storage must not block a network response */ }
+}
+function buildOf(html) {
+  return html.match(/<meta name="soundsible-build" content="([a-f0-9]{64})"/i)?.[1];
+}
+async function sizeOf(url, response) {
+  if (url.pathname in ASSET_SIZES) return ASSET_SIZES[url.pathname];
+  // Stable branding is served outside dist; stop reading if it exceeds admission.
+  const reader = response.clone().body?.getReader();
+  if (!reader) return 0;
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) return size;
+    size += value.byteLength;
+    if (size > MAX_BYTES) { void reader.cancel(); return size; }
+  }
+}
+async function storeOptional(request, response) {
+  if (!response.ok || response.status === 206) return;
+  const url = new URL(request.url || request, self.location.origin);
+  if (!(immutable(url) || revalidated(url)) || bypassed(url)) return;
   const cache = await caches.open(CACHE);
+  const state = await readState(cache);
+  if (!state?.ready) return;
+  const size = await sizeOf(url, response);
+  if (size > MAX_BYTES) return;
+  const key = url.href;
+  const existing = state.entries.find(entry => entry.url === key);
+  const next = state.entries.filter(entry => entry.url !== key);
+  const pin = coreUrls.has(url.pathname);
+  next.push({ url: key, size, pin });
+  let bytes = next.reduce((total, entry) => total + entry.size, 0);
+  while (bytes > MAX_BYTES || next.length > MAX_ENTRIES) {
+    const index = next.findIndex(entry => !entry.pin && entry.url !== key);
+    if (index < 0) return;
+    const [entry] = next.splice(index, 1);
+    bytes -= entry.size;
+    await cache.delete(entry.url);
+  }
+  try {
+    await cache.put(request, response);
+    state.entries = next;
+    await writeState(cache, state);
+  } catch {
+    // Storage failure never changes the network response or a completed shell.
+    if (!existing) await cache.delete(key).catch(() => {});
+  }
+}
+
+self.addEventListener('install', event => {
+  event.waitUntil(serialize(async () => {
+    const cache = await caches.open(CACHE);
+    if ((await readState(cache))?.ready) { await self.skipWaiting(); return; }
+    try {
+      const shell = await fetch(new Request(SHELL_URL, { cache: 'reload' }));
+      if (!shell.ok) throw new Error('shell unavailable');
+      const html = await shell.clone().text();
+      if (buildOf(html) !== BUILD) throw new Error('deployment changed during install');
+      const entries = [{ url: new URL(SHELL_URL, self.location.origin).href, size: new TextEncoder().encode(html).length, pin: true }];
+      // These are bootstrap dependencies only; authenticated views and locales stay lazy.
+      for (const path of CORE) {
+        const response = await fetch(path);
+        if (!response.ok) throw new Error('shell dependency unavailable');
+        entries.push({ url: new URL(path, self.location.origin).href, size: ASSET_SIZES[path], pin: true });
+        if (entries.length > MAX_ENTRIES || entries.reduce((sum, entry) => sum + entry.size, 0) > MAX_BYTES) throw new Error('shell exceeds budget');
+        await cache.put(path, response);
+      }
+      await cache.put(SHELL_URL, shell);
+      await writeState(cache, { ready: true, created: Date.now(), entries });
+      await self.skipWaiting();
+    } catch (error) {
+      // Reject this installation; the previous complete worker remains available.
+      await caches.delete(CACHE);
+      throw error;
+    }
+  }));
+});
+self.addEventListener('activate', event => {
+  event.waitUntil(serialize(async () => {
+    const complete = await generations();
+    const previous = complete.find(entry => entry.name !== CACHE)?.name;
+    for (const name of await caches.keys()) {
+      if (owned(name) && name !== CACHE && name !== previous) await caches.delete(name);
+    }
+    await self.clients.claim();
+  }));
+});
+
+function fetchWithTimeout(request, milliseconds) {
+  const aborter = new AbortController();
+  const timer = setTimeout(() => aborter.abort(), milliseconds);
+  return fetch(request, { signal: aborter.signal }).finally(() => clearTimeout(timer));
+}
+async function navigation(event) {
   try {
     const response = await fetchWithTimeout(event.request, NAVIGATION_TIMEOUT_MS);
-    // `waitUntil`, not a floating promise: the worker may be shut down as soon
-    // as the response is returned, and a half-written shell is worse than none.
-    if (response.ok) event.waitUntil(cache.put(SHELL_URL, response.clone()));
+    if (response.ok) event.waitUntil(serialize(async () => {
+      const html = await response.clone().text();
+      if (buildOf(html) !== BUILD) return;
+      const cache = await caches.open(CACHE);
+      const state = await readState(cache);
+      if (state?.ready) await cache.put(SHELL_URL, response.clone());
+    }).catch(() => {}));
     return response;
   } catch {
-    const cached = await cache.match(SHELL_URL);
-    if (cached) return cached;
-    throw new Error('offline and no cached shell');
+    const response = await cached(SHELL_URL);
+    if (response) return response;
+    throw new Error('offline and no complete shell');
   }
 }
-
-/** Hashed assets never change under their URL, so a hit needs no revalidation. */
-async function handleImmutable(event) {
-  const cache = await caches.open(CACHE);
-  const cached = await cache.match(event.request);
-  if (cached) return cached;
-  const response = await fetch(event.request);
-  if (response.ok) event.waitUntil(cache.put(event.request, response.clone()));
-  return response;
-}
-
-/** Serve what we have immediately, then quietly refresh it for next time. */
-async function handleRevalidated(event) {
-  const cache = await caches.open(CACHE);
-  const cached = await cache.match(event.request);
-  const network = fetch(event.request)
-    .then((response) => {
-      if (response.ok) cache.put(event.request, response.clone());
-      return response;
-    })
-    .catch(() => undefined);
-  if (cached) {
-    event.waitUntil(network);
-    return cached;
-  }
-  const response = await network;
+async function asset(event) {
+  const response = await cached(event.request);
   if (response) return response;
-  throw new Error('offline and not cached');
+  const network = await fetch(event.request);
+  event.waitUntil(serialize(() => storeOptional(event.request, network.clone())).catch(() => {}));
+  return network;
 }
-
-self.addEventListener('fetch', (event) => {
+async function stableAsset(event) {
+  const response = await cached(event.request);
+  const network = fetch(event.request).then(async fresh => {
+    if (fresh.ok) await serialize(() => storeOptional(event.request, fresh.clone())).catch(() => {});
+    return fresh;
+  }).catch(() => undefined);
+  event.waitUntil(network);
+  if (response) return response;
+  const fresh = await network;
+  if (fresh) return fresh;
+  throw new Error('offline and resource not cached');
+}
+self.addEventListener('fetch', event => {
   const request = event.request;
-  if (request.method !== 'GET') return;
-
+  if (request.method !== 'GET' || request.headers.has('Range')) return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
-  if (isBypassed(url)) return;
+  if (url.origin !== self.location.origin || bypassed(url)) return;
+  if (request.mode === 'navigate') event.respondWith(navigation(event));
+  else if (immutable(url)) event.respondWith(asset(event));
+  else if (revalidated(url)) event.respondWith(stableAsset(event));
+});
 
-  if (request.mode === 'navigate') {
-    event.respondWith(handleNavigation(event));
-    return;
-  }
-  if (isImmutableAsset(url)) {
-    event.respondWith(handleImmutable(event));
-    return;
-  }
-  if (isRevalidatedAsset(url)) {
-    event.respondWith(handleRevalidated(event));
-  }
+/** Adopt resources already used before the first page acquired a controller. */
+self.addEventListener('message', event => {
+  if (event.data?.type !== 'soundsible-cache-used' || !Array.isArray(event.data.urls)) return;
+  const source = event.source?.url && new URL(event.source.url);
+  if (!source || source.origin !== self.location.origin || !source.pathname.startsWith('/player/') || bypassed(source)) return;
+  event.waitUntil(serialize(async () => {
+    for (const value of event.data.urls.slice(0, MAX_ENTRIES)) {
+      if (typeof value !== 'string') continue;
+      const url = new URL(value, self.location.origin);
+      if (url.origin !== self.location.origin || !(url.pathname in ASSET_SIZES) || bypassed(url)) continue;
+      const request = new Request(url.href);
+      const cache = await caches.open(CACHE);
+      if (await cache.match(request)) continue;
+      const response = await fetch(request).catch(() => undefined);
+      if (response) await storeOptional(request, response);
+    }
+  }).catch(() => {}));
 });

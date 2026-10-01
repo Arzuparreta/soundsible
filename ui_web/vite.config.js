@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import solid from 'vite-plugin-solid';
 import { startupScreen } from './src/boot/plugin';
+import { payloadAssets } from './src/boot/payloadPlugin';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -21,6 +22,10 @@ function playbackSourceRevision() {
     }
   };
   visit(resolve(root, 'src'));
+  visit(resolve(root, 'public'));
+  for (const name of ['index.html', 'package.json', '../branding/logo-mark.svg']) {
+    hash.update(readFileSync(resolve(root, name)));
+  }
   hash.update(readFileSync(resolve(root, 'package-lock.json')));
   hash.update(readFileSync(resolve(root, 'vite.config.js')));
   return hash.digest('hex');
@@ -42,7 +47,7 @@ export default defineConfig(({ command }) => ({
   // Copied verbatim to dist/ (stable names, no hashing) so the manifest and its
   // icons keep predictable URLs — a .webmanifest can't reference hashed assets.
   publicDir: resolve(root, 'public'),
-  plugins: [solid(), startupScreen()],
+  plugins: [solid(), startupScreen(), ...(command === 'build' ? [payloadAssets(playbackSourceRevision())] : [])],
   resolve: {
     alias: {
       '@': resolve(root, 'src'),
@@ -51,6 +56,7 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    manifest: true,
     rollupOptions: {
       input: resolve(root, 'index.html'),
       output: {

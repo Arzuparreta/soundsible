@@ -58,3 +58,13 @@ def test_ensure_skips_when_env_set(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(ensure_mod.subprocess, "run", fail_run)
     assert ensure_ui_dist(ui_web=ui_web) is True
+
+
+def test_public_worker_and_branding_invalidate_the_bundle(tmp_path: Path):
+    ui_web = tmp_path / "ui_web"
+    _touch(ui_web / "dist" / "index.html", mtime=200)
+    _touch(ui_web / "public" / "sw.js", mtime=300)
+    assert ui_dist_is_stale(ui_web)
+    _touch(ui_web / "public" / "sw.js", mtime=100)
+    _touch(tmp_path / "branding" / "logo-mark.svg", mtime=300)
+    assert ui_dist_is_stale(ui_web)

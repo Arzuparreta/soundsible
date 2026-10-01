@@ -39,6 +39,7 @@ from shared.runtime import (
     RuntimeConfig,
 )
 from shared.ensure_ui_dist import ensure_ui_dist
+from shared.ui_assets import serve_ui_asset
 from shared.version import resolve_version
 from shared.playback_state import (  # noqa: F401  # aliases re-exported to blueprints
     get_state as get_playback_state,
@@ -473,7 +474,9 @@ def _render_web_ui_html(filename: str, *, inject_owner_token: bool = False):
     root = _web_ui_root()
     path = os.path.join(root, filename)
     if not inject_owner_token:
-        return send_from_directory(root, filename)
+        response = serve_ui_asset(root, filename)
+        response.headers["Cache-Control"] = "no-store"
+        return response
     with open(path, "r", encoding="utf-8") as handle:
         html = handle.read()
     token = _read_owner_token_for_ui()
@@ -520,7 +523,7 @@ def serve_branding(path):
 
 @app.route('/player/<path:path>')
 def serve_web_player_assets(path):
-    resp = send_from_directory(_web_ui_root(), path)
+    resp = serve_ui_asset(_web_ui_root(), path)
     lp = path.lower()
     # Every branch assigns rather than defaults: `send_file` has already put
     # `Cache-Control: no-cache` on the response (that is what it does when no
@@ -543,7 +546,7 @@ def serve_web_player_assets(path):
         # is stable (not hashed) so it must revalidate rather than pin for a year.
         resp.headers["Content-Type"] = "application/manifest+json"
         resp.headers["Cache-Control"] = "public, max-age=3600"
-    elif "assets/" in lp and lp.split("?")[0].endswith((".js", ".css", ".woff", ".woff2", ".ttf", ".map")):
+    elif "assets/" in lp and lp.split("?")[0].endswith((".js", ".css", ".woff", ".woff2", ".ttf", ".map", ".svg", ".png", ".ico")):
         # Content-hashed by the build: the URL changes whenever the bytes do,
         # so this can be pinned for as long as the spec allows.
         resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
