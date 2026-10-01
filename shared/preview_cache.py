@@ -471,7 +471,11 @@ def get_cached(video_id: str, *, from_start: bool = False) -> Optional[tuple[Pat
     changed since it was last served: anyone mid-song holds offsets into the
     old one.
 
-    Touches the file so LRU eviction treats it as recently used.
+    Looking a file up is not using it, so this never touches it: prefetches,
+    DJ analysis and status checks ask about a song all the time, and counting
+    them as reads kept a fragmented file "in use" for ever — a song played
+    after its prefetch was never idle long enough to be flattened. Whoever
+    serves the bytes calls ``mark_served``.
     """
     path = _audio_path(video_id)
     if not path.is_file():
@@ -501,11 +505,20 @@ def get_cached(video_id: str, *, from_start: bool = False) -> Optional[tuple[Pat
             # source file is safer than turning an atomic remux failure into an
             # unavailable track.
             logger.warning("[PreviewCache] MP4 normalization failed for %s: %s", video_id, exc)
+    return path, content_type
+
+
+def mark_served(video_id: str) -> None:
+    """Record that a listener has just been sent this preview's bytes.
+
+    The file's modification time is both its LRU recency and the clock that
+    decides when a source layout is idle enough to flatten — so only a reader
+    who may hold offsets into the file moves it.
+    """
     try:
-        os.utime(path, None)
+        os.utime(_audio_path(video_id), None)
     except OSError:
         pass
-    return path, content_type
 
 
 class CacheWriter:

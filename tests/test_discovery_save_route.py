@@ -1038,6 +1038,73 @@ def test_dj_plan_v6_ignores_legacy_boundaries_and_walks_explicit_sources(tmp_pat
     assert all("source_boundary" not in item for item in body["items"])
 
 
+def test_dj_plan_v6_keeps_hour_long_recordings_out_of_a_route_of_songs(tmp_path):
+    # The drive: a 54-minute ambient jungle set in the library was handed out as
+    # the next "song" of a set, and the phone never got far enough into its
+    # 563 MB to start it.
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    related = [
+        {
+            "id": f"song{index:07d}", "youtube_id": f"song{index:07d}", "title": f"Song {index}",
+            "artist": "Artist", "duration": 240, "source": "preview", "source_pool": "related",
+            "recommendation_identity": f"music:youtube:song{index:07d}",
+        }
+        for index in range(3)
+    ] + [{
+        "id": "longset0001", "youtube_id": "longset0001", "title": "Ambient jungle set", "artist": "crash",
+        "duration": 3277, "source": "preview", "source_pool": "related",
+        "recommendation_identity": "music:youtube:longset0001",
+    }]
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk(related, False, False)),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={
+                "session_id": "songs-only",
+                "seed": {"id": "seed", "track_id": "seed", "title": "Seed", "artist": "Artist"},
+                "sources": [{"id": "fav", "label": "Favourites", "tracks": [
+                    {"id": "set", "track_id": "set", "title": "Another set", "artist": "DJ", "duration": 4000},
+                ]}],
+                "limit": 8,
+            },
+        )
+
+    assert response.status_code == 200
+    items = response.get_json()["items"]
+    assert {item["id"] for item in items} == {"song0000000", "song0000001", "song0000002"}
+
+
+def test_dj_plan_v6_still_opens_a_source_made_only_of_long_recordings(tmp_path):
+    _make_runtime(tmp_path)
+    mock_api = _mock_api()
+    mock_api["get_core"].return_value = (
+        _FakeLibrary(LibraryMetadata(version=1, tracks=[], playlists={}, settings={})), None, None,
+    )
+    with (
+        patch.object(_auto_mode, "_get_api", return_value=mock_api),
+        patch.object(_auto_mode, "_planner_context_related", return_value=_auto_mode._GraphWalk([], False, False)),
+    ):
+        response = _make_app().test_client().post(
+            "/api/discovery/music/dj-plan",
+            json={
+                "session_id": "mixes",
+                "sources": [{"id": "mixes", "label": "Mixes", "tracks": [
+                    {"id": "mix-a", "track_id": "mix-a", "title": "Mix A", "artist": "DJ", "duration": 3600},
+                ]}],
+                "limit": 8,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()["opening"]["id"] == "mix-a"
+
+
 def test_dj_plan_v6_chooses_an_opening_from_a_source_when_there_is_no_seed(tmp_path):
     _make_runtime(tmp_path)
     mock_api = _mock_api()

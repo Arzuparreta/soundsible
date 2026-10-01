@@ -3,7 +3,7 @@ import { useParams, useNavigate } from '@solidjs/router';
 import { state, actions, musicLibrary } from '../stores';
 import TrackList from '../components/TrackList';
 import Button from '../components/Button';
-import { BackIcon, MoreIcon, PlayIcon, QueueAddIcon } from '../components/icons';
+import { BackIcon, ChangeSessionIcon, MoreIcon, PlayIcon } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
 import { openPlaylistMenu } from '../components/playlistActions';
@@ -35,7 +35,8 @@ export default function PlaylistDetail() {
   const playAll = () => {
     if (tracks().length > 0) {
       if (state.autoMode.active) {
-        void actions.placeAutoTracks(tracks());
+        // A playlist is one source for the DJ, never a list of requests.
+        void actions.changeAutoSession(tracks(), name());
         return;
       }
       actions.playFrom(tracks(), 0, { context: context() });
@@ -71,8 +72,8 @@ export default function PlaylistDetail() {
           <span class={styles.count}>{trackCount(trackIds().length)}</span>
         </div>
         <Button onClick={playAll} disabled={tracks().length === 0}>
-          {state.autoMode.active ? <QueueAddIcon size={16} /> : <PlayIcon size={16} />}
-          {state.autoMode.active ? t('musicExplorer.requestAll') : t('playlistDetail.play')}
+          {state.autoMode.active ? <ChangeSessionIcon size={16} /> : <PlayIcon size={16} />}
+          {state.autoMode.active ? t('musicExplorer.change') : t('playlistDetail.play')}
         </Button>
         <Show when={desktopShell()}>
           <button class={styles.menu} type="button" aria-label={t('playlistDetail.ariaOptions')} onClick={openMenu}>

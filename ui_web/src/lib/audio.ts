@@ -21,6 +21,10 @@ const ARMED_FINE_LEAD = 2;
 /** Longest silent head start given to the incoming deck. */
 const MAX_PREROLL = 4;
 const MIN_OVERLAP = 1.2;
+/** How long an audible blend may wait on an incoming deck whose clock has
+ * stopped before the mixer stops waiting. The outgoing curve keeps running on
+ * the audio clock, so past this the listener is hearing a fade into nothing. */
+const MIX_STALL_MS = 4_000;
 /** After a beatmatched blend the incoming deck drifts back to its own tempo. */
 const RATE_RETURN_MS = 8_000;
 /** `HTMLMediaElement.NETWORK_NO_SOURCE`, named rather than read off the global:
@@ -314,6 +318,10 @@ export function onProgramEvent(
   handler: (snapshot: ProgramPlaybackSnapshot, event: Event) => void,
 ): void {
   onDeckEvent(type, (event) => {
+    // A deck ending inside a mix is the mixer's to resolve, whichever listener
+    // hears it first. What it resolved by itself never reaches the store as a
+    // second track boundary.
+    if (type === 'ended' && settleEndedEvent(event) === 'consumed') return;
     if (!isActiveDeck(event.currentTarget)) return;
     if (type === 'pause' && (outputRecovering || !audioEl().paused)) return;
     if ((type === 'play' || type === 'playing') && (!playbackRequested || outputRecovering) && !holdsUnlockSample(audioEl())) {
@@ -1141,12 +1149,27 @@ export interface MixCallbacks {
   onComplete(position: number): void;
   onCancel(reason: MixCancelReason): void;
   onError(error: unknown): void;
+  /**
+   * The blend was given up at a boundary it could not perform — the outgoing
+   * song ended, or the listener skipped, before the incoming deck could sound —
+   * and the incoming deck is now staged for an ordinary handover (`takeStaged`).
+   * Nothing owns playback until the caller takes it.
+   */
+  onStaged?(): void;
 }
 
 interface ActiveMix {
   phase: Exclude<MixPhase, 'idle'>;
   fromIndex: number;
   toIndex: number;
+  /** What the incoming deck was given, so a released blend can stage it. */
+  url: string;
+  /** Incoming media position at the last look, and when it last moved. A
+   * deck that is "playing" but whose clock has stopped is a stalled stream. */
+  inPosition: number;
+  inProgressAt: number;
+  /** The incoming clock has been seen advancing since it was started. */
+  inAdvanced: boolean;
   outCue: number;
   inCue: number;
   /** Overlap in wall seconds. */
@@ -1391,7 +1414,11 @@ function flushDeferredWork(): void {
  * Healthy background playback continues; returning to the page never starts it. */
 function reconcilePlatformPlayback(): void {
   if (!playbackRequested || outputRecovering) return;
-  if (audioEl().paused && !pendingStarts.has(audioEl())) {
+  // A song that played to its end is paused by definition. That is a track
+  // boundary for `ended` to settle, not the platform taking the music away —
+  // revoking playback here is what left a drive on a finished song, with the
+  // next one already loaded and released.
+  if (audioEl().paused && !audioEl().ended && !pendingStarts.has(audioEl())) {
     audioService.pause('platform', 'native_paused_on_restore');
     return;
   }
@@ -1429,8 +1456,8 @@ function bindLifecycle(): void {
     observeClock();
     if (mix && !outputRecovering) tick();
   });
-  onDeckEvent('ended', () => {
-    if (mix) tick();
+  onDeckEvent('ended', (event) => {
+    settleEndedEvent(event);
     queueMicrotask(() => {
       if (!mix && !deckIsPlaying(audioEl())) programCarrier?.pause();
     });
@@ -1557,6 +1584,120 @@ function cutOver(current: ActiveMix): void {
   );
 }
 
+/** A deck that can no longer produce the song it was given. */
+function deckIsDead(deck: HTMLAudioElement): boolean {
+  return Boolean(deck.error) || deck.ended || deck.networkState === NETWORK_NO_SOURCE;
+}
+
+/** Note whether the incoming deck's own clock is moving. "Playing" is what the
+ * element says; a clock that does not move is a stream that is not arriving. */
+function observeIncoming(current: ActiveMix, to: HTMLAudioElement): void {
+  const position = Number.isFinite(to.currentTime) ? to.currentTime : 0;
+  if (!to.paused && !to.seeking && position > current.inPosition + 0.01) {
+    current.inAdvanced = true;
+    current.inProgressAt = Date.now();
+  }
+  current.inPosition = position;
+}
+
+/** The incoming deck is sounding, as opposed to merely having been started. */
+function incomingSounding(current: ActiveMix, to: HTMLAudioElement): boolean {
+  return current.phase !== 'armed' && current.inAdvanced && !to.paused && !to.seeking && to.readyState >= 3;
+}
+
+/**
+ * Give a blend up without giving up the song it was bringing in.
+ *
+ * The incoming deck keeps its stream, back at its first second and silent, as
+ * the staged deck an ordinary track change takes over. That handover is the one
+ * every other boundary uses: it reports an attempt, supervises a slow start and
+ * recovers a stalled one. A blend has none of that, which is why a song that
+ * never started under it used to leave the set waiting forever.
+ */
+function releaseToStaged(current: ActiveMix): void {
+  mixGeneration += 1;
+  stopTicker();
+  mix = null;
+  setBlendLimiter(false);
+  const to = decks()[current.toIndex];
+  setDeckGain(current.fromIndex, 1);
+  setDeckGain(current.toIndex, 0);
+  resetDeckEffects(current.fromIndex);
+  resetDeckEffects(current.toIndex);
+  if (!to.paused) pauseDeck(to);
+  setDeckParticipation(to, false);
+  to.playbackRate = 1;
+  if (to.readyState >= 1) to.currentTime = 0;
+  stagedUrl = current.url;
+  current.callbacks.onStaged?.();
+  notifySourcesSettled();
+}
+
+/**
+ * The outgoing song has played to its end inside a mix. Something has to be
+ * playing next, decided now: on a locked phone this event may be the last
+ * chance JavaScript gets.
+ *
+ * - an incoming deck that cannot play its song fails the handoff, and the
+ *   caller moves on to the next one;
+ * - one that is already sounding simply takes over;
+ * - anything else — still cued, still buffering, started but stalled — is
+ *   handed over the ordinary way (`releaseToStaged`), and the `ended` goes on
+ *   to the store as the boundary it is.
+ */
+function settleOutgoingEnd(current: ActiveMix): 'consumed' | 'forward' {
+  const to = decks()[current.toIndex];
+  observeIncoming(current, to);
+  if (deckIsDead(to)) {
+    failMix(new Error('incoming deck could not play at the boundary'));
+    return 'consumed';
+  }
+  if (incomingSounding(current, to)) {
+    finishMix();
+    return 'consumed';
+  }
+  releaseToStaged(current);
+  return 'forward';
+}
+
+/** Resolve the mix a deck just ended in. `consumed` means the mixer reported
+ * the outcome itself; `forward` means the event is an ordinary end of the song
+ * that now owns playback. */
+function settleEndedDeck(deck: HTMLAudioElement): 'consumed' | 'forward' {
+  const current = mix;
+  if (!current) return 'forward';
+  const from = decks()[current.fromIndex];
+  const to = decks()[current.toIndex];
+  if (deck === to) {
+    // Before the handoff the incoming song is nobody's track yet, and a song
+    // that "ends" seconds in is a broken stream: stay on the outgoing one.
+    if (!current.dominant) {
+      failMix(new Error('incoming deck ended before the handoff'));
+      return 'consumed';
+    }
+    finishMix();
+    return 'forward';
+  }
+  if (deck !== from) return 'forward';
+  if (current.dominant) {
+    finishMix();
+    return 'consumed';
+  }
+  return settleOutgoingEnd(current);
+}
+
+/** One answer per `ended` event, however many listeners ask. */
+const endedOutcomes = new WeakMap<Event, 'consumed' | 'forward'>();
+
+function settleEndedEvent(event: Event): 'consumed' | 'forward' {
+  const known = endedOutcomes.get(event);
+  if (known) return known;
+  const deck = event.currentTarget as HTMLAudioElement | null;
+  const outcome = deck ? settleEndedDeck(deck) : 'forward';
+  endedOutcomes.set(event, outcome);
+  return outcome;
+}
+
 /**
  * One tick of the mixer.
  *
@@ -1575,24 +1716,41 @@ function tick(): void {
   const from = decks()[current.fromIndex];
   const to = decks()[current.toIndex];
 
+  // The end of the outgoing song is settled by its own `ended` event, which
+  // also tells the store what happened. Settling it here, from whichever clock
+  // noticed first, is how the store used to hear about the boundary twice — or
+  // never.
+  if (from.ended && !current.dominant) return;
+  if (from.ended) {
+    finishMix();
+    return;
+  }
+  if (current.phase !== 'armed' && deckIsDead(to)) {
+    if (current.dominant) finishMix();
+    else failMix(new Error('incoming deck stopped during the handoff'));
+    return;
+  }
+  observeIncoming(current, to);
+
   if (current.phase === 'armed') {
-    if (from.paused && !from.ended) return;
-    const due = from.ended || from.currentTime >= current.outCue - current.preroll;
+    if (from.paused) return;
+    const due = from.currentTime >= current.outCue - current.preroll;
     if (!due) return;
-    // Invariant: nothing fades until the incoming deck can actually sound.
-    if (to.readyState < 3) {
-      // If the outgoing song has ended, waiting no longer protects continuity:
-      // it is silence. Fail the committed handoff while ownership still belongs
-      // to the outgoing deck so the store can promote a verified fallback.
-      if (from.ended) failMix(new Error('incoming deck was not ready at boundary'));
-      return;
-    }
+    // A whole song ends on its own `ended`, which hands the next one over the
+    // ordinary way. Cutting from a clock that merely reached the duration
+    // first would start the next song only to restart it a moment later.
+    if (current.technique === 'direct' && !current.manual) return;
     current.phase = 'prerolling';
+    // Started silent even when it has not buffered yet. Safari keeps a cued
+    // second element at metadata until somebody plays it, so waiting for it to
+    // be ready first could wait for ever. Nothing fades until it is sounding:
+    // the blend below waits for its clock to meet the cue.
+    current.inProgressAt = Date.now();
     if (current.technique === 'direct') {
       cutOver(current);
       return;
     }
-    void playProgramDeck(to).catch((error) => failMix(error));
+    void playProgramDeck(to).catch((error) => { if (mix === current) failMix(error); });
     // A requested skip has no head start to wait out: fall straight through.
     if (!current.manual) return;
   }
@@ -1602,7 +1760,7 @@ function tick(): void {
 
   // A pause anywhere holds the blend where it is; the gains stay put because
   // the incoming media clock is what drives them.
-  if (to.paused || (from.paused && !from.ended)) return;
+  if (to.paused || from.paused) return;
 
   if (current.phase === 'prerolling') {
     const outRemaining = current.outCue - from.currentTime;
@@ -1617,21 +1775,34 @@ function tick(): void {
       // The incoming deck is silent. Correcting its playhead here prevents a
       // flam instead of trying to hide one after both tracks are audible.
       to.currentTime = Math.max(0, current.inCue - outRemaining * current.rate);
+      current.inPosition = to.currentTime;
       current.phaseCorrected = true;
       return;
     }
-    const due = current.manual || from.ended
+    const due = current.manual
       || (outRemaining <= current.phaseTolerance && inRemaining <= current.phaseTolerance);
     if (!due) return;
-    if (!from.ended && !current.manual) {
+    if (!current.manual) {
       const target = current.inCue + Math.max(0, from.currentTime - current.outCue) * current.rate;
       if (Math.abs(to.currentTime - target) > current.phaseTolerance * current.rate) {
         to.currentTime = Math.max(0, target);
+        current.inPosition = to.currentTime;
       }
     }
     current.mixStart = to.currentTime;
     current.phase = 'crossfading';
+    current.inProgressAt = Date.now();
     scheduleCrossfade(current);
+  }
+
+  // The outgoing curve runs on the audio clock whatever the incoming deck is
+  // doing. One whose clock has stopped is a fade into silence: hand over to it
+  // if it already owns the programme (its own stall recovery takes it from
+  // there), otherwise give the blend up and stay on the song that is sounding.
+  if (Date.now() - current.inProgressAt > MIX_STALL_MS) {
+    if (current.dominant) finishMix();
+    else failMix(new Error('incoming deck stalled during the blend'));
+    return;
   }
 
   const span = Math.max(0.05, current.overlap * current.rate);
@@ -2049,19 +2220,39 @@ export const audioService = {
   },
   cancelMix,
   /**
-   * Bring a prepared blend forward because the listener asked for the next
-   * track now. The incoming deck keeps whatever it has already buffered — a
-   * skip should not pay for a fresh seek.
+   * The listener asked for the next song now, with a handoff already armed.
+   *
+   * Never a no-op — a Next that did nothing is what made a stuck set look dead:
+   * - a blend already sounding is finished on the spot (`finished`);
+   * - an incoming deck that can sound is brought in with a short blend, keeping
+   *   whatever it has buffered (`blend`);
+   * - one that cannot yet is handed over the ordinary way (`staged`): the
+   *   outgoing song stops and the next one loads, as any skip would;
+   * - one that cannot play at all fails the handoff (`failed`), and the caller
+   *   moves on to the song after it.
    */
-  startMixNow(overlapSeconds = 1.6): boolean {
+  startMixNow(overlapSeconds = 1.6): 'finished' | 'blend' | 'staged' | 'failed' | false {
     const current = mix;
-    if (!current || current.phase === 'crossfading') return false;
+    if (!current) return false;
+    if (current.phase === 'crossfading') {
+      finishMix();
+      return 'finished';
+    }
+    const to = decks()[current.toIndex];
+    if (deckIsDead(to)) {
+      failMix(new Error('incoming deck could not play'));
+      return 'failed';
+    }
+    if (to.readyState < 3) {
+      releaseToStaged(current);
+      return 'staged';
+    }
     current.manual = true;
     current.preroll = 0;
     current.overlap = Math.max(MIN_OVERLAP, overlapSeconds);
     current.outCue = decks()[current.fromIndex].currentTime;
     tick();
-    return true;
+    return 'blend';
   },
 
   /**
@@ -2131,6 +2322,10 @@ export const audioService = {
       phase: 'armed',
       fromIndex,
       toIndex,
+      url,
+      inPosition: startPosition,
+      inProgressAt: Date.now(),
+      inAdvanced: false,
       outCue,
       inCue,
       overlap,

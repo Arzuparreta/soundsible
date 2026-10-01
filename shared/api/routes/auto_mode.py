@@ -1144,6 +1144,20 @@ def _music_set_item(raw: dict, *, source_id: str, label: str, weight: float = 1.
     return item
 
 
+# A song the DJ mixes in and out of. Past this a file is a DJ set, a live
+# recording or a whole album in one take: not something to blend between, and
+# on a phone a stream of hundreds of megabytes that will not buffer in time.
+_DJ_MAX_SONG_SECONDS = 20 * 60
+
+
+def _song_sized(item: dict) -> bool:
+    try:
+        duration = float(item.get("duration") or 0)
+    except (TypeError, ValueError):
+        return True
+    return duration <= 0 or duration <= _DJ_MAX_SONG_SECONDS
+
+
 def _auto_set_arc_position(heard_count: int, segment_index: int) -> float:
     """A repeating club-shaped arc, with session-stable phase variation."""
     phases = (0.34, 0.52, 0.74, 0.9, 0.78, 0.58)
@@ -1279,6 +1293,9 @@ def _build_music_set_route(data: dict) -> tuple[dict, int]:
     available = [item for key, item in unique.items() if key not in heard]
     if not available:
         available = [item for key, item in unique.items() if key not in recent_heard]
+    # Songs before anything song-sized is given up on: a source made only of
+    # long recordings still opens rather than going silent.
+    available = [item for item in available if _song_sized(item)] or available
 
     seed_material = f"{data.get('session_id', '')}:{segment_index}:{','.join(sorted(unique))}"
     entropy = int.from_bytes(hashlib.blake2s(seed_material.encode(), digest_size=8).digest(), "big")
@@ -1624,7 +1641,7 @@ def _dj_place_bridge_pool(metadata, data: dict, occupied: set[str]) -> list[tupl
         candidates = []
         for item in related:
             identity = str(item.get("recommendation_identity") or item.get("id") or "")
-            if not identity or identity in occupied:
+            if not identity or identity in occupied or not _song_sized(item):
                 continue
             occupied.add(identity)
             candidates.append((item, _dj_item_analysis(metadata, item)))

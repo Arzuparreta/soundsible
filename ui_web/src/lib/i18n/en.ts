@@ -36,14 +36,10 @@ export const en = {
   musicExplorer: {
     startFromCurrent: 'From current',
     startDjFromCurrent: 'Start DJ from current song',
-    changeTimedOut: 'Session preparation took too long. You can retry.',
-    changeExhausted: 'No available route from {title}. Try another song.',
+    startDjFromSong: 'Start DJ from this song',
     change: 'Change session',
     mixWith: 'Mix with…',
     changeShort: 'Change…',
-    changing: 'Preparing session from {title}',
-    changeFailed: 'Could not change session',
-    retryChange: 'Retry',
 
     title: 'Music',
     explore: 'Explore',
@@ -281,6 +277,7 @@ export const en = {
       explore: 'Explore',
     },
     reason: {
+      sessionStart: 'Where the session starts now',
       favorite: 'From your favourites',
       library: 'From your library',
       related: 'Following the thread of {title}',
@@ -290,6 +287,7 @@ export const en = {
       artist: 'More from {artist}',
     },
     agent: {
+      sourceChanged: 'Now playing from {title}',
       heard: 'Heard you: {note}',
       looking: 'Looking for “{name}”…',
       noMatch: 'Nothing here answers to “{name}”',

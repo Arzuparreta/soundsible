@@ -67,17 +67,17 @@ for (const language of ['es', 'en'] as const) {
         - (label.iconWidth ? label.gap : 0) - label.width)).toBeLessThan(2);
     }
     await header.getByRole('button', { name: language === 'es' ? 'Desde la actual' : 'From current', exact: true }).click();
-    await expect(session.getByRole('status')).toContainText(language === 'es' ? 'Preparando sesión' : 'Preparing session');
-    await expect(session.getByRole('button', { name: language === 'es' ? 'Cancelar' : 'Cancel', exact: true })).toBeVisible();
-    await expect(session.getByRole('button', { name: language === 'es' ? 'Reintentar' : 'Retry', exact: true })).toHaveCount(0);
-    await expect.poll(() => attempts, { timeout: 15_000 }).toBe(4);
+    // The change is the source, at once: nothing is "prepared" behind the old
+    // route, and the runway is planned like any refill, retries included.
     await expect(session.getByRole('status')).toHaveCount(0);
+    await expect.poll(() => attempts, { timeout: 15_000 }).toBe(4);
+    await expect(route.locator('[data-drag-row]').first()).toBeVisible();
     expect(references).toEqual(Array(4).fill(TRACKS[319].id));
     await expect(page.locator('[data-auto-tile="stage"]')).toContainText(TRACKS[319].title);
   });
 }
 
-test('a NORMAL song menu starts DJ from that reference without playing the selected song', async ({ page }) => {
+test('a NORMAL song menu starts DJ from that song: it comes next, and the current song plays on', async ({ page }) => {
   await mockMusicEngine(page);
   const references: string[] = [];
   await page.route('**/api/discovery/music/dj-plan', async route => {
@@ -94,10 +94,11 @@ test('a NORMAL song menu starts DJ from that reference without playing the selec
   const menu = page.locator('[role="dialog"], [role="menu"]');
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('button', { name: 'Cambiar la sesión', exact: true })).toHaveCount(0);
-  await menu.getByRole('button', { name: 'Empezar DJ desde la canción actual', exact: true }).click();
+  await expect(menu.getByRole('button', { name: 'Empezar DJ desde la canción actual', exact: true })).toHaveCount(0);
+  await menu.getByRole('button', { name: 'Empezar DJ desde esta canción', exact: true }).click();
   await expect(page.locator('[data-player-surface-open]')).toBeVisible();
   const route = await showRoute(page);
-  await expect(route.locator('[data-drag-row]').first()).toBeVisible();
+  await expect(route.locator('[data-drag-row]').first()).toContainText(TRACKS[318].title);
   await expect(route.getByRole('region', { name: 'Sesión' })).toContainText(TRACKS[318].title);
   expect(references).toEqual([TRACKS[318].id]);
   await expect(page.locator('[data-auto-tile="stage"]')).toContainText(TRACKS[319].title);

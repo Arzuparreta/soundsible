@@ -81,10 +81,12 @@ describe('buildTrackMenu — podcast coherence', () => {
   it('offers a contextual DJ start in both NORMAL and DJ song menus', () => {
     const song: Track = { id: 'song', title: 'Selected song', artist: 'A' };
     for (const context of [{}, { auto: true }]) {
-      expect(labels(song, context)).toContain('Start DJ from current song');
+      // The song is the one being offered, not whatever happens to be playing.
+      expect(labels(song, context)).toContain('Start DJ from this song');
+      expect(labels(song, context)).not.toContain('Start DJ from current song');
       expect(labels(song, context)).not.toContain('Change session');
     }
-    expect(labels({ ...song, media_kind: 'podcast_episode' }, { auto: true })).not.toContain('Start DJ from current song');
+    expect(labels({ ...song, media_kind: 'podcast_episode' }, { auto: true })).not.toContain('Start DJ from this song');
   });
 
   it('withholds the heart until a song is in the library, and offers saving instead', () => {

@@ -32,6 +32,9 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
   return {
     title: name,
     actions: [
+      // In DJ a playlist is one source: choosing it moves the session onto it.
+      // Only an explicit placement into a seam asks for its songs one by one.
+      ...(inAuto && !hooks.beforeQueueId ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(playlistTracks(name), name) }] : []),
       {
         icon: inAuto ? menuIcons.queue() : menuIcons.play(),
         label: inAuto ? t('musicExplorer.requestAll') : t('playlistActions.play'),
@@ -49,7 +52,7 @@ export function playlistMenuOptions(name: string, hooks: PlaylistMenuHooks = {})
         },
       },
       ...(inAuto ? [{ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => { actions.addAutoSource(playlistTracks(name), name); hooks.onPlaced?.(); } }] : []),
-      ...(inAuto ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(playlistTracks(name), name) }] : []),
+      ...(inAuto && hooks.beforeQueueId ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(playlistTracks(name), name) }] : []),
       ...(!inAuto ? [{
         icon: menuIcons.shuffle(),
         label: t('playlistActions.shuffle'),

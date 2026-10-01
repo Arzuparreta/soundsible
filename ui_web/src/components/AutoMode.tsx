@@ -131,7 +131,7 @@ export function AutoMode(props: {
     // never replaces the occurrence, so even the cued handoff can be kept.
     const menu = () => [
       { icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.useAutoTrackAsSource(track) },
-      { icon: menuIcons.changeSession(), label: t('musicExplorer.startDjFromCurrent'), onSelect: () => void actions.startDjFromTrack(track) },
+      { icon: menuIcons.changeSession(), label: t('musicExplorer.startDjFromSong'), onSelect: () => void actions.startDjFromTrack(track) },
       ...buildTrackMenu(track, { inRoute: true, onAddToPlaylist: openPlaylistPicker, onEditMetadata: openMetadataEditor }),
       ...(committed ? [] : [{
         icon: menuIcons.remove(), label: t('autoMode.route.remove'), danger: true,
@@ -253,8 +253,8 @@ export function AutoMode(props: {
           routeBeforeQueueId={destination().beforeQueueId}
           onPlaced={() => finishDestination('route')}
           onCarryTrack={(track) => setCarriedTrack({ track })}
-          onCancelPlacement={() => { actions.cancelAutoSessionChange(); finishDestination(destinationOrigin); }}
-          onClose={() => { if (destination().kind !== 'neutral') actions.cancelAutoSessionChange(); finishDestination(destination().kind === 'neutral' ? 'stage' : destinationOrigin); }}
+          onCancelPlacement={() => finishDestination(destinationOrigin)}
+          onClose={() => finishDestination(destination().kind === 'neutral' ? 'stage' : destinationOrigin)}
         />
       </div>
     </section>

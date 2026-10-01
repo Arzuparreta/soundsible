@@ -37,14 +37,10 @@ export const zh: Dict = {
   musicExplorer: {
     startFromCurrent: '从当前曲目',
     startDjFromCurrent: '从当前歌曲开始 DJ',
-    changeTimedOut: '会话准备耗时过长，可以重试。',
-    changeExhausted: '无法从 {title} 生成可用路线，请尝试其他歌曲。',
+    startDjFromSong: '从这首歌开始 DJ',
     change: '更换会话',
     mixWith: '融入音乐…',
     changeShort: '更换…',
-    changing: '正在根据 {title} 准备会话',
-    changeFailed: '无法更换会话',
-    retryChange: '重试',
 
     title: '音乐',
     explore: '探索',
@@ -281,6 +277,7 @@ export const zh: Dict = {
       explore: '探索',
     },
     reason: {
+      sessionStart: '会话从这里开始',
       favorite: '来自你的收藏',
       library: '来自你的音乐库',
       related: '延续 {title} 的线索',
@@ -290,6 +287,7 @@ export const zh: Dict = {
       artist: '更多 {artist} 的作品',
     },
     agent: {
+      sourceChanged: '现在的音乐来自 {title}',
       heard: '收到：{note}',
       looking: '正在找《{name}》…',
       noMatch: '这里找不到《{name}》',

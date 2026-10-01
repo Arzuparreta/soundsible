@@ -192,7 +192,16 @@ function callbacks() {
     onComplete: vi.fn(),
     onCancel: vi.fn(),
     onError: vi.fn(),
+    onStaged: vi.fn(),
   };
+}
+
+/** Play a deck to the end of its file, the way the element itself does. */
+function end(deck: FakeAudio) {
+  deck.currentTime = deck.duration;
+  deck.paused = true;
+  deck.ended = true;
+  deck.dispatchEvent(new Event('ended'));
 }
 
 /** An armed mixer: one deck playing, one loaded and cued behind it. */
@@ -470,19 +479,129 @@ describe('two-deck mixer', () => {
     expect(outgoing.src).toBe('');
   });
 
-  it('rejects an unready incoming deck at the boundary without giving it ownership', async () => {
-    const { audioEl, audioService, outgoing, incoming, handlers } = await armed();
+  it('hands an unready incoming deck over the ordinary way when the outgoing song ends', async () => {
+    const { audioEl, audioService, onProgramEvent, outgoing, incoming, handlers } = await armed();
+    const boundary = vi.fn();
+    onProgramEvent('ended', boundary);
     incoming.readyState = 1;
-    outgoing.currentTime = outgoing.duration;
-    outgoing.ended = true;
 
-    await vi.advanceTimersByTimeAsync(300);
+    end(outgoing);
+
+    // Neither dropped nor waited on: the song is kept, cued at its first
+    // second, and the end goes on to the store as the boundary it is.
+    expect(handlers.onStaged).toHaveBeenCalledOnce();
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDominant).not.toHaveBeenCalled();
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+    expect(boundary).toHaveBeenCalledOnce();
+    expect(incoming.src).toBe('/next');
+    expect(incoming.currentTime).toBe(0);
+
+    expect(audioService.takeStaged('/next', 1)).not.toBeNull();
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+    expect(incoming.play).toHaveBeenCalled();
+  });
+
+  it('stages an incoming deck that started but never sounded, instead of waiting on it for ever', async () => {
+    // The drive: the next song was started under the outgoing one and its
+    // clock never left 0.4 s. The outgoing song played out, and the set sat on
+    // a finished song with the next one released.
+    const { audioEl, audioService, onProgramEvent, outgoing, incoming, handlers } = await armed();
+    const boundary = vi.fn();
+    onProgramEvent('ended', boundary);
+    await play(outgoing, 108.5);
+    expect(audioService.mixPhase()).toBe('prerolling');
+    incoming.currentTime = 0.4;
+    await play(outgoing, 109);
+    for (const position of [112, 120, 160, 230]) await play(outgoing, position);
+    expect(audioService.mixPhase()).toBe('prerolling');
+    expect(automatedCurves).toHaveLength(0);
+
+    end(outgoing);
+
+    expect(handlers.onStaged).toHaveBeenCalledOnce();
+    expect(boundary).toHaveBeenCalledOnce();
+    expect(incoming.paused).toBe(true);
+    expect(incoming.currentTime).toBe(0);
+    expect(audioService.takeStaged('/next', 1)).not.toBeNull();
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+  });
+
+  it('lets a sounding incoming deck take over when the outgoing song ends', async () => {
+    const { audioEl, audioService, onProgramEvent, outgoing, incoming, handlers } = await armed();
+    const boundary = vi.fn();
+    onProgramEvent('ended', boundary);
+    await play(outgoing, 108.5);
+    await play(incoming, 1);
+    await play(incoming, 1.5);
+
+    end(outgoing);
+
+    expect(handlers.onDominant).toHaveBeenCalledOnce();
+    expect(handlers.onComplete).toHaveBeenCalledOnce();
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+    // Settled by the mixer, so the store does not see a second boundary.
+    expect(boundary).not.toHaveBeenCalled();
+  });
+
+  it('fails a handoff whose incoming deck cannot play at the boundary, and reports it once', async () => {
+    const { audioEl, audioService, onProgramEvent, outgoing, incoming, handlers } = await armed();
+    const boundary = vi.fn();
+    onProgramEvent('ended', boundary);
+    incoming.networkState = 3;
+
+    end(outgoing);
+
+    expect(handlers.onError).toHaveBeenCalledOnce();
+    expect(handlers.onStaged).not.toHaveBeenCalled();
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+    expect(boundary).not.toHaveBeenCalled();
+  });
+
+  it('stays on the outgoing song when the incoming one ends seconds into the blend', async () => {
+    // The drive again: a stream that reported a three-second duration after
+    // its cue seek "ended" mid-blend, and the blend waited on it for ever.
+    const { audioEl, audioService, outgoing, incoming, handlers } = await armed();
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    expect(audioService.mixPhase()).toBe('crossfading');
+
+    end(incoming);
 
     expect(handlers.onError).toHaveBeenCalledOnce();
     expect(handlers.onDominant).not.toHaveBeenCalled();
-    expect(incoming.play).not.toHaveBeenCalled();
     expect(audioService.mixPhase()).toBe('idle');
     expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+    expect(outgoing.paused).toBe(false);
+    expect(outgoing.volume).toBeGreaterThan(0);
+  });
+
+  it.each([false, true])('stops waiting on an incoming deck that stalls mid-blend (dominant=%s)', async (dominant) => {
+    const { audioEl, audioService, outgoing, incoming, handlers } = await armed();
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    if (dominant) await play(incoming, 4);
+    expect(audioService.mixPhase()).toBe('crossfading');
+    expect(handlers.onDominant).toHaveBeenCalledTimes(dominant ? 1 : 0);
+
+    for (const position of [111, 112, 113, 114, 115]) await play(outgoing, position);
+    await vi.advanceTimersByTimeAsync(3000);
+    await play(outgoing, 116);
+
+    expect(audioService.mixPhase()).toBe('idle');
+    if (dominant) {
+      expect(handlers.onComplete).toHaveBeenCalledOnce();
+      expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+    } else {
+      expect(handlers.onError).toHaveBeenCalledOnce();
+      expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+      expect(outgoing.volume).toBeGreaterThan(0);
+    }
   });
 
   it('closes an interrupted blend on its current owner', async () => {
@@ -969,12 +1088,55 @@ describe('two-deck mixer', () => {
   it('lets a listener skip straight into the blend that was already prepared', async () => {
     const { audioEl, audioService, incoming, handlers } = await armed();
 
-    expect(audioService.startMixNow()).toBe(true);
+    expect(audioService.startMixNow()).toBe('blend');
     // A requested skip hands over at once — the listener already knows the
     // track changed — and keeps whatever the incoming deck had buffered.
     expect(handlers.onDominant).toHaveBeenCalledOnce();
     expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
     expect(incoming.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('never ignores a skip: an incoming deck that cannot sound yet is handed over plainly', async () => {
+    // Pressed twice on the drive with the next song stuck at its metadata, and
+    // nothing happened either time.
+    const { audioEl, audioService, outgoing, incoming, handlers } = await armed();
+    incoming.readyState = 1;
+
+    expect(audioService.startMixNow()).toBe('staged');
+
+    expect(handlers.onStaged).toHaveBeenCalledOnce();
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
+    expect(audioService.takeStaged('/next', 1)).not.toBeNull();
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+    expect(outgoing.src).toBe('');
+  });
+
+  it('finishes a blend that is already sounding when the listener skips', async () => {
+    const { audioEl, audioService, outgoing, incoming, handlers } = await armed();
+    await play(outgoing, 108.5);
+    incoming.currentTime = 2;
+    await play(outgoing, 110);
+    expect(audioService.mixPhase()).toBe('crossfading');
+
+    expect(audioService.startMixNow()).toBe('finished');
+
+    expect(handlers.onDominant).toHaveBeenCalledOnce();
+    expect(handlers.onComplete).toHaveBeenCalledOnce();
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
+  });
+
+  it('does not take a finished song for a platform pause when the page comes back', async () => {
+    const { audioService, outgoing, incoming, handlers } = await armed();
+    incoming.readyState = 1;
+    hide();
+    end(outgoing);
+    reveal();
+
+    expect(handlers.onCancel).not.toHaveBeenCalled();
+    expect(incoming.src).toBe('/next');
+    expect(audioService.takeStaged('/next', 1)).not.toBeNull();
   });
 });
 
@@ -1007,24 +1169,24 @@ describe('cut without mixing', () => {
     deck.dispatchEvent(new Event('ended'));
   }
 
-  it.each([false, true])('plays the song out and starts the next at full level, then hands over (graph=%s)', async (graph) => {
+  it.each([false, true])('plays the song out, then hands the next one over from its first second (graph=%s)', async (graph) => {
     const { audioEl, audioService, outgoing, incoming, handlers } = await cued(graph);
-    let started!: () => void;
-    incoming.play = vi.fn(() => {
-      incoming.paused = false;
-      return new Promise<void>((resolve) => { started = resolve; });
-    });
+    const unlockStarts = incoming.play.mock.calls.length;
 
     // No head start and no early exit: the last second still belongs to it.
     await play(outgoing, 239.5);
+    await play(outgoing, 240);
     expect(audioService.mixPhase()).toBe('armed');
-    expect(incoming.play).not.toHaveBeenCalled();
+    expect(incoming.play).toHaveBeenCalledTimes(unlockStarts);
 
     end(outgoing);
-    expect(incoming.play).toHaveBeenCalledOnce();
-    // Heard from its first sample, but not the owner until it is really playing.
-    expect(audioService.mixPhase()).toBe('prerolling');
-    expect(handlers.onDominant).not.toHaveBeenCalled();
+    // The ordinary gapless handover takes it from here, exactly as it does
+    // between two songs outside the DJ.
+    expect(handlers.onStaged).toHaveBeenCalledOnce();
+    expect(audioService.mixPhase()).toBe('idle');
+    expect(audioService.takeStaged('/next', 1)).not.toBeNull();
+    expect(incoming.play).toHaveBeenCalledTimes(unlockStarts + 1);
+    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
     if (graph) {
       expect(contexts[0].gains[4].gain.value).toBe(1);
       expect(contexts[0].gains[2].gain.value).toBe(0);
@@ -1032,13 +1194,6 @@ describe('cut without mixing', () => {
       expect(incoming.volume).toBeGreaterThan(0);
       expect(outgoing.volume).toBe(0);
     }
-
-    started();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(handlers.onDominant).toHaveBeenCalledOnce();
-    expect(handlers.onComplete).toHaveBeenCalledOnce();
-    expect(audioService.mixPhase()).toBe('idle');
-    expect(audioEl()).toBe(incoming as unknown as HTMLAudioElement);
     expect(outgoing.src).toBe('');
     // From its own first second, at its own tempo, with nothing drawn on it.
     expect(incoming.currentTime).toBe(0);
@@ -1046,24 +1201,20 @@ describe('cut without mixing', () => {
     expect(automatedCurves).toHaveLength(0);
   });
 
-  it('stays on the song that ended when the next one will not start', async () => {
-    const { audioEl, audioService, outgoing, incoming, handlers } = await cued(false);
+  it('reports a next song that will not start through the ordinary handover', async () => {
+    const { audioService, outgoing, incoming, handlers } = await cued(false);
     incoming.play = vi.fn(async () => { throw new Error('NotAllowedError'); });
 
     end(outgoing);
-    await vi.advanceTimersByTimeAsync(0);
 
-    expect(handlers.onError).toHaveBeenCalledOnce();
-    expect(handlers.onDominant).not.toHaveBeenCalled();
-    expect(audioService.mixPhase()).toBe('idle');
-    expect(audioEl()).toBe(outgoing as unknown as HTMLAudioElement);
-    expect(incoming.src).toBe('');
+    expect(handlers.onStaged).toHaveBeenCalledOnce();
+    await expect(audioService.takeStaged('/next', 1)).rejects.toThrow('NotAllowedError');
   });
 
   it('lets a listener skip straight to the next song, from its first second', async () => {
     const { audioEl, audioService, outgoing, incoming, handlers } = await cued(false);
 
-    expect(audioService.startMixNow()).toBe(true);
+    expect(audioService.startMixNow()).toBe('blend');
     await vi.advanceTimersByTimeAsync(0);
 
     expect(handlers.onDominant).toHaveBeenCalledOnce();

@@ -12,6 +12,16 @@ on:
     - cron: "17 4 * * *"
   workflow_dispatch:
 
+# A new push to a pull request makes the run for the previous one worthless.
+# Cancelling it frees the runners the new run is about to queue for. Pushes to
+# main and tags are never cancelled: each one may publish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Every job carries a `timeout-minutes`. Without one a hung step holds a
+# required check — and auto-merge with it — for GitHub's six-hour default.
+
 jobs:
   # The required checks (docker, docker_arm64, community_docker) are the slow
   # ones — a full image build plus an emulated arm64 build. Most PRs (UI copy,
@@ -28,6 +38,7 @@ jobs:
   # deployment smoke test ever running against it.
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       docker: ${{ steps.filter.outputs.docker }}
       community: ${{ steps.filter.outputs.community }}
@@ -58,17 +69,43 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # A static build, pinned and checked, rather than `apt-get install ffmpeg`.
+      # The apt package drags in ~105 MB of codecs, speech models and GPU drivers
+      # from Ubuntu's mirror, which some days serves them at 70 kB/s: the install
+      # took 24 minutes of a 27-minute job on 2026-10-01 while pytest took three.
+      # Same month-end BtbN build the Windows desktop bundles
+      # (desktop-shell/scripts/fetch-ffmpeg.sh), and cached between runs.
+      FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n8.1.2-34-g9b6c8969e0-linux64-gpl-8.1.tar.xz
+      FFMPEG_SHA256: 09fc77be269c7053e438b7e96548e4af97604faf96a42c4a3c56a1ad74c22c0a
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install dependencies
+      - name: Restore FFmpeg
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/soundsible-ffmpeg
+          key: ffmpeg-${{ env.FFMPEG_SHA256 }}
+      - name: Install FFmpeg
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          pip install -r requirements.txt
+          dir="$HOME/.cache/soundsible-ffmpeg"
+          if [ ! -x "$dir/ffmpeg" ] || [ ! -x "$dir/ffprobe" ]; then
+            mkdir -p "$dir"
+            curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --max-time 300 \
+              "$FFMPEG_URL" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+            echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum --check --strict
+            tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$dir" --strip-components=2 \
+              --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/ffmpeg" -hide_banner -version | head -1
+      - name: Install dependencies
+        run: pip install -r requirements.txt
       # One run, one signal. `--cov=.` used to include tests/ itself — ~12.5k
       # lines that are covered by construction — which inflated the total enough
       # that the 30% floor could not fail. Scoped to the source packages the
@@ -86,6 +123,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -103,6 +141,7 @@ jobs:
   # released. This is the job that makes the copies trustworthy.
   version_consistency:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -123,6 +162,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -136,18 +176,48 @@ jobs:
       - name: Show bandit report
         run: cat bandit-report.txt
 
-  ui_build:
+  # The image every browser job runs in: Playwright's own, at the exact version
+  # the lockfile pins, with the browsers *and* every system library they need
+  # already inside. Installing them per job (`playwright install --with-deps`)
+  # was an apt-get of ~125 MB from Ubuntu's mirror on every runner, every run:
+  # one to twenty-six minutes depending on the mirror, and now and then a step
+  # that hung until GitHub's six-hour limit. A bumped @playwright/test moves the
+  # image with it, so the two cannot drift apart.
+  browser_image:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.version.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ui_web/package-lock.json
+          sparse-checkout-cone-mode: false
+      - id: version
+        run: |
+          version="$(jq -r '.packages["node_modules/@playwright/test"].version // empty' ui_web/package-lock.json)"
+          test -n "$version"
+          echo "image=mcr.microsoft.com/playwright:v${version}-noble" >> "$GITHUB_OUTPUT"
+
+  ui_build:
+    needs: browser_image
+    # Never skipped because the image could not be resolved: a skipped required
+    # check passes. An empty image fails the job instead.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: ${{ needs.browser_image.outputs.image }}
+      options: --ipc=host
     defaults:
       run:
         working-directory: ui_web
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/cache@v4
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: ui_web/package-lock.json
+          path: ~/.npm
+          key: npm-${{ hashFiles('ui_web/package-lock.json') }}
       - name: Install JS dependencies
         run: npm ci
       # Without this the ~58 vitest files were advisory only: a regression in
@@ -156,8 +226,6 @@ jobs:
         run: npm run test:unit
       - name: Build player bundle (vite + tailwind)
         run: npm run build
-      - name: Install startup test browsers
-        run: npx playwright install --with-deps chromium webkit
       - name: Validate production startup and cached PWA
         run: npx playwright test --config playwright.startup.config.ts
       - name: Upload startup browser report
@@ -175,6 +243,7 @@ jobs:
       startsWith(github.ref, 'refs/tags/v') ||
       needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       COMPOSE_PROJECT_NAME: soundsible-ci
       SOUNDSIBLE_PORT: 15005
@@ -253,6 +322,7 @@ jobs:
       startsWith(github.ref, 'refs/tags/v') ||
       needs.changes.outputs.community == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       COMMUNITY_TURN_SECRET: ci-turn-secret
       COMMUNITY_SECRET_KEY: ci-community-secret
@@ -320,48 +390,47 @@ jobs:
 
   ui_accessibility_profiles:
     # Keep one Playwright worker per runner: sharing a runner previously made
-    # browsers crash. Separate machines let all four existing profiles run at once.
+    # browsers crash. The slow profiles are split across two runners each, so
+    # the longest one stops being the whole job's wall time.
+    needs: browser_image
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
-        project: [chromium-mobile, webkit-mobile, chromium-desktop, webkit-desktop]
+        include:
+          - { project: chromium-mobile, shard: 1/2 }
+          - { project: chromium-mobile, shard: 2/2 }
+          - { project: webkit-mobile, shard: 1/2 }
+          - { project: webkit-mobile, shard: 2/2 }
+          - { project: chromium-desktop, shard: 1/1 }
+          - { project: webkit-desktop, shard: 1/2 }
+          - { project: webkit-desktop, shard: 2/2 }
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Browsers and their libraries come with the image, so nothing is installed
+    # here. WebKit inside it plays media without a sound server, which on a bare
+    # runner needed a dummy PulseAudio from apt.
+    container:
+      image: ${{ needs.browser_image.outputs.image }}
+      options: --ipc=host
     defaults:
       run:
         working-directory: ui_web
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/cache@v4
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: ui_web/package-lock.json
+          path: ~/.npm
+          key: npm-${{ hashFiles('ui_web/package-lock.json') }}
       - name: Install JS dependencies
         run: npm ci
-      - name: Install browser engines
-        run: npx playwright install --with-deps chromium webkit
-      # Playwright's WebKit renders media through GStreamer, and a GitHub runner
-      # has no sound server for it to open, which killed the browser outright in
-      # the specs that play audio. `playback-feedback` used to fail all three of
-      # its attempts after ~20s each; with a sink it passes in five seconds.
-      # Best-effort on purpose — a runner that will not give us one must not
-      # cost us the whole job.
-      - name: Give WebKit an audio sink
-        continue-on-error: true
-        run: |
-          set -x
-          sudo apt-get update
-          sudo apt-get install -y pulseaudio
-          pulseaudio --start --exit-idle-time=-1
-          pactl load-module module-null-sink sink_name=soundsible
-          pactl set-default-sink soundsible
       - name: Validate interface scaling
-        run: npm run test:ui-scale -- --project=${{ matrix.project }}
+        run: npm run test:ui-scale -- --project=${{ matrix.project }} --shard=${{ matrix.shard }}
       - name: Upload browser report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-accessibility-report-${{ matrix.project }}
+          name: ui-accessibility-report-${{ matrix.project }}-${{ strategy.job-index }}
           path: ui_web/playwright-report
           retention-days: 14
 
@@ -371,6 +440,7 @@ jobs:
     needs: ui_accessibility_profiles
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require all browser profiles
         env:
@@ -398,6 +468,7 @@ jobs:
       && github.event_name == 'push'
       && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write

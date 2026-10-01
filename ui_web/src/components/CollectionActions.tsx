@@ -67,8 +67,17 @@ export function CollectionActions(props: {
       if (purpose !== 'change' && isCurrent() && placement.intent === intent) (props.onCompleted ?? placement.onCompleted)?.();
     } finally { setBusy(false); }
   };
-  const purpose = () => placement.changeSession ? 'change' : placement.referenceOnly ? 'reference' : 'request';
+  // A collection is one source for the DJ. Its primary action moves the
+  // session onto it; only a placement aimed at a seam of the route asks for its
+  // songs one by one.
+  const purpose = () => placement.changeSession ? 'change'
+    : placement.referenceOnly ? 'reference'
+    : placement.intent === 'auto-route' ? 'request'
+    : 'change';
   const primary = () => props.auto ? PRIMARY[purpose()] : PRIMARY.play;
+  const secondary = () => purpose() === 'change'
+    ? { icon: menuIcons.queue(), label: t('musicExplorer.requestAll'), onSelect: () => void use('request') }
+    : { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void use('change') };
   return <>
     <button class={props.buttonClass} type="button" data-glyph-label disabled={busy() || !count()} aria-busy={busy()} onClick={() => props.auto ? void use(purpose()) : props.onPlay?.()}>
       <span class={styles.content}>
@@ -77,7 +86,7 @@ export function CollectionActions(props: {
       </span>
     </button>
     <Show when={props.auto && !placement.referenceOnly && placement.intent !== 'auto-route' && !props.hideReferenceMenu}>
-      <button type="button" disabled={busy() || !count()} aria-label={t('autoMode.route.actions', { title: props.title })} onClick={() => openActionMenu({ title: props.title, actions: [{ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => void use('reference') }, { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void use('change') }] })}><MoreIcon size={18} /></button>
+      <button type="button" disabled={busy() || !count()} aria-label={t('autoMode.route.actions', { title: props.title })} onClick={() => openActionMenu({ title: props.title, actions: [{ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => void use('reference') }, secondary()] })}><MoreIcon size={18} /></button>
     </Show>
   </>;
 }

@@ -79,7 +79,11 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
     list.push({ icon: icons.queue(), label: t('trackActions.addToQueue'), onSelect: () => actions.enqueue(track) });
   }
   if (!isPodcast && !inRoute)
-    list.push({ icon: icons.changeSession(), label: t('musicExplorer.startDjFromCurrent'), onSelect: () => void actions.startDjFromTrack(track) });
+    list.push({
+      icon: icons.changeSession(),
+      label: t(state.playback.currentTrack?.id === track.id ? 'musicExplorer.startDjFromCurrent' : 'musicExplorer.startDjFromSong'),
+      onSelect: () => void actions.startDjFromTrack(track),
+    });
   if (ctx.onAddToPlaylist && !isPodcast)
     list.push({ icon: icons.playlist(), label: t('trackActions.addToPlaylist'), onSelect: () => ctx.onAddToPlaylist!(track) });
   if (!isPodcast && !inRoute)
