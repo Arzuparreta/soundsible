@@ -1327,10 +1327,15 @@ export const api = {
 
   // ── Podcasts ──
   /** `next` when the show's feed goes on past `episodes`: hand it to
-   * `browsePodcastFeed` for the page that follows. */
-  getPodcastEpisodes: (feedId: string) =>
-    request<{ feed_id?: string; subscription?: PodcastSubscription; episodes?: PodcastEpisode[]; next?: number | null }>(
-      `/api/podcasts/feeds/${encodeURIComponent(feedId)}/episodes`,
+   * `browsePodcastFeed` for the page that follows.
+   *
+   * `cached` answers at once with what the engine kept of the feed; with no
+   * mode the engine looks at the feed for anything new since (cheaply, and not
+   * twice within a minute), and `changed` says whether it found any; `refresh`
+   * reads the feed whole, however recently it was read. */
+  getPodcastEpisodes: (feedId: string, mode?: 'cached' | 'refresh') =>
+    request<{ feed_id?: string; subscription?: PodcastSubscription; episodes?: PodcastEpisode[]; next?: number | null; changed?: boolean }>(
+      `/api/podcasts/feeds/${encodeURIComponent(feedId)}/episodes${mode ? `?${mode}=1` : ''}`,
       { timeoutMs: 20000 },
     ),
   /** A show and its episodes read straight from its feed, for a show opened

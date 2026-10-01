@@ -4,11 +4,11 @@ Podcast subscriptions, RSS episodes, and enclosure preview streaming.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 import time
 import uuid
-from datetime import datetime as dt
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -17,16 +17,23 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
 from shared.models import LibraryMetadata, PodcastSubscription
 from shared.podcast_preview_token import decode_enclosure_stream_token, mint_enclosure_stream_token
-from shared.podcast_rss import assert_safe_http_url, fetch_feed_body, parse_feed, parse_feed_episodes
+from shared.podcast_rss import FeedCheck, assert_safe_http_url, check_feed, fetch_feed_body, parse_feed, parse_feed_episodes
 
 logger = logging.getLogger(__name__)
 
 podcasts_bp = Blueprint("podcasts", __name__, url_prefix="")
 
 _ITUNES_SEARCH = "https://itunes.apple.com/search"
-_CACHE_TTL_SEC = 1800
+# How long a followed show's feed is taken as read. Opening a show looks at its
+# feed again past this, so a new episode is there the next time it is opened;
+# within it, going back and forth between a show and its episodes costs nothing.
+_RECHECK_SEC = 60
 _CACHED_EPISODES = 500
 _fetch_lock = threading.Lock()
+# When each followed show's feed was last looked at, on the monotonic clock.
+# Kept in memory rather than with the cache, so that a look that finds nothing
+# new writes nothing; after a restart a show is simply looked at once more.
+_checked: Dict[str, float] = {}
 
 
 def _get_api():
@@ -39,17 +46,27 @@ def _get_api():
     }
 
 
-def _cached_episodes(episodes: List[Dict[str, Any]], next_after: Optional[int]) -> Dict[str, Any]:
+def _cached_episodes(episodes: List[Dict[str, Any]], next_after: Optional[int], looked: FeedCheck) -> Dict[str, Any]:
     """What a followed show keeps of its feed: its first episodes, and where the
     rest of the feed picks up after them (#250). Past a list cut here the count
     is of episodes, which can only fall short of the entries they came from, so
-    the page that follows may repeat a few the list has but never skips one."""
+    the page that follows may repeat a few the list has but never skips one.
+
+    It also keeps what tells the next read whether the feed has changed: the
+    validators the feed sent, and a digest of the page for feeds that send
+    none, so an unchanged feed is neither parsed nor saved again."""
     kept = episodes[:_CACHED_EPISODES]
     return {
         "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "episodes": kept,
         "next": len(kept) if len(episodes) > len(kept) else next_after,
+        "validators": looked.validators,
+        "digest": _digest(looked.page.xml) if looked.page else None,
     }
+
+
+def _digest(xml: bytes) -> str:
+    return hashlib.sha1(xml).hexdigest()
 
 
 def _subscription_by_id(metadata: LibraryMetadata, feed_id: str) -> Optional[Dict[str, Any]]:
@@ -92,8 +109,8 @@ def subscribe():
     itunes_id = (data.get("itunes_collection_id") or "").strip()
 
     try:
-        page = fetch_feed_body(rss_url)
-        show, eps = parse_feed(page.xml, rss_url)
+        looked = check_feed(rss_url)
+        show, eps = parse_feed(looked.page.xml, rss_url)
         feed_title = title_guess or show["title"]
         feed_author = author_guess or show["author"]
         feed_image = image_guess or show["image_url"]
@@ -114,7 +131,8 @@ def subscribe():
     # Dedupe by rss_url
     metadata.podcast_subscriptions = [s for s in metadata.podcast_subscriptions if isinstance(s, dict) and s.get("rss_url") != rss_url]
     metadata.podcast_subscriptions.append(sub)
-    metadata.podcast_episode_cache[subscription_id] = _cached_episodes(eps, page.next)
+    metadata.podcast_episode_cache[subscription_id] = _cached_episodes(eps, looked.page.next, looked)
+    _checked[subscription_id] = time.monotonic()
     lib.require_saved()
     api["emit_to_user"]("library_updated")
     return jsonify({"status": "success", "subscription": sub})
@@ -135,6 +153,7 @@ def unsubscribe(feed_id: str):
     if len(metadata.podcast_subscriptions) == before:
         return jsonify({"error": "Not found"}), 404
     metadata.podcast_episode_cache.pop(feed_id, None)
+    _checked.pop(feed_id, None)
     lib.require_saved()
     api["emit_to_user"]("library_updated")
     return jsonify({"status": "success"})
@@ -154,42 +173,67 @@ def feed_episodes(feed_id: str):
     if not rss_url:
         return jsonify({"error": "Invalid subscription"}), 400
 
-    refresh = request.args.get("refresh") in ("1", "true", "yes")
-    cache = metadata.podcast_episode_cache.get(feed_id) if isinstance(metadata.podcast_episode_cache, dict) else None
-    now = time.time()
-    need_fetch = refresh
-    if not need_fetch and isinstance(cache, dict):
-        fetched_at = cache.get("fetched_at") or ""
+    # `cached` answers from what was kept without going to the feed, for the
+    # page to show at once; the read that follows it looks at the feed for
+    # anything new. `refresh` reads the feed whole, whenever it was last read.
+    refresh = _flag("refresh")
+    cache = _kept(metadata, feed_id)
+    if cache is not None and not refresh and (_flag("cached") or not _due(feed_id)):
+        return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
+
+    with _fetch_lock:
+        # Another request for the same show may have looked while this one
+        # waited; what it found is in the cache now.
+        cache = _kept(metadata, feed_id)
+        if cache is not None and not refresh and not _due(feed_id):
+            return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
         try:
-            t = dt.fromisoformat(fetched_at.replace("Z", "+00:00")).timestamp()
-            if now - t > _CACHE_TTL_SEC:
-                need_fetch = True
-        except Exception:
-            need_fetch = True
-    else:
-        need_fetch = need_fetch or not cache
+            looked = check_feed(rss_url, None if refresh or cache is None else cache.get("validators"))
+        except Exception as e:
+            # What was kept stands untouched: a failed read used to be saved
+            # as a fresh one, which hid new episodes for another half hour.
+            logger.warning("RSS refresh failed for %s: %s", feed_id, e)
+            if cache is None or refresh:
+                return jsonify({"error": str(e)}), 502
+            _checked[feed_id] = time.monotonic()
+            return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
+        _checked[feed_id] = time.monotonic()
+        if looked.page is None or (cache is not None and _digest(looked.page.xml) == cache.get("digest")):
+            if cache.get("validators") != looked.validators:
+                cache["validators"] = looked.validators
+                lib.require_saved()
+            return _episodes_answer(feed_id, sub, cache["episodes"], cache.get("next"), changed=False)
+        episodes = parse_feed_episodes(looked.page.xml, rss_url)
+        next_after = looked.page.next
+        metadata.podcast_episode_cache[feed_id] = _cached_episodes(episodes, next_after, looked)
+        lib.require_saved()
+    return _episodes_answer(feed_id, sub, episodes, next_after, changed=True)
 
-    episodes: List[Dict[str, Any]] = []
-    # Where the rest of the feed picks up, for the page to offer (#250).
-    cached_next = cache.get("next") if isinstance(cache, dict) else None
-    next_after = cached_next if isinstance(cached_next, int) else None
-    if need_fetch:
-        with _fetch_lock:
-            try:
-                page = fetch_feed_body(rss_url)
-                episodes, next_after = parse_feed_episodes(page.xml, rss_url), page.next
-            except Exception as e:
-                logger.warning("RSS refresh failed for %s: %s", feed_id, e)
-                if isinstance(cache, dict) and isinstance(cache.get("episodes"), list):
-                    episodes = cache["episodes"]
-                else:
-                    return jsonify({"error": str(e)}), 502
-            metadata.podcast_episode_cache[feed_id] = _cached_episodes(episodes, next_after)
-            lib.require_saved()
-    else:
-        episodes = (cache or {}).get("episodes") or []
 
-    return jsonify({"feed_id": feed_id, "subscription": sub, "episodes": episodes, "next": next_after})
+def _kept(metadata: LibraryMetadata, feed_id: str) -> Optional[Dict[str, Any]]:
+    cache = metadata.podcast_episode_cache.get(feed_id) if isinstance(metadata.podcast_episode_cache, dict) else None
+    return cache if isinstance(cache, dict) and isinstance(cache.get("episodes"), list) else None
+
+
+def _flag(name: str) -> bool:
+    return request.args.get(name) in ("1", "true", "yes")
+
+
+def _due(feed_id: str) -> bool:
+    last = _checked.get(feed_id)
+    return last is None or time.monotonic() - last >= _RECHECK_SEC
+
+
+def _episodes_answer(feed_id: str, sub: Dict[str, Any], episodes: List[Dict[str, Any]], next_after: Any, changed: bool):
+    """`changed` says the list is not the one the page was last given, so a
+    page already showing the show has something to replace."""
+    return jsonify({
+        "feed_id": feed_id,
+        "subscription": sub,
+        "episodes": episodes,
+        "next": next_after if isinstance(next_after, int) else None,
+        "changed": changed,
+    })
 
 
 @podcasts_bp.route("/api/podcasts/episodes-by-url", methods=["GET"])

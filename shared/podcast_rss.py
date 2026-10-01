@@ -48,6 +48,15 @@ class FeedPage(NamedTuple):
     next: Optional[int]
 
 
+class FeedCheck(NamedTuple):
+    """A feed read against what was kept of it. `page` is None when the feed
+    answered that nothing changed since `validators` were taken; `validators`
+    are what to hand back on the next read."""
+
+    page: Optional[FeedPage]
+    validators: Dict[str, str]
+
+
 class _Shape(NamedTuple):
     """Where a feed's entries start, what they are called, and the elements
     open around them."""
@@ -81,20 +90,43 @@ def assert_safe_http_url(url: str) -> None:
 def fetch_feed_body(feed_url: str, after: int = 0) -> FeedPage:
     """The page of a feed that follows its first `after` entries. A feed that
     fits in one page, read from its top, comes back whole as it always has."""
+    with _get(feed_url, {}) as resp:
+        resp.raise_for_status()
+        return _read_page(resp.iter_content(chunk_size=65536), max(0, after))
+
+
+def check_feed(feed_url: str, validators: Optional[Dict[str, str]] = None) -> FeedCheck:
+    """The top of a feed, unless it has not changed since `validators` were
+    taken from it. A feed that keeps an ETag or a Last-Modified date answers
+    an unchanged read with an empty 304, so looking costs a round trip and no
+    download; one that keeps neither is read whole every time."""
+    kept = {key: value for key, value in (validators or {}).items() if isinstance(value, str) and value}
+    headers = {}
+    if "etag" in kept:
+        headers["If-None-Match"] = kept["etag"]
+    if "last_modified" in kept:
+        headers["If-Modified-Since"] = kept["last_modified"]
+    with _get(feed_url, headers) as resp:
+        if resp.status_code == 304 and headers:
+            return FeedCheck(None, kept)
+        resp.raise_for_status()
+        fresh = {key: resp.headers[name] for key, name in (("etag", "ETag"), ("last_modified", "Last-Modified")) if resp.headers.get(name)}
+        return FeedCheck(_read_page(resp.iter_content(chunk_size=65536), 0), fresh)
+
+
+def _get(feed_url: str, headers: Dict[str, str]) -> requests.Response:
     assert_safe_http_url(feed_url)
     # Streamed so the limit bounds what is held, not just what is parsed: the
     # whole body used to be downloaded before its size was even looked at.
     # Returning with the rest unread drops the connection instead of
     # downloading the remainder of a feed nothing is going to parse.
-    with requests.get(
+    return requests.get(
         feed_url,
-        headers={"User-Agent": _PODCAST_UA},
+        headers={"User-Agent": _PODCAST_UA, **headers},
         timeout=_FETCH_TIMEOUT,
         allow_redirects=True,
         stream=True,
-    ) as resp:
-        resp.raise_for_status()
-        return _read_page(resp.iter_content(chunk_size=65536), max(0, after))
+    )
 
 
 def _read_page(chunks: Iterator[bytes], after: int) -> FeedPage:

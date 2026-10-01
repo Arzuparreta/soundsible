@@ -8,7 +8,69 @@
 
 .filterBar {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
   padding: 0 var(--gutter) var(--space-sm);
+}
+
+.refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  flex-shrink: 0;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.refresh:disabled {
+  cursor: default;
+}
+@media (hover: hover) and (pointer: fine) {
+.refresh:not(:disabled):hover {
+  color: var(--accent-ink);
+}
+}
+
+/* Pulled open by the finger, so it follows it with no transition; it only
+ * eases closed once let go. */
+.pull {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--ink-tertiary);
+  transition: height 180ms ease-out;
+}
+.pull[data-pulling] {
+  transition: none;
+}
+.pullArmed {
+  color: var(--accent-ink);
+}
+.pullIcon {
+  display: inline-flex;
+}
+
+.spinning svg {
+  animation: refresh-spin 0.9s linear infinite;
+}
+@keyframes refresh-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pull {
+    transition: none;
+  }
+  .spinning svg {
+    animation: none;
+  }
 }
 
 .filter {
@@ -205,6 +267,7 @@
 
 @media (min-width: 1024px) {
   .filter,
+  .refresh,
   .epDownload,
   .epDownloaded,
   .back,
@@ -215,6 +278,7 @@
     height: 36px;
   }
 
+  .refresh,
   .epDownload,
   .epDownloaded,
   .back,

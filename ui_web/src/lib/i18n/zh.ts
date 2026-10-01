@@ -823,6 +823,8 @@ export const zh: Dict = {
     downloadedOnly: '仅已下载',
     empty: '没有剧集。',
     loadMore: '加载更多剧集',
+    refresh: '刷新剧集',
+    refreshFailed: '无法刷新剧集。',
     ariaPlay: '播放剧集',
     ariaDownload: '下载剧集',
     ariaDownloaded: '已下载',

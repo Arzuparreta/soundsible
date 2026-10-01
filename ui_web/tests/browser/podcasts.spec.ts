@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockMusicEngine, TRACKS, silentWav } from './music-browser-fixture';
+import { dragTouch } from './playerGestures';
 
 const FOLLOWED = { id: 'show-1', title: 'Programa seguido', author: 'Autora', rss_url: 'https://feeds.example.com/seguido.xml', image_url: null };
 const POPULAR = { title: 'Programa popular', author: 'Alguien', feed_url: 'https://feeds.example.com/popular.xml', recommendation_identity: 'podcast:popular' };
@@ -94,6 +95,69 @@ test('a search result opens its show, and its own button still follows without o
   await expect(page).toHaveURL(isMobile ? /#\/podcasts\/feed\?url=/ : /#\/podcasts\/show-2$/);
 });
 
+
+/** The followed show's episodes as the engine answers each way of asking:
+ * `cached` with what it kept, a look at the feed with `onCheck`'s answer, and
+ * a refresh with an episode published since. Every mode asked is recorded. */
+async function mockFeedModes(page: Page, onCheck: () => Promise<{ episodes: ReturnType<typeof episode>[]; changed: boolean }>) {
+  const asked: string[] = [];
+  const kept = [episode('Episodio guardado')];
+  await page.route((url) => url.pathname === '/api/podcasts/feeds/show-1/episodes', async (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    const mode = query.has('cached') ? 'cached' : query.has('refresh') ? 'refresh' : 'check';
+    asked.push(mode);
+    const answer = mode === 'cached' ? { episodes: kept, changed: false }
+      : mode === 'refresh' ? { episodes: [episode('Episodio recién subido'), ...kept], changed: true }
+        : await onCheck();
+    return route.fulfill({ json: { feed_id: 'show-1', subscription: FOLLOWED, ...answer } });
+  });
+  return { asked, kept };
+}
+
+test('a followed show opens on what was kept, and the episode published since joins it', async ({ page }) => {
+  await mockPodcasts(page);
+  let publish!: () => void;
+  const published = new Promise<void>((resolve) => { publish = resolve; });
+  const { asked, kept } = await mockFeedModes(page, async () => {
+    await published;
+    return { episodes: [episode('Episodio nuevo'), ...kept], changed: true };
+  });
+  await page.goto('/player/#/podcasts/show-1');
+  // The page does not wait on the feed to show the show.
+  await expect(page.getByText('Episodio guardado', { exact: true })).toBeVisible();
+  await expect(page.getByText('Episodio nuevo', { exact: true })).toHaveCount(0);
+  publish();
+  await expect(page.getByText('Episodio nuevo', { exact: true })).toBeVisible();
+  expect(asked).toEqual(['cached', 'check']);
+});
+
+test('the refresh button reads the feed again', async ({ page, isMobile }) => {
+  await mockPodcasts(page);
+  const { asked, kept } = await mockFeedModes(page, async () => ({ episodes: kept, changed: false }));
+  await page.goto('/player/#/podcasts/show-1');
+  await expect(page.getByText('Episodio guardado', { exact: true })).toBeVisible();
+  await expect.poll(() => asked).toEqual(['cached', 'check']);
+  const button = page.getByRole('button', { name: 'Actualizar episodios', exact: true });
+  if (isMobile) await button.tap(); else await button.click();
+  await expect(page.getByText('Episodio recién subido', { exact: true })).toBeVisible();
+  expect(asked).toEqual(['cached', 'check', 'refresh']);
+});
+
+test('pulling the episode list down from its top refreshes it', async ({ page, isMobile, browserName }) => {
+  test.skip(!isMobile || browserName !== 'chromium', 'CDP provides real multi-event touch input');
+  await mockPodcasts(page);
+  const { asked, kept } = await mockFeedModes(page, async () => ({ episodes: kept, changed: false }));
+  await page.goto('/player/#/podcasts/show-1');
+  await expect(page.getByText('Episodio guardado', { exact: true })).toBeVisible();
+  await expect.poll(() => asked).toEqual(['cached', 'check']);
+  // A short pull lets go without asking for anything.
+  await dragTouch(page, '[data-primary-scroll]', { dy: 60 });
+  await page.waitForTimeout(100);
+  expect(asked).toEqual(['cached', 'check']);
+  await dragTouch(page, '[data-primary-scroll]', { dy: 260 });
+  await expect(page.getByText('Episodio recién subido', { exact: true })).toBeVisible();
+  expect(asked).toEqual(['cached', 'check', 'refresh']);
+});
 
 test('podcast buttons jump 15 seconds and each show resumes after switching and reloading', async ({ page, isMobile }) => {
   await mockPodcasts(page);

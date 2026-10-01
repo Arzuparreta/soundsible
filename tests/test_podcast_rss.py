@@ -2,7 +2,7 @@ import feedparser
 import pytest
 
 from shared import podcast_rss
-from shared.podcast_rss import fetch_feed_body, parse_feed, parse_feed_episodes, parse_feed_image
+from shared.podcast_rss import check_feed, fetch_feed_body, parse_feed, parse_feed_episodes, parse_feed_image
 
 
 def _feed(channel_extra: str = "", items: str = "") -> bytes:
@@ -262,3 +262,49 @@ def test_every_feed_format_is_paged_by_its_own_entries(monkeypatch, xml, first):
     assert not any(p.bozo for p in parsed)
     assert [p.feed.title for p in parsed] == ["My Show", "My Show"]
     assert [[e.title for e in p.entries] for p in parsed] == [["Episode 1", "Episode 2"], ["Episode 3"]]
+
+
+class _Answer(_Stream):
+    def __init__(self, body: bytes, status: int = 200, headers=None):
+        super().__init__(body)
+        self.status_code = status
+        self.headers = headers or {}
+
+
+def _answer(monkeypatch, answer: _Answer) -> list:
+    sent = []
+
+    def get(url, headers, **kwargs):
+        sent.append(headers)
+        return answer
+
+    monkeypatch.setattr(podcast_rss.requests, "get", get)
+    return sent
+
+
+def test_a_first_read_keeps_what_tells_the_next_one_whether_the_feed_changed(monkeypatch):
+    xml = _feed(items=_item("ep1"))
+    sent = _answer(monkeypatch, _Answer(xml, headers={"ETag": 'W/"v1"', "Last-Modified": "Wed, 30 Sep 2026 20:55:15 GMT"}))
+    looked = check_feed("https://example.com/rss")
+    assert "If-None-Match" not in sent[0] and "If-Modified-Since" not in sent[0]
+    assert looked.page == (xml, None)
+    assert looked.validators == {"etag": 'W/"v1"', "last_modified": "Wed, 30 Sep 2026 20:55:15 GMT"}
+
+
+def test_an_unchanged_feed_is_not_downloaded_again(monkeypatch):
+    answer = _Answer(b"", status=304)
+    sent = _answer(monkeypatch, answer)
+    kept = {"etag": 'W/"v1"', "last_modified": "Wed, 30 Sep 2026 20:55:15 GMT"}
+    looked = check_feed("https://example.com/rss", kept)
+    assert sent[0]["If-None-Match"] == 'W/"v1"'
+    assert sent[0]["If-Modified-Since"] == "Wed, 30 Sep 2026 20:55:15 GMT"
+    assert looked == (None, kept)
+    assert answer.taken == 0
+
+
+def test_a_changed_feed_comes_back_with_its_new_validators(monkeypatch):
+    xml = _feed(items=_item("ep2") + _item("ep1"))
+    _answer(monkeypatch, _Answer(xml, headers={"ETag": '"v2"'}))
+    looked = check_feed("https://example.com/rss", {"etag": '"v1"'})
+    assert looked.page == (xml, None)
+    assert looked.validators == {"etag": '"v2"'}
