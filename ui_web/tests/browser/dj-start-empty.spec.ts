@@ -46,6 +46,8 @@ test('starting DJ with nothing playing lets the DJ choose the first song and pla
 
   await expect(surface.locator('[data-player-stage-mode="auto"]')).toContainText(opening);
   await expect(page.getByText('common.nothingPlaying')).toHaveCount(0);
-  await expect(pill.getByRole('button', { name: 'Pausar', exact: true })).toBeVisible();
+  // The fullscreen surface hides the underlying shell, including the pill.
+  // Assert playback through the visible DJ controls instead.
+  await expect(surface.locator('[data-player-stage-mode="auto"]').getByRole('button', { name: 'Pausar', exact: true })).toBeVisible();
   expect(plans.slice(1).every((plan) => plan.seed)).toBe(true);
 });
