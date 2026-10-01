@@ -1815,3 +1815,25 @@ describe('episode position on load', () => {
     expect(deck.currentTime).toBe(200);
   });
 });
+
+it('disposing audio detaches old deck events and recreates decks only on demand', async () => {
+  const { audioService, audioEl, onProgramEvent, disposeAudio } = await import('./audio');
+  const event = vi.fn();
+  onProgramEvent('timeupdate', event);
+  await audioService.load('/first-account', 1);
+  const old = audioEl() as unknown as FakeAudio;
+  old.dispatchEvent(new Event('timeupdate'));
+  expect(event).toHaveBeenCalledTimes(1);
+  const count = created.length;
+  disposeAudio();
+  disposeAudio();
+  expect(old.paused).toBe(true);
+  expect(old.src).toBe('');
+  old.dispatchEvent(new Event('timeupdate'));
+  expect(event).toHaveBeenCalledTimes(1);
+  expect(created).toHaveLength(count);
+  await audioService.load('/next-account', 2);
+  expect(audioEl()).not.toBe(old);
+  expect(created.length).toBeGreaterThan(count);
+  disposeAudio();
+});

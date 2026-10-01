@@ -6,7 +6,7 @@ const root = resolve(import.meta.dirname, '..');
 function dependencies(file: string): string[] {
   const source = readFileSync(file, 'utf8');
   return [...source.matchAll(/(?:import|export)\s+(?!type\b)([^;]*?)\s+from\s+['"]([^'"]+)['"]/g)]
-    .filter(([, spec, path]) => path.startsWith('.') && !/^\{\s*type\b/.test(spec.trim()))
+    .filter(([, spec, path]) => path.startsWith('.') && !(spec.trim().startsWith('{') && spec.replace(/[{}]/g, '').split(',').every(item => !item.trim() || /^type\s/.test(item.trim()))))
     .flatMap(([, , path]) => {
       const target = resolve(dirname(file), path);
       return [target + '.ts', target + '.tsx', resolve(target, 'index.ts')].filter(existsSync).slice(0, 1);
@@ -43,4 +43,13 @@ describe('client module boundaries', () => {
       walk(resolve(root, `stores/${module}.ts`), []);
     }
   });
+});
+
+
+it('audio modules remain below their composition root', () => {
+  for (const module of ['transport', 'graph', 'mixer', 'capture']) {
+    const graph = reachable(`lib/audio/${module}.ts`);
+    expect(graph.has(resolve(root, 'lib/audio.ts'))).toBe(false);
+    expect(graph.has(resolve(root, 'stores/index.ts'))).toBe(false);
+  }
 });

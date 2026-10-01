@@ -64,6 +64,14 @@ export class ProgramMediaSession {
     setOptionalHandler(session, 'seekforward', (details) => actions.seekForward(details.seekOffset));
   }
 
+  uninstallActions(): void {
+    if (!hasMediaSession()) return;
+    const session = navigator.mediaSession;
+    for (const action of ['play', 'pause', 'nexttrack', 'previoustrack', 'seekto', 'seekbackward', 'seekforward'] as MediaSessionAction[]) {
+      setOptionalHandler(session, action, null);
+    }
+  }
+
   sync(
     track: Track | null,
     snapshot: ProgramPlaybackSnapshot,
@@ -157,7 +165,7 @@ function clearPosition(session: MediaSession): void {
 function setOptionalHandler(
   session: MediaSession,
   action: MediaSessionAction,
-  handler: MediaSessionActionHandler,
+  handler: MediaSessionActionHandler | null,
 ): void {
   try {
     session.setActionHandler(action, handler);

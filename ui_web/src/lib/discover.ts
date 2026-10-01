@@ -85,12 +85,27 @@ interface RawPodcastRow {
 }
 
 let inFlight: Promise<void> | null = null;
+let generation = 0;
+
+/** Discovery warming belongs to the authenticated runtime too. */
+export function resetDiscover(): void {
+  generation++;
+  hydratedFor = null;
+  inFlight = null;
+  setRecentSaved([]);
+  setTopPodcasts([]);
+  setRevalidating(false);
+}
 async function revalidate(): Promise<void> {
   if (inFlight) return inFlight;
+  const epoch = ++generation;
+  const account = user()?.id ?? '-';
+  const current = () => epoch === generation && (user()?.id ?? '-') === account;
   setRevalidating(true);
   inFlight = (async () => {
     const recent = request<{ items?: RawSaved[] }>('/api/discovery/music/recently-saved?limit=12')
       .then((d) => {
+        if (!current()) return;
         const items: RecentlySavedItem[] = (d.items ?? [])
           .filter((x) => x.track_id)
           .map((x) => ({
@@ -107,6 +122,7 @@ async function revalidate(): Promise<void> {
       .catch(() => {});
     const podcasts = request<{ items?: RawPodcastRow[] }>('/api/discovery/podcasts/recommendations?limit=20', { timeoutMs: 20000 })
       .then((d) => {
+        if (!current()) return;
         const rows: PodcastSearchResult[] = (d.items ?? [])
           .map((r) => ({
             title: r.title ?? '',
@@ -127,8 +143,9 @@ async function revalidate(): Promise<void> {
       })
       .catch(() => {});
     await Promise.all([recent, podcasts]);
-    writeCache(KEY.ts, Date.now());
+    if (current()) writeCache(KEY.ts, Date.now());
   })().finally(() => {
+    if (!current()) return;
     inFlight = null;
     setRevalidating(false);
   });

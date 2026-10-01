@@ -1,4 +1,4 @@
-import { Show, onMount } from 'solid-js';
+import { Show, onMount, onCleanup } from 'solid-js';
 import { HashRouter, Route, useNavigate, useSearchParams } from '@solidjs/router';
 import Shell from './app';
 import { asyncPage } from './components/AsyncPage';
@@ -22,7 +22,7 @@ const Placeholder = asyncPage(() =>
   import('./routes/Placeholder').then((m) => ({ default: () => <m.Placeholder title={t('placeholder.notFoundTitle')} blurb={t('placeholder.notFoundBlurb')} /> })),
   () => t('placeholder.notFoundTitle'),
 );
-import { initStore } from './stores';
+import { initStore, disposeStore } from './stores';
 import { t } from './lib/i18n';
 function DiscoverRedirect() {
   const navigate = useNavigate();
@@ -63,6 +63,7 @@ function Player() {
 
 export default function AuthenticatedPlayer() {
   initStore();
+  onCleanup(disposeStore);
   onMount(() => window.__SOUNDSIBLE_BOOT__?.complete());
   return <Player />;
 }

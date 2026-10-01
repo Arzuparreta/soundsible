@@ -1,24 +1,14 @@
-
-
 import { type DjDirection, type DjProfile, type LibraryScanStatus } from "../lib/api";
 import { type ProgramTransportOrigin } from "../lib/audio";
-
 import { type AutoActivity, type AutoProfile } from "../lib/generatedQueue";
-
 import { type ContextTrack, type PlaybackContextDescriptor } from "../lib/playbackQueue";
 import { type PlaybackSessionSnapshot } from "../lib/playbackSession";
-
 import type { Track, SavedEntry } from "../types/music";
 import type { PodcastShowInfo, PodcastEpisode } from "../types/podcast";
-
 import { type InterfaceSize } from "../lib/visualPreferences";
-
 import { type Theme } from "./core";
-
 export type PlaybackTrigger = 'selection' | 'next' | 'ended' | 'retry' | 'resume' | 'recovery' | 'podcast' | 'handoff';
-
 export type PlaybackSourceKind = 'local' | 'preview' | 'podcast';
-
 export interface PlaybackAttempt {
   id: string;
   trackId: string;
@@ -66,19 +56,27 @@ export interface PlaybackAttempt {
   concluded: boolean;
   generation: number;
 }
-
 export type ContextMatchOutcome = 'resolved' | 'unavailable' | 'gone';
-
-export type LoadOptions = { restart?: boolean; trigger?: PlaybackTrigger; freshDeck?: boolean };
-
+export type LoadOptions = {
+  restart?: boolean;
+  trigger?: PlaybackTrigger;
+  freshDeck?: boolean;
+};
 export interface CommittedTransition {
   queueId: string;
   fromKey: string;
   toKey: string;
 }
-
-export type PublishedPlaybackState = { track_id: string | null; track: Track | null; position_sec: number; is_playing: boolean; device_id: string; device_name: string; device_type: string; session?: PlaybackSessionSnapshot | null };
-
+export type PublishedPlaybackState = {
+  track_id: string | null;
+  track: Track | null;
+  position_sec: number;
+  is_playing: boolean;
+  device_id: string;
+  device_name: string;
+  device_type: string;
+  session?: PlaybackSessionSnapshot | null;
+};
 export interface PlayerActions {
   syncLibrary: () => Promise<void>;
   syncLibrarySoon: () => void;
@@ -88,7 +86,10 @@ export interface PlayerActions {
   toggleSavedTrack: (track: Track) => void;
   toggleFavourite: (entry: SavedEntry) => void;
   toggleFavouriteTrack: (track: Track) => void;
-  enterAutoMode: (options?: { source: Track; deferPlanning: boolean }) => void;
+  enterAutoMode: (options?: {
+    source: Track;
+    deferPlanning: boolean;
+  }) => void;
   exitAutoMode: () => void;
   addAutoSource: (tracks: Track[], label: string) => void;
   beginAutoSessionChange: () => number;
@@ -109,11 +110,11 @@ export interface PlayerActions {
   repairAutoRoute: () => Promise<void>;
   autoSkip: () => Promise<void>;
   playFrom: (tracks: ContextTrack[], i: number, opts?: {
-      radio?: boolean;
-      context?: PlaybackContextDescriptor;
-      shuffled?: boolean;
-      preserveManual?: boolean;
-    }) => void;
+    radio?: boolean;
+    context?: PlaybackContextDescriptor;
+    shuffled?: boolean;
+    preserveManual?: boolean;
+  }) => void;
   playTrack: (track: Track) => void;
   playShuffled: (tracks: Track[], context?: PlaybackContextDescriptor) => void;
   playEpisode: (ep: PodcastEpisode, showTitle?: string, feedId?: string, showImage?: string | null) => Promise<void>;
@@ -143,7 +144,12 @@ export interface PlayerActions {
   startRadio: (seed: Track) => Promise<void>;
   stopRadio: () => void;
   deleteTrack: (id: string) => Promise<void>;
-  updateTrackMetadata: (id: string, meta: { title?: string; artist?: string; album?: string; album_artist?: string | null }) => Promise<boolean>;
+  updateTrackMetadata: (id: string, meta: {
+    title?: string;
+    artist?: string;
+    album?: string;
+    album_artist?: string | null;
+  }) => Promise<boolean>;
   uploadTrackCover: (id: string, file: File) => Promise<void>;
   clearTrackCover: (id: string) => Promise<void>;
   toggleShuffle: () => void;

@@ -10,12 +10,20 @@ export function deferredComponent<P extends object>(load: () => Promise<{ defaul
     const [failed, setFailed] = createSignal(false);
     let disposed = false;
     onCleanup(() => { disposed = true; });
+    let attempts = 0;
     const retry = () => {
+      attempts += 1;
       setFailed(false);
       flight ??= load().then(module => cached = module.default).finally(() => { flight = undefined; });
       void flight.then(component => {
         if (!disposed) setView(() => component);
-      }, () => { if (!disposed) setFailed(true); });
+      }, () => {
+        if (disposed) return;
+        // Browsers retain rejected module loads. A reload also recovers from
+        // an old shell referring to chunks removed by a deployment.
+        if (attempts > 1) window.location.reload();
+        else setFailed(true);
+      });
     };
     onMount(() => { if (!view()) retry(); });
     return <Show when={view()} keyed fallback={

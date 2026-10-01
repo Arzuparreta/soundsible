@@ -3,13 +3,14 @@ import { render } from 'solid-js/web';
 import { Show, createEffect, onMount, createSignal, onCleanup, type Component } from 'solid-js';
 import type { ParentProps } from 'solid-js';
 import Login from './routes/Login';
+import { ConnectionRecovery } from './components/ConnectionRecovery';
 import Invite from './routes/Invite';
 import { applyVisualPreferences, loadVisualPreferences } from './lib/visualPreferences';
 import { installPageVisibility } from './lib/pageVisibility';
-import { initLocale, t } from './lib/i18n';
+import { initLocale } from './lib/i18n';
 import { registerServiceWorker } from './lib/pwa';
 import { OverlayOutlet } from './lib/overlay';
-import { installSessionGuard, ready, refreshSession, requiresLogin, user } from './lib/session';
+import { installSessionGuard, ready, refreshSession, requiresLogin, user, sessionUnavailable } from './lib/session';
 // Self-host the design-system typefaces (DESIGN.md) so they render for every
 // user, not only those who happen to have them installed locally. Subsets load
 // on demand via unicode-range. Plus Jakarta Sans 400/500/600/700, JetBrains
@@ -86,8 +87,11 @@ function StartupReady(props: ParentProps) {
 function AuthenticatedBoundary() {
   const [player, setPlayer] = createSignal<Component>();
   const [failed, setFailed] = createSignal(false);
+  const [attempted, setAttempted] = createSignal(false);
   let disposed = false;
   onCleanup(() => { disposed = true; });
+  // A failed native module import remains cached by the browser; retry by
+  // reloading the shell rather than importing the same rejected URL.
   const load = () => {
     setFailed(false);
     void import('./AuthenticatedPlayer').then(module => {
@@ -95,14 +99,23 @@ function AuthenticatedBoundary() {
     }, () => {
       if (!disposed) {
         setFailed(true);
-        window.__SOUNDSIBLE_BOOT__?.fail();
+        setAttempted(true);
       }
     });
   };
   onMount(load);
   return <Show when={player()} keyed fallback={
-    <Show when={failed()}><div role="alert">{t('common.loadFailed')} <button onClick={load}>{t('common.retry')}</button></div></Show>
+    <Show when={attempted()}><StartupReady><ConnectionRecovery busy={!failed()} retry={() => window.location.reload()} /></StartupReady></Show>
   }>{Player => <Player />}</Show>;
+}
+
+function StationUnavailable() {
+  const [busy, setBusy] = createSignal(false);
+  const retry = async () => {
+    setBusy(true);
+    try { await refreshSession(); } finally { setBusy(false); }
+  };
+  return <ConnectionRecovery offline busy={busy()} retry={() => { void retry(); }} />;
 }
 
 /**
@@ -114,7 +127,7 @@ function App() {
   const authenticated = () => !requiresLogin() || Boolean(user());
 
   createEffect(() => {
-    if (!ready() || !authenticated()) return;
+    if (!ready() || sessionUnavailable() || !authenticated()) return;
     // A leftover `#/invite/<token>` — e.g. a home-screen icon saved on the
     // invite page — must not strand a signed-in user on a dead-link screen.
     // Once there is a session the token is irrelevant: drop it and go to the root.
@@ -125,8 +138,10 @@ function App() {
   return (
     <>
       <Show when={ready()} fallback={null}>
-        <Show when={authenticated()} fallback={<StartupReady><InviteOrLogin /></StartupReady>}>
+        <Show when={!sessionUnavailable()} fallback={<StartupReady><StationUnavailable /></StartupReady>}>
+        <Show when={authenticated() ? user()?.id ?? '__station__' : undefined} keyed fallback={<StartupReady><InviteOrLogin /></StartupReady>}>
           <AuthenticatedBoundary />
+        </Show>
         </Show>
       </Show>
       <OverlayOutlet />

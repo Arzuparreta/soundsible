@@ -121,6 +121,43 @@ test('failed entry module offers a working reload', async ({ page }) => {
   await expect(page.locator('#startup-screen')).toHaveCount(0);
 });
 
+test('login and its display preferences do not download the authenticated player', async ({ page }) => {
+  const requested: string[] = [];
+  page.on('request', request => requested.push(request.url()));
+  await engine(page);
+  await page.goto('/player/');
+  await expect(page.locator('#login-username')).toBeVisible();
+  await page.getByRole('button', { name: 'Abrir ajustes de accesibilidad visual' }).click();
+  await expect(page.getByRole('slider')).toBeVisible();
+  expect(requested.filter(url => /AuthenticatedPlayer|vendor-socket|\/socket\.io\/|\/src\/lib\/audio\.ts|\/src\/stores\/index\.ts/.test(url))).toEqual([]);
+});
+
+test('an authenticated module failure has an accessible retry that clears failed browser modules', async ({ page }) => {
+  await engine(page, Promise.resolve(), false);
+  const player = /\/AuthenticatedPlayer[^/]*\.(?:js|tsx)(?:\?|$)/;
+  let failed = false;
+  await page.route(player, async route => {
+    if (!failed) { failed = true; await route.abort(); }
+    else await route.continue();
+  });
+  await page.goto('/player/');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Reintentar', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Biblioteca', exact: true })).toBeVisible();
+});
+
+test('a first offline session exposes station recovery without loading playback', async ({ page }) => {
+  await engine(page);
+  await page.route('**/api/auth/state', route => route.abort());
+  await page.goto('/player/');
+  await expect(page.getByRole('alert')).toContainText('Tu biblioteca sigue ahí');
+  await expect(page.locator('#startup-screen')).toHaveCount(0);
+  await page.unroute('**/api/auth/state');
+  await page.getByRole('button', { name: 'Reintentar', exact: true }).click();
+  await expect(page.locator('#login-username')).toBeVisible();
+});
+
 for (const theme of ['light', 'dark']) {
   test(`respects ${theme} theme and reduced motion on a narrow screen`, async ({ page }) => {
     const auth = gate();
@@ -207,8 +244,8 @@ test('cached PWA shell includes the loader and reopens offline', async ({ page, 
     }
   });
   await expect.poll(() => page.evaluate(async () => {
-    const cache = await caches.open('soundsible-shell-v1');
-    return Boolean(await cache.match('/player/'));
+    const names = (await caches.keys()).filter(name => /^soundsible-shell-[a-f0-9]{64}$/.test(name));
+    return (await Promise.all(names.map(async name => Boolean(await (await caches.open(name)).match('/player/'))))).some(Boolean);
   })).toBe(true);
   // The first navigation installs the worker after its assets have arrived.
   // A controlled online launch populates the existing immutable asset cache.
@@ -227,4 +264,27 @@ test('cached PWA shell includes the loader and reopens offline', async ({ page, 
   await page.reload();
   await expect(page.locator('#startup-screen')).toHaveCount(0);
   await expect(page.locator('#app')).not.toHaveAttribute('inert');
+});
+
+
+test('changing the authenticated account replaces the runtime and its library', async ({ page }) => {
+  test.skip(Boolean(test.info().config.metadata.startupProduction), 'Direct module import is a development-only control; lifecycle is unit tested in production code.');
+  await engine(page, Promise.resolve(), false);
+  let account = 'first';
+  let libraryReads = 0;
+  await page.route('**/api/auth/state', route => route.fulfill({ json: { requires_login: true, user: { id: account, username: account, display_name: account, role: 'admin', has_password: true } } }));
+  await page.route(/\/api\/library(?:\?.*)?$/, route => {
+    libraryReads++;
+    return route.fulfill({ json: { tracks: [{ id: account, title: `Song ${account}`, artist: account, duration: 180, source: 'local' }], playlists: {}, settings: {}, podcast_subscriptions: [] } });
+  });
+  await page.goto('/player/#/library?view=songs');
+  await expect(page.getByRole('button', { name: /Reproducir Song first/ })).toBeVisible();
+  account = 'second';
+  await page.evaluate(async () => {
+    const { refreshSession } = await import('/player/src/lib/session.ts');
+    await refreshSession();
+  });
+  await expect(page.getByRole('button', { name: /Reproducir Song second/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Reproducir Song first/ })).toHaveCount(0);
+  expect(libraryReads).toBe(2);
 });
