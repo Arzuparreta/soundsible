@@ -79,7 +79,7 @@ export function SubsonicAccessPanel() {
 
   return (
     <SettingsLoad load={load}>
-      <SettingsGroup label={t('subsonic.title')} note={t('subsonic.note')}>
+      <SettingsGroup note={t('subsonic.note')}>
         <ValueRow
           anchor="subsonic-server"
           label={t('subsonic.server')}

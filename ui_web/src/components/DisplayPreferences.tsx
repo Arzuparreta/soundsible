@@ -3,7 +3,7 @@ import { actions, state } from '../stores';
 import { t } from '../lib/i18n';
 import { openOverlay } from '../lib/overlay';
 import type { InterfaceSize } from '../lib/visualPreferences';
-import { settingAnchor } from './SettingsRows';
+import { settingAnchor, settingsRowStyles as rowStyles } from './SettingsRows';
 import styles from './DisplayPreferences.module.css';
 
 const SIZES: InterfaceSize[] = ['compact', 'normal', 'large'];
@@ -88,19 +88,27 @@ export function DisplayPreferences(props: { heading?: boolean; onClose?: () => v
         </div>
       </div>
 
-      <label class={styles.contrastRow} {...settingAnchor('high-contrast')}>
-        <span>
-          <span class={styles.label}>{t('accessibility.highContrast')}</span>
-          <span class={styles.note}>{t('accessibility.highContrastNote')}</span>
+      {/* The same row and switch as every other setting, driven by a native
+          checkbox so the whole label toggles it. */}
+      <label class={`${rowStyles.row} ${styles.contrastRow}`} {...settingAnchor('high-contrast')}>
+        <span class={rowStyles.text}>
+          <span class={rowStyles.label} id="high-contrast-label">
+            {t('accessibility.highContrast')}
+          </span>
+          <span class={rowStyles.hint} id="high-contrast-note">
+            {t('accessibility.highContrastNote')}
+          </span>
         </span>
         <input
-          class={styles.nativeSwitch}
+          class={rowStyles.switchInput}
           type="checkbox"
           checked={state.highContrast}
+          aria-labelledby="high-contrast-label"
+          aria-describedby="high-contrast-note"
           onChange={(event) => actions.setHighContrast(event.currentTarget.checked)}
         />
-        <span class={styles.switch} aria-hidden="true">
-          <span />
+        <span class={rowStyles.switch} aria-hidden="true">
+          <span class={rowStyles.knob} />
         </span>
       </label>
     </div>

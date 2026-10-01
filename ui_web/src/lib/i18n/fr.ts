@@ -672,8 +672,6 @@ export const fr: Dict = {
     },
     appearance: 'Apparence',
     theme: 'Thème',
-    otherThemes: 'Autres thèmes',
-    selectTheme: 'Sélectionner…',
     themeSlate: 'Ardoise',
     themePureBlack: 'Noir pur',
     themeForestGreen: 'Vert forêt',

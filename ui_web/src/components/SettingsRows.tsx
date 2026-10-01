@@ -1,4 +1,4 @@
-import { For, Show, type JSX } from 'solid-js';
+import { createUniqueId, For, Show, type JSX } from 'solid-js';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { A, useNavigate } from '@solidjs/router';
 import type { SettingAnchor } from '../lib/settingsCatalog';
@@ -9,6 +9,9 @@ import styles from './SettingsRows.module.css';
  * with an optional explanatory footer, and the handful of row shapes that go
  * inside it. Keeping them here is what lets a section read as data rather than
  * as markup, and what keeps every submenu visually identical.
+ *
+ * A row explains itself: what a setting does sits under its label, so a group
+ * of one needs no title and no footer to be understood.
  */
 
 /**
@@ -52,7 +55,6 @@ function WarnIcon() {
 export function SettingsGroup(props: {
   label?: string;
   note?: string;
-  plain?: boolean;
   anchor?: SettingAnchor;
   children: JSX.Element;
 }) {
@@ -61,9 +63,7 @@ export function SettingsGroup(props: {
       <Show when={props.label}>
         <h2 class={styles.groupLabel}>{props.label}</h2>
       </Show>
-      <div class={styles.panel} classList={{ [styles.panelPlain]: props.plain }}>
-        {props.children}
-      </div>
+      <div class={styles.panel}>{props.children}</div>
       <Show when={props.note}>
         <p class={styles.groupNote}>{props.note}</p>
       </Show>
@@ -71,17 +71,25 @@ export function SettingsGroup(props: {
   );
 }
 
-function RowText(props: { label: string; hint?: string; warn?: boolean }) {
+function RowText(props: {
+  label: string;
+  hint?: string;
+  warn?: boolean;
+  labelId?: string;
+  hintId?: string;
+}) {
   return (
     <span class={styles.text}>
-      <span class={styles.label}>
+      <span class={styles.label} id={props.labelId}>
         {props.label}
         <Show when={props.warn}>
           <WarnIcon />
         </Show>
       </span>
       <Show when={props.hint}>
-        <span class={styles.hint}>{props.hint}</span>
+        <span class={styles.hint} id={props.hintId}>
+          {props.hint}
+        </span>
       </Show>
     </span>
   );
@@ -105,15 +113,25 @@ export function SettingRow(props: {
 }
 
 /** Read-only fact: label left, value right. */
-export function ValueRow(props: { label: string; value: JSX.Element; anchor?: SettingAnchor }) {
+export function ValueRow(props: {
+  label: string;
+  hint?: string;
+  value: JSX.Element;
+  anchor?: SettingAnchor;
+}) {
   return (
     <div class={styles.row} data-setting={props.anchor}>
-      <RowText label={props.label} />
+      <RowText label={props.label} hint={props.hint} />
       <span class={styles.value}>{props.value}</span>
     </div>
   );
 }
 
+/**
+ * An on/off setting. The whole row is the switch, so the label and the words
+ * under it are as good a target as the track. The name stays the label alone;
+ * the explanation is its description.
+ */
 export function SwitchRow(props: {
   label: string;
   hint?: string;
@@ -121,20 +139,27 @@ export function SwitchRow(props: {
   onChange: () => void;
   anchor?: SettingAnchor;
 }) {
+  const hintId = createUniqueId();
+  // Same activation as every other row in a scroller: a flick that starts on
+  // the row scrolls, it does not flip the setting.
+  const tap = createResponsiveTap({ onTap: () => props.onChange() });
+
   return (
-    <div class={styles.row} data-setting={props.anchor}>
-      <RowText label={props.label} hint={props.hint} />
+    <div class={styles.field} data-setting={props.anchor}>
       <button
         type="button"
-        class={styles.switch}
-        classList={{ [styles.switchOn]: props.checked }}
+        class={styles.rowBtn}
         role="switch"
         aria-checked={props.checked}
         aria-label={props.label}
-        onClick={props.onChange}
+        aria-describedby={props.hint ? hintId : undefined}
         data-pressable
+        {...tap}
       >
-        <span class={styles.knob} />
+        <RowText label={props.label} hint={props.hint} hintId={hintId} />
+        <span class={styles.switch} classList={{ [styles.switchOn]: props.checked }} aria-hidden="true">
+          <span class={styles.knob} />
+        </span>
       </button>
     </div>
   );
@@ -232,6 +257,66 @@ export function SegmentedRow<T extends string>(props: {
         </For>
       </div>
     </div>
+  );
+}
+
+export interface ChoiceOption<T extends string> {
+  value: T;
+  label: string;
+  hint?: string;
+}
+
+/**
+ * One choice out of a short list, every option in view: a titled group of
+ * rows, each a native radio, the chosen one marked on the right. Native
+ * radios bring the arrow keys and the grouping for free; the label and the
+ * explanation are wired apart so a screen reader names the option by its
+ * label alone.
+ */
+export function ChoiceGroup<T extends string>(props: {
+  label: string;
+  options: ChoiceOption<T>[];
+  value: T | undefined;
+  onChange: (value: T) => void;
+  note?: string;
+  anchor?: SettingAnchor;
+}) {
+  const id = createUniqueId();
+
+  return (
+    <section class={styles.group} data-setting={props.anchor}>
+      <h2 class={styles.groupLabel} id={`${id}-title`}>
+        {props.label}
+      </h2>
+      <div class={styles.panel} role="radiogroup" aria-labelledby={`${id}-title`}>
+        <For each={props.options}>
+          {(option, index) => (
+            <label class={styles.choice} data-pressable>
+              <input
+                type="radio"
+                class={styles.choiceInput}
+                name={id}
+                value={option.value}
+                checked={props.value === option.value}
+                aria-labelledby={`${id}-${index()}`}
+                aria-describedby={option.hint ? `${id}-${index()}-hint` : undefined}
+                onChange={() => props.onChange(option.value)}
+              />
+              <RowText
+                label={option.label}
+                hint={option.hint}
+                labelId={`${id}-${index()}`}
+                hintId={`${id}-${index()}-hint`}
+              />
+              <span class={styles.radio} aria-hidden="true" />
+            </label>
+          )}
+        </For>
+      </div>
+      <Show when={props.note}>
+        <p class={styles.groupNote}>{props.note}</p>
+      </Show>
+    </section>
   );
 }
 

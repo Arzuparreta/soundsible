@@ -1,92 +1,94 @@
-/* Shared vocabulary for every settings screen: grouped panels of hairline-
-   separated rows, an uppercase group title above and a quiet note below. */
+/* Shared vocabulary for every settings screen: flat groups of rows drawn on the
+   page itself. A plain heading above, a quiet note below, whitespace between
+   groups — no cards and no dividers. Large labels and the explanation under
+   each one carry the structure. */
 
 .group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: var(--space-2xs);
+  min-width: 0;
 }
 
+/* Secondary, not tertiary: tertiary lands under AA on several themes. */
 .groupLabel {
-  margin: 0;
-  padding: 0 var(--space-md);
-  font-size: var(--text-caption);
+  margin: 0 0 var(--space-2xs);
+  font-size: var(--text-label);
   font-weight: var(--fw-semibold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-tertiary);
+  line-height: var(--lh-snug);
+  color: var(--ink-secondary);
 }
 
 .groupNote {
-  margin: 0;
-  padding: 0 var(--space-md);
-  font-size: var(--text-caption);
+  margin: var(--space-2xs) 0 0;
+  font-size: var(--text-label);
   line-height: var(--lh-normal);
-  color: var(--ink-tertiary);
+  color: var(--ink-secondary);
 }
 
+/* The rows reach into the gutter by their own inset, so their text lines up
+   with the heading above while a pressed row still has room around its words.
+   Panels that bring their own markup pad their rows with the same variable;
+   outside a panel it is unset and those rows sit flush.
+
+   A row is a touch target and a little air, not a list row's 64px: a column of
+   one-line settings should read as a list, not as a stack of islands. */
 .panel {
+  --settings-row-inset: var(--space-md);
+  --settings-row-h: calc(var(--control-h) + var(--space-sm));
   display: flex;
   flex-direction: column;
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: var(--shadow-1);
-}
-
-/* Every direct child of a panel is a row, so one rule draws every divider —
-   including rows rendered by panels that bring their own markup. */
-.panel > * + * {
-  border-top: 1px solid var(--hairline-soft);
-}
-
-.panelPlain {
-  padding: var(--space-lg);
-  overflow: visible;
-}
-
-.panelPlain > * + * {
-  border-top: none;
+  gap: var(--space-2xs);
+  min-width: 0;
+  margin-inline: calc(-1 * var(--settings-row-inset));
 }
 
 .row,
 .rowBtn,
-.rowLink {
+.rowLink,
+.choice {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md);
+  gap: var(--space-lg);
   width: 100%;
-  min-height: var(--control-h);
-  padding: var(--space-sm) var(--space-lg);
+  min-height: var(--settings-row-h, var(--control-h));
+  padding: var(--space-sm) var(--settings-row-inset, 0px);
   font: inherit;
-  font-size: var(--text-body);
   color: var(--ink-primary);
   text-align: left;
   text-decoration: none;
   background: transparent;
   border: none;
+  border-radius: var(--radius-sm);
+}
+
+/* A switch row's anchor wraps its button, so the landing flash and the row
+   share one shape. */
+.field {
+  border-radius: var(--radius-sm);
 }
 
 .stackRow {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
-  font-size: var(--text-body);
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--settings-row-inset, 0px) var(--space-md);
   color: var(--ink-primary);
+  border-radius: var(--radius-sm);
 }
 
 .rowBtn,
-.rowLink {
+.rowLink,
+.choice {
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .rowBtn:hover:not(:disabled),
-  .rowLink:hover {
+  .rowLink:hover,
+  .choice:hover {
     background: var(--bg-hover);
   }
 }
@@ -103,7 +105,7 @@
 .text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-2xs);
   flex: 1;
   min-width: 0;
 }
@@ -112,14 +114,16 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35em;
-  color: inherit;
+  font-size: var(--text-title);
+  font-weight: var(--fw-medium);
   line-height: var(--lh-snug);
+  color: inherit;
 }
 
 .hint {
-  font-size: var(--text-caption);
-  line-height: var(--lh-snug);
-  color: var(--ink-tertiary);
+  font-size: var(--text-label);
+  line-height: var(--lh-normal);
+  color: var(--ink-secondary);
 }
 
 .warnIcon {
@@ -137,10 +141,12 @@
 .value {
   flex-shrink: 0;
   max-width: 55%;
-  font-size: var(--text-label);
+  font-size: var(--text-body);
+  line-height: var(--lh-snug);
   color: var(--ink-secondary);
   text-align: right;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .chevron {
@@ -152,51 +158,114 @@
 
 /* ── Controls ── */
 
+/* One switch for every settings screen. Rows draw it inside their button;
+   a native checkbox (`.switchInput`) can drive the same track from a label. */
 .switch {
   position: relative;
-  width: 44px;
-  height: 26px;
+  width: 50px;
+  height: 30px;
   flex-shrink: 0;
-  padding: 0;
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
+  background: var(--hairline-strong);
   border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+  transition: background var(--dur-short) var(--ease-out);
 }
 
-.switch::before {
-  position: absolute;
-  inset: -9px 0;
-  content: '';
-}
-
-.switchOn {
+.switchOn,
+.switchInput:checked + .switch {
   background: var(--accent);
-  border-color: transparent;
 }
 
 .knob {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #fff;
   box-shadow: var(--shadow-1);
   transition: transform var(--dur-short) var(--ease-out);
 }
 
-.switchOn .knob {
-  transform: translateX(18px);
+.switchOn .knob,
+.switchInput:checked + .switch .knob {
+  transform: translateX(20px);
+}
+
+/* Large type beside a phone-sized switch reads as a mismatch; the track grows
+   with the labels it sits next to. */
+:global(html[data-interface-size='large']) .switch {
+  width: 58px;
+  height: 34px;
+}
+
+:global(html[data-interface-size='large']) .knob {
+  width: 28px;
+  height: 28px;
+}
+
+:global(html[data-interface-size='large']) .switchOn .knob,
+:global(html[data-interface-size='large']) .switchInput:checked + .switch .knob {
+  transform: translateX(24px);
+}
+
+.switchInput,
+.choiceInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.switchInput:focus-visible + .switch {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 3px;
+}
+
+.choice {
+  position: relative;
+}
+
+/* The chosen option: a ring, filled with the accent once it is the one. */
+.radio {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 2px solid var(--hairline-strong);
+  border-radius: 50%;
+  transition: border-color var(--dur-short) var(--ease-out);
+}
+
+.radio::after {
+  position: absolute;
+  inset: 3px;
+  content: '';
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  transition: transform var(--dur-short) var(--ease-out);
+}
+
+.choiceInput:checked ~ .radio {
+  border-color: var(--accent);
+}
+
+.choiceInput:checked ~ .radio::after {
+  transform: scale(1);
+}
+
+.choiceInput:focus-visible ~ .radio {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 3px;
 }
 
 .segment {
   display: flex;
   gap: var(--space-2xs);
   padding: var(--space-2xs);
-  background: var(--bg-inset);
+  background: var(--bg-active);
   border-radius: var(--radius-full);
 }
 
@@ -210,7 +279,7 @@
   height: var(--segment-h);
   padding: 0 var(--space-sm);
   font: inherit;
-  font-size: var(--text-label);
+  font-size: var(--text-body);
   font-weight: var(--fw-semibold);
   color: var(--ink-secondary);
   background: transparent;
@@ -240,21 +309,23 @@
   height: var(--icon-sm);
 }
 
+/* Filled, not outlined: the fill says "this is a control" without adding a
+   line to the page. Focus brings the accent edge back. */
 .select {
   height: var(--control-h);
-  max-width: 100%;
-  padding: 0 var(--space-xl) 0 var(--space-sm);
+  max-width: 60%;
+  padding: 0 var(--space-2xl) 0 var(--space-md);
   font: inherit;
-  font-size: var(--text-label);
-  color: var(--ink-secondary);
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
+  font-size: var(--text-body);
+  color: var(--ink-primary);
+  background-color: var(--bg-active);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236a6a72' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888890' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 8px center;
+  background-position: right var(--space-md) center;
 }
 
 .input {
@@ -264,8 +335,8 @@
   font: inherit;
   font-size: var(--text-body);
   color: var(--ink-primary);
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
+  background: var(--bg-active);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   outline: none;
   transition: border-color var(--dur-short) var(--ease-out);
@@ -275,13 +346,25 @@
   color: var(--ink-tertiary);
 }
 
-.input:focus {
+/* Low vision gets its edge back: high contrast spends subtlety on separation.
+   :where() keeps these under the focus rule below. */
+:global(:where(html[data-high-contrast='true'])) .select,
+:global(:where(html[data-high-contrast='true'])) .input {
+  border-color: var(--hairline-strong);
+}
+
+:global(:where(html[data-high-contrast='true'])) .segment {
+  border: 1px solid var(--hairline-strong);
+}
+
+.input:focus,
+.select:focus-visible {
   border-color: var(--accent);
 }
 
 @media (min-width: 1024px) {
   .select {
-    height: 32px;
+    height: 34px;
   }
 
   .input {

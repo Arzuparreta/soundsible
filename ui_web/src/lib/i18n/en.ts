@@ -672,8 +672,6 @@ export const en = {
     },
     appearance: 'Appearance',
     theme: 'Theme',
-    otherThemes: 'Other themes',
-    selectTheme: 'Select…',
     themeSlate: 'Slate',
     themePureBlack: 'Pure black',
     themeForestGreen: 'Forest green',

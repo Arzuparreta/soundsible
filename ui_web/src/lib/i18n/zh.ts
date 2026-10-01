@@ -668,8 +668,6 @@ export const zh: Dict = {
     },
     appearance: '外观',
     theme: '主题',
-    otherThemes: '其他主题',
-    selectTheme: '选择…',
     themeSlate: '石板灰',
     themePureBlack: '纯黑',
     themeForestGreen: '森林绿',

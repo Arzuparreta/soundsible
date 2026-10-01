@@ -30,8 +30,12 @@
 /* Grid, not a flex column: in a scrollable flex column every child is
    shrinkable, so once the list is taller than the rail the search field and the
    rows get squeezed instead of scrolling. `align-content: start` keeps each row
-   at its own height and lets the overflow do its job. */
+   at its own height and lets the overflow do its job.
+
+   `--cat-inset` is the rows' own padding. Each list reaches into the gutter by
+   that much, so the titles line up with the search field and the labels. */
 .railScroll {
+  --cat-inset: var(--space-md);
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -45,14 +49,15 @@
 }
 
 .page[data-layout='split'] .railScroll {
+  --cat-inset: var(--space-sm);
   gap: var(--space-lg);
-  padding: var(--space-sm) var(--space-sm) var(--space-xl);
+  padding: var(--space-sm) var(--space-lg) var(--space-xl);
 }
 
 .group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: var(--space-2xs);
 }
 
 /* Secondary, not tertiary: tertiary on any of the window's surfaces lands at
@@ -60,42 +65,20 @@
    gradient, where a contrast checker can only shrug — the window's flat rail is
    what made it measurable. */
 .groupLabel {
-  margin: 0;
-  padding: 0 var(--space-md);
-  font-size: var(--text-caption);
+  margin: 0 0 var(--space-2xs);
+  font-size: var(--text-label);
   font-weight: var(--fw-semibold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  line-height: var(--lh-snug);
   color: var(--ink-secondary);
 }
 
+/* The rows are the navigation itself, not a card of links: flat, with the
+   selection carrying the only weight. */
 .catList {
   display: flex;
   flex-direction: column;
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: var(--shadow-1);
-}
-
-.catList > * + * {
-  border-top: 1px solid var(--hairline-soft);
-}
-
-/* In the rail the rows are the navigation itself, not a card of links: flat,
-   with the selection carrying the only weight. */
-.page[data-layout='split'] .catList {
-  gap: 2px;
-  background: none;
-  border: none;
-  border-radius: 0;
-  overflow: visible;
-  box-shadow: none;
-}
-
-.page[data-layout='split'] .catList > * + * {
-  border-top: none;
+  gap: var(--space-2xs);
+  margin-inline: calc(-1 * var(--cat-inset));
 }
 
 .cat {
@@ -104,12 +87,13 @@
   gap: var(--space-md);
   width: 100%;
   min-height: var(--row-h);
-  padding: var(--space-sm) var(--space-lg);
+  padding: var(--space-xs) var(--cat-inset);
   font: inherit;
   text-align: start;
   color: var(--ink-primary);
   background: none;
   border: none;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out);
 }
@@ -117,8 +101,7 @@
 .page[data-layout='split'] .cat {
   gap: var(--space-sm);
   min-height: var(--control-h);
-  padding: var(--space-2xs) var(--space-sm);
-  border-radius: var(--radius-sm);
+  padding-block: var(--space-2xs);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -136,15 +119,16 @@
   font-weight: var(--fw-semibold);
 }
 
+/* The tile grows with the interface size, as the glyph inside it does. */
 .catIcon {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: calc(var(--icon-md) + var(--space-md));
+  height: calc(var(--icon-md) + var(--space-md));
   flex-shrink: 0;
   border-radius: var(--radius-sm);
   color: var(--ink-secondary);
-  background: var(--bg-inset);
+  background: var(--bg-active);
 }
 
 .page[data-layout='split'] .catIcon {
@@ -196,13 +180,14 @@
 .catText {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-2xs);
   flex: 1;
   min-width: 0;
 }
 
 .catTitle {
-  font-size: var(--text-body);
+  font-size: var(--text-title);
+  font-weight: var(--fw-medium);
   line-height: var(--lh-snug);
   color: var(--ink-primary);
   overflow: hidden;
@@ -211,13 +196,13 @@
 }
 
 .page[data-layout='split'] .catTitle {
-  font-size: var(--text-label);
+  font-size: var(--text-body);
 }
 
 .catBlurb {
-  font-size: var(--text-caption);
+  font-size: var(--text-label);
   line-height: var(--lh-snug);
-  color: color-mix(in srgb, var(--ink-secondary) 70%, var(--ink-primary));
+  color: var(--ink-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -245,9 +230,9 @@
 }
 
 .resultPath {
-  font-size: var(--text-caption);
+  font-size: var(--text-label);
   line-height: var(--lh-snug);
-  color: color-mix(in srgb, var(--ink-secondary) 70%, var(--ink-primary));
+  color: var(--ink-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -295,12 +280,10 @@
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-xl) var(--gutter) var(--space-md);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 86%, transparent), transparent);
 }
 
 .page[data-layout='split'] .detailHead {
-  padding: var(--space-xl) var(--space-xl) var(--space-md);
-  border-bottom: 1px solid var(--hairline-soft);
+  padding: var(--space-xl) var(--space-2xl) var(--space-sm);
 }
 
 .detailTitle {
@@ -316,8 +299,7 @@
 }
 
 .page[data-layout='split'] .detailTitle {
-  font-size: var(--text-h2);
-  font-weight: var(--fw-semibold);
+  font-size: var(--text-h1);
 }
 
 /* Grid for the same reason as the rail: a submenu taller than the window must
@@ -330,7 +312,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
-  gap: var(--space-xl);
+  gap: var(--space-2xl);
   width: 100%;
   max-width: 640px;
   margin: 0 auto;
@@ -338,18 +320,22 @@
   padding-bottom: var(--space-2xl);
 }
 
+/* Side by side the pane is wide; a switch 800px away from its label is a
+   switch nobody connects to it. The column keeps a reading width instead. */
 .page[data-layout='split'] .detailScroll {
   max-width: none;
-  padding: var(--space-lg) var(--space-xl) var(--space-2xl);
+  padding: var(--space-md) var(--space-2xl) var(--space-2xl);
+  grid-template-columns: minmax(0, 720px);
 }
 
 /* Where a search result landed: the row glows once, then settles. The rows
    come from several stylesheets, so the marker is a plain attribute. */
 .detailScroll :global([data-setting-flash]) {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: var(--radius-sm);
 }
 
-/* A whole group glows as a card; a row borrows its panel's corners. */
+/* A whole group glows with a little room around its rows. */
 .detailScroll :global(section[data-setting-flash]) {
   border-radius: var(--radius-md);
 }

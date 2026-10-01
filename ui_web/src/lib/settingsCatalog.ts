@@ -81,13 +81,11 @@ export const SETTINGS_CATALOG = {
           'settings.themeDark',
           'settings.themeLight',
           'settings.themeSystem',
+          'settings.themeSlate',
+          'settings.themePureBlack',
+          'settings.themeForestGreen',
           'settings.searchAliases.theme',
         ],
-      },
-      {
-        id: 'other-themes',
-        label: 'settings.otherThemes',
-        aliases: ['settings.themeSlate', 'settings.themePureBlack', 'settings.themeForestGreen'],
       },
       {
         id: 'language',
@@ -125,9 +123,8 @@ export const SETTINGS_CATALOG = {
       {
         id: 'haptics',
         label: 'settings.haptics',
-        group: 'settings.group.feedback',
         hint: 'settings.note.haptics',
-        aliases: ['settings.searchAliases.haptics'],
+        aliases: ['settings.searchAliases.haptics', 'settings.group.feedback'],
       },
     ],
   },
@@ -145,7 +142,6 @@ export const SETTINGS_CATALOG = {
       {
         id: 'volume-leveling',
         label: 'settings.volumeLeveling',
-        group: 'settings.playback',
         hint: 'settings.note.volumeLeveling',
         aliases: ['settings.volumeLevelingSearch'],
         terms: ['ReplayGain'],
@@ -153,16 +149,14 @@ export const SETTINGS_CATALOG = {
       {
         id: 'autoplay',
         label: 'settings.autoplay',
-        group: 'settings.group.upNext',
         hint: 'settings.note.autoplay',
-        aliases: ['settings.searchAliases.autoplay'],
+        aliases: ['settings.searchAliases.autoplay', 'settings.group.upNext'],
       },
       {
         id: 'dj-mixing',
         label: 'settings.djMixing',
-        group: 'settings.group.dj',
         hint: 'settings.note.djMixing',
-        aliases: ['settings.djMixingSearch'],
+        aliases: ['settings.djMixingSearch', 'settings.group.dj'],
       },
       {
         id: 'learn-activity',
@@ -196,9 +190,8 @@ export const SETTINGS_CATALOG = {
       {
         id: 'import',
         label: 'settings.importFrom',
-        group: 'settings.importCard',
         hint: 'settings.importNote',
-        aliases: ['settings.searchAliases.import'],
+        aliases: ['settings.searchAliases.import', 'settings.importCard'],
         terms: ['Spotify', 'Apple Music'],
       },
       {
@@ -305,9 +298,9 @@ export const SETTINGS_CATALOG = {
     blurb: 'settings.blurb.subsonic',
     terms: ['Subsonic', 'OpenSubsonic', 'Symfonium', 'Amperfy', 'Feishin', 'DSub', 'Tempo'],
     settings: [
-      { id: 'subsonic-server', label: 'subsonic.server', group: 'subsonic.title', hint: 'subsonic.note' },
-      { id: 'subsonic-username', label: 'subsonic.username', group: 'subsonic.title' },
-      { id: 'subsonic-copy-server', label: 'subsonic.copyServer', group: 'subsonic.title' },
+      { id: 'subsonic-server', label: 'subsonic.server', hint: 'subsonic.note' },
+      { id: 'subsonic-username', label: 'subsonic.username' },
+      { id: 'subsonic-copy-server', label: 'subsonic.copyServer' },
       {
         id: 'subsonic-password',
         label: 'subsonic.password',
@@ -324,25 +317,19 @@ export const SETTINGS_CATALOG = {
       {
         id: 'community-service',
         label: 'settings.communityService',
-        group: 'settings.community',
         hint: 'settings.note.community',
         aliases: ['settings.communityRelay'],
       },
-      { id: 'community-status', label: 'settings.communityStatus', group: 'settings.community' },
+      { id: 'community-status', label: 'settings.communityStatus' },
     ],
   },
   about: {
     title: 'settings.about',
     blurb: 'settings.blurb.about',
     settings: [
-      { id: 'engine-status', label: 'settings.engineLabel', group: 'settings.connection' },
-      {
-        id: 'version',
-        label: 'brand.soundsible',
-        group: 'settings.about',
-        aliases: ['settings.searchAliases.version'],
-      },
-      { id: 'design-system', label: 'settings.viewDesign', group: 'settings.about' },
+      { id: 'engine-status', label: 'settings.engineLabel', aliases: ['settings.connection'] },
+      { id: 'version', label: 'brand.soundsible', aliases: ['settings.searchAliases.version'] },
+      { id: 'design-system', label: 'settings.viewDesign' },
     ],
   },
 } as const satisfies Record<string, SectionCatalog>;
