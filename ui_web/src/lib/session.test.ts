@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const requestMock = vi.fn();
 const setUnauthorizedHandlerMock = vi.fn();
 
-vi.mock('./api', () => ({
+vi.mock('./http', () => ({
   request: (...args: unknown[]) => requestMock(...args),
   setUnauthorizedHandler: (h: unknown) => setUnauthorizedHandlerMock(h),
 }));

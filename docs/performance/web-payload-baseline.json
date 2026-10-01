@@ -1,0 +1,27 @@
+{
+  "revision": "d608588e0ac994b07fb0a3db203ebbe87f960e76",
+  "method": "Existing engine bundle; HTML entry, modulepreloads and stylesheet links; excludes fonts, locales and API",
+  "initial": {
+    "raw_bytes": 812773,
+    "gzip_bytes": 250368,
+    "files": [
+      "assets/MusicListRow-B0vMww5b.css",
+      "assets/MusicListRow-Y1PRaPNi.js",
+      "assets/catalogCollection-BNEUQUth.js",
+      "assets/contextMenu-YDCQ_CHW.css",
+      "assets/contextMenu-k-DbLrCI.js",
+      "assets/cover-CKhJ4vk6.js",
+      "assets/icons-CaZLg0O1.js",
+      "assets/index-1yRoeX2U.css",
+      "assets/index-CKUDnBVK.js",
+      "assets/prompt-BmdrizY6.css",
+      "assets/prompt-CCZmWw0a.js",
+      "assets/responsiveTap-i87dgFsn.js",
+      "assets/scrollHistory-C1JqWyuV.js",
+      "assets/session-C7l7rTsE.js",
+      "assets/stores-BzkJLVmF.css",
+      "assets/stores-C0vEiSQ6.js",
+      "assets/vendor-socket-C0iVmK9L.js"
+    ]
+  }
+}

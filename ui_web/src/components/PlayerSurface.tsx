@@ -6,7 +6,16 @@ import { isPodcastTrack } from '../lib/track';
 import { t } from '../lib/i18n';
 import { AUTO_MODE_PANELS, type AutoModePanelId } from '../lib/autoModeLayout';
 import { scrollableAncestor } from '../lib/scrollableAncestor';
-import { NowPlaying, type NowPlayingMobilePanel } from './NowPlaying';
+import type { NowPlayingMobilePanel } from './NowPlaying';
+import { deferredComponent } from '../lib/deferredComponent';
+const recoverNowPlaying = import.meta.glob<typeof import('./NowPlaying').NowPlaying>('./NowPlaying.tsx', {
+  query: '?recovery', import: 'NowPlaying',
+})['./NowPlaying.tsx'];
+const NowPlaying = deferredComponent<Parameters<typeof import('./NowPlaying').NowPlaying>[0]>(
+  async () => ({ default: (await import('./NowPlaying')).NowPlaying }),
+  async () => ({ default: await recoverNowPlaying() }),
+  styles.autoLoading,
+);
 import styles from './PlayerSurface.module.css';
 
 const AutoMode = lazy(() => import('./AutoMode').then((module) => ({ default: module.AutoMode })));
@@ -43,6 +52,8 @@ type BackdropState = {
 
 /** One fullscreen player environment shared by Now Playing and Auto Mode. */
 export function PlayerSurface() {
+  const [opened, setOpened] = createSignal(nowPlayingOpen());
+  createEffect(() => { if (nowPlayingOpen()) setOpened(true); });
   const current = createMemo(() => state.playback.currentTrack);
   const auto = createMemo(() => state.autoMode.active);
   const autoAvailable = createMemo(() => !current() || !isPodcastTrack(current()!));
@@ -442,6 +453,7 @@ export function PlayerSurface() {
           aria-hidden={auto() || !nowPlayingOpen()}
           inert={auto() || !nowPlayingOpen() ? true : undefined}
         >
+          <Show when={opened()}>
           <NowPlaying
             mobilePanel={mobilePanel() as NowPlayingMobilePanel}
             onMobilePanelChange={setPanel}
@@ -452,6 +464,7 @@ export function PlayerSurface() {
             surfaceOpen={nowPlayingOpen() && !auto()}
             onCloseSurface={() => closeSurface()}
           />
+          </Show>
         </div>
 
         <div

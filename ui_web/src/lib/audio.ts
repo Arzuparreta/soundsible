@@ -1,2362 +1,383 @@
-import { MAX_LINEAR as MAX_LEVEL, MIN_LINEAR as MIN_LEVEL } from './loudness';
-import {
-  diagnosticLoad, diagnosticPause, diagnosticPlay, diagnosticSource,
-  observeDiagnosticMedia, recordPlaybackDiagnostic, setDiagnosticSnapshot,
-} from './playbackDiagnostics';
-import {
-  ProgramOutput,
-  type ProgramOutputEvent,
-  type ProgramOutputMode,
-} from './audio/programOutput';
-
-const VOLUME_KEY = 'volume';
-
-/** Media-clock supervision. Audio gain itself is sample-accurate automation. */
-const TICK_MS = 40;
-/** Supervision rate during the long `armed` wait, where a tick only compares
- * the media clock against the preroll point. See `tickInterval`. */
-const ARMED_TICK_MS = 250;
-/** Runway left, in seconds, at which `armed` goes back to watching at TICK_MS. */
-const ARMED_FINE_LEAD = 2;
-/** Longest silent head start given to the incoming deck. */
-const MAX_PREROLL = 4;
-const MIN_OVERLAP = 1.2;
-/** How long an audible blend may wait on an incoming deck whose clock has
- * stopped before the mixer stops waiting. The outgoing curve keeps running on
- * the audio clock, so past this the listener is hearing a fade into nothing. */
-const MIX_STALL_MS = 4_000;
-/** After a beatmatched blend the incoming deck drifts back to its own tempo. */
-const RATE_RETURN_MS = 8_000;
-/** `HTMLMediaElement.NETWORK_NO_SOURCE`, named rather than read off the global:
- * the constant is missing under jsdom, and a deck holding nothing is exactly
- * the case this has to recognise. */
-const NETWORK_NO_SOURCE = 3;
-/** A replacement deck that never receives metadata is a failed recovery, not a
- * promise the transport is allowed to await forever. */
-const RECOVERY_METADATA_TIMEOUT_MS = 12_000;
-
-/** True while the page is in the background — a locked phone, another app, a
- * different tab. Everything that would reset a media element, rebuild the audio
- * graph, or trust a throttled timer has to know: iOS keeps a backgrounded page
- * alive only while an element is actually sounding, so those are the moments
- * they are most likely to run and least able to survive. */
-function pageHidden(): boolean {
-  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
-}
-
-let elements: HTMLAudioElement[] | null = null;
-let activeIndex = 0;
-/** Permission to play is independent of WebKit's native element state. */
-let playbackRequested = false;
-let seekGeneration = 0;
-const expectedPauses = new WeakSet<HTMLAudioElement>();
-const pendingStarts = new WeakMap<HTMLAudioElement, object>();
-/** Keep transport intent intact while the decoder changes position. */
-const pendingSeeks = new WeakMap<HTMLAudioElement, { settled: boolean }>();
-
-function applySeekGate(deck: HTMLAudioElement): void {
-  const index = elements?.indexOf(deck) ?? -1;
-  if (index >= 0) setDeckGain(index, mixGains[index]);
-  applyDeckMute(deck);
-}
-
-function clearSeekGate(deck: HTMLAudioElement): void {
-  if (!pendingSeeks.delete(deck)) return;
-  applySeekGate(deck);
-}
-
-function finishSeek(deck: HTMLAudioElement): void {
-  const pending = pendingSeeks.get(deck);
-  // canplay can precede seeked, or a queued event can belong to a previous
-  // tap. Neither permits the old position to reach the programme output.
-  if (!pending?.settled || deck.seeking || deck.readyState < 3) return;
-  clearSeekGate(deck);
-}
-
-function pauseDeck(deck: HTMLAudioElement): void {
-  pendingStarts.delete(deck);
-  if (!deck.paused) expectedPauses.add(deck);
-  diagnosticPause(deck);
-}
-/** Current/paused programme and sources actually started for a mix. A cued
- * deck is not a participant; a preroll with zero mix gain is. */
-const participatingDecks = new WeakSet<HTMLAudioElement>();
-let sourcesSettledPending = false;
-
-function applyDeckMute(deck: HTMLAudioElement): void {
-  deck.muted = !participatingDecks.has(deck)
-    || (!(monitorGain && audioContext) && (allMuted || pendingSeeks.has(deck)));
-}
-
-function setDeckParticipation(deck: HTMLAudioElement, participating: boolean): void {
-  if (participating) participatingDecks.add(deck);
-  else participatingDecks.delete(deck);
-  applyDeckMute(deck);
-}
-
-/** A microtask finishes the synchronous ownership/store update first. Unlike
- * a timer this does not wait for a foreground scheduling opportunity. */
-function notifySourcesSettled(): void {
-  if (sourcesSettledPending) return;
-  sourcesSettledPending = true;
-  queueMicrotask(() => {
-    sourcesSettledPending = false;
-    audioEl().dispatchEvent(new Event('sourcesettled'));
-  });
-}
-/** Shadow of each deck's mix gain, so volume changes can be reapplied without
- * an AudioContext. */
-const mixGains = [1, 0];
-/**
- * Per-deck volume levelling, as a linear multiplier.
- *
- * Shadowed here rather than read back off the nodes, for the same reason as
- * `mixGains`: a level can be set before the graph exists and has to survive the
- * graph being rebuilt. The gain belongs to the *deck*, never to the track — so
- * a handoff that swaps which deck is active never has to move a gain anywhere.
- */
-const levelGains = [1, 1];
-let levelNodes: GainNode[] | null = null;
-/** Whether levelling is applied at all. Off means literally unity, so the
- * output is what it was before this feature existed. */
-let levelingEnabled = true;
-/** Long enough not to click, short enough to feel immediate. */
-const LEVEL_RAMP_SEC = 0.15;
-let audioContext: AudioContext | null = null;
-let deckGains: GainNode[] | null = null;
-interface DeckEffects {
-  low?: BiquadFilterNode;
-  filter?: BiquadFilterNode;
-  /** Where the echo send taps the deck, kept so it can be built on demand. */
-  source?: MediaElementAudioSourceNode;
-  /** This deck's levelling gain. The echo send taps it rather than `source`,
-   * so an echo tail is levelled like the programme it came from. */
-  level?: GainNode;
-  delay?: DelayNode;
-  echoWet?: GainNode;
-  echoFeedback?: GainNode;
-}
-let deckEffects: DeckEffects[] | null = null;
-/** Unity-gain program bus. Local volume is deliberately downstream. */
-let masterGain: GainNode | null = null;
-/** Device-only monitor gain: volume and mute never alter the broadcast bus. */
-let monitorGain: GainNode | null = null;
-/** Stable post-mix output; platform control selection remains browser-owned. */
-let programCarrier: ProgramOutput | null = null;
-let programOutputReporter: ((event: ProgramOutputEvent) => void) | null = null;
-let masterVolume = storedVolume();
-let allMuted = false;
-/** Peak limiter on the master bus, transparent until a blend needs it. */
-let limiter: DynamicsCompressorNode | null = null;
-/** The post-limiter node shared by the local monitor and an optional live tap. */
-let programOutput: AudioNode | null = null;
-let broadcastDestination: MediaStreamAudioDestinationNode | null = null;
-let broadcastCapture: BroadcastCapture | null = null;
-let broadcastElement: HTMLAudioElement | null = null;
-let broadcastCaptureCleanup: (() => void) | null = null;
-
-/**
- * Whether the decks are routed through the mixing graph.
- *
- * `unavailable` is always a decision about *this* page load and is never
- * persisted: a context that could not run once — an iOS audio session that was
- * interrupted, a device that had just switched to Bluetooth — says nothing about
- * the next launch, and writing that verdict down would quietly leave a device
- * without the real mixer for good.
- */
-type GraphState = 'untested' | 'ready' | 'unavailable';
-let graphState: GraphState = 'untested';
-
-/**
- * Register the live bridge's handler for a tap that died with its graph.
- *
- * Playback survives a failed graph on replacement elements, but the broadcast
- * does not: the tap needs a context that this page load will not build again.
- * Without this the publisher keeps a sender that will never carry a sample
- * while the room still reads "on air".
- */
-let broadcastLostReporter: (() => void) | null = null;
-
-export function setBroadcastLostReporter(fn: (() => void) | null): void {
-  broadcastLostReporter = fn;
-}
-
-/** Observe carrier/fallback changes without exposing either source deck. */
-export function setProgramOutputReporter(fn: ((event: ProgramOutputEvent) => void) | null): void {
-  programOutputReporter = fn;
-}
-
-export type BroadcastCaptureKind = 'program' | 'element';
-
-/**
- * The one audio source Live is allowed to publish.
- *
- * Normally this is the post-limiter program tap, which preserves the DJ mix.
- * If a browser forces this page load into the deliberately safe, direct-deck
- * playback mode, `element` keeps Live usable without trying to resurrect the
- * failed AudioContext. Its track can change whenever the element changes URL,
- * so the bridge subscribes and replaces the WebRTC sender in place.
- */
-export interface BroadcastCapture {
-  kind: BroadcastCaptureKind;
-  stream: MediaStream;
-  onTrackChange: (listener: (track: MediaStreamTrack | null) => void) => () => void;
-}
-
-/** Read the persisted volume without forcing the lazy elements into existence. */
-export function storedVolume(): number {
-  const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(VOLUME_KEY) : null;
-  const v = raw == null ? 1 : Number(raw);
-  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
-}
-
-/**
- * Deck-level listeners shared by the two long-lived mixer decks.
- *
- * The store binds playback events once, at startup. Keeping those bindings here
- * makes the two-deck transport lazy without making callers care when the decks
- * are first created.
- */
-interface DeckBinding {
-  type: string;
-  handler: (event: Event) => void;
-}
-const deckBindings: DeckBinding[] = [];
-
-/** Bind `handler` to both decks, now or when they are first created. */
-export function onDeckEvent(type: string, handler: (event: Event) => void): void {
-  deckBindings.push({ type, handler });
-  if (elements) for (const deck of elements) deck.addEventListener(type, handler);
-}
-
-function createDeck(index: number): HTMLAudioElement {
-  const deck = new Audio();
-  deck.muted = true;
-  observeDiagnosticMedia(deck, 'deck', index);
-  deck.preload = 'auto';
-  if ('preservesPitch' in deck) deck.preservesPitch = true;
-  deck.addEventListener('seeked', () => {
-    const pending = pendingSeeks.get(deck);
-    if (pending && !deck.seeking) pending.settled = true;
-    finishSeek(deck);
-  });
-  deck.addEventListener('canplay', () => finishSeek(deck));
-  deck.addEventListener('error', () => clearSeekGate(deck));
-  deck.addEventListener('emptied', () => clearSeekGate(deck));
-  for (const binding of deckBindings) deck.addEventListener(binding.type, binding.handler);
-  return deck;
-}
-
-/**
- * The two decks.
- *
- * They are symmetric on purpose: a DJ handoff makes the incoming deck the
- * active one and simply releases the other. The previous single-canonical-deck
- * arrangement had to copy the incoming position back into the canonical element
- * at the end of every transition, which meant re-assigning `src` and
- * re-buffering a stream that was already playing.
- */
-function decks(): HTMLAudioElement[] {
-  if (!elements) {
-    elements = [createDeck(0), createDeck(1)];
-    applyDeckVolume();
-    bindLifecycle();
-  }
-  return elements;
-}
-
-/** The source deck that currently owns programme timing inside the engine. */
-export function audioEl(): HTMLAudioElement {
-  return decks()[activeIndex];
-}
-
-/** True when `target` is the deck that currently owns playback. */
-export function isActiveDeck(target: EventTarget | null): boolean {
-  return target === decks()[activeIndex];
-}
-
-export type ProgramMediaEventName =
-  | 'outputhealth'
-  | 'sourcesettled'
-  | 'play'
-  | 'pause'
-  | 'ended'
-  | 'error'
-  | 'seeking'
-  | 'waiting'
-  | 'canplay'
-  | 'playing'
-  | 'timeupdate'
-  | 'durationchange'
-  | 'loadedmetadata'
-  | 'seeked'
-  | 'ratechange';
-
-export interface ProgramPlaybackSnapshot {
-  outputMode: ProgramOutputMode;
-  playing: boolean;
-  sourcePlaying: boolean;
-  carrierPlaying: boolean;
-  position: number;
-  duration: number;
-  playbackRate: number;
-  ended: boolean;
-  readyState: number;
-  networkState: number;
-  mediaErrorCode: number;
-  hasSource: boolean;
-  bufferedEnd: number;
-  activeIndex: number;
-  mixPhase: MixPhase;
-  dominant: boolean;
-  contextState: string;
-}
-
-/** Subscribe to canonical programme events instead of a particular deck. */
-export function onProgramEvent(
-  type: ProgramMediaEventName,
-  handler: (snapshot: ProgramPlaybackSnapshot, event: Event) => void,
-): void {
-  onDeckEvent(type, (event) => {
-    // A deck ending inside a mix is the mixer's to resolve, whichever listener
-    // hears it first. What it resolved by itself never reaches the store as a
-    // second track boundary.
-    if (type === 'ended' && settleEndedEvent(event) === 'consumed') return;
-    if (!isActiveDeck(event.currentTarget)) return;
-    if (type === 'pause' && (outputRecovering || !audioEl().paused)) return;
-    if ((type === 'play' || type === 'playing') && (!playbackRequested || outputRecovering) && !holdsUnlockSample(audioEl())) {
-      if (!audioEl().paused) recordPlaybackDiagnostic('transport.rejected_native_play');
-      pauseDeck(audioEl());
-      return;
-    }
-    handler(programPlaybackSnapshot(), event);
-  });
-}
-
-function applyDeckVolume(): void {
-  if (!elements) return;
-  if (monitorGain && audioContext) {
-    monitorGain.gain.value = allMuted ? 0 : masterVolume;
-    for (const deck of elements) {
-      deck.volume = 1;
-      applyDeckMute(deck);
-    }
-    return;
-  }
-  elements.forEach((deck, index) => {
-    deck.volume = Math.min(1, Math.max(0, mixGains[index] * masterVolume * fallbackLevel(index)));
-    applyDeckMute(deck);
-  });
-}
-
-/** The applied level for one deck: unity whenever levelling is switched off. */
-function appliedLevel(index: number): number {
-  return levelingEnabled ? levelGains[index] : 1;
-}
-
-/**
- * Levelling on the no-graph path, where the only control is `deck.volume`.
- *
- * An element's volume can attenuate but cannot amplify, so a boost is silently
- * dropped and only cuts survive. That is a partial job, but a strictly closer
- * one than doing nothing — and it can never distort, which matters more.
- */
-function fallbackLevel(index: number): number {
-  return Math.min(1, appliedLevel(index));
-}
-
-/**
- * Set one deck's mix gain.
- *
- * This is for discrete deck state changes. Audible crossfades bypass it and use
- * one scheduled AudioParam curve, because repeatedly cancelling short ramps is
- * exactly what made the old mixer crackle when a timer arrived late.
- */
-function setDeckGain(index: number, value: number): void {
-  const clamped = Math.min(1, Math.max(0, value));
-  mixGains[index] = clamped;
-  if (deckGains && audioContext) {
-    const param = deckGains[index].gain;
-    const now = audioContext.currentTime;
-    param.cancelScheduledValues(now);
-    param.setValueAtTime(pendingSeeks.has(decks()[index]) ? 0 : clamped, now);
-    return;
-  }
-  const deck = decks()[index];
-  deck.volume = Math.min(1, Math.max(0, clamped * masterVolume * fallbackLevel(index)));
-}
-
-/**
- * Set one deck's volume levelling.
- *
- * Deliberately a node of its own rather than folded into `deckGains`: that
- * parameter is driven by scheduled equal-power curves during a crossfade, and
- * multiplying a second thing into an automated `AudioParam` is exactly what
- * used to make the mixer crackle when a timer arrived late.
- *
- * The floor keeps an extreme levelling value from muting a deck by accident.
- */
-function setDeckLevel(index: number, linear: number, ramp = false): void {
-  const safe = Number.isFinite(linear) ? Math.min(Math.max(linear, MIN_LEVEL), MAX_LEVEL) : 1;
-  levelGains[index] = safe;
-  const node = levelNodes?.[index];
-  if (node && audioContext) {
-    const target = appliedLevel(index);
-    const now = audioContext.currentTime;
-    const param = node.gain;
-    param.cancelScheduledValues(now);
-    if (ramp && typeof param.linearRampToValueAtTime === 'function') {
-      // Never a step: this is the one path that can run while a deck is
-      // already sounding, when the listener toggles the setting mid-track.
-      param.setValueAtTime(param.value, now);
-      param.linearRampToValueAtTime(target, now + LEVEL_RAMP_SEC);
-    } else {
-      param.setValueAtTime(target, now);
-    }
-    return;
-  }
-  applyDeckVolume();
-}
-
-/** Release a deck's stream and return it to unity.
- *
- * Pairing the two is what stops a levelled track leaking its gain onto whatever
- * the deck is handed next. */
-function releaseDeck(index: number): void {
-  recordPlaybackDiagnostic('deck.release', { index });
-  detach(decks()[index]);
-  setDeckLevel(index, 1);
-  notifySourcesSettled();
-}
-
-/** Optional platform hint; unsupported browsers keep their existing routing. */
-function configurePlaybackSession(): void {
-  const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
-  if (!session) return;
-  try {
-    if (session.type !== 'playback') session.type = 'playback';
-  } catch {
-    recordPlaybackDiagnostic('audio_session.configuration', { state: 'unsupported' });
-  }
-}
-
-/**
- * Wake the audio session, from the first user gesture of the session.
- *
- * Order is everything here, and getting it wrong is what silenced Auto Mode in
- * the installed iOS app. Routing an element that is *already playing* into a
- * freshly created context, with a `resume()` nobody waited for, is the one
- * sequence WebKit punishes — and `createMediaElementSource` is irreversible, so
- * the punishment is total silence with the transport still claiming to play.
- *
- * So: create and unlock the context in the gesture, prime the session with a
- * silent buffer (what actually flips WebKit's audio session into a playback
- * category), and route the decks *before either has ever played*. That is the
- * sequence that works, and it is why this runs at the first tap rather than at
- * the tap that opens Auto Mode.
- *
- * The deck unlock is part of that order, not a preamble to it. Spending the
- * silent sample first is what makes `createMediaElementSource` route two decks
- * that are sounding at that instant — the punished sequence, arrived at from the
- * other side — so it happens once the decks are routed and still untouched.
- *
- * Idempotent and safe to call from anywhere. Once a media element has been
- * routed through `createMediaElementSource`, the graph and both decks remain
- * intact for the page lifetime: there is no browser API that can distinguish a
- * deliberately silent passage from a graph that is not reaching the speaker.
- */
-export function unlockAudio(): boolean {
-  configurePlaybackSession();
-  if (graphState !== 'untested') {
-    reconcilePlatformPlayback();
-    if (!playbackRequested) return graphState === 'ready';
-    unlockDecks();
-    if (graphState === 'ready') {
-      void programCarrier?.retryFromGesture(deckIsPlaying(audioEl()));
-    }
-    return graphState === 'ready';
-  }
-  const Context = globalThis.AudioContext
-    ?? (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Context) {
-    graphState = 'unavailable';
-    unlockDecks();
-    return false;
-  }
-  try {
-    const list = decks();
-    const context = new Context();
-    void context.resume?.().catch(() => {});
-    primeAudioSession(context);
-    const master = context.createGain();
-    master.gain.value = 1;
-    const monitor = context.createGain();
-    monitor.gain.value = allMuted ? 0 : masterVolume;
-    // Reach the speakers before anything is routed in: a graph that throws
-    // halfway would otherwise leave a deck connected to nothing audible.
-    if (typeof context.createDynamicsCompressor === 'function') {
-      const peak = context.createDynamicsCompressor();
-      // Idle threshold is 0 dBFS — nothing below full scale is touched, so
-      // ordinary playback sounds exactly as it does with no graph at all. Only
-      // a blend, where two tracks sum, pulls it down to catch the overshoot.
-      peak.threshold.value = 0;
-      peak.knee.value = 8;
-      peak.ratio.value = 6;
-      peak.attack.value = 0.003;
-      peak.release.value = 0.18;
-      master.connect(peak);
-      peak.connect(monitor);
-      limiter = peak;
-      programOutput = peak;
-    } else {
-      master.connect(monitor);
-      programOutput = master;
-    }
-    const effects: DeckEffects[] = [];
-    const levels: GainNode[] = [];
-    const gains = list.map((deck, index) => {
-      const gain = context.createGain();
-      gain.gain.value = mixGains[index];
-      // Volume levelling sits upstream of `master`, so it reaches the broadcast
-      // tap as well as the speakers — a Live listener hears the same levelled
-      // programme the broadcaster does. Seeded from the shadow so a level set
-      // before the first gesture survives into the graph.
-      const level = context.createGain();
-      level.gain.value = appliedLevel(index);
-      levels.push(level);
-      const source = context.createMediaElementSource(deck);
-      if (typeof context.createBiquadFilter === 'function') {
-        const low = context.createBiquadFilter();
-        low.type = 'lowshelf';
-        low.frequency.value = 220;
-        low.gain.value = 0;
-        const filter = context.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.value = 22000;
-        filter.Q.value = 0.7;
-        source.connect(low).connect(filter).connect(level).connect(gain).connect(master);
-        // No echo send here: see `ensureEcho`.
-        effects.push({ low, filter, source, level });
-      } else {
-        source.connect(level).connect(gain).connect(master);
-        effects.push({ source, level });
-      }
-      return gain;
-    });
-    for (const deck of list) deck.volume = 1;
-    audioContext = context;
-    deckGains = gains;
-    levelNodes = levels;
-    deckEffects = effects;
-    masterGain = master;
-    monitorGain = monitor;
-    programCarrier = new ProgramOutput(context, monitor);
-    programCarrier.subscribe((event) => programOutputReporter?.(event));
-    programCarrier.initialize();
-    graphState = 'ready';
-    watchContextState(context);
-    // Routed and never played: now the sample can be spent, still inside the
-    // gesture that owes the decks their playback permission.
-    unlockDecks();
-    return true;
-  } catch {
-    discardGraph();
-    graphState = 'unavailable';
-    applyDeckVolume();
-    unlockDecks();
-    return false;
-  }
-}
-
-/** A 44-byte WAV holding one silent sample. */
-const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
-
-/**
- * Let each deck play once, from inside the gesture.
- *
- * Playback permission is granted per element, not per page: a deck that has
- * never sounded is still locked, and the first thing it is ever asked to do is
- * start the next track — from an `ended` handler or the mixer's ticker, neither
- * of which carries a gesture. Spending one silent sample on each deck here is
- * what makes those later, gestureless starts legal.
- *
- * Only ever touches an empty deck, and re-checks before cleaning up, so it can
- * never interfere with a real track that started in the same gesture.
- */
-const unlockedDecks = new WeakSet<HTMLAudioElement>();
-
-/**
- * Whether this deck is spending its unlock sample rather than playing music.
- *
- * `play()` clears `paused` the moment it is called and the platform answers when
- * it feels like it — on a cold iOS launch that can be hundreds of milliseconds.
- * For that whole window an empty deck is indistinguishable from a sounding one
- * unless the sample is recognised for what it is, and everything that asks "is
- * this playing?" gets the wrong answer: the graph watchdog, and Live's view of
- * whether the broadcaster has anything to send.
- */
-function holdsUnlockSample(deck: HTMLAudioElement): boolean {
-  return (deck.currentSrc || deck.getAttribute('src') || '') === SILENT_WAV;
-}
-
-function unlockDecks(): void {
-  for (const deck of decks()) {
-    // Once per element, and never over a deck that is holding a track: this is
-    // called from every gesture, including typing in a search field. A deck only
-    // counts as unlocked once a play actually succeeded, so a call that was not
-    // really a gesture leaves it to be retried by the next one.
-    if (unlockedDecks.has(deck)) continue;
-    if (deck.getAttribute('src') !== null || deck.currentSrc) continue;
-    deck.muted = true;
-    diagnosticSource(deck, () => { deck.src = SILENT_WAV; });
-    const release = () => {
-      if (deck.src !== SILENT_WAV) return; // a real track claimed this deck
-      setDeckParticipation(deck, false);
-      pauseDeck(deck);
-      diagnosticSource(deck, () => deck.removeAttribute('src'));
-      diagnosticLoad(deck);
-    };
-    void diagnosticPlay(deck).then(
-      () => {
-        unlockedDecks.add(deck);
-        release();
-      },
-      release,
-    );
-  }
-}
-
-/**
- * Start and immediately end one silent sample.
- *
- * A context can report `running` while the platform has not actually given the
- * page an audio session; pushing a real buffer through it is what claims one.
- */
-function primeAudioSession(context: AudioContext): void {
-  if (typeof context.createBuffer !== 'function' || typeof context.createBufferSource !== 'function') return;
-  try {
-    const buffer = context.createBuffer(1, 1, context.sampleRate || 44100);
-    const source = context.createBufferSource();
-    source.buffer = buffer;
-    source.connect(context.destination);
-    source.start(0);
-  } catch {
-    /* a context that refuses a one-sample buffer is caught by the probe */
-  }
-}
-
-/** Resume requests never grant playback permission or restart a paused source. */
-const pendingContextResumes = new WeakMap<AudioContext, object>();
-function resumeContext(): void {
-  const context = audioContext;
-  if (!playbackRequested || outputRecovering || !context
-    || context.state === 'running' || context.state === 'closed'
-    || pendingContextResumes.has(context)) return;
-  const request = {};
-  pendingContextResumes.set(context, request);
-  const finish = () => {
-    if (pendingContextResumes.get(context) === request) pendingContextResumes.delete(context);
-  };
-  const deadline = setTimeout(() => {
-    recordPlaybackDiagnostic('context.resume_result', { state: context.state, error: 'resume_timeout' });
-    finish(); // A later Play may retry; this timeout never retries by itself.
-  }, 5000);
-  recordPlaybackDiagnostic('context.resume_request', { state: context.state });
-  // Keep the native request in the activation turn. Statechange can fire before
-  // its promise resolves; the guard prevents recursive requests.
-  try {
-    void context.resume().then(() => {
-      recordPlaybackDiagnostic('context.resume_result', { state: context.state });
-    }, () => {
-      recordPlaybackDiagnostic('context.resume_result', { state: context.state, error: 'resume_failed' });
-    }).finally(() => { clearTimeout(deadline); finish(); });
-  } catch {
-    clearTimeout(deadline);
-    finish();
-    recordPlaybackDiagnostic('context.resume_result', { error: 'resume_failed' });
-  }
-}
-
-/** Observe platform interruptions without undoing a system pause. */
-function watchContextState(context: AudioContext): void {
-  if (typeof context.addEventListener !== 'function') return;
-  context.addEventListener('statechange', () => {
-    recordPlaybackDiagnostic('context.statechange', { state: context.state });
-    if (audioContext !== context || graphState !== 'ready') return;
-    resetClockSample();
-    // Locking iOS can interrupt Web Audio before visibility changes. This is
-    // not a transport Pause. A real pause independently revokes permission.
-    resumeContext();
-  });
-}
-
-type OutputHealth = 'healthy' | 'recovering' | 'needs_play';
-let outputHealth: OutputHealth = 'healthy';
-let outputRecovering = false;
-let recoveryAttempted = false;
-let recoveryGeneration = 0;
-let clockTimer: ReturnType<typeof setTimeout> | null = null;
-let clockSample: {
-  wall: number; context: number; position: number; deck: HTMLAudioElement;
-  since: number; startPosition: number;
-} | null = null;
-
-function resetClockSample(): void { clockSample = null; }
-
-function publishOutputHealth(health: OutputHealth): void {
-  outputHealth = health;
-  recordPlaybackDiagnostic('output.health', { state: health });
-  audioEl().dispatchEvent(new Event('outputhealth'));
-}
-
-function cancelOutputRecovery(): void {
-  recoveryGeneration += 1;
-  outputRecovering = false;
-  outputHealth = 'healthy';
-  recoveryAttempted = false;
-  resetClockSample();
-  if (clockTimer !== null) clearTimeout(clockTimer);
-  clockTimer = null;
-}
-
-/** Compare clocks, not signal amplitude: musical silence is still rendering. */
-function observeClock(): void {
-  const context = audioContext;
-  const deck = audioEl();
-  if (!playbackRequested || outputRecovering || !context || !graphReady()
-    || !deckIsPlaying(deck) || deck.seeking || deck.readyState < 3 || context.state !== 'running') {
-    resetClockSample();
-    return;
-  }
-  const wall = performance.now();
-  const previous = clockSample;
-  const position = deck.currentTime;
-  const clock = context.currentTime;
-  const continuous = previous && previous.deck === deck && wall - previous.wall <= 1000
-    && position >= previous.position && position - previous.position <= 2;
-  const frozen = continuous && clock === previous.context;
-  clockSample = {
-    wall, context: clock, position, deck,
-    since: frozen ? previous.since : wall,
-    startPosition: frozen ? previous.startPosition : position,
-  };
-  if (frozen && wall - previous.since >= 1000
-    && position - previous.startPosition >= (wall - previous.since) / 2000) {
-    void recoverProgramOutput();
-  }
-}
-
-function superviseClock(): void {
-  if (clockTimer !== null || !playbackRequested || outputRecovering || !graphReady()) return;
-  clockTimer = setTimeout(() => {
-    clockTimer = null;
-    observeClock();
-    if (deckIsPlaying(audioEl())) superviseClock();
-  }, 250);
-}
-
-/** One in-place recovery per incident. Never rebuild routed media elements. */
-async function recoverProgramOutput(): Promise<void> {
-  const context = audioContext;
-  if (!context || outputRecovering || !playbackRequested) return;
-  if (recoveryAttempted) {
-    audioService.pause('recovery', 'output_recovery_failed');
-    publishOutputHealth('needs_play');
-    return;
-  }
-  recoveryAttempted = true;
-  outputRecovering = true;
-  const generation = ++recoveryGeneration;
-  const current = () => generation === recoveryGeneration && playbackRequested && audioContext === context;
-  if (clockTimer !== null) clearTimeout(clockTimer);
-  clockTimer = null;
-  if (mix && mix.phase !== 'armed') cancelMix('transport_pause');
-  const deck = audioEl();
-  const position = deck.currentTime;
-  const seek = seekGeneration;
-  for (const participant of decks()) pauseDeck(participant);
-  programCarrier?.pause();
-  publishOutputHealth('recovering');
-  let deadline: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      (async () => {
-        await context.suspend();
-        if (!current()) return;
-        await context.resume();
-        if (!current()) return;
-        primeAudioSession(context);
-        const before = context.currentTime;
-        // Route activation may settle after resume() resolves. The shared
-        // deadline bounds this wait without mistaking a slow restart for death.
-        while (current() && (context.state !== 'running' || context.currentTime <= before)) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 250));
-        }
-        if (!current()) return;
-        if (seek === seekGeneration) deck.currentTime = position;
-        outputRecovering = false;
-        resetClockSample();
-        await playProgramDeck(deck);
-      })(),
-      new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error('clock_timeout')), 5000); }),
-    ]);
-    if (!current()) return;
-    if (current()) publishOutputHealth('healthy');
-  } catch {
-    if (!current()) return;
-    audioService.pause('recovery', 'output_recovery_failed');
-    publishOutputHealth('needs_play');
-  } finally {
-    if (deadline !== undefined) clearTimeout(deadline);
-  }
-}
-
-function discardGraph(): void {
-  const context = audioContext;
-  const lostBroadcast = broadcastCapture?.kind === 'program';
-  releaseBroadcastCapture();
-  programCarrier?.destroy();
-  programCarrier = null;
-  audioContext = null;
-  deckGains = null;
-  // The nodes go; `levelGains` stays, so the levels survive into whatever
-  // replaces the graph.
-  levelNodes = null;
-  deckEffects = null;
-  masterGain = null;
-  monitorGain = null;
-  limiter = null;
-  programOutput = null;
-  if (context && typeof context.close === 'function') void context.close().catch(() => {});
-  if (lostBroadcast) broadcastLostReporter?.();
-}
-
-/** Whether the decks are routed through a graph that is believed to be sounding. */
-export function graphReady(): boolean {
-  return graphState === 'ready' && Boolean(audioContext && deckGains && masterGain && monitorGain);
-}
-
-function activeAudioTrack(stream: MediaStream): MediaStreamTrack | null {
-  return stream.getAudioTracks().find((track) => track.readyState !== 'ended') ?? null;
-}
-
-function deckIsPlaying(deck: HTMLAudioElement): boolean {
-  return !deck.paused
-    && !deck.ended
-    && Boolean(deck.currentSrc || deck.getAttribute('src'))
-    && !holdsUnlockSample(deck);
-}
-
-/** Start a source and the stable device carrier in the same activation turn. */
-function playProgramDeck(deck: HTMLAudioElement): Promise<void> {
-  if (!playbackRequested) return Promise.resolve();
-  resumeContext();
-  superviseClock();
-  setDeckParticipation(deck, true);
-  const start = {};
-  pendingStarts.set(deck, start);
-  const started = diagnosticPlay(deck);
-  void programCarrier?.play();
-  return started.finally(() => {
-    if (pendingStarts.get(deck) === start) pendingStarts.delete(deck);
-  });
-}
-
-function deckBufferedEnd(deck: HTMLAudioElement): number {
-  let furthest = 0;
-  for (let i = 0; i < deck.buffered.length; i += 1) {
-    const end = deck.buffered.end(i);
-    if (Number.isFinite(end) && end > furthest) furthest = end;
-  }
-  return furthest;
-}
-
-/** The complete read-only state consumed by the store and Media Session. */
-export function programPlaybackSnapshot(): ProgramPlaybackSnapshot {
-  const deck = audioEl();
-  const output = programCarrier?.snapshot();
-  const outputMode = output?.mode ?? 'direct_fallback';
-  const sourcePlaying = deckIsPlaying(deck);
-  const carrierPlaying = output?.carrierPlaying ?? false;
-  return {
-    outputMode,
-    playing: sourcePlaying && !outputRecovering && (outputMode === 'carrier' ? carrierPlaying : true),
-    sourcePlaying,
-    carrierPlaying,
-    position: Number.isFinite(deck.currentTime) ? deck.currentTime : 0,
-    duration: Number.isFinite(deck.duration) ? deck.duration : 0,
-    playbackRate: Number.isFinite(deck.playbackRate) && deck.playbackRate > 0 ? deck.playbackRate : 1,
-    ended: deck.ended,
-    readyState: deck.readyState,
-    networkState: deck.networkState,
-    mediaErrorCode: deck.error?.code ?? 0,
-    hasSource: Boolean(deck.getAttribute('src') || deck.currentSrc),
-    bufferedEnd: deckBufferedEnd(deck),
-    activeIndex,
-    mixPhase: mix?.phase ?? 'idle',
-    dominant: mix?.dominant ?? false,
-    contextState: audioContext?.state ?? 'unavailable',
-  };
-}
-
-/** Audible programme state across Music, Auto, Live and platform controls. */
-export function broadcastPlaybackActive(): boolean {
-  return programPlaybackSnapshot().playing;
-}
-
-function releaseBroadcastCapture(): void {
-  const capture = broadcastCapture;
-  broadcastCapture = null;
-  broadcastElement = null;
-  const cleanup = broadcastCaptureCleanup;
-  broadcastCaptureCleanup = null;
-  cleanup?.();
-  if (!capture) return;
-  if (capture.kind === 'program' && broadcastDestination) {
-    try {
-      programOutput?.disconnect(broadcastDestination);
-    } catch {
-      /* the graph was already torn down */
-    }
-    broadcastDestination = null;
-  }
-  for (const track of capture.stream.getTracks()) track.stop();
-}
-
-function programBroadcastCapture(): BroadcastCapture | null {
-  if (!graphReady() || !audioContext || !programOutput) return null;
-  if (broadcastCapture?.kind === 'program') return broadcastCapture;
-  releaseBroadcastCapture();
-  if (typeof audioContext.createMediaStreamDestination !== 'function') return null;
-  broadcastDestination = audioContext.createMediaStreamDestination();
-  programOutput.connect(broadcastDestination);
-  const track = activeAudioTrack(broadcastDestination.stream);
-  if (track && 'contentHint' in track) track.contentHint = 'music';
-  const stream = broadcastDestination.stream;
-  broadcastCapture = {
-    kind: 'program',
-    stream,
-    onTrackChange: () => () => {},
-  };
-  return broadcastCapture;
-}
-
-interface CapturableAudioElement extends HTMLAudioElement {
-  captureStream?: () => MediaStream;
-  mozCaptureStream?: () => MediaStream;
-}
-
-function elementBroadcastCapture(element: HTMLAudioElement): BroadcastCapture | null {
-  if (broadcastCapture?.kind === 'element' && broadcastElement === element) return broadcastCapture;
-  releaseBroadcastCapture();
-  const capture = (element as CapturableAudioElement).captureStream
-    ?? (element as CapturableAudioElement).mozCaptureStream;
-  if (!capture) return null;
-  let stream: MediaStream;
-  try {
-    stream = capture.call(element);
-  } catch {
-    return null;
-  }
-  const listeners = new Set<(track: MediaStreamTrack | null) => void>();
-  let observedTrack: MediaStreamTrack | null = null;
-  const observeTrack = () => {
-    const next = activeAudioTrack(stream);
-    if (next === observedTrack) return;
-    if (observedTrack && typeof observedTrack.removeEventListener === 'function') {
-      observedTrack.removeEventListener('ended', notify);
-    }
-    observedTrack = next;
-    if (observedTrack && typeof observedTrack.addEventListener === 'function') {
-      observedTrack.addEventListener('ended', notify);
-    }
-  };
-  const notify = () => {
-    observeTrack();
-    const track = activeAudioTrack(stream);
-    for (const listener of listeners) listener(track);
-  };
-  stream.addEventListener('addtrack', notify);
-  stream.addEventListener('removetrack', notify);
-  observeTrack();
-  broadcastCaptureCleanup = () => {
-    stream.removeEventListener('addtrack', notify);
-    stream.removeEventListener('removetrack', notify);
-    if (observedTrack && typeof observedTrack.removeEventListener === 'function') {
-      observedTrack.removeEventListener('ended', notify);
-    }
-    listeners.clear();
-  };
-  broadcastElement = element;
-  broadcastCapture = {
-    kind: 'element',
-    stream,
-    onTrackChange: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+import { RuntimeLifetime } from './runtimeLifetime';
+import { createTransport } from './audio/transport';
+import { createGraph } from './audio/graph';
+import { createMixer } from './audio/mixer';
+import { createCapture } from './audio/capture';
+import type { AudioService } from './audio/contracts';
+export type * from './audio/contracts';
+export { storedVolume } from './audioPreferences';
+import { setDiagnosticSnapshot } from './playbackDiagnostics';
+function createAudioRuntime() {
+  const lifetime = new RuntimeLifetime();
+  const transport = createTransport({
+    get setDeckGain() {
+      return graph.setDeckGain;
     },
+    get mixGains() {
+      return graph.mixGains;
+    },
+    get monitorGain() {
+      return graph.monitorGain;
+    },
+    set monitorGain(value) {
+      graph.monitorGain = value;
+    },
+    get audioContext() {
+      return graph.audioContext;
+    },
+    set audioContext(value) {
+      graph.audioContext = value;
+    },
+    get allMuted() {
+      return graph.allMuted;
+    },
+    set allMuted(value) {
+      graph.allMuted = value;
+    },
+    get applyDeckVolume() {
+      return graph.applyDeckVolume;
+    },
+    get settleEndedEvent() {
+      return mixer.settleEndedEvent;
+    },
+    get setDeckLevel() {
+      return graph.setDeckLevel;
+    },
+    get graphReady() {
+      return graph.graphReady;
+    },
+    get audioService() {
+      return audioService;
+    },
+    get mix() {
+      return mixer.mix;
+    },
+    set mix(value) {
+      mixer.mix = value;
+    },
+    get cancelMix() {
+      return mixer.cancelMix;
+    },
+    get programCarrier() {
+      return graph.programCarrier;
+    },
+    set programCarrier(value) {
+      graph.programCarrier = value;
+    },
+    get primeAudioSession() {
+      return graph.primeAudioSession;
+    },
+    get resumeContext() {
+      return graph.resumeContext;
+    },
+    get tick() {
+      return mixer.tick;
+    },
+    get reportProgramTransport() {
+      return mixer.reportProgramTransport;
+    },
+    get stopRateReturn() {
+      return mixer.stopRateReturn;
+    }
+  }, lifetime);
+  const graph = createGraph({
+    get elements() {
+      return transport.elements;
+    },
+    set elements(value) {
+      transport.elements = value;
+    },
+    get applyDeckMute() {
+      return transport.applyDeckMute;
+    },
+    get pendingSeeks() {
+      return transport.pendingSeeks;
+    },
+    get decks() {
+      return transport.decks;
+    },
+    get configurePlaybackSession() {
+      return transport.configurePlaybackSession;
+    },
+    get reconcilePlatformPlayback() {
+      return transport.reconcilePlatformPlayback;
+    },
+    get playbackRequested() {
+      return transport.playbackRequested;
+    },
+    set playbackRequested(value) {
+      transport.playbackRequested = value;
+    },
+    get unlockDecks() {
+      return transport.unlockDecks;
+    },
+    get deckIsPlaying() {
+      return transport.deckIsPlaying;
+    },
+    get audioEl() {
+      return transport.audioEl;
+    },
+    get outputRecovering() {
+      return transport.outputRecovering;
+    },
+    set outputRecovering(value) {
+      transport.outputRecovering = value;
+    },
+    get resetClockSample() {
+      return transport.resetClockSample;
+    },
+    get broadcastCapture() {
+      return capture.broadcastCapture;
+    },
+    set broadcastCapture(value) {
+      capture.broadcastCapture = value;
+    },
+    get releaseBroadcastCapture() {
+      return capture.releaseBroadcastCapture;
+    },
+    get broadcastLostReporter() {
+      return capture.broadcastLostReporter;
+    },
+    set broadcastLostReporter(value) {
+      capture.broadcastLostReporter = value;
+    },
+    get VOLUME_KEY() {
+      return transport.VOLUME_KEY;
+    },
+    get activeIndex() {
+      return transport.activeIndex;
+    },
+    set activeIndex(value) {
+      transport.activeIndex = value;
+    }
+  }, lifetime);
+  const mixer = createMixer({
+    get decks() {
+      return transport.decks;
+    },
+    get mixGains() {
+      return graph.mixGains;
+    },
+    get audioContext() {
+      return graph.audioContext;
+    },
+    set audioContext(value) {
+      graph.audioContext = value;
+    },
+    get activeIndex() {
+      return transport.activeIndex;
+    },
+    set activeIndex(value) {
+      transport.activeIndex = value;
+    },
+    get pageHidden() {
+      return transport.pageHidden;
+    },
+    get deckIsPlaying() {
+      return transport.deckIsPlaying;
+    },
+    get deckGains() {
+      return graph.deckGains;
+    },
+    set deckGains(value) {
+      graph.deckGains = value;
+    },
+    get setBlendLimiter() {
+      return graph.setBlendLimiter;
+    },
+    get scheduleCurve() {
+      return graph.scheduleCurve;
+    },
+    get deckEffects() {
+      return graph.deckEffects;
+    },
+    set deckEffects(value) {
+      graph.deckEffects = value;
+    },
+    get ensureEcho() {
+      return graph.ensureEcho;
+    },
+    get setDeckGain() {
+      return graph.setDeckGain;
+    },
+    get resetDeckEffects() {
+      return graph.resetDeckEffects;
+    },
+    get releaseDeck() {
+      return transport.releaseDeck;
+    },
+    get playProgramDeck() {
+      return transport.playProgramDeck;
+    },
+    get NETWORK_NO_SOURCE() {
+      return transport.NETWORK_NO_SOURCE;
+    },
+    get pauseDeck() {
+      return transport.pauseDeck;
+    },
+    get setDeckParticipation() {
+      return transport.setDeckParticipation;
+    },
+    get stagedUrl() {
+      return transport.stagedUrl;
+    },
+    set stagedUrl(value) {
+      transport.stagedUrl = value;
+    },
+    get notifySourcesSettled() {
+      return transport.notifySourcesSettled;
+    },
+    get outputRecovering() {
+      return transport.outputRecovering;
+    },
+    set outputRecovering(value) {
+      transport.outputRecovering = value;
+    },
+    get playbackRequested() {
+      return transport.playbackRequested;
+    },
+    set playbackRequested(value) {
+      transport.playbackRequested = value;
+    },
+    get resumeContext() {
+      return graph.resumeContext;
+    },
+    get pendingDetach() {
+      return transport.pendingDetach;
+    },
+    get setDeckLevel() {
+      return graph.setDeckLevel;
+    }
+  }, lifetime);
+  const capture = createCapture({
+    get programPlaybackSnapshot() {
+      return transport.programPlaybackSnapshot;
+    },
+    get programOutput() {
+      return graph.programOutput;
+    },
+    set programOutput(value) {
+      graph.programOutput = value;
+    },
+    get graphReady() {
+      return graph.graphReady;
+    },
+    get audioContext() {
+      return graph.audioContext;
+    },
+    set audioContext(value) {
+      graph.audioContext = value;
+    },
+    get audioEl() {
+      return transport.audioEl;
+    }
+  }, lifetime);
+  const audioService: AudioService = {
+    ...transport.actions,
+    ...graph.actions,
+    ...mixer.actions,
+    ...capture.actions
   };
-  return broadcastCapture;
-}
-
-/**
- * Acquire a Live source without changing local playback. The normal route is
- * the post-limiter program. Direct element capture is only used after the
- * graph's own recovery has chosen its safe, graphless mode for this page load.
- */
-export function acquireBroadcastCapture(): BroadcastCapture | null {
-  const program = programBroadcastCapture();
-  if (program) return program;
-  const element = audioEl();
-  if (!element.currentSrc && !element.getAttribute('src')) return null;
-  const fallback = elementBroadcastCapture(element);
-  return fallback && activeAudioTrack(fallback.stream) ? fallback : null;
-}
-
-/** Backwards-compatible stream-only access for consumers that do not need swaps. */
-export function broadcastStream(): MediaStream | null {
-  return acquireBroadcastCapture()?.stream ?? null;
-}
-
-/** Release the live tap without disturbing the local monitor graph. */
-export function releaseBroadcastStream(): void {
-  releaseBroadcastCapture();
-}
-
-export interface ProgramMixSnapshot {
-  contextTime: number;
-  activeIndex: number;
-  phase: MixPhase;
-  technique?: LiveTransitionPlan['technique'];
-  progress: number;
-  dominant: boolean;
-  decks: Array<{ index: number; position: number; duration: number; gain: number }>;
-}
-
-/** Read-only sample of the exact graph state used for live metadata. */
-export function programMixSnapshot(): ProgramMixSnapshot {
-  const list = decks();
-  let progress = 0;
-  if (mix?.mixStart != null) {
-    const incoming = list[mix.toIndex];
-    progress = Math.min(1, Math.max(0, (incoming.currentTime - mix.mixStart) / Math.max(0.001, mix.overlap * mix.rate)));
-  }
-  const liveGains = mix?.phase === 'crossfading'
-    ? [
-        mix.fromIndex === 0 ? Math.cos(progress * Math.PI * 0.5) : Math.sin(progress * Math.PI * 0.5),
-        mix.fromIndex === 1 ? Math.cos(progress * Math.PI * 0.5) : Math.sin(progress * Math.PI * 0.5),
-      ]
-    : mixGains;
+  setDiagnosticSnapshot(() => ({
+    activeIndex: transport.activeIndex,
+    mixPhase: mixer.mix?.phase ?? 'idle',
+    dominant: mixer.mix?.dominant ?? false,
+    contextState: graph.audioContext?.state ?? 'unavailable',
+    contextTime: graph.audioContext?.currentTime ?? 0,
+    outputMode: graph.programCarrier?.snapshot().mode ?? 'direct_fallback',
+    gain0Target: graph.mixGains[0],
+    gain1Target: graph.mixGains[1],
+    localVolume: graph.masterVolume,
+    localMuted: graph.allMuted
+  }));
   return {
-    contextTime: audioContext?.currentTime ?? 0,
-    activeIndex,
-    phase: mix?.phase ?? 'idle',
-    technique: mix?.technique,
-    progress,
-    dominant: mix?.dominant ?? false,
-    decks: list.map((deck, index) => ({
-      index,
-      position: Number.isFinite(deck.currentTime) ? deck.currentTime : 0,
-      duration: Number.isFinite(deck.duration) ? deck.duration : 0,
-      gain: liveGains[index],
-    })),
+    audioService,
+    setBroadcastLostReporter: capture.setBroadcastLostReporter,
+    setProgramOutputReporter: graph.setProgramOutputReporter,
+    onDeckEvent: transport.onDeckEvent,
+    audioEl: transport.audioEl,
+    isActiveDeck: transport.isActiveDeck,
+    onProgramEvent: transport.onProgramEvent,
+    unlockAudio: graph.unlockAudio,
+    graphReady: graph.graphReady,
+    programPlaybackSnapshot: transport.programPlaybackSnapshot,
+    broadcastPlaybackActive: capture.broadcastPlaybackActive,
+    acquireBroadcastCapture: capture.acquireBroadcastCapture,
+    broadcastStream: capture.broadcastStream,
+    releaseBroadcastStream: capture.releaseBroadcastStream,
+    programMixSnapshot: mixer.programMixSnapshot,
+    setProgramTransportReporter: mixer.setProgramTransportReporter,
+    isCurrentLoad: transport.isCurrentLoad,
+    dispose() {
+      lifetime.close();
+      mixer.dispose();
+      capture.dispose();
+      transport.dispose();
+      graph.dispose();
+    }
   };
 }
-
-/**
- * Arm or release the master limiter.
- *
- * Two decks summing can overshoot; one deck cannot. Keeping the threshold at
- * full scale outside a blend is what lets every listener stay routed through the
- * graph without the mixer colouring ordinary playback.
- */
-function setBlendLimiter(active: boolean): void {
-  if (!limiter || !audioContext) return;
-  const now = audioContext.currentTime;
-  const target = active ? -6 : 0;
-  const param = limiter.threshold;
-  param.cancelScheduledValues(now);
-  param.setValueAtTime(param.value, now);
-  if (typeof param.linearRampToValueAtTime === 'function') {
-    param.linearRampToValueAtTime(target, now + 0.25);
-  } else {
-    param.value = target;
+let runtime = createAudioRuntime();
+let disposed = false;
+function current() {
+  if (disposed) {
+    runtime = createAudioRuntime();
+    disposed = false;
   }
+  return runtime;
 }
-
-export interface LiveTransitionPlan {
-  /** `direct` is no mix at all: see `cutOver`. */
-  technique: 'long_blend' | 'bass_swap' | 'filter_blend' | 'echo_cut' | 'structural_fade' | 'safe_fade' | 'direct';
-  /** Position in the *outgoing* deck at which the blend begins. */
-  out_cue: number;
-  in_cue: number;
-  overlap_seconds: number;
-  overlap_bars: number;
-  playback_rate: number;
-  confidence: number;
-  sync?: { phase_tolerance_ms?: number };
-  automation?: { eq?: 'bass_swap' | 'neutral'; filter?: boolean; echo_out?: boolean };
-}
-
-export type MixPhase = 'idle' | 'armed' | 'prerolling' | 'crossfading';
-export type MixCancelReason = 'superseded' | 'load' | 'seek' | 'stop' | 'exit' | 'failed' | 'transport_pause';
-export type ProgramTransportOrigin = 'ui' | 'media_session' | 'platform' | 'recovery';
-
-export interface ProgramTransportEvent {
-  kind: 'pause' | 'resume' | 'inactive_deck_play';
-  origin: ProgramTransportOrigin;
-  mixPhase: MixPhase;
-  dominant: boolean;
-  activeIndex: number;
-  hidden: boolean;
-  deck0Playing: boolean;
-  deck1Playing: boolean;
-}
-
-let programTransportReporter: ((event: ProgramTransportEvent) => void) | null = null;
-
-/** Let the store publish local-only evidence about whole-program transport. */
-export function setProgramTransportReporter(
-  reporter: ((event: ProgramTransportEvent) => void) | null,
-): void {
-  programTransportReporter = reporter;
-}
-
-function reportProgramTransport(
-  kind: ProgramTransportEvent['kind'],
-  origin: ProgramTransportOrigin,
-  phase: MixPhase,
-  dominant: boolean,
-): void {
-  const list = decks();
-  programTransportReporter?.({
-    kind,
-    origin,
-    mixPhase: phase,
-    dominant,
-    activeIndex,
-    hidden: pageHidden(),
-    deck0Playing: deckIsPlaying(list[0]),
-    deck1Playing: deckIsPlaying(list[1]),
-  });
-}
-
-export interface MixCallbacks {
-  /** The incoming deck is loaded and cued; the handoff is now committed. */
-  onArmed?(): void;
-  /** The incoming deck owns playback from this moment. */
-  onDominant(): void;
-  onComplete(position: number): void;
-  onCancel(reason: MixCancelReason): void;
-  onError(error: unknown): void;
-  /**
-   * The blend was given up at a boundary it could not perform — the outgoing
-   * song ended, or the listener skipped, before the incoming deck could sound —
-   * and the incoming deck is now staged for an ordinary handover (`takeStaged`).
-   * Nothing owns playback until the caller takes it.
-   */
-  onStaged?(): void;
-}
-
-interface ActiveMix {
-  phase: Exclude<MixPhase, 'idle'>;
-  fromIndex: number;
-  toIndex: number;
-  /** What the incoming deck was given, so a released blend can stage it. */
-  url: string;
-  /** Incoming media position at the last look, and when it last moved. A
-   * deck that is "playing" but whose clock has stopped is a stalled stream. */
-  inPosition: number;
-  inProgressAt: number;
-  /** The incoming clock has been seen advancing since it was started. */
-  inAdvanced: boolean;
-  outCue: number;
-  inCue: number;
-  /** Overlap in wall seconds. */
-  overlap: number;
-  rate: number;
-  preroll: number;
-  /** Incoming media position at which the crossfade started. */
-  mixStart: number | null;
-  technique: LiveTransitionPlan['technique'];
-  phaseTolerance: number;
-  phaseCorrected: boolean;
-  dominant: boolean;
-  /** A listener-requested skip: hand over as soon as the blend begins. */
-  manual: boolean;
-  callbacks: MixCallbacks;
-}
-
-let mix: ActiveMix | null = null;
-let mixGeneration = 0;
-let mixTimer: ReturnType<typeof setTimeout> | null = null;
-let rateTimer: ReturnType<typeof setInterval> | null = null;
-
-/**
- * Build the echo send for a deck, if it does not have one.
- *
- * Only `echo_cut` ever uses this, and only on the outgoing deck — but a delay
- * line inside a feedback loop can never be proved silent, so Web Audio has to
- * render it regardless of the send being at zero. Built up front, that was two
- * permanently running delay lines for every session that so much as opened Auto
- * Mode. Built here and torn down in `resetDeckEffects`, it only costs the audio
- * thread anything during the blend that asked for it.
- */
-function ensureEcho(index: number): void {
-  const effect = deckEffects?.[index];
-  if (!effect || effect.echoWet || !audioContext || !masterGain) return;
-  // Tapped after levelling, not at the raw element: an echo tail returns
-  // straight into `masterGain`, so tapping `source` would put an un-levelled
-  // copy of the track under a levelled programme.
-  const source = effect.level ?? effect.source;
-  if (!source || typeof audioContext.createDelay !== 'function') return;
-  const delay = audioContext.createDelay(1);
-  delay.delayTime.value = 0.28;
-  const wet = audioContext.createGain();
-  wet.gain.value = 0;
-  const feedback = audioContext.createGain();
-  feedback.gain.value = 0.32;
-  source.connect(delay).connect(wet).connect(masterGain);
-  delay.connect(feedback).connect(delay);
-  effect.delay = delay;
-  effect.echoWet = wet;
-  effect.echoFeedback = feedback;
-}
-
-/** Break the feedback loop so the graph can drop it. The send is already at
- * zero by the time this runs, so nothing audible is being cut. */
-function disposeEcho(effect: DeckEffects): void {
-  if (!effect.echoWet) return;
-  effect.echoFeedback?.disconnect();
-  effect.echoWet.disconnect();
-  effect.delay?.disconnect();
-  effect.delay = undefined;
-  effect.echoWet = undefined;
-  effect.echoFeedback = undefined;
-}
-
-function resetDeckEffects(index: number): void {
-  const effect = deckEffects?.[index];
-  if (!effect || !audioContext) return;
-  const now = audioContext.currentTime;
-  const params = [
-    effect.low?.gain,
-    effect.filter?.frequency,
-    effect.echoWet?.gain,
-    effect.echoFeedback?.gain,
-  ];
-  for (const param of params) param?.cancelScheduledValues(now);
-  effect.low?.gain.setValueAtTime(0, now);
-  effect.filter?.frequency.setValueAtTime(22000, now);
-  effect.echoWet?.gain.setValueAtTime(0, now);
-  disposeEcho(effect);
-}
-
-function scheduleCurve(param: AudioParam | undefined, values: number[], duration: number): void {
-  if (!param || !audioContext) return;
-  const now = audioContext.currentTime;
-  const span = Math.max(0.05, duration);
-  param.cancelScheduledValues(now);
-  param.setValueAtTime(values[0], now);
-  if (typeof param.setValueCurveAtTime === 'function') {
-    param.setValueCurveAtTime(Float32Array.from(values), now, span);
-  } else {
-    param.linearRampToValueAtTime(values[values.length - 1], now + span);
-  }
-}
-
-/** Schedule one continuous curve; the supervisory timer never rewrites it. */
-function scheduleCrossfade(current: ActiveMix): void {
-  if (!deckGains || !audioContext) return;
-  setBlendLimiter(true);
-  const points = 96;
-  const incoming = Array.from(
-    { length: points },
-    (_, index) => Math.sin((index / (points - 1)) * Math.PI * 0.5),
-  );
-  const outgoing = Array.from(
-    { length: points },
-    (_, index) => Math.cos((index / (points - 1)) * Math.PI * 0.5),
-  );
-  scheduleCurve(deckGains[current.toIndex].gain, incoming, current.overlap);
-  scheduleCurve(deckGains[current.fromIndex].gain, outgoing, current.overlap);
-
-  const outEffect = deckEffects?.[current.fromIndex];
-  const inEffect = deckEffects?.[current.toIndex];
-  if (current.technique === 'bass_swap' || current.technique === 'long_blend') {
-    scheduleCurve(outEffect?.low?.gain, [0, 0, -4, -12, -18, -18], current.overlap);
-    scheduleCurve(inEffect?.low?.gain, [-18, -18, -12, -4, 0, 0], current.overlap);
-  }
-  if (current.technique === 'filter_blend' || current.technique === 'long_blend') {
-    scheduleCurve(outEffect?.filter?.frequency, [22000, 18000, 9000, 3500, 1200, 700], current.overlap);
-    scheduleCurve(inEffect?.filter?.frequency, [900, 1600, 4200, 10000, 18000, 22000], current.overlap);
-  }
-  if (current.technique === 'echo_cut') {
-    ensureEcho(current.fromIndex);
-    scheduleCurve(outEffect?.echoWet?.gain, [0, 0.05, 0.12, 0.24, 0.32, 0.18], current.overlap);
-  }
-}
-
-/**
- * How long the supervisor waits before looking at the media clock again.
- *
- * `armed` is a long wait: the DJ commits a transition COMMIT_LEAD_SECONDS (45)
- * before the out-cue, and every look until the preroll point does nothing but
- * compare two numbers. Watching that at mix resolution is ~1100 timer wakeups
- * per track, which on a low-power laptop is enough on its own to keep the CPU
- * out of its deeper idle states for most of the song. The coarse rate still
- * lands far inside the head start the preroll allows (MIN_OVERLAP is 1.2s), and
- * a late start is what `prerolling`'s phase correction exists to absorb —
- * everything that actually needs resolution runs from that phase on.
- */
-function tickInterval(): number {
-  const current = mix;
-  if (!current || current.phase !== 'armed') return TICK_MS;
-  const from = decks()[current.fromIndex];
-  const runway = current.outCue - current.preroll - (from.currentTime || 0);
-  return runway > ARMED_FINE_LEAD ? ARMED_TICK_MS : TICK_MS;
-}
-
-/** Bumped by every stop, so a timeout already in flight cannot re-arm itself. */
-let tickerToken = 0;
-
-function startTicker(): void {
-  stopTicker();
-  const token = tickerToken;
-  const run = () => {
-    mixTimer = null;
-    tick();
-    // tick() may have finished, failed or cancelled the mix, each of which
-    // stops the ticker. Reviving it here would outlive the transition.
-    if (token !== tickerToken) return;
-    mixTimer = setTimeout(run, tickInterval());
-  };
-  mixTimer = setTimeout(run, tickInterval());
-}
-
-function stopTicker(): void {
-  tickerToken += 1;
-  if (mixTimer) clearTimeout(mixTimer);
-  mixTimer = null;
-}
-
-function stopRateReturn(): void {
-  if (rateTimer) clearInterval(rateTimer);
-  rateTimer = null;
-}
-
-/** Walk a beatmatched deck back to its own tempo once the blend is over. Over
- * eight seconds, with pitch preserved, this is inaudible — and leaving the deck
- * permanently detuned is not. */
-function scheduleRateReturn(index: number): void {
-  stopRateReturn();
-  const deck = decks()[index];
-  const from = deck.playbackRate;
-  if (Math.abs(from - 1) < 0.001) {
-    deck.playbackRate = 1;
-    return;
-  }
-  const startedAt = Date.now();
-  rateTimer = setInterval(() => {
-    if (decks()[activeIndex] !== deck) {
-      stopRateReturn();
-      return;
-    }
-    const progress = Math.min(1, (Date.now() - startedAt) / RATE_RETURN_MS);
-    deck.playbackRate = from + (1 - from) * progress;
-    if (progress >= 1) stopRateReturn();
-  }, 200);
-}
-
-/** Release a stream. Clearing `src` (rather than just pausing) is what makes the
- * browser abort the in-flight request — for previews that request is a proxied
- * googlevideo stream, so leaving it open keeps the engine streaming bytes nobody
- * is listening to. */
-function detach(deck: HTMLAudioElement): void {
-  // Stop competing for Now Playing before the native pause can publish a
-  // stopped source as the programme. Audio gain alone does not exclude it.
-  setDeckParticipation(deck, false);
-  clearSeekGate(deck);
-  pauseDeck(deck);
-  deck.playbackRate = 1;
-  if (deck.getAttribute('src') === null && !deck.currentSrc) return;
-  // Not while the page is in the background. This runs the instant a handoff
-  // completes, before the incoming deck has produced a single sample, and
-  // `load()` is what resets a media element — on iOS that is enough to hand the
-  // audio session back and end playback for a phone that is locked in a pocket.
-  // Holding the stream costs nothing until then: `stage` assigns this same deck
-  // a new `src` milliseconds later, which aborts the old request anyway.
-  if (pageHidden()) {
-    pendingDetach.add(deck);
-    return;
-  }
-  diagnosticSource(deck, () => deck.removeAttribute('src'));
-  diagnosticLoad(deck);
-}
-
-/** Decks whose stream outlived their track because the page was hidden. */
-const pendingDetach = new Set<HTMLAudioElement>();
-
-/** Finish what the background deferred, now that the page can afford it. */
-function flushDeferredWork(): void {
-  for (const deck of pendingDetach) {
-    // Skip a deck that has been handed a real track in the meantime — `stage`
-    // and `load` both assign `src` without going through `detach`.
-    if (deck.paused && (deck.getAttribute('src') !== null || deck.currentSrc)) {
-      diagnosticSource(deck, () => deck.removeAttribute('src'));
-      diagnosticLoad(deck);
-    }
-  }
-  pendingDetach.clear();
-}
-
-/** Read native state before queued pause/statechange events catch up on thaw.
- * Healthy background playback continues; returning to the page never starts it. */
-function reconcilePlatformPlayback(): void {
-  if (!playbackRequested || outputRecovering) return;
-  // A song that played to its end is paused by definition. That is a track
-  // boundary for `ended` to settle, not the platform taking the music away —
-  // revoking playback here is what left a drive on a finished song, with the
-  // next one already loaded and released.
-  if (audioEl().paused && !audioEl().ended && !pendingStarts.has(audioEl())) {
-    audioService.pause('platform', 'native_paused_on_restore');
-    return;
-  }
-  resumeContext();
-}
-
-let lifecycleBound = false;
-
-/** Watch for the page coming back, once per session. Registered from `decks()`
- * so it exists as early as the elements themselves do. */
-function bindLifecycle(): void {
-  if (lifecycleBound) return;
-  lifecycleBound = true;
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      recordPlaybackDiagnostic('lifecycle.visibility');
-      resetClockSample();
-      if (document.visibilityState !== 'hidden') {
-        flushDeferredWork();
-        reconcilePlatformPlayback();
-        if (playbackRequested) superviseClock();
-      }
-    });
-  }
-  document.addEventListener('resume', reconcilePlatformPlayback);
-  window.addEventListener('pageshow', reconcilePlatformPlayback);
-  // A blend is driven by a chain of timeouts, and a backgrounded page does not
-  // get to keep its timers: iOS throttles them to whatever it likes and stops
-  // them altogether once the page is frozen. `timeupdate` and `ended` come from
-  // the media element itself and keep arriving for as long as it is sounding,
-  // which on a locked phone is the only clock left. `tick` reads media clocks
-  // and compares them, so being called twice for the same moment costs nothing
-  // and being called at all is the difference between a handoff and silence.
-  onDeckEvent('timeupdate', () => {
-    observeClock();
-    if (mix && !outputRecovering) tick();
-  });
-  onDeckEvent('ended', (event) => {
-    settleEndedEvent(event);
-    queueMicrotask(() => {
-      if (!mix && !deckIsPlaying(audioEl())) programCarrier?.pause();
-    });
-  });
-  onDeckEvent('pause', (event) => {
-    const deck = event.currentTarget as HTMLAudioElement;
-    // A queued system pause still revokes intent if WebKit has already
-    // restarted the source before delivering the event on unlock.
-    if (expectedPauses.delete(deck) || outputRecovering || deck.ended
-      || holdsUnlockSample(deck) || !participatingDecks.has(deck) || !playbackRequested) return;
-    audioService.pause('platform', 'native_pause');
-  });
-  const rejectOrphanedDeck = (event: Event) => {
-    const deck = event.currentTarget as HTMLAudioElement | null;
-    if (!deck || holdsUnlockSample(deck) || !deckIsPlaying(deck)) return;
-    if (!playbackRequested || outputRecovering) {
-      pauseDeck(deck);
-      recordPlaybackDiagnostic('transport.rejected_native_play');
-      return;
-    }
-    if (isActiveDeck(deck)) return;
-    // Both decks are legitimate programme sources only while one live mix owns
-    // them. Outside it, a non-active play is WebKit reviving an old media
-    // session (most often after a Bluetooth/lock-screen command), never music
-    // Soundsible asked to start.
-    if (mix && (deck === decks()[mix.fromIndex] || deck === decks()[mix.toIndex])) return;
-    const index = decks().indexOf(deck);
-    if (index < 0) return;
-    releaseDeck(index);
-    reportProgramTransport('inactive_deck_play', 'media_session', 'idle', false);
-  };
-  onDeckEvent('play', rejectOrphanedDeck);
-  onDeckEvent('playing', rejectOrphanedDeck);
-  // Native fallout may arrive after the synchronous operation's publication.
-  // Only reconcile inactive sources; active transport keeps its own handlers.
-  for (const type of ['pause', 'emptied', 'loadedmetadata']) {
-    onDeckEvent(type, (event) => {
-      if (!isActiveDeck(event.currentTarget)) notifySourcesSettled();
-    });
-  }
-}
-
-/**
- * Tear down the running transition.
- *
- * Whichever deck currently owns playback keeps it; the other is released. That
- * single rule is what keeps audio and UI from disagreeing: before the handoff a
- * cancel means "stay on the outgoing track", after it a cancel means "the
- * incoming track is simply the current track now".
- */
-function cancelMix(reason: MixCancelReason): void {
-  const current = mix;
-  mixGeneration += 1;
-  stopTicker();
-  mix = null;
-  setBlendLimiter(false);
-  if (!current) return;
-  const keep = current.dominant ? current.toIndex : current.fromIndex;
-  const drop = 1 - keep;
-  activeIndex = keep;
-  setDeckGain(keep, 1);
-  setDeckGain(drop, 0);
-  resetDeckEffects(keep);
-  resetDeckEffects(drop);
-  releaseDeck(drop);
-  if (current.dominant) scheduleRateReturn(keep);
-  current.callbacks.onCancel(reason);
-}
-
-function finishMix(): void {
-  const current = mix;
-  if (!current) return;
-  const incoming = decks()[current.toIndex];
-  stopTicker();
-  mix = null;
-  setBlendLimiter(false);
-  setDeckGain(current.toIndex, 1);
-  setDeckGain(current.fromIndex, 0);
-  resetDeckEffects(current.toIndex);
-  resetDeckEffects(current.fromIndex);
-  if (!current.dominant) {
-    activeIndex = current.toIndex;
-    current.callbacks.onDominant();
-  }
-  recordPlaybackDiagnostic('handoff.retirement', { from: current.fromIndex, to: current.toIndex });
-  releaseDeck(current.fromIndex);
-  scheduleRateReturn(current.toIndex);
-  current.callbacks.onComplete(incoming.currentTime);
-}
-
-function failMix(error: unknown): void {
-  const current = mix;
-  if (!current) return;
-  mixGeneration += 1;
-  stopTicker();
-  mix = null;
-  setBlendLimiter(false);
-  const keep = current.dominant ? current.toIndex : current.fromIndex;
-  activeIndex = keep;
-  setDeckGain(keep, 1);
-  setDeckGain(1 - keep, 0);
-  resetDeckEffects(keep);
-  resetDeckEffects(1 - keep);
-  releaseDeck(1 - keep);
-  current.callbacks.onError(error);
-}
-
-/**
- * Hand over without mixing: the outgoing song stops where it is, and the next
- * sounds from its own first second — no overlap, no curve, no effect, no
- * retiming.
- *
- * The incoming deck is heard at full level from its first sample, because a
- * gain still at zero when it starts would swallow that sample. Ownership only
- * moves once it is actually playing, so a start that fails still falls back on
- * the outgoing song, as a failed blend does.
- */
-function cutOver(current: ActiveMix): void {
-  setDeckGain(current.fromIndex, 0);
-  setDeckGain(current.toIndex, 1);
-  void playProgramDeck(decks()[current.toIndex]).then(
-    () => { if (mix === current) finishMix(); },
-    (error) => { if (mix === current) failMix(error); },
-  );
-}
-
-/** A deck that can no longer produce the song it was given. */
-function deckIsDead(deck: HTMLAudioElement): boolean {
-  return Boolean(deck.error) || deck.ended || deck.networkState === NETWORK_NO_SOURCE;
-}
-
-/** Note whether the incoming deck's own clock is moving. "Playing" is what the
- * element says; a clock that does not move is a stream that is not arriving. */
-function observeIncoming(current: ActiveMix, to: HTMLAudioElement): void {
-  const position = Number.isFinite(to.currentTime) ? to.currentTime : 0;
-  if (!to.paused && !to.seeking && position > current.inPosition + 0.01) {
-    current.inAdvanced = true;
-    current.inProgressAt = Date.now();
-  }
-  current.inPosition = position;
-}
-
-/** The incoming deck is sounding, as opposed to merely having been started. */
-function incomingSounding(current: ActiveMix, to: HTMLAudioElement): boolean {
-  return current.phase !== 'armed' && current.inAdvanced && !to.paused && !to.seeking && to.readyState >= 3;
-}
-
-/**
- * Give a blend up without giving up the song it was bringing in.
- *
- * The incoming deck keeps its stream, back at its first second and silent, as
- * the staged deck an ordinary track change takes over. That handover is the one
- * every other boundary uses: it reports an attempt, supervises a slow start and
- * recovers a stalled one. A blend has none of that, which is why a song that
- * never started under it used to leave the set waiting forever.
- */
-function releaseToStaged(current: ActiveMix): void {
-  mixGeneration += 1;
-  stopTicker();
-  mix = null;
-  setBlendLimiter(false);
-  const to = decks()[current.toIndex];
-  setDeckGain(current.fromIndex, 1);
-  setDeckGain(current.toIndex, 0);
-  resetDeckEffects(current.fromIndex);
-  resetDeckEffects(current.toIndex);
-  if (!to.paused) pauseDeck(to);
-  setDeckParticipation(to, false);
-  to.playbackRate = 1;
-  if (to.readyState >= 1) to.currentTime = 0;
-  stagedUrl = current.url;
-  current.callbacks.onStaged?.();
-  notifySourcesSettled();
-}
-
-/**
- * The outgoing song has played to its end inside a mix. Something has to be
- * playing next, decided now: on a locked phone this event may be the last
- * chance JavaScript gets.
- *
- * - an incoming deck that cannot play its song fails the handoff, and the
- *   caller moves on to the next one;
- * - one that is already sounding simply takes over;
- * - anything else — still cued, still buffering, started but stalled — is
- *   handed over the ordinary way (`releaseToStaged`), and the `ended` goes on
- *   to the store as the boundary it is.
- */
-function settleOutgoingEnd(current: ActiveMix): 'consumed' | 'forward' {
-  const to = decks()[current.toIndex];
-  observeIncoming(current, to);
-  if (deckIsDead(to)) {
-    failMix(new Error('incoming deck could not play at the boundary'));
-    return 'consumed';
-  }
-  if (incomingSounding(current, to)) {
-    finishMix();
-    return 'consumed';
-  }
-  releaseToStaged(current);
-  return 'forward';
-}
-
-/** Resolve the mix a deck just ended in. `consumed` means the mixer reported
- * the outcome itself; `forward` means the event is an ordinary end of the song
- * that now owns playback. */
-function settleEndedDeck(deck: HTMLAudioElement): 'consumed' | 'forward' {
-  const current = mix;
-  if (!current) return 'forward';
-  const from = decks()[current.fromIndex];
-  const to = decks()[current.toIndex];
-  if (deck === to) {
-    // Before the handoff the incoming song is nobody's track yet, and a song
-    // that "ends" seconds in is a broken stream: stay on the outgoing one.
-    if (!current.dominant) {
-      failMix(new Error('incoming deck ended before the handoff'));
-      return 'consumed';
-    }
-    finishMix();
-    return 'forward';
-  }
-  if (deck !== from) return 'forward';
-  if (current.dominant) {
-    finishMix();
-    return 'consumed';
-  }
-  return settleOutgoingEnd(current);
-}
-
-/** One answer per `ended` event, however many listeners ask. */
-const endedOutcomes = new WeakMap<Event, 'consumed' | 'forward'>();
-
-function settleEndedEvent(event: Event): 'consumed' | 'forward' {
-  const known = endedOutcomes.get(event);
-  if (known) return known;
-  const deck = event.currentTarget as HTMLAudioElement | null;
-  const outcome = deck ? settleEndedDeck(deck) : 'forward';
-  endedOutcomes.set(event, outcome);
-  return outcome;
-}
-
-/**
- * One tick of the mixer.
- *
- * Every decision reads a *media* clock — `deck.currentTime` — rather than wall
- * time. A buffering outgoing deck therefore delays its own transition instead of
- * being mixed out of at the wrong musical moment, and a pause freezes the blend
- * exactly where it was.
- */
-function tick(): void {
-  if (outputRecovering || !playbackRequested) return;
-  const current = mix;
-  if (!current) {
-    stopTicker();
-    return;
-  }
-  const from = decks()[current.fromIndex];
-  const to = decks()[current.toIndex];
-
-  // The end of the outgoing song is settled by its own `ended` event, which
-  // also tells the store what happened. Settling it here, from whichever clock
-  // noticed first, is how the store used to hear about the boundary twice — or
-  // never.
-  if (from.ended && !current.dominant) return;
-  if (from.ended) {
-    finishMix();
-    return;
-  }
-  if (current.phase !== 'armed' && deckIsDead(to)) {
-    if (current.dominant) finishMix();
-    else failMix(new Error('incoming deck stopped during the handoff'));
-    return;
-  }
-  observeIncoming(current, to);
-
-  if (current.phase === 'armed') {
-    if (from.paused) return;
-    const due = from.currentTime >= current.outCue - current.preroll;
-    if (!due) return;
-    // A whole song ends on its own `ended`, which hands the next one over the
-    // ordinary way. Cutting from a clock that merely reached the duration
-    // first would start the next song only to restart it a moment later.
-    if (current.technique === 'direct' && !current.manual) return;
-    current.phase = 'prerolling';
-    // Started silent even when it has not buffered yet. Safari keeps a cued
-    // second element at metadata until somebody plays it, so waiting for it to
-    // be ready first could wait for ever. Nothing fades until it is sounding:
-    // the blend below waits for its clock to meet the cue.
-    current.inProgressAt = Date.now();
-    if (current.technique === 'direct') {
-      cutOver(current);
-      return;
-    }
-    void playProgramDeck(to).catch((error) => { if (mix === current) failMix(error); });
-    // A requested skip has no head start to wait out: fall straight through.
-    if (!current.manual) return;
-  }
-  // A cut has nothing to supervise between starting the next song and handing
-  // over to it: `cutOver` finishes it the moment that song is playing.
-  if (current.technique === 'direct') return;
-
-  // A pause anywhere holds the blend where it is; the gains stay put because
-  // the incoming media clock is what drives them.
-  if (to.paused || from.paused) return;
-
-  if (current.phase === 'prerolling') {
-    const outRemaining = current.outCue - from.currentTime;
-    const inRemaining = (current.inCue - to.currentTime) / current.rate;
-    const phaseError = inRemaining - outRemaining;
-    if (
-      !current.manual
-      && !current.phaseCorrected
-      && outRemaining > 0.15
-      && Math.abs(phaseError) > current.phaseTolerance
-    ) {
-      // The incoming deck is silent. Correcting its playhead here prevents a
-      // flam instead of trying to hide one after both tracks are audible.
-      to.currentTime = Math.max(0, current.inCue - outRemaining * current.rate);
-      current.inPosition = to.currentTime;
-      current.phaseCorrected = true;
-      return;
-    }
-    const due = current.manual
-      || (outRemaining <= current.phaseTolerance && inRemaining <= current.phaseTolerance);
-    if (!due) return;
-    if (!current.manual) {
-      const target = current.inCue + Math.max(0, from.currentTime - current.outCue) * current.rate;
-      if (Math.abs(to.currentTime - target) > current.phaseTolerance * current.rate) {
-        to.currentTime = Math.max(0, target);
-        current.inPosition = to.currentTime;
-      }
-    }
-    current.mixStart = to.currentTime;
-    current.phase = 'crossfading';
-    current.inProgressAt = Date.now();
-    scheduleCrossfade(current);
-  }
-
-  // The outgoing curve runs on the audio clock whatever the incoming deck is
-  // doing. One whose clock has stopped is a fade into silence: hand over to it
-  // if it already owns the programme (its own stall recovery takes it from
-  // there), otherwise give the blend up and stay on the song that is sounding.
-  if (Date.now() - current.inProgressAt > MIX_STALL_MS) {
-    if (current.dominant) finishMix();
-    else failMix(new Error('incoming deck stalled during the blend'));
-    return;
-  }
-
-  const span = Math.max(0.05, current.overlap * current.rate);
-  const elapsed = to.currentTime - (current.mixStart ?? to.currentTime);
-  const progress = Math.min(1, Math.max(0, elapsed / span));
-  // Equal-power curves keep the perceived loudness steadier than linear gain,
-  // especially on long blends.
-  if (!deckGains || !audioContext) {
-    setDeckGain(current.toIndex, Math.sin(progress * Math.PI * 0.5));
-    setDeckGain(current.fromIndex, Math.cos(progress * Math.PI * 0.5));
-  }
-  if (!current.dominant && (current.manual || progress >= 0.5)) {
-    current.dominant = true;
-    activeIndex = current.toIndex;
-    current.callbacks.onDominant();
-  }
-  if (progress >= 1) finishMix();
-}
-
-/**
- * Monotonic load counter. Every `load`/`prime`/`stop` claims the next value, so
- * an async continuation can tell whether it still owns the deck. Without it,
- * the `play()` promise of a superseded track rejects with AbortError *after* the
- * new track started, and whoever catches it reports the new track as failed.
- */
-let loadSeq = 0;
-
-/** True while `token` is still the most recent load claim. */
-export function isCurrentLoad(token: number): boolean {
-  return token === loadSeq;
-}
-
-/** The URL cued up on the idle deck, if any. See `stage`. */
-let stagedUrl = '';
-
-export const audioService = {
-  /**
-   * Point the active deck at `url` and start playing.
-   *
-   * Rejects only for failures that belong to *this* load: being interrupted by
-   * a newer load — the shape of a listener tapping through several previews
-   * before any of them starts — resolves quietly instead.
-   */
-  load(url: string, level: number, positionSec = 0): Promise<void> {
-    cancelOutputRecovery();
-    playbackRequested = true;
-    cancelMix('load');
-    const a = audioEl();
-    const token = ++loadSeq;
-    pendingDetach.delete(a);
-    stopRateReturn();
-    a.playbackRate = 1;
-    // Before `src`, and required rather than defaulted: this deck is not
-    // detached between tracks, so the only thing standing between a levelled
-    // song and the podcast after it is that every caller passes its own level.
-    setDeckLevel(activeIndex, level);
-    // Assigning src runs the media load algorithm, which aborts the previous
-    // fetch. No explicit detach: it would emit a spurious `pause` between the
-    // two tracks and flicker the transport controls.
-    clearSeekGate(a);
-    diagnosticSource(a, () => { a.src = url; });
-    if (Number.isFinite(positionSec) && positionSec > 0) {
-      const applyPosition = () => {
-        if (token !== loadSeq) return;
-        a.currentTime = Number.isFinite(a.duration) && a.duration > 0
-          ? Math.min(positionSec, a.duration) : positionSec;
-      };
-      if (a.readyState >= 1) applyPosition();
-      else a.addEventListener('loadedmetadata', applyPosition, { once: true });
-    }
-    return playProgramDeck(a).catch((err: unknown) => {
-      if (token !== loadSeq) return; // superseded — the newer load owns the deck
-      if (err instanceof Error && err.name === 'AbortError') return;
-      throw err;
-    });
-  },
-  /** Reload a stalled stream and resume from the last audible position. */
-  recover(url: string, positionSec: number, level: number): Promise<void> {
-    if (!playbackRequested) return Promise.resolve();
-    cancelOutputRecovery();
-    cancelMix('load');
-    const fromIndex = activeIndex;
-    const toIndex = 1 - fromIndex;
-    const a = decks()[toIndex];
-    const token = ++loadSeq;
-    stagedUrl = '';
-    stopRateReturn();
-    pendingDetach.delete(a);
-    a.playbackRate = 1;
-    setDeckLevel(toIndex, level);
-    // Ownership moves before either deck can emit fallout from replacing or
-    // releasing its resource. Store listeners therefore ignore every late
-    // event belonging to the failed resource by construction.
-    activeIndex = toIndex;
-    setDeckGain(toIndex, 1);
-    setDeckGain(fromIndex, 0);
-    clearSeekGate(a);
-    diagnosticSource(a, () => { a.src = url; });
-    releaseDeck(fromIndex);
-    const resumeAtPosition = async () => {
-      if (token !== loadSeq) return;
-      const position = Number.isFinite(positionSec) ? Math.max(0, positionSec) : 0;
-      if (position > 0) {
-        const duration = a.duration;
-        a.currentTime = Number.isFinite(duration) && duration > 0
-          ? Math.min(position, Math.max(0, duration - 0.05))
-          : position;
-      }
-      try {
-        await playProgramDeck(a);
-      } catch (err: unknown) {
-        if (token !== loadSeq) return;
-        if (err instanceof Error && err.name === 'AbortError') return;
-        throw err;
-      }
-    };
-    if (a.readyState >= 1) return resumeAtPosition();
-    return new Promise<void>((resolve, reject) => {
-      let timer: ReturnType<typeof setTimeout> | null = null;
-      const cleanup = () => {
-        if (timer) clearTimeout(timer);
-        timer = null;
-        a.removeEventListener('loadedmetadata', onMetadata);
-        a.removeEventListener('error', onError);
-      };
-      const onMetadata = () => {
-        cleanup();
-        void resumeAtPosition().then(resolve, reject);
-      };
-      const onError = () => {
-        cleanup();
-        reject(new Error('media recovery failed'));
-      };
-      a.addEventListener('loadedmetadata', onMetadata, { once: true });
-      a.addEventListener('error', onError, { once: true });
-      timer = setTimeout(() => {
-        if (token !== loadSeq) {
-          cleanup();
-          resolve();
-          return;
-        }
-        cleanup();
-        reject(new Error('media recovery metadata timeout'));
-      }, RECOVERY_METADATA_TIMEOUT_MS);
-    });
-  },
-  /** Load without playing, optionally cued to `positionSec` (cross-device resume). */
-  // `level` last, matching `recover`: with it second, an existing two-argument
-  // call would still typecheck and quietly pass a seek position as a gain.
-  prime(url: string, positionSec: number, level: number): void {
-    playbackRequested = false;
-    cancelOutputRecovery();
-    cancelMix('load');
-    const a = audioEl();
-    const token = ++loadSeq;
-    pendingDetach.delete(a);
-    setDeckLevel(activeIndex, level);
-    // Explicitly, before the stream is handed over. A deck that is mid-`play()`
-    // from `unlockDecks` — the silent sample every gesture spends on an empty
-    // deck — would otherwise carry that play straight into the track being
-    // primed, and a session put back on boot would start sounding on its own.
-    pauseDeck(a);
-    clearSeekGate(a);
-    diagnosticSource(a, () => { a.src = url; });
-    diagnosticLoad(a);
-    setDeckParticipation(a, true);
-    const applyPosition = () => {
-      if (token !== loadSeq) return;
-      const pos = Math.max(0, positionSec);
-      if (!Number.isFinite(pos) || pos <= 0) return;
-      const dur = a.duration;
-      a.currentTime = Number.isFinite(dur) && dur > 0 ? Math.min(pos, dur) : pos;
-    };
-    if (a.readyState >= 1) applyPosition();
-    else a.addEventListener('loadedmetadata', applyPosition, { once: true });
-  },
-  /** Resume the one deck that owns the programme. */
-  resume(origin: ProgramTransportOrigin = 'ui'): Promise<void> {
-    recordPlaybackDiagnostic('transport.resume', { origin });
-    if (outputRecovering) return Promise.resolve();
-    playbackRequested = true;
-    recoveryAttempted = false;
-    outputHealth = 'healthy';
-    configurePlaybackSession();
-    const current = mix;
-    const phase = current?.phase ?? 'idle';
-    const dominant = current?.dominant ?? false;
-    const started = playProgramDeck(audioEl());
-    reportProgramTransport('resume', origin, phase, dominant);
-    return started;
-  },
-  /**
-   * Pause the whole programme, not whichever media element the platform happens
-   * to consider its Now Playing session.
-   *
-   * An armed handoff has only one sounding deck and remains prepared. Once the
-   * incoming deck has started, pausing closes the overlap on the deck that owns
-   * playback at that instant. A later play therefore has exactly one possible
-   * source; it can never revive the outgoing song underneath the current one.
-   *
-   * The context is deliberately left running. Suspending it costs nothing to
-   * resume from a page gesture but a great deal from anywhere else, and the
-   * play that follows a pause in a car arrives through MediaSession — a
-   * lock-screen or steering-wheel button, not a tap on the page. A suspended
-   * context that will not come back is silence; an idle one is a rounding error.
-   */
-  pause(origin: ProgramTransportOrigin = 'ui', reason = 'command'): void {
-    recordPlaybackDiagnostic('transport.pause', { origin, reason });
-    playbackRequested = false;
-    loadSeq += 1;
-    cancelOutputRecovery();
-    const current = mix;
-    const phase = current?.phase ?? 'idle';
-    const dominant = current?.dominant ?? false;
-    programCarrier?.pause();
-    if (current && current.phase !== 'armed') cancelMix('transport_pause');
-    pauseDeck(audioEl());
-    reportProgramTransport('pause', origin, phase, dominant);
-  },
-  /** Stop and release the stream — for teardown (track deleted, queue emptied),
-   * not for pausing. */
-  stop(): void {
-    playbackRequested = false;
-    cancelOutputRecovery();
-    loadSeq += 1;
-    programCarrier?.pause();
-    cancelMix('stop');
-    stagedUrl = '';
-    releaseDeck(activeIndex);
-    releaseDeck(1 - activeIndex);
-  },
-  seek(t: number): void {
-    if (!Number.isFinite(t)) return;
-    seekGeneration += 1;
-    resetClockSample();
-    cancelMix('seek');
-    const a = audioEl();
-    const target = Math.max(0, t);
-    if (target === a.currentTime) return;
-    // Mute before assigning currentTime: seeking is delivered asynchronously,
-    // and WebKit can keep rendering the old decoder buffer in that window.
-    // Leave the source/context running and never issue a delayed play().
-    if (a.readyState >= 1) {
-      pendingSeeks.set(a, { settled: false });
-      applySeekGate(a);
-    }
-    try {
-      a.currentTime = target;
-      // No seekable resource (or an effective no-op): no completion event is
-      // owed by the browser, so do not leave the output gated forever.
-      if (!a.seeking) clearSeekGate(a);
-    } catch (error) {
-      clearSeekGate(a);
-      throw error;
-    }
-  },
-  /**
-   * How far the active deck has buffered, in seconds — the furthest edge it
-   * holds, not the range around the playhead.
-   *
-   * Read as a progress signal, never as a readiness gate: a load that is slow
-   * but advancing is a slow link, and reloading it throws away everything it
-   * has fetched. Returns 0 when the deck holds nothing, which is what a load
-   * that is genuinely stuck looks like.
-   */
-  bufferedEnd(): number {
-    return deckBufferedEnd(audioEl());
-  },
-  /** 0..1 — persisted so volume survives reloads. */
-  setVolume(v: number): void {
-    const clamped = Math.min(1, Math.max(0, v));
-    masterVolume = clamped;
-    if (monitorGain) monitorGain.gain.value = allMuted ? 0 : clamped;
-    else applyDeckVolume();
-    recordPlaybackDiagnostic('volume.local_applied');
-    try {
-      localStorage.setItem(VOLUME_KEY, String(clamped));
-    } catch {
-      /* private mode / storage disabled */
-    }
-  },
-  getVolume(): number {
-    return masterVolume;
-  },
-  setMuted(muted: boolean): void {
-    allMuted = muted;
-    applyDeckVolume();
-    recordPlaybackDiagnostic('volume.local_mute_applied');
-  },
-  /**
-   * Set both decks' levelling at once, ramped.
-   *
-   * The one path allowed to change the level of a deck that is already
-   * sounding, because it is the listener asking for it. Everything else waits
-   * for the next track: a gain that moves under a song is exactly the artefact
-   * this feature exists to avoid.
-   */
-  setLevels(activeLevel: number, idleLevel: number): void {
-    setDeckLevel(activeIndex, activeLevel, true);
-    setDeckLevel(1 - activeIndex, idleLevel, true);
-  },
-  /** Turn levelling on or off. Off restores unity exactly, not approximately. */
-  setLevelingEnabled(enabled: boolean): void {
-    if (levelingEnabled === enabled) return;
-    levelingEnabled = enabled;
-    // Re-assert both decks so the change is heard now, ramped rather than
-    // stepped. The desired levels are untouched, so switching back on restores
-    // what each deck was already meant to be at.
-    setDeckLevel(activeIndex, levelGains[activeIndex], true);
-    setDeckLevel(1 - activeIndex, levelGains[1 - activeIndex], true);
-  },
-  levelingEnabled(): boolean {
-    return levelingEnabled;
-  },
-  unlockAudio,
-  graphReady,
-  acquireBroadcastCapture,
-  broadcastPlaybackActive,
-  broadcastStream,
-  releaseBroadcastStream,
-  programMixSnapshot,
-  snapshot: programPlaybackSnapshot,
-  outputHealth: () => outputHealth,
-
-  /**
-   * Cue the next track on the idle deck without playing it.
-   *
-   * This is the whole answer to "the song ended and nothing followed". A track
-   * that ends with its successor already loaded hands over inside the `ended`
-   * handler itself — no network, no `src` assignment, no gap — which is both
-   * instant and the only shape of continuation a phone with its screen off
-   * reliably allows. Waiting until the track is over to ask the network for the
-   * next one is what turned a moment of bad signal into silence for the rest of
-   * the journey.
-   */
-  stage(url: string, level: number): void {
-    if (mix || !url) return;
-    const index = 1 - activeIndex;
-    const idle = decks()[index];
-    pendingDetach.delete(idle);
-    setDeckParticipation(idle, false);
-    // Above the early return on purpose: re-staging the same URL is how a
-    // track that has only just been measured gets its level onto the silent
-    // deck before it is promoted.
-    setDeckLevel(index, level);
-    if (stagedUrl === url && (idle.getAttribute('src') !== null || idle.currentSrc)) return;
-    stagedUrl = url;
-    setDeckGain(index, 0);
-    if (!idle.paused) pauseDeck(idle);
-    idle.playbackRate = 1;
-    diagnosticSource(idle, () => { idle.src = url; });
-    diagnosticLoad(idle);
-    notifySourcesSettled();
-  },
-
-  /** Release the idle deck's stream — the staged track is no longer next. */
-  clearStaged(): void {
-    if (mix || !stagedUrl) return;
-    stagedUrl = '';
-    releaseDeck(1 - activeIndex);
-  },
-
-  /**
-   * Hand playback to the staged deck, if it is holding exactly `url`.
-   *
-   * Returns null when there is nothing usable staged, so the caller falls back
-   * to an ordinary load.
-   */
-  takeStaged(url: string, level: number): Promise<void> | null {
-    if (mix || !url || stagedUrl !== url) return null;
-    const toIndex = 1 - activeIndex;
-    const to = decks()[toIndex];
-    pendingDetach.delete(to);
-    // Deliberately not a `readyState` gate. Safari downgrades `preload="auto"`
-    // to metadata-only — on cellular, and for a second media element, near
-    // always — so an iPhone's staged deck sits at `HAVE_METADATA` however long
-    // it has been cued. Refusing it there sent every track change back to the
-    // network, which is precisely what a locked phone will not do. A deck that
-    // is holding the right URL is always the better start: `play()` buffers what
-    // it still needs, and the fallback would make the same request from scratch
-    // and throw away everything this one already has.
-    if (to.networkState === NETWORK_NO_SOURCE) return null;
-    cancelOutputRecovery();
-    playbackRequested = true;
-    const fromIndex = activeIndex;
-    const token = ++loadSeq;
-    stagedUrl = '';
-    stopRateReturn();
-    to.playbackRate = 1;
-    // Already set by `stage`, but re-asserted because the caller may have a
-    // fresher measurement than it had when the track was cued. Nothing moves
-    // between decks here — only which deck is active.
-    setDeckLevel(toIndex, level);
-    // Ownership moves first: the outgoing deck's `pause` and `error` from the
-    // release below then belong to a deck the store is no longer listening to.
-    activeIndex = toIndex;
-    setDeckGain(toIndex, 1);
-    setDeckGain(fromIndex, 0);
-    const started = playProgramDeck(to).catch((err: unknown) => {
-      if (token !== loadSeq) return;
-      if (err instanceof Error && err.name === 'AbortError') return;
-      throw err;
-    });
-    recordPlaybackDiagnostic('handoff.retirement', { from: fromIndex, to: toIndex });
-    releaseDeck(fromIndex);
-    return started;
-  },
-  mixPhase(): MixPhase {
-    return mix?.phase ?? 'idle';
-  },
-  /** True once the incoming deck owns playback — the point past which cancelling
-   * would mean reviving a track the listener already stopped hearing. */
-  mixIsDominant(): boolean {
-    return mix?.dominant ?? false;
-  },
-  cancelMix,
-  /**
-   * The listener asked for the next song now, with a handoff already armed.
-   *
-   * Never a no-op — a Next that did nothing is what made a stuck set look dead:
-   * - a blend already sounding is finished on the spot (`finished`);
-   * - an incoming deck that can sound is brought in with a short blend, keeping
-   *   whatever it has buffered (`blend`);
-   * - one that cannot yet is handed over the ordinary way (`staged`): the
-   *   outgoing song stops and the next one loads, as any skip would;
-   * - one that cannot play at all fails the handoff (`failed`), and the caller
-   *   moves on to the song after it.
-   */
-  startMixNow(overlapSeconds = 1.6): 'finished' | 'blend' | 'staged' | 'failed' | false {
-    const current = mix;
-    if (!current) return false;
-    if (current.phase === 'crossfading') {
-      finishMix();
-      return 'finished';
-    }
-    const to = decks()[current.toIndex];
-    if (deckIsDead(to)) {
-      failMix(new Error('incoming deck could not play'));
-      return 'failed';
-    }
-    if (to.readyState < 3) {
-      releaseToStaged(current);
-      return 'staged';
-    }
-    current.manual = true;
-    current.preroll = 0;
-    current.overlap = Math.max(MIN_OVERLAP, overlapSeconds);
-    current.outCue = decks()[current.fromIndex].currentTime;
-    tick();
-    return 'blend';
-  },
-
-  /**
-   * Commit to a transition: load the incoming deck, cue it, and hold.
-   *
-   * Nothing sounds until the outgoing deck's own clock reaches the cue, so
-   * arming early is free. `manual` is a listener-requested skip: the blend
-   * starts at once and the handoff is reported immediately, because the
-   * listener already knows they changed the track.
-   */
-  armTransition(
-    url: string,
-    plan: LiveTransitionPlan,
-    callbacks: MixCallbacks,
-    options: { manual?: boolean; level: number },
-  ): void {
-    cancelMix('superseded');
-    const generation = ++mixGeneration;
-    // No graph is built here. Routing an element into an AudioContext is
-    // irreversible, and this runs from the mixer's ticker — a timer is the one
-    // place it must never happen. `unlockAudio` owns that, from a gesture.
-    // Deliberately not awaited: the mix has to be armed before this function
-    // returns, or the caller's own "is a handoff prepared?" check races it.
-    resumeContext();
-    stagedUrl = '';
-
-    const fromIndex = activeIndex;
-    const toIndex = 1 - activeIndex;
-    const from = decks()[fromIndex];
-    const to = decks()[toIndex];
-    pendingDetach.delete(to);
-    const manual = options.manual === true;
-    const rate = Math.min(1.06, Math.max(0.94, Number(plan.playback_rate) || 1));
-    const overlap = manual
-      ? Math.max(MIN_OVERLAP, Math.min(1.8, Number(plan.overlap_seconds) || 4))
-      : Math.max(MIN_OVERLAP, Number(plan.overlap_seconds) || 6);
-    const inCue = Math.max(0, Number(plan.in_cue) || 0);
-    const preroll = manual ? 0 : Math.min(MAX_PREROLL, inCue / rate);
-    const startPosition = Math.max(0, inCue - preroll * rate);
-    const outCue = manual ? from.currentTime : Math.max(0, Number(plan.out_cue) || 0);
-
-    setDeckGain(toIndex, 0);
-    // The incoming deck gets its own level; the outgoing one keeps its own,
-    // because it is still playing its own track. Set before `src` and before
-    // the manual `tick()` below, which can reach `crossfading` inside this call.
-    setDeckLevel(toIndex, options.level);
-    resetDeckEffects(toIndex);
-    resetDeckEffects(fromIndex);
-    setDeckParticipation(to, false);
-    if (!to.paused) diagnosticPause(to);
-    diagnosticSource(to, () => { to.src = url; });
-    diagnosticLoad(to);
-    to.playbackRate = rate;
-    const cue = () => {
-      if (generation !== mixGeneration) return;
-      to.currentTime = startPosition;
-    };
-    if (to.readyState >= 1) cue();
-    else to.addEventListener('loadedmetadata', cue, { once: true });
-    const onDeckError = () => {
-      if (generation !== mixGeneration) return;
-      failMix(new Error('incoming deck failed to load'));
-    };
-    to.addEventListener('error', onDeckError, { once: true });
-
-    mix = {
-      phase: 'armed',
-      fromIndex,
-      toIndex,
-      url,
-      inPosition: startPosition,
-      inProgressAt: Date.now(),
-      inAdvanced: false,
-      outCue,
-      inCue,
-      overlap,
-      rate,
-      preroll,
-      mixStart: null,
-      technique: plan.technique,
-      phaseTolerance: Math.max(
-        0.001,
-        Math.min(0.012, Number(plan.sync?.phase_tolerance_ms || 5) / 1000),
-      ),
-      phaseCorrected: false,
-      dominant: false,
-      manual,
-      callbacks,
-    };
-    callbacks.onArmed?.();
-    notifySourcesSettled();
-    stopTicker();
-    // A manual skip should not wait a whole tick to become audible. Running it
-    // before the ticker starts also means the first interval is picked from the
-    // phase the skip left behind rather than from `armed`.
-    if (manual) tick();
-    if (mix) startTicker();
-  },
+export const audioService: AudioService = {
+  load: (...args) => current().audioService.load(...args),
+  recover: (...args) => current().audioService.recover(...args),
+  prime: (...args) => current().audioService.prime(...args),
+  resume: (...args) => current().audioService.resume(...args),
+  pause: (...args) => current().audioService.pause(...args),
+  stop: (...args) => current().audioService.stop(...args),
+  seek: (...args) => current().audioService.seek(...args),
+  bufferedEnd: (...args) => current().audioService.bufferedEnd(...args),
+  setVolume: (...args) => current().audioService.setVolume(...args),
+  getVolume: (...args) => current().audioService.getVolume(...args),
+  setMuted: (...args) => current().audioService.setMuted(...args),
+  setLevels: (...args) => current().audioService.setLevels(...args),
+  setLevelingEnabled: (...args) => current().audioService.setLevelingEnabled(...args),
+  levelingEnabled: (...args) => current().audioService.levelingEnabled(...args),
+  unlockAudio: (...args) => current().audioService.unlockAudio(...args),
+  graphReady: (...args) => current().audioService.graphReady(...args),
+  acquireBroadcastCapture: (...args) => current().audioService.acquireBroadcastCapture(...args),
+  broadcastPlaybackActive: (...args) => current().audioService.broadcastPlaybackActive(...args),
+  broadcastStream: (...args) => current().audioService.broadcastStream(...args),
+  releaseBroadcastStream: (...args) => current().audioService.releaseBroadcastStream(...args),
+  programMixSnapshot: (...args) => current().audioService.programMixSnapshot(...args),
+  snapshot: (...args) => current().audioService.snapshot(...args),
+  outputHealth: (...args) => current().audioService.outputHealth(...args),
+  stage: (...args) => current().audioService.stage(...args),
+  clearStaged: (...args) => current().audioService.clearStaged(...args),
+  takeStaged: (...args) => current().audioService.takeStaged(...args),
+  mixPhase: (...args) => current().audioService.mixPhase(...args),
+  mixIsDominant: (...args) => current().audioService.mixIsDominant(...args),
+  cancelMix: (...args) => current().audioService.cancelMix(...args),
+  startMixNow: (...args) => current().audioService.startMixNow(...args),
+  armTransition: (...args) => current().audioService.armTransition(...args)
 };
-
-setDiagnosticSnapshot(() => ({
-  activeIndex, mixPhase: mix?.phase ?? 'idle', dominant: mix?.dominant ?? false,
-  contextState: audioContext?.state ?? 'unavailable', contextTime: audioContext?.currentTime ?? 0,
-  outputMode: programCarrier?.snapshot().mode ?? 'direct_fallback',
-  gain0Target: mixGains[0], gain1Target: mixGains[1],
-  localVolume: masterVolume, localMuted: allMuted,
-}));
+export const setBroadcastLostReporter = (...args: Parameters<typeof runtime.setBroadcastLostReporter>): ReturnType<typeof runtime.setBroadcastLostReporter> => current().setBroadcastLostReporter(...args);
+export const setProgramOutputReporter = (...args: Parameters<typeof runtime.setProgramOutputReporter>): ReturnType<typeof runtime.setProgramOutputReporter> => current().setProgramOutputReporter(...args);
+export const onDeckEvent = (...args: Parameters<typeof runtime.onDeckEvent>): ReturnType<typeof runtime.onDeckEvent> => current().onDeckEvent(...args);
+export const audioEl = (...args: Parameters<typeof runtime.audioEl>): ReturnType<typeof runtime.audioEl> => current().audioEl(...args);
+export const isActiveDeck = (...args: Parameters<typeof runtime.isActiveDeck>): ReturnType<typeof runtime.isActiveDeck> => current().isActiveDeck(...args);
+export const onProgramEvent = (...args: Parameters<typeof runtime.onProgramEvent>): ReturnType<typeof runtime.onProgramEvent> => current().onProgramEvent(...args);
+export const unlockAudio = (...args: Parameters<typeof runtime.unlockAudio>): ReturnType<typeof runtime.unlockAudio> => current().unlockAudio(...args);
+export const graphReady = (...args: Parameters<typeof runtime.graphReady>): ReturnType<typeof runtime.graphReady> => current().graphReady(...args);
+export const programPlaybackSnapshot = (...args: Parameters<typeof runtime.programPlaybackSnapshot>): ReturnType<typeof runtime.programPlaybackSnapshot> => current().programPlaybackSnapshot(...args);
+export const broadcastPlaybackActive = (...args: Parameters<typeof runtime.broadcastPlaybackActive>): ReturnType<typeof runtime.broadcastPlaybackActive> => current().broadcastPlaybackActive(...args);
+export const acquireBroadcastCapture = (...args: Parameters<typeof runtime.acquireBroadcastCapture>): ReturnType<typeof runtime.acquireBroadcastCapture> => current().acquireBroadcastCapture(...args);
+export const broadcastStream = (...args: Parameters<typeof runtime.broadcastStream>): ReturnType<typeof runtime.broadcastStream> => current().broadcastStream(...args);
+export const releaseBroadcastStream = (...args: Parameters<typeof runtime.releaseBroadcastStream>): ReturnType<typeof runtime.releaseBroadcastStream> => current().releaseBroadcastStream(...args);
+export const programMixSnapshot = (...args: Parameters<typeof runtime.programMixSnapshot>): ReturnType<typeof runtime.programMixSnapshot> => current().programMixSnapshot(...args);
+export const setProgramTransportReporter = (...args: Parameters<typeof runtime.setProgramTransportReporter>): ReturnType<typeof runtime.setProgramTransportReporter> => current().setProgramTransportReporter(...args);
+export const isCurrentLoad = (...args: Parameters<typeof runtime.isCurrentLoad>): ReturnType<typeof runtime.isCurrentLoad> => current().isCurrentLoad(...args);
+export function disposeAudio(): void {
+  if (disposed) return;
+  runtime.dispose();
+  disposed = true;
+}
+if (import.meta.hot) import.meta.hot.dispose(disposeAudio);

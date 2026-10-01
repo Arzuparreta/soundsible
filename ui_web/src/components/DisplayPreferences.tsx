@@ -1,5 +1,6 @@
 import { For, type JSX } from 'solid-js';
-import { actions, state } from '../stores';
+import { state } from '../stores/core';
+import { visualPreferenceActions as actions } from '../stores/visualPreferences';
 import { t } from '../lib/i18n';
 import { openOverlay } from '../lib/overlay';
 import type { InterfaceSize } from '../lib/visualPreferences';

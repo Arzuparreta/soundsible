@@ -174,6 +174,9 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     const panel = surfaceOpen ? props.activePanel : props.panels.find((id) => id === 'stage') ?? props.panels[0];
     if (!mobileLayout() || !workspaceEl) return;
     if (panelFromScroll) {
+      // A user's settled scroll supersedes a pending initial alignment. Under
+      // WebKit load that frame can otherwise run late and return to the stage.
+      cancelAnimationFrame(carouselFrame);
       panelFromScroll = false;
       carouselAligned = surfaceOpen;
       return;

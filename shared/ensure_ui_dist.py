@@ -39,12 +39,14 @@ def _iter_input_files(ui_web: Path) -> Iterable[Path]:
         path = ui_web / name
         if path.is_file():
             yield path
-    src = ui_web / "src"
-    if not src.is_dir():
-        return
-    for path in src.rglob("*"):
-        if path.is_file():
-            yield path
+    for directory in (ui_web / "src", ui_web / "public"):
+        if directory.is_dir():
+            for path in directory.rglob("*"):
+                if path.is_file():
+                    yield path
+    logo = ui_web.parent / "branding" / "logo-mark.svg"
+    if logo.is_file():
+        yield logo
 
 
 def ui_dist_is_stale(ui_web: Path | None = None) -> bool:

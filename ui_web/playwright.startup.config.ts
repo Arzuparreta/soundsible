@@ -8,7 +8,8 @@ export default defineConfig({
   metadata: { startupProduction: true },
   testMatch: 'startup.spec.ts',
   use: { ...base.use, baseURL: 'http://127.0.0.1:4174' },
-  webServer: {
+  // Docker WebKit uses the host preview over a read-only repository mount.
+  webServer: process.env.SOUNDSIBLE_UI_PREVIEW_EXTERNAL ? undefined : {
     command: 'npm run preview -- --host 127.0.0.1 --port 4174 --strictPort',
     url: 'http://127.0.0.1:4174/player/',
     reuseExistingServer: false,

@@ -1,0 +1,56 @@
+{
+  "build_id": "c5255e01cabbea0ba0975dbdf230511b409d2ae217eb41c81207fddb666a9964",
+  "baseline_revision": "d608588e0ac994b07fb0a3db203ebbe87f960e76",
+  "method": "Production manifest static JS/CSS dependency closure; excludes fonts, locale dictionaries, dynamic routes and API. Gzip level 9, Brotli quality 5.",
+  "login": {
+    "raw_bytes": 215040,
+    "gzip_bytes": 82424,
+    "brotli_bytes": 77780,
+    "files": [
+      "assets/index-BUUaNVPw.js",
+      "assets/index-DJhkgSAM.css",
+      "assets/overlay-BFfpDOTw.css",
+      "assets/overlay-CXSt_SXm.js",
+      "assets/routing-Cb2KxRur.js",
+      "assets/session-CbPAKXj5.js"
+    ],
+    "gzip_reduction_percent": 67.08
+  },
+  "library": {
+    "raw_bytes": 615138,
+    "gzip_bytes": 205253,
+    "brotli_bytes": 194118,
+    "files": [
+      "assets/AuthenticatedPlayer-CTQ9Dp-d.js",
+      "assets/CoverImage-Cd4p-4YB.js",
+      "assets/LibraryHome-CB0VNRLR.css",
+      "assets/LibraryHome-Db7fbCp_.js",
+      "assets/PlayerSurface-DSLaM8Tr.css",
+      "assets/PlayerSurface.module-BVkLkKgK.js",
+      "assets/SavedEntities--LNI32W7.css",
+      "assets/SavedEntities.module-BQbbXDXU.js",
+      "assets/Skeleton-B1XT7Hvd.js",
+      "assets/Skeleton-nBDp32EO.css",
+      "assets/appBar-BI6jQQBF.js",
+      "assets/catalogCollection-B4v9yIAM.js",
+      "assets/contextMenu-6mP8X-OI.js",
+      "assets/contextMenu-YDCQ_CHW.css",
+      "assets/cover-CKhJ4vk6.js",
+      "assets/icons-DPYgjhbs.js",
+      "assets/index-BUUaNVPw.js",
+      "assets/index-DJhkgSAM.css",
+      "assets/listLayout-DIN7BtSI.css",
+      "assets/listLayout-lh_xUsuM.js",
+      "assets/overlay-BFfpDOTw.css",
+      "assets/overlay-CXSt_SXm.js",
+      "assets/routing-Cb2KxRur.js",
+      "assets/savedEntityActions-BnysKfS4.js",
+      "assets/session-CbPAKXj5.js",
+      "assets/shellLayout-CXMgPoYh.js",
+      "assets/stores-Br9WfZOJ.css",
+      "assets/stores-DrubG6aW.js",
+      "assets/vendor-socket-C0iVmK9L.js"
+    ],
+    "gzip_reduction_percent": 18.02
+  }
+}

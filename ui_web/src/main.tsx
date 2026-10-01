@@ -1,44 +1,16 @@
 /* SolidJS player entry point for mobile, desktop, PWA, and the desktop shell. */
 import { render } from 'solid-js/web';
-import { Show, createEffect, onMount } from 'solid-js';
+import { Show, createEffect, onMount, createSignal, onCleanup, type Component } from 'solid-js';
 import type { ParentProps } from 'solid-js';
-import { HashRouter, Route, useNavigate, useSearchParams } from '@solidjs/router';
-import Shell from './app';
-import { asyncPage } from './components/AsyncPage';
-// The Library root is the landing route; Login and Invite are the pre-auth screens. All
-// three stay in the entry chunk. Other routes show their destination shell
-// while their module loads. Every other route is split out: the import
-// wizard alone is ~40 KB that most sessions never open, and it was downloaded
-// and parsed before the first track list could paint.
-import LibraryHome from './routes/LibraryHome';
-const Library = asyncPage(() => import('./routes/Library'), () => t('nav.library'));
 import Login from './routes/Login';
+import { ConnectionRecovery } from './components/ConnectionRecovery';
 import Invite from './routes/Invite';
-
-const Favourites = asyncPage(() => import('./routes/Favourites'), () => t('favourites.title'));
-const Settings = asyncPage(() => import('./routes/Settings'), () => t('settings.title'));
-const Search = asyncPage(() => import('./routes/Search'), () => t('nav.search'));
-const Playlists = asyncPage(() => import('./routes/Playlists'), () => t('playlists.title'), 'cards');
-const PlaylistDetail = asyncPage(() => import('./routes/PlaylistDetail'), () => t('playlists.title'));
-const Podcasts = asyncPage(() => import('./routes/Podcasts'), () => t('nav.podcasts'), 'cards');
-const PodcastShow = asyncPage(() => import('./routes/PodcastShow'), () => t('nav.podcasts'));
-const Downloads = asyncPage(() => import('./routes/Downloads'), () => t('downloads.title'));
-const Migrate = asyncPage(() => import('./routes/Migrate'), () => t('migrate.title'));
-const Artist = asyncPage(() => import('./routes/Artist'), () => t('library.artists'));
-const Album = asyncPage(() => import('./routes/Album'), () => t('library.albums'));
-const Live = asyncPage(() => import('./routes/Live'), () => t('live.title'));
-const DesignPreview = asyncPage(() => import('./pages/DesignPreview'), () => t('common.loading'));
-const Placeholder = asyncPage(() =>
-  import('./routes/Placeholder').then((m) => ({ default: () => <m.Placeholder title={t('placeholder.notFoundTitle')} blurb={t('placeholder.notFoundBlurb')} /> })),
-  () => t('placeholder.notFoundTitle'),
-);
-import { initStore, state } from './stores';
-import { applyVisualPreferences } from './lib/visualPreferences';
+import { applyVisualPreferences, loadVisualPreferences } from './lib/visualPreferences';
 import { installPageVisibility } from './lib/pageVisibility';
-import { initLocale, t } from './lib/i18n';
+import { initLocale } from './lib/i18n';
 import { registerServiceWorker } from './lib/pwa';
 import { OverlayOutlet } from './lib/overlay';
-import { installSessionGuard, ready, refreshSession, requiresLogin, user } from './lib/session';
+import { installSessionGuard, ready, refreshSession, requiresLogin, user, sessionUnavailable } from './lib/session';
 // Self-host the design-system typefaces (DESIGN.md) so they render for every
 // user, not only those who happen to have them installed locally. Subsets load
 // on demand via unicode-range. Plus Jakarta Sans 400/500/600/700, JetBrains
@@ -54,10 +26,7 @@ import './styles/app.css';
 
 // Visual accessibility preferences must be present before auth resolves so
 // Login/Invite and the first authenticated frame use the same geometry.
-applyVisualPreferences({
-  interfaceSize: state.interfaceSize,
-  highContrast: state.highContrast,
-});
+applyVisualPreferences(loadVisualPreferences());
 
 function installViewportHeightSync() {
   const root = document.documentElement;
@@ -95,43 +64,6 @@ void refreshSession();
 const root = document.getElementById('app');
 if (!root) throw new Error('#app mount point missing');
 
-function DiscoverRedirect() {
-  const navigate = useNavigate();
-  onMount(() => navigate('/search', { replace: true }));
-  return <Search />;
-}
-
-function LibraryRoute() {
-  const [params] = useSearchParams();
-  return <Show when={['songs', 'albums', 'artists'].includes(String(params.view))} fallback={<LibraryHome />}><Library /></Show>;
-}
-
-function Player() {
-  return (
-    <HashRouter root={Shell}>
-      <Route path="/" component={LibraryHome} />
-      <Route path="/library" component={LibraryRoute} />
-      <Route path="/favourites" component={Favourites} />
-      <Route path="/search" component={Search} />
-      <Route path="/settings" component={Settings} />
-      <Route path="/settings/:section" component={Settings} />
-      <Route path="/discover" component={DiscoverRedirect} />
-      <Route path="/playlists" component={Playlists} />
-      <Route path="/playlists/:name" component={PlaylistDetail} />
-      <Route path="/podcasts" component={Podcasts} />
-      <Route path="/podcasts/feed" component={PodcastShow} />
-      <Route path="/podcasts/:id" component={PodcastShow} />
-      <Route path="/live" component={Live} />
-      <Route path="/downloads" component={Downloads} />
-      <Route path="/import" component={Migrate} />
-      <Route path="/artist/:name" component={Artist} />
-      <Route path="/album/:name" component={Album} />
-      <Route path="/preview" component={DesignPreview} />
-      <Route path="*" component={Placeholder} />
-    </HashRouter>
-  );
-}
-
 /** `#/invite/<token>` — the link someone is handed before they have an account. */
 function inviteToken(): string | null {
   const match = /^#\/invite\/([^/?#]+)/.exec(window.location.hash || '');
@@ -151,6 +83,52 @@ function StartupReady(props: ParentProps) {
   return props.children;
 }
 
+// Compile one alternate entry URL for recovery. WebKit can retain a rejected
+// module fetch even across reloads; importing its original URL repeats the error.
+const recoveryPlayer = import.meta.glob<Component>('./AuthenticatedPlayer.tsx', {
+  query: '?recovery', import: 'default',
+})['./AuthenticatedPlayer.tsx'];
+
+/** Keep playback and sockets out of login, including the accessibility overlay. */
+function AuthenticatedBoundary() {
+  const [player, setPlayer] = createSignal<Component>();
+  const [failed, setFailed] = createSignal(false);
+  const [attempted, setAttempted] = createSignal(false);
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
+  let retried = false;
+  const load = (recover = false) => {
+    setFailed(false);
+    const module = recover ? recoveryPlayer().then(defaultExport => ({ default: defaultExport }))
+      : import('./AuthenticatedPlayer');
+    void module.then(module => {
+      if (!disposed) setPlayer(() => module.default);
+    }, () => {
+      if (!disposed) {
+        setFailed(true);
+        setAttempted(true);
+      }
+    });
+  };
+  const retry = () => {
+    if (retried) window.location.reload();
+    else { retried = true; load(true); }
+  };
+  onMount(() => load());
+  return <Show when={player()} keyed fallback={
+    <Show when={attempted()}><StartupReady><ConnectionRecovery busy={!failed()} retry={retry} /></StartupReady></Show>
+  }>{Player => <Player />}</Show>;
+}
+
+function StationUnavailable() {
+  const [busy, setBusy] = createSignal(false);
+  const retry = async () => {
+    setBusy(true);
+    try { await refreshSession(); } finally { setBusy(false); }
+  };
+  return <ConnectionRecovery offline busy={busy()} retry={() => { void retry(); }} />;
+}
+
 /**
  * Nothing renders until the engine has told us who we are. Booting the stores
  * first would fire a burst of library requests as the wrong account — or as
@@ -160,22 +138,22 @@ function App() {
   const authenticated = () => !requiresLogin() || Boolean(user());
 
   createEffect(() => {
-    if (!ready() || !authenticated()) return;
+    if (!ready() || sessionUnavailable() || !authenticated()) return;
     // A leftover `#/invite/<token>` — e.g. a home-screen icon saved on the
     // invite page — must not strand a signed-in user on a dead-link screen.
     // Once there is a session the token is irrelevant: drop it and go to the root.
     if (inviteToken()) window.location.hash = '#/';
-    initStore();
+
   });
 
   return (
     <>
       <Show when={ready()} fallback={null}>
-        <StartupReady>
-          <Show when={authenticated()} fallback={<InviteOrLogin />}>
-            <Player />
-          </Show>
-        </StartupReady>
+        <Show when={!sessionUnavailable()} fallback={<StartupReady><StationUnavailable /></StartupReady>}>
+        <Show when={authenticated() ? user()?.id ?? '__station__' : undefined} keyed fallback={<StartupReady><InviteOrLogin /></StartupReady>}>
+          <AuthenticatedBoundary />
+        </Show>
+        </Show>
       </Show>
       <OverlayOutlet />
     </>

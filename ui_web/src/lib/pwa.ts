@@ -32,9 +32,31 @@ export function registerServiceWorker(): void {
 
   // After load: registration competes with the first library sync otherwise,
   // and the shell the worker caches is only useful on the *next* launch.
-  window.addEventListener('load', () => {
-    void navigator.serviceWorker.register(SW_URL, { scope: '/player/' }).catch(() => {
+  const register = async () => {
+    try {
+      const registration = await navigator.serviceWorker.register(SW_URL, { scope: '/player/' });
+      await navigator.serviceWorker.ready;
+      const used = new Set<string>();
+      const report = (entries: PerformanceEntry[]) => {
+        const urls = entries.map(entry => entry.name).filter(value => {
+          const url = new URL(value, window.location.origin);
+          return url.origin === window.location.origin
+            && /^\/player\/(?:assets\/|icons\/|branding\/|manifest\.webmanifest$)/.test(url.pathname)
+            && !used.has(value);
+        });
+        for (const url of urls) used.add(url);
+        (navigator.serviceWorker.controller ?? registration.active)?.postMessage({ type: 'soundsible-cache-used', urls });
+      };
+      report(performance.getEntriesByType('resource'));
+      if (typeof PerformanceObserver !== 'undefined') {
+        const observer = new PerformanceObserver(list => report(list.getEntries()));
+        observer.observe({ type: 'resource', buffered: true });
+        if (import.meta.hot) import.meta.hot.dispose(() => observer.disconnect());
+      }
+    } catch {
       /* Unsupported, blocked by policy, or served over plain HTTP off-LAN. */
-    });
-  });
+    }
+  };
+  if (document.readyState === 'complete') void register();
+  else window.addEventListener('load', () => { void register(); }, { once: true });
 }

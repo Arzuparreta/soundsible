@@ -11,7 +11,7 @@
  */
 
 import { createSignal } from 'solid-js';
-import { createStore } from 'solid-js/store';
+import { createStore, reconcile } from 'solid-js/store';
 
 import type {
   DeviceRegistration,
@@ -20,7 +20,7 @@ import type {
   PreviewPreparation,
   RemotePlaybackState,
 } from '../lib/api';
-import { storedVolume } from '../lib/audio';
+import { storedVolume } from '../lib/audioPreferences';
 import type { AutoModeState, AutoProfile } from '../lib/generatedQueue';
 import type { PlaybackQueueEntry } from '../lib/playbackQueue';
 import { loadVisualPreferences, type InterfaceSize } from '../lib/visualPreferences';
@@ -238,9 +238,9 @@ function loadDjMixing(): boolean {
   return localStorage.getItem(DJ_MIXING_KEY) !== 'off';
 }
 
-const initialVisualPreferences = loadVisualPreferences();
-
-const [state, setState] = createStore<AppState>({
+function initialState(): AppState {
+  const initialVisualPreferences = loadVisualPreferences();
+  return {
   online: false,
   device: loadDevice(),
   theme: loadTheme(),
@@ -308,8 +308,15 @@ const [state, setState] = createStore<AppState>({
     isProcessing: false,
     recent: [],
   },
-});
+  };
+}
+const [state, setState] = createStore<AppState>(initialState());
 
+export function resetAccountState(): void {
+  setState(reconcile(initialState(), { merge: false }));
+  setNowPlayingOpen(false);
+  setResumeState(null);
+}
 
 /** Now-Playing sheet open state (UI-only). */
 export { state, setState };

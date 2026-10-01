@@ -236,6 +236,10 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   // The visible menu and a hold share the same occurrence actions.
   await holdForMenu(page, second);
   await page.getByRole('dialog').getByRole('button', { name: 'Mover', exact: true }).click();
+  // A late initial alignment must not undo the selected queue panel while
+  // opening its menu, leaving the editing controls inert (WebKit).
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(queue).not.toHaveAttribute('inert', '');
   const editing = queue.locator(`[data-drag-row="${id}"]`);
   await editing.getByRole('button', { name: 'Bajar', exact: true }).click();
   await expect(queue.locator('[data-drag-row]').nth(2)).toHaveAttribute('data-drag-row', id!);

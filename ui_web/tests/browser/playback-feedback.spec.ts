@@ -17,6 +17,7 @@ test('a large queue remains bounded and transport updates preserve its rows in t
   const pill = page.locator('[data-omni-player]')
     .getByRole('button', { name: /^(Pausar|Reproducir|Cancelar|Reintentar)$/ });
   await expect(pill).toHaveAttribute('aria-label', 'Pausar');
+  await page.getByRole('button', { name: /^NORMAL:/ }).click();
   const rows = page.locator('[data-now-playing-tile="queue"] [data-drag-row]');
   await expect(rows.first()).toBeAttached();
   // The queue contains the whole library, but only its viewport is mounted.
@@ -29,6 +30,7 @@ test('a large queue remains bounded and transport updates preserve its rows in t
     expect(await before!.evaluate(node => node.isConnected)).toBe(true);
     await before!.dispose();
   };
+  await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
   await toggle(pill, 'Reproducir');
   await toggle(pill, 'Pausar');
   await page.getByRole('button', { name: /^NORMAL:/ }).click();

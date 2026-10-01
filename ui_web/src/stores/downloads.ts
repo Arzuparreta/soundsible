@@ -11,13 +11,21 @@ import { syncLibrarySoon } from './library';
 import { t as tr } from '../lib/i18n';
 import type { CompletedDownload, DownloadEvent, DownloadQueueItem } from '../types/download';
 
+const recentTimers = new Set<ReturnType<typeof setTimeout>>();
+export function clearDownloadTimers(): void {
+  for (const timer of recentTimers) clearTimeout(timer);
+  recentTimers.clear();
+}
+
 /** Push a "just finished" entry to the recent strip and auto-expire it. */
 export function addRecentCompleted(entry: CompletedDownload): void {
   if (state.downloads.recent.some((r) => r.id === entry.id)) return;
   setState('downloads', 'recent', (r) => [entry, ...r].slice(0, 5));
-  setTimeout(() => {
+  const timer = setTimeout(() => {
+    recentTimers.delete(timer);
     setState('downloads', 'recent', (r) => r.filter((x) => x.id !== entry.id));
   }, 5000);
+  recentTimers.add(timer);
 }
 
 /** Merge one `downloader_update` socket payload into the live queue. Mirrors the

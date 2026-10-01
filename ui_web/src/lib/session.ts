@@ -7,7 +7,7 @@
  * from the single-user days.
  */
 import { createSignal } from 'solid-js';
-import { request, setUnauthorizedHandler } from './api';
+import { request, setUnauthorizedHandler } from './http';
 
 export type Role = 'admin' | 'member';
 
@@ -30,8 +30,9 @@ interface AuthState {
 const [user, setUser] = createSignal<User | null>(null);
 const [requiresLogin, setRequiresLogin] = createSignal(false);
 const [ready, setReady] = createSignal(false);
+const [sessionUnavailable, setSessionUnavailable] = createSignal(false);
 
-export { user, requiresLogin, ready };
+export { user, requiresLogin, ready, sessionUnavailable };
 
 /** True when the signed-in account may change instance settings and accounts. */
 export function isAdmin(): boolean {
@@ -54,8 +55,10 @@ function applyState(state: AuthState): AuthState {
 export async function refreshSession(): Promise<AuthState> {
   try {
     const state = await request<AuthState>('/api/auth/state');
+    setSessionUnavailable(false);
     return applyState(state);
   } catch {
+    if (!ready()) setSessionUnavailable(true);
     // The engine is unreachable; leave the app in whatever state it had rather
     // than bouncing a working session to the login screen.
     return { requires_login: requiresLogin(), user: user() };

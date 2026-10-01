@@ -270,8 +270,10 @@ async function loadStore(
   vi.doMock('../lib/audio', () => ({
     onProgramEvent: vi.fn((type: string, handler: (snapshot: unknown, event: Event) => void) => {
       const list = deckHandlers.get(type) ?? [];
-      list.push((event) => handler(audioService.snapshot(), event));
+      const callback = (event: Event) => handler(audioService.snapshot(), event);
+      list.push(callback);
       deckHandlers.set(type, list);
+      return () => deckHandlers.set(type, (deckHandlers.get(type) ?? []).filter(item => item !== callback));
     }),
     setProgramOutputReporter: vi.fn((fn: typeof programOutputReporter) => {
       programOutputReporter = fn;
@@ -280,6 +282,7 @@ async function loadStore(
       programTransportReporter = fn;
     }),
     audioService,
+    disposeAudio: vi.fn(),
     storedVolume: () => 1,
     isCurrentLoad: () => true,
   }));
@@ -376,12 +379,13 @@ async function loadStore(
   /** Events the store subscribed to, so a test can send one the way the engine
    * would — a remote control command, a handoff from another device. */
   const socketHandlers = new Map<string, (data?: unknown) => void>();
+  const disconnect = vi.fn();
+  const createSocket = vi.fn(() => ({
+    on: (event: string, handler: (data?: unknown) => void) => socketHandlers.set(event, handler),
+    emit: vi.fn(), disconnect,
+  }));
   vi.doMock('../lib/socket', () => ({
-    createSocket: vi.fn(() => ({
-      on: (event: string, handler: (data?: unknown) => void) => socketHandlers.set(event, handler),
-      emit: vi.fn(),
-      disconnect: vi.fn(),
-    })),
+    createSocket,
     dispatchDiscoverSeed: vi.fn(),
   }));
 
@@ -412,6 +416,8 @@ async function loadStore(
     ...store,
     api,
     audioService,
+    createSocket,
+    disconnect,
     deck,
     fireDeckEvent,
     fireSocketEvent,
@@ -4349,4 +4355,22 @@ describe('podcast progress and time jumps', () => {
     expect(api.podcastPeek).toHaveBeenCalledWith(episode('a').enclosure_url);
     expect(audioService.load).toHaveBeenCalledWith('/podcast/queued', 1, 0);
   });
+});
+
+
+it('authenticated runtime starts once, closes once, and starts a fresh socket for the next account', async () => {
+  const store = await loadStore();
+  store.initStore();
+  store.initStore();
+  expect(store.createSocket).toHaveBeenCalledTimes(1);
+  store.disposeStore();
+  store.disposeStore();
+  expect(store.disconnect).toHaveBeenCalledTimes(1);
+  store.fireSocketEvent('playback_start_requested', { track_id: 'old-account' });
+  await flush();
+  expect(store.state.playback.queue).toEqual([]);
+  store.initStore();
+  expect(store.createSocket).toHaveBeenCalledTimes(2);
+  store.disposeStore();
+  expect(store.disconnect).toHaveBeenCalledTimes(2);
 });

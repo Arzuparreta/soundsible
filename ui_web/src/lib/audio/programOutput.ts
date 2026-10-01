@@ -51,6 +51,7 @@ export class ProgramOutput {
   private listeners = new Set<OutputListener>();
   private stopObserving: (() => void) | null = null;
   private initialized = false;
+  private destroyed = false;
 
   constructor(
     private readonly context: AudioContext,
@@ -114,6 +115,7 @@ export class ProgramOutput {
     if (this.mode !== 'carrier' || !this.carrier) return;
     try {
       await diagnosticPlay(this.carrier);
+      if (this.destroyed) return;
     } catch (error) {
       this.emit('carrier_error', errorReason(error));
       this.enterFallback(errorReason(error));
@@ -133,6 +135,7 @@ export class ProgramOutput {
     if (!programPlaying) return false;
     try {
       await diagnosticPlay(this.carrier);
+      if (this.destroyed) return false;
       if (this.directConnected) {
         try {
           this.monitor.disconnect(this.context.destination);
@@ -150,6 +153,8 @@ export class ProgramOutput {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     const carrier = this.carrier;
     if (carrier) {
       diagnosticPause(carrier);
@@ -169,6 +174,7 @@ export class ProgramOutput {
   }
 
   private enterFallback(reason: string): void {
+    if (this.destroyed) return;
     if (!this.directConnected) {
       this.monitor.connect(this.context.destination);
       this.directConnected = true;
@@ -179,6 +185,7 @@ export class ProgramOutput {
   }
 
   private emit(event: ProgramOutputEventName, reason?: string): void {
+    if (this.destroyed) return;
     const payload = { event, reason, ...this.snapshot() };
     for (const listener of this.listeners) listener(payload);
   }

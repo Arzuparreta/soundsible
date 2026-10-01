@@ -34,6 +34,7 @@ test('full player artist opens the general page while keeping the current song a
   const surface = page.locator('[data-player-surface-open]');
   const stage = surface.locator('[data-now-playing-tile="stage"]');
   const song = await stage.getByRole('heading', { name: 'Canción de biblioteca 320', exact: true }).textContent();
+  await expect(surface.locator('[data-drag-row]').first()).toBeAttached();
   const queueBefore = await surface.locator('[data-drag-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-drag-row')));
   const link = stage.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await activate(page, link, isMobile);

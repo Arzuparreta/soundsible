@@ -40,6 +40,16 @@ let generation = 0;
 let loading: Promise<void> | undefined;
 let refreshQueued = false;
 
+export function resetSavedEntities(): void {
+  ++generation;
+  loading = undefined;
+  refreshQueued = false;
+  setSavedEntities([]);
+  setEntitiesLoading(false);
+  setEntitiesError(false);
+  setEntitiesBusy(false);
+}
+
 export function isEntitySaved(entry: SavedEntity): boolean {
   return savedEntities().some((item) => sameEntity(item, entry));
 }
@@ -51,17 +61,19 @@ export function syncSavedEntities(): Promise<void> {
   }
   const current = ++generation;
   setEntitiesLoading(true);
-  loading = Promise.resolve().then(() => api.getSavedEntities()).then((entries) => {
+  const task = Promise.resolve().then(() => api.getSavedEntities()).then((entries) => {
     if (current !== generation) return;
     setSavedEntities(entries);
     setEntitiesError(false);
   }).catch(() => { if (current === generation) setEntitiesError(true); })
     .finally(() => {
+      if (loading !== task) return;
       loading = undefined;
       setEntitiesLoading(false);
       flushQueuedRefresh();
     });
-  return loading;
+  loading = task;
+  return task;
 }
 
 function flushQueuedRefresh(): void {
@@ -73,21 +85,25 @@ function flushQueuedRefresh(): void {
 /** Save or remove only the navigation bookmark, independently of songs. */
 export async function setEntitySaved(entry: SavedEntity, saved: boolean, opts: { quiet?: boolean } = {}): Promise<void> {
   if (entitiesBusy()) return;
-  ++generation;
+  const current = ++generation;
   setEntitiesBusy(true);
   const previous = savedEntities();
   setSavedEntities(saved
     ? (isEntitySaved(entry) ? previous : [entry, ...previous])
     : previous.filter((item) => !sameEntity(item, entry)));
   try {
-    setSavedEntities(await api.setSavedEntity(entry, saved));
+    const entries = await api.setSavedEntity(entry, saved);
+    if (current !== generation) return;
+    setSavedEntities(entries);
     setEntitiesError(false);
     if (saved) pulseNavigation(['/', entry.kind === 'album' ? '/?saved=albums' : '/?saved=artists']);
     if (!saved && !opts.quiet) toast.action(t('savedEntities.removed'), t('savedEntities.undo'), () => void setEntitySaved(entry, true));
   } catch {
+    if (current !== generation) return;
     setSavedEntities(previous);
     toast.error(t('savedEntities.failed'));
   } finally {
+    if (current !== generation) return;
     setEntitiesBusy(false);
     flushQueuedRefresh();
   }
@@ -98,13 +114,16 @@ export async function setEntitySaved(entry: SavedEntity, saved: boolean, opts: {
 export async function fillEntityCover(entry: SavedEntity): Promise<void> {
   const stored = savedEntities().find((item) => sameEntity(item, entry));
   if (!stored || stored.cover || !entry.cover || entitiesBusy()) return;
-  ++generation;
+  const current = ++generation;
   setEntitiesBusy(true);
   try {
-    setSavedEntities(await api.setSavedEntity({ ...stored, cover: entry.cover }, true));
+    const entries = await api.setSavedEntity({ ...stored, cover: entry.cover }, true);
+    if (current !== generation) return;
+    setSavedEntities(entries);
   } catch {
     /* tried again on the next visit */
   } finally {
+    if (current !== generation) return;
     setEntitiesBusy(false);
     flushQueuedRefresh();
   }
