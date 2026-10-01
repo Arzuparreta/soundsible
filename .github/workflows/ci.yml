@@ -226,6 +226,8 @@ jobs:
         run: npm run test:unit
       - name: Build player bundle (vite + tailwind)
         run: npm run build
+      - name: Enforce initial payload budgets
+        run: node scripts/check-payload.mjs
       - name: Validate production startup and cached PWA
         run: npx playwright test --config playwright.startup.config.ts
       - name: Upload startup browser report
