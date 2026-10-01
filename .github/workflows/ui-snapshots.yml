@@ -3,8 +3,8 @@ name: Refresh UI snapshots
 # Reviewed screenshot baselines are committed per engine and per viewport, and
 # they are named `-linux` because they only mean anything on the platform that
 # produced them. Regenerating them on a laptop invites a diff made of font
-# hinting rather than of the change under review, so this does it on the same
-# runner image CI compares them on.
+# hinting rather than of the change under review, so this does it in the same
+# Playwright image CI compares them in.
 #
 # Run it from the Actions tab against the branch that needs new baselines. The
 # updated PNGs are always uploaded as an artifact; committing them back is the
@@ -25,23 +25,39 @@ permissions:
   contents: write
 
 jobs:
-  refresh:
+  browser_image:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.version.outputs.image }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
-      - uses: actions/setup-node@v4
+          sparse-checkout: ui_web/package-lock.json
+          sparse-checkout-cone-mode: false
+      - id: version
+        run: |
+          version="$(jq -r '.packages["node_modules/@playwright/test"].version // empty' ui_web/package-lock.json)"
+          test -n "$version"
+          echo "image=mcr.microsoft.com/playwright:v${version}-noble" >> "$GITHUB_OUTPUT"
+
+  refresh:
+    needs: browser_image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The image CI's browser jobs run in, so a baseline renders here exactly
+    # as it will be compared there.
+    container:
+      image: ${{ needs.browser_image.outputs.image }}
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: ui_web/package-lock.json
+          ref: ${{ github.ref_name }}
       - name: Install JS dependencies
         working-directory: ui_web
         run: npm ci
-      - name: Install browser engines
-        working-directory: ui_web
-        run: npx playwright install --with-deps chromium webkit
       # --update-snapshots rewrites every baseline it can reach, so all four
       # projects land in one commit and the engines cannot drift apart again
       # the way chromium and webkit did.
