@@ -829,6 +829,8 @@ export const en = {
     downloadedOnly: 'Downloaded only',
     empty: 'No episodes.',
     loadMore: 'Load more episodes',
+    refresh: 'Refresh episodes',
+    refreshFailed: 'Could not refresh the episodes.',
     ariaPlay: 'Play episode',
     ariaDownload: 'Download episode',
     ariaDownloaded: 'Downloaded',

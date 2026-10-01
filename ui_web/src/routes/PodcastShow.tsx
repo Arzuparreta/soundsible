@@ -2,10 +2,10 @@ import Button from '../components/Button';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
-import { BackIcon, CheckIcon, DownloadIcon, menuIcons } from '../components/icons';
+import { BackIcon, CheckIcon, DownloadIcon, RefreshIcon, menuIcons } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
-import { createEffect, createMemo, createResource, createSignal, Show } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from 'solid-js';
 import { useParams, useNavigate, useSearchParams } from '@solidjs/router';
 import { api } from '../lib/api';
 import { state, actions, isPlayingEpisode } from '../stores';
@@ -20,6 +20,7 @@ import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { followPodcast, shownPodcast } from '../lib/podcasts';
 import { toast } from '../lib/toast';
+import { attachPullToRefresh, PULL_ARMED, type PullFrame } from '../lib/pullToRefresh';
 
 interface ShowFeed {
   subscription?: PodcastSubscription;
@@ -61,20 +62,58 @@ export default function PodcastShow() {
     if (followed && !params.id) navigate(`/podcasts/${encodeURIComponent(followed.id)}`, { replace: true });
   });
   const [failed, setFailed] = createSignal(false);
-  const [data, { refetch }] = createResource(
-    (): { id: string } | { url: string } | false => {
-      const id = params.id;
-      return id ? { id } : feedUrl() ? { url: feedUrl() } : false;
-    },
-    async (source): Promise<ShowFeed | null> => {
+  type Source = { id: string } | { url: string };
+  const source = (): Source | false => {
+    const id = params.id;
+    return id ? { id } : feedUrl() ? { url: feedUrl() } : false;
+  };
+  const sameSource = (a: Source) => {
+    const b = source();
+    return !!b && ('id' in a ? 'id' in b && b.id === a.id : 'url' in b && b.url === a.url);
+  };
+  /** A show nobody follows is read from its feed every time it is opened. */
+  const readFeed = async (url: string): Promise<ShowFeed> => {
+    const feed = await api.browsePodcastFeed(url);
+    return { episodes: feed.episodes, feed: feed.show, next: feed.next };
+  };
+  const [data, { refetch, mutate }] = createResource(source, async (from): Promise<ShowFeed | null> => {
+    setFailed(false);
+    try {
+      if (!('id' in from)) return await readFeed(from.url);
+      // A followed show opens on what the engine kept of it, and then asks
+      // the feed for anything published since: a new episode joins the list a
+      // moment later instead of the whole page waiting on the feed.
+      const kept = await api.getPodcastEpisodes(from.id, 'cached');
+      void lookForNew(from.id);
+      return kept;
+    } catch { setFailed(true); return null; }
+  });
+  const lookForNew = async (id: string) => {
+    try {
+      const fresh = await api.getPodcastEpisodes(id);
+      if (fresh.changed && sameSource({ id }) && !refreshing()) mutate(fresh);
+    } catch { /* What was kept is already on screen. */ }
+  };
+
+  /** Read the feed again by hand, from the button or by pulling the list
+   * down: whatever the feed's host serves now, however recently it was read. */
+  const [refreshing, setRefreshing] = createSignal(false);
+  const refresh = async () => {
+    const from = source();
+    if (!from || refreshing()) return;
+    setRefreshing(true);
+    try {
+      const fresh = 'id' in from ? await api.getPodcastEpisodes(from.id, 'refresh') : await readFeed(from.url);
+      if (!sameSource(from)) return;
       setFailed(false);
-      try {
-        if ('id' in source) return await api.getPodcastEpisodes(source.id);
-        const feed = await api.browsePodcastFeed(source.url);
-        return { episodes: feed.episodes, feed: feed.show, next: feed.next };
-      } catch { setFailed(true); return null; }
-    },
-  );
+      mutate(fresh);
+    } catch {
+      if (sameSource(from)) toast.error(t('podcastShow.refreshFailed'));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const [pull, setPull] = createSignal<PullFrame>({ captured: false, distance: 0, armed: false });
 
   /** A show nobody follows yet, as the directory row that opened it described
    * it until the feed itself answers. */
@@ -220,12 +259,43 @@ export default function PodcastShow() {
         >
           {t('podcastShow.downloadedOnly')}
         </button>
+        <button
+          class={styles.refresh}
+          classList={{ [styles.spinning]: refreshing() }}
+          type="button"
+          aria-label={t('podcastShow.refresh')}
+          title={t('podcastShow.refresh')}
+          aria-busy={refreshing() || undefined}
+          disabled={refreshing() || !source()}
+          onClick={() => void refresh()}
+        >
+          <RefreshIcon size={18} />
+        </button>
+      </div>
+
+      {/* The pull follows the finger; once let go far enough it holds while
+        * the feed is read. */}
+      <div
+        class={styles.pull}
+        classList={{ [styles.pullArmed]: pull().armed, [styles.spinning]: refreshing() && !pull().captured }}
+        style={{ height: `${pull().captured ? pull().distance : refreshing() ? PULL_ARMED * 0.75 : 0}px` }}
+        data-pulling={pull().captured ? '' : undefined}
+        aria-hidden="true"
+      >
+        <span class={styles.pullIcon} style={{ transform: `rotate(${Math.round((pull().distance / PULL_ARMED) * 270)}deg)` }}>
+          <RefreshIcon size={20} />
+        </span>
       </div>
 
       <div
         ref={(element) => {
           setScroller(element);
           registerPrimaryScroll(element, () => !data.loading);
+          onCleanup(attachPullToRefresh(element, {
+            onPull: setPull,
+            onRefresh: () => void refresh(),
+            enabled: () => !data.loading && !refreshing(),
+          }));
         }}
         class={styles.scroll}
         data-primary-scroll

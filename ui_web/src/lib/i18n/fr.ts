@@ -835,6 +835,8 @@ export const fr: Dict = {
     downloadedOnly: 'Téléchargés uniquement',
     empty: 'Aucun épisode.',
     loadMore: 'Charger plus d’épisodes',
+    refresh: 'Actualiser les épisodes',
+    refreshFailed: 'Impossible d’actualiser les épisodes.',
     ariaPlay: 'Lire l’épisode',
     ariaDownload: 'Télécharger l’épisode',
     ariaDownloaded: 'Téléchargé',
