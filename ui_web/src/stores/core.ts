@@ -20,7 +20,7 @@ import type {
   PreviewPreparation,
   RemotePlaybackState,
 } from '../lib/api';
-import { storedVolume } from '../lib/audio';
+import { storedVolume } from '../lib/audioPreferences';
 import type { AutoModeState, AutoProfile } from '../lib/generatedQueue';
 import type { PlaybackQueueEntry } from '../lib/playbackQueue';
 import { loadVisualPreferences, type InterfaceSize } from '../lib/visualPreferences';

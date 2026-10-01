@@ -6,12 +6,9 @@ const mocks = vi.hoisted(() => ({
   setHighContrast: vi.fn(),
 }));
 
-vi.mock('../stores', () => ({
-  state: { interfaceSize: 'normal', highContrast: false },
-  actions: {
-    setInterfaceSize: mocks.setInterfaceSize,
-    setHighContrast: mocks.setHighContrast,
-  },
+vi.mock('../stores/core', () => ({ state: { interfaceSize: 'normal', highContrast: false } }));
+vi.mock('../stores/visualPreferences', () => ({
+  visualPreferenceActions: { setInterfaceSize: mocks.setInterfaceSize, setHighContrast: mocks.setHighContrast },
 }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 
