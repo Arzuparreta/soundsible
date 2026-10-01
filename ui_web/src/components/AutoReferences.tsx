@@ -35,15 +35,6 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
       <button type="button" title={t('musicExplorer.mixWith')} onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}><SourceIcon size={16} /><span>{t('musicExplorer.mixWith')}</span></button>
       <button type="button" title={t('musicExplorer.changeShort')} onClick={props.onChange}><ChangeSessionIcon size={16} /><span>{t('musicExplorer.changeShort')}</span></button>
     </div></header>
-    <Show when={state.autoMode.sessionChange}>{(change) => <div role="status" aria-live="polite">
-      <span>{t(change().status === 'working' ? 'musicExplorer.changing'
-        : change().reason === 'timeout' ? 'musicExplorer.changeTimedOut'
-        : change().reason === 'exhausted' ? 'musicExplorer.changeExhausted'
-        : 'musicExplorer.changeFailed', { title: change().label })}</span>
-      <Show when={change().status === 'error'} fallback={<button type="button" onClick={() => actions.cancelAutoSessionChange()}>{t('common.cancel')}</button>}>
-        <button type="button" onClick={() => actions.retryAutoSessionChange()}>{t('musicExplorer.retryChange')}</button>
-      </Show>
-    </div>}</Show>
     <Show when={state.autoMode.sources.length} fallback={<button type="button" class={styles.referenceEmpty} onClick={props.onAdd}>{t('musicExplorer.referenceEmpty')}</button>}>
       <div class={styles.referenceRows}>{rows()}</div>
       <Show when={state.autoMode.sources.length > 2}><button type="button" class={styles.referenceMore} onClick={() => openOverlay(() => <section class={styles.referenceSheet}><h2>{t('musicExplorer.references')}</h2>{rows()}</section>, { ariaLabel: () => t('musicExplorer.references') })}>{t('musicExplorer.viewReferences')} ({state.autoMode.sources.length})</button></Show>

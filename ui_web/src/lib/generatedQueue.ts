@@ -54,7 +54,6 @@ export interface AutoPlanItem {
 
 export interface AutoModeState {
   active: boolean;
-  sessionChange?: { label: string; status: 'working' | 'error'; reason?: 'timeout' | 'exhausted' | 'failed' };
   profile: AutoProfile;
   djProfile: DjProfile;
   direction: DjDirection;
@@ -186,8 +185,6 @@ export class GeneratedQueueController {
   private generation = 0;
   private retryStep = 0;
   private recent: string[] = [];
-  private suspended = false;
-  private retryPending = false;
   private settledInput: string | null = null;
 
   constructor(private readonly deps: GeneratedQueueDeps) {}
@@ -252,57 +249,8 @@ export class GeneratedQueueController {
     return this.sync(force);
   }
 
-  /** Freeze planner writes while a replacement is prepared independently. */
-  suspendPlanning(): void {
-    this.suspended = true;
-    this.generation += 1;
-    this.aborter?.abort();
-    this.aborter = null;
-    this.inFlight = null;
-    if (this.retryTimer) {
-      clearTimeout(this.retryTimer);
-      this.retryPending = true;
-    }
-    this.retryTimer = null;
-  }
-
-  /** Hand the runway back to the planner.
-   *
-   * `suspendPlanning` throws the pending retry away, so simply clearing the
-   * flag used to leave a starved session with no scheduled work at all: nothing
-   * planned again until a track boundary, and if playback had already run out
-   * there is no boundary left to wait for. Re-arm the chain the change
-   * interrupted, from the first backoff step rather than the minute-long one it
-   * had climbed to.
-   */
-  resumePlanning(): void {
-    if (!this.suspended) return;
-    this.suspended = false;
-    this.retryStep = 0;
-    if (!this.retryPending) return;
-    this.retryPending = false;
-    this.scheduleRetry();
-  }
-
-  applyReplacement(response: ListeningPlanResponse, anchor: Track): boolean {
-    const accepted = this.deps.applyPlan('auto_mode', response, true, anchor);
-    if (!accepted) return false;
-    if (this.session) {
-      this.session.seed = anchor;
-      this.session.id = response.session_id || sessionId();
-      this.session.segmentIndex = 1;
-    }
-    this.suspended = false;
-    this.retryStep = 0;
-    this.retryPending = false;
-    this.deps.onStatus('auto_mode', 'ready', response, true);
-    return true;
-  }
-
   stop(intent?: ListeningPlanIntent): void {
     if (intent && this.session?.intent !== intent) return;
-    this.suspended = false;
-    this.retryPending = false;
     const stoppedIntent = this.session?.intent;
     this.generation += 1;
     this.aborter?.abort();
@@ -443,7 +391,7 @@ export class GeneratedQueueController {
 
   private sync(force = false, replace = false): Promise<boolean> {
     const session = this.session;
-    if (!session || this.suspended) return Promise.resolve(false);
+    if (!session) return Promise.resolve(false);
     if (this.inFlight) return this.inFlight;
     const remaining = this.generatedRemaining(session.intent);
     if (!force && remaining >= REFILL_THRESHOLD[session.intent]) {
@@ -492,7 +440,6 @@ export class GeneratedQueueController {
         if (exhausted) {
           if (this.retryTimer) clearTimeout(this.retryTimer);
           this.retryTimer = null;
-          this.retryPending = false;
         }
         this.deps.onStatus(session.intent, exhausted ? 'exhausted' : response.warming ? 'warming' : 'degraded', response, replace);
         if (!exhausted) this.scheduleRetry(response.retry_after);
@@ -502,7 +449,6 @@ export class GeneratedQueueController {
       for (const item of response.items) this.remember(item.recommendation_identity || item.id);
       if (session.intent === 'auto_mode') session.segmentIndex += 1;
       this.retryStep = 0;
-      this.retryPending = false;
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = null;
       // `degraded` means one or more source pools were unavailable. If the

@@ -71,9 +71,9 @@ export default function Favourites() {
       onSelect: () => openActionMenu({
         title: t('nav.favourites'),
         actions: [
-          { icon: menuIcons.queue(), label: t('musicExplorer.requestAll'), disabled: !favTracks().length, onSelect: () => void actions.placeAutoTracks(favTracks()) },
-          { icon: menuIcons.source(), label: t('musicExplorer.reference'), disabled: !favTracks().length, onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) },
           { icon: menuIcons.changeSession(), label: t('musicExplorer.change'), disabled: !favTracks().length, onSelect: () => void actions.changeAutoSession(favTracks(), t('favourites.title')) },
+          { icon: menuIcons.source(), label: t('musicExplorer.reference'), disabled: !favTracks().length, onSelect: () => actions.addAutoSource(favTracks(), t('favourites.title')) },
+          { icon: menuIcons.queue(), label: t('musicExplorer.requestAll'), disabled: !favTracks().length, onSelect: () => void actions.placeAutoTracks(favTracks()) },
         ],
       }),
     }] : [],

@@ -89,11 +89,24 @@ Unmatched occurrences travel in published sessions and are matched on play.
   stays empty and says so; its first selected music then starts playback and
   becomes the initial visible influence.
   **Add to session** creates requested occurrences, **Mix into session** adds
-  influences, and **Change session** replaces influences and generated runway.
-  Requested occurrences retain their IDs and relative order across a change.
-- Mode is explicit session state. **Play now** is an immediate mix. Collection
-  primary actions request songs; mixing and changing live in the action menu.
-  Podcast and Radio requests require confirmation before leaving DJ.
+  influences, and **Change session** replaces the influences and the runway.
+- **A source is one piece of music**: a song, an album, an artist, a playlist or
+  the favourites. Collection primary actions in DJ make the collection the
+  session's source; they never expand it into requests. Requesting every song of
+  a collection stays available by name in its menu, and creates occurrences that
+  share one `autoRoute.requestGroup`.
+- **Change session** and **Start DJ from…** are immediate and generative. They
+  commit the new single source, an empty exploration and the next
+  `directionRevision`, then drop the old runway: generated entries, bridges and
+  grouped requests. Requests made one song at a time (`manual`, or `user`
+  without a `requestGroup`) survive with their ids and order; their seams lose
+  any cue planned out of a different predecessor. A song chosen with **Start DJ
+  from…** that is not playing becomes the next entry, reached by the DJ's own
+  transition (measured at once). The runway is then planned as a refill from the
+  tail, with the refill's own retries; answers for the old revision are
+  discarded.
+- Mode is explicit session state. **Play now** is an immediate mix. Podcast and
+  Radio requests require confirmation before leaving DJ.
 - A song dropped into the route inlet is placed by the DJ among editable gaps;
   a song dropped into a concrete gap is fixed there. Both are real queue
   occurrences, not requests or waypoints. Local placement preserves existing
@@ -120,12 +133,9 @@ Unmatched occurrences travel in published sessions and are matched on play.
 - Exploration contains at most four automatic songs that started playing in
   the current `directionRevision`. Pending recommendations, exact requests and
   bridges never become roots merely by being queued or heard.
-- **Mix with…** retains exploration. **Change…** prepares with empty exploration
-  and the next direction revision while existing playback and refills continue.
-  It commits influences, revision, exploration and replacement route together,
-  invalidating old planner writes. Failures preserve the previous direction.
-  A moving playback anchor causes bounded replanning. Audible blends finish;
-  preserved requests receive cues for their actual neighbours.
+- **Mix with…** retains exploration. **Change…** clears it as part of the
+  change above. Audible blends finish; preserved requests receive cues for
+  their actual neighbours.
 - Empty plans identify `empty_reason` as `temporary_failure` or `exhausted`.
   Temporary failures retry with backoff. Exhaustion and entirely duplicate
   plans stop retrying identical inputs, including automatic runway checks.
@@ -144,6 +154,19 @@ Unmatched occurrences travel in published sessions and are matched on play.
   its cue was planned out of, and a refill continues the route from the tail of
   what survives. A cue whose origin does not match what is playing is never
   performed.
+- **Every handoff resolves.** Nothing fades until the incoming deck is sounding,
+  and the outgoing song's `ended` always decides what follows: an incoming deck
+  that is already sounding takes over; one that cannot play fails the handoff and
+  the next entry follows; anything else — cued, buffering or stalled — is
+  released as the staged deck and taken over by the ordinary gapless handover,
+  which owns start-up supervision and stall recovery. The mixer settles each
+  `ended` once, so the store never sees one boundary twice. An incoming deck
+  that ends before the handoff, or whose clock stops for four seconds during an
+  audible blend, is given up (the outgoing song keeps playing) or, once it owns
+  the programme, finished and recovered like any stalled song. A song handed
+  over by a blend carries a playback attempt like a loaded one.
+- **Next in DJ is never a no-op.** It finishes an audible blend, blends in a
+  ready incoming deck, or hands an unready one over the ordinary way.
 
 Async results carry generation identity and may not attach to a newer playback
 session after cancellation.
@@ -154,8 +177,8 @@ This queue is deliberately client-session state. Account settings such as
 Autoplay are persisted by the Station API, but queue occurrences are not synced
 between browsers or restored as a server queue.
 
-A full **Change session** may cancel a prepared, still silent handoff once its
-replacement is ready. It never cancels an audible blend or resumes paused audio.
+A **Change session** cancels a prepared, still silent handoff. It never cancels
+an audible blend or resumes paused audio.
 
 ## Song actions
 

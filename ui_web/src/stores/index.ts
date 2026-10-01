@@ -4,7 +4,6 @@ import { user } from '../lib/session';
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
 import {
   api,
-  ApiError,
   type DjDirection,
   type DjItemRef,
   type DjPlanResponse,
@@ -131,7 +130,7 @@ const AUTOPLAY_PREPARE_THRESHOLD = 2;
 /** Matches REFILL_THRESHOLD.autoplay in generatedQueue: deep enough that a
  * refill has room to fail and retry before the lane actually runs out. */
 const AUTOPLAY_REFILL_THRESHOLD = 5;
-type PlaybackTrigger = 'selection' | 'next' | 'ended' | 'retry' | 'resume' | 'recovery' | 'podcast';
+type PlaybackTrigger = 'selection' | 'next' | 'ended' | 'retry' | 'resume' | 'recovery' | 'podcast' | 'handoff';
 type PlaybackSourceKind = 'local' | 'preview' | 'podcast';
 
 interface PlaybackAttempt {
@@ -1569,6 +1568,20 @@ function unmixed(plan: LiveTransitionPlan): LiveTransitionPlan {
   return { ...plan, technique: 'direct', in_cue: 0, overlap_seconds: 0, overlap_bars: 0, playback_rate: 1 };
 }
 
+/**
+ * Give a song the DJ blended in the same supervision as one that was loaded.
+ *
+ * A handoff used to leave no attempt behind it, and everything that watches a
+ * playing song keys on one: stall recovery, media-error handling, delivery
+ * reports. A song that stalled after a blend therefore just sat there, with no
+ * recovery and nothing in the logs. It is audible already, so it starts its
+ * life as a song that is sounding, not one that is loading.
+ */
+function adoptHandoffAttempt(track: PlaybackQueueEntry): void {
+  const attempt = createPlaybackAttempt(track, beginLoad(), 'handoff');
+  attempt.audibleAt = performance.now();
+}
+
 /** Hand the runway over to the mixer and freeze it there. */
 function commitTransition(
   next: PlaybackQueueEntry,
@@ -1599,6 +1612,7 @@ function commitTransition(
       // The incoming deck is already audible; there is no undo. Follow it.
       concludeAttempt(activeAttempt, 'handoff');
       activeAttempt = null;
+      adoptHandoffAttempt(next);
       const snapshot = audioService.snapshot();
       setState('playback', {
         currentTrack: next,
@@ -1641,6 +1655,15 @@ function commitTransition(
       if (!owns()) return;
       committedTransition = null;
       setState('autoMode', 'transition', IDLE_TRANSITION);
+    },
+    onStaged: () => {
+      if (!owns()) return;
+      // The blend could not be performed, but its song still comes next: the
+      // deck that was cued for it is now the staged deck the ordinary handover
+      // takes (`loadIndex` → `takeStaged`), from its first second.
+      committedTransition = null;
+      setState('autoMode', 'transition', IDLE_TRANSITION);
+      stagedEntry = { queueId: next.queueId, attemptId: randomId(), url: trackUrl(next) };
     },
     onError: () => {
       if (!owns()) return;
@@ -2159,202 +2182,119 @@ const REPLAN_DEBOUNCE_MS = 800;
  */
 let replanNote = '';
 
-const SESSION_CHANGE_BUDGET_MS = 60_000;
-const SESSION_CHANGE_RETRY_DELAYS = [2_000, 5_000, 15_000, 30_000];
-
-class SessionChangeError extends Error {
-  constructor(readonly reason: 'timeout' | 'exhausted' | 'failed') { super(reason); }
+/**
+ * An explicit request the listener made one song at a time.
+ *
+ * Those belong to the listener, not to the session, and outlive a change of
+ * source. Songs that arrived as a whole collection (`requestGroup`) were the old
+ * session's material, and go with it — as do the DJ's own picks and bridges.
+ */
+function isSingleRequest(entry: PlaybackQueueEntry): boolean {
+  if (entry.autoRoute?.kind === 'bridge') return false;
+  if (entry.autoRoute?.requestGroup) return false;
+  return entry.queueLane === 'manual' || entry.autoRoute?.kind === 'user';
 }
 
-/** Release pending work immediately even if a provider ignores cancellation. */
-function sessionChangeTask<T>(task: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const aborted = () => reject(new DOMException('Session change cancelled', 'AbortError'));
-    if (signal.aborted) { aborted(); return; }
-    signal.addEventListener('abort', aborted, { once: true });
-    task.then(resolve, reject).finally(() => signal.removeEventListener('abort', aborted));
-  });
-}
-
-function sessionChangeDelay(delay: number, signal: AbortSignal): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const finish = () => { signal.removeEventListener('abort', aborted); resolve(); };
-    const timer = setTimeout(finish, delay);
-    const aborted = () => {
-      clearTimeout(timer);
-      signal.removeEventListener('abort', aborted);
-      reject(new DOMException('Session change cancelled', 'AbortError'));
-    };
-    if (signal.aborted) aborted();
-    else signal.addEventListener('abort', aborted, { once: true });
-  });
-}
-
-function transientSessionChangeError(error: unknown): boolean {
-  if (error instanceof ApiError) return error.status === 408 || error.status === 429 || error.status >= 500;
-  return error instanceof TypeError
-    || (error != null && typeof error === 'object' && 'name' in error && error.name === 'AbortError');
-}
-
-let sessionChangeAborter: AbortController | null = null;
-let failedSessionChange: { tracks: Track[]; label: string } | null = null;
-
-function cancelSessionChange(): void {
-  sessionChangeAborter?.abort();
-  sessionChangeAborter = null;
-  failedSessionChange = null;
-  generatedQueue?.resumePlanning();
-  setState('autoMode', 'sessionChange', undefined);
-}
-
-/** Keep the old direction and runway until a usable replacement is ready. */
-async function changeAutoSession(tracks: Track[], label: string): Promise<boolean> {
+/**
+ * Make one piece of music the session's source, from now on.
+ *
+ * A song, an album, an artist, a playlist or the favourites: whatever it is, it
+ * is one source, and choosing it is a change of direction — never a list of
+ * requests. The change is immediate and generative. The new source replaces the
+ * old ones at once; everything the DJ had queued from the old direction goes,
+ * along with songs that arrived as a whole collection; requests the listener
+ * made one song at a time stay. The song that is playing carries on and the DJ
+ * mixes out of it when it judges best, as it would anyway; a blend that is
+ * already audible finishes. The runway is then planned from the new source like
+ * any refill, with the refill's own retries.
+ *
+ * `lead` is a song the session should start from: it becomes the next song,
+ * reached by an ordinary DJ transition. The song that is playing needs no lead.
+ */
+function changeAutoSession(tracks: Track[], label: string, lead?: Track): boolean {
   const usable = tracks.filter((track) => !isPodcastTrack(track));
-  if (!state.autoMode.active || !usable.length) return false;
-  cancelSessionChange();
+  if (!state.autoMode.active || !usable.length || (lead && isPodcastTrack(lead))) return false;
   cancelRunwayReplan();
   autoOpeningAborter?.abort();
+  autoOpeningAborter = null;
   if (autoOpeningRetry) clearTimeout(autoOpeningRetry);
   autoOpeningRetry = null;
+  pendingImmediateAutoTrack = null;
   autoSessionEpoch += 1;
-  const epoch = autoSessionEpoch;
-  const aborter = new AbortController();
-  sessionChangeAborter = aborter;
-  const source: AutoMusicSet = { id: randomId(), label: label.trim() || usable[0].title, tracks: usable, activation: 1 };
-  const controller = ensureGeneratedQueue();
-  setState('autoMode', { repairing: false, sessionChange: { label: source.label, status: 'working' } });
-  const current = () => !aborter.signal.aborted && state.autoMode.active && autoSessionEpoch === epoch;
-  const signature = () => JSON.stringify([
-    state.playback.queue[state.playback.index]?.queueId,
-    state.playback.queue.slice(state.playback.index + 1)
-      .filter((row) => row.queueLane === 'manual' || row.autoRoute?.kind === 'user')
-      .map((row) => row.queueId),
-  ]);
   const revision = (state.autoMode.directionRevision ?? 0) + 1;
-  // Keep ordinary refills running during preparation. A blend that never
-  // settles or a changing anchor must still reach an actionable error.
-  const deadline = Date.now() + SESSION_CHANGE_BUDGET_MS;
-  let timedOut = false;
-  const budgetTimer = setTimeout(() => { timedOut = true; aborter.abort(); }, SESSION_CHANGE_BUDGET_MS);
-  const sessionId = randomId();
-  let unstableAttempts = 0;
-  let retryStep = 0;
-  const retry = async (retryAfter?: number | null) => {
-    const delay = Math.max(
-      SESSION_CHANGE_RETRY_DELAYS[Math.min(retryStep++, SESSION_CHANGE_RETRY_DELAYS.length - 1)],
-      retryAfter != null && Number.isFinite(retryAfter) ? Math.max(0, retryAfter * 1000) : 0,
-    );
-    await sessionChangeDelay(Math.min(delay, Math.max(0, deadline - Date.now())), aborter.signal);
-  };
-  try {
-    while (current()) {
-      if (Date.now() >= deadline) throw new SessionChangeError('timeout');
-      // An audible blend belongs to the two sounding decks. Wait for it to settle.
-      if (audioService.mixPhase() === 'crossfading') {
-        await sessionChangeDelay(100, aborter.signal);
-        continue;
-      }
-      const anchor = state.playback.currentTrack;
-      const before = signature();
-      const explicit = state.playback.queue.slice(state.playback.index + 1).filter((row) => row.queueLane === 'manual' || row.autoRoute?.kind === 'user');
-      let response: DjPlanResponse;
-      try {
-        response = await sessionChangeTask(api.planDjQueue({
-          dj_profile: state.autoMode.djProfile, direction: state.autoMode.direction,
-          source_policy: 'explicit',
-          exploration: [],
-          direction_revision: revision,
-          sources: [source], heard: state.autoMode.heard,
-          seed: anchor ? djItemRef(anchor) : undefined,
-          session_id: sessionId, segment_index: 0,
-          exclude: [...state.autoMode.avoidedIdentities, ...explicit.flatMap((row) => [queueIdentity(row), row.id, row.youtube_id ?? ''])],
-          limit: 8,
-        }, aborter.signal, Math.min(20_000, deadline - Date.now())), aborter.signal);
-      } catch (error) {
-        if (!current() || !transientSessionChangeError(error)) throw error;
-        await retry();
-        continue;
-      }
-      if (!current()) return false;
-      if (Date.now() >= deadline) throw new SessionChangeError('timeout');
-      if (response.direction_revision != null && response.direction_revision !== revision) throw new Error('stale direction');
-      if (before !== signature() || audioService.mixPhase() === 'crossfading') {
-        if (++unstableAttempts >= 6) throw new SessionChangeError('failed');
-        continue;
-      }
-      const retained = [...state.playback.queue.slice(0, state.playback.index + 1), ...explicit];
-      const usablePlan = anchor
-        ? response.items.some((item) => queueIndexOf(retained, planItemTrack(item)) === -1)
-        : Boolean(response.opening);
-      if (!usablePlan) {
-        if (response.empty_reason === 'exhausted' && !response.warming && !response.degraded) {
-          throw new SessionChangeError('exhausted');
-        }
-        await retry(response.retry_after);
-        continue;
-      }
-      controller.suspendPlanning();
-      const previousContext = { exploration: state.autoMode.exploration ?? [], directionRevision: state.autoMode.directionRevision ?? 0 };
-      if (!anchor) {
-        if (!response.opening) throw new Error('no opening');
-        const previous = state.autoMode.sources;
-        setState('autoMode', { sources: [source], exploration: [], directionRevision: revision });
-        if (!startAutoFromSourcePlan(response)) {
-          setState('autoMode', { sources: previous, ...previousContext });
-          throw new Error('no playable opening');
-        }
-      } else {
-        // A cued but silent transition may be discarded; a sounding blend never is.
-        if (audioService.mixPhase() !== 'idle') audioService.cancelMix('superseded');
-        committedTransition = null;
-        setState('autoMode', 'transition', IDLE_TRANSITION);
-        if (controller.activeIntent() !== 'auto_mode') {
-          controller.adopt('auto_mode', anchor, state.autoMode.profile);
-        }
-        const previous = state.autoMode.sources;
-        setState('autoMode', { sources: [source], exploration: [], directionRevision: revision });
-        if (!controller.applyReplacement(response, anchor)) {
-          setState('autoMode', { sources: previous, ...previousContext });
-          throw new Error('no replacement');
-        }
-        // Preserved requests change adjacency. Never reuse a cue for another seam.
-        const queue = state.playback.queue;
-        const plan = { ...state.autoMode.plan };
-        queue.slice(state.playback.index + 1).forEach((row, offset) => {
-          const fromKey = queueIdentity(queue[state.playback.index + offset]);
-          if (plan[row.queueId]?.fromKey === fromKey) return;
-          plan[row.queueId] = {
-            ...plan[row.queueId], trackId: queueIdentity(row),
-            source: plan[row.queueId]?.source ?? (row.source === 'preview' ? 'related' : 'local'),
-            reasonKey: plan[row.queueId]?.reasonKey ?? 'autoMode.route.placed',
-            fromKey, transition: undefined,
-          };
-        });
-        // The live-pair refinement upgrades these conservative seams before playback.
-        setState('autoMode', { plan, staleSeams: [] });
-      }
-      setState('autoMode', 'sessionChange', undefined);
-      controller.resumePlanning();
-      sessionChangeAborter = null;
-      pushPlaybackState();
-      return true;
-    }
-    return false;
-  } catch (error) {
-    if (!state.autoMode.active || autoSessionEpoch !== epoch || sessionChangeAborter !== aborter
-      || (aborter.signal.aborted && !timedOut)) return false;
-    failedSessionChange = { tracks: usable, label: source.label };
-    const reason = timedOut ? 'timeout' : error instanceof SessionChangeError ? error.reason : 'failed';
-    setState('autoMode', 'sessionChange', { label: source.label, status: 'error', reason });
-    return false;
-  } finally {
-    clearTimeout(budgetTimer);
-    if (sessionChangeAborter === aborter) {
-      sessionChangeAborter = null;
-      controller.resumePlanning();
-      if (starvedQueueId) void controller.ensureRunway();
-    }
+  const source: AutoMusicSet = { id: randomId(), label: label.trim() || usable[0].title, tracks: usable, activation: 1 };
+  // A cued but silent handoff was the old direction's next song; a sounding
+  // blend is already the music.
+  const audible = audioService.mixPhase() === 'crossfading';
+  if (!audible) {
+    if (audioService.mixPhase() !== 'idle') audioService.cancelMix('superseded');
+    committedTransition = null;
+    setState('autoMode', 'transition', IDLE_TRANSITION);
   }
+  const pb = state.playback;
+  const current = pb.currentTrack;
+  const floor = current ? insertionFloor() : pb.index;
+  const anchor = pb.queue[floor] ?? current;
+  const leadEntry = lead && anchor && queueIndexOf([anchor], lead) !== 0
+    ? { ...createQueueEntry(lead, 'generated', 'auto_mode'), autoRoute: { kind: 'generated' as const, directionRevision: revision } }
+    : null;
+  // A request for the very song the session now starts from is that start.
+  const kept = pb.queue.slice(floor + 1)
+    .filter((entry) => isSingleRequest(entry) && !(leadEntry && queueIndexOf([entry], leadEntry) === 0));
+  const head = pb.queue.slice(0, floor + 1);
+  const queue = [...head, ...(leadEntry ? [leadEntry] : []), ...kept];
+  if (stagedEntry && !queue.some((entry) => entry.queueId === stagedEntry!.queueId)) {
+    stagedEntry = null;
+    audioService.clearStaged();
+  }
+  setState('playback', { queue, radioMode: false, radioLoading: false, radioSeedId: null });
+  // Every kept seam now has a different song in front of it. A cue is only
+  // ever honoured for the song it was planned out of.
+  const plan: Record<string, AutoPlanItem> = {};
+  for (const [queueId, item] of Object.entries(state.autoMode.plan)) {
+    if (head.some((entry) => entry.queueId === queueId)) plan[queueId] = item;
+  }
+  queue.slice(floor + 1).forEach((row, offset) => {
+    const fromKey = queueIdentity(queue[floor + offset]);
+    const held = state.autoMode.plan[row.queueId];
+    plan[row.queueId] = held?.fromKey === fromKey ? held : {
+      ...held,
+      trackId: queueIdentity(row),
+      source: held?.source ?? (row.source === 'preview' ? 'related' : 'local'),
+      reasonKey: held?.reasonKey ?? (row === leadEntry ? 'autoMode.reason.sessionStart' : 'autoMode.route.placed'),
+      fromKey,
+      transition: undefined,
+    };
+  });
+  setState('autoMode', {
+    sources: [source],
+    exploration: [],
+    directionRevision: revision,
+    plan,
+    staleSeams: [],
+    repairing: false,
+    phase: 'planning',
+    activity: {
+      id: ++generatedActivityId,
+      status: 'working',
+      key: 'autoMode.agent.sourceChanged',
+      values: { title: source.label },
+    },
+  });
+  updateUpcomingPreparation();
+  if (!current) {
+    // Nothing to mix out of: the planner opens inside the new source.
+    generatedQueue?.stop('auto_mode');
+    void startAutoFromSources();
+  } else {
+    // The DJ's own measurement of the seam into the chosen song, asked for now
+    // rather than a minute before the end — it may well leave sooner.
+    if (leadEntry && anchor) maybeRefineTransition(anchor, leadEntry, queueIdentity(anchor));
+    void ensureGeneratedQueue().start('auto_mode', queue.at(-1) ?? current, state.autoMode.profile);
+  }
+  prefetchUpcoming();
+  pushPlaybackState();
+  return true;
 }
 
 function scheduleRunwayReplan(note: string): void {
@@ -2863,7 +2803,6 @@ export const actions = {
 
   /** Leave Auto: generated guesses disappear; user route occurrences survive. */
   exitAutoMode(): void {
-    cancelSessionChange();
     cancelRunwayReplan();
     pendingImmediateAutoTrack = null;
     autoOpeningAborter?.abort();
@@ -2907,7 +2846,6 @@ export const actions = {
   addAutoSource(tracks: Track[], label: string): void {
     const usable = tracks.filter((track) => !isPodcastTrack(track));
     if (!state.autoMode.active || usable.length === 0) return;
-    cancelSessionChange();
     const source: AutoMusicSet = {
       id: randomId(),
       label: label.trim() || usable[0].title,
@@ -2922,25 +2860,32 @@ export const actions = {
     else void startAutoFromSources();
   },
 
-  /** Reserve a change before asynchronous catalogue resolution starts. */
+  /** Reserve a change before asynchronous catalogue resolution starts: a
+   * collection still being matched must not land after a later choice. */
   beginAutoSessionChange(): number {
-    cancelSessionChange();
     return ++autoSessionEpoch;
   },
 
-  startDjFromTrack(track: Track): Promise<boolean> {
+  /**
+   * Start the DJ from one song, or move a running session onto it.
+   *
+   * The song becomes the session's source. If it is not the one playing, it is
+   * also the next song, reached the way the DJ reaches any other; from then on
+   * the music comes from it. Entering DJ this way plans nothing from whatever
+   * was playing before.
+   */
+  async startDjFromTrack(track: Track): Promise<boolean> {
     if (isPodcastTrack(track) || (state.playback.currentTrack && isPodcastTrack(state.playback.currentTrack))) {
-      return Promise.resolve(false);
+      return false;
     }
     if (!state.autoMode.active) actions.enterAutoMode({ source: track, deferPlanning: true });
-    return changeAutoSession([track], track.title);
+    return changeAutoSession([track], track.title, track);
   },
 
-  changeAutoSession(tracks: Track[], label: string): Promise<boolean> {
+  /** Make a collection — or any list of songs — the session's one source. */
+  async changeAutoSession(tracks: Track[], label: string): Promise<boolean> {
     return changeAutoSession(tracks, label);
   },
-
-  cancelAutoSessionChange(): void { cancelSessionChange(); },
 
   retryAutoRoute(): void {
     if (!state.playback.currentTrack) {
@@ -2948,10 +2893,6 @@ export const actions = {
       return;
     }
     void generatedQueue?.retry();
-  },
-
-  retryAutoSessionChange(): void {
-    if (failedSessionChange) void changeAutoSession(failedSessionChange.tracks, failedSessionChange.label);
   },
 
   /** Steer the session from one song.
@@ -2975,7 +2916,6 @@ export const actions = {
 
   removeAutoSource(id: string): void {
     if (!state.autoMode.active || state.autoMode.sources.length <= 1) return;
-    cancelSessionChange();
     setState('autoMode', 'sources', (sources) => sources.filter((source) => source.id !== id));
     if (state.playback.currentTrack && state.autoMode.heard.length) {
       scheduleRunwayReplan(tr('autoMode.note.direction'));
@@ -3038,16 +2978,19 @@ export const actions = {
 
   autoSessionToken(): number { return autoSessionEpoch; },
 
-  async placeAutoTracks(tracks: Track[], beforeQueueId?: string): Promise<void> {
+  /** Request every song of a collection. The songs travel as one group: they
+   * are this session's material and leave with it when its source changes. */
+  async placeAutoTracks(tracks: Track[], beforeQueueId?: string, requestGroup?: string): Promise<void> {
     if (!state.autoMode.active) return;
     const usable = tracks.filter((track) => !isPodcastTrack(track));
     if (!usable.length) return;
-    if (usable.length === 1) return actions.placeAutoTrack(usable[0], beforeQueueId);
+    const group = requestGroup ?? (usable.length > 1 ? randomId() : undefined);
+    if (usable.length === 1) return actions.placeAutoTrack(usable[0], beforeQueueId, group);
     const epoch = autoSessionEpoch;
     if (!state.playback.currentTrack) {
-      await actions.placeAutoTrack(usable[0]);
+      await actions.placeAutoTrack(usable[0], undefined, group);
       if (!state.autoMode.active || epoch !== autoSessionEpoch) return;
-      return actions.placeAutoTracks(usable.slice(1), beforeQueueId);
+      return actions.placeAutoTracks(usable.slice(1), beforeQueueId, group);
     }
     const floor = insertionFloor();
     const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
@@ -3055,7 +2998,7 @@ export const actions = {
     const signature = route.map((row) => row.queueId).join('|');
     const occurrences = usable.map((track) => ({
       ...createQueueEntry(track, 'generated', 'auto_mode'),
-      autoRoute: { kind: 'user' as const, placement: beforeQueueId ? 'fixed' as const : 'dj' as const },
+      autoRoute: { kind: 'user' as const, placement: beforeQueueId ? 'fixed' as const : 'dj' as const, requestGroup: group },
     }));
     const progress = toast.loading(tr('musicExplorer.requesting'));
     const fallback = () => {
@@ -3125,14 +3068,14 @@ export const actions = {
     }
   },
 
-  async placeAutoTrack(track: Track, beforeQueueId?: string): Promise<void> {
+  async placeAutoTrack(track: Track, beforeQueueId?: string, requestGroup?: string): Promise<void> {
     if (!state.autoMode.active || isPodcastTrack(track)) return;
     const floor = insertionFloor();
     const route = state.playback.queue.slice(floor + 1);
     const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
     const occurrence = {
       ...createQueueEntry(track, 'generated', 'auto_mode'),
-      autoRoute: { kind: 'user' as const, placement: beforeQueueId ? 'fixed' as const : 'dj' as const },
+      autoRoute: { kind: 'user' as const, placement: beforeQueueId ? 'fixed' as const : 'dj' as const, requestGroup },
     };
     if (!seed) {
       setState('playback', { queue: [occurrence], index: 0, shuffle: false, repeat: 'off' });
@@ -3412,14 +3355,37 @@ export const actions = {
    */
   async autoSkip(): Promise<void> {
     const canAdvance = () => state.playback.index < state.playback.queue.length - 1;
+    if (audioService.mixPhase() !== 'idle') {
+      // A handoff is already prepared or under way. Bring it forward; the mixer
+      // always does something with that, and says what.
+      const skipped = state.playback.currentTrack;
+      const owned = audioService.mixIsDominant();
+      const outcome = audioService.startMixNow();
+      if (outcome === 'staged') {
+        // The next song could not be blended in yet: hand it over the way any
+        // other skip would, from the deck that was already holding it.
+        listeningLearning.skip(skipped, playingDuration());
+        actions.next();
+        void generatedQueue?.ensureRunway();
+        return;
+      }
+      if (outcome === 'blend' || (outcome === 'finished' && !owned)) {
+        listeningLearning.skip(skipped, playingDuration());
+        void generatedQueue?.ensureRunway();
+        return;
+      }
+      // The blend had already handed over, so the listener is skipping the
+      // song they now hear; or the prepared song could not play at all. Either
+      // way, skip from where playback stands now.
+    }
     if (canAdvance()) {
       const pb = state.playback;
       const next = pb.queue[pb.index + 1];
       const current = pb.currentTrack;
       listeningLearning.skip(current, playingDuration());
       if (audioService.mixPhase() !== 'idle') {
-        // A blend was already prepared for this exact pair: bring it forward.
-        audioService.startMixNow();
+        audioService.cancelMix('superseded');
+        actions.next();
       } else if (next && current) {
         const fromKey = queueIdentity(current);
         const item = state.autoMode.plan[next.queueId];
@@ -3650,6 +3616,17 @@ export const actions = {
     // played before it, so carrying on means loading this one.
     if (unmatchedSelection && unmatchedSelection.queueId === pb.queue[pb.index]?.queueId) {
       loadIndex(pb.index, { restart: true, trigger: 'resume' });
+      return;
+    }
+    // The song this deck holds played to its end and nothing took over —
+    // inside DJ that is a stalled handoff, never a request to hear it again.
+    if (state.autoMode.active && pb.repeat !== 'one' && audioService.snapshot().ended) {
+      audioService.unlockAudio();
+      if (pb.index < pb.queue.length - 1) actions.next('ended');
+      else {
+        enterStarved();
+        void ensureGeneratedQueue().refillNow();
+      }
       return;
     }
     // An Auto session with nobody planning for it: the workspace was entered

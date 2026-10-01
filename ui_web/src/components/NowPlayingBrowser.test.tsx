@@ -296,6 +296,23 @@ describe('NowPlayingBrowser', () => {
     expect(onPlaced).toHaveBeenCalledOnce();
   });
 
+  it('treats a collection browsed in DJ as one source, never as a list of requests', async () => {
+    // Starting a session "from my favourites" used to queue every favourite
+    // as a request, and those requests outlived every later change of session.
+    storeMock.state.favorites = ['local-1'];
+    render(() => <NowPlayingBrowser purpose="auto-neutral" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Favourites/ }));
+    const header = within(document.querySelector<HTMLElement>('[data-browser-toolbar]')!);
+    expect(header.queryByRole('button', { name: 'Add to session' })).not.toBeInTheDocument();
+    fireEvent.click(header.getByRole('button', { name: 'Change session' }));
+    await waitFor(() => expect(storeMock.actions.changeAutoSession).toHaveBeenCalledWith([storeMock.local], 'Favourites'));
+    expect(storeMock.actions.placeAutoTracks).not.toHaveBeenCalled();
+    // Asking for every song is still there, by name, in the collection's menu.
+    fireEvent.click(header.getByRole('button', { name: 'Actions for Favourites' }));
+    const options = vi.mocked(openActionMenu).mock.calls.at(-1)![0];
+    expect(options.actions!.map((action) => action.label)).toEqual(['Mix into session', 'Add to session']);
+  });
+
   it('makes reference selection the primary collection action in the reference picker', () => {
     storeMock.state.favorites = ['local-1'];
     const onPlaced = vi.fn();

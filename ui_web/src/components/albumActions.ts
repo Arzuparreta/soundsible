@@ -45,6 +45,12 @@ function albumContext(album: CatalogAlbum): PlaybackContextDescriptor {
 export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {}): ActionMenuOptions {
   const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
+    // In DJ an album is one source: choosing it moves the session onto it.
+    ...(inAuto ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: async () => {
+      const epoch = actions.beginAutoSessionChange();
+      const tracks = await albumTracks(album);
+      if (actions.autoSessionToken() === epoch) await actions.changeAutoSession(tracks, album.title);
+    } }] : []),
     {
       icon: inAuto ? menuIcons.queue() : menuIcons.play(),
       label: inAuto ? t('musicExplorer.requestAll') : t('albumActions.play'),
@@ -62,11 +68,6 @@ export function albumMenuOptions(album: CatalogAlbum, _ctx: AlbumMenuContext = {
     const epoch = actions.autoSessionToken();
     const tracks = await albumTracks(album);
     if (actions.autoSessionToken() === epoch) actions.addAutoSource(tracks, album.title);
-  } });
-  if (inAuto) list.push({ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: async () => {
-    const epoch = actions.beginAutoSessionChange();
-    const tracks = await albumTracks(album);
-    if (actions.autoSessionToken() === epoch) await actions.changeAutoSession(tracks, album.title);
   } });
   if (!inAuto) list.push({
       icon: menuIcons.shuffle(),

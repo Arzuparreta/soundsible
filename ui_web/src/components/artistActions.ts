@@ -35,6 +35,8 @@ function artistContext(artist: string): PlaybackContextDescriptor {
 export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}): ActionMenuOptions {
   const inAuto = state.autoMode.active;
   const list: MenuAction[] = [
+    // In DJ an artist is one source: choosing it moves the session onto it.
+    ...(inAuto ? [{ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(artistTracks(artist), artist) }] : []),
     {
       icon: inAuto ? menuIcons.queue() : menuIcons.play(),
       label: inAuto ? t('musicExplorer.requestAll') : t('artistActions.play'),
@@ -50,7 +52,6 @@ export function artistMenuOptions(artist: string, _ctx: ArtistMenuContext = {}):
     },
   ];
   if (inAuto) list.push({ icon: menuIcons.source(), label: t('musicExplorer.reference'), onSelect: () => actions.addAutoSource(artistTracks(artist), artist) });
-  if (inAuto) list.push({ icon: menuIcons.changeSession(), label: t('musicExplorer.change'), onSelect: () => void actions.changeAutoSession(artistTracks(artist), artist) });
   if (!inAuto) list.push({
       icon: menuIcons.shuffle(),
       label: t('artistActions.shuffle'),

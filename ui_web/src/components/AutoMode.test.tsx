@@ -8,7 +8,7 @@ const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPi
   actions: {
     removeAutoSource: vi.fn(), useAutoTrackAsSource: vi.fn(), placeAutoTrack: vi.fn(),
     removeAutoRouteOccurrence: vi.fn(), avoidAutoTrackForSession: vi.fn(), moveAutoRoute: vi.fn(),
-    retryAutoRoute: vi.fn(), retryAutoSessionChange: vi.fn(), repairAutoRoute: vi.fn(), changeAutoSession: vi.fn(), startDjFromTrack: vi.fn(), cancelAutoSessionChange: vi.fn(),
+    retryAutoRoute: vi.fn(), repairAutoRoute: vi.fn(), changeAutoSession: vi.fn(), startDjFromTrack: vi.fn(),
   },
   openActionMenu: vi.fn(),
   openContextMenu: vi.fn(),
@@ -22,7 +22,6 @@ const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPi
     },
     autoMode: {
       active: true,
-      sessionChange: undefined as undefined | { label: string; status: 'working' | 'error'; reason?: 'timeout' | 'exhausted' | 'failed' },
       sources: [{ id: 'source-1', label: 'Warehouse techno', activation: 1, tracks: [{ id: 'root', title: 'Root', artist: 'DJ' }] }],
       transition: { status: 'idle' as 'idle' | 'armed' },
       repairing: false,
@@ -115,23 +114,6 @@ describe('AutoMode workspace', () => {
     } finally { state.playback.currentTrack = previous; }
   });
 
-  it('offers Cancel while preparing and reserves Retry for the terminal error', () => {
-    state.autoMode.sessionChange = { label: 'New direction', status: 'working' };
-    try {
-      const view = renderAuto('route');
-      expect(screen.getByRole('status')).toHaveTextContent('musicExplorer.changing:New direction');
-      expect(screen.queryByRole('button', { name: 'musicExplorer.retryChange' })).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }));
-      expect(actions.cancelAutoSessionChange).toHaveBeenCalledOnce();
-      view.unmount();
-      state.autoMode.sessionChange = { label: 'New direction', status: 'error', reason: 'timeout' };
-      renderAuto('route');
-      expect(screen.getByRole('status')).toHaveTextContent('musicExplorer.changeTimedOut');
-      fireEvent.click(screen.getByRole('button', { name: 'musicExplorer.retryChange' }));
-      expect(actions.retryAutoSessionChange).toHaveBeenCalledOnce();
-    } finally { state.autoMode.sessionChange = undefined; }
-  });
-
   /* Visible row menus expose collection and session actions together. */
   it('keeps session actions in one route menu, reached from the visible button', () => {
     const { container } = renderAuto('route');
@@ -141,7 +123,7 @@ describe('AutoMode workspace', () => {
     fireEvent.click(container.querySelector('[data-drag-row="q-next"] [data-row-menu]')!);
     const options = openContextMenu.mock.calls.at(-1)![0];
     expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
-      'musicList.move', 'musicExplorer.reference', 'musicExplorer.startDjFromCurrent', 'trackMenu', 'autoMode.route.remove',
+      'musicList.move', 'musicExplorer.reference', 'musicExplorer.startDjFromSong', 'trackMenu', 'autoMode.route.remove',
     ]);
     options.actions[1].onSelect();
     options.actions[2].onSelect();
@@ -333,7 +315,7 @@ describe('AutoMode workspace', () => {
       // Loaded and mixing: it cannot be moved, and taking it out of the route
       // no longer means anything. Everything else still applies.
       expect(options.actions.map((action: { label: string }) => action.label)).toEqual([
-        'musicExplorer.reference', 'musicExplorer.startDjFromCurrent', 'trackMenu',
+        'musicExplorer.reference', 'musicExplorer.startDjFromSong', 'trackMenu',
       ]);
       options.actions[0].onSelect();
       expect(actions.useAutoTrackAsSource).toHaveBeenCalledWith(expect.objectContaining({ id: 'next' }));

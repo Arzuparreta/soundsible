@@ -77,6 +77,13 @@ export interface PlaybackQueueEntry extends Track {
     placement?: 'dj' | 'fixed';
     /** queueId of the user occurrence this bridge exists for. */
     ownerQueueId?: string;
+    /**
+     * Shared by the songs of one whole-collection request. A collection is
+     * material for a session, not a set of separate requests: these leave with
+     * the session when its source changes, where a song requested on its own
+     * stays.
+     */
+    requestGroup?: string;
   };
   /** Set until this occurrence has been matched to something playable. Its
    * `id` is a placeholder meanwhile, never a stream. */

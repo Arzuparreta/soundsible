@@ -37,14 +37,10 @@ export const es: Dict = {
   musicExplorer: {
     startFromCurrent: 'Desde la actual',
     startDjFromCurrent: 'Empezar DJ desde la canción actual',
-    changeTimedOut: 'La sesión está tardando demasiado. Puedes reintentar.',
-    changeExhausted: 'No hay una ruta disponible desde {title}. Prueba otra canción.',
+    startDjFromSong: 'Empezar DJ desde esta canción',
     change: 'Cambiar la sesión',
     mixWith: 'Mezclar con…',
     changeShort: 'Cambiar…',
-    changing: 'Preparando sesión de {title}',
-    changeFailed: 'No se pudo cambiar la sesión',
-    retryChange: 'Reintentar',
 
     title: 'Música',
     explore: 'Explorar',
@@ -281,6 +277,7 @@ export const es: Dict = {
       explore: 'Explorar',
     },
     reason: {
+      sessionStart: 'Aquí empieza la sesión',
       favorite: 'Desde tus favoritos',
       library: 'Desde tu biblioteca',
       related: 'Siguiendo el hilo de {title}',
@@ -290,6 +287,7 @@ export const es: Dict = {
       artist: 'Más de {artist}',
     },
     agent: {
+      sourceChanged: 'Ahora la música sale de {title}',
       heard: 'Te he oído: {note}',
       looking: 'Buscando «{name}»…',
       noMatch: 'Aquí no hay nadie que responda a «{name}»',
