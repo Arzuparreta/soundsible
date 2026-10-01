@@ -1,52 +1,60 @@
-.editor { width: 100%; min-width: 0; padding: 12px; }
+.editor { width: 100%; min-width: 0; padding: var(--space-md) var(--settings-row-inset, 0px) var(--space-sm); }
 .preview { display: flex; gap: 4px; padding: 16px 4px; margin-bottom: 12px; background: var(--bg-raised); border-radius: var(--radius-md); }
 .preview > div { flex: 1; min-width: 0; display: flex; align-items: center; flex-direction: column; gap: 6px; text-align: center; font-size: var(--text-caption); overflow-wrap: anywhere; }
 .preview span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview svg { width: 21px; height: 21px; }
 .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-.row label { font-size: var(--text-caption); flex: none; }
+.row label { font-size: var(--text-label); color: var(--ink-secondary); flex: none; }
 .row select { flex: 1; min-width: 0; }
-.editor select, .editor button { min-height: 44px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 8px; color: var(--ink-primary); background: var(--bg-raised); font: inherit; }
+.editor select, .editor button { min-height: 44px; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 8px 12px; color: var(--ink-primary); background: var(--bg-active); font: inherit; }
 .row button { min-width: 44px; font-size: 22px; }
 .editor button { cursor: pointer; }
 .editor button:disabled { opacity: .4; cursor: default; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 
+/* A row that opens in place: the summary is a settings row like any other and
+   the editor unfolds under it, on the page rather than on a card. No overflow:
+   hidden. Nothing inside paints past the corners, and as a grid item of the
+   settings scroller a clipped <details> kept the height it had while closed,
+   so opening it showed no editor. */
 .disclosure {
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-panel);
-  background: var(--bg-raised);
-  /* No overflow: hidden. Nothing inside paints past the rounded corners, and
-     as a grid item of the settings scroller a clipped <details> kept the
-     height it had while closed, so opening it showed no editor. */
+  border-radius: var(--radius-sm);
 }
 .disclosure summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 48px;
-  padding: 14px 16px;
+  gap: var(--space-lg);
+  min-height: var(--settings-row-h, var(--control-h));
+  padding: var(--space-sm) var(--settings-row-inset, 0px);
+  color: var(--ink-primary);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-weight: 600;
   list-style: none;
+  transition: background var(--dur-short) var(--ease-out);
 }
 .disclosure summary::-webkit-details-marker {
   display: none;
 }
+@media (hover: hover) and (pointer: fine) {
+  .disclosure summary:hover {
+    background: var(--bg-hover);
+  }
+}
 .disclosure summary:focus-visible {
   outline: 2px solid var(--accent-ink);
-  outline-offset: -3px;
+  outline-offset: -2px;
+}
+.disclosure summary svg {
+  transition: transform var(--dur-short) var(--ease-out);
 }
 .disclosure[open] summary svg {
   transform: rotate(90deg);
 }
-.disclosure .editor {
-  padding: 16px;
-}
 .note {
   margin: 0;
-  padding: 0 16px;
+  padding: 0 var(--settings-row-inset, 0px);
   color: var(--ink-secondary);
-  font-size: var(--text-caption);
+  font-size: var(--text-label);
+  line-height: var(--lh-normal);
 }

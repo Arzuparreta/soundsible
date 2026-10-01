@@ -3,6 +3,14 @@ import AxeBuilder from '@axe-core/playwright';
 import { EXTRA_THEMES } from '../../src/boot/themes';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 
+/* What the theme picker calls each palette. Keyed on the shared list, so a
+   palette added to it does not compile until this walk knows its name. */
+const LABELS: Record<(typeof EXTRA_THEMES)[number], string> = {
+  slate: 'Pizarra',
+  'pure-black': 'Negro puro',
+  'forest-green': 'Verde bosque',
+};
+
 /* The shared list, so a palette cannot ship without being walked end to end. */
 for (const theme of EXTRA_THEMES) {
   test(`${theme}: selection, persistence, accessibility and player`, async ({ page }, info) => {
@@ -12,21 +20,21 @@ for (const theme of EXTRA_THEMES) {
       body: '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="720"><defs><linearGradient id="cover"><stop stop-color="#ff4010"/><stop offset="0.5" stop-color="#c020e0"/><stop offset="1" stop-color="#0080ff"/></linearGradient></defs><rect width="720" height="720" fill="url(#cover)"/></svg>',
     }));
     await page.goto('/player/#/settings/appearance');
-    const select = page.getByRole('combobox', { name: 'Otros temas' });
-    await select.selectOption(theme);
+    const option = page.getByRole('radio', { name: LABELS[theme], exact: true });
+    await option.check();
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-    await expect(page.getByRole('button', { name: 'Oscuro', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByRole('radio', { name: 'Oscuro', exact: true })).not.toBeChecked();
     await expect(page.locator('details')).toHaveCount(0);
     await page.reload();
-    await expect(select).toHaveValue(theme);
+    await expect(option).toBeChecked();
     await page.emulateMedia({ colorScheme: 'light' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await expect(page.locator('#startup-screen')).toHaveCount(0);
     await page.screenshot({ animations: 'disabled', path: info.outputPath(`${theme}.png`) });
     expect((await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa']).analyze()).violations).toEqual([]);
-    await page.getByRole('button', { name: 'Sistema', exact: true }).click();
+    await page.getByRole('radio', { name: 'Sistema', exact: true }).check();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await select.selectOption(theme);
+    await option.check();
     await page.goto('/player/#/settings/accessibility');
     const disclosure = page.locator('details');
     await expect(disclosure).not.toHaveAttribute('open');

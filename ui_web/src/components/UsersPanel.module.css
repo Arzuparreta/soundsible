@@ -1,24 +1,28 @@
 /* The settings window owns the scroller and the outer padding; this is only
-   the stack of blocks that goes inside it. */
+   the stack of blocks that goes inside it. Like every settings screen it draws
+   on the page: people are rows, the form is a titled group, nothing is a card. */
 .panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
+  gap: var(--space-xl);
   min-width: 0;
 }
 
 .intro {
   margin: 0;
   font-size: var(--text-label);
+  line-height: var(--lh-normal);
   color: var(--ink-secondary);
 }
 
+/* Rows reach into the gutter by their own padding, as in SettingsRows. */
 .list {
+  --users-row-inset: var(--space-md);
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-2xs);
   list-style: none;
-  margin: 0;
+  margin: 0 calc(-1 * var(--users-row-inset));
   padding: 0;
 }
 
@@ -26,30 +30,22 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-md);
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-1);
-  transition:
-    background var(--dur-short) var(--ease-out),
-    border-color var(--dur-short) var(--ease-out),
-    box-shadow var(--dur-short) var(--ease-out);
+  min-height: var(--row-h);
+  padding: var(--space-sm) var(--users-row-inset);
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-short) var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
-
-.row:hover {
-  background: var(--bg-hover);
-  border-color: var(--hairline-strong);
-  box-shadow: var(--shadow-2);
-}
+  .row:hover {
+    background: var(--bg-hover);
+  }
 }
 
 .avatar {
   flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   border-radius: var(--radius-full);
@@ -68,7 +64,7 @@
 }
 
 .name {
-  font-size: var(--text-body);
+  font-size: var(--text-title);
   font-weight: var(--fw-medium);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -79,8 +75,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-sm);
-  font-size: var(--text-caption);
-  color: var(--ink-tertiary);
+  font-size: var(--text-label);
+  color: var(--ink-secondary);
 }
 
 .badge {
@@ -94,8 +90,8 @@
 .badgeMuted {
   padding: 1px var(--space-sm);
   border-radius: var(--radius-full);
-  background: var(--bg-inset);
-  color: var(--ink-tertiary);
+  background: var(--bg-active);
+  color: var(--ink-secondary);
 }
 
 .rowActions {
@@ -118,8 +114,8 @@
   font-family: var(--font-mono);
   font-size: var(--text-mono);
   color: var(--ink-secondary);
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
+  background: var(--bg-active);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
 }
 
@@ -127,17 +123,15 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  padding: var(--space-lg);
-  background: var(--bg-raised);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-1);
 }
 
+/* Titled like every settings group. */
 .formTitle {
   margin: 0;
-  font-size: var(--text-title);
+  font-size: var(--text-label);
   font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--ink-secondary);
 }
 
 .field {
@@ -153,13 +147,22 @@
 
 .input,
 .select {
+  min-height: var(--control-h);
   padding: var(--space-sm) var(--space-md);
   font: inherit;
   font-size: var(--text-body);
   color: var(--ink-primary);
-  background: var(--bg-inset);
-  border: 1px solid var(--hairline);
+  background: var(--bg-active);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+}
+
+/* PasswordFields brings outlined fields of its own; in this form they match
+   the filled ones around them. Its focus ring still wins. */
+.form input,
+.form button[aria-pressed] {
+  background: var(--bg-active);
+  border-color: transparent;
 }
 
 .input:focus-visible,

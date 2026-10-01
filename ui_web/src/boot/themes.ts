@@ -13,7 +13,7 @@
  * here, deliberately — that is what lets those callers reach it.
  */
 
-/** The palettes the segmented control does not show, offered in a select. */
+/** The palettes beyond light, dark and following the system. */
 export const EXTRA_THEMES = ['slate', 'pure-black', 'forest-green'] as const;
 
 /** Every preference the store will accept out of localStorage. */

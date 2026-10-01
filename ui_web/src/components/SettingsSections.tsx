@@ -1,6 +1,6 @@
 import { SettingsLoad } from './SettingsLoad';
 import { BottomNavigationSettings } from './BottomNavigationSettings';
-import { EXTRA_THEMES } from '../boot/themes';
+import { EXTRA_THEMES, type Theme } from '../boot/themes';
 import { createSignal, onMount, For, Show, type JSX } from 'solid-js';
 import { state, actions } from '../stores';
 import { api } from '../lib/api';
@@ -28,6 +28,7 @@ import { UsersPanel } from './UsersPanel';
 import { SubsonicAccessPanel } from './SubsonicAccessPanel';
 import {
   ActionRow,
+  ChoiceGroup,
   InputRow,
   NavRow,
   SegmentedRow,
@@ -161,11 +162,12 @@ function AccountSection() {
             </span>
           </div>
 
-          <SettingsGroup label={t('settings.group.profile')} note={t('account.usernameHint')}>
+          <SettingsGroup label={t('settings.group.profile')}>
             <ActionRow anchor="change-name" label={t('account.changeName')} onClick={editName} />
             <ActionRow
               anchor="change-username"
               label={t('account.changeUsername')}
+              hint={t('account.usernameHint')}
               onClick={editUsername}
             />
             <ActionRow
@@ -176,10 +178,11 @@ function AccountSection() {
             />
           </SettingsGroup>
 
-          <SettingsGroup label={t('settings.group.searchHistory')} note={t('settings.note.searchHistory')}>
+          <SettingsGroup label={t('settings.group.searchHistory')}>
             <SwitchRow
               anchor="search-history"
               label={t('settings.searchHistory')}
+              hint={t('settings.note.searchHistory')}
               checked={searchHistoryEnabled()}
               onChange={() => setSearchHistoryEnabled(!searchHistoryEnabled())}
             />
@@ -196,80 +199,45 @@ function AccountSection() {
 
 /* ── Appearance ───────────────────────────────────────────────────────── */
 
-const THEMES = ['dark', 'system', 'light'] as const;
-
-function themeIcon(theme: (typeof THEMES)[number]): JSX.Element {
-  if (theme === 'dark') return svg(<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />);
-  if (theme === 'light')
-    return svg(
-      <>
-        <circle cx="12" cy="12" r="4" />
-        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-      </>,
-    );
-  return svg(
-    <>
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <path d="M8 21h8M12 17v4" />
-    </>,
-  );
-}
-
-function themeLabel(theme: (typeof THEMES)[number]): string {
-  if (theme === 'dark') return t('settings.themeDark');
-  if (theme === 'light') return t('settings.themeLight');
-  return t('settings.themeSystem');
-}
-
-/* The palettes the segmented control has no room for. Keyed on the shared list,
-   so a theme added to it does not compile until it has a label here. */
-const EXTRA_THEME_LABELS: Record<(typeof EXTRA_THEMES)[number], () => string> = {
+/* Every palette, in the order the picker lists them. Keyed on the shared type,
+   so a theme added to the store does not compile until it has a label here. */
+const THEME_LABELS: Record<Theme, () => string> = {
+  system: () => t('settings.themeSystem'),
+  dark: () => t('settings.themeDark'),
+  light: () => t('settings.themeLight'),
   slate: () => t('settings.themeSlate'),
   'pure-black': () => t('settings.themePureBlack'),
   'forest-green': () => t('settings.themeForestGreen'),
 };
 
-function extraTheme(theme: string): (typeof EXTRA_THEMES)[number] | undefined {
-  return EXTRA_THEMES.find((candidate) => candidate === theme);
-}
+const THEME_ORDER: Theme[] = ['system', 'dark', 'light', ...EXTRA_THEMES];
 
 function AppearanceSection() {
   return (
-    <SettingsGroup label={t('settings.appearance')} note={t('settings.note.theme')}>
-      <SegmentedRow
+    <>
+      <ChoiceGroup
         anchor="theme"
         label={t('settings.theme')}
-        options={THEMES.map((theme) => ({
+        options={THEME_ORDER.map((theme) => ({
           value: theme,
-          icon: themeIcon(theme),
-          aria: themeLabel(theme),
+          label: THEME_LABELS[theme](),
+          hint: theme === 'system' ? t('settings.note.theme') : undefined,
         }))}
-        value={THEMES.find(theme => theme === state.theme)}
+        value={state.theme}
         onChange={(theme) => actions.setTheme(theme)}
       />
-      <SelectRow
-        anchor="other-themes"
-        label={t('settings.otherThemes')}
-        value={extraTheme(state.theme) ?? ''}
-        onChange={(value) => {
-          const theme = extraTheme(value);
-          if (theme) actions.setTheme(theme);
-        }}
-      >
-        <option value="" disabled>{t('settings.selectTheme')}</option>
-        <For each={EXTRA_THEMES}>
-          {(theme) => <option value={theme}>{EXTRA_THEME_LABELS[theme]()}</option>}
-        </For>
-      </SelectRow>
-      <SelectRow
-        anchor="language"
-        label={t('settings.language')}
-        value={locale()}
-        onChange={(value) => setLocale(value as Locale)}
-      >
-        <For each={LOCALES}>{(l) => <option value={l.code}>{l.native}</option>}</For>
-      </SelectRow>
-    </SettingsGroup>
+
+      <SettingsGroup>
+        <SelectRow
+          anchor="language"
+          label={t('settings.language')}
+          value={locale()}
+          onChange={(value) => setLocale(value as Locale)}
+        >
+          <For each={LOCALES}>{(l) => <option value={l.code}>{l.native}</option>}</For>
+        </SelectRow>
+      </SettingsGroup>
+    </>
   );
 }
 
@@ -277,20 +245,17 @@ function AppearanceSection() {
 
 function AccessibilitySection() {
   return (
-    <>
-      <SettingsGroup label={t('accessibility.title')} note={t('accessibility.intro')} plain>
-        <DisplayPreferences />
-      </SettingsGroup>
+    <SettingsGroup>
+      <DisplayPreferences />
+      <SwitchRow
+        anchor="haptics"
+        label={t('settings.haptics')}
+        hint={t('settings.note.haptics')}
+        checked={state.haptics}
+        onChange={() => actions.setHaptics(!state.haptics)}
+      />
       <BottomNavigationSettings />
-      <SettingsGroup label={t('settings.group.feedback')} note={t('settings.note.haptics')}>
-        <SwitchRow
-          anchor="haptics"
-          label={t('settings.haptics')}
-          checked={state.haptics}
-          onChange={() => actions.setHaptics(!state.haptics)}
-        />
-      </SettingsGroup>
-    </>
+    </SettingsGroup>
   );
 }
 
@@ -367,45 +332,49 @@ function PlaybackSection() {
 
   return (
     <SettingsLoad load={load}>
-      <SettingsGroup label={t('settings.group.connection')} note={t('settings.note.connection')}>
-        <ValueRow anchor="delivery" label={t('settings.link.label')} value={connection()} />
-      </SettingsGroup>
-
-      <SettingsGroup label={t('settings.playback')} note={t('settings.note.volumeLeveling')}>
+      <SettingsGroup>
         <SwitchRow
           anchor="volume-leveling"
           label={t('settings.volumeLeveling')}
+          hint={t('settings.note.volumeLeveling')}
           checked={leveling()}
           onChange={toggleLeveling}
         />
-      </SettingsGroup>
-
-      <SettingsGroup label={t('settings.group.upNext')} note={t('settings.note.autoplay')}>
         <SwitchRow
           anchor="autoplay"
           label={t('settings.autoplay')}
+          hint={t('settings.note.autoplay')}
           checked={autoplay()}
           onChange={toggleAutoplay}
         />
-      </SettingsGroup>
-
-      <SettingsGroup label={t('settings.group.dj')} note={t('settings.note.djMixing')}>
         <SwitchRow
           anchor="dj-mixing"
           label={t('settings.djMixing')}
+          hint={t('settings.note.djMixing')}
           checked={mixing()}
           onChange={toggleMixing}
         />
       </SettingsGroup>
 
-      <SettingsGroup label={t('settings.group.recommendations')} note={t('settings.learnActivityNote')}>
+      <SettingsGroup label={t('settings.group.recommendations')}>
         <SwitchRow
           anchor="learn-activity"
           label={t('settings.learnActivity')}
+          hint={t('settings.learnActivityNote')}
           checked={learning()}
           onChange={toggleLearning}
         />
         <ActionRow anchor="reset-learning" label={t('settings.resetLearning')} onClick={resetLearning} />
+      </SettingsGroup>
+
+      {/* A diagnostic, not a preference: after everything that can be changed. */}
+      <SettingsGroup label={t('settings.group.connection')}>
+        <ValueRow
+          anchor="delivery"
+          label={t('settings.link.label')}
+          hint={t('settings.note.connection')}
+          value={connection()}
+        />
       </SettingsGroup>
     </SettingsLoad>
   );
@@ -539,6 +508,12 @@ function LibrarySection() {
     <>
       <SettingsGroup>
         <ValueRow anchor="track-count" label={t('settings.tracks')} value={String(state.library.length)} />
+        <NavRow
+          anchor="import"
+          href="/import"
+          label={t('settings.importFrom')}
+          hint={t('settings.importNote')}
+        />
       </SettingsGroup>
 
       <SettingsGroup label={t('settings.group.sync')} note={t('settings.note.sync')}>
@@ -547,10 +522,6 @@ function LibrarySection() {
         <Show when={isAdmin()}>
           <ActionRow anchor="cloud-sync" label={t('settings.sync')} onClick={cloudSync} />
         </Show>
-      </SettingsGroup>
-
-      <SettingsGroup label={t('settings.importCard')} note={t('settings.importNote')}>
-        <NavRow anchor="import" href="/import" label={t('settings.importFrom')} />
       </SettingsGroup>
 
       <SettingsGroup label={t('settings.group.maintenance')} note={t('settings.note.maintenance')}>
@@ -625,10 +596,11 @@ function DownloadsSection() {
 
   return (
     <SettingsLoad load={load}>
-      <SettingsGroup label={t('settings.quality')} note={t('settings.note.quality')}>
+      <SettingsGroup>
         <SegmentedRow
           anchor="quality"
           label={t('settings.quality')}
+          hint={t('settings.note.quality')}
           options={QUALITY_OPTIONS.map((q) => ({ value: q, label: qualityLabel(q) }))}
           value={quality()}
           onChange={changeQuality}
@@ -659,10 +631,11 @@ function DevicesSection() {
   const sharedLinks = associationUrl();
   return (
     <>
-      <SettingsGroup label={t('settings.group.thisDevice')} note={t('settings.note.device')}>
+      <SettingsGroup label={t('settings.group.thisDevice')}>
         <InputRow
           anchor="device-name"
           label={t('settings.deviceName')}
+          hint={t('settings.note.device')}
           value={state.device.device_name}
           onInput={(value) => actions.setDeviceName(value)}
         />
@@ -713,7 +686,7 @@ function CommunitySection() {
   };
 
   return (
-    <SettingsGroup label={t('settings.community')} note={t('settings.note.community')}>
+    <SettingsGroup note={t('settings.note.community')}>
       <ValueRow anchor="community-service" label={t('settings.communityService')} value={source()} />
       <ValueRow anchor="community-status" label={t('settings.communityStatus')} value={status()} />
       <Show when={communityConfig()?.source === 'custom' && communityConfig()?.api_url}>
@@ -733,29 +706,24 @@ function CommunitySection() {
 
 function AboutSection() {
   return (
-    <>
-      <SettingsGroup label={t('settings.connection')}>
-        <SettingRow anchor="engine-status" label={t('settings.engineLabel')}>
-          <span class={styles.status}>
-            <span
-              class={styles.statusDot}
-              classList={{ [styles.statusOn]: state.online, [styles.statusOff]: !state.online }}
-              aria-hidden="true"
-            />
-            {state.online ? t('common.online') : t('common.offline')}
-          </span>
-        </SettingRow>
-      </SettingsGroup>
-
-      <SettingsGroup label={t('settings.about')}>
-        <ValueRow
-          anchor="version"
-          label={t('brand.soundsible')}
-          value={<span class={styles.mono}>{t('settings.version')}</span>}
-        />
-        <NavRow anchor="design-system" href="/preview" label={t('settings.viewDesign')} />
-      </SettingsGroup>
-    </>
+    <SettingsGroup>
+      <SettingRow anchor="engine-status" label={t('settings.engineLabel')}>
+        <span class={styles.status}>
+          <span
+            class={styles.statusDot}
+            classList={{ [styles.statusOn]: state.online, [styles.statusOff]: !state.online }}
+            aria-hidden="true"
+          />
+          {state.online ? t('common.online') : t('common.offline')}
+        </span>
+      </SettingRow>
+      <ValueRow
+        anchor="version"
+        label={t('brand.soundsible')}
+        value={<span class={styles.mono}>{t('settings.version')}</span>}
+      />
+      <NavRow anchor="design-system" href="/preview" label={t('settings.viewDesign')} />
+    </SettingsGroup>
   );
 }
 
@@ -769,16 +737,16 @@ function described(id: SettingsSectionId): Pick<SettingsSection, 'id' | 'title' 
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
-    ...described('account'),
+    ...described('playback'),
     tone: 'accent',
     icon: () =>
       svg(
         <>
-          <circle cx="12" cy="8" r="3.5" />
-          <path d="M5 20a7 7 0 0 1 14 0" />
+          <circle cx="12" cy="12" r="9" />
+          <path d="M10 8.8l5.5 3.2-5.5 3.2z" />
         </>,
       ),
-    content: () => <AccountSection />,
+    content: () => <PlaybackSection />,
   },
   {
     ...described('appearance'),
@@ -803,18 +771,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         </>,
       ),
     content: () => <AccessibilitySection />,
-  },
-  {
-    ...described('playback'),
-    tone: 'accent',
-    icon: () =>
-      svg(
-        <>
-          <circle cx="12" cy="12" r="9" />
-          <path d="M10 8.8l5.5 3.2-5.5 3.2z" />
-        </>,
-      ),
-    content: () => <PlaybackSection />,
   },
   {
     ...described('library'),
@@ -849,18 +805,16 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     content: () => <DevicesSection />,
   },
   {
-    ...described('users'),
+    ...described('subsonic'),
     tone: 'info',
-    adminOnly: true,
     icon: () =>
       svg(
         <>
-          <path d="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1" />
-          <circle cx="9.5" cy="7" r="3" />
-          <path d="M21 19v-1a4 4 0 00-3-3.87M16.5 4.13a4 4 0 010 7.75" />
+          <path d="M4 12a8 8 0 0 1 8-8M4 12a8 8 0 0 0 8 8" />
+          <path d="M9 9.5v5M12 7.5v9M15 10.5v3M18 9v6" />
         </>,
       ),
-    content: () => <UsersPanel />,
+    content: () => <SubsonicAccessPanel />,
   },
   {
     ...described('community'),
@@ -876,18 +830,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     content: () => <CommunitySection />,
   },
   {
-    ...described('subsonic'),
-    tone: 'info',
-    icon: () =>
-      svg(
-        <>
-          <path d="M4 12a8 8 0 0 1 8-8M4 12a8 8 0 0 0 8 8" />
-          <path d="M9 9.5v5M12 7.5v9M15 10.5v3M18 9v6" />
-        </>,
-      ),
-    content: () => <SubsonicAccessPanel />,
-  },
-  {
     ...described('about'),
     tone: 'neutral',
     icon: () =>
@@ -899,16 +841,46 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       ),
     content: () => <AboutSection />,
   },
+  {
+    ...described('account'),
+    tone: 'accent',
+    icon: () =>
+      svg(
+        <>
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M5 20a7 7 0 0 1 14 0" />
+        </>,
+      ),
+    content: () => <AccountSection />,
+  },
+  {
+    ...described('users'),
+    tone: 'info',
+    adminOnly: true,
+    icon: () =>
+      svg(
+        <>
+          <path d="M16 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1" />
+          <circle cx="9.5" cy="7" r="3" />
+          <path d="M21 19v-1a4 4 0 00-3-3.87M16.5 4.13a4 4 0 010 7.75" />
+        </>,
+      ),
+    content: () => <UsersPanel />,
+  },
 ];
 
-/** The index, grouped so the submenus read as three intentions. */
+/**
+ * The index, grouped so the submenus read as three intentions and ordered by
+ * how often each is opened: what the music does first, the account last. The
+ * first entry is also what the side-by-side layout opens on.
+ */
 export const SETTINGS_GROUPS: { label: () => string; ids: string[] }[] = [
-  { label: () => t('settings.group.you'), ids: ['account'] },
-  { label: () => t('settings.group.preferences'), ids: ['appearance', 'accessibility', 'playback'] },
+  { label: () => t('settings.group.preferences'), ids: ['playback', 'appearance', 'accessibility'] },
   {
     label: () => t('settings.group.system'),
-    ids: ['library', 'users', 'downloads', 'devices', 'subsonic', 'community', 'about'],
+    ids: ['library', 'downloads', 'devices', 'subsonic', 'community', 'about'],
   },
+  { label: () => t('settings.group.you'), ids: ['account', 'users'] },
 ];
 
 /** Which conditional rows this account and install actually draw. */

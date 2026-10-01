@@ -2,7 +2,7 @@ import { For, Index, Show } from 'solid-js';
 import { t } from '../lib/i18n';
 import { bottomNavigation, setBottomNavigation } from '../lib/bottomNavigation';
 import { defaultBottomNavigation, navigationItems } from './primaryNavigation';
-import { Chevron, settingAnchor } from './SettingsRows';
+import { Chevron, settingAnchor, settingsRowStyles as rowStyles } from './SettingsRows';
 import styles from './BottomNavigationSettings.module.css';
 
 export function BottomNavigationSettings() {
@@ -14,7 +14,7 @@ export function BottomNavigationSettings() {
     setBottomNavigation(next);
   };
   return <details class={styles.disclosure} {...settingAnchor('bottom-bar')}>
-    <summary>{t('nav.bottomBar')}<Chevron /></summary>
+    <summary><span class={rowStyles.label}>{t('nav.bottomBar')}</span><Chevron /></summary>
     <p class={styles.note}>{t('nav.bottomBarHint')}</p>
     <div class={styles.editor}>
       <div class={styles.preview} aria-hidden="true"><For each={bottomNavigation()}>{href => {

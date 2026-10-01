@@ -154,7 +154,8 @@
 }
 }
 
-/* ── Paired devices panel (in Settings) ── */
+/* ── Paired devices panel (in Settings) ──
+   Rows on the page, padded by the settings panel's inset: no dividers. */
 .empty {
   padding: var(--space-md) var(--space-lg);
   font-size: var(--text-label);
@@ -166,11 +167,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-sm) var(--space-lg);
-}
-
-.deviceRow + .deviceRow {
-  border-top: 1px solid var(--hairline);
+  min-height: var(--settings-row-h, var(--control-h));
+  padding: var(--space-sm) var(--settings-row-inset, 0px);
 }
 
 .deviceMeta {
@@ -178,11 +176,11 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-2xs);
 }
 
 .deviceName {
-  font-size: var(--text-body);
+  font-size: var(--text-title);
   font-weight: var(--fw-medium);
   color: var(--ink-primary);
   white-space: nowrap;
@@ -191,49 +189,50 @@
 }
 
 .deviceSub {
-  font-size: var(--text-caption);
+  font-size: var(--text-label);
   color: var(--ink-secondary);
 }
 
 .revoke {
   flex-shrink: 0;
-  padding: var(--space-2xs) var(--space-md);
-  font-size: var(--text-caption);
+  min-height: 32px;
+  padding: var(--space-xs) var(--space-md);
+  font: inherit;
+  font-size: var(--text-label);
   font-weight: var(--fw-semibold);
   color: var(--danger);
   background: transparent;
-  border: 1px solid var(--hairline);
+  border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+  transition: background var(--dur-short) var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
 .revoke:hover {
-  background: var(--danger);
-  color: #fff;
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 }
 
 .pairBtn {
   display: flex;
   align-items: center;
-  justify-content: center;
   width: 100%;
-  margin-top: var(--space-sm);
-  padding: var(--space-sm) var(--space-lg);
-  font-size: var(--text-label);
+  min-height: var(--settings-row-h, var(--control-h));
+  padding: var(--space-sm) var(--settings-row-inset, 0px);
+  font: inherit;
+  font-size: var(--text-title);
   font-weight: var(--fw-semibold);
   color: var(--accent-ink);
+  text-align: left;
   background: transparent;
   border: none;
-  border-top: 1px solid var(--hairline);
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background var(--dur-short) var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
 .pairBtn:hover {
-  background: var(--bg-elevated);
+  background: var(--bg-hover);
 }
 }
 

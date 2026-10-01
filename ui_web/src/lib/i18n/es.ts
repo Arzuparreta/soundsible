@@ -668,8 +668,6 @@ export const es: Dict = {
     },
     appearance: 'Apariencia',
     theme: 'Tema',
-    otherThemes: 'Otros temas',
-    selectTheme: 'Seleccionar…',
     themeSlate: 'Pizarra',
     themePureBlack: 'Negro puro',
     themeForestGreen: 'Verde bosque',

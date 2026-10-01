@@ -286,13 +286,14 @@ export default function SettingsShell(props: SettingsShellProps) {
   let input: HTMLInputElement | undefined;
   let results: HTMLDivElement | undefined;
 
+  const groups = createMemo(() => groupSections(visibleSections(), SETTINGS_GROUPS));
+  // Side by side the pane is never empty: it shows the index's first entry.
   const current = createMemo(() => props.section
     ? findSection(props.section) ?? null
-    : desktopShell() ? visibleSections()[0] ?? null : null);
+    : desktopShell() ? groups()[0]?.sections[0] ?? null : null);
   const matches = createMemo(() =>
     searchSettings(visibleSections(), settingsCapabilities(), props.query),
   );
-  const groups = createMemo(() => groupSections(visibleSections(), SETTINGS_GROUPS));
 
   const select = (id: string) => props.onSectionChange(id);
   const open = (result: SearchResult) =>
