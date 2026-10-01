@@ -784,6 +784,34 @@ def test_a_recently_served_source_layout_keeps_its_offsets(runtime):
     assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.SOURCE_LAYOUT
 
 
+def test_lookups_that_serve_nothing_do_not_hold_a_source_layout(runtime):
+    # The drive: a fragmented preview prefetched seconds before every play was
+    # never "idle", so it was never flattened, and the iPhone took ten seconds
+    # to start it and could not seek near its end.
+    idle = preview_cache._SOURCE_FLATTEN_IDLE_SEC + 60
+    path = _seed_source_layout(runtime, idle_seconds=idle)
+
+    # Prefetch, DJ analysis and status checks all ask whether the file is there.
+    for _ in range(3):
+        assert preview_cache.get_cached(VID) == (path, "audio/mp4")
+    assert preview_cache.get_cached(VID, from_start=True) == (path, "audio/mp4")
+
+    assert path.read_bytes().count(b"moof") == 0
+    assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.FLAT_MP4_LAYOUT
+
+
+def test_serving_bytes_is_what_keeps_a_source_layout(runtime):
+    idle = preview_cache._SOURCE_FLATTEN_IDLE_SEC + 60
+    path = _seed_source_layout(runtime, idle_seconds=idle)
+    before = path.read_bytes()
+
+    preview_cache.mark_served(VID)
+
+    assert preview_cache.get_cached(VID, from_start=True) == (path, "audio/mp4")
+    assert path.read_bytes() == before
+    assert preview_cache.cached_metadata(VID)["layout"] == preview_cache.SOURCE_LAYOUT
+
+
 def test_a_failed_source_flatten_is_not_retried(runtime, monkeypatch):
     idle = preview_cache._SOURCE_FLATTEN_IDLE_SEC + 60
     path = _seed_source_layout(runtime, idle_seconds=idle)

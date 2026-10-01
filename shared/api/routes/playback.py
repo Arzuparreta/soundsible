@@ -527,6 +527,7 @@ def _serve_cached_preview(
     except OSError:
         pass
     response = send_file(str(path), mimetype=content_type, conditional=True)
+    preview_cache.mark_served(video_id)
     response.headers["Cache-Control"] = "private, max-age=86400"
     response.headers["X-Soundsible-Playback-Source"] = "preview"
     response.headers["X-Soundsible-Playback-Cache"] = cache_state
