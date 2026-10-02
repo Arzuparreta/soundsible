@@ -1,1 +1,1 @@
-"""Setup tool package for music upload and cloud storage management."""
+"""Storage providers, the library folder scan and file uploads."""
