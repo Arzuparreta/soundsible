@@ -1401,8 +1401,6 @@ export const api = {
       body: { dry_run: dryRun },
       timeoutMs: 60000,
     }),
-  optimizeLibrary: () =>
-    request<{ status?: string }>('/api/downloader/optimize', { method: 'POST', timeoutMs: 60000 }),
   cloudSync: () => request<{ status?: string }>('/api/downloader/sync', { method: 'POST', timeoutMs: 60000 }),
   wipeLibrary: () =>
     request<{ status?: string }>('/api/library/wipe', {

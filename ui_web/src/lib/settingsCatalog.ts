@@ -201,13 +201,6 @@ export const SETTINGS_CATALOG = {
         hint: 'settings.repairMsg',
       },
       {
-        id: 'optimize',
-        label: 'settings.optimize',
-        group: 'settings.group.maintenance',
-        hint: 'settings.note.maintenance',
-        requires: 'admin',
-      },
-      {
         id: 'purge-missing',
         label: 'settings.purgeFiles',
         group: 'settings.group.maintenance',

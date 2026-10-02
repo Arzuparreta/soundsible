@@ -3,7 +3,7 @@ import boto3
 from pathlib import Path
 from typing import Dict, Any
 from botocore.exceptions import ClientError
-from .models import LibraryMetadata
+from shared.models import LibraryMetadata
 
 class CloudSync:
     """Handles synchronization with Cloudflare R2 bucket."""

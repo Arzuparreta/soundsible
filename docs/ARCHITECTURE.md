@@ -341,7 +341,7 @@ Exact filenames and fields may evolve; treat the code under `shared/` and `playe
 - **Scopes**: members hold `library:read`, `library:write`, `playback:control`,
   `download:add`, `admin:config` (their own preferences). Admins additionally hold
   **`admin:instance`** — music folder, storage backend, downloader tuning,
-  optimization, cloud sync, and account management — plus `admin:dangerous`.
+  cloud sync, and account management — plus `admin:dangerous`.
 - **Real-time isolation**: each socket joins a `user:{user_id}` room;
   `library_updated` and `downloader_*` are emitted there, never broadcast.
   Playback rooms stay `playback:{scope}:{device_id}` where the scope is the user id.

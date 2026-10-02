@@ -53,7 +53,6 @@ from player.library import LibraryManager
 from player.queue_manager import QueueManager
 from player.favourites_manager import FavouritesManager
 from odst_tool.odst_downloader import ODSTDownloader
-from odst_tool.optimize_library import optimize_library
 
 import socket
 import requests
@@ -1489,10 +1488,9 @@ def _sync_odst_to_main_core():
 
 @serialized
 def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
-    """Rewrite track ids across every account after files were re-encoded.
+    """Rewrite track ids across every account after stored files changed.
 
-    Optimization changes each file's content hash, and the hash is the track
-    id. Without this pass every manifest, playlist, and favourite that pointed
+    A repair changes each file's content hash, and the hash is the track id. Without this pass every manifest, playlist, and favourite that pointed
     at the old id would go dead — for everyone, not just whoever ran it.
     """
     from shared.user_context import user_context
@@ -1538,41 +1536,10 @@ def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
                     emit_to_user("library_updated", user_id=user_id)
         except Exception as e:
             failed.append(user_id)
-            logger.warning("API: could not remap optimized track ids for user %s: %s", user_id, e)
+            logger.warning("API: could not remap repaired track ids for user %s: %s", user_id, e)
     if failed:
         raise RuntimeError("Some libraries could not commit repaired references; originals retained")
     return touched
-
-
-def run_optimization_task(dry_run):
-    def _task():
-        try:
-            dl = get_downloader(log_callback=queue_manager_dl.add_log)
-            mode = "DRY RUN" if dry_run else "LIVE"
-            queue_manager_dl.add_log(f"--- Starting Library Optimization ({mode}) ---")
-            def cb(msg): queue_manager_dl.add_log(f"🔧 {msg}")
-
-            summary = optimize_library(
-                dl.output_dir,
-                dry_run=dry_run,
-                progress_callback=cb,
-                library=dl.library,
-                save_callback=dl.save_library
-            ) or {}
-
-            if not dry_run:
-                touched = remap_track_ids_for_all_users(summary.get("id_map") or {}, {t.id: t for t in dl.library.tracks})
-                if touched:
-                    queue_manager_dl.add_log(
-                        f"Updated track ids in {len(touched)} librar"
-                        f"{'y' if len(touched) == 1 else 'ies'}."
-                    )
-
-            queue_manager_dl.add_log("--- Optimization Finished ---")
-        except Exception as e:
-            queue_manager_dl.add_log(f"❌ Optimization Error: {e}")
-
-    orchestrator.submit_task("optimization", _task)
 
 
 def run_library_repair_task(dry_run: bool = True, limit: int = 0):

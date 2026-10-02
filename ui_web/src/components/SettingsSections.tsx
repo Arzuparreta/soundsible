@@ -438,16 +438,6 @@ function LibrarySection() {
     }
   };
 
-  const optimize = async () => {
-    const h = toast.loading(t('settings.toast.optimizing'));
-    try {
-      await api.optimizeLibrary();
-      h.update('success', t('settings.toast.optimized'));
-    } catch {
-      h.update('error', t('settings.toast.optimizeFailed'));
-    }
-  };
-
   const cloudSync = async () => {
     const h = toast.loading(t('settings.toast.syncing'));
     try {
@@ -526,9 +516,6 @@ function LibrarySection() {
 
       <SettingsGroup label={t('settings.group.maintenance')} note={t('settings.note.maintenance')}>
         <ActionRow anchor="repair" label={t('settings.repair')} onClick={repair} />
-        <Show when={isAdmin()}>
-          <ActionRow anchor="optimize" label={t('settings.optimize')} onClick={optimize} />
-        </Show>
         <ActionRow anchor="purge-missing" label={t('settings.purgeFiles')} onClick={purge} />
         <Show when={isAdmin()}>
           <ActionRow anchor="empty-library" label={t('settings.emptyLibrary')} onClick={wipe} danger warn />

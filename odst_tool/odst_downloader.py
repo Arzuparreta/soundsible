@@ -9,7 +9,7 @@ from shared.library_lifecycle import serialized, LibraryPersistenceError
 from shared.file_revision import publication_lock, revision
 from shared.atomic_file import replace_contents, text_pieces
 from .config import DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_QUALITY
-from .models import LibraryMetadata
+from shared.models import LibraryMetadata
 from .library_podcasts import read_podcast_fields
 from .youtube_downloader import YouTubeDownloader
 from .cloud_sync import CloudSync

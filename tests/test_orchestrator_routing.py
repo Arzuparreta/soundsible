@@ -4,7 +4,7 @@ through JobOrchestrator (visible in active_jobs, capped by disk profile)
 instead of raw threading.Thread.
 
 Covers:
-  - optimization and sync admin tasks submit via orchestrator.submit_task
+  - the sync admin task submits via orchestrator.submit_task
   - runtime dependency auto-update submits via orchestrator.submit_background
 """
 
@@ -22,35 +22,19 @@ def _source(rel_path: str) -> str:
     return (REPO_ROOT / rel_path).read_text(encoding="utf-8")
 
 
-def test_optimize_and_sync_routes_no_longer_spawn_threads():
-    """The two admin routes must not wrap run_*_task in threading.Thread —
-    the inner tasks already submit to the orchestrator."""
+def test_sync_route_no_longer_spawns_a_thread():
+    """The admin route must not wrap run_sync_task in threading.Thread —
+    the inner task already submits to the orchestrator."""
     src = _source("shared/api/routes/downloader.py")
     tree = ast.parse(src)
-
-    def fn(name):
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == name:
-                return node
-        raise AssertionError(f"function {name} not found")
-
-    for fname in ("trigger_downloader_optimize", "trigger_downloader_sync"):
-        body_src = ast.unparse(fn(fname))
-        assert "threading.Thread" not in body_src, (
-            f"{fname} still spawns a raw Thread; should call the *_task "
-            f"function directly (orchestrator handles concurrency)"
-        )
-
-
-def test_run_optimization_task_submits_to_orchestrator():
-    """Calling run_optimization_task must enqueue exactly one job on the
-    orchestrator under the well-known id 'optimization'."""
-    with patch.object(api_mod.orchestrator, "submit_task") as submit:
-        submit.return_value = MagicMock()
-        api_mod.run_optimization_task(dry_run=True)
-        assert submit.called, "run_optimization_task did not submit any job"
-        task_id = submit.call_args.args[0]
-        assert task_id == "optimization"
+    route = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "trigger_downloader_sync"
+    )
+    assert "threading.Thread" not in ast.unparse(route), (
+        "trigger_downloader_sync still spawns a raw Thread; should call "
+        "run_sync_task directly (orchestrator handles concurrency)"
+    )
 
 
 def test_run_sync_task_submits_to_orchestrator():

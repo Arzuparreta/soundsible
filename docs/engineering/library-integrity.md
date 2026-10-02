@@ -10,7 +10,7 @@ retains the object. Storage changes do not retarget old cleanup intents.
 
 Canonical replacements and cleanup use one reentrant process/file lock, acquired
 before SQLite transactions. External scanned originals are borrowed and never
-removed. Repairs and optimization retain their previous objects until canonical
+removed. Repairs retain their previous objects until canonical
 references have moved. A failed remap preserves the original and reports failure.
 
 A library wipe clears that account only; it no longer enumerates and deletes a

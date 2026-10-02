@@ -8,7 +8,7 @@ import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Iterator, Callable
+from typing import Optional, Dict, Any, List, Callable
 from urllib.parse import quote, urlparse, parse_qs
 import yt_dlp
 import requests
@@ -23,9 +23,8 @@ from .config import (
     FORBIDDEN_KEYWORDS,
     prefer_ytmusic,
 )
-import difflib
 from .audio_utils import AudioProcessor
-from .models import Track
+from shared.models import Track
 from shared.musicbrainz import normalize_recording_mbid
 from shared.music_identity import youtube_music_metadata
 from shared.stream_resolution import ResolvedStream, resolved_stream
@@ -546,52 +545,6 @@ class YouTubeDownloader:
                 os.remove(temp_file)
             return None
 
-    @staticmethod
-    def _is_music_specific_content(info: Dict[str, Any], url: str = "") -> bool:
-        """
-        Detect if YouTube content is music-specific (likely to have good album art thumbnails).
-        Returns True if content appears to be music-focused (YouTube Music, VEVO, Topic channels, etc.).
-        """
-        # Note: Check yt-dlp music-specific fields
-        if info.get('artist') or info.get('track') or info.get('album'):
-            return True
-        
-        # Note: Check URL domain
-        if 'music.youtube.com' in url.lower():
-            return True
-        
-        # Note: Check channel/uploader patterns
-        channel = (info.get('channel') or info.get('uploader') or "").lower()
-        if not channel:
-            return False
-        
-        # Note: VEVO channels
-        if 'vevo' in channel:
-            return True
-        
-        # Note: Topic channels (official music channels)
-        if channel.endswith('- topic') or channel.endswith(' - topic'):
-            return True
-        
-        # Note: Known music labels/collectives
-        music_keywords = [
-            'records', 'music', 'official', 'oficial', 'label',
-            '88rising', 'trap nation', 'proximity', 'monstercat',
-            'ncs', 'nocopyrightsounds', 'lyrical lemonade'
-        ]
-        for keyword in music_keywords:
-            if keyword in channel:
-                return True
-        
-        # Note: Check category if available
-        category = (info.get('categories') or [])
-        if isinstance(category, list):
-            category_str = ' '.join(category).lower()
-            if 'music' in category_str:
-                return True
-        
-        return False
-
     def process_video(
         self,
         url: str,
@@ -933,9 +886,6 @@ class YouTubeDownloader:
             return True, match_ratio
             
         return False, 0.0
-
-    def _calculate_similarity(self, a: str, b: str) -> float:
-        return difflib.SequenceMatcher(None, a, b).ratio()
 
     def _download_audio(
         self, url: str, progress_callback: Optional[Callable[..., None]] = None
@@ -1602,52 +1552,3 @@ class YouTubeDownloader:
         """Compatibility wrapper for callers that do not fetch the URL."""
         resolved = self.get_resolved_stream(video_id)
         return resolved.url if resolved else None
-
-    def get_cover_for_query(self, artist: str, title: str) -> Optional[str]:
-        """Fetch only cover (thumbnail) for a track via yt-dlp search. No audio download.
-        Returns thumbnail URL or None. Uses extract_info(download=False) so no media is downloaded."""
-        if not title or not str(title).strip():
-            return None
-        query = f"{artist or ''} {title}".strip()
-        if not query:
-            return None
-        try:
-            # No enrichment: the only field wanted here is the thumbnail, and
-            # `to_item` already derives that from the video id. Asking for a
-            # creator name would buy a full extraction to throw it away.
-            primary = prefer_ytmusic()
-            results = self.search_youtube(
-                query, max_results=1, use_ytmusic=primary, enrich_missing=False
-            )
-            if not results:
-                results = self.search_youtube(
-                    query, max_results=1, use_ytmusic=not primary, enrich_missing=False
-                )
-            if results and results[0].get("thumbnail"):
-                return results[0]["thumbnail"]
-            return None
-        except Exception:
-            return None
-
-    def stream_audio_generator(self, video_id: str, timeout: int = 60) -> Iterator[bytes]:
-        """
-        Yield audio bytes for a YouTube video (for in-app preview streaming).
-        Uses bestaudio format and streams via the direct URL; no file written.
-        """
-        resolved = self.get_resolved_stream(video_id)
-        if not resolved:
-            logger.debug("[Preview] No stream URL for %s; response will be empty", video_id)
-            return
-        try:
-            with requests.get(
-                resolved.url,
-                stream=True,
-                timeout=timeout,
-                proxies=resolved.requests_proxies(),
-            ) as resp:
-                resp.raise_for_status()
-                for chunk in resp.iter_content(chunk_size=65536):
-                    if chunk:
-                        yield chunk
-        except Exception as e:
-            logger.warning("[Preview] Stream fetch failed for %s: %s", video_id, e)
