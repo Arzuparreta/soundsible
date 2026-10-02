@@ -13,3 +13,10 @@ it has not been prepared.
 Development uses the `.dev` application ID. There is no release signing or
 publication configuration yet. Compiling or starting this shell does not prove
 music playback, background operation, DJ, Live, offline or Android Auto.
+
+S1 now connects to an engine with a native account cookie (Keystore protected),
+REST/artwork/Socket.IO and a read-only shared Solid catalogue. Public cleartext is
+blocked; only the native private routing alias has an OS exception. See
+`docs/android/ARCHITECTURE.md`. With an AVD and Python engine dependencies installed,
+`python scripts/android.py integration` owns three disposable real-engine fixtures, including verified TLS. It removes temporary test trust and rebuilds the normal APK afterward.
+Playback and public distribution remain pending; continue with `SLICE_2.md`.

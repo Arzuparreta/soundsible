@@ -85,7 +85,7 @@ Open `http://localhost:5173/player/` — Vite proxies `/api` and `/socket.io` to
 
 See [the Android guide](docs/ANDROID.md) for the local APK build/emulator commands
 and [the handoff](docs/android/HANDOFF.md) before continuing the port. The APK is
-a development shell; no alpha will ship before parity and the offline decision.
+a development client with read-only browsing; no alpha will ship before parity and the offline decision.
 
 ### Reporting bugs & requesting features
 

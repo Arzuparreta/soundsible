@@ -15,7 +15,7 @@ import org.junit.runner.RunWith;
 /** Exercises the actual packaged Solid assets and native App.getInfo plugin. */
 @RunWith(AndroidJUnit4.class)
 public class StartupTest {
-    private String evaluate(ActivityScenario<MainActivity> scenario, String script) throws Exception {
+    public String evaluate(ActivityScenario<MainActivity> scenario, String script) throws Exception {
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<String> value = new AtomicReference<>();
         scenario.onActivity(activity -> {
@@ -26,7 +26,7 @@ public class StartupTest {
         return value.get();
     }
 
-    private void awaitReady(ActivityScenario<MainActivity> scenario) throws Exception {
+    public void awaitReady(ActivityScenario<MainActivity> scenario) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
         while (System.nanoTime() < deadline) {
             if ("true".equals(evaluate(scenario,

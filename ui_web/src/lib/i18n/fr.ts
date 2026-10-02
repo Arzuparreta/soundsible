@@ -1,7 +1,7 @@
 import type { Dict } from './en';
 
 export const fr: Dict = {
-  android: { title: 'Connectez votre Soundsible', unconfigured: 'Aucun serveur n’est encore connecté.' },
+  android: { refresh: "Actualiser", permissionDenied: "Votre compte ne peut pas accéder à cette ressource.", title: 'Connectez votre Soundsible', unconfigured: 'Aucun serveur n’est encore connecté.', server: "Adresse du serveur", serverHint: "HTTPS à distance ; HTTP uniquement sur votre réseau privé ou Tailscale.", connect: "Connecter", username: "Utilisateur", password: "Mot de passe", login: "Se connecter", logout: "Se déconnecter", changeServer: "Changer de serveur", connectFailed: "Connexion impossible. Vérifiez adresse, réseau et certificat du serveur.", wrongLogin: "Utilisateur ou mot de passe incorrect.", browseOnly: "Version de développement : navigation seule. Lecture au prochain slice.", eventsPending: "Mises à jour déconnectées. Réessayez ou actualisez la bibliothèque." },
   savedEntities: {
     albums: "Albums enregistrés",
     artists: "Artistes enregistrés",

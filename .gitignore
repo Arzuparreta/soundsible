@@ -121,3 +121,8 @@ android/capacitor.settings.gradle
 *.jks
 *.keystore
 android/build-info.json
+
+# Temporary public CA/trust resources generated ONLY during Android integration.
+# Private CA/server keys live in TemporaryDirectory, never in this source tree.
+android/app/src/debug/res/raw/android_fixture_ca.pem
+android/app/src/debug/res/xml/network_security_config.xml

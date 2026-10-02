@@ -1,9 +1,10 @@
 # Soundsible para Android: desarrollo del port
 
-**Estado: scaffolding de desarrollo, no alpha ni cliente funcional.** La APK
-actual empaqueta una pantalla Solid local sin servidor configurado y comprueba
-el puente nativo. No permite aún conectar, navegar la biblioteca o reproducir.
-No se ha validado en un teléfono ni en un coche.
+**Estado: cliente de desarrollo con conexión y biblioteca de lectura (S1), no alpha.**
+La APK conecta a una instancia, inicia sesión como cuenta, conserva la sesión en
+Android y navega canciones, álbumes, artistas y playlists con carátulas y eventos.
+Comparte la fila visual Solid; no carga el runtime Web Audio. No hay reproducción,
+acciones de edición/adquisición ni aceptación en teléfono/coche reales.
 
 El objetivo es la experiencia completa del teléfono: biblioteca, descubrimiento,
 adquisición, NORMAL, podcasts, radio, DJ y Live, más Android Auto. No se publicará
@@ -88,6 +89,25 @@ Un árbol sucio nunca debe presentarse como un build exacto de un commit.
 `SOUNDSIBLE_ANDROID_BUILD_NUMBER` es un contador de builds de desarrollo, no un
 número de release. Su valor local por defecto es 1; CI usa su número de ejecución.
 
+## Conectar la APK
+
+Introducir el origen, sin `/player`, path, usuario, contraseña ni query:
+`http://10.0.2.2:5005` para el motor del host desde el AVD; una IP privada/DNS LAN
+o Tailscale para la red propia; `https://musica.example.org` para acceso remoto.
+El puerto depende de la instancia. `localhost` en el teléfono es el propio
+Android, no el host. Un hostname HTTP debe resolver sólo a direcciones privadas;
+la comprobación se repite al establecer conexión. HTTPS usa la confianza normal
+de Android, sin aceptar certificados inválidos ni seguir redirects autenticados.
+
+Se inicia sesión con la cuenta del motor (o automáticamente en una instancia
+única sin contraseña). La contraseña sólo se usa para ese login. La cookie de
+sesión permanece en Kotlin, cifrada con Keystore; no está en localStorage, URLs,
+WebView cookies ni metadata. Los permisos siguen siendo los de esa cuenta.
+Cerrar sesión borra el secreto local incluso si el servidor no responde;
+**Actualizar** vuelve a cargar la biblioteca y reabre eventos desconectados.
+No cambiar HTTP por HTTPS en una URL sin que el servidor ofrezca TLS.
+
+
 ## Emulador y pruebas
 
 ```sh
@@ -104,6 +124,27 @@ adb shell svc wifi disable
 adb shell svc data disable
 python scripts/android.py smoke
 ```
+
+Para la integración real con tres motores desechables (cuentas, passwordless y HTTPS):
+
+```sh
+# Usar el Python que tenga las dependencias del motor, por ejemplo .venv/bin/python.
+python -m pip install -r requirements.txt
+python scripts/android.py integration --serial emulator-5554
+```
+
+El helper sólo acepta un emulador, activa su Wi-Fi, exige puertos 5097/5098/5099 libres,
+crea directorios temporales nuevos, arranca las rutas reales de Flask/Socket.IO y
+cierra los procesos al terminar. Nunca usa el motor personal o sus directorios.
+Para TLS genera una CA/clave efímeras, verifica cadena y hostname, instala la
+confianza sólo en recursos debug temporales, ejecuta el APK y elimina esos
+recursos y las claves. Después recompila la APK normal sin esa CA; release no
+recibe excepciones TLS. No se desactiva la verificación de certificados.
+Las cuentas sintéticas son `owner`/`member`, contraseña `android-test`.
+`smoke` omite los tests que requieren fixture; `integration` ejecuta los cinco.
+Los controles `/__fixture/*` y `/api/android-fixture/*` existen sólo en el proceso
+`scripts/android_fixture.py`, nunca se registran en el motor de producción.
+
 
 El test abre la APK real, espera el arranque Solid, comprueba `App.getInfo`, versión,
 identidad, commit, ausencia de peticiones API/socket y service worker controlador,

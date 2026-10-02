@@ -31,7 +31,7 @@ const { actions, state } = vi.hoisted(() => ({
 
 vi.mock('@solidjs/router', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../stores', () => ({ actions, state, isSavedTrack: () => false }));
-vi.mock('../lib/config', () => ({ apiOrigin: () => '' }));
+vi.mock('../lib/config', () => ({ apiOrigin: () => '', mediaOrigin: () => '', artworkUrl: (url?: string | null) => url || undefined }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('./CollectionButton', () => ({ CollectionButton: () => null }));
 vi.mock('./FavouriteButton', () => ({ FavouriteButton: () => null }));

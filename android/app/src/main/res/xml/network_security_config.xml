@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <!-- Reserved native routing alias; EngineConnection resolves it ONLY to
+         private addresses of the configured instance, preserving its Host. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">soundsible-private.invalid</domain>
+    </domain-config>
+</network-security-config>

@@ -23,9 +23,9 @@ import {
   trackKeys,
   withLinkedKeys,
 } from '../lib/playbackIdentity';
-import { byRecency, libraryNow } from '../lib/libraryOrder';
+import { libraryNow } from '../lib/libraryOrder';
 import { savedToTrack } from '../lib/saved';
-import { isMusicTrack } from '../lib/track';
+import { musicLibraryRows } from '../lib/musicLibrary';
 import { futureEntries } from '../lib/playbackQueue';
 import type { CatalogItem, SavedEntry, SearchResult, Track } from '../types/music';
 
@@ -134,14 +134,8 @@ export const identity = createRoot(() => {
    * Each half is handed over newest-first so that a library the engine has not
    * dated yet still comes out in the order it always did.
    */
-  const libraryTracks = createMemo(() => {
-    // The manifest is stored oldest → newest.
-    const files = state.library.filter(isMusicTrack).reverse();
-    const streaming = savedRows()
-      .filter((row) => row.track.source === 'preview' && isMusicTrack(row.track))
-      .map((row) => row.track);
-    return byRecency(streaming.length === 0 ? files : [...files, ...streaming]);
-  });
+  const libraryTracks = createMemo(() => musicLibraryRows(state.library, savedRows().map(row => row.track)));
+
   // The marked subset that lives on disk, by library id — what the surfaces
   // that only speak library ids (sort, radio seeds, Auto Mode) already expect.
   const favouriteLibraryIds = createMemo(() => {

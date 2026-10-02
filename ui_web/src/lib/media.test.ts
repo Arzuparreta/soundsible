@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('./config', () => ({ apiOrigin: () => '' }));
+vi.mock('./config', () => ({ apiOrigin: () => '', mediaOrigin: () => '', artworkUrl: (url?: string | null) => url || undefined }));
 
 const { previewUrl, streamUrl, podcastStreamUrl, coverUrl, trackCoverUrl, hasCoverArt } =
   await import('./media');

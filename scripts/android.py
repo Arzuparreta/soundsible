@@ -9,8 +9,13 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import tempfile
+import time
+from urllib.request import urlopen
+import ssl
 
 ROOT = Path(__file__).resolve().parents[1]
 ANDROID = ROOT / "android"
@@ -88,9 +93,116 @@ def adb(*args: str, serial: str | None = None) -> None:
     run(str(binary), *(["-s", serial] if serial else []), *args)
 
 
+def integration() -> None:
+    """Own three disposable engines and run real native account integration on an AVD."""
+    doctor()
+    binary = str(sdk() / "platform-tools/adb")
+    devices = [
+        line.split()[0]
+        for line in run(binary, "devices", capture=True).splitlines()[1:]
+        if len(line.split()) == 2 and line.split()[1] == "device"
+    ]
+    if len(devices) != 1 or run(binary, "shell", "getprop", "ro.kernel.qemu", capture=True) != "1":
+        raise RuntimeError("Integration requires exactly one connected emulator and no other devices")
+    # AVD networking must be enabled for 10.0.2.2; offline startup has its own smoke run.
+    adb("shell", "svc", "wifi", "enable")
+    from android_test_tls import create_fixture_tls
+
+    processes: list[subprocess.Popen] = []
+    certificate_resource = ANDROID / "app/src/debug/res/raw/android_fixture_ca.pem"
+    policy_resource = ANDROID / "app/src/debug/res/xml/network_security_config.xml"
+    if certificate_resource.exists() or policy_resource.exists():
+        raise RuntimeError("Temporary TLS test resources already exist; inspect/remove them before integration")
+    (ANDROID / "build").mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="soundsible-android-") as temporary:
+        with (ANDROID / "build/fixture.log").open("w") as log:
+            try:
+                ca_path, certificate, key = create_fixture_tls(Path(temporary))
+                certificate_resource.parent.mkdir(parents=True, exist_ok=True)
+                policy_resource.parent.mkdir(parents=True, exist_ok=True)
+                certificate_resource.write_bytes(ca_path.read_bytes())
+                policy_resource.write_text(
+                    (ANDROID / "app/src/main/res/xml/network_security_config.xml")
+                    .read_text()
+                    .replace(
+                        "</network-security-config>",
+                        '<debug-overrides><trust-anchors><certificates src="@raw/android_fixture_ca" /></trust-anchors></debug-overrides></network-security-config>',
+                    )
+                )
+                for port, passwordless in ((5097, False), (5098, True), (5099, False)):
+                    with socket.socket() as probe:
+                        try:
+                            probe.bind(("127.0.0.1", port))
+                        except OSError:
+                            raise RuntimeError(
+                                f"Fixture port {port} is occupied; stop the previous test fixture"
+                            ) from None
+                    command = [
+                        sys.executable,
+                        str(ROOT / "scripts/android_fixture.py"),
+                        "--root",
+                        str(Path(temporary) / str(port)),
+                        "--port",
+                        str(port),
+                        "--run-id",
+                        Path(temporary).name,
+                    ]
+                    if passwordless:
+                        command.append("--passwordless")
+                    if port == 5099:
+                        command.extend(("--tls-cert", str(certificate), "--tls-key", str(key)))
+                    # Import project modules independently of the caller's working directory.
+                    environment = {**os.environ, "PYTHONPATH": str(ROOT)}
+                    process = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=log, stderr=log)
+                    processes.append(process)
+                    deadline = time.monotonic() + 20
+                    while True:
+                        if process.poll() is not None:
+                            raise RuntimeError(
+                                "Fixture failed; see android/build/fixture.log and install requirements.txt"
+                            )
+                        try:
+                            protocol = "https" if port == 5099 else "http"
+                            trust = ssl.create_default_context(cafile=ca_path) if port == 5099 else None
+                            with urlopen(
+                                f"{protocol}://127.0.0.1:{port}/__fixture/ready/{Path(temporary).name}",
+                                timeout=1,
+                                context=trust,
+                            ) as response:
+                                if (
+                                    response.status == 200
+                                    and json.load(response).get("fixture") == Path(temporary).name
+                                ):
+                                    break
+                        except OSError:
+                            if time.monotonic() >= deadline:
+                                raise RuntimeError("Fixture startup timed out; see android/build/fixture.log") from None
+                            time.sleep(0.2)
+                gradle(
+                    ":app:connectedDebugAndroidTest",
+                    "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
+                    "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
+                    "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
+                )
+                adb("pull", "/sdcard/Download/soundsible-s1-library.png", str(ANDROID / "build/library.png"))
+            finally:
+                for process in processes:
+                    process.terminate()
+                for process in processes:
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                certificate_resource.unlink(missing_ok=True)
+                policy_resource.unlink(missing_ok=True)
+    # The distributed development APK is rebuilt without temporary test trust.
+    gradle(":app:assembleDebug", ":app:assembleDebugAndroidTest", ":app:lintDebug")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("doctor", "prepare", "build", "install", "smoke"))
+    parser.add_argument("command", choices=("doctor", "prepare", "build", "install", "smoke", "integration"))
     parser.add_argument("--serial", help="adb device serial (or set ANDROID_SERIAL)")
     args = parser.parse_args()
     if args.serial:
@@ -113,6 +225,8 @@ def main() -> int:
                 "com.soundsible.android.dev/com.soundsible.android.MainActivity",
                 serial=args.serial,
             )
+        elif args.command == "integration":
+            integration()
         else:
             # Tests install/run the packaged APK and exercise App.getInfo through
             # the real bridge, including offline reopening and locale persistence.

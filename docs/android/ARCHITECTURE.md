@@ -12,7 +12,7 @@ desde el único package/lockfile del cliente. El proyecto Gradle se conserva en
 `android/`; `cap sync` genera sus enlaces a plugins. No introducir otro frontend,
 una copia de las pantallas ni un segundo lockfile JavaScript.
 
-## Lo implementado en el scaffolding
+## Fundación S0 (referencia histórica)
 
 - Entrada `ui_web/src/mobile/main.tsx`: preferencias visuales, locale y arranque
   compartidos; no importa sesión, stores, socket, audio o Community.
@@ -55,6 +55,66 @@ conectar: rutas relativas deben resolver contra el motor; enlaces externos no
 reciben su credencial. Preservar cancelación, timeouts, multipart, Range, ETags,
 401/403 y aislamiento de cuenta. Tras cambiar servidor/cuenta cancelar trabajos
 anteriores y limpiar caches, playback y socket antes de montar el siguiente.
+
+## Decisión de transporte S1
+
+`EngineConnection`/`EnginePlugin` implementan REST y Socket.IO con OkHttp y el
+cliente Java [Socket.IO](https://github.com/socketio/socket.io-client-java).
+El plugin local usa el [puente Capacitor](https://capacitorjs.com/docs/android/custom-code).
+No cambia CORS, SameSite ni autenticación/scopes del motor. No añade bearer/owner.
+`sb_session` se obtiene del `Set-Cookie` HttpOnly y se conserva en memoria y en
+preferencias privadas cifradas AES-GCM con una clave no exportable de Keystore;
+`allowBackup=false` evita exportar esa sesión. La dirección se guarda sin secreto.
+El puente sólo devuelve status, cuerpo y ETag/Content-Type/Content-Range de REST;
+no devuelve Set-Cookie. Logging Capacitor está desactivado para no registrar login.
+
+`http.request` conserva su fetch web y permite instalar un transporte desde la
+entrada nativa. `mobile/engine.ts` serializa JSON/multipart, propaga timeout/abort,
+reconstruye status/ETags y descarta respuestas de generaciones anteriores. Cancelar
+antes de que el executor registre la llamada también queda registrado en Kotlin.
+304 y 401/403 conservan sus significados. No hay cambio de API de producción.
+
+Android **bloquea cleartext por defecto**. La única excepción OS es el alias
+reservado `soundsible-private.invalid`; el transporte reescribe internamente HTTP
+hacia ese alias, mantiene el `Host` original y resuelve exclusivamente las IPs
+privadas de la instancia seleccionada. La resolución está capturada por cliente,
+no puede saltar a otro servidor al cambiar la selección. Incluye RFC1918,
+loopback, ULA IPv6 y Tailscale 100.64/10. No se aceptan redirects; para HTTPS no hay
+alias ni excepción de certificados. La WebView carga assets locales, nunca una
+página remota con el puente; imágenes externas se leen sin cookies ni headers de
+cuenta (HTTPS, máximo 8 MiB y timeout). HTTP externo no recibe la excepción LAN.
+
+Las carátulas autenticadas se resuelven como
+`https://localhost/__engine/<generación>/api/static/cover/<id>`. MainActivity
+intercepta sólo ese recurso, verifica la generación, usa la misma cookie nativa y
+responde `no-store`. No hay cache de imágenes compartida entre cuentas. El socket
+usa el mismo cliente/cookie y sólo remite nombres de eventos con generación, sin
+payloads personales. Logout/cambio destruyen socket, cancelan llamadas, desmontan
+la biblioteca y limpian metadata; cualquier callback tardío comprueba su época.
+La identidad se revalida antes de cada refresh y al volver a primer plano.
+
+La UI conectada es una superficie **de lectura de desarrollo**:
+`mobile/LibraryBrowser`, la fila compartida `MusicListRowView`, virtualización,
+carátulas y diccionarios existentes. `musicLibraryRows` comparte la selección y
+orden por recencia de archivos y canciones guardadas con la biblioteca web;
+los helpers de identidad evitan duplicar canciones promovidas. `MusicListRow` sigue siendo el adaptador de
+cuenta/playback web sobre esa misma vista. No se importa `stores/index`, audio o
+Community desde Android. Los botones de canciones anuncian `aria-disabled`;
+las colecciones sí navegan. Esto no representa paridad de acciones: al integrar
+S2 se debe conectar la UI completa al runtime nativo, evitando un fork permanente
+de Library. Búsqueda aquí sólo filtra la biblioteca propia; no es descubrimiento.
+
+La integración instrumentada usa tres instancias reales desechables; cubre HTTP y HTTPS,
+roles, cookie/artwork/socket, persistencia cifrada, revocación, generaciones y
+passwordless. El fixture HTTPS usa una CA generada para esa ejecución y SAN IP
+correcto; Android/OkHttp verifican cadena y hostname con el trust normal más esa
+CA efímera en un override debug generado. Las claves viven en TemporaryDirectory,
+la CA pública/config debug se ignoran en git y se eliminan siempre; al terminar
+se recompila el APK normal sin la CA de prueba. Release jamás la incorpora.
+El rechazo de TLS incorrecto y el happy path están probados en ese motor real.
+La instancia HTTPS pública concreta y DNS/Tailscale/red/dispositivo reales siguen
+como aceptación de despliegue pendiente; no son lo que prueba la CA del fixture.
+
 
 ## Audio: un programa, un propietario
 

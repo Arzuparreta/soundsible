@@ -59,3 +59,12 @@ y APK empaquetada en emulador. Conservar comandos, build-info, logs sin secretos
 y resultado. Actualizar matriz/HANDOFF y cerrar con commit enfocado, sin push,
 PR o publicación salvo instrucción posterior. Si se abre PR: fetch/ancestry de
 base actual y exactamente un impact label según AGENTS.
+
+## Estado tras implementación
+
+Núcleo funcional implementado y probado con APK/API 36 y motores desechables.
+Ver [evidencia](evidence/s1.json) y [traspaso](HANDOFF.md). Sigue pendiente la
+aceptación positiva contra una instancia HTTPS remota con certificado válido y
+DNS/Tailscale reales. La superficie de lectura no afirma paridad de acciones.
+El usuario autorizó push después de S0; PR/merge/publicación siguen sin solicitar.
+Siguiente corte: [audio nativo S2](SLICE_2.md).

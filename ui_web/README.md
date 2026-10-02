@@ -94,4 +94,4 @@ Set `SOUNDSIBLE_WEB_UI_DIST=1` to require the built bundle explicitly, or `0`/`f
 The Android entry reuses the same Solid sources, theme, fonts and dictionaries.
 Its packaged assets are separate from the engine bundle. Follow
 [the Android guide](../docs/ANDROID.md) and
-[the handoff](../docs/android/HANDOFF.md); this is a development shell, not an alpha.
+[the handoff](../docs/android/HANDOFF.md); this is a development client with account login and read-only browsing, not an alpha.

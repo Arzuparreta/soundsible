@@ -22,3 +22,22 @@ export function ownerToken(): string | null {
     null
   );
 }
+
+let resourceOrigin: string | null = null;
+let engineOrigin: string | null = null;
+/** Local generation-bound artwork proxy in Android; REST uses its native adapter. */
+export function setResourceOrigin(origin: string | null, remote: string | null = null): void { resourceOrigin = origin; engineOrigin = remote; }
+export function mediaOrigin(): string { return resourceOrigin ?? apiOrigin(); }
+
+export function artworkUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('/api/')) return `${mediaOrigin()}${url}`;
+  if (engineOrigin && resourceOrigin) {
+    try {
+      const parsed = new URL(url);
+      if (parsed.origin === engineOrigin && parsed.pathname.startsWith('/api/'))
+        return `${resourceOrigin}${parsed.pathname}${parsed.search}`;
+    } catch { return undefined; }
+  }
+  return url;
+}

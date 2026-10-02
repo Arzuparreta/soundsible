@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-02",
+  "slice": "S1",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "3c9ff984e4d81a4f5dc9873ef894fb25af33f183",
+    "dirty": true,
+    "channel": "development"
+  },
+  "environment": {
+    "platform": "Android API 36 emulator",
+    "application": "com.soundsible.android.dev",
+    "jdk": "21"
+  },
+  "checks": {
+    "unit": {
+      "command": "npm test --prefix ui_web",
+      "files": 141,
+      "passed": 1330
+    },
+    "backend_contracts": {
+      "command": "PYTHONPATH=. .venv/bin/pytest tests/test_multiuser.py tests/test_socket_connect_scope.py tests/test_auth_scopes.py -q",
+      "passed": 43
+    },
+    "android": {
+      "command": "python scripts/android.py build; python scripts/android.py integration",
+      "instrumented_passed": 5,
+      "lint": "passed",
+      "fixture": "three disposable real Flask/Socket.IO engines: multi-user HTTP, passwordless HTTP, verified TLS"
+    },
+    "offline_startup": {
+      "command": "adb shell svc wifi disable; adb shell svc data disable; python scripts/android.py smoke",
+      "startup_passed": 1,
+      "fixture_tests": "omitted without fixture arguments"
+    },
+    "browser": {
+      "chromium": {
+        "passed": 278,
+        "skipped": 66
+      },
+      "webkit_first_stable_run": {
+        "passed": 268,
+        "skipped": 75,
+        "failed": 1,
+        "case": "webkit-mobile search-discovery: scroll restoration expected 160, observed 0"
+      },
+      "webkit_scroll_repetitions": {
+        "passed": 3,
+        "source_changes": false
+      },
+      "webkit_final": {
+        "passed": 269,
+        "skipped": 75,
+        "failed": 0,
+        "source_changes_since_first_stable_run": false
+      }
+    },
+    "other": [
+      "Ruff check/format",
+      "central version check",
+      "actionlint",
+      "git diff --check"
+    ]
+  },
+  "native_cases": [
+    "member/admin login and wrong password",
+    "account-specific library and artwork",
+    "WebView authenticated artwork pixel check",
+    "same-account Socket.IO events and foreign-event rejection",
+    "encrypted session survives connection and activity recreation",
+    "session revocation and logout",
+    "old-generation and in-flight response rejection",
+    "passwordless and switching origins",
+    "HTTP public blocked by OS; private alias preserves Host",
+    "HTTPS login/library/artwork/socket with normal hostname/certificate verification and ephemeral test trust",
+    "HTTP misadvertised as HTTPS rejected",
+    "redirect is returned without forwarding the account cookie",
+    "saved-only music shares web library identity/order; active album refreshes after scoped event"
+  ],
+  "tls_test_boundary": "CA public trust resources generated only for integration; all keys temporary; resources removed and normal debug APK rebuilt without test CA. Public HTTPS instance and LAN/Tailscale DNS still await deployment-specific acceptance.",
+  "screenshot": "library-api36.png",
+  "screenshot_account": "synthetic member; no personal engine/library used",
+  "limitations": [
+    "development read-only UI; no playback",
+    "public HTTPS/LAN/Tailscale and physical phone/car not exercised",
+    "GitHub workflow defined, not executed on this feature branch",
+    "offline not decided"
+  ],
+  "local_reports": [
+    "android/app/build/reports",
+    "android/app/build/outputs/androidTest-results",
+    "android/build/fixture.log"
+  ]
+}

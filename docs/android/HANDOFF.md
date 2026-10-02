@@ -11,8 +11,8 @@ historial del chat ni memoria privada. Ver [guía](../ANDROID.md),
 ## Decisiones del usuario que siguen vigentes
 
 - APK Android con UI Solid compartida y capa nativa; mantenerla desde el mismo repo.
-- Preparación actual: documentación completa y **APK mínima ejecutable**, no
-  cliente conectado ni reproductor funcional.
+- S0 fue la documentación y APK mínima. El usuario pidió después «push y a por
+  el siguiente slice»: S0 se subió y S1 implementa conexión/biblioteca de lectura.
 - Objetivo completo: teléfono, DJ, Live y Android Auto. No publicar una alpha
   parcial; los artifacts CI son de desarrollo y pueden ser accesibles públicamente.
 - Offline no está decidido. Caso de interés: un vuelo. Preocupan la lógica,
@@ -22,7 +22,8 @@ historial del chat ni memoria privada. Ver [guía](../ANDROID.md),
 - No hay teléfono Android propio. Separar emulador, dispositivos remotos y
   teléfono/coche reales; no llamar a CI aceptación acústica.
 - Cada implementación termina con commit en rama, nunca main. Esta preparación
-  no autoriza push, PR, merge ni publicación. No delegar sin autorización.
+  autorizaba inicialmente sólo commit. La instrucción posterior autoriza push;
+  no autoriza PR, merge ni publicación. No delegar sin autorización.
 - Respetar AGENTS: versión central, nada de `npm run build` local, suite completa
   de cuatro perfiles cuando se toca `ui_web`, y base remota actual/impact label
   si posteriormente se solicita PR.
@@ -42,7 +43,7 @@ locale/preferencias/fuentes; información nativa real; helper prepare/build/inst
 smoke; test instrumentado y workflow sin publicación. Los diccionarios Android
 incluyen las cuatro lenguas existentes. Ninguna API del motor cambió.
 
-No implementado: servidor/cuenta/sockets, reproducción de ningún modo, descargas
+No implementado **en S0**: servidor/cuenta/sockets, reproducción de ningún modo, descargas
 locales, DJ, Live, servicio multimedia, Android Auto, firma permanente, actualizador
 o publicación. El shell no importa esos runtimes ni solicita sus permisos.
 
@@ -75,18 +76,58 @@ WebView verifica el arranque real.
 Resultados reproducibles quedan en `android/app/build/reports/`,
 `android/app/build/outputs/androidTest-results/` y artifacts CI futuros. Toolchain
 local temporal: `/home/arsu/.cache/soundsible/android-toolchain`; **no depender de
-esa ruta en otras máquinas**. Exportar SDK/JDK como en ANDROID.md. El entorno CI
-se ha definido, pero no se ha ejecutado en GitHub sin push.
+esa ruta en otras máquinas**. Exportar SDK/JDK como en ANDROID.md. El entorno CI de S0
+se definió, pero entonces no se había ejecutado en GitHub. El push a una rama
+feature no dispara el workflow filtrado a main/dev; no presentar CI como verificado.
+
+## Entrega S1 y evidencia actual
+
+Rama `feat/android-port-foundation`. S0 subido como `3c9ff98`.
+Para el commit de S1: `git log --oneline --grep='native account transport'`.
+
+Implementado: origen validado, login de cuenta y passwordless, cookie cifrada en
+Keystore, REST/multipart/abort/ETags, carátulas privadas sin cache entre cuentas,
+Socket.IO por identidad, logout/cambio/revocación, refresh manual/foreground,
+biblioteca de lectura y colecciones usando la fila visual Solid compartida.
+No se modifican CORS ni auth del motor; no se importa runtime de reproducción.
+HTTP público sigue bloqueado por Android; alias nativo reservado para IP privada,
+Host preservado y DNS verificado. Ver decisión técnica en ARCHITECTURE.
+
+Prueba real reproducible: `python scripts/android.py build` y, con Python del
+motor y AVD arrancado, `python scripts/android.py integration`. El helper crea
+tres motores en directorios nuevos y los apaga. No apuntar fixtures al engine
+personal. `android/build/fixture.log` y reportes Gradle conservan evidencia local;
+la metadata de las comprobaciones previas al commit dice `dirty=true`.
+
+Resultados finales/evidencia: [S1](evidence/s1.json) y [captura](evidence/library-api36.png).
+Typecheck/Vitest: 1.330 tests en 141 archivos; contratos backend: 43 pasan;
+APK/lint e integración API 36: 5 tests pasan, incluida WebView con cover real.
+Suite browser completa: Chromium 278 pasan/66 omitidos; WebKit 269 pasan/75
+omitidos en la repetición final. Una ejecución anterior tuvo un fallo de scroll
+en Descubrir; pasó tres veces aislado y después en la suite completa sin cambios
+de fuentes. La evidencia conserva ambos resultados.
+ No confundir las dos primeras
+pruebas fallidas (red del AVD desactivada / lectura de generation como Long) con
+el resultado corregido. La política de HTTP privado se comprueba también a nivel
+Android: example.com no permite cleartext. El cliente de control del fixture usa
+el mismo routing privado pero no adjunta cookie; un OkHttp genérico correctamente
+queda bloqueado por la política OS.
+
+HTTPS positivo ya se prueba con motor real y CA efímera/hostname verificado,
+además del rechazo de HTTP anunciado como HTTPS. La CA de pruebas se elimina y
+el APK normal se reconstruye sin ella. No hay clave privada o confianza de prueba
+commiteada. Aceptación de despliegue todavía abierta: instancia HTTPS pública
+concreta, DNS LAN/Tailscale reales y teléfono. La biblioteca todavía no ofrece todas las
+acciones web ni podcasts/descubrimiento; no marcar paridad completa.
+
 
 ## Siguiente tarea concreta
 
-Empezar [S1: conexión y biblioteca](SLICE_1.md). Primero demostrar el contrato de
-sesión entre motor remoto, cookie jar Android y Socket.IO. `apiOrigin`/cookies
-same-origin de la web y `library:read` del pairing iOS no son soluciones completas.
-No arrancar stores antes de resolver cuenta ni sustituir autorización por owner.
-Cerrar S1 con biblioteca real aislada por cuenta y recuperación, no con mocks
-presentados como integración. Después seguir S2→S3→S4/S5; el estudio offline puede
-adelantarse, pero necesita una decisión del usuario.
+Seguir [S2: primer programa de audio nativo](SLICE_2.md). Mantener visibles las
+aceptaciones S1 pendientes; antes de una entrega pública probar HTTPS remoto y
+DNS/Tailscale, además de los gates de paridad. No añadir un segundo propietario
+Web Audio ni convertir la biblioteca de lectura en un fork permanente de UI.
+Offline sigue sin decisión; no implementarlo en S2.
 
 Antes de trabajar: `git status --short --branch`, leer AGENTS y verificar archivos
 actuales. Actualizar este traspaso con cada slice: commit, pruebas/evidencias,

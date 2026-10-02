@@ -1,5 +1,5 @@
 import { createSignal } from 'solid-js';
-import { apiOrigin } from './config';
+import { apiOrigin, mediaOrigin, artworkUrl } from './config';
 
 interface ArtworkMetadata {
   id: string;
@@ -25,7 +25,7 @@ export function patchArtworkMetadata(tracks: ArtworkMetadata[], removed: string[
 
 export function artworkCandidates(src?: string | null): string | undefined {
   if (!src) return undefined;
-  const base = `${apiOrigin()}/api/static/cover/`;
+  const base = `${mediaOrigin()}/api/static/cover/`;
   if (!src.startsWith(base)) return undefined;
   const [identity, query = ''] = src.slice(base.length).split('?');
   const id = decodeURIComponent(identity);
@@ -66,7 +66,7 @@ export const coverUrl = (id: string, size?: 'thumb'): string => {
   const v = coverVersion();
   const revision = artworkMetadata()[id]?.artwork_revision;
   const params = [size ? `size=${size}` : '', revision ? `rev=${revision}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&');
-  return `${apiOrigin()}/api/static/cover/${encodeURIComponent(id)}${params ? `?${params}` : ''}`;
+  return `${mediaOrigin()}/api/static/cover/${encodeURIComponent(id)}${params ? `?${params}` : ''}`;
 };
 
 interface TrackCoverIdentity {
@@ -96,7 +96,7 @@ interface TrackCoverIdentity {
  * edit views. A preview's thumbnail is already small and has no size variants.
  */
 export const trackCoverUrl = (track: TrackCoverIdentity, size?: 'thumb'): string | undefined =>
-  track.source === 'preview' ? track.cover || undefined : coverUrl(track.id, size);
+  track.source === 'preview' ? artworkUrl(track.cover) || undefined : coverUrl(track.id, size);
 
 /** Whether a track has any artwork to show. Defined in terms of
  * `trackCoverUrl` rather than restating the rule, so the two cannot drift:

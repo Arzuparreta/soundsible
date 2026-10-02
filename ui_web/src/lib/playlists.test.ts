@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { LibrarySettings, Track } from '../types/music';
 
-vi.mock('./config', () => ({ apiOrigin: () => '' }));
+vi.mock('./config', () => ({ apiOrigin: () => '', mediaOrigin: () => '', artworkUrl: (url?: string | null) => url || undefined }));
 
 const { pickPlaylistCoverTrack } = await import('./playlists');
 
