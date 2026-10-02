@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from odst_tool.cloud_sync import CloudSync
+from shared.downloader.cloud_sync import CloudSync
 from shared.models import LibraryMetadata, Track
 
 

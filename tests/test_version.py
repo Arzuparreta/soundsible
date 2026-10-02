@@ -6,7 +6,7 @@ import pytest
 from shared.version import VERSION, resolve_version, source_revision
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_PACKAGES = ("shared", "player", "odst_tool", "setup_tool", "launcher_web")
+SOURCE_PACKAGES = ("shared", "player", "setup_tool", "launcher_web")
 
 
 def test_declared_version_is_semver():

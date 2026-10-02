@@ -51,7 +51,8 @@ from shared.playback_state import (  # noqa: F401  # aliases re-exported to blue
 from player.library import LibraryManager
 from player.queue_manager import QueueManager
 from player.favourites_manager import FavouritesManager
-from odst_tool.odst_downloader import ODSTDownloader
+from shared.downloader.service import Downloader
+from shared.downloader.settings import read_settings, setting, settings_path
 
 import socket
 import requests
@@ -558,8 +559,6 @@ def serve_web_player_assets(path):
 playback_engine = None
 downloader_service = None
 _downloader_lock = threading.Lock()  # Note: Prevent concurrent init when many discover/resolve requests hit at once
-#: Parsed `odst_tool/.env`; see `_downloader_env`. Invalidated when it is written.
-_downloader_env_cache: Optional[dict] = None
 # One queue for the whole instance: downloads land in a shared pool, and a single
 # pump keeps total concurrency bounded no matter how many people are queueing.
 # Each item carries `user_id`, and the routes only ever show you your own.
@@ -709,22 +708,6 @@ def get_queue_manager(user_id: Optional[str] = None):
 def get_library_manager(user_id: Optional[str] = None):
     return get_user_core(user_id).library
 
-def _downloader_env() -> dict:
-    """`odst_tool/.env`, read from disk at most once per process.
-
-    This used to be parsed on every `get_downloader()` call — which sits on the
-    preview-stream, catalog-resolve and discovery-seed paths — even though only
-    the branch that actually constructs the downloader reads it.
-    """
-    global _downloader_env_cache
-    if _downloader_env_cache is None:
-        from dotenv import dotenv_values
-
-        env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
-        _downloader_env_cache = dict(dotenv_values(env_path)) if env_path.exists() else {}
-    return _downloader_env_cache
-
-
 def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     global downloader_service
 
@@ -741,7 +724,7 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
     elif _app_out is not None:
         target_path = _app_out
     else:
-        target_dir = _downloader_env().get("OUTPUT_DIR") or os.getenv("OUTPUT_DIR") or DEFAULT_OUTPUT_DIR_FALLBACK
+        target_dir = setting("OUTPUT_DIR") or os.getenv("OUTPUT_DIR") or DEFAULT_OUTPUT_DIR_FALLBACK
         target_path = Path(target_dir).expanduser().absolute()
 
     with _downloader_lock:
@@ -765,9 +748,8 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
             lib_core, _, _ = get_core()
 
             _log("Step 3/3: Starting Engine...")
-            env_vars = _downloader_env()
+            env_vars = read_settings()
             quality = env_vars.get("DEFAULT_QUALITY", lib_core.config.quality_preference if lib_core.config else "high")
-            from odst_tool.config import DEFAULT_WORKERS
             cookie_browser = env_vars.get("COOKIE_BROWSER") or os.getenv("COOKIE_BROWSER")
             cookie_file = (
                 env_vars.get("SOUNDSIBLE_YTDLP_COOKIE_FILE")
@@ -778,9 +760,8 @@ def get_downloader(output_dir=None, open_browser=False, log_callback=None):
                 or os.getenv("COOKIE_FILE")
             )
             _log(f"Initializing Downloader (Quality: {quality})...")
-            downloader_service = ODSTDownloader(
+            downloader_service = Downloader(
                 target_path,
-                DEFAULT_WORKERS,
                 cookie_browser=cookie_browser,
                 cookie_file=cookie_file,
                 quality=quality,
@@ -824,7 +805,7 @@ def _fill_youtube_runtime_hint(dl, song_str: str, item: dict, metadata_evidence:
     """Build metadata_hint for process_video; never prefer raw URLs over yt-dlp/peek titles.
 
     YouTube Music text search uses yt-dlp with extract_flat on music.youtube.com results; those
-    entries often have title but no channel/uploader/artist (see odst_tool.youtube.search.search_youtube).
+    entries often have title but no channel/uploader/artist (see shared.downloader.youtube.search.search_youtube).
     A usable title from search then skipped peek_brief previously, so artist stayed empty and
     tags fell through to Unknown Artist. We call peek_brief when title or artist is still unusable.
     """
@@ -1239,9 +1220,9 @@ def get_track_by_id(lib, track_id: str) -> Optional[Track]:
     return None
 
 
-def _mirror_track_into_odst_downloader(track: Track) -> None:
+def _mirror_track_into_pool(track: Track) -> None:
     """
-    Keep ODSTDownloader.library in sync with the main manifest.
+    Keep the download pool's library in sync with the main manifest.
     Otherwise the next dl.save_library() overwrites library.json with stale titles/artists.
     """
     try:
@@ -1288,7 +1269,7 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
     if cover_source == "none":
         from shared.artwork import artwork_store
         artwork_store().bind(track_id, None, "none")
-    _mirror_track_into_odst_downloader(get_track_by_id(lib, track_id))
+    _mirror_track_into_pool(get_track_by_id(lib, track_id))
     emit_to_user('library_updated', payload={'cover_changed': cover_source is not None})
     return True
 
@@ -1357,7 +1338,7 @@ def add_tracks_to_user_library(
 
     Downloads land in a pool everyone shares, so what makes a track *yours* is
     this entry. Only the tracks you asked for are added — merging the whole
-    ODST catalog would hand you everybody else's downloads.
+    download pool would hand you everybody else's downloads.
 
     Each track is dated by :meth:`shared.library_dates.Holdings.claim`: a song
     this account already holds — saved without a file, say — keeps the day it
@@ -1462,8 +1443,8 @@ def _promote_favourites_to_library(tracks, *, user_id: str, song_keys=()) -> int
     return promoted
 
 
-def _sync_odst_to_main_core():
-    """Merge the whole ODST catalog into the bound user's library.
+def _sync_pool_to_main_core():
+    """Merge the whole download pool into the bound user's library.
 
     Only correct for whole-catalog operations the admin runs, never for a single
     download — see :func:`add_tracks_to_user_library`.
@@ -1610,7 +1591,7 @@ def _fetch_youtube_original(video_id: str) -> Optional[Path]:
 
 def get_output_dir_for_repair() -> Path:
     """The content-addressed pool a repaired file goes back into."""
-    from odst_tool.config import TRACKS_DIR
+    from shared.downloader.config import TRACKS_DIR
     from shared.app_config import get_output_dir
 
     return Path(get_output_dir()) / TRACKS_DIR
@@ -1655,10 +1636,10 @@ def _run_sync_task_bound():
                 queue_manager_dl.add_log("✅ Sync Complete!")
                 queue_manager_dl.add_log(f"   Uploaded: {result.get('uploaded', 0)}, Merged: {result.get('merged', 0)}")
                 queue_manager_dl.add_log(f"   Total Remote: {result.get('total_remote', 0)}")
-                _sync_odst_to_main_core()
+                _sync_pool_to_main_core()
         except Exception as e:
             queue_manager_dl.add_log(f"❌ Critical Sync Error: {e}")
-            logger.exception("API: ODST sync failed")
+            logger.exception("API: cloud sync failed")
 
     _task()
 
@@ -1817,19 +1798,11 @@ def home():
 # Note: Server management
 
 def _resolve_output_dir():
-    """Resolve OUTPUT_DIR once at startup (only place that may read odst_tool/.env)."""
-    target = os.getenv("OUTPUT_DIR")
+    """Resolve OUTPUT_DIR once at startup: environment, then saved settings."""
+    target = os.getenv("OUTPUT_DIR") or setting("OUTPUT_DIR")
     if not target:
         try:
-            from dotenv import dotenv_values
-            _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
-            _env = dotenv_values(_env_path) if _env_path.exists() else {}
-            target = _env.get("OUTPUT_DIR")
-        except Exception:
-            pass
-    if not target:
-        try:
-            from odst_tool.config import DEFAULT_OUTPUT_DIR
+            from shared.downloader.config import DEFAULT_OUTPUT_DIR
             target = str(DEFAULT_OUTPUT_DIR)
         except Exception:
             target = str(get_music_dir() or Path(DEFAULT_OUTPUT_DIR_FALLBACK).expanduser().resolve())
@@ -1984,7 +1957,12 @@ def start_api(
     logger.info("For full startup (sync + watcher) use: python run.py --daemon")
     ensure_ui_dist(external_dist=runtime.ui_dist)
 
-    # Note: Set app config so path_resolver and security do not depend on odst_tool layout
+    # Saved downloader settings become environment defaults before anything
+    # reads them: the output folder, cloud credentials, the auto-updates.
+    from shared.downloader.settings import export_to_environ
+
+    export_to_environ()
+    # Set app config so path_resolver and security do not depend on the downloader
     _out = _resolve_output_dir()
     if _out:
         set_app_output_dir(_out)
@@ -2012,16 +1990,12 @@ def start_api(
         # admin settings are enabled. They share one pip transaction so startup
         # can never launch two package installers against the same environment.
         try:
-            from dotenv import dotenv_values
             from shared.runtime_updates import enabled_runtime_packages, pip_upgrade_command
 
-            _env_path = Path(_REPO_ROOT) / "odst_tool" / ".env"
-            _env = dotenv_values(_env_path) if _env_path.exists() else {}
-            _runtime_packages, _runtime_flags = enabled_runtime_packages(_env)
+            _runtime_packages, _runtime_flags = enabled_runtime_packages(read_settings())
             logger.info(
-                "API: runtime auto-update config resolved (env_file=%s, exists=%s, flags=%s)",
-                _env_path,
-                _env_path.exists(),
+                "API: runtime auto-update config resolved (settings=%s, flags=%s)",
+                settings_path(),
                 _runtime_flags,
             )
             if _runtime_packages:

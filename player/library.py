@@ -438,7 +438,7 @@ class LibraryManager:
                     lib = LibraryMetadata.from_json(json_str)
                     if lib.tracks:
                         _log_local(f"Loaded library from music path ({path_at_music.parent}): {len(lib.tracks)} tracks.")
-                        # Note: Downloader/ODST may ship a library.json without playlists; config cache can be newer.
+                        # The download pool's library.json may have no playlists; the config cache can be newer.
                         if cache_path.exists():
                             try:
                                 cached = LibraryMetadata.from_json(cache_path.read_text())
@@ -827,7 +827,7 @@ class LibraryManager:
                     self._log("Failed to download track.")
                     return False
 
-            # Note: Local library / ODST tracks live under OUTPUT_DIR; update tags in-place via temp copy
+            # Local and downloaded tracks live under OUTPUT_DIR; tags are updated in place via a temp copy
             if not local_path:
                 resolved = resolve_local_track_path(track)
                 if resolved and os.path.isfile(resolved):

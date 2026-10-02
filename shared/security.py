@@ -13,7 +13,7 @@ from shared.runtime import get_cache_dir, get_config_dir
 
 
 def _get_output_dir_root():
-    """Output dir for allowed_roots; use app_config if set, else fallback (no odst_tool import)."""
+    """Output dir for allowed_roots; use app_config if set, else fallback."""
     from shared.app_config import get_output_dir
     out = get_output_dir()
     if out is not None:
@@ -51,7 +51,7 @@ def is_safe_path(file_path, is_trusted: bool = False) -> bool:
         # Note: Lexical normalization for public-facing security check
         target = os.path.normpath(os.path.abspath(os.path.expanduser(file_path)))
 
-        # Note: Approved roots for public access (no odst_tool dependency)
+        # Approved roots for public access
         allowed_roots = [
             os.path.normpath(os.path.abspath(str(get_config_dir()))),
             os.path.normpath(os.path.abspath(str(get_cache_dir()))),

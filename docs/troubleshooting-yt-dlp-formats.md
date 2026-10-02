@@ -53,4 +53,4 @@ to tune them are in
 [Configuration → YouTube and downloads](CONFIGURATION.md#youtube-and-downloads).
 
 The attempt order lives in `download_audio` in
-[`odst_tool/youtube/download.py`](../odst_tool/youtube/download.py).
+[`shared/downloader/youtube/download.py`](../shared/downloader/youtube/download.py).

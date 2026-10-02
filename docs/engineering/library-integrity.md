@@ -91,14 +91,14 @@ regression (nine lifecycle tests total). Ruff and `git diff --check` passed.
 
 ## Portable writers
 
-ODST now adds an acquired track with `commit_track`: it reloads the current pool
+The download pool adds an acquired track with `commit_track`: it reloads the current pool
 manifest, replaces only that acquisition's matching hash and publishes under a
 cross-process directory lock. Two independent downloaders preserve both additions.
 Station's atomic local exports and local provider copies take the same publication
 lock, including symlink aliases. The lock is independent of the canonical lifecycle
 lock, so provider uploads remain outside the instance-wide critical section.
 
-Full ODST saves (including cloud sync) compare the file fingerprint captured at
+Full download-pool saves (including cloud sync) compare the file fingerprint captured at
 load with the current file while holding the publication lock. A concurrent edit
 raises `library_conflict` instead of overwriting it; reload and repeat the operation.
 Corrupt manifests fail on load instead of being reinterpreted as an empty pool.

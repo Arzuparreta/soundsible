@@ -56,7 +56,6 @@ jobs:
               - 'requirements.docker.lock'
               - 'shared/**'
               - 'player/**'
-              - 'odst_tool/**'
               - 'setup_tool/**'
               - 'ui_web/**'
               - 'run.py'
@@ -118,7 +117,7 @@ jobs:
           SOUNDSIBLE_VERSION: ""
         run: >-
           pytest -q
-          --cov=shared --cov=player --cov=odst_tool --cov=setup_tool
+          --cov=shared --cov=player --cov=setup_tool
           --cov-report=term-missing --cov-fail-under=55
 
   lint:

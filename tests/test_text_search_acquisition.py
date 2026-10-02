@@ -10,8 +10,8 @@ winner exactly as a chosen video is downloaded.
 
 import pytest
 
-from odst_tool.youtube import search
-from odst_tool.youtube_downloader import YouTubeDownloader
+from shared.downloader.youtube import search
+from shared.downloader.youtube_downloader import YouTubeDownloader
 
 
 def _row(video_id, title, channel, duration):

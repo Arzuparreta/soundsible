@@ -1,33 +1,36 @@
-"""ODST downloader: YouTube search + download + library + cloud."""
+"""The download pool: its folder, its library.json, YouTube and the cloud."""
 
+import json
+import threading
 from pathlib import Path
 from typing import Optional
 
-import threading
-import json
-from shared.library_lifecycle import serialized, LibraryPersistenceError
-from shared.file_revision import publication_lock, revision
 from shared.atomic_file import replace_contents, text_pieces
-from .config import DEFAULT_WORKERS, LIBRARY_FILENAME, DEFAULT_QUALITY
+from shared.file_revision import publication_lock, revision
+from shared.library_lifecycle import LibraryPersistenceError, serialized
 from shared.models import LibraryMetadata
+
+from .cloud_sync import CloudSync
+from .config import DEFAULT_QUALITY, LIBRARY_FILENAME
 from .library_podcasts import read_podcast_fields
 from .youtube_downloader import YouTubeDownloader
-from .cloud_sync import CloudSync
 
 
-class ODSTDownloader:
-    """YouTube search, download, library, and cloud sync. Used by the webapp."""
+class Downloader:
+    """The shared pool every account downloads into.
+
+    Files land in `output_dir/tracks` under their content hash and are listed
+    in the pool's own library.json; accounts then hold them by id.
+    """
 
     def __init__(
         self,
         output_dir: Path,
-        workers: int = DEFAULT_WORKERS,
         cookie_browser: Optional[str] = None,
         cookie_file: Optional[str] = None,
         quality: str = DEFAULT_QUALITY,
     ):
         self.output_dir = Path(output_dir)
-        self.workers = workers
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
@@ -103,8 +106,3 @@ class ODSTDownloader:
         # Streamed into a temporary: the Station reads this file meanwhile.
         replace_contents(self.library_path, text_pieces(self.library.iter_json()))
         self._manifest_revision = revision(self.library_path)
-
-    @serialized
-    def add_track(self, track) -> None:
-        with self._lock:
-            self.library.add_track(track)

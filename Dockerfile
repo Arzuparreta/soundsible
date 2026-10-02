@@ -69,7 +69,6 @@ WORKDIR /app
 COPY --chown=soundsible:soundsible __init__.py soundsible_engine.py ./
 COPY --chown=soundsible:soundsible shared ./shared
 COPY --chown=soundsible:soundsible player ./player
-COPY --chown=soundsible:soundsible odst_tool ./odst_tool
 COPY --chown=soundsible:soundsible setup_tool ./setup_tool
 COPY --chown=soundsible:soundsible branding ./branding
 COPY --chown=soundsible:soundsible --from=ui-build /build/ui_web/dist ./ui_web/dist

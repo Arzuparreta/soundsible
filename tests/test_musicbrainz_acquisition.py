@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from odst_tool.youtube_downloader import YouTubeDownloader
+from shared.downloader.youtube_downloader import YouTubeDownloader
 from shared.musicbrainz import normalize_recording_mbid
 
 

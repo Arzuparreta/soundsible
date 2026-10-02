@@ -20,12 +20,11 @@ The **Station** UI is a responsive SolidJS application under `ui_web/`, served b
 |------|------|
 | `run.py` | Universal entry: venv bootstrap, then the **TUI** menu, the server **`--daemon`** (also what systemd runs), or desktop **`--desktop-engine`**. |
 | `soundsible_engine.py` | Standalone desktop engine entrypoint that wraps `run.py --desktop-engine`. |
-| `shared/` | Cross-cutting code: Flask API app (`shared/api/`), models, config paths, security helpers, SQLite access, job orchestration. |
+| `shared/` | Cross-cutting code: Flask API app (`shared/api/`), models, config paths, security helpers, SQLite access, job orchestration, audio files (`shared/audio_files.py`) and the download pipeline (`shared/downloader/`: yt-dlp, FFmpeg, the download pool and cloud sync). |
 | `player/` | Library manager, queue, favourites, cache — **core playback and library** logic used by the API. |
 | `ui_web/` | SolidJS + TypeScript Station frontend and Vite build; includes **Discover** (Deezer metadata + YouTube resolution). |
 | `launcher_web/` | Small Flask app for the launcher pages and “launch/stop ecosystem” API. |
-| `odst_tool/` | Download pipeline (yt-dlp, FFmpeg), ODST library format, cloud sync helpers; embedded in the API for downloads. |
-| `setup_tool/` | Storage providers (local folder, Cloudflare R2, Backblaze B2), scanning, uploads, audio/cover helpers used by library and sync paths. |
+| `setup_tool/` | Storage providers (local folder, Cloudflare R2, Backblaze B2), scanning and uploads used by library and sync paths. |
 
 ### 3. Process and network view
 
@@ -96,7 +95,7 @@ The Flask application lives in `shared/api/__init__.py`. It:
 
 Catalog resolve queues the winner's stream-URL resolution on the **preview prefetch worker** rather than blocking the response on it: the click that follows either finds the URL warm or joins the extraction already running.
 
-**Download path**: queued items are processed in the background; completed tracks are merged into the main library metadata (`_sync_odst_to_main_core` and related helpers). A catalog Recording MBID crosses the queue as acquisition evidence, is stored on the track and is embedded using MusicBrainz Picard's standard MP3/FLAC tag mapping; folder scans recover the same identifier from supported tagged files. FFmpeg and yt-dlp are used via `odst_tool/`.
+**Download path**: queued items are processed in the background; completed tracks are merged into the main library metadata (`add_tracks_to_user_library`; `_sync_pool_to_main_core` for whole-pool admin operations). A catalog Recording MBID crosses the queue as acquisition evidence, is stored on the track and is embedded using MusicBrainz Picard's standard MP3/FLAC tag mapping; folder scans recover the same identifier from supported tagged files. FFmpeg and yt-dlp are used via `shared/downloader/`.
 
 **Library path**: `player/library.py` loads each account's canonical **`library.db`** and **`~/.config/soundsible/config.json`** for `PlayerConfig`; it can also use storage providers from `setup_tool/` for cloud-backed exports. One SQLite transaction stores the complete library snapshot: ordered tracks and playlists, settings, podcast state, normalized `artists`/`albums`/`track_artists`, and `track_user_state`. Entity IDs are deterministic and albums include their album artist, so unrelated records with the same title do not collapse. After that transaction commits, Soundsible atomically refreshes `library.json` as a portable export; an export failure does not roll back the library.
 
@@ -172,9 +171,9 @@ An account without a canonical marker is migrated once using the previous manife
   account's global taste profile.
   Autoplay remains an invisible finite-context continuation. Search does not
   use the queue planner and its UI is unchanged.
-- **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (same ODST `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:
+- **Playback and downloads** for those rows do **not** use Deezer audio. The UI runs **YouTube / YouTube Music text search** (the same `/api/downloader/youtube/search` path as the downloader) using Deezer title + artist, picks a matching video id, then:
   - **In-app preview** streams via **`GET /api/preview/stream/<video_id>`** (playback blueprint).
-  - **Download queue** uses the resolved item like any other ODST search result.
+  - **Download queue** uses the resolved item like any other search result.
 - Resolution can take a few seconds; the download-queue popover may show a short **“Finding YouTube match…”** state while that search runs.
 
 **Universal search** (`shared/api/routes/catalog.py`):
@@ -275,7 +274,7 @@ machine, and what belongs to a person.
 | `<config>/cookies.txt` | yt-dlp cookies. |
 | `<config>/download_queue.json` | One queue; each row carries `user_id`. |
 | `<music>/tracks/<hash>.<ext>` | **Shared audio pool.** The track id *is* the content hash, so two people who own the same song point at the same file — nothing is downloaded or stored twice. |
-| `<music>/library.json` | Instance catalog of what is physically on disk (written by ODST). |
+| `<music>/library.json` | Instance catalog of what is physically on disk (written by the download pool, `shared/downloader/`). |
 | `<cache>/previews/`, `<cache>/covers/` | Shared, content-addressed. |
 | `<data>/telemetry/` | `setup-events`, `migration-events`. |
 

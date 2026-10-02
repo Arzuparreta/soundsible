@@ -25,9 +25,9 @@ for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac
     except Exception:
         sys.modules[_module] = MagicMock()
 
-from odst_tool import youtube_downloader as yd  # noqa: E402
+from shared.downloader import youtube_downloader as yd  # noqa: E402
 import yt_dlp  # noqa: E402
-from odst_tool.youtube import search  # noqa: E402
+from shared.downloader.youtube import search  # noqa: E402
 from shared.resolution_confidence import classify_confidence, score_candidate  # noqa: E402
 
 

@@ -110,7 +110,7 @@ def test_metadata_route_fallback_commits_declared_fields(manager, monkeypatch):
     from flask import Flask
     track_id = manager.metadata.tracks[0].id
     monkeypatch.setattr(manager, 'update_track', lambda *a, **k: False)
-    monkeypatch.setattr(api, '_mirror_track_into_odst_downloader', lambda *a, **k: None)
+    monkeypatch.setattr(api, '_mirror_track_into_pool', lambda *a, **k: None)
     monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: None)
     monkeypatch.setattr(routes, '_get_api', lambda: {
         'get_core': lambda: (manager, None, None),

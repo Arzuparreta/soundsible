@@ -9,6 +9,6 @@
 - `download`: fetching a video's audio to a file.
 - `tracks`: turning a downloaded file into a library `Track`.
 
-`odst_tool.youtube_downloader.YouTubeDownloader` ties them to one output
+`shared.downloader.youtube_downloader.YouTubeDownloader` ties them to one output
 folder and one set of cookies; the engine talks to that.
 """

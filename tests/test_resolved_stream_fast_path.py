@@ -29,9 +29,9 @@ for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac
     except Exception:
         sys.modules[_module] = MagicMock()
 
-from odst_tool import youtube_downloader as yd  # noqa: E402
+from shared.downloader import youtube_downloader as yd  # noqa: E402
 import yt_dlp  # noqa: E402
-from odst_tool.youtube import streams, web  # noqa: E402
+from shared.downloader.youtube import streams, web  # noqa: E402
 
 VID = "dQw4w9WgXcQ"
 STREAM_URL = "https://cdn.invalid/audio.m4a?expire=99999999999"

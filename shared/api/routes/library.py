@@ -302,7 +302,7 @@ def delete_track_from_library(track_id):
     logger.info("API: Deleting track %s (%s)...", track.title, track_id)
     success = lib.delete_track(track)
     if success:
-        # ODST is the shared pool catalog. A personal removal must not remove
+        # The download pool's catalog is shared. A personal removal must not remove
         # an object still owned by another account; cleanup reconciles it later.
         api["emit_to_user"]("library_updated")
         return jsonify({"status": "success"})

@@ -18,7 +18,7 @@ for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac
     except Exception:
         sys.modules[_module] = MagicMock()
 
-from odst_tool.youtube import web  # noqa: E402
+from shared.downloader.youtube import web  # noqa: E402
 
 VID = "bSnlKl_PoQU"
 

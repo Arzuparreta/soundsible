@@ -527,7 +527,7 @@ class LibraryMetadata:
         into one goes through :meth:`shared.library_dates.Holdings.claim`, which
         knows whether the account already held the song (a download of a song
         saved weeks ago keeps that day). What still arrives undated — the shared
-        pool's own catalog, the ODST tool — joined just now.
+        pool's own catalog — joined just now.
         """
         if not track.added_at:
             track.added_at = utc_now_iso_naive()

@@ -1,6 +1,6 @@
 """The engine's handle on YouTube: one output folder, one set of cookies.
 
-The work lives in `odst_tool.youtube`; this class binds it to where files
+The work lives in `shared.downloader.youtube`; this class binds it to where files
 go and which cookies to use, and acquires tracks from a text search, from a
 video or from a file already on disk.
 """

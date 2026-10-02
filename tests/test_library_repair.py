@@ -520,8 +520,8 @@ def test_a_good_youtube_download_is_never_fetched_again(pool, downloads, pool_pa
 def test_the_ultra_profile_never_converts_youtube_audio_to_flac(tmp_path, monkeypatch):
     """`ultra` means the stream as YouTube serves it. When the native download
     fails and yt-dlp has to extract, it must keep that codec, not write FLAC."""
-    import odst_tool.youtube_downloader as ytd
-    from odst_tool.youtube import download
+    import shared.downloader.youtube_downloader as ytd
+    from shared.downloader.youtube import download
 
     launched = []
 

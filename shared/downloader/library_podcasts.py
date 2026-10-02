@@ -1,4 +1,4 @@
-"""Read ODST's two podcast fields without retaining the disk track collection.
+"""Read the pool library's two podcast fields without retaining the disk track collection.
 
 Every track is decoded/validated and immediately discarded. JSON syntax and
 LibraryMetadata.from_json's legacy rejection/default rules remain authoritative;
@@ -105,7 +105,7 @@ def read_podcast_fields(source: TextIO, *, chunk_size: int = 64 * 1024) -> tuple
 
     Malformed JSON returns empty podcast fields, as LibraryMetadata.from_json
     does. Valid JSON that could not construct the old model raises TypeError;
-    ODST's existing caller then retains its in-memory podcasts. Types/defaults,
+    The pool's existing caller then retains its in-memory podcasts. Types/defaults,
     duplicate root keys (last wins) and trailing-data validation are preserved.
     The descriptor is opened/owned by the caller, just as before.
     """

@@ -1,6 +1,6 @@
 """A song downloaded from an album page lands on that album, in its place."""
 
-from odst_tool.youtube_downloader import YouTubeDownloader
+from shared.downloader.youtube_downloader import YouTubeDownloader
 
 
 def _download(tmp_path, monkeypatch, *, tags: dict, hint: dict):

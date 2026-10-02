@@ -167,7 +167,7 @@ def test_a_download_through_the_queue_keeps_the_day_the_song_was_saved(isolated_
     downloaded = _track("hash-q", "abcdefghijk")
 
     def pool_add(track):
-        # What `ODSTDownloader.commit_track` does to the object it is handed.
+        # What `Downloader.commit_track` does to the object it is handed.
         track.added_at = POOL_STAMP
 
     fake = SimpleNamespace(
