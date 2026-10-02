@@ -32,18 +32,20 @@ What you can do
 - **Podcasts**: Find podcasts, subscribe and play episodes in the same app.
 - **Multi-user support**: Each person has their own library, playlists, favourites and listening history.
 
-<img src="docs/images/desktop-now-playing.png" alt="Soundsible web player with album artwork, library navigation and the upcoming queue" width="100%">
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/light/desktop-now-playing.webp"><img src="docs/images/screenshots/dark/desktop-now-playing.webp" alt="Soundsible web player with album artwork, library navigation and the upcoming queue" width="100%"></picture>
 
 <details>
 <summary>More screenshots: search, library and mobile lyrics</summary>
 
-<img src="docs/images/desktop-search.png" alt="Search results for artists, songs and albums" width="49%">
-<img src="docs/images/desktop-library.png" alt="Music library on desktop" width="49%">
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/light/desktop-search.webp"><img src="docs/images/screenshots/dark/desktop-search.webp" alt="Search results for an artist, their songs and albums" width="49%"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/light/desktop-library.webp"><img src="docs/images/screenshots/dark/desktop-library.webp" alt="Music library on desktop" width="49%"></picture>
 <br>
-<img src="docs/images/mobile-library.png" alt="Music library on a phone" width="32%">
-<img src="docs/images/mobile-now-playing.png" alt="Mobile player showing time-synced lyrics" width="32%">
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/light/mobile-library.webp"><img src="docs/images/screenshots/dark/mobile-library.webp" alt="Music library on a phone" width="32%"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/images/screenshots/light/mobile-now-playing.webp"><img src="docs/images/screenshots/dark/mobile-now-playing.webp" alt="Mobile player showing time-synced lyrics" width="32%"></picture>
 
 </details>
+
+<sub>The music in the screenshots is CC BY, from Jamendo: [credits](ui_web/showcase/CREDITS.md).</sub>
 
 ## Clients and devices
 
