@@ -72,3 +72,50 @@ def test_audio_details_report_length_and_size(tmp_path):
     assert duration == 0  # 0.3 s rounds down
     assert bitrate > 0
     assert size == path.stat().st_size
+
+
+RECORDING_MBID = "b1a9c0e9-d987-4042-ae91-78d6a3267d69"
+WRITTEN = {
+    "title": "Digital Love",
+    "artist": "Daft Punk",
+    "album": "Discovery",
+    "album_artist": "Daft Punk",
+    "year": 2001,
+    "track_number": 3,
+    "disc_number": 1,
+    "disc_total": 2,
+    "musicbrainz_id": RECORDING_MBID,
+}
+
+
+@pytest.mark.parametrize("suffix", [".m4a", ".ogg", ".opus", ".mp3", ".flac"])
+def test_a_download_carries_its_record_in_every_stored_format(tmp_path, suffix):
+    # Only MP3 and FLAC used to be written, while YouTube downloads are
+    # mostly M4A: a rescan read back YouTube's tags, not the album the song
+    # was saved from.
+    path = _encode(tmp_path / f"song{suffix}", "title=Digital Love (Official Video)", "artist=Daft Punk - Topic")
+
+    AudioProcessor.embed_metadata(str(path), WRITTEN)
+
+    tags = AudioProcessor.read_tags(str(path))
+    assert (tags["title"], tags["artist"], tags["album"], tags["album_artist"]) == (
+        "Digital Love", "Daft Punk", "Discovery", "Daft Punk",
+    )
+    assert (tags["year"], tags["track_number"], tags["disc_number"], tags["disc_total"]) == (2001, 3, 1, 2)
+    assert tags["musicbrainz_id"] == RECORDING_MBID
+
+
+def test_an_m4a_cover_from_a_url_is_embedded(tmp_path, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    image = io.BytesIO()
+    Image.new("RGB", (64, 64), (200, 30, 30)).save(image, "JPEG")
+    monkeypatch.setattr("shared.artwork.download_image", lambda _url: image.getvalue())
+    path = _encode(tmp_path / "song.m4a")
+
+    AudioProcessor.embed_metadata(str(path), {"title": "Song"}, "https://example.invalid/cover.jpg")
+
+    assert AudioProcessor.extract_cover_art(str(path))
+    assert AudioProcessor.read_tags(str(path))["cover_art"] is True

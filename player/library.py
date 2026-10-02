@@ -863,22 +863,9 @@ class LibraryManager:
                 os.remove(local_path)
                 return True # Note: Success but nothing to do
                 
-            # Note: 3. Process as "new" upload
-            # Note: We use uploadengine logic to re-hash and upload
+            # 3. Upload the edited file as a new track: its hash, and so its id, changed.
             self._log("Re-processing file...")
-            uploader = UploadEngine(self.config)
-            
-            # Note: Hack we use _process_single_file but we need to pass a valid source_root
-            # Note: We treat the temp dir as root
-            source_root = Path(local_path).parent
-            
-            new_track, uploaded = uploader._process_single_file(
-                Path(local_path),
-                source_root,
-                existing_tracks={},  # Empty, so a new Track is built
-                cover_image_path=None,  # Already embedded
-                force_reprocess=True,
-            )
+            new_track = UploadEngine(self.config).upload(Path(local_path))
             
             if new_track:
                 preserve_track_identity(track, new_track)

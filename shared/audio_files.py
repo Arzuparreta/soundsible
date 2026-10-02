@@ -18,7 +18,8 @@ from mutagen import File as MutagenFile
 from mutagen.flac import FLAC, Picture
 from mutagen.id3 import APIC, ID3, TALB, TCMP, TDRC, TIT2, TPE1, TPE2, TPOS, TRCK, TXXX, UFID
 from mutagen.mp3 import MP3
-from mutagen.mp4 import MP4
+from mutagen.mp4 import MP4, MP4Cover, MP4FreeForm
+from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 
 from shared.constants import SUPPORTED_AUDIO_FORMATS
@@ -174,7 +175,7 @@ class AudioProcessor:
                 if audio.tags:
                     _read_vorbis(audio.tags, out)
                 out["cover_art"] = bool(audio.pictures)
-            elif isinstance(audio, OggVorbis):
+            elif isinstance(audio, (OggVorbis, OggOpus)):
                 if audio.tags:
                     _read_vorbis(audio.tags, out)
             elif isinstance(audio, MP4):
@@ -207,10 +208,11 @@ class AudioProcessor:
 
     @staticmethod
     def embed_metadata(file_path: str, metadata: Dict[str, Any], cover_url: Optional[str] = None) -> None:
-        """Write tags (and a cover from `cover_url`) into an MP3 or FLAC file.
+        """Write tags (and a cover from `cover_url`) into the file.
 
-        Writing changes the file's hash, so the artwork the file had is bound
-        to the new hash before this returns.
+        MP3, FLAC, MP4/M4A, Ogg Vorbis and Opus. WebM is left as it is:
+        mutagen cannot write Matroska tags. Writing changes the file's hash, so
+        the artwork the file had is bound to the new hash before this returns.
         """
         from shared.artwork import artwork_store, download_image
         from shared.library_repair import shrink_cover
@@ -236,6 +238,10 @@ class AudioProcessor:
             AudioProcessor._embed_mp3(file_path, metadata, cover_data)
         elif suffix == ".flac":
             AudioProcessor._embed_flac(file_path, metadata, cover_data)
+        elif suffix in (".m4a", ".mp4"):
+            AudioProcessor._embed_mp4(file_path, metadata, cover_data)
+        elif suffix in (".ogg", ".opus"):
+            AudioProcessor._embed_ogg(file_path, metadata, cover_data)
         if original:
             store.bind(
                 AudioProcessor.calculate_hash(file_path), original,
@@ -258,46 +264,110 @@ class AudioProcessor:
         return disc
 
     @staticmethod
+    def _write_vorbis(audio: Any, metadata: Dict[str, Any]) -> None:
+        """Vorbis comments: FLAC, Ogg Vorbis and Opus all carry these."""
+        if metadata.get("title"):
+            audio["title"] = metadata["title"]
+        artists = metadata.get("artists")
+        if isinstance(artists, list) and artists:
+            audio["artist"] = [str(value) for value in artists if str(value).strip()]
+        elif metadata.get("artist"):
+            audio["artist"] = metadata["artist"]
+        if metadata.get("album"):
+            audio["album"] = metadata["album"]
+        if metadata.get("album_artist"):
+            audio["albumartist"] = metadata["album_artist"]
+        if AudioProcessor._year(metadata):
+            audio["date"] = AudioProcessor._year(metadata)
+        if metadata.get("track_number"):
+            audio["tracknumber"] = str(metadata["track_number"])
+        if AudioProcessor._disc(metadata):
+            audio["discnumber"] = AudioProcessor._disc(metadata)
+        if metadata.get("is_compilation"):
+            audio["compilation"] = "1"
+        if metadata.get("isrc"):
+            audio["isrc"] = metadata["isrc"]
+        musicbrainz_id = normalize_recording_mbid(metadata.get("musicbrainz_id"))
+        if musicbrainz_id:
+            audio[MUSICBRAINZ_VORBIS_RECORDING_TAG] = musicbrainz_id
+
+    @staticmethod
+    def _cover_picture(cover_data: bytes) -> Picture:
+        image = Picture()
+        image.type = 3
+        image.mime = "image/jpeg"
+        image.desc = "Cover"
+        image.data = cover_data
+        return image
+
+    @staticmethod
     def _embed_flac(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]) -> None:
         try:
             audio = FLAC(file_path)
-            if metadata.get("title"):
-                audio["title"] = metadata["title"]
-            artists = metadata.get("artists")
-            if isinstance(artists, list) and artists:
-                audio["artist"] = [str(value) for value in artists if str(value).strip()]
-            elif metadata.get("artist"):
-                audio["artist"] = metadata["artist"]
-            if metadata.get("album"):
-                audio["album"] = metadata["album"]
-            if metadata.get("album_artist"):
-                audio["albumartist"] = metadata["album_artist"]
-            if AudioProcessor._year(metadata):
-                audio["date"] = AudioProcessor._year(metadata)
-            if metadata.get("track_number"):
-                audio["tracknumber"] = str(metadata["track_number"])
-            if AudioProcessor._disc(metadata):
-                audio["discnumber"] = AudioProcessor._disc(metadata)
-            if metadata.get("is_compilation"):
-                audio["compilation"] = "1"
-            if metadata.get("isrc"):
-                audio["isrc"] = metadata["isrc"]
-            musicbrainz_id = normalize_recording_mbid(metadata.get("musicbrainz_id"))
-            if musicbrainz_id:
-                audio[MUSICBRAINZ_VORBIS_RECORDING_TAG] = musicbrainz_id
+            AudioProcessor._write_vorbis(audio, metadata)
             if cover_data:
                 try:
-                    image = Picture()
-                    image.type = 3
-                    image.mime = "image/jpeg"
-                    image.desc = "Cover"
-                    image.data = cover_data
-                    audio.add_picture(image)
+                    audio.add_picture(AudioProcessor._cover_picture(cover_data))
                 except Exception as e:
                     logger.warning("Could not embed a FLAC cover in %s: %s", file_path, e)
             audio.save()
         except Exception as e:
             logger.warning("Could not write FLAC tags to %s: %s", file_path, e)
+
+    @staticmethod
+    def _embed_ogg(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]) -> None:
+        try:
+            audio = MutagenFile(file_path)
+            if not isinstance(audio, (OggVorbis, OggOpus)):
+                return
+            if audio.tags is None:
+                audio.add_tags()
+            AudioProcessor._write_vorbis(audio.tags, metadata)
+            if cover_data:
+                import base64
+
+                picture = AudioProcessor._cover_picture(cover_data).write()
+                audio.tags["metadata_block_picture"] = [base64.b64encode(picture).decode("ascii")]
+            audio.save()
+        except Exception as e:
+            logger.warning("Could not write Ogg tags to %s: %s", file_path, e)
+
+    @staticmethod
+    def _embed_mp4(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]) -> None:
+        try:
+            audio = MP4(file_path)
+            if audio.tags is None:
+                audio.add_tags()
+            tags = audio.tags
+            if metadata.get("title"):
+                tags["\xa9nam"] = [metadata["title"]]
+            artists = metadata.get("artists")
+            if isinstance(artists, list) and artists:
+                tags["\xa9ART"] = [str(value) for value in artists if str(value).strip()]
+            elif metadata.get("artist"):
+                tags["\xa9ART"] = [metadata["artist"]]
+            if metadata.get("album"):
+                tags["\xa9alb"] = [metadata["album"]]
+            if metadata.get("album_artist"):
+                tags["aART"] = [metadata["album_artist"]]
+            if AudioProcessor._year(metadata):
+                tags["\xa9day"] = [AudioProcessor._year(metadata)]
+            if metadata.get("track_number"):
+                tags["trkn"] = [(int(metadata["track_number"]), 0)]
+            if metadata.get("disc_number"):
+                tags["disk"] = [(int(metadata["disc_number"]), int(metadata.get("disc_total") or 0))]
+            if metadata.get("is_compilation"):
+                tags["cpil"] = True
+            if metadata.get("isrc"):
+                tags["----:com.apple.iTunes:ISRC"] = [MP4FreeForm(str(metadata["isrc"]).encode("utf-8"))]
+            musicbrainz_id = normalize_recording_mbid(metadata.get("musicbrainz_id"))
+            if musicbrainz_id:
+                tags[MUSICBRAINZ_MP4_RECORDING_TAG] = [MP4FreeForm(musicbrainz_id.encode("ascii"))]
+            if cover_data:
+                tags["covr"] = [MP4Cover(cover_data, imageformat=MP4Cover.FORMAT_JPEG)]
+            audio.save()
+        except Exception as e:
+            logger.warning("Could not write MP4 tags to %s: %s", file_path, e)
 
     @staticmethod
     def _embed_mp3(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]) -> None:

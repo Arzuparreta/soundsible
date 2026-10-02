@@ -7,7 +7,6 @@ mutagen>=1.46.0            # Audio metadata extraction
 numpy>=1.26.0              # In-memory beat/key/structure analysis for Auto DJ
 
 # CLI Framework
-click>=8.1.0               # Command-line interface
 rich>=13.5.0               # Progress bars and rich UI
 
 # Web Interface
