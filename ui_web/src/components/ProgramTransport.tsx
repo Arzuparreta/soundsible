@@ -7,7 +7,7 @@ import styles from './ProgramTransport.module.css';
 /** Stateless ownership: presentation observes a program; commands never create audio here. */
 export default function ProgramTransport(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void> }) {
   const [seeking, setSeeking] = createSignal<number | null>(null);
-  const occurrence = createMemo(() => `${props.state.generation}:${props.state.index}:${props.state.id}`);
+  const occurrence = createMemo(() => `${props.state.generation}:${props.state.items[props.state.index]?.key ?? ""}`);
   createEffect(() => { occurrence(); setSeeking(null); });
   const run = (command: ProgramCommand) => props.command(command).catch(() => {});
   const disabled = () => !props.state.ready || props.pending;

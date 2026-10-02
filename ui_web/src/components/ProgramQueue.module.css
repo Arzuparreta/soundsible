@@ -1,0 +1,8 @@
+.queue { margin-bottom: 16px; }
+.queue header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.queue h2 { font-size: var(--text-label); }
+.queue header button, .row button[data-queue-action] { min-width: 44px; min-height: 44px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--ink-primary); font: inherit; }
+.scroll { height: 240px; overflow: auto; }
+.row { position: absolute; width: 100%; top: 0; }
+
+.edit { display: flex; justify-content: flex-end; gap: 4px; padding: 0 12px 8px; }

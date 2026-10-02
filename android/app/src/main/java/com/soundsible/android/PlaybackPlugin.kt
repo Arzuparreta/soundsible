@@ -1,6 +1,7 @@
 package com.soundsible.android
 
 import android.content.ComponentName
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.*
@@ -32,8 +33,14 @@ class PlaybackPlugin : Plugin() {
     private fun snapshot(): JSObject {
         val p = controller
         val queue = JSArray()
-        if (p != null) for (i in 0 until p.mediaItemCount) queue.put(p.getMediaItemAt(i).mediaId)
+        val items = JSArray()
+        if (p != null) for (i in 0 until p.mediaItemCount) {
+            val item = p.getMediaItemAt(i)
+            queue.put(item.mediaId)
+            items.put(JSObject().put("key", ProgramQueue.key(p, i)).put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: ""))
+        }
         return JSObject().put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
+            .put("items", items).put("queueToken", if (p != null) ProgramQueue.token(p) else "")
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
             .put("shuffle", p?.shuffleModeEnabled ?: false).put("repeat", p?.repeatMode ?: Player.REPEAT_MODE_OFF)
             .put("hasNext", p?.hasNextMediaItem() ?: false).put("hasPrevious", p?.hasPreviousMediaItem() ?: false)
@@ -64,11 +71,26 @@ class PlaybackPlugin : Plugin() {
                         val id = row.getString("id")
                         require(id.isNotBlank() && id.length <= 512)
                         MediaItem.Builder().setMediaId(id).setUri(connection.origin + "/api/static/stream/" + android.net.Uri.encode(id) + "?android_generation=" + connection.generation)
-                            .setMediaMetadata(MediaMetadata.Builder().setTitle(row.optString("title")).setArtist(row.optString("artist")).setAlbumTitle(row.optString("album")).build()).build()
+                            .setMediaMetadata(MediaMetadata.Builder().setTitle(row.optString("title")).setArtist(row.optString("artist")).setAlbumTitle(row.optString("album")).setExtras(Bundle().apply { putString(ProgramQueue.KEY, java.util.UUID.randomUUID().toString()) }).build()).build()
                     }
                     val index = call.getInt("index") ?: 0
                     require(index in items.indices)
                     p.setMediaItems(items, index, 0); p.prepare(); p.play()
+                }
+                "select", "move", "remove" -> {
+                    val args = Bundle().apply {
+                        putLong("generation", connection.generation)
+                        putString("action", call.getString("action")); putString("queueToken", call.getString("queueToken")); putString("key", call.getString("key"))
+                        putInt("index", call.getInt("index") ?: -1); putInt("toIndex", call.getInt("toIndex") ?: -1)
+                    }
+                    val result = p.sendCustomCommand(ProgramQueue.command, args)
+                    result.addListener({
+                        try {
+                            require(alive && args.getLong("generation") == connection.generation && result.get().resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS)
+                            call.resolve(snapshot())
+                        } catch (_: Exception) { call.reject("Queue changed or session unavailable", "PLAYBACK_COMMAND") }
+                    }, java.util.concurrent.Executor { task -> main.post(task) })
+                    return@post
                 }
                 "play" -> { if (p.playerError != null || p.playbackState == Player.STATE_ENDED) { p.seekTo(p.currentMediaItemIndex, if (p.playbackState == Player.STATE_ENDED) 0 else p.currentPosition); p.prepare() }; p.play() }
                 "pause" -> p.pause()

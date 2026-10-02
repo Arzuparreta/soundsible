@@ -2,15 +2,18 @@
 export interface ProgramState {
   generation: number; sequence: number; ready: boolean; playing: boolean;
   state: number; index: number; id: string; title: string; artist: string;
-  queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
+  items: ProgramOccurrence[]; queueToken: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
 }
+export interface ProgramOccurrence extends ProgramTrack { key: string }
 export interface ProgramTrack { id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' | 'stop' }
   | { action: 'seek'; positionMs: number }
   | { action: 'shuffle'; enabled: boolean }
   | { action: 'repeat'; mode: 0 | 1 | 2 }
+  | { action: 'select' | 'remove'; index: number; key: string; queueToken: string }
+  | { action: 'move'; index: number; toIndex: number; key: string; queueToken: string }
   | { action: 'queue'; tracks: ProgramTrack[]; index: number };
 export interface ProgramTransport {
   state(): Promise<ProgramState>;

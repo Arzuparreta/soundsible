@@ -206,3 +206,14 @@ No sustituye todavía stores/actions de NORMAL ni monta AuthenticatedPlayer; esa
 rutas deben adaptarse al contrato antes de retirar LibraryBrowser. No interpretar
 la disponibilidad de un componente en `components/` como migración del navegador:
 la UI web conserva su runtime actual. Véase [S2c](SLICE_2.md#s2c-runtime-asíncrono-y-transporte-solid).
+
+### Cola por ocurrencias de S2d
+
+ProgramQueue observa entradas nativas con UUID por ocurrencia. El puente envía
+select/move/remove con generación, índice, clave y huella del orden; PlaybackService
+valida su cola real al recibir el custom command antes de editarla. Sólo concede
+ese comando al UID de la app; no recibe URI/cookie de JS. Los controles Solid y OS
+continúan observando un único player. Virtualización con clave estable y medición
+real de cada fila evita reconstruir DOM con los ticks o solapar controles en edición.
+El seek sigue la clave actual, conservándose al moverla y limpiándose al sustituirla
+por otra entrada del mismo id e índice.

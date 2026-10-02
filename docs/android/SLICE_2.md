@@ -141,3 +141,36 @@ acciones/rutas NORMAL y el estado de cola al contrato asíncrono: el AudioServic
 síncrono de mezcla no es compatible. El componente está disponible para futuros
 adaptadores; no se afirma que el navegador use ya este runtime. Fuentes pendientes,
 artwork, DJ/Live/Auto/offline y aceptación física mantienen sus gates.
+
+## S2d: cola NORMAL por ocurrencias
+
+El snapshot añade `items` (key/id/título/artista/álbum) y `queueToken`, una huella
+SHA-256 del orden de las claves. Cada entrada recibe un UUID nativo en
+MediaMetadata.extras al crear la cola; repetir id conserva entradas independientes.
+Las claves sobreviven en el servicio a recrear la Activity, no se persisten tras
+muerte de proceso ni se aceptan de JS al crear fuentes. No se exportan URI/cookies.
+
+Comandos tipados `select`/`move`/`remove` llevan index/key/queueToken y generación;
+move incluye toIndex. Se envían como un comando custom de MediaSession disponible
+sólo para el UID de la app. El servicio valida sesión/generación, huella de su cola
+real, clave e índices antes de editar. Una petición con orden antiguo se rechaza,
+aunque el id de la canción siga existiendo. La aceptación asíncrona no promete que
+el nuevo snapshot del controlador haya llegado: la UI sigue observando eventos.
+
+Seleccionar una aparición salta a su comienzo y pide Play explícito. Mover o
+quitar otra fila usa las operaciones de Media3, conservando posición y estado
+play/pausa de la actual. Quitar la actual delega el siguiente elemento en Media3;
+si no queda sucesor, termina. Quitar la última entrada detiene y vacía el programa.
+Los modos shuffle/repeat se conservan con estas ediciones y cola vacía; logout o
+cambio de cuenta/origen siguen restableciéndolos. Semántica de modificaciones:
+[Media3 playlists](https://developer.android.com/media/media3/exoplayer/playlists).
+
+`ProgramQueue` muestra las filas con `MusicListRowView`, selección activa por
+ocurrencia y controles de edición separados. Virtualiza el panel sin importar
+stores/Web Audio; mide filas reales también en edición. Claves estables conservan
+DOM entre ticks y reordenaciones; recupera foco al mover un nodo aún presente.
+Los labels de acciones incluyen el índice para distinguir títulos repetidos.
+
+Sigue siendo la superficie Android de desarrollo, no la UI NORMAL completa ni
+un catálogo Android Auto. Límite de 1.000 archivos, sin append/adquisición,
+previews/podcasts/radio/artwork/handoff ni resumption. No alpha ni offline.

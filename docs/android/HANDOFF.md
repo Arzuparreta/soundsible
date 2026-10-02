@@ -170,11 +170,12 @@ continúa sin decisión y no se implementa aquí. No alpha.
 
 ## Siguiente tarea concreta
 
-Continuar S2 con el contrato asíncrono en el runtime autenticado Solid y retirar
-la superficie/controles temporales al tener un reemplazo probado. Añadir
-previews/podcasts/resume/±15s/radio y artwork de MediaSession, según
-[la continuación de S2a](SLICE_2.md). No introducir un segundo dueño Web Audio.
-Mantener las aceptaciones de despliegue/phone de S1 y todos los gates de paridad.
+Continuar con S2e: acciones NORMAL de biblioteca para poner después/añadir a la
+cola sin sustituir el programa actual, ampliando el contrato asíncrono y la
+validación nativa. Ver la propuesta al final de este traspaso y [S2](SLICE_2.md).
+Después adaptar rutas/acciones completas antes de montar AuthenticatedPlayer o
+retirar LibraryBrowser. Fuentes previews/podcasts/resume/±15s/radio, artwork y
+aceptación phone/Auto mantienen sus gates. No introducir un segundo dueño Web Audio.
 
 Antes de trabajar: `git status --short --branch`, leer AGENTS y verificar archivos
 actuales. Actualizar este traspaso con cada slice: commit, pruebas/evidencias,
@@ -269,3 +270,61 @@ a atribuir los 49 tests backend de S2a a este corte sin cambios backend.
 [Evidencia S2c](evidence/s2c.json) y [captura visible](evidence/program-s2c-api36.png).
 La evidencia conserva metadata de la validación con dirty=true; no es una release.
 Para identificar el commit final: `git log --oneline --grep='asynchronous program runtime'`.
+
+## Entrega S2d: cola NORMAL por ocurrencias
+
+La UI de desarrollo observa metadata de todas las entradas del servicio, muestra
+su orden y permite seleccionar/mover/quitar una aparición concreta. Un UUID
+nativo por entrada y la huella del orden impiden confundir duplicados o ejecutar
+una edición atrasada. La validación ocurre en PlaybackService por comando custom
+privado al UID de la app, antes de editar ExoPlayer; no se reemplaza toda la cola.
+Ver [contrato S2d](SLICE_2.md#s2d-cola-normal-por-ocurrencias).
+
+Seleccionar pide inicio/Play. Mover/quitar otra entrada conserva posición y pausa;
+quitar la actual sigue semántica de Media3, y la última vacía y detiene. Los modos
+se mantienen, incluso con cola vacía, hasta reset de cuenta/origen. Metadata/keys
+siguen en el servicio al recrear Activity. No hay persistencia de queue/keys.
+ProgramQueue reutiliza la fila pura compartida, virtualiza y mide altura real de
+filas con controles visibles; no importa los adaptadores con stores/audio.
+
+Fallos iniciales corregidos: mock de ResizeObserver faltante en jsdom; foco perdido
+al mover un nodo DOM (aunque conservase identidad); constantes de error antiguas
+rechazadas por lint de Media3. La primera integración funcional pasó pero la
+captura mostró filas solapadas en edición: el estimado fijo no medía su crecimiento.
+Se separaron controles de la fila compartida y se mide cada elemento; la prueba
+instrumentada ahora comprueba rectángulos sin solapamiento. Chromium se interrumpió
+para esta corrección y su ejecución completa se repite con fuentes congeladas.
+
+### Siguiente corte propuesto: S2e, acciones de biblioteca hacia NORMAL
+
+Añadir después y añadir al final desde las filas de biblioteca/colecciones, con
+comandos nativos de inserción que crean UUIDs y fuentes desde ids/metadatos (sin
+URI/cookie de JS). Mantener la canción, posición, pausa/modos y claves existentes;
+validar generación, orden esperado y límite de cola en el servicio. Reutilizar
+menús/presentación compartidos mediante callbacks sin importar stores de mezcla.
+Probar nuevas ocurrencias de un id repetido, inserción después de la actual, cola
+vacía, límites y rechazo de acción antigua, más recreación/controles OS.
+
+S2e seguirá con archivos locales: la adquisición y el transporte real de previews
+necesitan un corte posterior específico. No dar por resueltos edición completa,
+rutas AuthenticatedPlayer, podcasts/radio/artwork/DJ/Live/Auto/offline.
+
+### Validación final de S2d
+
+Typecheck/Vitest: **1.344 tests / 145 archivos**. APK debug/test y lint correctos;
+integración API 36 **7 pasan / 0 omitidos / 0 fallos**, HTTP y HTTPS verificado,
+ediciones reales desde Solid, fingerprint/key/generación incorrectos rechazados
+y rectángulos sin solapamientos. La captura espera fila actual/panel en viewport
+y dos frames después del scroll instantáneo. Chromium completo: **278 pasan /
+66 omitidos**; WebKit completo readonly/1 worker: **269 pasan / 75 omitidos /
+0 fallos**, después de Chromium y sin emulador.
+
+Durante el Chromium final se ajustó sólo ProgramTransport, importado por Android
+y tests (no por el grafo web): no hubo HMR ni page reload. Se repitieron unit/APK
+con ese cambio. WebKit se ejecutó después, con todas las fuentes congeladas.
+Versión central, firma APK, ausencia de CA fixture/Web Audio, diff y enlaces
+verificados. No se atribuyen aquí tests backend antiguos ni CI GitHub no ejecutado.
+
+[Evidencia S2d](evidence/s2d.json) y [cola visible](evidence/queue-s2d-api36.png).
+Metadata de validación conserva dirty=true; no es una release. Commit final:
+`git log --oneline --grep='edit NORMAL queue by native occurrence'`.
