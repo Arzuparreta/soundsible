@@ -825,7 +825,7 @@ def _fill_youtube_runtime_hint(dl, song_str: str, item: dict, metadata_evidence:
     """Build metadata_hint for process_video; never prefer raw URLs over yt-dlp/peek titles.
 
     YouTube Music text search uses yt-dlp with extract_flat on music.youtube.com results; those
-    entries often have title but no channel/uploader/artist (see youtube_downloader.search_youtube).
+    entries often have title but no channel/uploader/artist (see odst_tool.youtube.search.search_youtube).
     A usable title from search then skipped peek_brief previously, so artist stayed empty and
     tags fell through to Unknown Artist. We call peek_brief when title or artist is still unusable.
     """
@@ -1065,7 +1065,6 @@ def _process_single_queue_item_bound(item):
                 track = dl.downloader.process_video(
                     song_str,
                     metadata_hint=runtime_hint,
-                    source=source_type,
                     progress_callback=_on_progress,
                 )
             else:
@@ -1078,7 +1077,7 @@ def _process_single_queue_item_bound(item):
                 }
                 if metadata_evidence:
                     fake_meta.update({k: v for k, v in metadata_evidence.items() if v is not None})
-                track = dl.downloader.process_track(fake_meta, source="manual")
+                track = dl.downloader.process_track(fake_meta)
 
         if track:
             # Persist the reusable result before any personal-library work.

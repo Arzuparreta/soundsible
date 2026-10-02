@@ -521,6 +521,7 @@ def test_the_ultra_profile_never_converts_youtube_audio_to_flac(tmp_path, monkey
     """`ultra` means the stream as YouTube serves it. When the native download
     fails and yt-dlp has to extract, it must keep that codec, not write FLAC."""
     import odst_tool.youtube_downloader as ytd
+    from odst_tool.youtube import download
 
     launched = []
 
@@ -535,7 +536,7 @@ def test_the_ultra_profile_never_converts_youtube_audio_to_flac(tmp_path, monkey
         launched.append(args)
         return FailedRun()
 
-    monkeypatch.setattr(ytd.subprocess, "Popen", popen)
+    monkeypatch.setattr(download.subprocess, "Popen", popen)
     downloader = ytd.YouTubeDownloader(tmp_path, quality="ultra")
 
     with pytest.raises(Exception):

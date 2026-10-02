@@ -757,13 +757,13 @@ def test_preview_stream_url_resolution_is_single_flight(monkeypatch):
     release = threading.Event()
     calls = []
 
-    def slow_get_stream_url(video_id):
+    def slow_resolve(video_id, *, skip_fast_path=False):
         calls.append(video_id)
         started.set()
         release.wait(5)
-        return "https://rr.googlevideo.com/one"
+        return resolved_stream("https://rr.googlevideo.com/one", egress="direct")
 
-    downloader = SimpleNamespace(downloader=SimpleNamespace(get_stream_url=slow_get_stream_url))
+    downloader = SimpleNamespace(downloader=SimpleNamespace(get_resolved_stream=slow_resolve))
     api = {"get_downloader": lambda open_browser=False: downloader}
 
     results: list[str] = []
@@ -795,11 +795,11 @@ def test_preview_stream_url_failure_is_negatively_cached(monkeypatch):
     playback_routes._preview_stream_urls.clear()
     calls = []
 
-    def failing(video_id):
+    def failing(video_id, *, skip_fast_path=False):
         calls.append(video_id)
         return None
 
-    downloader = SimpleNamespace(downloader=SimpleNamespace(get_stream_url=failing))
+    downloader = SimpleNamespace(downloader=SimpleNamespace(get_resolved_stream=failing))
     api = {"get_downloader": lambda open_browser=False: downloader}
 
     try:

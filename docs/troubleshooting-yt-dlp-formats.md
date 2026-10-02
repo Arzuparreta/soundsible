@@ -52,5 +52,5 @@ Soundsible already forces IPv4 and retries with backoff; the defaults and how
 to tune them are in
 [Configuration → YouTube and downloads](CONFIGURATION.md#youtube-and-downloads).
 
-The attempt order lives in `_download_audio` in
-[`odst_tool/youtube_downloader.py`](../odst_tool/youtube_downloader.py).
+The attempt order lives in `download_audio` in
+[`odst_tool/youtube/download.py`](../odst_tool/youtube/download.py).

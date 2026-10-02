@@ -18,7 +18,7 @@ for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac
     except Exception:
         sys.modules[_module] = MagicMock()
 
-from odst_tool import youtube_downloader as yd  # noqa: E402
+from odst_tool.youtube import web  # noqa: E402
 
 VID = "bSnlKl_PoQU"
 
@@ -38,7 +38,7 @@ def _no_relay(monkeypatch):
 
 
 def _patch_session(monkeypatch, fake_get):
-    monkeypatch.setattr(yd, "_youtube_meta_session", lambda: MagicMock(get=fake_get))
+    monkeypatch.setattr(web, "_youtube_meta_session", lambda: MagicMock(get=fake_get))
 
 
 def test_returns_the_channel(monkeypatch):
@@ -51,8 +51,8 @@ def test_returns_the_channel(monkeypatch):
 
     _patch_session(monkeypatch, fake_get)
 
-    assert yd._oembed_creator(VID) == "Queen - Topic"
-    assert seen["url"] == yd._OEMBED_URL
+    assert web.oembed_creator(VID) == "Queen - Topic"
+    assert seen["url"] == web._OEMBED_URL
     assert seen["params"]["url"] == f"https://www.youtube.com/watch?v={VID}"
 
 
@@ -66,7 +66,7 @@ def test_goes_through_the_relay_when_one_is_configured(monkeypatch):
         return _Resp({"author_name": "Queen"})
 
     _patch_session(monkeypatch, fake_get)
-    yd._oembed_creator(VID)
+    web.oembed_creator(VID)
 
     assert seen["proxies"] == {
         "http": "http://relay.invalid:8888",
@@ -78,7 +78,7 @@ def test_a_bad_id_asks_nothing(monkeypatch):
     called = []
     _patch_session(monkeypatch, lambda url, **kw: called.append(1) or _Resp({}))
 
-    assert yd._oembed_creator("not-an-id") is None
+    assert web.oembed_creator("not-an-id") is None
     assert called == []
 
 
@@ -94,7 +94,7 @@ def test_a_bad_id_asks_nothing(monkeypatch):
 def test_an_unusable_answer_is_just_no_creator(monkeypatch, response):
     _patch_session(monkeypatch, lambda url, **kw: response)
 
-    assert yd._oembed_creator(VID) is None
+    assert web.oembed_creator(VID) is None
 
 
 def test_a_network_failure_does_not_escape(monkeypatch):
@@ -103,11 +103,11 @@ def test_a_network_failure_does_not_escape(monkeypatch):
 
     _patch_session(monkeypatch, boom)
 
-    assert yd._oembed_creator(VID) is None
+    assert web.oembed_creator(VID) is None
 
 
 def test_the_session_is_pooled_and_reused():
-    first, second = yd._youtube_meta_session(), yd._youtube_meta_session()
+    first, second = web._youtube_meta_session(), web._youtube_meta_session()
 
     assert first is second
     adapter = first.get_adapter("https://www.youtube.com/")

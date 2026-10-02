@@ -30,6 +30,8 @@ for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac
         sys.modules[_module] = MagicMock()
 
 from odst_tool import youtube_downloader as yd  # noqa: E402
+import yt_dlp  # noqa: E402
+from odst_tool.youtube import streams, web  # noqa: E402
 
 VID = "dQw4w9WgXcQ"
 STREAM_URL = "https://cdn.invalid/audio.m4a?expire=99999999999"
@@ -67,12 +69,12 @@ class _RecordingYDL:
 def downloader(monkeypatch, tmp_path):
     _RecordingYDL.instances = []
     _RecordingYDL.responses = []
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _RecordingYDL)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _RecordingYDL)
     monkeypatch.delenv("SOUNDSIBLE_YT_PROXY", raising=False)
-    yd._reset_visitor_data_cache()
+    web.reset_visitor_data()
     dl = yd.YouTubeDownloader(output_dir=tmp_path)
     yield dl
-    yd._reset_visitor_data_cache()
+    web.reset_visitor_data()
 
 
 def _clients(opts):
@@ -84,7 +86,7 @@ def _skips(opts):
 
 
 def test_first_attempt_is_the_cheap_one(downloader, monkeypatch):
-    monkeypatch.setattr(yd, "_youtube_visitor_data", lambda: "CgtWaXNpdG9yRGF0YQ")
+    monkeypatch.setattr(streams, "visitor_data", lambda: "CgtWaXNpdG9yRGF0YQ")
 
     resolved = downloader.get_resolved_stream(VID)
 
@@ -98,7 +100,7 @@ def test_first_attempt_is_the_cheap_one(downloader, monkeypatch):
 
 
 def test_without_an_identifier_the_old_path_runs(downloader, monkeypatch):
-    monkeypatch.setattr(yd, "_youtube_visitor_data", lambda: None)
+    monkeypatch.setattr(streams, "visitor_data", lambda: None)
 
     resolved = downloader.get_resolved_stream(VID)
 
@@ -111,7 +113,7 @@ def test_without_an_identifier_the_old_path_runs(downloader, monkeypatch):
 def test_a_rejected_identifier_falls_back_and_is_dropped(downloader, monkeypatch):
     """YouTube can invalidate an identifier at any moment. When it does, the
     listener must still get audio, and the next resolution must not reuse it."""
-    monkeypatch.setattr(yd, "_youtube_visitor_data", lambda: "CgtTdGFsZQ")
+    monkeypatch.setattr(streams, "visitor_data", lambda: "CgtTdGFsZQ")
     _RecordingYDL.responses = [
         Exception("Sign in to confirm you're not a bot"),
         {"url": STREAM_URL},
@@ -124,7 +126,7 @@ def test_a_rejected_identifier_falls_back_and_is_dropped(downloader, monkeypatch
     assert len(_RecordingYDL.instances) == 2
     assert _clients(_RecordingYDL.instances[0]) == ["android_vr"]
     assert _clients(_RecordingYDL.instances[1]) == ["default", "android", "ios"]
-    assert yd._visitor_data_cache["value"] is None, "a rejected identifier must not be kept"
+    assert web._visitor_data_cache["value"] is None, "a rejected identifier must not be kept"
 
 
 def test_skip_fast_path_goes_straight_to_the_fallback(downloader, monkeypatch):
@@ -132,7 +134,7 @@ def test_skip_fast_path_goes_straight_to_the_fallback(downloader, monkeypatch):
     URL — the caller retrying after that rejection has to say so explicitly,
     because a fresh visitor identifier would otherwise look just as usable as
     the one that was rejected and send the retry right back into the wall."""
-    monkeypatch.setattr(yd, "_youtube_visitor_data", lambda: "CgtWaXNpdG9yRGF0YQ")
+    monkeypatch.setattr(streams, "visitor_data", lambda: "CgtWaXNpdG9yRGF0YQ")
 
     resolved = downloader.get_resolved_stream(VID, skip_fast_path=True)
 
@@ -146,7 +148,7 @@ def test_muxed_fast_path_is_rejected_before_it_can_poison_prefetch(downloader, m
     """A degraded visitor session can expose only itag 18. Extraction succeeds,
     but those URLs were the exact five durable entries rejected in the incident;
     the fast path must fall through to an audio-only client result instead."""
-    monkeypatch.setattr(yd, "_youtube_visitor_data", lambda: "CgtEZWdyYWRlZA")
+    monkeypatch.setattr(streams, "visitor_data", lambda: "CgtEZWdyYWRlZA")
     _RecordingYDL.responses = [
         {"url": "https://cdn.invalid/itag18?expire=99999999999", "format_id": "18", "vcodec": "avc1.42001E"},
         {"url": STREAM_URL, "format_id": "140", "vcodec": "none"},
@@ -164,7 +166,7 @@ def test_relay_egress_is_carried_by_the_cheap_path(downloader, monkeypatch):
     """The CDN signs the resolving address into the URL, so the egress that
     resolved has to travel with the result."""
     monkeypatch.setenv("SOUNDSIBLE_YT_PROXY", "http://relay.invalid:8888")
-    monkeypatch.setattr(yd, "_youtube_visitor_data", lambda: "CgtWaXNpdG9y")
+    monkeypatch.setattr(streams, "visitor_data", lambda: "CgtWaXNpdG9y")
 
     resolved = downloader.get_resolved_stream(VID)
 
@@ -180,7 +182,7 @@ def test_relay_egress_is_carried_by_the_cheap_path(downloader, monkeypatch):
 def test_identifier_is_fetched_once_and_reused(monkeypatch):
     """It is not per-video; refetching it per resolution would give back the
     round trip the shortcut just saved."""
-    yd._reset_visitor_data_cache()
+    web.reset_visitor_data()
     calls = []
 
     class _Resp:
@@ -194,20 +196,20 @@ def test_identifier_is_fetched_once_and_reused(monkeypatch):
         return _Resp()
 
     monkeypatch.delenv("SOUNDSIBLE_YT_PROXY", raising=False)
-    monkeypatch.setattr(yd.requests, "get", fake_get)
+    monkeypatch.setattr(web.requests, "get", fake_get)
 
-    first = yd._youtube_visitor_data()
-    second = yd._youtube_visitor_data()
+    first = web.visitor_data()
+    second = web.visitor_data()
 
     assert first == second == "CgtjYWNoZWRWYWx1ZUZvclRlc3RpbmdMb25nRW5vdWdo"
     assert len(calls) == 1
-    yd._reset_visitor_data_cache()
+    web.reset_visitor_data()
 
 
 def test_identifier_lookup_goes_through_the_relay(monkeypatch):
     """It is a YouTube request like any other: from a station that needs the
     relay to talk to YouTube, this one needs it too."""
-    yd._reset_visitor_data_cache()
+    web.reset_visitor_data()
     seen = {}
 
     class _Resp:
@@ -221,24 +223,24 @@ def test_identifier_lookup_goes_through_the_relay(monkeypatch):
         return _Resp()
 
     monkeypatch.setenv("SOUNDSIBLE_YT_PROXY", "http://relay.invalid:8888")
-    monkeypatch.setattr(yd.requests, "get", fake_get)
+    monkeypatch.setattr(web.requests, "get", fake_get)
 
-    yd._youtube_visitor_data()
+    web.visitor_data()
 
     assert seen["proxies"] == {
         "http": "http://relay.invalid:8888",
         "https": "http://relay.invalid:8888",
     }
-    yd._reset_visitor_data_cache()
+    web.reset_visitor_data()
 
 
 def test_a_failed_identifier_lookup_is_not_fatal(monkeypatch):
-    yd._reset_visitor_data_cache()
+    web.reset_visitor_data()
     monkeypatch.delenv("SOUNDSIBLE_YT_PROXY", raising=False)
 
     def boom(url, **kwargs):
         raise RuntimeError("network down")
 
-    monkeypatch.setattr(yd.requests, "get", boom)
+    monkeypatch.setattr(web.requests, "get", boom)
 
-    assert yd._youtube_visitor_data() is None
+    assert web.visitor_data() is None
