@@ -41,3 +41,55 @@ Bluetooth, llamadas, Android Auto o coche real.
 Ejecutar tests de contratos, build/lint/Android y cuatro perfiles browser tras
 cambios UI. Actualizar matriz/evidencia/HANDOFF y cerrar con commit enfocado.
 Push autorizado para esta línea de trabajo; PR/merge/publicación no solicitados.
+
+
+## Contrato del primer corte (S2a)
+
+`SoundsiblePlayback.command` es asíncrono. Su resolución confirma aceptación del
+comando por el controlador, no sonido audible: `playing` sólo procede de
+`ExoPlayer.isPlaying`. Estado nativo: generación, id/índice/ids de cola,
+posición/duración en ms, readiness y error/status HTTP. Las ocurrencias conservan
+su índice aunque repitan id. No se adapta aún la interfaz síncrona de mezcla
+`AudioService`; ese cambio corresponde a la integración del runtime completo.
+
+`PlaybackService` aloja un ExoPlayer y MediaLibrarySession. `PlaybackPlugin`
+conecta un MediaController de la app y sólo recibe ids/metadatos, nunca URLs o
+cookies de JS. Los comandos se validan contra la generación de EngineConnection.
+El origen/cookie viven en una conexión del proceso: destruir la Activity cierra
+su socket/controlador, no la conexión de reproducción. Logout/configuración
+cancelan el cliente audio y vacían el programa. No hay resumption tras muerte del
+proceso en este corte; no persistir una cola privada como si se hubiese aprobado.
+
+El DataSource OkHttp comparte la política HTTP privado/HTTPS de S1. Cada fuente
+incluye una generación interna que se comprueba antes de enviar cookie, y se
+retira antes del HTTP. Preserva Range; no sigue redirects ni usa cache de audio.
+401 detiene el intento y la UI revalida identidad para volver al login; 403 se
+muestra como permiso denegado. Otros fallos conservan la cola y permiten reintentar
+con Play. No hay fallback Web Audio ni descarga local.
+
+Los controles OS observan la misma sesión. Sólo el UID de la aplicación puede
+reemplazar la cola; clientes externos deben ser trusted y no reciben comandos
+para inyectar fuentes. El servicio todavía no ofrece un catálogo de browsing:
+**MediaLibrarySession no significa Android Auto implementado**. Título/artista
+son metadata nativa; carátulas en la notificación quedan pendientes.
+
+La superficie de desarrollo activa archivos locales en las filas/virtualización
+Solid compartidas y ofrece transporte/seek básicos. Las canciones preview siguen
+visibles y desactivadas. Cola de desarrollo limitada a 1.000 archivos; edición,
+shuffle/repeat, cola extensa por lotes y rutas completas quedan pendientes.
+No marcar NORMAL entero ni S2 completo como terminados.
+
+## Continuación después de S2a
+
+1. Integrar el contrato asíncrono de programa con el runtime autenticado Solid,
+   retirando los controles temporales y conservando las acciones/estado de cola.
+2. Extender fuentes: previews, podcasts/resume/±15s y radio con casos reales,
+   protección de origen, persistencia autorizada y errores de proveedor.
+3. Añadir artwork nativo de sesión, aceptación de notificación/lockscreen,
+   ruido/desconexión de auriculares y redes en teléfono; foreground con app fuera
+   de recientes y política explícita de process death/resumption.
+4. Mantener DJ/Live/Android Auto/offline como gates independientes. No publicar.
+
+Referencias primarias usadas para servicio/foreground/controladores y transporte:
+[background playback](https://developer.android.com/media/media3/session/background-playback),
+[network stacks](https://developer.android.com/media/media3/exoplayer/network-stacks).

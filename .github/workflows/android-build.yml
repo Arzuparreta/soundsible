@@ -106,5 +106,7 @@ jobs:
             android/build-info.json
             android/build/startup.png
             android/build/library.png
+            android/build/program.png
+            android/build/integration-results/
             android/build/emulator.log
             android/build/fixture.log

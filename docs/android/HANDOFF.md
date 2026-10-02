@@ -121,13 +121,60 @@ concreta, DNS LAN/Tailscale reales y teléfono. La biblioteca todavía no ofrece
 acciones web ni podcasts/descubrimiento; no marcar paridad completa.
 
 
+## Entrega S2a: primer programa nativo
+
+El usuario pidió continuar después del push de S1 (`d0cb3a3`). S2a implementa
+el primer corte de [S2](SLICE_2.md), no S2 completo. Localizar el commit con
+`git log --oneline --grep='native NORMAL program'`. Push autorizado en esta rama;
+no abrir PR ni publicar por completar este corte.
+
+Implementado: servicio MediaLibraryService/ExoPlayer, MediaSession/MediaController,
+streaming de archivos autenticado con cookie nativa y Range, foco/noisy/foreground,
+cola básica con ocurrencias, Play/Pause/seek/Previous/Next y snapshots de
+metadata/posición/error. Solid usa las filas compartidas y controles temporales;
+no importa AudioService/Web Audio ni inventa éxito síncrono. Activo sólo para
+archivos; previews guardados siguen visibles/desactivados.
+
+La conexión es ahora del proceso (`EngineConnection.shared`). Destruir Activity
+libera controlador/socket y cancela sus REST por namespace único; no destruye el
+programa. Background suspende el ticker de JS. Logout/cambio/401 antes de otro
+login borran sesión, avanzan generación y cancelan audio; fuentes antiguas no
+pueden adoptar una cookie nueva. URI de época sólo interna y retirada del HTTP.
+La cola actual no se persiste tras process death. Sólo el UID propio reemplaza
+cola; clientes OS externos deben ser trusted. Sin catálogo de Android Auto aún.
+
+Pruebas/captura: [S2a](evidence/s2a.json) y [programa](evidence/program-api36.png).
+Typecheck/Vitest: 1.331 tests / 142 archivos. Contratos backend auth/socket/Range:
+49 pasan. APK/lint e integración API 36: 7 tests pasan, incluida notificación
+multimedia/token de sesión, Range, foco y revocación. Reapertura sin red: 1 pasa
+y 6 fixtures se omiten. Chromium completo: 278 pasan/66 omitidos; WebKit completo:
+269 pasan/75 omitidos. Un fallo inicial de scroll en artista pasó tres veces
+aislado y luego en la suite completa sin cambios de fuentes; evidencia conserva
+ambas ejecuciones. La selección de segunda ocurrencia se verifica tocando la
+fila de una playlist real, además de comandos nativos.
+
+Los fixtures añaden WAV sintéticos, auditoría de Range sin cookies y controles
+sólo locales de fallo/revocación. Se salta al final de un tono generado de 600 s
+para obligar a Media3 a leer un rango nuevo; un fichero de 60 s se precargaba
+entero y el seek no necesitaba HTTP. No usar música personal ni cambiar el motor
+para que una prueba inventada obtenga Range. Otra corrección: onConnect devolvía
+comandos vacíos, así que se conceden explícitamente con la restricción de cola.
+El test de arranque selecciona el heading de la pantalla, no el loader retenido.
+
+Limitaciones materiales: UI temporal, límite de 1.000 archivos, sin artwork en
+notificación, sin resumption tras process death ni previews/podcasts/radio.
+MediaLibrarySession no demuestra Auto; token/media commands en emulador no
+validan pantalla bloqueada, Bluetooth, desconexión/llamadas o escucha en teléfono.
+Gates de servidor HTTPS público/DNS/Tailscale y coche siguen abiertos. Offline
+continúa sin decisión y no se implementa aquí. No alpha.
+
 ## Siguiente tarea concreta
 
-Seguir [S2: primer programa de audio nativo](SLICE_2.md). Mantener visibles las
-aceptaciones S1 pendientes; antes de una entrega pública probar HTTPS remoto y
-DNS/Tailscale, además de los gates de paridad. No añadir un segundo propietario
-Web Audio ni convertir la biblioteca de lectura en un fork permanente de UI.
-Offline sigue sin decisión; no implementarlo en S2.
+Continuar S2 con el contrato asíncrono en el runtime autenticado Solid y retirar
+la superficie/controles temporales al tener un reemplazo probado. Añadir
+previews/podcasts/resume/±15s/radio y artwork de MediaSession, según
+[la continuación de S2a](SLICE_2.md). No introducir un segundo dueño Web Audio.
+Mantener las aceptaciones de despliegue/phone de S1 y todos los gates de paridad.
 
 Antes de trabajar: `git status --short --branch`, leer AGENTS y verificar archivos
 actuales. Actualizar este traspaso con cada slice: commit, pruebas/evidencias,

@@ -11,7 +11,7 @@ import styles from './AndroidStart.module.css';
 
 export interface BrowseSnapshot { tracks: Track[]; playlists?: PlaylistMap }
 /** Read-only account surface. Shares the existing row/artwork/tokens; imports no player runtime. */
-export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number }) {
+export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string }) {
   const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists'>('songs');
   const [collection, setCollection] = createSignal<{ title: string; ids: string[]; kind: 'albums' | 'artists' | 'playlists'; id: string } | null>(null);
   const [query, setQuery] = createSignal('');
@@ -86,7 +86,7 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
     }>
       <label class={styles.field}>{t('library.searchLibrary')}<input type="search" value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label>
       <Show when={tracks().length} fallback={<EmptyState>{t('library.emptyLibrary')}</EmptyState>}>
-<VirtualBrowseRows tracks={tracks()} />
+<VirtualBrowseRows tracks={tracks()} activeId={props.activeId} onPlay={props.onPlay ? index => props.onPlay?.(tracks(), index) : undefined} />
       </Show>
     </Show>
   </section>;

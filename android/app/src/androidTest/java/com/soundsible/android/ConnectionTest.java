@@ -162,7 +162,7 @@ public class ConnectionTest {
     }
     @Test public void packagedLibraryLoginAndAccountChange() throws Exception {
         String server = origin();
-        EngineConnection cleanup = new EngineConnection(InstrumentationRegistry.getInstrumentation().getTargetContext());
+        EngineConnection cleanup = EngineConnection.shared(InstrumentationRegistry.getInstrumentation().getTargetContext());
         cleanup.clearSession(true);
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             StartupTest web = new StartupTest(); web.awaitReady(scenario);

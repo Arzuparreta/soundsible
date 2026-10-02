@@ -13,7 +13,7 @@
 .form { width: min(100%, 420px); display: grid; gap: 16px; text-align: left; }
 .field { display: grid; gap: 8px; font-size: var(--text-label); }
 .field input { padding: 12px; width: 100%; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--ink-primary); font: inherit; }
-.start button, .connected header button, .connected > button, .connected > p button, .library nav button, .library > div button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--ink-primary); font: inherit; }
+.start button, .connected header button, .connected > button, .connected > p button, .program button, .library nav button, .library > div > button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--ink-primary); font: inherit; }
 .connected { height: 100dvh; overflow: auto; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
 .connected header { padding-bottom: 16px; }
 .connected h1 { font-size: 1.5rem; }
@@ -22,3 +22,6 @@
 .notice { color: var(--ink-secondary); font-size: var(--text-label); padding: 8px 0; }
 .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .tabs [aria-pressed=true] { border-color: var(--accent-ink); color: var(--accent-ink); }
+
+.program { padding: 12px 0; display: flex; flex-wrap: wrap; gap: 8px; border-block: 1px solid var(--hairline); margin-bottom: 16px; }
+.program p, .program input { width: 100%; }

@@ -1,10 +1,12 @@
 # Soundsible para Android: desarrollo del port
 
-**Estado: cliente de desarrollo con conexión y biblioteca de lectura (S1), no alpha.**
+**Estado: cliente de desarrollo con conexión y primer programa de audio nativo (S2a), no alpha.**
 La APK conecta a una instancia, inicia sesión como cuenta, conserva la sesión en
 Android y navega canciones, álbumes, artistas y playlists con carátulas y eventos.
-Comparte la fila visual Solid; no carga el runtime Web Audio. No hay reproducción,
-acciones de edición/adquisición ni aceptación en teléfono/coche reales.
+Comparte la fila visual Solid; no carga el runtime Web Audio. Los archivos de la
+biblioteca reproducen con Media3 y controles básicos/seek; el servicio conserva
+el programa al recrear la Activity y usa la sesión multimedia de Android. Previews,
+podcasts/radio, UI completa, edición/adquisición y teléfono/coche siguen pendientes.
 
 El objetivo es la experiencia completa del teléfono: biblioteca, descubrimiento,
 adquisición, NORMAL, podcasts, radio, DJ y Live, más Android Auto. No se publicará
@@ -17,6 +19,7 @@ Leer primero [el traspaso](android/HANDOFF.md), después
 [arquitectura y contratos](android/ARCHITECTURE.md),
 [slices y matriz de paridad](android/PORT_PLAN.md),
 [el primer slice funcional](android/SLICE_1.md),
+[el programa nativo y continuación S2](android/SLICE_2.md),
 [la decisión offline pendiente](android/OFFLINE_DECISION.md) y
 [distribución y aceptación](android/RELEASE_GATES.md).
 Estos documentos y sus referencias al código son suficientes sin acceso al chat.
@@ -168,3 +171,19 @@ no usa claves de firma públicas y no publica releases ni tags.
 La futura distribución será APK firmada por GitHub Releases; no requiere Google
 Play. No habrá actualización silenciosa por el mero hecho de compartir código.
 Ver [los requisitos de publicación](android/RELEASE_GATES.md).
+
+
+## Primer programa nativo (S2a)
+
+Tocar una canción local crea una cola NORMAL con los archivos de esa vista;
+las canciones guardadas en preview aún no pueden reproducirse. Play/Pause,
+Previous/Next y seek usan MediaController; título/posición/estado proceden del
+servicio. La notificación multimedia lleva la misma metadata y controles.
+Una fuente fallida permite reintentar con Play; 401 revalida la sesión y vuelve
+al login, 403 muestra falta de permiso. Logout/cambio destruyen el programa.
+
+El programa sobrevive a recreación y background de la Activity, pero este corte
+no restaura la cola tras muerte del proceso. No hay offline, artwork de sesión,
+mezcla, DJ/Live ni Android Auto. La cola de desarrollo admite hasta 1.000 archivos.
+El siguiente trabajo de S2 integra el contrato asíncrono con la UI autenticada
+completa y añade previews/podcasts/radio. Ver [contrato y pendientes](android/SLICE_2.md).

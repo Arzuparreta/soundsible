@@ -54,7 +54,7 @@ public class StartupTest {
             awaitReady(scenario);
             assertEquals("\"es\"", evaluate(scenario, "document.documentElement.lang"));
             assertEquals("\"dark\"", evaluate(scenario, "document.documentElement.dataset.theme"));
-            assertEquals("\"Conecta tu Soundsible\"", evaluate(scenario, "document.querySelector('h1').textContent"));
+            assertEquals("\"Conecta tu Soundsible\"", evaluate(scenario, "document.querySelector('[data-testid=android-unconfigured] h1').textContent"));
             assertEquals("false", evaluate(scenario, "Array.from(document.images).some(i => !i.complete || !i.naturalWidth)"));
             assertEquals("true", evaluate(scenario, "document.fonts.check('16px \"Plus Jakarta Sans\"')"));
         }

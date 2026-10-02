@@ -19,4 +19,6 @@ REST/artwork/Socket.IO and a read-only shared Solid catalogue. Public cleartext 
 blocked; only the native private routing alias has an OS exception. See
 `docs/android/ARCHITECTURE.md`. With an AVD and Python engine dependencies installed,
 `python scripts/android.py integration` owns three disposable real-engine fixtures, including verified TLS. It removes temporary test trust and rebuilds the normal APK afterward.
-Playback and public distribution remain pending; continue with `SLICE_2.md`.
+S2a adds local-file NORMAL playback in a MediaLibraryService, native controls,
+Range/seek, focus and Activity-independent state. Full UI/modes, process-death
+resumption and public distribution remain pending; continue with `SLICE_2.md`.

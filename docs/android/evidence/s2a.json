@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-02",
+  "slice": "S2a",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "d0cb3a31ace7b735adb463c7853b8bf5e168d25f",
+    "dirty": true,
+    "channel": "development"
+  },
+  "environment": {
+    "platform": "Android API 36 emulator",
+    "application": "com.soundsible.android.dev",
+    "jdk": "21"
+  },
+  "checks": {
+    "unit": {
+      "files": 142,
+      "passed": 1331,
+      "command": "npm test --prefix ui_web"
+    },
+    "backend": {
+      "passed": 49,
+      "command": "PYTHONPATH=. .venv/bin/pytest tests/test_stream_range_semantics.py tests/test_multiuser.py tests/test_socket_connect_scope.py tests/test_auth_scopes.py -q"
+    },
+    "android": {
+      "status": "passed",
+      "command": "python scripts/android.py build; python scripts/android.py integration",
+      "instrumented_passed": 7,
+      "lint": "passed"
+    },
+    "browser": {
+      "chromium": {
+        "passed": 278,
+        "skipped": 66
+      },
+      "webkit": {
+        "passed": 269,
+        "skipped": 75,
+        "failed": 0,
+        "source_changes_since_scroll_repetitions": false
+      },
+      "webkit_first": {
+        "passed": 268,
+        "skipped": 75,
+        "failed": 1,
+        "case": "webkit-mobile scroll-history: artist back expected 462, received 0"
+      },
+      "webkit_scroll_repetitions": {
+        "passed": 3,
+        "source_changes": false
+      }
+    },
+    "offline_startup": {
+      "startup_passed": 1,
+      "fixture_tests_skipped": 6,
+      "command": "adb shell svc wifi disable; adb shell svc data disable; python scripts/android.py smoke"
+    },
+    "other": [
+      "Ruff check/format",
+      "central version check",
+      "actionlint",
+      "git diff --check",
+      "no Web Audio runtime in packaged native JS"
+    ]
+  },
+  "cases": [
+    "Solid local row starts real authenticated WAV via Media3",
+    "HTTP and verified HTTPS playback",
+    "native position/seek/end and real Range 206",
+    "Android media notification carries native session metadata; legacy OS MediaController play",
+    "transient focus request pauses playback",
+    "background Activity and recreation preserve program",
+    "two occurrences of same id retain native order/index",
+    "503 preserves queue, explicit Play recovers",
+    "403 visible permission error",
+    "real session revocation during new source forces login and clears program",
+    "logout cancels program",
+    "all S1 native connection tests retained",
+    "playlist UI selects the second occurrence even when both rows reference the exact same Track object"
+  ],
+  "initial_failures": [
+    "MediaSession callback availablePlayerCommands was empty; corrected explicit commands and acceptance guard",
+    "startup title assertion hit retained loader heading; scoped to actual Android screen",
+    "short WAV was completely buffered; replaced with generated 600-second tone and far seek to force actual Range; no waiting 600 seconds",
+    "UI indexOf collapsed two playlist rows referencing the same Track object; raw row index now preserves selection, covered by packaged second-occurrence click"
+  ],
+  "screenshot": "program-api36.png",
+  "limitations": [
+    "S2a only: local-file program and temporary controls; full shared authenticated runtime and complete NORMAL actions pending",
+    "queue bounded to 1000 local files",
+    "no native notification artwork or process-death resumption",
+    "previews/podcasts/radio/DJ/Live/Auto pending",
+    "emulator is not acoustic phone/headphones/car acceptance",
+    "offline undecided",
+    "no public alpha/release or GitHub workflow run"
+  ],
+  "local_reports": [
+    "android/build/integration-results/connected/debug/",
+    "android/app/build/reports/",
+    "android/build/fixture.log"
+  ]
+}

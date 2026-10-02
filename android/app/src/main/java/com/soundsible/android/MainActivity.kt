@@ -13,9 +13,11 @@ import okhttp3.Dns
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
+@androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(EnginePlugin::class.java)
+        registerPlugin(PlaybackPlugin::class.java)
         super.onCreate(savedInstanceState)
         bridge.setWebViewClient(object : BridgeWebViewClient(bridge) {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {

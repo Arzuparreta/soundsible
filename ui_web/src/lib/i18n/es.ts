@@ -1,7 +1,7 @@
 import type { Dict } from './en';
 
 export const es: Dict = {
-  android: { refresh: "Actualizar", permissionDenied: "Tu cuenta no tiene permiso para acceder a este recurso.", title: 'Conecta tu Soundsible', unconfigured: 'Todavía no hay un servidor conectado.', server: "Dirección del servidor", serverHint: "HTTPS para acceso remoto; HTTP sólo en tu LAN privada o Tailscale.", connect: "Conectar", username: "Usuario", password: "Contraseña", login: "Entrar", logout: "Cerrar sesión", changeServer: "Cambiar servidor", connectFailed: "No se pudo conectar. Revisa dirección, red y certificado del servidor.", wrongLogin: "Usuario o contraseña incorrectos.", browseOnly: "Build de desarrollo: sólo navegación. La reproducción llega en el siguiente slice.", eventsPending: "Actualizaciones desconectadas. Puedes reintentar o refrescar la biblioteca." },
+  android: { refresh: "Actualizar", permissionDenied: "Tu cuenta no tiene permiso para acceder a este recurso.", title: 'Conecta tu Soundsible', unconfigured: 'Todavía no hay un servidor conectado.', server: "Dirección del servidor", serverHint: "HTTPS para acceso remoto; HTTP sólo en tu LAN privada o Tailscale.", connect: "Conectar", username: "Usuario", password: "Contraseña", login: "Entrar", logout: "Cerrar sesión", changeServer: "Cambiar servidor", connectFailed: "No se pudo conectar. Revisa dirección, red y certificado del servidor.", wrongLogin: "Usuario o contraseña incorrectos.", browseOnly: 'Build de desarrollo: canciones locales con audio nativo. Previews y otros modos pendientes.', seek: 'Posición de reproducción', eventsPending: "Actualizaciones desconectadas. Puedes reintentar o refrescar la biblioteca." },
   savedEntities: {
     albums: "Álbumes guardados",
     artists: "Artistas guardados",

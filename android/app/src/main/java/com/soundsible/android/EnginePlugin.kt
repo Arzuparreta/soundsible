@@ -14,11 +14,13 @@ import java.util.concurrent.Executors
 class EnginePlugin : Plugin() {
     lateinit var connection: EngineConnection
         private set
+    private val namespace = java.util.UUID.randomUUID().toString()
+    private val ownedRequests = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val executor = Executors.newFixedThreadPool(4)
     private var socket: Socket? = null
 
     override fun load() {
-        connection = EngineConnection(context)
+        connection = EngineConnection.shared(context)
         connection.onReset = { stopSocket() }
     }
     private fun result() = JSObject().put("origin", connection.origin).put("generation", connection.generation)
@@ -33,10 +35,11 @@ class EnginePlugin : Plugin() {
         connection.clearSession(call.getBoolean("forget", false) == true)
         call.resolve(result())
     }
-    @PluginMethod fun cancel(call: PluginCall) { connection.cancel(call.getString("id") ?: ""); call.resolve() }
+    @PluginMethod fun cancel(call: PluginCall) { connection.cancel(namespace + ":" + (call.getString("id") ?: "")); call.resolve() }
     @PluginMethod fun request(call: PluginCall) {
         val epoch = call.getInt("generation")?.toLong() ?: call.getLong("generation") ?: -1L
-        val id = call.getString("id") ?: ""
+        val id = namespace + ":" + (call.getString("id") ?: "")
+        ownedRequests.add(id)
         executor.execute {
             try {
                 val method = call.getString("method") ?: "GET"
@@ -61,6 +64,7 @@ class EnginePlugin : Plugin() {
                     call.resolve(JSObject().put("status", response.code).put("headers", visibleHeaders).put("body", response.body?.string() ?: ""))
                 }
             } catch (_: Exception) { call.reject("The server could not be reached or the session changed.", "NETWORK_OR_STALE") }
+            finally { ownedRequests.remove(id) }
         }
     }
     @PluginMethod fun events(call: PluginCall) {
@@ -91,5 +95,8 @@ class EnginePlugin : Plugin() {
     }
     @PluginMethod fun stopEvents(call: PluginCall) { stopSocket(); call.resolve() }
     @Synchronized private fun stopSocket() { socket?.off(); socket?.disconnect(); socket = null }
-    override fun handleOnDestroy() { connection.close(); executor.shutdownNow() }
+    override fun handleOnDestroy() {
+        stopSocket(); connection.onReset = {}
+        ownedRequests.forEach { connection.cancel(it) }; ownedRequests.clear(); executor.shutdownNow()
+    }
 }

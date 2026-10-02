@@ -58,12 +58,26 @@ def main() -> None:
     if not args.passwordless:
         set_password(owner, "android-test")
         accounts["member"] = create_user("member", password="android-test")["id"]
+    import math
+    import struct
+    import wave
+
     from PIL import Image
     from shared.artwork import artwork_store
 
     for name, uid in accounts.items():
         cover = root / f"{name}-cover.png"
         Image.new("RGB", (64, 64), "#c53030" if name == "member" else "#2845b4").save(cover)
+        audio = root / "music/tracks" / f"{name}-track.wav"
+        audio.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(audio), "wb") as output:
+            output.setnchannels(1)
+            output.setsampwidth(2)
+            output.setframerate(16000)
+            output.writeframes(
+                b"".join(struct.pack("<h", int(3000 * math.sin(2 * math.pi * 440 * i / 16000))) for i in range(16000))
+                * 600
+            )
         with user_context(uid):
             library = get_user_core(uid).library
             library.metadata.add_track(
@@ -72,18 +86,18 @@ def main() -> None:
                     title=f"{name} private song",
                     artist=f"{name} artist",
                     album=f"{name} album",
-                    duration=60,
+                    duration=600,
                     file_hash=f"{name}-hash",
-                    original_filename="fixture.mp3",
-                    file_size=0,
+                    original_filename="fixture.wav",
+                    file_size=audio.stat().st_size,
                     bitrate=128,
-                    format="mp3",
+                    format="wav",
                     cover_art_key=str(cover),
                     cover_source="local",
                 )
             )
             library.metadata.create_playlist(f"{name} playlist")
-            library.metadata.playlists[f"{name} playlist"] = [f"{name}-track"]
+            library.metadata.playlists[f"{name} playlist"] = [f"{name}-track", f"{name}-track"]
             library._save_metadata()
             store = artwork_store()
             store.bind(f"{name}-track", store.put(cover.read_bytes()), "manual")
@@ -95,6 +109,28 @@ def main() -> None:
                     "thumbnail": f"/api/static/cover/{name}-track?size=thumb",
                 }
             )
+
+    stream_requests = []
+    stream_failure = {}
+
+    @app.before_request
+    def audio_failure():
+        if request.path.startswith("/api/static/stream/"):
+            name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
+            if stream_failure.get(name):
+                return jsonify({"error": "synthetic audio failure"}), stream_failure[name]
+
+    @app.after_request
+    def record_range(response):
+        if request.path.startswith("/api/static/stream/"):
+            stream_requests.append(
+                {"path": request.path, "range": request.headers.get("Range"), "status": response.status_code}
+            )
+        return response
+
+    @app.route("/api/android-fixture/audio-stats")
+    def audio_stats():
+        return jsonify({"requests": stream_requests[-100:]})
 
     @app.route(f"/__fixture/ready/{args.run_id}")
     def ready():
@@ -118,7 +154,9 @@ def main() -> None:
             return jsonify({"error": "fixture only"}), 403
         name = (request.get_json(silent=True) or {}).get("account", "member")
         uid = accounts[name]
-        if action == "revoke":
+        if action == "audio-failure":
+            stream_failure[name] = int((request.get_json() or {}).get("status", 0))
+        elif action == "revoke":
             revoke_user_sessions(uid)
         elif action == "event":
             emit_to_user("library_updated", user_id=uid)

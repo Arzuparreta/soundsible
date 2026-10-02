@@ -28,6 +28,7 @@ class EngineConnection(context: Context) {
     private val cancelled = ConcurrentHashMap<String, Long>()
     private val calls = ConcurrentHashMap<String, Call>()
     var onReset: () -> Unit = {}
+    val resetListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
     val client: OkHttpClient get() = transport(origin)
     private fun transport(selected: String): OkHttpClient {
         val target = selected.toHttpUrl()
@@ -90,6 +91,7 @@ class EngineConnection(context: Context) {
         calls.values.forEach { it.cancel() }
         calls.clear()
         onReset()
+        resetListeners.forEach { it() }
     }
 
     fun close() = synchronized(lock) { resetLocked() }
@@ -170,6 +172,10 @@ class EngineConnection(context: Context) {
         return String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)))
     }
     companion object {
+        @Volatile private var shared: EngineConnection? = null
+        @JvmStatic fun shared(context: Context): EngineConnection = synchronized(this) {
+            shared ?: EngineConnection(context.applicationContext).also { shared = it }
+        }
         const val PRIVATE_ALIAS = "soundsible-private.invalid"
         fun privateAddress(address: InetAddress): Boolean {
             val bytes = address.address

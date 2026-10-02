@@ -131,6 +131,7 @@ def integration() -> None:
                 )
                 for port, passwordless in ((5097, False), (5098, True), (5099, False)):
                     with socket.socket() as probe:
+                        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                         try:
                             probe.bind(("127.0.0.1", port))
                         except OSError:
@@ -184,7 +185,13 @@ def integration() -> None:
                     "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
                     "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
                 )
+                shutil.copytree(
+                    ANDROID / "app/build/outputs/androidTest-results",
+                    ANDROID / "build/integration-results",
+                    dirs_exist_ok=True,
+                )
                 adb("pull", "/sdcard/Download/soundsible-s1-library.png", str(ANDROID / "build/library.png"))
+                adb("pull", "/sdcard/Download/soundsible-s2-program.png", str(ANDROID / "build/program.png"))
             finally:
                 for process in processes:
                     process.terminate()

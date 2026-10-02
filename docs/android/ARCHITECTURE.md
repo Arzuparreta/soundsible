@@ -167,3 +167,28 @@ plataforma dispersos por pantallas. Actualizar conjuntamente core/CLI/Android,
 comprobar compatibilidad de plugins, fijar dependencias y mantener Gradle Wrapper
 verificado. La versión comercial viene exclusivamente de `shared/version.py`
 mediante `scripts/version_sync.py --print`; no copiar una versión en Gradle.
+
+
+## Programa nativo S2a
+
+`EngineConnection.shared` comparte el origen/cookie/generación en el proceso.
+La Activity libera su socket y MediaController, conservando el servicio de audio.
+`PlaybackService` contiene ExoPlayer/MediaLibrarySession y un cliente OkHttp por
+época; los listeners de reset cancelan ese cliente y vacían el programa.
+Las fuentes tienen una generación interna en su URI, retirada antes del HTTP;
+una fuente antigua no puede adoptar la nueva cookie aunque se reutilice el origen.
+Range sigue el DataSpec de Media3. No hay cache de audio ni redirects autenticados.
+
+`PlaybackPlugin` construye ids/metadatos/URLs nativos, valida comandos contra la
+generación y expone snapshots; resolver command no afirma audio audible. JS no
+recibe cookie ni URL autenticada. Estado playing procede de ExoPlayer y metadata
+procede de MediaSession. Un callback de estado de otra generación se ignora.
+Los controladores externos deben ser trusted; sólo el UID propio reemplaza cola.
+
+La Activity observa; no contiene el player ni lo detiene al desmontar Solid.
+Al pasar a background se pausa el ticker de JS; foco/noisy/foreground/notificación
+pertenecen a Android. Logout y cambio sí paran el programa. HTTP 401 se expone
+como status para revalidar identidad; otros fallos no afirman reproducción y
+permiten un retry explícito. Fuente/id/posición están sujetos a la cuenta actual.
+No hay persistencia del programa tras process death ni navegación Auto implementada.
+Ver [contrato/continuación](SLICE_2.md) y [evidencia S2a](evidence/s2a.json).
