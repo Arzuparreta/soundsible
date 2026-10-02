@@ -13,14 +13,14 @@ from shared.models import LibraryMetadata, Track
 def metadata():
     song = Track(
         id="song", title="Canción 🎵", artist="Artista", album="Álbum", duration=240,
-        file_hash="hash", original_filename="song.flac", compressed=False,
+        file_hash="hash", original_filename="song.flac",
         file_size=1000, bitrate=900, format="flac", artists=["Uno", "Dos"],
         local_path="/private/music/song.flac", local_mtime_ns=12345,
         metadata_modified_by_user=True, added_at="2026-01-01T12:00:00",
     )
     episode = Track(
         id="episode", title="Episodio", artist="Autor", album="Programa", duration=1200,
-        file_hash="episode-hash", original_filename="episode.mp3", compressed=False,
+        file_hash="episode-hash", original_filename="episode.mp3",
         file_size=2000, bitrate=128, format="mp3", media_kind="podcast_episode",
         podcast_feed_id="feed", podcast_episode_guid="guid", podcast_rss_url="https://example.org/rss",
     )

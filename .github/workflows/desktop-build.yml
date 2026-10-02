@@ -10,7 +10,6 @@ on:
       - 'desktop-shell/**'
       - 'shared/**'
       - 'player/**'
-      - 'odst_tool/**'
       - 'setup_tool/**'
       - 'ui_web/**'
       - 'soundsible_engine.py'

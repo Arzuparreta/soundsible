@@ -68,7 +68,7 @@ def main():
         for count in args.sizes:
             lib.metadata = LibraryMetadata(1, [Track(
                 id=str(i), title='Title', artist='Artist', album='Album', duration=240,
-                file_hash=str(i), original_filename=f'{i}.mp3', compressed=False,
+                file_hash=str(i), original_filename=f'{i}.mp3',
                 file_size=1000000, bitrate=320, format='mp3',
             ) for i in range(count)], {}, {}, last_updated='2026-01-01T00:00:00')
             full, full_stats = measure(client, {}, args.repeats, args.memory)

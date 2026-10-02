@@ -30,7 +30,6 @@ def _track(track_id: str, video_id: str | None = None, **overrides) -> Track:
         duration=284,
         file_hash=track_id,
         original_filename=f"{track_id}.m4a",
-        compressed=False,
         file_size=1024,
         bitrate=320,
         format="m4a",
@@ -168,7 +167,7 @@ def test_a_download_through_the_queue_keeps_the_day_the_song_was_saved(isolated_
     downloaded = _track("hash-q", "abcdefghijk")
 
     def pool_add(track):
-        # What `ODSTDownloader.commit_track` does to the object it is handed.
+        # What `Downloader.commit_track` does to the object it is handed.
         track.added_at = POOL_STAMP
 
     fake = SimpleNamespace(
@@ -181,7 +180,7 @@ def test_a_download_through_the_queue_keeps_the_day_the_song_was_saved(isolated_
     monkeypatch.setattr(api, "get_downloader", lambda *a, **k: fake)
     monkeypatch.setattr(api, "emit_to_user", lambda *a, **k: None)
     monkeypatch.setattr("shared.loudness.get_loudness_service", lambda: SimpleNamespace(measure_now=lambda _: None))
-    monkeypatch.setattr("setup_tool.audio.AudioProcessor.extract_cover_art", lambda _: None)
+    monkeypatch.setattr("shared.audio_files.AudioProcessor.extract_cover_art", lambda _: None)
 
     parsed, error = parse_intake_item({
         "source_type": "youtube_url",

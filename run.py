@@ -408,7 +408,7 @@ class SoundsibleLauncher:
         # there is none to read and the menu opens without stats rather than
         # failing to open at all.
         self.user_id = _owner_user_id()
-        self.stats = {"tracks": 0, "local": 0, "cloud": 0}
+        self.stats = {"tracks": 0, "local": 0}
         self.sync_status = "Idle"
         self._load_stats()
         self.watcher = None

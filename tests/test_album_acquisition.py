@@ -1,6 +1,6 @@
 """A song downloaded from an album page lands on that album, in its place."""
 
-from odst_tool.youtube_downloader import YouTubeDownloader
+from shared.downloader.youtube_downloader import YouTubeDownloader
 
 
 def _download(tmp_path, monkeypatch, *, tags: dict, hint: dict):
@@ -10,13 +10,13 @@ def _download(tmp_path, monkeypatch, *, tags: dict, hint: dict):
     embedded = []
 
     monkeypatch.setattr(downloader, "_download_audio", lambda *_args, **_kwargs: temporary)
-    monkeypatch.setattr("odst_tool.youtube_downloader.AudioProcessor.get_audio_details", lambda _path: (180, 320, 5))
-    monkeypatch.setattr("odst_tool.youtube_downloader.AudioProcessor.get_metadata_from_file", lambda _path: dict(tags))
+    monkeypatch.setattr("shared.audio_files.AudioProcessor.audio_details", lambda _path: (180, 320, 5))
+    monkeypatch.setattr("shared.audio_files.AudioProcessor.read_tags", lambda _path: dict(tags))
     monkeypatch.setattr(
-        "odst_tool.youtube_downloader.AudioProcessor.embed_metadata",
+        "shared.audio_files.AudioProcessor.embed_metadata",
         lambda _path, metadata, _cover: embedded.append(dict(metadata)),
     )
-    monkeypatch.setattr("odst_tool.youtube_downloader.AudioProcessor.calculate_hash", lambda _path: "content-hash")
+    monkeypatch.setattr("shared.audio_files.AudioProcessor.calculate_hash", lambda _path: "content-hash")
 
     track = downloader.process_video("https://www.youtube.com/watch?v=abcdefghijk", metadata_hint=hint)
     return track, embedded[0]

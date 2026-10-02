@@ -165,8 +165,7 @@ def test_endpoint_variants_mime_revision_and_conditional_cache(tmp_path):
 
 
 def test_metadata_rewrite_keeps_original_and_final_hash_reference(tmp_path):
-    from odst_tool.audio_utils import AudioProcessor
-    from setup_tool.audio import AudioProcessor as EmbeddedAudio
+    from shared.audio_files import AudioProcessor
     from mutagen.id3 import ID3, APIC
     store = artwork_store()
     path = tmp_path / 'song.mp3'
@@ -181,12 +180,12 @@ def test_metadata_rewrite_keeps_original_and_final_hash_reference(tmp_path):
     before = AudioProcessor.calculate_hash(str(path))
     digest = store.put(original)
     store.bind(before, digest, 'embedded')
-    with patch('odst_tool.audio_utils.download_image', side_effect=AssertionError('metadata must not fetch mqdefault')):
+    with patch('shared.artwork.download_image', side_effect=AssertionError('metadata must not fetch mqdefault')):
         AudioProcessor.embed_metadata(str(path), {'title': 'New title', 'artist': 'Artist'})
     after = AudioProcessor.calculate_hash(str(path))
     assert before != after
     assert store.ref(after)['hash'] == digest
-    assert open_image(EmbeddedAudio.extract_cover_art(str(path))).size == (600, 338)
+    assert open_image(AudioProcessor.extract_cover_art(str(path))).size == (600, 338)
 
 
 def test_annotation_only_reads_requested_references_in_bounded_batches(tmp_path, monkeypatch):

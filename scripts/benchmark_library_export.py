@@ -48,7 +48,7 @@ def library(count):
     return LibraryMetadata(1, [Track(
         id=f"{rng.getrandbits(128):032x}", title=f"Song {i}" + (" (Live)" if i % 7 == 0 else ""),
         artist=f"Artist {i // 100}", album=f"Álbum {i // 10}", duration=180 + i % 60,
-        file_hash=f"{rng.getrandbits(256):064x}", original_filename=f"{i}.flac", compressed=False,
+        file_hash=f"{rng.getrandbits(256):064x}", original_filename=f"{i}.flac",
         file_size=30_000_000 + i, bitrate=1411, format="flac", year=1990 + i % 30, genre="Rock",
         track_number=i % 12 + 1, artists=[f"Artist {i // 100}"], youtube_id=f"{i:011d}",
         added_at="2026-01-01T00:00:00",

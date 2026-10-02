@@ -4,7 +4,6 @@ b2sdk>=1.19.0              # Backblaze B2 native SDK (fallback)
 
 # Audio Processing
 mutagen>=1.46.0            # Audio metadata extraction
-ffmpeg-python>=0.2.0       # Audio format conversion
 numpy>=1.26.0              # In-memory beat/key/structure analysis for Auto DJ
 
 # CLI Framework
@@ -36,7 +35,7 @@ bandit[toml]>=1.7.5        # Security linter
 # black and mypy were listed here but configured and invoked nowhere, so every
 # CI job installed them for nothing. Re-add them with config if they get used.
 
-# ODST-Tool Dependencies (YouTube Downloader)
+# Downloader (shared/downloader)
 yt-dlp==2026.8.19         # YouTube Downloader; startup auto-update is optional
 curl-cffi==0.15.0         # Current browser impersonation for yt-dlp
 python-dotenv>=1.0.0       # Environment variables

@@ -78,7 +78,7 @@ def main():
                     db = (reference_writer(reference) if reference else DatabaseManager)(str(root / 'library.db'))
                     value = LibraryMetadata(1, [Track(
                         id=str(i), title=f'Title {i}', artist='Artist', artists=['Artist'], album=f'Album {i // 10}',
-                        duration=180, file_hash=str(i), original_filename=f'{i}.mp3', compressed=False,
+                        duration=180, file_hash=str(i), original_filename=f'{i}.mp3',
                         file_size=1000, bitrate=320, format='mp3',
                     ) for i in range(count)], {'List': ['0', '1']}, {}, last_updated='2026-01-01T00:00:00')
                     initial_write = measure(db, root / 'library.db', value)

@@ -13,7 +13,6 @@ def _track(suffix: str) -> Track:
         duration=120,
         file_hash=f"hash-{suffix}",
         original_filename=f"{suffix}.mp3",
-        compressed=False,
         file_size=1234,
         bitrate=320,
         format="mp3",
@@ -42,7 +41,7 @@ def test_run_sync_task_persists_synced_library():
     fake_orchestrator.submit_task.side_effect = lambda _name, fn: fn()
 
     with patch("shared.api.get_downloader", return_value=fake_dl):
-        with patch("shared.api._sync_odst_to_main_core") as sync_core:
+        with patch("shared.api._sync_pool_to_main_core") as sync_core:
             with patch("shared.api.orchestrator", fake_orchestrator):
                 run_sync_task()
 

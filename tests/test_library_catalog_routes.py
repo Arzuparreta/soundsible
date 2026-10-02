@@ -42,7 +42,6 @@ def _track(
         duration=180,
         file_hash=f"hash-{track_id}",
         original_filename=f"{track_id}.flac",
-        compressed=False,
         file_size=10,
         bitrate=900,
         format="flac",

@@ -122,7 +122,7 @@ def pool_paths(monkeypatch):
 def _track(track_id: str, path) -> Track:
     return Track(
         id=track_id, title="Corpo e Canção", artist="Antdot", album="Single",
-        duration=3, file_hash=track_id, original_filename=path.name, compressed=False,
+        duration=3, file_hash=track_id, original_filename=path.name,
         file_size=path.stat().st_size, bitrate=96, format=path.suffix.lstrip("."),
         youtube_id="K3JGxj2rvAs", added_at="2026-07-02T10:00:00", local_path=str(path),
         is_local=True,
@@ -161,7 +161,7 @@ def test_repairing_moves_the_audio_without_touching_it(tmp_path):
     assert result is not None
     assert result.dropped_video
     from shared.artwork import artwork_store
-    from setup_tool.audio import AudioProcessor
+    from shared.audio_files import AudioProcessor
     from pathlib import Path
     assert Path(artwork_store().path(AudioProcessor.calculate_hash(result.path))).read_bytes() == original_cover
     assert _decoded_audio_md5(result.path) == before
@@ -520,8 +520,8 @@ def test_a_good_youtube_download_is_never_fetched_again(pool, downloads, pool_pa
 def test_the_ultra_profile_never_converts_youtube_audio_to_flac(tmp_path, monkeypatch):
     """`ultra` means the stream as YouTube serves it. When the native download
     fails and yt-dlp has to extract, it must keep that codec, not write FLAC."""
-    import odst_tool.youtube_downloader as ytd
-    from odst_tool.youtube import download
+    import shared.downloader.youtube_downloader as ytd
+    from shared.downloader.youtube import download
 
     launched = []
 

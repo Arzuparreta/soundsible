@@ -1,6 +1,6 @@
 """
 Runtime app config set at startup. Shared code uses this instead of
-depending on odst_tool layout or env file location.
+depending on the downloader or its settings file.
 """
 
 import os

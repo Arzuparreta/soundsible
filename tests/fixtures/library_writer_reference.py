@@ -169,14 +169,14 @@ def replace_library(
                     conn.execute("""
                         INSERT INTO tracks (
                             id, title, artist, album, duration, file_hash, 
-                            original_filename, compressed, file_size, bitrate, 
+                            original_filename, file_size, bitrate, 
                             format, cover_art_key, year, genre, track_number, 
                             disc_number, disc_total, is_compilation, media_kind,
                             podcast_feed_id, podcast_episode_guid, podcast_rss_url, artists_json,
                             is_local, local_path, local_mtime_ns, musicbrainz_id, isrc, album_artist,
                             cover_source, metadata_modified_by_user, youtube_id,
                             audio_quality, added_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET
                             title=excluded.title,
                             artist=excluded.artist,
@@ -184,7 +184,6 @@ def replace_library(
                             duration=excluded.duration,
                             file_hash=excluded.file_hash,
                             original_filename=excluded.original_filename,
-                            compressed=excluded.compressed,
                             file_size=excluded.file_size,
                             bitrate=excluded.bitrate,
                             format=excluded.format,
@@ -217,7 +216,7 @@ def replace_library(
                     """, (
                         track.id, track.title, track.artist, track.album,
                         track.duration, track.file_hash, track.original_filename, 
-                        track.compressed, track.file_size, track.bitrate, track.format, 
+                        track.file_size, track.bitrate, track.format, 
                         track.cover_art_key, track.year, track.genre, track.track_number, 
                         track.disc_number, track.disc_total, track.is_compilation, track.media_kind,
                         track.podcast_feed_id, track.podcast_episode_guid, track.podcast_rss_url,

@@ -31,7 +31,6 @@ def _track(
         duration=180,
         file_hash=track_id,
         original_filename=f"{track_id}.flac",
-        compressed=False,
         file_size=10,
         bitrate=900,
         format="flac",
@@ -157,6 +156,8 @@ def test_existing_flat_database_is_backfilled_on_upgrade(tmp_path):
     path = tmp_path / "legacy.db"
     db = DatabaseManager(str(path))
     with db._get_connection() as conn:
+        # A column the old schema had and the current one retired.
+        conn.execute("ALTER TABLE tracks ADD COLUMN compressed BOOLEAN")
         conn.execute(
             "INSERT INTO tracks (id, title, artist, album, duration, file_hash, original_filename, compressed, file_size, bitrate, format) "
             "VALUES ('legacy', 'Song', 'Legacy Artist', 'Legacy Album', 180, 'hash', 'song.mp3', 0, 10, 128, 'mp3')"
@@ -174,6 +175,10 @@ def test_existing_flat_database_is_backfilled_on_upgrade(tmp_path):
 
     assert upgraded.get_albums()[0]["album"] == "Legacy Album"
     assert upgraded.get_artists()[0]["name"] == "Legacy Artist"
+    with upgraded._get_connection() as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(tracks)")}
+    assert "compressed" not in columns
+    assert upgraded.get_track("legacy").title == "Song"
 
 
 def test_new_track_fields_round_trip_through_json_and_sqlite(tmp_path):

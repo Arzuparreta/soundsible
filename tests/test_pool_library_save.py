@@ -1,16 +1,16 @@
-"""ODST's library.json writer: streamed, and never visible half-written."""
+"""The download pool's library.json writer: streamed, and never visible half-written."""
 import threading
 from unittest.mock import patch
 
 import pytest
 
-from odst_tool.odst_downloader import ODSTDownloader
+from shared.downloader.service import Downloader
 from shared.models import LibraryMetadata
 from scripts.benchmark_library_export import library
 
 
 def writer(tmp_path, count=129):
-    target = ODSTDownloader.__new__(ODSTDownloader)
+    target = Downloader.__new__(Downloader)
     target.library_path = tmp_path / 'library.json'
     target.library = library(count)
     target._lock = threading.Lock()
@@ -151,7 +151,7 @@ def test_stale_snapshot_refuses_to_erase_station_edit(tmp_path):
     from shared.library_lifecycle import LibraryPersistenceError
     target = writer(tmp_path, 2)
     target.save_library()
-    # A separate Station writer edits the file after ODST loaded its model.
+    # A separate Station writer edits the file after the pool loaded its model.
     changed = library(2)
     changed.tracks[0].title = 'Station edit'
     from shared.atomic_file import publish, text_pieces
@@ -193,9 +193,9 @@ def test_processes_merge_acquired_tracks_under_publication_lock(tmp_path):
     script = '''
 import sys, threading
 from pathlib import Path
-from odst_tool.odst_downloader import ODSTDownloader
+from shared.downloader.service import Downloader
 from scripts.benchmark_library_export import library
-writer = ODSTDownloader.__new__(ODSTDownloader)
+writer = Downloader.__new__(Downloader)
 writer.library_path = Path(sys.argv[1])
 writer._lock = threading.Lock()
 writer.commit_track(library(3).tracks[int(sys.argv[2])])

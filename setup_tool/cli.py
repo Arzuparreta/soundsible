@@ -266,20 +266,14 @@ def _manual_setup(provider):
 
 @cli.command()
 @click.argument('music_path', type=click.Path(exists=True))
-@click.option('--compress/--no-compress', default=True, 
-              help='Compress lossless formats (FLAC/WAV) to MP3')
 @click.option('--parallel', default=4, type=click.IntRange(1, 8),
               help='Number of parallel upload threads')
-@click.option('--bitrate', default=320, type=click.IntRange(128, 320),
-              help='MP3 bitrate for compression (kbps)')
-@click.option('--auto-fetch/--no-auto-fetch', default=False,
-              help='Automatically fetch and embed covers for tracks with missing art')
-def upload(music_path, compress, parallel, bitrate, auto_fetch):
+def upload(music_path, parallel):
     """
     Upload music files from a directory.
-    
-    Scans the directory for audio files, extracts metadata,
-    optionally compresses them, and uploads to cloud storage.
+
+    Scans the directory for audio files, extracts metadata and uploads them
+    to cloud storage as they are.
     """
     from .uploader import UploadEngine
     
@@ -299,7 +293,7 @@ def upload(music_path, compress, parallel, bitrate, auto_fetch):
 
     console.print(f"\n[bold green]Starting Upload[/bold green]")
     console.print(f"Source: [cyan]{music_path}[/cyan]")
-    console.print(f"Options: parallel={parallel}, compress={compress}, bitrate={bitrate}k\n")
+    console.print(f"Options: parallel={parallel}\n")
 
     try:
         uploader = UploadEngine(config)
@@ -309,8 +303,7 @@ def upload(music_path, compress, parallel, bitrate, auto_fetch):
             TextColumn("[progress.description]{task.description}"),
             console=console
         ) as progress:
-            library = uploader.run(music_path, compress=compress, parallel=parallel, bitrate=bitrate, 
-                                 auto_fetch=auto_fetch, progress=progress)
+            library = uploader.run(music_path, parallel=parallel, progress=progress)
             
         if library:
             console.print(f"\n[green][COMPLETE] Upload Complete![/green]")

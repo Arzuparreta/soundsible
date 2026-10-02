@@ -126,6 +126,15 @@ Choose the download quality in **Settings → Downloads**; it applies to new
 downloads. The search source is the `SOUNDSIBLE_YT_SEARCH_SOURCE`
 [variable](#youtube-and-downloads).
 
+What Settings → Downloads saves — output folder, quality, cloud bucket
+credentials and the yt-dlp / curl-cffi auto-updates — is kept in
+`downloader.env` in the
+[configuration directory](#7-where-soundsible-keeps-its-files). A real
+environment variable of the same name wins over it. Installs before this
+file kept the same settings in `odst_tool/.env` inside the checkout; the
+engine copies that file over the first time it starts and leaves the old one
+in place.
+
 ### YouTube cookies
 
 For VPS or datacenter deployments, YouTube may require authenticated cookies.
@@ -155,14 +164,12 @@ When a relay is configured, every resolved stream records whether it came from
 direct or relay egress. Preview streaming and prefetch reuse that exact path;
 they never guess from the current environment after the URL has been resolved.
 
-The standalone downloader in `odst_tool/` is documented in
-[odst_tool/README.md](../odst_tool/README.md).
 
 ## 4. Discover (Deezer metadata)
 
 - **No Deezer API key** is required for the built-in Discover experience. The Station proxies **public** Deezer GET endpoints (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 - The engine must be able to reach **`https://api.deezer.com`** outbound. If that fails, Discover lists and search will be empty or error.
-- Playback still depends on **YouTube / YouTube Music search** (ODST) and your existing downloader configuration; Discover does not add a separate audio backend.
+- Playback still depends on **YouTube / YouTube Music search** and your existing downloader configuration; Discover does not add a separate audio backend.
 
 ## 5. Storage
 
@@ -265,6 +272,9 @@ user who completed setup. Older installs used `~/.config/soundsible`,
 `~/.cache/soundsible` and `~/.local/share/soundsible` on every platform; those
 are copied to the new locations on first start. The `run.py` options and
 [path variables](#paths) override any of them.
+
+The configuration directory also holds `downloader.env`, the
+[downloader's saved settings](#3-downloads).
 
 The desktop app also keeps two files in the configuration directory:
 

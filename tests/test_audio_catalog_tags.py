@@ -1,7 +1,6 @@
 from pathlib import Path
 
-import odst_tool.audio_utils as odst_audio
-import setup_tool.audio as setup_audio
+import shared.audio_files as audio_files
 from shared.musicbrainz import (
     MUSICBRAINZ_MP4_RECORDING_TAG,
     MUSICBRAINZ_UFID_OWNER,
@@ -43,10 +42,10 @@ class _FakeMP3:
 
 
 def test_scanner_reads_structured_mp3_credits_and_disc_tags(monkeypatch):
-    monkeypatch.setattr(setup_audio, "MP3", _FakeMP3)
-    monkeypatch.setattr(setup_audio, "MutagenFile", lambda _path, easy=False: _FakeMP3())
+    monkeypatch.setattr(audio_files, "MP3", _FakeMP3)
+    monkeypatch.setattr(audio_files, "MutagenFile", lambda _path, easy=False: _FakeMP3())
 
-    metadata = setup_audio.AudioProcessor.extract_metadata("song.mp3")
+    metadata = audio_files.AudioProcessor.extract_metadata("song.mp3")
 
     assert metadata["artist"] == "First Artist & Second Artist"
     assert metadata["artists"] == ["First Artist", "Second Artist"]
@@ -75,9 +74,9 @@ class _WritableMP3:
 
 def test_downloader_embeds_multiple_artists_and_disc_tags(monkeypatch, tmp_path):
     audio = _WritableMP3()
-    monkeypatch.setattr(odst_audio, "MP3", lambda *args, **kwargs: audio)
+    monkeypatch.setattr(audio_files, "MP3", lambda *args, **kwargs: audio)
 
-    odst_audio.AudioProcessor._embed_mp3(
+    audio_files.AudioProcessor._embed_mp3(
         str(Path(tmp_path) / "song.mp3"),
         {
             "title": "A Song",
@@ -115,9 +114,9 @@ class _WritableFLAC(dict):
 
 def test_downloader_embeds_recording_mbid_in_flac(monkeypatch, tmp_path):
     audio = _WritableFLAC()
-    monkeypatch.setattr(odst_audio, "FLAC", lambda _path: audio)
+    monkeypatch.setattr(audio_files, "FLAC", lambda _path: audio)
 
-    odst_audio.AudioProcessor._embed_flac(
+    audio_files.AudioProcessor._embed_flac(
         str(tmp_path / "song.flac"),
         {"title": "A Song", "musicbrainz_id": RECORDING_MBID.upper()},
         None,
@@ -155,16 +154,16 @@ class _FakeMP4:
 
 def test_scanner_reads_recording_mbid_from_flac_vorbis_and_mp4(monkeypatch):
     flac = _FakeFLAC()
-    monkeypatch.setattr(setup_audio, "FLAC", _FakeFLAC)
-    monkeypatch.setattr(setup_audio, "MutagenFile", lambda _path, easy=False: flac)
-    assert setup_audio.AudioProcessor.extract_metadata("song.flac")["musicbrainz_id"] == RECORDING_MBID
+    monkeypatch.setattr(audio_files, "FLAC", _FakeFLAC)
+    monkeypatch.setattr(audio_files, "MutagenFile", lambda _path, easy=False: flac)
+    assert audio_files.AudioProcessor.extract_metadata("song.flac")["musicbrainz_id"] == RECORDING_MBID
 
     ogg = _FakeOgg()
-    monkeypatch.setattr(setup_audio, "OggVorbis", _FakeOgg)
-    monkeypatch.setattr(setup_audio, "MutagenFile", lambda _path, easy=False: ogg)
-    assert setup_audio.AudioProcessor.extract_metadata("song.ogg")["musicbrainz_id"] == RECORDING_MBID
+    monkeypatch.setattr(audio_files, "OggVorbis", _FakeOgg)
+    monkeypatch.setattr(audio_files, "MutagenFile", lambda _path, easy=False: ogg)
+    assert audio_files.AudioProcessor.extract_metadata("song.ogg")["musicbrainz_id"] == RECORDING_MBID
 
     mp4 = _FakeMP4()
-    monkeypatch.setattr(setup_audio, "MP4", _FakeMP4)
-    monkeypatch.setattr(setup_audio, "MutagenFile", lambda _path, easy=False: mp4)
-    assert setup_audio.AudioProcessor.extract_metadata("song.m4a")["musicbrainz_id"] == RECORDING_MBID
+    monkeypatch.setattr(audio_files, "MP4", _FakeMP4)
+    monkeypatch.setattr(audio_files, "MutagenFile", lambda _path, easy=False: mp4)
+    assert audio_files.AudioProcessor.extract_metadata("song.m4a")["musicbrainz_id"] == RECORDING_MBID

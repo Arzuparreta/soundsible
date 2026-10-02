@@ -1,6 +1,6 @@
 """Verified, offline instance copies. No migrations or application imports on restore.
 
-The caller must stop every writer first (including standalone ODST). SQLite's
+The caller must stop every writer first (including the download pool). SQLite's
 backup API includes committed WAL contents; it does not make multiple databases
 and audio files a transaction while an instance is running.
 """

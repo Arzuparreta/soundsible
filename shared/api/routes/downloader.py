@@ -67,7 +67,7 @@ def youtube_search():
     if not q:
         return jsonify({"results": []})
     limit = min(20, max(1, request.args.get("limit", 10, type=int)))
-    from odst_tool.config import prefer_ytmusic
+    from shared.downloader.config import prefer_ytmusic
 
     default_source = "ytmusic" if prefer_ytmusic() else "youtube"
     source = (request.args.get("source") or default_source).strip().lower()
@@ -365,12 +365,9 @@ def trigger_downloader_sync():
 def get_downloader_config():
     api = _get_api()
     is_trusted = api["is_trusted_network"](request.remote_addr)
-    from dotenv import dotenv_values
-    # Note: Resolve .env from the project root so config and startup use the same file regardless of CWD.
-    env_path = Path(__file__).resolve().parents[3] / "odst_tool" / ".env"
-    env_vars = {}
-    if env_path.exists():
-        env_vars = dotenv_values(env_path)
+    from shared.downloader.settings import read_settings
+
+    env_vars = read_settings()
 
     def mask(s):
         if not s:
@@ -417,14 +414,9 @@ def get_downloader_config():
 @rate_limit("downloader_config_update", limit=20, window_sec=60)
 def update_downloader_config():
     import os
+    from shared.downloader.settings import write_settings
+
     data = request.json
-    # Note: Keep writer in sync with reader and API startup: always use repo-root-based .env.
-    env_path = Path(__file__).resolve().parents[3] / "odst_tool" / ".env"
-    from dotenv import set_key
-    # Note: Ensure parent directory exists before touching .env, regardless of CWD
-    env_path.parent.mkdir(parents=True, exist_ok=True)
-    if not env_path.exists():
-        env_path.touch()
     key_map = {
         "output_dir": "OUTPUT_DIR",
         "quality": "DEFAULT_QUALITY",
@@ -442,7 +434,7 @@ def update_downloader_config():
                 continue
             if key in {"auto_update_ytdlp", "auto_update_curl_cffi"}:
                 val = "true" if (val is True or (isinstance(val, str) and val.strip().lower() in ("true", "1"))) else "false"
-            set_key(str(env_path), env_key, str(val))
+            write_settings({env_key: str(val)})
             os.environ[env_key] = str(val)
             # Note: Keep in-memory app config in sync so GET config and get_downloader() see the new path immediately
             if key == "output_dir":
@@ -458,6 +450,4 @@ def update_downloader_config():
                     pass
     import shared.api as api_mod
     api_mod.downloader_service = None
-    # The parsed .env is cached process-wide; this request just rewrote it.
-    api_mod._downloader_env_cache = None
     return jsonify({"status": "updated"})

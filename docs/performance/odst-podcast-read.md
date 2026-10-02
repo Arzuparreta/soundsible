@@ -73,13 +73,13 @@ reader hash in its metadata. No frontend code changed.
 ## Reproduce
 
 ```sh
-venv/bin/python scripts/benchmark_odst_save.py --reference f5a5a8a \
+venv/bin/python scripts/benchmark_pool_save.py --reference f5a5a8a \
   --library /absolute/path/to/library.json \
   --output /tmp/odst-podcast-read-results.jsonl
 venv/bin/python -m pytest -q
-venv/bin/ruff check odst_tool/library_podcasts.py odst_tool/odst_downloader.py \
-  scripts/benchmark_odst_save.py tests/test_odst_podcast_reader.py \
-  tests/test_odst_library_save.py
+venv/bin/ruff check shared/downloader/library_podcasts.py shared/downloader/service.py \
+  scripts/benchmark_pool_save.py tests/test_pool_podcast_reader.py \
+  tests/test_pool_library_save.py
 git diff --check
 ```
 

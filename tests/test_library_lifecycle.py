@@ -9,7 +9,7 @@ from shared.user_context import user_context
 
 def track():
     return Track(id='song', title='Song', artist='Artist', album='Album', duration=1,
-                 file_hash='song', original_filename='song.flac', compressed=False,
+                 file_hash='song', original_filename='song.flac',
                  file_size=4, bitrate=100, format='flac')
 
 

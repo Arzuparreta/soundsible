@@ -31,7 +31,6 @@ def _track(track_id: str, video_id: str | None = None) -> Track:
         duration=284,
         file_hash=track_id,
         original_filename=f"{track_id}.m4a",
-        compressed=False,
         file_size=1024,
         bitrate=320,
         format="m4a",

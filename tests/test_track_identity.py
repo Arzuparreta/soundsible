@@ -12,7 +12,6 @@ def _track(track_id: str = "track-1", youtube_id: str | None = "dQw4w9WgXcQ") ->
         duration=213,
         file_hash="hash",
         original_filename="song.opus",
-        compressed=True,
         file_size=123,
         bitrate=128,
         format="opus",

@@ -16,7 +16,7 @@ from shared.user_context import require_user_id
 
 from shared.loudness import annotate_tracks
 from shared.path_resolver import resolve_local_track_path
-from odst_tool.audio_utils import download_image
+from shared.artwork import download_image
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +302,7 @@ def delete_track_from_library(track_id):
     logger.info("API: Deleting track %s (%s)...", track.title, track_id)
     success = lib.delete_track(track)
     if success:
-        # ODST is the shared pool catalog. A personal removal must not remove
+        # The download pool's catalog is shared. A personal removal must not remove
         # an object still owned by another account; cleanup reconciles it later.
         api["emit_to_user"]("library_updated")
         return jsonify({"status": "success"})
@@ -545,7 +545,7 @@ def copy_track_cover(track_id):
     if not master and not source_local_path:
         return jsonify({"error": "Source track file not found"}), 404
     try:
-        from setup_tool.audio import AudioProcessor
+        from shared.audio_files import AudioProcessor
         cover_data = Path(master).read_bytes() if master else AudioProcessor.extract_cover_art(source_local_path)
         if not cover_data:
             return jsonify({"error": "No cover art found in source track"}), 404

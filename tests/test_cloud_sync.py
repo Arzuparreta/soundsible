@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from odst_tool.cloud_sync import CloudSync
+from shared.downloader.cloud_sync import CloudSync
 from shared.models import LibraryMetadata, Track
 
 
@@ -13,7 +13,6 @@ def _track(suffix: str) -> Track:
         duration=120,
         file_hash=f"hash-{suffix}",
         original_filename=f"{suffix}.mp3",
-        compressed=False,
         file_size=1234,
         bitrate=320,
         format="mp3",

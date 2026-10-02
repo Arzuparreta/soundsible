@@ -50,7 +50,6 @@ def track(tmp_path, monkeypatch):
         duration=240,
         file_hash="standard-range",
         original_filename=path.name,
-        compressed=False,
         file_size=len(payload),
         bitrate=1411,
         format="flac",

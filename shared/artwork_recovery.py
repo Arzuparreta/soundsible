@@ -89,7 +89,7 @@ class ArtworkRecovery:
             return bytes(data)
 
     def recover(self, track) -> bool:
-        from setup_tool.audio import AudioProcessor
+        from shared.audio_files import AudioProcessor
         from shared.path_resolver import resolve_local_track_path
         store = artwork_store()
         with store.connect() as db:

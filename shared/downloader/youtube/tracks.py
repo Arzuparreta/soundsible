@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Optional
 from shared.models import Track
 from shared.musicbrainz import normalize_recording_mbid
 
-from ..audio_utils import AudioProcessor
+from shared.audio_files import AudioProcessor
 
 _PLACEHOLDER_TAGS = {"title", "track", "unknown", "unknown title", "audio", "video", "untitled"}
 
@@ -126,7 +126,6 @@ def store_track(
     *,
     duration: int,
     bitrate: int,
-    compressed: bool,
     youtube_id: Optional[str],
     cover_source: Optional[str],
 ) -> Track:
@@ -148,7 +147,6 @@ def store_track(
         duration=duration if duration > 0 else int(meta.get("duration_sec") or 0),
         file_hash=file_hash,
         original_filename=f"{meta['artist']} - {meta['title']}.{extension}",
-        compressed=compressed,
         file_size=size,
         bitrate=bitrate,
         format=extension,

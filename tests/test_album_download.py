@@ -34,7 +34,7 @@ PROFILE = {
 def _library_track(track_id: str, title: str) -> Track:
     return Track(
         id=track_id, title=title, artist="Daft Punk", album="Discovery", duration=300,
-        file_hash=f"hash-{track_id}", original_filename=f"{track_id}.mp3", compressed=False,
+        file_hash=f"hash-{track_id}", original_filename=f"{track_id}.mp3",
         file_size=1000, bitrate=320, format="mp3",
     )
 

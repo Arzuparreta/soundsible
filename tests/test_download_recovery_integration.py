@@ -10,7 +10,7 @@ from shared.user_context import user_context
 
 def prepared(runtime):
     track = Track(id='prepared', title='Prepared', artist='Artist', album='Album', duration=1,
-                  file_hash='prepared', original_filename='prepared.flac', compressed=False,
+                  file_hash='prepared', original_filename='prepared.flac',
                   file_size=4, bitrate=1, format='flac')
     path = runtime.music_dir / 'tracks/prepared.flac'
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,7 +43,7 @@ def test_worker_recovers_checkpoint_without_acquisition(isolated_runtime, monkey
     )
     monkeypatch.setattr(api, 'get_downloader', lambda *a, **k: fake)
     monkeypatch.setattr('shared.loudness.get_loudness_service', lambda: SimpleNamespace(measure_now=lambda _: None))
-    monkeypatch.setattr('setup_tool.audio.AudioProcessor.extract_cover_art', lambda _: None)
+    monkeypatch.setattr('shared.audio_files.AudioProcessor.extract_cover_art', lambda _: None)
     api._process_single_queue_item(queue.get_pending()[0])
     assert queue.queue == []
     actual = api.get_user_core(uid).library.db.get_track(track.id)

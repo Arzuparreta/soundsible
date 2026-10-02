@@ -237,3 +237,31 @@ def artwork_store() -> ArtworkStore:
         if key not in _stores:
             _stores[key] = ArtworkStore(*key)
         return _stores[key]
+
+
+_YT_IMAGE_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0"
+_image_session = None
+_image_session_lock = threading.Lock()
+
+
+def download_image(url: str) -> bytes | None:
+    """Fetch an image, or None. YouTube's thumbnail hosts get a browser UA."""
+    global _image_session
+    if not url:
+        return None
+    import requests
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).netloc or "").lower()
+    headers = None
+    if "ytimg.com" in host or "youtube.com" in host or "img.youtube" in host:
+        headers = {"User-Agent": _YT_IMAGE_USER_AGENT}
+    with _image_session_lock:
+        if _image_session is None:
+            _image_session = requests.Session()
+    try:
+        response = _image_session.get(url, timeout=10, headers=headers)
+        response.raise_for_status()
+        return response.content
+    except Exception:
+        return None

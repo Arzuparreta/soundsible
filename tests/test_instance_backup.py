@@ -18,7 +18,7 @@ def test_restore_after_failed_upgrade(isolated_runtime, tmp_path):
     db_path = runtime.config_dir / 'users/owner/library.db'
     db = DatabaseManager(str(db_path))
     track = Track(id='song', title='Original', artist='Artist', album='Album', duration=3,
-                  file_hash='song', original_filename='song.flac', compressed=False,
+                  file_hash='song', original_filename='song.flac',
                   file_size=5, bitrate=100, format='flac')
     db.replace_library(LibraryMetadata(1, [track], {'Mix': ['song']}, {'theme': 'dark'}))
     from player.favourites_manager import FavouritesManager

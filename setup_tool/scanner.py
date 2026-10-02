@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
-from setup_tool.audio import AudioProcessor
+from shared.audio_files import AudioProcessor
 from shared.models import Track
 from shared.path_resolver import path_within_roots
 
@@ -117,7 +117,6 @@ class LibraryScanner:
             duration=meta.get("duration", 0),
             file_hash=file_hash,
             original_filename=file_path.name,
-            compressed=False,
             file_size=size,
             bitrate=meta.get("bitrate", 0),
             format=meta.get("format", file_path.suffix.lstrip(".").lower() or "mp3"),

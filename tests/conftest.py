@@ -47,6 +47,9 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     # tests' runtimes. Recovery itself is exercised with an explicit worker.
     from shared.artwork_recovery import recovery
     monkeypatch.setattr(recovery, "start", lambda: None)
+    # The checkout's own pre-move settings file is the developer's, not a test's.
+    from shared.downloader import settings as downloader_settings
+    monkeypatch.setattr(downloader_settings, "_LEGACY_PATH", root / "no-legacy-settings")
     configure_runtime(runtime)
     for path in (runtime.config_dir, runtime.data_dir, runtime.cache_dir, runtime.log_dir, runtime.music_dir):
         path.mkdir(parents=True, exist_ok=True)

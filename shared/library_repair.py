@@ -145,7 +145,7 @@ def _run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
 
 def extract_cover(path: str | Path) -> Optional[bytes]:
     """The artwork inside a file, or None. Delegates to the one extractor."""
-    from setup_tool.audio import AudioProcessor
+    from shared.audio_files import AudioProcessor
 
     try:
         return AudioProcessor.extract_cover_art(str(path))
@@ -314,7 +314,7 @@ def repair_file(
     original_art = None
     if cover:
         try:
-            from setup_tool.audio import AudioProcessor
+            from shared.audio_files import AudioProcessor
             original_ref = artwork_store().ref(AudioProcessor.calculate_hash(str(source)))
             original_art = (original_ref['hash'] if original_ref else None) or artwork_store().put(cover)
         except Exception as exc:
@@ -412,7 +412,7 @@ def restore_original(
     stream, when it is not clearly better than a lossy file already stored, or
     when its length says it is not the same recording.
     """
-    from setup_tool.audio import AudioProcessor
+    from shared.audio_files import AudioProcessor
     from shared.artwork import artwork_store
 
     try:
@@ -508,7 +508,7 @@ def repair_library(
     `youtube_id`, `musicbrainz_id` and `added_at` from everything it touches.
     """
     from shared.path_resolver import resolve_local_track_path
-    from setup_tool.audio import AudioProcessor
+    from shared.audio_files import AudioProcessor
 
     def log(message: str) -> None:
         if progress:

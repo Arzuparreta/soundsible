@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from odst_tool.library_podcasts import read_podcast_fields
+from shared.downloader.library_podcasts import read_podcast_fields
 from shared.models import LibraryMetadata, Track
 from scripts.benchmark_library_export import library
 

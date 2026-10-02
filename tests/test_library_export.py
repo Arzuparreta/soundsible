@@ -21,7 +21,7 @@ def _track(i, rng=None):
     rng = rng or random.Random(i)
     return Track(
         id=f"track-{i}", title=rng.choice(_WORDS) + f" {i}", artist=rng.choice(_WORDS), album=rng.choice(_WORDS),
-        duration=rng.choice([180, 0]), file_hash=f"hash-{i}", original_filename=f"{i}.flac", compressed=False,
+        duration=rng.choice([180, 0]), file_hash=f"hash-{i}", original_filename=f"{i}.flac",
         file_size=1000 + i, bitrate=rng.choice([320, 1411]), format="flac",
         album_artist=rng.choice([None, "Various"]), artists=rng.choice([None, [], ["A", "B"]]),
         year=rng.choice([None, 1999]), local_path=f"/music/{i}.flac", local_mtime_ns=i,

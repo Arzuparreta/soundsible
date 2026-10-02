@@ -18,7 +18,7 @@ In desktop-engine mode, the base URL is not assumed to be `:5005`. Read the read
 2. Do not invent device IDs. Read `/api/devices` and target a real `device_id` or exact `device_name`.
 3. If a response includes `warning: "Device appears offline (no active socket)"`, the command was emitted but no browser player is currently connected to that device room.
 4. Deezer is metadata only. Soundsible never plays Deezer audio.
-5. For playable search results outside the library, use YouTube / YouTube Music search through the ODST / yt-dlp path.
+5. For playable search results outside the library, use YouTube / YouTube Music search through the downloader's yt-dlp path.
 6. The playback queue is not the same as the download queue.
 7. Prefer `/api/agent/play` for "play this now". Prefer `/api/playback/queue` for "add this to the player queue".
 

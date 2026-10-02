@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 # environment they take precedence; otherwise fall back to a MagicMock stub so
 # CI without them can still run search/preview tests. We deliberately avoid
 # stubbing *over* an already-loaded real module so unrelated tests that
-# import mutagen (e.g., player.library → setup_tool.audio) keep working.
+# import mutagen (e.g., player.library → shared.audio_files) keep working.
 for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac"):
     if _module in sys.modules:
         continue
@@ -16,9 +16,9 @@ for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac
     except Exception:
         sys.modules[_module] = MagicMock()
 
-from odst_tool import youtube_downloader as yd
+from shared.downloader import youtube_downloader as yd
 import yt_dlp  # noqa: E402
-from odst_tool.youtube import search, ytdlp  # noqa: E402
+from shared.downloader.youtube import search, ytdlp  # noqa: E402
 
 
 def _stream_url(downloader, video_id):

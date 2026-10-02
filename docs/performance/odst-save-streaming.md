@@ -99,12 +99,12 @@ phase rows, for this comparison.
 ## Reproduction and validation
 
 ```sh
-venv/bin/python scripts/benchmark_odst_save.py --repeats 5 \
+venv/bin/python scripts/benchmark_pool_save.py --repeats 5 \
   --output /tmp/odst-save.jsonl
 # Optional read-only fixture:
-venv/bin/python scripts/benchmark_odst_save.py --library PATH/library.json \
+venv/bin/python scripts/benchmark_pool_save.py --library PATH/library.json \
   --output /tmp/odst-save-real.jsonl
-venv/bin/python -m pytest -q tests/test_odst_library_save.py
+venv/bin/python -m pytest -q tests/test_pool_library_save.py
 ```
 
 The baseline method is loaded from the trusted git revision; the shared model

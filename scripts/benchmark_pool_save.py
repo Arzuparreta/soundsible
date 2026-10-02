@@ -1,4 +1,4 @@
-"""Compare ODST saves with a trusted git baseline in temporary directories.
+"""Compare download-pool saves with a trusted git baseline in temporary directories.
 
 Existing --library is read-only. Timings exclude tracing; allocation peaks are
 separate runs. Phase timing includes read, reconstruction, encoding and writes;
@@ -22,14 +22,23 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from odst_tool import odst_downloader as module
+from shared.downloader import service as module
 from shared.models import LibraryMetadata
 from scripts.benchmark_library_export import library
 
 
 def baseline(revision):
-    source = subprocess.check_output(['git', 'show', f'{revision}:odst_tool/odst_downloader.py'], text=True, cwd=ROOT)
-    cls = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == 'ODSTDownloader')
+    # Revisions before the move kept the class in odst_tool as ODSTDownloader.
+    for path, name in (('shared/downloader/service.py', 'Downloader'), ('odst_tool/odst_downloader.py', 'ODSTDownloader')):
+        try:
+            source = subprocess.check_output(['git', 'show', f'{revision}:{path}'], text=True, cwd=ROOT,
+                                             stderr=subprocess.DEVNULL)
+            break
+        except subprocess.CalledProcessError:
+            continue
+    else:
+        raise SystemExit(f'{revision} has no download pool to compare with')
+    cls = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == name)
     method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == 'save_library')
     scope = dict(vars(module))
     exec(compile(ast.Module(body=[method], type_ignores=[]), '<baseline ODST>', 'exec'), scope)
@@ -47,11 +56,11 @@ def measure(metadata, reference, repeats, name):
     original_iter = LibraryMetadata.iter_json
     original_select = module.read_podcast_fields
     with tempfile.TemporaryDirectory(prefix='odst-save-', dir=ROOT) as directory:
-        target = module.ODSTDownloader.__new__(module.ODSTDownloader)
+        target = module.Downloader.__new__(module.Downloader)
         target.library_path = Path(directory) / 'library.json'
         target.library = metadata
         target._lock = threading.Lock()
-        functions = {'before': reference['save_library'], 'after': module.ODSTDownloader.save_library}
+        functions = {'before': reference['save_library'], 'after': module.Downloader.save_library}
 
         def reset():
             target.library_path.write_text(expected)
@@ -149,9 +158,9 @@ def main():
     with args.output.open('w') as out:
         out.write(json.dumps({'baseline': args.reference, 'repeats': args.repeats,
                               'python': sys.version, 'platform': platform.platform(),
-                              'candidate_sha256': hashlib.sha256((ROOT / 'odst_tool/odst_downloader.py').read_bytes()).hexdigest(),
-                              'podcast_reader_sha256': hashlib.sha256((ROOT / 'odst_tool/library_podcasts.py').read_bytes()).hexdigest(),
-                              'scope': 'ODST complete save; temporary copies; Python allocations excluding preloaded model; fsync only where the measured code does it'}) + '\n')
+                              'candidate_sha256': hashlib.sha256((ROOT / 'shared/downloader/service.py').read_bytes()).hexdigest(),
+                              'podcast_reader_sha256': hashlib.sha256((ROOT / 'shared/downloader/library_podcasts.py').read_bytes()).hexdigest(),
+                              'scope': 'Download pool complete save; temporary copies; Python allocations excluding preloaded model; fsync only where the measured code does it'}) + '\n')
         if args.library:
             row = measure(LibraryMetadata.from_json(args.library.read_text()), reference, args.repeats, 'real-copy')
             out.write(json.dumps(row) + '\n')

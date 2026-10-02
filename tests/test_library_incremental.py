@@ -20,7 +20,7 @@ from shared.user_context import user_context
 def model(count=40):
     return LibraryMetadata(1, [Track(
         id=str(i), title=f'Title {i}', artist='Artist', artists=['Artist'], album='Album',
-        duration=180, file_hash=str(i), original_filename=f'{i}.mp3', compressed=False,
+        duration=180, file_hash=str(i), original_filename=f'{i}.mp3',
         file_size=1000, bitrate=320, format='mp3',
     ) for i in range(count)], {'List': ['0', 'external', '0']}, {'nested': [True]},
         last_updated='2026-01-01T00:00:00')

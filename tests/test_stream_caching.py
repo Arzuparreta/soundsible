@@ -50,7 +50,6 @@ def downloaded_track(tmp_path, monkeypatch):
         duration=180,
         file_hash="cachetrack",
         original_filename="cachetrack.mp3",
-        compressed=False,
         file_size=audio.stat().st_size,
         bitrate=320,
         format="mp3",

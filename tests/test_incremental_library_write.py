@@ -25,7 +25,7 @@ def legacy_class():
 def model(count=20):
     return LibraryMetadata(1, [Track(
         id=str(i), title=f'Track {i}', artist='Artist', artists=['Artist', 'Guest'], album='Album', duration=180,
-        file_hash=str(i), original_filename=f'{i}.flac', compressed=False, file_size=1000,
+        file_hash=str(i), original_filename=f'{i}.flac', file_size=1000,
         bitrate=900, format='flac', year=2000 + i, genre='Rock' if i else None,
     ) for i in range(count)], {'List': ['0', 'external', '0'], 'Empty': []}, {'nested': {'flag': True}},
         last_updated='2026-01-01T00:00:00', podcast_subscriptions=[{'id': 'feed'}],

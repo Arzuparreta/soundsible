@@ -30,7 +30,6 @@ def _track(track_id: str, **overrides) -> Track:
         "duration": 180,
         "file_hash": track_id,
         "original_filename": f"{track_id}.flac",
-        "compressed": False,
         "file_size": 10,
         "bitrate": 900,
         "format": "flac",
@@ -50,7 +49,7 @@ def _dates(db: DatabaseManager) -> dict:
 
 def test_a_song_is_dated_when_it_joins_the_library():
     """`add_track` is where every acquisition path meets — download, migration,
-    a shared track, the ODST tool — so it is where a song learns its date."""
+    a shared track, the download pool — so it is where a song learns its date."""
     library = _library()
 
     library.add_track(_track("new"))

@@ -16,7 +16,7 @@ from shared.runtime import get_cache_dir
 def snapshot(count=30):
     return LibraryMetadata(1, [Track(
         id=f'song-{i}', title=f'Song {i}', artist='Artist', album='Album', duration=180,
-        file_hash=str(i), original_filename=f'{i}.mp3', compressed=False,
+        file_hash=str(i), original_filename=f'{i}.mp3',
         file_size=1000, bitrate=320, format='mp3',
     ) for i in range(count)], {'Old': ['song-0']}, {'old': True},
         podcast_subscriptions=[{'id': 'feed'}], podcast_episode_cache={'feed': {'episodes': []}})

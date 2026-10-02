@@ -84,7 +84,7 @@ def main():
               patch('shared.loudness.LoudnessStore.public_revision', return_value='loudness'), user_context('benchmark')):
             lib.metadata = LibraryMetadata(1, [Track(
                 id=str(i), title='Title', artist='Artist', album='Album', duration=240,
-                file_hash=str(i), original_filename=f'{i}.mp3', compressed=False,
+                file_hash=str(i), original_filename=f'{i}.mp3',
                 file_size=1000000, bitrate=320, format='mp3',
             ) for i in range(count)], {}, {}, last_updated='2026-01-01T00:00:00')
             full, full_ms, _ = timed(lambda: client.get('/api/library'))

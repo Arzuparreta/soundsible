@@ -28,7 +28,6 @@ def _track(track_id: str, title: str, *, artist: str = "Artist", album: str = "A
         duration=180,
         file_hash=f"hash-{track_id}",
         original_filename=f"{track_id}.mp3",
-        compressed=False,
         file_size=1000,
         bitrate=320,
         format="mp3",

@@ -1,13 +1,10 @@
+"""Downloader defaults. Saved settings reach them through the environment
+once the engine starts (`settings.export_to_environ`)."""
+
 import os
 from pathlib import Path
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
 
 DEFAULT_OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(Path.home() / "Music" / "Soundsible")))
-DEFAULT_WORKERS = 4
 
 # A bitrate of 0 keeps the stream's own codec and quality.
 QUALITY_PROFILES = {
