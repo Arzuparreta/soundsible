@@ -147,22 +147,79 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      # GitHub's run listing is not reliably newest-first: it has handed back a
-      # March run whose artifacts had long expired while newer runs held a
-      # valid one, failing the job on `no artifacts found`. Searching makes the
-      # action skip any run that does not still list `openssl-arm64`.
-      - name: Provision OpenSSL for Python cryptography (Windows ARM64)
+      # `cryptography` publishes no Windows ARM64 wheel, so pip builds it here
+      # and needs a static OpenSSL. pyca, who maintain it, build one weekly as
+      # a workflow artifact in pyca/infra; there is no release or CDN to fetch.
+      #
+      # Finding that artifact by listing workflow runs failed twice on 1 Oct
+      # 2026 ("no matching workflow run found") while a dozen valid artifacts
+      # existed: filtered run listings come back out of order and incomplete.
+      # The artifacts listing is newest-first and complete, so pick from it,
+      # check the run is pyca's own build on main, and keep the result in our
+      # cache. A failed lookup then falls back to the last OpenSSL we had.
+      - name: Find pyca's OpenSSL build (Windows ARM64)
+        id: openssl_build
         if: matrix.arch == 'arm64'
-        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
+          $api = "https://api.github.com/repos/pyca/infra/actions"
+          try {
+            $listing = Invoke-RestMethod -Headers $headers -MaximumRetryCount 3 -RetryIntervalSec 5 `
+              "$api/artifacts?name=openssl-arm64&per_page=30"
+          } catch {
+            Write-Output "::warning::Could not list pyca/infra artifacts: $_. Falling back to the cached OpenSSL."
+            exit 0
+          }
+          foreach ($artifact in $listing.artifacts) {
+            if ($artifact.expired -or $artifact.workflow_run.head_branch -ne "main") { continue }
+            $run = Invoke-RestMethod -Headers $headers -MaximumRetryCount 3 -RetryIntervalSec 5 `
+              "$api/runs/$($artifact.workflow_run.id)"
+            if ($run.path -ne ".github/workflows/build-windows-openssl.yml" -or $run.conclusion -ne "success") { continue }
+            Write-Output "Using pyca/infra artifact $($artifact.id) from run $($run.id) ($($artifact.created_at))"
+            "id=$($artifact.id)" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          Write-Output "::warning::No current OpenSSL build in pyca/infra. Falling back to the cached OpenSSL."
+
+      - name: Restore OpenSSL (Windows ARM64)
+        id: openssl_cache
+        if: matrix.arch == 'arm64'
+        uses: actions/cache/restore@v4
         with:
-          repo: pyca/infra
-          workflow: build-windows-openssl.yml
-          branch: main
-          workflow_conclusion: success
-          search_artifacts: true
-          name: openssl-arm64
           path: C:/openssl-arm64
-          github_token: ${{ github.token }}
+          key: openssl-arm64-${{ steps.openssl_build.outputs.id || 'unavailable' }}
+          restore-keys: openssl-arm64-
+
+      - name: Download OpenSSL (Windows ARM64)
+        if: matrix.arch == 'arm64' && steps.openssl_build.outputs.id && steps.openssl_cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "openssl-arm64.zip"
+          Invoke-WebRequest -MaximumRetryCount 3 -RetryIntervalSec 5 -OutFile $zip `
+            -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } `
+            "https://api.github.com/repos/pyca/infra/actions/artifacts/${{ steps.openssl_build.outputs.id }}/zip"
+          if (Test-Path C:/openssl-arm64) { Remove-Item -Recurse -Force C:/openssl-arm64 }
+          Expand-Archive -Path $zip -DestinationPath C:/openssl-arm64
+
+      - name: Save OpenSSL (Windows ARM64)
+        if: matrix.arch == 'arm64' && steps.openssl_build.outputs.id && steps.openssl_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: C:/openssl-arm64
+          key: openssl-arm64-${{ steps.openssl_build.outputs.id }}
+
+      - name: Check OpenSSL (Windows ARM64)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path C:/openssl-arm64/include/openssl/ssl.h) -or -not (Get-ChildItem C:/openssl-arm64/lib -Filter *.lib -ErrorAction SilentlyContinue)) {
+            throw "No OpenSSL for the ARM64 cryptography build: pyca/infra had none to download and the cache was empty."
+          }
 
       - name: Configure OpenSSL for Python cryptography (Windows ARM64)
         if: matrix.arch == 'arm64'
