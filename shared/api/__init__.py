@@ -1088,7 +1088,7 @@ def _process_single_queue_item_bound(item):
             cover_path = os.path.join(covers_dir, f"{shared_track.id}.jpg")
             if not os.path.exists(cover_path):
                 try:
-                    from setup_tool.audio import AudioProcessor
+                    from shared.audio_files import AudioProcessor
                     cover_data = AudioProcessor.extract_cover_art(local_track_path) if local_track_path else None
                     if cover_data:
                         with open(cover_path, 'wb') as f:

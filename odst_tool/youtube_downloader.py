@@ -15,7 +15,7 @@ from shared.models import Track
 from shared.resolution_confidence import best_candidate
 from shared.stream_resolution import ResolvedStream
 
-from .audio_utils import AudioProcessor
+from shared.audio_files import AudioProcessor
 from .config import DEFAULT_OUTPUT_DIR, DEFAULT_QUALITY, TRACKS_DIR
 from .youtube import download, search, streams
 from .youtube.ids import video_id_from_url, watch_url
@@ -146,9 +146,9 @@ class YouTubeDownloader:
 
         try:
             report({"phase": "processing", "percent": 92.0})
-            duration, bitrate, _size = AudioProcessor.get_audio_details(str(temp_file))
+            duration, bitrate, _size = AudioProcessor.audio_details(str(temp_file))
             meta = video_metadata(
-                AudioProcessor.get_metadata_from_file(str(temp_file)),
+                AudioProcessor.read_tags(str(temp_file)),
                 metadata_hint,
                 duration,
                 peek=lambda: search.peek_video_metadata(url, self.cookies),
@@ -192,7 +192,7 @@ class YouTubeDownloader:
         meta.setdefault("track_number", 1)
         with_canonical_mbid(meta)
         try:
-            duration, bitrate, _size = AudioProcessor.get_audio_details(str(temp_file))
+            duration, bitrate, _size = AudioProcessor.audio_details(str(temp_file))
             try:
                 AudioProcessor.embed_metadata(str(temp_file), meta, cover_art_url)
             except Exception as e:

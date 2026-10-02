@@ -22,19 +22,19 @@ def test_video_acquisition_embeds_and_preserves_the_recording_mbid(tmp_path, mon
 
     monkeypatch.setattr(downloader, "_download_audio", lambda *_args, **_kwargs: temporary)
     monkeypatch.setattr(
-        "odst_tool.youtube_downloader.AudioProcessor.get_audio_details",
+        "shared.audio_files.AudioProcessor.audio_details",
         lambda _path: (180, 320, 5),
     )
     monkeypatch.setattr(
-        "odst_tool.youtube_downloader.AudioProcessor.get_metadata_from_file",
+        "shared.audio_files.AudioProcessor.read_tags",
         lambda _path: {"title": "", "artist": "", "album": ""},
     )
     monkeypatch.setattr(
-        "odst_tool.youtube_downloader.AudioProcessor.embed_metadata",
+        "shared.audio_files.AudioProcessor.embed_metadata",
         lambda _path, metadata, _cover: embedded.append(dict(metadata)),
     )
     monkeypatch.setattr(
-        "odst_tool.youtube_downloader.AudioProcessor.calculate_hash",
+        "shared.audio_files.AudioProcessor.calculate_hash",
         lambda _path: "content-hash",
     )
 

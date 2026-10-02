@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from shared.models import PlayerConfig, Track, LibraryMetadata
 # Note: From setup_tool.cloud import cloudstorage <-- removed
 from setup_tool.provider_factory import StorageProviderFactory
-from setup_tool.audio import AudioProcessor
+from shared.audio_files import AudioProcessor
 
 # Note: Optional progress reporting
 try:

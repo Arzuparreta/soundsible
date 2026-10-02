@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Optional
 from shared.models import Track
 from shared.musicbrainz import normalize_recording_mbid
 
-from ..audio_utils import AudioProcessor
+from shared.audio_files import AudioProcessor
 
 _PLACEHOLDER_TAGS = {"title", "track", "unknown", "unknown title", "audio", "video", "untitled"}
 

@@ -60,7 +60,7 @@ def _music_dir_manifest_is_shared() -> bool:
         return instance_has_multiple_users()
     except Exception:
         return False
-from setup_tool.audio import AudioProcessor
+from shared.audio_files import AudioProcessor
 from setup_tool.uploader import UploadEngine
 from shared.database import USER_DB_FILENAME, DatabaseManager, StaleLibraryWrite
 from shared.user_context import user_config_dir

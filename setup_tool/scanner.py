@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
-from setup_tool.audio import AudioProcessor
+from shared.audio_files import AudioProcessor
 from shared.models import Track
 from shared.path_resolver import path_within_roots
 

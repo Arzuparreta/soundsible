@@ -161,7 +161,7 @@ def test_repairing_moves_the_audio_without_touching_it(tmp_path):
     assert result is not None
     assert result.dropped_video
     from shared.artwork import artwork_store
-    from setup_tool.audio import AudioProcessor
+    from shared.audio_files import AudioProcessor
     from pathlib import Path
     assert Path(artwork_store().path(AudioProcessor.calculate_hash(result.path))).read_bytes() == original_cover
     assert _decoded_audio_md5(result.path) == before

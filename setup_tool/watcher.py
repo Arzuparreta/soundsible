@@ -24,7 +24,7 @@ class MusicFolderHandler(FileSystemEventHandler):
             self._trigger_scan(Path(event.src_path).parent)
 
     def _is_audio(self, path: str) -> bool:
-        from setup_tool.audio import AudioProcessor
+        from shared.audio_files import AudioProcessor
         return AudioProcessor.is_supported_format(path)
 
     def _trigger_scan(self, path: Path):

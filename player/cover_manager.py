@@ -4,7 +4,7 @@ import os
 import threading
 
 from shared.constants import DEFAULT_CACHE_DIR
-from setup_tool.audio import AudioProcessor
+from shared.audio_files import AudioProcessor
 
 #: Longest edge for the list/grid thumbnail variant. One size covers both a
 #: retina row (44-60px) and a grid tile (120-300px) without adding more tiers.

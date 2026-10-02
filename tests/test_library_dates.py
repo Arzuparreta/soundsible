@@ -180,7 +180,7 @@ def test_a_download_through_the_queue_keeps_the_day_the_song_was_saved(isolated_
     monkeypatch.setattr(api, "get_downloader", lambda *a, **k: fake)
     monkeypatch.setattr(api, "emit_to_user", lambda *a, **k: None)
     monkeypatch.setattr("shared.loudness.get_loudness_service", lambda: SimpleNamespace(measure_now=lambda _: None))
-    monkeypatch.setattr("setup_tool.audio.AudioProcessor.extract_cover_art", lambda _: None)
+    monkeypatch.setattr("shared.audio_files.AudioProcessor.extract_cover_art", lambda _: None)
 
     parsed, error = parse_intake_item({
         "source_type": "youtube_url",
