@@ -51,6 +51,25 @@ the baselines after visually reviewing the rendered result:
 npm run test:ui-scale:update
 ```
 
+## Screenshots
+
+The README and site screenshots, and the repository's social card, are taken
+by `showcase/`, not by hand. Each screen is a spec that puts the player in a
+known state against a mocked engine serving real CC BY music from Jamendo
+(`showcase/catalog/`, credited in `showcase/CREDITS.md`), and is photographed
+once per theme at a fixed viewport and pixel ratio:
+
+```bash
+scripts/refresh_showcase.sh   # from the repository root; runs in the Playwright image
+```
+
+It writes `docs/images/screenshots/<theme>/*.webp` and
+`docs/images/social-card.png`, rewriting a file only when its picture actually
+changed. A theme added to `src/boot/themes.ts` is photographed automatically.
+The release command runs it before every release. `npm run showcase` runs the
+same specs outside Docker, where this machine's font rendering will rewrite
+most of the pictures.
+
 ## Running through the engine
 
 First-time setup still needs dependencies:

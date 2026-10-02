@@ -12,12 +12,20 @@ like reaching 1.0).
 1. `python scripts/release.py plan $ARGUMENTS` — show the user the number and
    what is going into it. If any merged pull request has no impact label, say
    so plainly: it is being counted as a patch and that may be wrong.
-2. `python scripts/release.py prepare $ARGUMENTS` — opens the bump pull
+2. `scripts/refresh_showcase.sh` — retakes the README and site screenshots
+   in every theme, and the social card (needs Docker). If anything under
+   `docs/images/` changed, look at every changed picture before going on: a
+   picture of a broken screen is worse than an old one. Put them on a branch,
+   open a pull request labelled `impact:none`, and have it merged before the
+   bump, so the release — which is what the site imports — carries them. If
+   `social-card.png` changed, tell the user to upload it under Settings →
+   Social preview; GitHub has no API for that.
+3. `python scripts/release.py prepare $ARGUMENTS` — opens the bump pull
    request with auto-merge armed.
-3. Wait for it to merge. It needs the same required checks as anything else,
+4. Wait for it to merge. It needs the same required checks as anything else,
    and it touches `shared/**`, so the container builds run: expect this to
    take a while. Poll with `gh pr checks <url> --watch` or come back to it.
-4. `python scripts/release.py finish` — tags the merge commit and pushes.
+5. `python scripts/release.py finish` — tags the merge commit and pushes.
    That tag is what builds the images and the installers and publishes the
    GitHub Release.
 

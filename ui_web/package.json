@@ -9,6 +9,7 @@
     "test:unit": "vitest run",
     "test:ui-scale": "playwright test",
     "test:ui-scale:update": "playwright test --update-snapshots",
+    "showcase": "playwright test -c showcase/playwright.config.ts",
     "test:watch": "vitest",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview"
