@@ -22,7 +22,7 @@ function plan(request: { seed?: { id: string }; direction_revision?: number }, c
 }
 
 for (const language of ['es', 'en'] as const) {
-  test(`Session fits its action labels and recovers a cold current-song change automatically (${language})`, async ({ page }) => {
+  test(`Session actions fill their row and recovers a cold current-song change automatically (${language})`, async ({ page }) => {
     await mockMusicEngine(page);
     await page.addInitScript(lang => localStorage.setItem('lang', lang), language);
     let attempts = 0;
@@ -42,30 +42,37 @@ for (const language of ['es', 'en'] as const) {
     const session = route.getByRole('region', { name: language === 'es' ? 'Sesión' : 'Session' });
     const header = session.locator('header');
     await expect(header.getByRole('button')).toHaveCount(3);
+    // No title: the three actions span the row, side by side.
     const geometry = await header.evaluate(element => {
       const header = element.getBoundingClientRect();
-      const title = element.querySelector('strong')!.getBoundingClientRect();
       const buttons = [...element.querySelectorAll('button')].map(button => button.getBoundingClientRect());
-      return { right: header.right, titleRight: title.right, buttons: buttons.map(b => ({ x: b.x, y: b.y, right: b.right, width: b.width })) };
+      return { left: header.left, right: header.right, buttons: buttons.map(b => ({ x: b.x, y: b.y, right: b.right })) };
     });
-    expect(geometry.buttons[0].x).toBeGreaterThan(geometry.titleRight);
+    await expect(header.locator('strong')).toHaveCount(0);
+    expect(Math.abs(geometry.buttons[0].x - geometry.left)).toBeLessThan(2);
     expect(Math.abs(geometry.buttons[2].right - geometry.right)).toBeLessThan(2);
     expect(Math.max(...geometry.buttons.map(b => b.y)) - Math.min(...geometry.buttons.map(b => b.y))).toBeLessThan(2);
-    // Button widths follow their content: a short action must not reserve width
-    // while a longer action truncates. Labels fill each button's available area.
-    const labels = await header.locator('button span').evaluateAll(elements => elements.map(label => ({
-      width: label.clientWidth, contentWidth: label.scrollWidth,
-      buttonWidth: label.parentElement!.clientWidth,
-      padding: Number.parseFloat(getComputedStyle(label.parentElement!).paddingLeft)
-        + Number.parseFloat(getComputedStyle(label.parentElement!).paddingRight),
-      iconWidth: label.parentElement!.querySelector('svg')!.getBoundingClientRect().width,
-      gap: Number.parseFloat(getComputedStyle(label.parentElement!).gap),
-    })));
+    // Each label reads in full and sits next to its icon, the pair centred in
+    // its button. A label stretched across the spare width left its text
+    // centred far from the icon it belongs to.
+    const labels = await header.locator('button span').evaluateAll(elements => elements.map(label => {
+      const button = label.parentElement!;
+      const icon = button.querySelector('svg')!.getBoundingClientRect();
+      const text = label.getBoundingClientRect();
+      const box = button.getBoundingClientRect();
+      return {
+        width: label.clientWidth, contentWidth: label.scrollWidth, iconWidth: icon.width,
+        spacing: text.left - icon.right, gap: Number.parseFloat(getComputedStyle(button).gap),
+        before: icon.left - box.left, after: box.right - text.right,
+      };
+    }));
     for (const label of labels) {
       expect(label.contentWidth).toBeLessThanOrEqual(label.width + 1);
-      expect(Math.abs(label.buttonWidth - label.padding - label.iconWidth
-        - (label.iconWidth ? label.gap : 0) - label.width)).toBeLessThan(2);
+      expect(label.iconWidth).toBeGreaterThan(0);
+      expect(Math.abs(label.spacing - label.gap)).toBeLessThan(1);
+      expect(Math.abs(label.before - label.after)).toBeLessThan(2);
     }
+    await header.screenshot({ path: test.info().outputPath('session-actions.png') });
     await header.getByRole('button', { name: language === 'es' ? 'Desde la actual' : 'From current', exact: true }).click();
     // The change is the source, at once: nothing is "prepared" behind the old
     // route, and the runway is planned like any refill, retries included.
