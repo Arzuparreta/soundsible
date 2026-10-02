@@ -106,3 +106,6 @@ ios/App/Info.plist
 ios/build/
 ios/**/.build/
 ios/**/.swiftpm/
+
+# A machine's own systemd unit: docs/INSTALL.md writes it to /etc/systemd/system.
+/soundsible.service
