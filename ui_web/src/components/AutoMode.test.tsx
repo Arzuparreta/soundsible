@@ -96,7 +96,7 @@ describe('AutoMode workspace', () => {
     expect(screen.queryByRole('button', { name: 'autoMode.source.title' })).not.toBeInTheDocument();
   });
 
-  it('starts a new direction from the sounding song in the Session header', () => {
+  it('starts a new direction from the sounding song in the session actions row', () => {
     renderAuto('route');
     const section = screen.getByRole('region', { name: 'musicExplorer.references' });
     const header = within(section.querySelector('header')!);

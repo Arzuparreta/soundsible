@@ -26,7 +26,7 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
     onDragLeave={() => { depth = Math.max(0, depth - 1); if (!depth) setOver(false); }}
     onDragOver={(event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'; }}
     onDrop={(event) => { event.preventDefault(); event.stopPropagation(); depth = 0; setOver(false); const transfer = readAutoTrackTransfer(event); if (transfer) props.onUse(transfer.track); }}>
-    <header><strong>{t('musicExplorer.references')}</strong><div class={styles.sessionActions}>
+    <header class={styles.sessionActions}>
       <button type="button" title={t('musicExplorer.startFromCurrent')}
         disabled={!state.playback.currentTrack || isPodcastTrack(state.playback.currentTrack)}
         onClick={() => { const track = state.playback.currentTrack; if (track) void actions.startDjFromTrack(track); }}>
@@ -34,7 +34,7 @@ export function AutoReferences(props: { carried?: Track; onUse: (track: Track) =
       </button>
       <button type="button" title={t('musicExplorer.mixWith')} onClick={() => props.carried ? props.onUse(props.carried) : props.onAdd()}><SourceIcon size={16} /><span>{t('musicExplorer.mixWith')}</span></button>
       <button type="button" title={t('musicExplorer.changeShort')} onClick={props.onChange}><ChangeSessionIcon size={16} /><span>{t('musicExplorer.changeShort')}</span></button>
-    </div></header>
+    </header>
     <Show when={state.autoMode.sources.length} fallback={<button type="button" class={styles.referenceEmpty} onClick={props.onAdd}>{t('musicExplorer.referenceEmpty')}</button>}>
       <div class={styles.referenceRows}>{rows()}</div>
       <Show when={state.autoMode.sources.length > 2}><button type="button" class={styles.referenceMore} onClick={() => openOverlay(() => <section class={styles.referenceSheet}><h2>{t('musicExplorer.references')}</h2>{rows()}</section>, { ariaLabel: () => t('musicExplorer.references') })}>{t('musicExplorer.viewReferences')} ({state.autoMode.sources.length})</button></Show>
