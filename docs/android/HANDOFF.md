@@ -207,3 +207,65 @@ auditoría y corrección de seek iOS, además de esta línea Android. Cambios si
 commit del worktree de fiabilidad se conservaron en
 `wip/reliability-worktree-backup`: respaldo **sin validar para integrar**, creado
 sin alterar su working tree/índice y excluyendo su enlace local `.venv`.
+
+## Entrega S2c: observación asíncrona y controles Solid
+
+El programa tiene ahora un contrato tipado independiente de Capacitor/Solid/Web
+Audio en `ui_web/src/lib/program/runtime.ts`. AndroidStart usa ese runtime y el
+componente `ProgramTransport` en vez de sus comandos/listener/JSX incrustados.
+Shuffle/repeat pasan a estar disponibles en la UI de desarrollo. Las respuestas
+se ordenan por generación y secuencia nativa; los comandos se serializan y los
+callbacks pendientes se descartan al desvincular una cuenta. Un Play aceptado no
+se convierte en estado playing por lógica JS. La limpieza de UI no para el servicio.
+
+El runtime es la primera parte de la integración compartida. **No está montado
+AuthenticatedPlayer, no se ha retirado LibraryBrowser, y el navegador no usa este
+nuevo runtime todavía**. Mantener estas limitaciones al informar de paridad. El
+contrato síncrono de AudioService sigue siendo de mezcla y no debe suplantarse.
+El siguiente corte debe adaptar acciones/estado de cola y rutas NORMAL a este
+contrato, con selección por ocurrencias y operaciones asíncronas; después ampliar
+fuentes/artwork según SLICE_2. No introducir AudioContext/HTMLAudio en Android.
+
+Los tests específicos prueban comandos en orden, respuesta inicial/command tardía
+frente a eventos nuevos, errores de otra cuenta ignorados, comandos en espera
+invalidados, listener tardío liberado, reintento después de fallo y seek arrastrado
+estable con ticks. La prueba instrumentada toca Shuffle y selecciona Repeat en
+el Solid real antes de comprobar Media3, background y recreación.
+
+Advertencia práctica para la continuación: `integration` ejecuta Gradle sobre los
+assets preparados; tras cambiar Solid, ejecutar `scripts/android.py build` antes.
+La primera ejecución S2c omitió ese paso y falló con los controles de S2b todavía
+empaquetados. La guía ya muestra ambos comandos y la evidencia conserva el fallo.
+
+### Siguiente corte propuesto: S2d, cola NORMAL por ocurrencias
+
+Mostrar el programa actual desde el snapshot nativo (incluyendo metadatos de cada
+entrada), permitir seleccionar/mover/quitar una ocurrencia por índice y conservar
+posición/modos al editar otra fila. Ampliar la unión de comandos del runtime,
+validar generación/límites en Kotlin y observar el resultado; no reconstruir toda
+la cola desde la biblioteca para cada acción. Reutilizar la presentación de filas
+compartida sin importar adaptadores que arrastren `stores`/Web Audio; auditar
+`PlayerTrackList`/`MusicLinks`/`MusicListRow` antes de montarlos directamente.
+
+Aceptación: dos filas con el mismo id son distinguibles en selección/eliminación,
+mover otra fila no reinicia la canción actual, quitar la actual tiene transición
+explícita y la última fila vacía el programa; conservar modos, controles OS y
+recreación, rechazar edición tardía de otra cuenta. Probar mediante UI empaquetada
+y fixtures HTTP/HTTPS, además de contratos y cuatro perfiles browser. Este corte
+no resuelve previews/podcasts/radio ni sustituye por sí solo toda la biblioteca;
+reduce otro bloque concreto antes de montar las rutas completas.
+
+### Validación final de S2c
+
+Typecheck/Vitest: **1.339 tests / 144 archivos**. APK debug/test y lint correctos;
+integración API 36 **7 pasan / 0 omitidos / 0 fallos**, incluidos controles Solid
+reales con HTTP/HTTPS y loader retirado antes de captura. Chromium completo:
+**278 pasan / 66 omitidos**. WebKit completo, readonly/1 worker después de Chromium
+y sin emulador: **269 pasan / 75 omitidos / 0 fallos**. Sin cambios de fuentes
+compartidas durante las suites. Versión central, firma APK, ausencia de CA de
+fixture/Web Audio en artifact, diff y enlaces internos verificados. No se vuelven
+a atribuir los 49 tests backend de S2a a este corte sin cambios backend.
+
+[Evidencia S2c](evidence/s2c.json) y [captura visible](evidence/program-s2c-api36.png).
+La evidencia conserva metadata de la validación con dirty=true; no es una release.
+Para identificar el commit final: `git log --oneline --grep='asynchronous program runtime'`.

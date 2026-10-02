@@ -1,0 +1,4 @@
+.program { padding: 12px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-block: 1px solid var(--hairline); margin-bottom: 16px; }
+.program p, .program input { width: 100%; }
+.program button, .program select { min-height: 44px; padding: 8px 16px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--ink-primary); font: inherit; }
+.program [aria-pressed=true] { border-color: var(--accent-ink); color: var(--accent-ink); }

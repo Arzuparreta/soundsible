@@ -110,3 +110,34 @@ acciones. El siguiente corte sigue siendo integrar ese runtime asíncrono, sin
 adaptar la interfaz de mezcla síncrona con éxitos ficticios.
 
 Semántica de modos e índices: [Media3 playlists](https://developer.android.com/media/media3/exoplayer/playlists).
+
+## S2c: runtime asíncrono y transporte Solid
+
+`ui_web/src/lib/program/runtime.ts` define el programa de una sola salida sin
+importar Solid, Capacitor, stores del mezclador ni Web Audio. Contrato con comandos
+como unión tipada (queue/play/pause/seek/next/previous/stop/shuffle/repeat), snapshot
+nativo y suscripción. Android aporta `nativeProgramTransport`; cada snapshot
+incluye `sequence`, creciente durante la vida del plugin. Esa secuencia no es un
+reloj ni se persiste: evita que una respuesta retrasada reemplace un evento más
+reciente de la misma generación. La generación impide cruzar cuentas.
+
+El runtime escucha antes de leer el snapshot inicial, serializa los comandos y
+publica pending sólo hasta su aceptación. No deriva `playing` de Play ni de la
+resolución de la promesa. Un fallo no envenena el siguiente intento explícito.
+Unbind descarta respuestas/errores anteriores y comandos aún en espera; libera
+incluso una suscripción cuyo alta termina después. No cancela por sí solo el audio:
+logout/configuración siguen usando la limpieza nativa de EngineConnection; destruir
+la UI sólo deja de observar y no destruye el programa del servicio.
+
+`ProgramTransport.tsx` sustituye el JSX de controles incrustado en AndroidStart y
+no importa el store global de mezcla. Ofrece shuffle y repeat accesibles, pending,
+play/pause/seek y navegación según `hasNext`/`hasPrevious` nativos: repeat-all puede
+volver desde la última ocurrencia. El seek arrastrado no se pierde con los ticks,
+y sí se limpia al cambiar la ocurrencia aunque el id se repita.
+
+Este paso inicia la integración compartida, **no monta aún AuthenticatedPlayer ni
+retira LibraryBrowser temporal**. Antes de hacerlo, adaptar explícitamente las
+acciones/rutas NORMAL y el estado de cola al contrato asíncrono: el AudioService
+síncrono de mezcla no es compatible. El componente está disponible para futuros
+adaptadores; no se afirma que el navegador use ya este runtime. Fuentes pendientes,
+artwork, DJ/Live/Auto/offline y aceptación física mantienen sus gates.

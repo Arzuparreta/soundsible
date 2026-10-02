@@ -14,6 +14,7 @@ import com.google.common.util.concurrent.ListenableFuture
 @UnstableApi
 @CapacitorPlugin(name = "SoundsiblePlayback")
 class PlaybackPlugin : Plugin() {
+    private var sequence = 0L
     private var alive = true
     private var visible = true
     private var controller: MediaController? = null
@@ -32,7 +33,7 @@ class PlaybackPlugin : Plugin() {
         val p = controller
         val queue = JSArray()
         if (p != null) for (i in 0 until p.mediaItemCount) queue.put(p.getMediaItemAt(i).mediaId)
-        return JSObject().put("generation", EngineConnection.shared(context).generation)
+        return JSObject().put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
             .put("shuffle", p?.shuffleModeEnabled ?: false).put("repeat", p?.repeatMode ?: Player.REPEAT_MODE_OFF)
             .put("hasNext", p?.hasNextMediaItem() ?: false).put("hasPrevious", p?.hasPreviousMediaItem() ?: false)

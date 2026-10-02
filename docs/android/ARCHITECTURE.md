@@ -192,3 +192,17 @@ como status para revalidar identidad; otros fallos no afirman reproducción y
 permiten un retry explícito. Fuente/id/posición están sujetos a la cuenta actual.
 No hay persistencia del programa tras process death ni navegación Auto implementada.
 Ver [contrato/continuación](SLICE_2.md) y [evidencia S2a](evidence/s2a.json).
+
+### Contrato asíncrono implementado en S2c
+
+`ui_web/src/lib/program/runtime.ts` separa comandos tipados y snapshots de una
+salida de los contratos síncronos de mezcla. `mobile/playback.ts` aporta el
+adaptador Capacitor y `components/ProgramTransport.tsx` observa el estado para
+renderizar transporte/seek/modos. AndroidStart ya usa este camino. Orden de
+snapshots por generación y secuencia, comandos serializados, limpieza de callbacks
+y pending de aceptación quedan probados sin instanciar audio en JS.
+
+No sustituye todavía stores/actions de NORMAL ni monta AuthenticatedPlayer; esas
+rutas deben adaptarse al contrato antes de retirar LibraryBrowser. No interpretar
+la disponibilidad de un componente en `components/` como migración del navegador:
+la UI web conserva su runtime actual. Véase [S2c](SLICE_2.md#s2c-runtime-asíncrono-y-transporte-solid).

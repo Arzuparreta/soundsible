@@ -1,10 +1,10 @@
 # Soundsible para Android: desarrollo del port
 
-**Estado: cliente de desarrollo con conexión y primer programa de audio nativo (S2a), no alpha.**
+**Estado: cliente de desarrollo con conexión y programa de audio nativo y transporte Solid asíncrono (S2c), no alpha.**
 La APK conecta a una instancia, inicia sesión como cuenta, conserva la sesión en
 Android y navega canciones, álbumes, artistas y playlists con carátulas y eventos.
 Comparte la fila visual Solid; no carga el runtime Web Audio. Los archivos de la
-biblioteca reproducen con Media3 y controles básicos/seek; el servicio conserva
+biblioteca reproducen con Media3, transporte/seek y shuffle/repeat; el servicio conserva
 el programa al recrear la Activity y usa la sesión multimedia de Android. Previews,
 podcasts/radio, UI completa, edición/adquisición y teléfono/coche siguen pendientes.
 
@@ -133,6 +133,8 @@ Para la integración real con tres motores desechables (cuentas, passwordless y 
 ```sh
 # Usar el Python que tenga las dependencias del motor, por ejemplo .venv/bin/python.
 python -m pip install -r requirements.txt
+# Actualizar primero los assets Solid y el APK si han cambiado las fuentes.
+python scripts/android.py build
 python scripts/android.py integration --serial emulator-5554
 ```
 

@@ -97,7 +97,11 @@ public class PlaybackTest {
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertFalse(controller.isPlaying()); audio.abandonAudioFocus(focus); controller.play(); });
                 Thread.sleep(300);
                 // Bridge modes belong to the service, not the Activity. Queue indices remain original.
-                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'shuffle',enabled:true}).then(()=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'repeat',mode:2})).then(s=>window.__modes=s)");
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-program] button')).find(b=>b.textContent==='Shuffle').click()");
+                waitFor(web, scenario, "Array.from(document.querySelectorAll('[data-testid=android-program] button')).some(b=>b.textContent==='Shuffle' && b.getAttribute('aria-pressed')==='true' && !b.disabled)");
+                web.evaluate(scenario, "const repeat=document.querySelector('[data-testid=android-program] select');repeat.value='2';repeat.dispatchEvent(new Event('change',{bubbles:true}))");
+                waitFor(web, scenario, "document.querySelector('[data-testid=android-program] select')?.value==='2' && !document.querySelector('[data-testid=android-program] select')?.disabled");
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__modes=s)");
                 waitFor(web, scenario, "window.__modes?.shuffle===true && window.__modes?.repeat===2 && window.__modes?.queue.length===2 && window.__modes?.index===1 && window.__modes?.hasNext===true");
                 web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'repeat',mode:9}).then(()=>window.__invalid=false,()=>window.__invalid=true)");
                 waitFor(web, scenario, "window.__invalid===true");
@@ -109,6 +113,8 @@ public class PlaybackTest {
                 scenario.recreate();
                 waitFor(web, scenario, "!!document.querySelector('[data-testid=android-program]') && Array.from(document.querySelectorAll('[data-testid=android-program] button')).some(b=>b.textContent==='Pause')");
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> assertTrue(controller.getCurrentPosition() > 12500));
+                // Do not capture the loader just because the hidden Solid subtree already exists.
+                waitFor(web, scenario, "!document.documentElement.hasAttribute('data-booting') && !document.getElementById('startup-screen') && getComputedStyle(document.querySelector('[data-testid=android-program]')).visibility==='visible'");
                 try (android.os.ParcelFileDescriptor command = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/soundsible-s2-program.png");
                      java.io.InputStream output = new android.os.ParcelFileDescriptor.AutoCloseInputStream(command)) { while (output.read() != -1) {} }
                 web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__restored=s)");

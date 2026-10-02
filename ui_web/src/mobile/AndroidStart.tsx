@@ -1,5 +1,4 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { clockTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { musicLibraryRows } from '../lib/musicLibrary';
 import { buildIdentityIndex } from '../lib/playbackIdentity';
@@ -10,30 +9,30 @@ import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
 import type { User } from '../lib/session';
 import { engine, useEngine, watchEngine } from './engine';
 import LibraryBrowser, { type BrowseSnapshot } from './LibraryBrowser';
-import { playback, localProgram, type PlaybackState } from './playback';
+import { nativeProgramTransport, localProgram } from './playback';
+import { createProgramRuntime, type ProgramState } from '../lib/program/runtime';
+import ProgramTransport from '../components/ProgramTransport';
 import logo from '../../../branding/logo-mark.svg';
 import styles from './AndroidStart.module.css';
 
 export default function AndroidStart() {
-  const [seeking, setSeeking] = createSignal<number | null>(null);
-  const [program, setProgram] = createSignal<PlaybackState | null>(null);
+  const [program, setProgram] = createSignal<ProgramState | null>(null);
+  const [programPending, setProgramPending] = createSignal(false);
   let generation = -1;
   let authFailureHandled = false;
-  const applyProgram = (state: PlaybackState) => {
-    if (state.generation !== generation) return;
-    setProgram(state);
-    if (state.errorStatus === 401 && !authFailureHandled) { authFailureHandled = true; void sync(); }
-  };
-  async function command(action: string, positionMs?: number) {
-    try { applyProgram(await playback.command({ generation, action, positionMs })); }
-    catch { setError(t('common.loadFailed')); }
-  }
+  const runtime = createProgramRuntime(nativeProgramTransport, {
+    state: state => {
+      setProgram(state);
+      if (state?.errorStatus === 401 && !authFailureHandled) { authFailureHandled = true; void sync(); }
+    },
+    pending: setProgramPending,
+    error: () => setError(t('common.loadFailed')),
+  });
   async function play(tracks: Track[], selectedIndex: number) {
     authFailureHandled = false;
     const queue = localProgram(tracks, selectedIndex);
     if (queue.index < 0) return;
-    try { applyProgram(await playback.command({ generation, action: 'queue', index: queue.index, tracks: queue.tracks.map(({ id, title, artist, album }) => ({ id, title, artist, album })) })); }
-    catch { setError(t('common.loadFailed')); }
+    await runtime.execute({ action: 'queue', index: queue.index, tracks: queue.tracks.map(({ id, title, artist, album }) => ({ id, title, artist, album })) }).catch(() => {});
   }
   const [origin, setOrigin] = createSignal('');
   const [server, setServer] = createSignal('');
@@ -54,8 +53,11 @@ export default function AndroidStart() {
   function reset(stopPlayback = true) {
     epoch++; syncEpoch++; controller.abort(); controller = new AbortController();
     cancelEvents?.(); cancelEvents = undefined;
-    if (stopPlayback && user()) void playback.command({ generation, action: 'stop' }).catch(() => {});
-    setSeeking(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setRevision(0); setEventsOnline(false); setStale(false);
+    if (stopPlayback) {
+      if (user()) void nativeProgramTransport.command({ generation, action: 'stop' }).catch(() => {});
+      runtime.unbind();
+    }
+    setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setRevision(0); setEventsOnline(false); setStale(false);
   }
   let expiration: Promise<void> | null = null;
   function expireSession(): Promise<void> {
@@ -64,7 +66,7 @@ export default function AndroidStart() {
     expiration = (async () => {
       try {
         const next = await engine.clear({ forget: false });
-        generation = next.generation; useEngine(next); setNeedsLogin(true);
+        generation = next.generation; void runtime.bind(generation); useEngine(next); setNeedsLogin(true);
       } catch { setError(t('android.connectFailed')); }
       finally { setBusy(false); expiration = null; }
     })();
@@ -136,7 +138,7 @@ export default function AndroidStart() {
     setBusy(true); setError(''); reset();
     try {
       const next = await engine.configure({ origin: origin().trim() });
-      generation = next.generation; setProgram(null); useEngine(next); setServer(next.origin); setOrigin(next.origin);
+      generation = next.generation; void runtime.bind(generation); useEngine(next); setServer(next.origin); setOrigin(next.origin);
       await resolveIdentity();
     } catch { setError(t('android.connectFailed')); }
     finally { setBusy(false); }
@@ -158,7 +160,7 @@ export default function AndroidStart() {
     try { await request('/api/auth/logout', { method: 'POST', timeoutMs: 3000 }); }
     catch { /* Local credential removal also works when the engine is offline. */ }
     finally {
-      const next = await engine.clear({ forget }); generation = next.generation; setProgram(null); useEngine(next);
+      const next = await engine.clear({ forget }); generation = next.generation; void runtime.bind(generation); useEngine(next);
       if (forget) { setServer(''); setNeedsLogin(false); }
       else setNeedsLogin(true);
       setBusy(false);
@@ -167,17 +169,13 @@ export default function AndroidStart() {
   onMount(() => {
     setUnauthorizedHandler(() => { void expireSession(); });
     void engine.state().then(async state => {
-      generation = state.generation; useEngine(state); void playback.state().then(applyProgram); setOrigin(state.origin); setServer(state.origin);
+      generation = state.generation; useEngine(state); void runtime.bind(generation); setOrigin(state.origin); setServer(state.origin);
       if (state.origin) { setBusy(true); try { await resolveIdentity(); } catch { setError(t('android.connectFailed')); } finally { setBusy(false); } }
     }).finally(() => window.__SOUNDSIBLE_BOOT__?.complete());
-    let alive = true;
-    void playback.addListener('playbackState', applyProgram).then(listener => { if (!alive) void listener.remove(); else onCleanupListener = () => { void listener.remove(); }; });
-    let onCleanupListener: (() => void) | undefined;
-    onCleanup(() => { alive = false; onCleanupListener?.(); });
     const interval = setInterval(() => { if (user() && document.visibilityState === 'visible') void sync(); }, 30000);
     const resume = () => { if (user() && document.visibilityState === 'visible') void sync(); };
     document.addEventListener('visibilitychange', resume);
-    onCleanup(() => { clearInterval(interval); document.removeEventListener('visibilitychange', resume); reset(false); setUnauthorizedHandler(null); });
+    onCleanup(() => { clearInterval(interval); document.removeEventListener('visibilitychange', resume); reset(false); runtime.unbind(); setUnauthorizedHandler(null); });
   });
   return <main class={user() ? styles.connected : styles.start} data-testid={server() ? 'android-configured' : 'android-unconfigured'}>
     <Show when={user()} fallback={<><img src={logo} alt="" width="64" height="64" /><h1>{t('android.title')}</h1></>}>
@@ -202,15 +200,7 @@ export default function AndroidStart() {
     <Show when={user()}>
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
       <Show when={!eventsOnline()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
-      <Show when={program()?.queue.length}><section class={styles.program} data-testid="android-program" aria-label={t('nowPlaying.nowPlayingSection')}>
-        <p>{program()?.title || program()?.id}<br /><small>{program()?.artist}</small></p>
-        <button disabled={!program()?.ready} onClick={() => void command('previous')}>{t('common.prev')}</button>
-        <button disabled={!program()?.ready} onClick={() => void command(program()?.playing ? 'pause' : 'play')}>{program()?.playing ? t('common.pause') : t('common.play')}</button>
-        <button disabled={!program()?.ready || program()!.index >= program()!.queue.length - 1} onClick={() => void command('next')}>{t('common.next')}</button>
-        <input aria-label={t('android.seek')} type="range" min="0" max={program()?.durationMs || 0} value={seeking() ?? program()?.positionMs ?? 0} step="1000" aria-valuetext={clockTime((seeking() ?? program()?.positionMs ?? 0) / 1000)} onInput={event => setSeeking(Number(event.currentTarget.value))} onChange={event => { const target = Number(event.currentTarget.value); void command('seek', target).finally(() => setSeeking(null)); }} />
-        <small>{clockTime((program()?.positionMs || 0) / 1000)} / {clockTime((program()?.durationMs || 0) / 1000)}</small>
-        <Show when={program()?.error}><p role="alert">{t(program()?.errorStatus === 403 ? 'android.permissionDenied' : 'common.loadFailed')}</p></Show>
-      </section></Show>
+      <Show when={program()?.queue.length ? program() : null}>{state => <ProgramTransport state={state()} pending={programPending()} command={runtime.execute} />}</Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
         {data => <LibraryBrowser snapshot={data()} revision={revision()} activeId={program()?.id} onPlay={play} />}
       </Show>
