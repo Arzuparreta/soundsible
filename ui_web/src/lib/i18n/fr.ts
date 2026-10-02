@@ -1,6 +1,7 @@
 import type { Dict } from './en';
 
 export const fr: Dict = {
+  android: { title: 'Connectez votre Soundsible', unconfigured: 'Aucun serveur n’est encore connecté.' },
   savedEntities: {
     albums: "Albums enregistrés",
     artists: "Artistes enregistrés",

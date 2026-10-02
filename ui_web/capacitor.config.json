@@ -1,0 +1,9 @@
+{
+  "appId": "com.soundsible.android",
+  "appName": "Soundsible",
+  "webDir": "../android/web-dist",
+  "android": {
+    "path": "../android",
+    "minWebViewVersion": 120
+  }
+}

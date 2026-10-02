@@ -1,0 +1,2 @@
+# Keep the Windows wrapper native on checkout and normalized in git.
+gradlew.bat text eol=crlf

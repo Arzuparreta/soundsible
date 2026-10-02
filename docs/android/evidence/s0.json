@@ -1,0 +1,64 @@
+{
+  "recorded_at_utc": "2026-10-02T16:49:22.795693+00:00",
+  "build": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "26be603c9712f5599507ca1fc7a43255040f1ce2",
+    "dirty": true,
+    "channel": "development"
+  },
+  "artifact": {
+    "path": "android/app/build/outputs/apk/debug/app-debug.apk",
+    "sha256": "9254d4242aaf1f9d1eb87b83dcd40d30a86fee70ef4b7bc99b52acebae3f2e03",
+    "signing": "development debug key; APK Signature Scheme v2 verified"
+  },
+  "environment": {
+    "os": "Linux x86_64",
+    "android_api": 36,
+    "device": "soundsible-api36 AVD, Android 16, Google APIs x86_64",
+    "jdk": "21",
+    "physical_phone": false,
+    "car": false
+  },
+  "results": {
+    "typescript_and_vitest": {
+      "tests_passed": 1320,
+      "files_passed": 137
+    },
+    "chromium_mobile_and_desktop": {
+      "passed": 278,
+      "skipped": 66
+    },
+    "webkit_mobile_and_desktop": {
+      "passed": 269,
+      "skipped": 75
+    },
+    "native_instrumentation": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0
+    },
+    "apk_build": "passed",
+    "apk_signing_verification": "passed",
+    "android_lint": "passed; no errors; pinned-tool/template informational warnings retained",
+    "actionlint": "passed (1.7.7)",
+    "ruff_check_and_format": "passed",
+    "central_version_check": "passed",
+    "internal_document_links": "passed"
+  },
+  "commands": [
+    "npm test (ui_web)",
+    "npx playwright test --project=chromium-mobile --project=chromium-desktop --workers=2",
+    "Docker Playwright read-only mount: --project=webkit-mobile --project=webkit-desktop --workers=1 --output=/tmp/results",
+    "python scripts/android.py build",
+    "adb shell svc wifi disable; adb shell svc data disable",
+    "python scripts/android.py smoke --serial emulator-5554"
+  ],
+  "not_validated": [
+    "GitHub workflow execution (no push)",
+    "real phone/audio/Android Auto",
+    "account connection and every playback mode (not implemented)",
+    "offline music (not decided or implemented)",
+    "public signing, updates and release"
+  ]
+}

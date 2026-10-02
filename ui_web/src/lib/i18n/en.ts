@@ -1,5 +1,6 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
+  android: { title: 'Connect your Soundsible', unconfigured: 'No server is connected yet.' },
   savedEntities: {
     albums: "Saved albums",
     artists: "Saved artists",

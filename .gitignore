@@ -109,3 +109,15 @@ ios/**/.swiftpm/
 
 # A machine's own systemd unit: docs/INSTALL.md writes it to /etc/systemd/system.
 /soundsible.service
+
+# Android: local SDK/configuration, generated assets and Gradle caches.
+android/.gradle/
+android/local.properties
+android/web-dist/
+android/app/src/main/assets/
+android/capacitor-cordova-android-plugins/
+android/app/capacitor.build.gradle
+android/capacitor.settings.gradle
+*.jks
+*.keystore
+android/build-info.json

@@ -1,0 +1,12 @@
+.start {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  text-align: center;
+  gap: 16px;
+}
+.start h1 { font-size: 1.5rem; }
+.start p { color: var(--ink-secondary); }

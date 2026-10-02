@@ -123,4 +123,7 @@ Avoid rich/free-form UI on the car display. Search and complex discovery should 
 
 ## Android Target
 
+The [Android port](ANDROID.md) currently has only a development shell. Android
+Auto is required by the port plan but is not implemented or validated.
+
 The later Android app should expose the same `/api/car/*` tree through Media3 `MediaLibraryService` and `MediaSession`. Android Auto and Android Automotive OS can then render the browse/playback UI from the native Android media session.

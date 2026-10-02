@@ -1,6 +1,7 @@
 import type { Dict } from './en';
 
 export const zh: Dict = {
+  android: { title: '连接你的 Soundsible', unconfigured: '尚未连接服务器。' },
   savedEntities: {
     albums: "已收藏专辑",
     artists: "已收藏艺人",
