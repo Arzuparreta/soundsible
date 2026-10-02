@@ -42,7 +42,7 @@ async function mockEngine(page: Page) {
           has_password: true,
         },
       };
-    } else if (path === '/api/library') {
+    } else if (path === '/api/library/changes') {
       body = { tracks: [], playlists: {}, settings: {}, podcast_subscriptions: [] };
     } else if (path === '/api/library/favourites') {
       body = [];
@@ -93,6 +93,7 @@ async function mockEngine(page: Page) {
         cached: false,
       };
     }
+    if (path === '/api/library/changes') body = { ...body as object, epoch: 'browser-fixture', revision: 1, mode: 'snapshot', positions: {}, removed: [], next_cursor: null };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

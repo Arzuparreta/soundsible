@@ -127,7 +127,7 @@ def test_replace_is_atomic_and_preserves_user_state(tmp_path, monkeypatch):
     db.replace_library(original)
     db.set_track_rating("keep", 5)
 
-    def fail_projection(_conn, _tracks):
+    def fail_projection(_conn, _tracks, **_kwargs):
         raise RuntimeError("projection failed")
 
     monkeypatch.setattr(db, "_replace_catalog_projection", fail_projection)

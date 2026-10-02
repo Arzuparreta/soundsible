@@ -140,6 +140,7 @@ export default function Search() {
   const [interpretedAs, setInterpretedAs] = createSignal('');
   const [loading, setLoading] = createSignal(false);
   const [searchError, setSearchError] = createSignal(false);
+  const [partialSources, setPartialSources] = createSignal<string[]>([]);
   const [youtubeResults, setYoutubeResults] = createSignal<SearchResult[]>([]);
   const [youtubeDirect, setYoutubeDirect] = createSignal<SearchResult | null>(null);
   const [youtubeLoading, setYoutubeLoading] = createSignal(false);
@@ -284,6 +285,7 @@ export default function Search() {
     aborter?.abort();
     aborter = undefined;
     setSearchError(false);
+    setPartialSources([]);
     setInterpretedAs('');
     setYoutubeError(false);
     setYoutubeDirect(null);
@@ -315,7 +317,9 @@ export default function Search() {
         const items = res.items ?? [];
         const sections = res.sections ?? [];
         const interpretedAs = res.interpreted_as ?? '';
-        writeSearchCache(CATALOG_CACHE_NS, query, { items, sections, interpretedAs });
+        const sources = (res.partial_failures ?? []).map((failure) => failure.source);
+        setPartialSources(sources);
+        if (!sources.length) writeSearchCache(CATALOG_CACHE_NS, query, { items, sections, interpretedAs });
         setItems(items);
         setSections(sections);
         setInterpretedAs(interpretedAs);
@@ -704,6 +708,12 @@ export default function Search() {
           <div class={styles.loadingBar} role="status" aria-live="polite" aria-label={tr('common.loading')}>
             <span>{tr('common.loading')}</span>
           </div>
+        </Show>
+        <Show when={domain() === 'music' && partialSources().length > 0 && !loading()}>
+          <p class={styles.interpretation} role="status">
+            {tr('search.partialResults', { sources: partialSources().join(', ') })}{' '}
+            <button class={styles.retry} type="button" onClick={() => runCatalog(q())}>{tr('common.retry')}</button>
+          </p>
         </Show>
         <Switch>
           <Match when={sharedInvalid()}>

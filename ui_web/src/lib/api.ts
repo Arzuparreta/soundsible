@@ -1,3 +1,4 @@
+import { validateLibraryPage, type LibraryPage, type LibraryQuery } from './librarySync';
 import { apiOrigin, ownerToken } from './config';
 import type {
   CatalogAlbum,
@@ -713,16 +714,15 @@ export const api = {
   revokePairedDevice: (tokenId: string) =>
     request<PairedDevice>(`/api/paired-devices/${encodeURIComponent(tokenId)}/revoke`, { method: 'POST' }),
 
-  /** The whole library in one payload. Deliberately past the default deadline:
-   * a few thousand tracks over a phone's link to a home server can outrun 8s,
-   * and giving up there is what turns a large library into an empty screen. */
-  getLibrary: () =>
-    request<{
-      tracks?: Track[];
-      playlists?: PlaylistMap;
-      settings?: LibrarySettings;
-      podcast_subscriptions?: PodcastSubscription[];
-    }>(`/api/library?t=${Date.now()}`, { timeoutMs: 30000 }),
+  /** Bounded pages, with changes since the last committed client revision. */
+  getLibrary: (query: LibraryQuery = {}): Promise<LibraryPage> => {
+    const params = new URLSearchParams();
+    for (const key of ['epoch', 'since', 'revision', 'cursor'] as const) {
+      if (query[key] != null) params.set(key, String(query[key]));
+    }
+    return request<unknown>(`/api/library/changes?${params}`, { signal: query.signal })
+      .then(validateLibraryPage);
+  },
   /** The songs in the library that have no file of their own — identity plus
    * snapshot, newest first, each carrying whether it is marked a favourite. */
   getSaved: () =>

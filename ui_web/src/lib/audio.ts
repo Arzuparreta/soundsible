@@ -158,9 +158,15 @@ interface DeckBinding {
 const deckBindings: DeckBinding[] = [];
 
 /** Bind `handler` to both decks, now or when they are first created. */
-export function onDeckEvent(type: string, handler: (event: Event) => void): void {
-  deckBindings.push({ type, handler });
+export function onDeckEvent(type: string, handler: (event: Event) => void): () => void {
+  const binding = { type, handler };
+  deckBindings.push(binding);
   if (elements) for (const deck of elements) deck.addEventListener(type, handler);
+  return () => {
+    const index = deckBindings.indexOf(binding);
+    if (index >= 0) deckBindings.splice(index, 1);
+    if (elements) for (const deck of elements) deck.removeEventListener(type, handler);
+  };
 }
 
 function createDeck(): HTMLAudioElement {
@@ -238,8 +244,8 @@ export interface ProgramPlaybackSnapshot {
 export function onProgramEvent(
   type: ProgramMediaEventName,
   handler: (snapshot: ProgramPlaybackSnapshot, event: Event) => void,
-): void {
-  onDeckEvent(type, (event) => {
+): () => void {
+  return onDeckEvent(type, (event) => {
     if (!isActiveDeck(event.currentTarget)) return;
     handler(programPlaybackSnapshot(), event);
   });

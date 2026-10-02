@@ -380,6 +380,7 @@ export const en = {
     ytDirectSection: 'Detected video',
     ytResultsSection: 'YouTube results',
     ytFallbackCta: "Not what you wanted? Look on YouTube",
+    partialResults: "Partial results: {sources} did not respond.",
     catalogErrorHint: 'The search could not be completed.',
     catalogNoResults: 'No Music results.',
     searchInYt: 'Search on YouTube',

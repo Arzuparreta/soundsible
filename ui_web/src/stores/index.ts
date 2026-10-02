@@ -1,79 +1,42 @@
+/** Composition root for playback domains and the public UI actions.
+ * Domain modules depend on explicit host contracts; none imports this barrel. */
+import { Lifetime } from '../lib/lifetime';
+import { disposeLibrarySync } from './library';
+import { createTransport } from './playbackTransport';
+import { createSession } from './playbackSession';
+import { createDj } from './playbackDj';
+import type { PlaybackTrigger, PlaybackAttempt } from './playbackTransport';
+
 import { createSocket, type AppSocket, dispatchDiscoverSeed } from '../lib/socket';
-import {
-  api,
-  type DjDirection,
-  type DjItemRef,
-  type DjPlanResponse,
-  type DjProfile,
-  type DjRouteKind,
-  type ListeningPlanItem,
-  type LibraryScanStatus,
-  type PreviewPreparation,
-  type RemotePlaybackState,
-} from '../lib/api';
-import {
-  audioService,
-  onProgramEvent,
-  setProgramOutputReporter,
-  setProgramTransportReporter,
-  type LiveTransitionPlan,
-  type ProgramMediaEventName,
-  type ProgramPlaybackSnapshot,
-  type ProgramTransportOrigin,
-} from '../lib/audio';
-import { ProgramMediaSession, type MediaSessionSyncReason } from '../lib/mediaSession';
-import { streamUrl, previewUrl, podcastStreamUrl, bustCovers, playbackYoutubeId } from '../lib/media';
-import {
-  prefetchPreviews,
-  previewPreparation,
-  previewPreparationState,
-  upcomingPreviewIds,
-} from '../lib/prefetch';
+import { api, type DjDirection, type DjProfile, type ListeningPlanItem, type LibraryScanStatus, type RemotePlaybackState } from '../lib/api';
+import { audioService, onProgramEvent, setProgramOutputReporter, setProgramTransportReporter, type ProgramMediaEventName, type ProgramPlaybackSnapshot, type ProgramTransportOrigin } from '../lib/audio';
+
+import { podcastStreamUrl, bustCovers, playbackYoutubeId } from '../lib/media';
+
 import { toast } from '../lib/toast';
-import { confirmDialog } from '../lib/confirm';
+
 import { vibrate } from '../lib/haptics';
 import { isPodcastTrack, podcastEpisodeToTrack } from '../lib/track';
 import { queueIdentity, queueIndexOf } from '../lib/queueDiscovery';
 import { savedFromTrack, savedVideoId } from '../lib/saved';
 import { trackKeys } from '../lib/playbackIdentity';
-import {
-  GeneratedQueueController,
-  type AutoActivity,
-  type AutoMusicSet,
-  type AutoPlanItem,
-  type AutoProfile,
-} from '../lib/generatedQueue';
+import { GeneratedQueueController, type AutoActivity, type AutoMusicSet, type AutoPlanItem, type AutoProfile } from '../lib/generatedQueue';
 import { createShortcutHandler } from '../lib/shortcuts';
 import { nudgeVolumeGain } from '../lib/volumeScale';
 import { t as tr } from '../lib/i18n';
 import { ListeningLearning } from '../lib/listeningLearning';
-import {
-  createQueueEntry,
-  defaultContext,
-  futureEntries,
-  manualInsertIndex,
-  sameQueueSection,
-  contextSource,
-  type PlaybackContextDescriptor,
-  type PlaybackQueueEntry,
-  type QueueSource,
-} from '../lib/playbackQueue';
-import {
-  buildPlaybackSession,
-  readPlaybackSession,
-  type PlaybackSessionSnapshot,
-} from '../lib/playbackSession';
+import { createQueueEntry, defaultContext, futureEntries, manualInsertIndex, sameQueueSection, contextSource, type PlaybackContextDescriptor, type PlaybackQueueEntry, type QueueSource } from '../lib/playbackQueue';
+
 import { liveHandoffPending } from '../lib/liveHandoff';
 import { shuffled } from '../lib/shuffle';
 import type { Track, SavedEntry, PlaylistMap, LibrarySettings } from '../types/music';
 import type { PodcastSubscription, PodcastEpisode } from '../types/podcast';
 import type { DownloadEvent } from '../types/download';
-import {
-  applyVisualPreferences,
-  persistHighContrast,
-  persistInterfaceSize,
-  type InterfaceSize,
-} from '../lib/visualPreferences';
+import { applyVisualPreferences, persistHighContrast, persistInterfaceSize, type InterfaceSize } from '../lib/visualPreferences';
+
+// The store shape and its primitives live in `./core`; this module composes
+// behaviour on top of them and stays the public surface every component
+// imports from.
 
 // The store shape and its primitives live in `./core`; this module composes
 // behaviour on top of them and stays the public surface every component
@@ -83,30 +46,60 @@ export { invalidateLibrarySync, syncLibrary, syncLibrarySoon } from './library';
 import { invalidateLibrarySync, syncLibrary, syncLibrarySoon } from './library';
 export { addRecentCompleted, applyDownloadEvent, downloadCounts } from './downloads';
 import { applyDownloadEvent } from './downloads';
-import { levelFor as levelForTrack } from '../lib/loudness';
+
 import { refreshLinkReading } from '../lib/linkQuality';
 export * from './identity';
-import {
-  isFavouriteKeys,
-  isSavedKeys,
-  ownedTrackForKeys,
-  savedEntryForKeys,
-  setCatalogLinks,
-} from './identity';
-import {
-  state,
-  setState,
-  nowPlayingOpen,
-  setNowPlayingOpen,
-  randomId,
-  resumeState,
-  setResumeState,
-  VOLUME_LEVELING_KEY,
-  type PlaybackState,
-  type RepeatMode,
-  type Theme,
-} from './core';
+import { isFavouriteKeys, isSavedKeys, ownedTrackForKeys, savedEntryForKeys, setCatalogLinks } from './identity';
+import { state, setState, nowPlayingOpen, setNowPlayingOpen, randomId, resumeState, setResumeState, type RepeatMode, type Theme } from './core';
 
+const playbackHost = {
+  get onPreviewPreparation() { return dj.onPreviewPreparation; },
+  get generatedQueue() { return generatedQueue; },
+  set generatedQueue(value: GeneratedQueueController | null) { generatedQueue = value; },
+  get AUTOPLAY_PREPARE_THRESHOLD() { return AUTOPLAY_PREPARE_THRESHOLD; },
+  get AUTOPLAY_REFILL_THRESHOLD() { return AUTOPLAY_REFILL_THRESHOLD; },
+  get AUTOPLAY_TARGET() { return AUTOPLAY_TARGET; },
+  get ensureGeneratedQueue() { return ensureGeneratedQueue; },
+  get userPlaybackStartedThisSession() { return userPlaybackStartedThisSession; },
+  set userPlaybackStartedThisSession(value: boolean) { userPlaybackStartedThisSession = value; },
+  get actions() { return actions; },
+  get cancelActiveAttempt() { return transport.cancelActiveAttempt; },
+  get updateMediaSession() { return transport.updateMediaSession; },
+  get stagedEntry() { return transport.stagedEntry; },
+  set stagedEntry(value: { queueId: string; attemptId: string; url: string } | null) { transport.stagedEntry = value; },
+  get autoSessionEpoch() { return autoSessionEpoch; },
+  set autoSessionEpoch(value: number) { autoSessionEpoch = value; },
+  get autoPlaybackPrefs() { return autoPlaybackPrefs; },
+  set autoPlaybackPrefs(value: { shuffle: boolean; repeat: RepeatMode } | null) { autoPlaybackPrefs = value; },
+  get loadIndex() { return transport.loadIndex; },
+  get trackUrl() { return transport.trackUrl; },
+  get levelFor() { return transport.levelFor; },
+  get listeningLearning() { return listeningLearning; },
+  get concludeAttempt() { return transport.concludeAttempt; },
+  get activeAttempt() { return transport.activeAttempt; },
+  set activeAttempt(value: PlaybackAttempt | null) { transport.activeAttempt = value; },
+  get pushPlaybackState() { return sessionController.pushPlaybackState; },
+  get pendingImmediateAutoTrack() { return pendingImmediateAutoTrack; },
+  set pendingImmediateAutoTrack(value: Track | null) { pendingImmediateAutoTrack = value; },
+  get prefetchUpcoming() { return transport.prefetchUpcoming; },
+  get trackPrepared() { return transport.trackPrepared; },
+  get generatedActivityId() { return generatedActivityId; },
+  set generatedActivityId(value: number) { generatedActivityId = value; },
+  get discardFutureAutoplay() { return transport.discardFutureAutoplay; },
+  get cancelPendingRadio() { return transport.cancelPendingRadio; },
+  get planItemTrack() { return planItemTrack; },
+  get autoReasonKey() { return autoReasonKey; },
+  get autoOpeningAborter() { return autoOpeningAborter; },
+  set autoOpeningAborter(value: AbortController | null) { autoOpeningAborter = value; },
+  get emitPlaybackEvent() { return transport.emitPlaybackEvent; },
+  get ensureAutoplay() { return transport.ensureAutoplay; },
+  get stageNext() { return transport.stageNext; },
+  get nextEntry() { return transport.nextEntry; },
+  get recoverCurrent() { return transport.recoverCurrent; }
+};
+let transport = createTransport(playbackHost);
+let sessionController = createSession(playbackHost);
+let dj = createDj(playbackHost);
 let userPlaybackStartedThisSession = false;
 let generatedQueue: GeneratedQueueController | null = null;
 let autoPlaybackPrefs: { shuffle: boolean; repeat: RepeatMode } | null = null;
@@ -118,1941 +111,10 @@ const AUTOPLAY_PREPARE_THRESHOLD = 2;
 /** Matches REFILL_THRESHOLD.autoplay in generatedQueue: deep enough that a
  * refill has room to fail and retry before the lane actually runs out. */
 const AUTOPLAY_REFILL_THRESHOLD = 5;
-type PlaybackTrigger = 'selection' | 'next' | 'ended' | 'retry' | 'resume' | 'recovery' | 'podcast';
-type PlaybackSourceKind = 'local' | 'preview' | 'podcast';
-
-interface PlaybackAttempt {
-  id: string;
-  trackId: string;
-  sourceKind: PlaybackSourceKind;
-  trigger: PlaybackTrigger;
-  queueLane: string;
-  startedAt: number;
-  loadedMetadataAt: number | null;
-  canPlayAt: number | null;
-  audibleAt: number | null;
-  /** When the current buffering spell began, or null between spells. */
-  bufferStartedAt: number | null;
-  /**
-   * Buffering before the first sound, and buffering after it, kept apart.
-   *
-   * They used to be one counter reported on `ui_click_to_playing`, which fires at
-   * the moment of first sound — so the only spell it could ever contain was the
-   * opening one, which every cold start has. It read 1 on 56 of 58 plays before
-   * the chunk change and 8 of 9 after, and a metric that cannot move is not
-   * measuring anything. The opening wait is already `click_to_playing_ms`; what
-   * `rebuffer` counts is playback that was running and stopped, which is the only
-   * one of the two that means delivery failed.
-   */
-  startupStallMs: number;
-  rebufferCount: number;
-  rebufferMs: number;
-  /**
-   * Rebuffers that follow a seek the listener asked for.
-   *
-   * Dragging the scrubber into un-buffered audio stops the sound, and the element
-   * reports that the same way it reports a stream that died. One is the listener
-   * getting what they asked for and the other is a fault, so they are counted
-   * apart rather than summed into a number that flatters or damns the change
-   * depending on how much anyone scrubbed that day.
-   */
-  seekRebufferCount: number;
-  seekPending: boolean;
-  /** Times this attempt's stall timer found the deck still fetching and waited
-   * again instead of reloading it. See `scheduleStallRecovery`. */
-  stallReprieves: number;
-  /** Last server spool position observed by startup supervision. */
-  spoolBytes: number;
-  recoveryCount: number;
-  reportedRecoveryCount: number;
-  concluded: boolean;
-  generation: number;
-}
-
-const STALL_RECOVERY_MS = 3000;
-const STARTUP_RECOVERY_MS = 12000;
-/** How many times a startup that is still fetching may be given another
- * interval before it is treated as dead anyway. Bounded so a link slow enough
- * to never finish still fails visibly rather than spinning forever. */
-const MAX_PROGRESS_REPRIEVES = 3;
-let activeAttempt: PlaybackAttempt | null = null;
-let stallRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
-/** What the deck had buffered when the current stall timer was armed. */
-let stallBufferedEnd = 0;
-
-function playbackSourceKind(track: Track): PlaybackSourceKind {
-  if (isPodcastTrack(track)) return 'podcast';
-  return track.source === 'preview' ? 'preview' : 'local';
-}
-
-/** Where this entry's audio comes from. Stable per track — see `streamUrl`:
- * the URL is the browser's cache key, so it may not carry anything that
- * changes from one play to the next. */
-function trackUrl(track: Track): string {
-  const previewId = playbackYoutubeId(track);
-  return track.source === 'preview' && previewId
-    ? previewUrl(previewId)
-    : streamUrl(track.id);
-}
-
-/** A local file is already station-owned. An internet preview is viable for an
- * unattended boundary only after the engine confirms a complete disk copy. */
-function trackPrepared(track: Track): boolean {
-  if (track.source !== 'preview' || isPodcastTrack(track)) return true;
-  const videoId = playbackYoutubeId(track);
-  return !!videoId && previewPreparationState?.(videoId) === 'ready';
-}
-
-/**
- * The volume levelling for one queue entry, as a linear gain.
- *
- * Always `1` unless there is a measurement to stand on: an unmeasured track, a
- * preview, a podcast or the setting switched off all play exactly as they
- * always did.
- *
- * The library lookup matters. A queue entry is a snapshot taken by
- * `createQueueEntry` when the track was enqueued, so a song measured *after*
- * that carries the numbers only on the library copy. Only unmeasured entries
- * pay for the search.
- */
-function measuredTrack<T extends Track>(entry: T): T | Track {
-  return entry.loudness_lufs == null
-    ? state.library.find((track) => track.id === entry.id) ?? entry
-    : entry;
-}
-
-function levelFor(entry: PlaybackQueueEntry | Track | null | undefined): number {
-  if (!entry || !state.playback.volumeLeveling) return 1;
-  const facts = measuredTrack(entry);
-  const context = (entry as PlaybackQueueEntry).queueContext;
-  // Resolved through the library like the entry itself. Without this an album
-  // queued before the sweep reached it would look wholly unmeasured, and album
-  // levelling would silently never engage.
-  const siblings = context?.kind === 'album'
-    ? state.playback.queue
-        .filter((item) => item.queueContext?.id === context.id)
-        .map(measuredTrack)
-    : undefined;
-  return levelForTrack(facts, {
-    enabled: true,
-    shuffle: state.playback.shuffle,
-    siblings,
-    contextKind: context?.kind ?? null,
-    contextId: context?.id ?? null,
-  });
-}
-
-/**
- * Apply the levelling preference everywhere it is remembered, and re-level both
- * decks so the change is heard now rather than at the next track.
- *
- * The only place a sounding deck's gain is allowed to move — because it is the
- * listener asking for it — and the mixer ramps rather than steps it.
- */
-function applyVolumeLeveling(enabled: boolean): void {
-  setState('playback', 'volumeLeveling', enabled);
-  try {
-    localStorage.setItem(VOLUME_LEVELING_KEY, enabled ? 'on' : 'off');
-  } catch {
-    /* private mode / storage disabled */
-  }
-  audioService.setLevelingEnabled(enabled);
-}
-
-/** Ids already sent to the engine. Cleared when it announces new measurements. */
-const loudnessAsked = new Set<string>();
-
-/** Ask the engine to measure what is coming up, so the next few songs are
- * levelled even on a library the sweep has not reached yet. Fire and forget:
- * playback never waits on it, and a late answer applies from the next track. */
-function requestUpcomingLoudness(fromIndex: number): void {
-  if (!state.playback.volumeLeveling) return;
-  const ids = state.playback.queue
-    .slice(fromIndex, fromIndex + 5)
-    // Through the library, not the queue entry. An entry is a snapshot taken
-    // when the track was enqueued, so a song measured since then still looks
-    // unmeasured here — and asking again for something the engine has already
-    // answered is work nobody is waiting for.
-    .filter(
-      (entry) =>
-        measuredTrack(entry).loudness_lufs == null
-        && entry.source !== 'preview'
-        && !isPodcastTrack(entry)
-        && !loudnessAsked.has(entry.id),
-    )
-    .map((entry) => entry.id);
-  if (!ids.length) return;
-  // The engine only announces new measurements every few minutes, so without
-  // this the same five ids would be re-sent on every track change until it does.
-  for (const id of ids) loudnessAsked.add(id);
-  try {
-    // Advisory only, and guarded rather than awaited: an older engine or a test
-    // double may not expose this at all, and nothing about starting a track is
-    // allowed to depend on it.
-    void api.requestLoudness?.(ids)?.catch(() => {});
-  } catch {
-    /* the sweep will reach these on its own */
-  }
-}
-
-function clearStallTimer(): void {
-  if (stallRecoveryTimer) clearTimeout(stallRecoveryTimer);
-  stallRecoveryTimer = null;
-}
-
-function emitAttempt(
-  attempt: PlaybackAttempt,
-  phase: string,
-  terminalState: string,
-  extra: Record<string, number | boolean> = {},
-  failureReason?: string,
-): void {
-  void api
-    .sendPlayTiming({
-      v: 2,
-      attempt_id: attempt.id,
-      track_id: attempt.trackId,
-      device_id: state.device.device_id,
-      phase,
-      source_kind: attempt.sourceKind,
-      cache_state: 'unknown',
-      trigger: attempt.trigger,
-      queue_lane: attempt.queueLane,
-      terminal_state: terminalState,
-      egress: 'unknown',
-      failure_reason: failureReason,
-      segments: extra,
-    })
-    .catch(() => {});
-}
-
-/**
- * Report a playback event that is not tied to a load attempt.
- *
- * `emitAttempt` needs one and most of these do not have one: a queue that ran
- * dry, an audio graph that stopped sounding, a page that came back from being
- * frozen. They go to the same place, so a drive that went wrong can be read back
- * afterwards instead of reconstructed from memory.
- */
-function emitPlaybackEvent(
-  phase: string,
-  extra: Record<string, number | boolean> = {},
-  strings: {
-    failure_reason?: string;
-    context_state?: string;
-    display_mode?: string;
-    transport_action?: string;
-    transport_origin?: string;
-    mix_phase?: string;
-    output_mode?: string;
-    output_event?: string;
-    media_session_state?: string;
-    sync_reason?: string;
-    video_id?: string;
-    queue_lane?: string;
-    queue_source?: string;
-  } = {},
-): void {
-  void api
-    .sendPlayTiming({
-      v: 2,
-      attempt_id: activeAttempt?.id,
-      track_id: state.playback.currentTrack?.id,
-      device_id: state.device.device_id,
-      phase,
-      trigger: activeAttempt?.trigger,
-      terminal_state: state.playback.phase,
-      // Every one of these events reads differently depending on whether the
-      // decks were routed through the mixing graph at the time, so it travels
-      // with all of them rather than only with the graph's own report.
-      segments: { graph: audioService.graphReady(), ...extra },
-      ...strings,
-    })
-    .catch(() => {});
-}
-
-/**
- * Close the books on a play that made a sound.
- *
- * `ui_click_to_playing` can only ever describe the start, because it is emitted at
- * the start. Whether the music then kept playing is a different question and it has
- * to be asked at a different time, which is here: once per audible attempt, however
- * it ended. An attempt that never sounded has nothing to report that
- * `ui_attempt_failed` and `ui_attempt_cancelled` do not already carry.
- */
-function concludeAttempt(attempt: PlaybackAttempt | null, outcome: string): void {
-  if (!attempt || attempt.concluded || attempt.audibleAt === null) return;
-  attempt.concluded = true;
-  const now = performance.now();
-  // A spell still open at this point ended the play — the track was cut off while
-  // buffering. Counting it needs doing here or it is lost.
-  const pending = attempt.bufferStartedAt === null ? 0 : Math.max(0, now - attempt.bufferStartedAt);
-  attempt.bufferStartedAt = null;
-  emitAttempt(attempt, 'ui_play_delivery', outcome, {
-    audible_ms: Math.round(now - attempt.audibleAt),
-    startup_stall_ms: Math.round(attempt.startupStallMs),
-    rebuffer_count: attempt.rebufferCount,
-    rebuffer_ms: Math.round(attempt.rebufferMs + pending),
-    seek_rebuffer_count: attempt.seekRebufferCount,
-    recovery_count: attempt.recoveryCount,
-  });
-}
-
-function cancelActiveAttempt(reason = 'superseded'): void {
-  clearStallTimer();
-  const attempt = activeAttempt;
-  if (!attempt) return;
-  if (attempt.audibleAt === null) {
-    emitAttempt(
-      attempt,
-      'ui_attempt_cancelled',
-      'cancelled',
-      { elapsed_ms: Math.round(performance.now() - attempt.startedAt) },
-      reason,
-    );
-  } else {
-    concludeAttempt(attempt, reason);
-  }
-  activeAttempt = null;
-}
-
-function createPlaybackAttempt(
-  track: Track,
-  generation: number,
-  trigger: PlaybackTrigger,
-  id = randomId(),
-): PlaybackAttempt {
-  cancelActiveAttempt();
-  const attempt: PlaybackAttempt = {
-    id,
-    trackId: track.id,
-    sourceKind: playbackSourceKind(track),
-    trigger,
-    queueLane: 'queueLane' in track && typeof track.queueLane === 'string' ? track.queueLane : 'context',
-    startedAt: performance.now(),
-    loadedMetadataAt: null,
-    canPlayAt: null,
-    audibleAt: null,
-    bufferStartedAt: null,
-    startupStallMs: 0,
-    rebufferCount: 0,
-    rebufferMs: 0,
-    seekRebufferCount: 0,
-    seekPending: false,
-    stallReprieves: 0,
-    spoolBytes: 0,
-    recoveryCount: 0,
-    reportedRecoveryCount: 0,
-    concluded: false,
-    generation,
-  };
-  activeAttempt = attempt;
-  return attempt;
-}
-
-/**
- * The queue `actions.next` rebuilds when `repeat: 'all'` wraps.
- *
- * Shared so that the deck being warmed for the wrap and the track actually
- * played at it cannot disagree — staging a first entry that `next` then filters
- * out is worse than not staging at all.
- */
-function repeatCycle(queue: PlaybackQueueEntry[]): PlaybackQueueEntry[] {
-  return queue.filter((entry) => entry.queueLane !== 'manual' && entry.queueSource !== 'autoplay');
-}
-
-/** Warm the tracks `actions.next` would reach so track changes start instantly.
- * Shuffle writes its chosen order into the queue, so its successors are just as
- * knowable — and just as important to prepare — as a linear context. */
-function prefetchUpcoming(): void {
-  const pb = state.playback;
-  // Acquisition may start here, but staging waits for the current track's
-  // `playing` event and for the engine's complete-file readiness verdict.
-  const ids = upcomingPreviewIds(pb.queue, pb.index, pb.repeat === 'all', 5);
-  // Every unattended context needs alternatives, not one optimistic URL. The
-  // download lane is serial, so this builds a small verified runway in order.
-  const downloadCount = 3;
-  const downloads = ids.slice(0, downloadCount);
-  if (downloads.length > 0) {
-    prefetchPreviews(downloads, { download: true, onStatus: onPreviewPreparation });
-  }
-  const warmOnly = ids.slice(downloadCount);
-  if (warmOnly.length > 0) prefetchPreviews(warmOnly);
-}
-
-/**
- * Keep the next track loaded on the idle deck.
- *
- * Warming the HTTP cache is not enough: what makes `ended` able to continue
- * without touching the network — and what a phone with its screen off will
- * actually allow — is an element that is already holding the stream. On a locked
- * iPhone it is the *only* continuation that works: iOS keeps a backgrounded page
- * alive while a media element is sounding, so the moment a track ends with
- * nothing else playing, the page freezes and a request for the next one never
- * comes back.
- *
- * Shuffle is not an exception. `toggleShuffle` and `playShuffled` write the
- * random order into the queue itself and `actions.next` always takes the entry
- * after this one, so there is nothing to guess — the old guard here was reading
- * an arrangement the player stopped using.
- */
-let stagedEntry: { queueId: string; attemptId: string; url: string } | null = null;
-
-/** What `actions.next` will play, or undefined when nothing can be known ahead:
- * `repeat: 'one'` is handled in `onEnded` without ever reaching a load. */
-function nextEntry(): PlaybackQueueEntry | undefined {
-  const pb = state.playback;
-  if (pb.repeat === 'one' || pb.queue.length === 0) return undefined;
-  if (pb.index < pb.queue.length - 1) return pb.queue[pb.index + 1];
-  return pb.repeat === 'all' ? repeatCycle(pb.queue)[0] : undefined;
-}
-
-function stageNext(): void {
-  // A DJ handoff owns the idle deck: it loads the incoming track there itself,
-  // cued to its own in-point, and staging would fetch the same stream twice and
-  // lose the race. Only once there *is* a plan, though — Auto Mode without one
-  // has an ordinary track change to make, and used to make it over the network.
-  if (audioService.mixPhase() !== 'idle') return;
-  const next = nextEntry();
-  if (state.autoMode.active && next && state.autoMode.plan[next.queueId]) return;
-  if (!next || isPodcastTrack(next)) {
-    stagedEntry = null;
-    audioService.clearStaged();
-    return;
-  }
-  if (!trackPrepared(next)) {
-    stagedEntry = null;
-    audioService.clearStaged();
-    const videoId = playbackYoutubeId(next);
-    if (videoId) prefetchPreviews([videoId], { download: true, onStatus: onPreviewPreparation });
-    return;
-  }
-  if (stagedEntry?.queueId === next.queueId) return;
-  // Minted here rather than at playback so a handoff reports the same attempt
-  // the deck was cued under. It identifies the attempt in telemetry only — it
-  // is deliberately not in the URL, which has to stay cacheable.
-  const attemptId = randomId();
-  stagedEntry = { queueId: next.queueId, attemptId, url: trackUrl(next) };
-  audioService.stage(stagedEntry.url, levelFor(next));
-}
-
-function discardFutureAutoplay(): void {
-  generatedQueue?.stop('autoplay');
-  const pb = state.playback;
-  const queue = pb.queue.filter(
-    (entry, index) => index <= pb.index || !(entry.queueLane === 'generated' && entry.queueSource === 'autoplay'),
-  );
-  setState('playback', { queue, autoplayLoading: false });
-}
-
-function cancelPendingRadio(): void {
-  generatedQueue?.stop('radio');
-}
-
-/**
- * Keep a small final lane of similar music warm. The shared generated-queue
- * coordinator owns cancellation and asks the same server planner as Radio and
- * Auto Mode; this gate only decides when invisible Autoplay is allowed to run.
- */
-async function ensureAutoplay(force = false): Promise<boolean> {
-  const pb = state.playback;
-  const current = pb.currentTrack;
-  if (
-    !pb.autoplayEnabled ||
-    !current ||
-    isPodcastTrack(current) ||
-    pb.radioMode ||
-    state.autoMode.active ||
-    pb.repeat !== 'off'
-  ) {
-    return false;
-  }
-
-  const upcoming = futureEntries(pb.queue, pb.index);
-  const generated = upcoming.filter(
-    (entry) => entry.queueLane === 'generated' && entry.queueSource === 'autoplay',
-  );
-  const deterministic = upcoming.filter(
-    (entry) => !(entry.queueLane === 'generated' && entry.queueSource === 'autoplay'),
-  );
-  if (!force && deterministic.length > AUTOPLAY_PREPARE_THRESHOLD) return false;
-  if (!force && generated.length >= AUTOPLAY_REFILL_THRESHOLD) return false;
-
-  const seed = generated.at(-1) ?? deterministic.at(-1) ?? current;
-  if (generated.length >= AUTOPLAY_TARGET) return true;
-  return ensureGeneratedQueue().ensureAutoplay(seed, force);
-}
-
-const programMediaSession = new ProgramMediaSession();
-
-/** Publish metadata, position and transport from one canonical programme read. */
-function updateMediaSession(
-  track: Track | null,
-  reason: MediaSessionSyncReason = 'track',
-  forceMetadata = false,
-): void {
-  programMediaSession.sync(track, audioService.snapshot(), reason, forceMetadata);
-}
-
-function updatePositionState(reason: MediaSessionSyncReason = 'position'): void {
-  updateMediaSession(state.playback.currentTrack, reason);
-}
-
-/** Fallback jump for the OS skip buttons, when the platform names no offset of
- * its own. Podcast listeners expect a bigger hop than music listeners — a 10s
- * nudge through a two-hour episode is useless — and a bigger one forward (skip
- * the ad) than back (catch the sentence you missed). */
-function osSeekStep(direction: 'forward' | 'backward'): number {
-  const track = state.playback.currentTrack;
-  if (track && isPodcastTrack(track)) return direction === 'forward' ? 30 : 15;
-  return 10;
-}
-
-/**
- * Load + play the queue entry at index `i`. Computes the stream URL by source.
- *
- * Idempotent by default: asking for the entry that is already active is a no-op
- * (or a resume, if it was paused) rather than a second request and a restart
- * from 0:00. That is what makes drumming on a row harmless — a preview click
- * costs the engine a yt-dlp resolution and a proxied stream, and the first tap
- * has already paid for both. Pass `restart` for the deliberate replay.
- */
-function loadIndex(
-  i: number,
-  opts: { restart?: boolean; trigger?: PlaybackTrigger; freshDeck?: boolean } = {},
-): void {
-  const track = state.playback.queue[i];
-  if (!track) return;
-  const pb = state.playback;
-  if (!opts.restart && !pb.loadError && i === pb.index && pb.currentTrack?.id === track.id) {
-    if (pb.isLoading || pb.isPlaying) return; // already on its way / already sounding
-    void audioService.resume().catch(() => {});
-    return;
-  }
-  if (state.autoMode.active) {
-    const identity = queueIdentity(track);
-    if (!state.autoMode.heard.some((heard) => queueIdentity(heard) === identity)) {
-      setState('autoMode', 'heard', (heard) => [...heard, track].slice(-40));
-    }
-  }
-  userPlaybackStartedThisSession = true;
-  const generation = beginLoad();
-  // A deck already holding this exact stream takes over without a request and
-  // without an `src` assignment. From `ended` that keeps the handover inside the
-  // media event, which is what lets it continue at all on a locked phone.
-  // Computed once and shared by both paths, so a handoff and a fresh load can
-  // never disagree about how loud this track should be.
-  const level = levelFor(track);
-  const staged = stagedEntry?.queueId === track.queueId
-    ? audioService.takeStaged(stagedEntry.url, level)
-    : null;
-  createPlaybackAttempt(
-    track,
-    generation,
-    opts.trigger ?? 'selection',
-    staged ? stagedEntry!.attemptId : undefined,
-  );
-  if (staged) stagedEntry = null;
-  setState('playback', {
-    currentTrack: track,
-    index: i,
-    isPlaying: true,
-    isLoading: true,
-    loadError: false,
-    needsGesture: false,
-    phase: 'loading',
-    previewPreparation: null,
-    currentTime: 0,
-    duration: staged ? audioService.snapshot().duration : 0,
-  });
-  updateMediaSession(track);
-  const previewId = track.source === 'preview' ? playbackYoutubeId(track) : null;
-  if (previewId) {
-    prefetchPreviews([previewId], { download: true, onStatus: onPreviewPreparation });
-  }
-  const start = staged
-    ?? (opts.freshDeck
-      ? audioService.recover(trackUrl(track), 0, level)
-      : audioService.load(trackUrl(track), level));
-  void Promise.resolve(start)
-    .catch(() => onPlaybackFailed(generation, 'load'));
-  // `waiting` is not guaranteed for a media element whose play promise never
-  // settles. Arm startup supervision from the request itself so an infinite
-  // 0:00 spinner has a bounded recovery path.
-  scheduleStallRecovery(STARTUP_RECOVERY_MS);
-  // Warming the next track is a second full-file GET and the loudness lookahead
-  // is a POST that used to make the engine read the whole library. Firing them
-  // in the tick of the click meant the song the listener is actually waiting for
-  // competed with both — for the engine, and for Safari's load slots. Neither is
-  // needed until this track is sounding; `watchRunway` re-stages a minute before
-  // the end, so a load that never becomes audible loses nothing.
-  runWhenAudible = () => {
-    prefetchUpcoming();
-    // The live index, not the one this load was for: by the time a track is
-    // audible it is the current one, and a captured index would look ahead from
-    // wherever a superseded attempt happened to be.
-    requestUpcomingLoudness(state.playback.index);
-  };
-  // Queue *depth*, on the other hand, cannot wait on audio: a lane that runs dry
-  // because the track before it failed to start is the one case where refilling
-  // matters most.
-  queueMicrotask(() => {
-    void ensureAutoplay();
-    if (state.playback.radioMode || state.autoMode.active) {
-      void generatedQueue?.ensureRunway();
-    }
-  });
-}
-
-/** Lookahead work deferred until the current track is actually sounding. */
-let runWhenAudible: (() => void) | null = null;
-
-function flushWhenAudible(): void {
-  const work = runWhenAudible;
-  runWhenAudible = null;
-  work?.();
-}
-
-/**
- * Which load attempt the store is currently on.
- *
- * A failed load reports itself twice — `play()` rejects *and* the element fires
- * `error` — so without a generation the second report would land after the first
- * already advanced the queue, and blame the innocent track that just started.
- * Claim a generation per attempt; the first report to arrive retires it and the
- * duplicate is ignored.
- */
-let loadGeneration = 0;
-const beginLoad = (): number => ++loadGeneration;
-
-/** Consecutive unplayable tracks, so a broken stretch of the queue skips
- * forward a few entries and then stops instead of racing to the end. */
-let consecutiveLoadFailures = 0;
-const MAX_CONSECUTIVE_SKIPS = 3;
-
-function recoverCurrent(reason: 'load' | 'error' | 'stall'): boolean {
-  const attempt = activeAttempt;
-  const track = state.playback.currentTrack;
-  if (!attempt || !track || attempt.recoveryCount >= 1) return false;
-  attempt.recoveryCount += 1;
-  clearStallTimer();
-  if (attempt.bufferStartedAt !== null) {
-    const spell = Math.max(0, performance.now() - attempt.bufferStartedAt);
-    if (attempt.audibleAt === null) attempt.startupStallMs += spell;
-    else attempt.rebufferMs += spell;
-    attempt.bufferStartedAt = null;
-  }
-  const generation = beginLoad();
-  attempt.generation = generation;
-  setState('playback', {
-    isPlaying: true,
-    isLoading: true,
-    loadError: false,
-    phase: 'recovering',
-  });
-  emitAttempt(
-    attempt,
-    'ui_recovery_started',
-    'recovering',
-    {
-      recovery_count: attempt.recoveryCount,
-      position_ms: Math.round((state.playback.currentTime || 0) * 1000),
-    },
-    reason,
-  );
-  const position = state.playback.currentTime || 0;
-  const recovery = attempt.sourceKind === 'podcast' && track.podcast_enclosure_url
-    ? api
-        .podcastPeek(track.podcast_enclosure_url)
-        .then(({ stream_token }) => {
-          if (!stream_token) throw new Error('no podcast stream token');
-          return audioService.recover(podcastStreamUrl(stream_token), position, 1);
-        })
-    : audioService.recover(trackUrl(track), position, levelFor(track));
-  void recovery.catch(() => onPlaybackFailed(generation, reason));
-  scheduleStallRecovery(STARTUP_RECOVERY_MS);
-  return true;
-}
-
-function scheduleStallRecovery(delayMs = STALL_RECOVERY_MS): void {
-  clearStallTimer();
-  const attempt = activeAttempt;
-  if (!attempt) return;
-  const bufferedAtArm = audioService.bufferedEnd();
-  stallBufferedEnd = bufferedAtArm;
-  stallRecoveryTimer = setTimeout(() => {
-    stallRecoveryTimer = null;
-    if (
-      activeAttempt !== attempt
-      || !['loading', 'recovering', 'buffering'].includes(state.playback.phase)
-    ) return;
-    // Recovery reloads the element, which drops every byte it has fetched and
-    // starts the track again from nothing. Worth it for a load that has died;
-    // ruinous for one that is merely slow — on a phone reaching the station
-    // over a relay, a reload at twelve seconds was what turned a long start
-    // into a much longer one. So: if the deck has buffered anything at all
-    // since this timer was armed, it is working, and it is given more time.
-    if (audioService.bufferedEnd() > stallBufferedEnd && attempt.stallReprieves < MAX_PROGRESS_REPRIEVES) {
-      attempt.stallReprieves += 1;
-      scheduleStallRecovery(delayMs);
-      return;
-    }
-    const current = state.playback.currentTrack;
-    const previewId = current?.source === 'preview' ? playbackYoutubeId(current) : null;
-    const prep = previewId ? previewPreparation(previewId) : undefined;
-    const spoolBytes = prep?.downloaded_bytes ?? 0;
-    if (
-      prep
-      && (prep.state === 'pending' || prep.state === 'streamable')
-      && spoolBytes > attempt.spoolBytes
-    ) {
-      attempt.spoolBytes = spoolBytes;
-      scheduleStallRecovery(delayMs);
-      return;
-    }
-    if (!recoverCurrent('stall')) onPlaybackFailed(attempt.generation, 'stall');
-  }, delayMs);
-}
-
-/** The current track cannot be played: surface it, then move on if that is the
- * sane thing to do. Silence with a dead play button was the old behaviour. */
-function onPlaybackFailed(
-  generation: number,
-  reason = 'media_error',
-  media: Record<string, number | boolean> = {},
-): void {
-  if (generation !== loadGeneration) return; // a later attempt already took over
-  if (recoverCurrent(reason === 'stall' ? 'stall' : reason === 'load' ? 'load' : 'error')) return;
-  loadGeneration += 1; // retire this attempt: further reports for it are stale
-  const pb = state.playback;
-  const attempt = activeAttempt;
-  clearStallTimer();
-  if (attempt) {
-    emitAttempt(
-      attempt,
-      'ui_attempt_failed',
-      'failed',
-      {
-        elapsed_ms: Math.round(performance.now() - attempt.startedAt),
-        startup_stall_ms: Math.round(attempt.startupStallMs),
-        rebuffer_count: attempt.rebufferCount,
-        rebuffer_ms: Math.round(attempt.rebufferMs),
-        recovery_count: attempt.recoveryCount,
-        resource_generation: generation,
-        runway_ready_depth: futureEntries(pb.queue, pb.index).slice(0, 3).filter(trackPrepared).length,
-        ...media,
-      },
-      reason,
-    );
-    // A failure after the music had started is still a play, and one that ended
-    // badly is the most worth counting. `concludeAttempt` no-ops on an attempt
-    // that never sounded, which is what the event above already covers.
-    concludeAttempt(attempt, 'failed');
-    activeAttempt = null;
-  }
-  setState('playback', { isPlaying: false, isLoading: false, loadError: true, phase: 'failed' });
-  if (
-    attempt?.sourceKind === 'preview'
-    && (attempt.trigger === 'selection' || attempt.trigger === 'retry')
-  ) {
-    // A listener explicitly chose this exact work. Keep it selected with the
-    // retry affordance; skipping is appropriate only for unattended context.
-    toast.error(tr('toast.trackUnavailable'));
-    return;
-  }
-  if (state.autoMode.active) {
-    // Once a handoff has made this the current track, a delivery failure is no
-    // longer a failed *candidate*. Advancing here turned one station-wide 503
-    // into a self-driving cascade: each new deck hit the same cooldown, failed
-    // in a few hundred milliseconds, and recursively selected another song.
-    // Keep the exact current occurrence stopped on Retry. A pre-handoff failure
-    // is handled separately by `commitTransition.onError`, while an intentional
-    // listener skip still goes through `autoSkip`.
-    toast.error(tr('toast.trackUnavailable'));
-    return;
-  }
-  consecutiveLoadFailures += 1;
-  const hasNext = pb.index < pb.queue.length - 1 || (pb.repeat === 'all' && pb.queue.length > 1);
-  if (hasNext && consecutiveLoadFailures <= MAX_CONSECUTIVE_SKIPS) {
-    toast.error(tr('toast.trackUnavailableSkipping'));
-    actions.next();
-    return;
-  }
-  toast.error(tr('toast.trackUnavailable'));
-}
-
-/** This device's session as it would be handed over right now. */
-function sessionSnapshot(): PlaybackSessionSnapshot | null {
-  const pb = state.playback;
-  return buildPlaybackSession({
-    queue: pb.queue,
-    index: pb.index,
-    shuffle: pb.shuffle,
-    repeat: pb.repeat,
-    radioMode: pb.radioMode,
-    radioSeedId: pb.radioSeedId,
-    auto: state.autoMode,
-  });
-}
-
-/**
- * The session as the engine last accepted it, serialized.
- *
- * Position is published every fifteen seconds and on every transport event; the
- * queue and the workspace behind it change far more rarely. Comparing against
- * what was actually stored is what keeps a fifty-entry route out of a ping that
- * only had a new position to report.
- */
-let publishedSession: string | null = null;
-
-/** Whether this device holds a session the engine has not been told about. */
-function sessionOutOfDate(): boolean {
-  return JSON.stringify(sessionSnapshot() ?? null) !== publishedSession;
-}
-
-function playbackStateBody(
-  override: Partial<{
-    track: Track | null;
-    position_sec: number;
-    is_playing: boolean;
-  }> = {},
-) {
-  const pb = state.playback;
-  const track = override.track !== undefined ? override.track : pb.currentTrack;
-  // No track is the end of a session, not a session nobody described: clearing
-  // it explicitly is what stops another device offering to resume music this
-  // one has already stopped playing.
-  const session = track ? sessionSnapshot() : null;
-  const serialized = JSON.stringify(session ?? null);
-  return {
-    track_id: track?.id ?? null,
-    track: track ?? null,
-    position_sec: override.position_sec ?? pb.currentTime ?? 0,
-    is_playing: override.is_playing ?? pb.isPlaying,
-    device_id: state.device.device_id,
-    device_name: state.device.device_name,
-    device_type: state.device.device_type,
-    ...(serialized === publishedSession ? {} : { session }),
-  };
-}
-
-/** Where the music actually is. The store's clock stops with the page; the
- * element's does not, and a state published as the page leaves has to say where
- * the listener was, not where the last frame left them. */
-function livePosition(): number {
-  const live = audioService.snapshot().position;
-  return Number.isFinite(live) ? live : state.playback.currentTime || 0;
-}
-
-/**
- * What a `keepalive` request may weigh.
- *
- * The platform limit is 64 KB across all in-flight keepalive requests, and over
- * it the fetch is rejected outright — so a session big enough to need the
- * guarantee is exactly the one that would lose the position report with it.
- * Past the budget the request is sent as an ordinary one instead: it goes out
- * immediately and usually lands, rather than being refused for certain.
- */
-const KEEPALIVE_BUDGET_BYTES = 56 * 1024;
-
-/** Publish this device's current playback to the engine so other devices can
- * offer to resume it. Best-effort: fire-and-forget, errors swallowed. */
-function pushPlaybackState(opts: { keepalive?: boolean; body?: ReturnType<typeof playbackStateBody> } = {}): void {
-  const body = opts.body ?? playbackStateBody();
-  const sent = 'session' in body ? JSON.stringify(body.session ?? null) : null;
-  const keepalive = opts.keepalive && JSON.stringify(body).length <= KEEPALIVE_BUDGET_BYTES;
-  void api.putPlaybackState(body, { keepalive })
-    // Only once it is stored. A session dropped by a failed request has to ride
-    // the next ping, or the device that picks this one up gets the song without
-    // anything that was around it.
-    .then(() => {
-      if (sent !== null) publishedSession = sent;
-    })
-    .catch(() => {});
-}
-
-function pushEmptyPlaybackState(opts: { keepalive?: boolean } = {}): void {
-  pushPlaybackState({ keepalive: opts.keepalive, body: playbackStateBody({ track: null, position_sec: 0, is_playing: false }) });
-}
-
-function removeTrackReferences(id: string): void {
-  setState('library', (l) => l.filter((t) => t.id !== id));
-  // Favourites are deliberately left alone: deleting the file is not
-  // unfavouriting the song. The entry stops resolving to a library track and
-  // degrades to a preview on its own — and re-downloading the same audio mints
-  // the same content hash, so it silently becomes local again.
-  setState(
-    'playlists',
-    Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.filter((x) => x !== id)])),
-  );
-
-  const pb = state.playback;
-  const nextQueue = pb.queue.filter((t) => t.id !== id);
-  if (nextQueue.length !== pb.queue.length) {
-    const nextIndex = pb.currentTrack ? nextQueue.findIndex((t) => t.id === pb.currentTrack?.id) : -1;
-    setState('playback', { queue: nextQueue, index: nextIndex });
-  }
-
-  if (pb.currentTrack?.id === id) {
-    cancelActiveAttempt('track_removed');
-    audioService.stop();
-    setState('playback', {
-      currentTrack: null,
-      isPlaying: false,
-      isLoading: false,
-      loadError: false,
-      phase: 'idle',
-      currentTime: 0,
-      duration: 0,
-      queue: nextQueue,
-      index: -1,
-    });
-    updateMediaSession(null);
-    pushEmptyPlaybackState();
-  }
-}
-
-function restorePlaybackSnapshot(snapshot: PlaybackState): void {
-  setState('playback', {
-    ...snapshot,
-    queue: snapshot.queue.slice(),
-  });
-  updateMediaSession(snapshot.currentTrack);
-}
-
-/** A restored occurrence, told against the library this device actually has:
- * the song may have been downloaded since it was queued somewhere else. */
-function hydrateSessionEntry(entry: PlaybackQueueEntry): PlaybackQueueEntry {
-  const owned = state.library.find((track) => track.id === entry.id);
-  if (!owned) return entry;
-  const { queueId, queueLane, queueSource, queueContext, queueContextIndex, autoRoute } = entry;
-  return { ...owned, queueId, queueLane, queueSource, queueContext, queueContextIndex, autoRoute };
-}
-
-/**
- * Rebuild a session — one another device published, or this device's own from
- * before a reload.
- *
- * Everything the session was made of travels together: the queue and the place
- * in it, the transport preferences that belong to the session rather than to
- * the device, and, when Auto was driving, its sources, direction, route plan
- * and what it had already heard. Restoring used to mean a queue of one song,
- * which handed an Auto session back as an ordinary Now Playing one.
- *
- * Leaves the transport paused and the decks untouched. Whether this is a resume
- * the listener asked for out loud or a session quietly put back where they left
- * it is the caller's to decide.
- */
-function applySessionSnapshot(
-  snapshot: PlaybackSessionSnapshot,
-  position: number,
-): PlaybackQueueEntry | null {
-  const queue = snapshot.queue.map(hydrateSessionEntry);
-  const index = Math.min(Math.max(snapshot.index, 0), queue.length - 1);
-  const entry = queue[index];
-  if (!entry) return null;
-
-  cancelActiveAttempt('session_restored');
-  // Auto's own teardown rewrites the queue, so it has to run before the
-  // restored one is written rather than over the top of it.
-  if (state.autoMode.active) actions.exitAutoMode();
-  generatedQueue?.stop();
-  stagedEntry = null;
-  audioService.clearStaged();
-
-  setState('playback', {
-    currentTrack: entry,
-    queue,
-    index,
-    isPlaying: false,
-    isLoading: false,
-    loadError: false,
-    needsGesture: false,
-    phase: 'paused',
-    currentTime: position,
-    duration: entry.duration ?? 0,
-    shuffle: snapshot.shuffle,
-    repeat: snapshot.repeat,
-    radioMode: snapshot.radio.active,
-    radioLoading: false,
-    radioSeedId: snapshot.radio.seedId,
-  });
-
-  const auto = snapshot.auto;
-  if (auto) {
-    autoSessionEpoch += 1;
-    autoPlaybackPrefs = null;
-    setState('autoMode', {
-      active: true,
-      profile: auto.profile,
-      djProfile: auto.djProfile,
-      direction: auto.direction,
-      sources: auto.sources,
-      heard: auto.heard,
-      avoidedIdentities: auto.avoidedIdentities,
-      plan: auto.plan,
-      staleSeams: auto.staleSeams,
-      transition: { status: 'idle' },
-      pendingDirection: false,
-      repairing: false,
-      activity: null,
-      // The planner is started by whoever presses play. Until then the route
-      // that arrived is the runway, and `planning` would promise a request
-      // nobody has made yet.
-      phase: futureEntries(queue, index, 'generated').length > 0 ? 'ready' : 'idle',
-    });
-  }
-  updateMediaSession(entry);
-  return entry;
-}
-
-/** The session behind a published state, when it describes the same song that
- * state is a position into. Anything else is a state from a build that did not
- * publish sessions, or one that has moved on since. */
-function sessionFor(remote: RemotePlaybackState): PlaybackSessionSnapshot | null {
-  const session = readPlaybackSession(remote.session);
-  return session && session.queue[session.index]?.id === remote.track_id ? session : null;
-}
-
-/** Restore a session and carry on playing it from where it was left. */
-function playRestoredSession(session: PlaybackSessionSnapshot, position: number): boolean {
-  const entry = applySessionSnapshot(session, position);
-  if (!entry) return false;
-  userPlaybackStartedThisSession = true;
-  // Before the load, not after: loading an entry asks the live session for more
-  // runway in the same tick, and there has to be one to ask.
-  if (state.autoMode.active) {
-    void ensureGeneratedQueue().start('auto_mode', entry, state.autoMode.profile);
-  }
-  loadIndex(state.playback.index, { restart: true, trigger: 'resume' });
-  if (position > 0) setTimeout(() => actions.seek(position), 400);
-  return true;
-}
-
-function restoreSameDevicePlayback(remote: RemotePlaybackState): void {
-  const track = state.library.find((t) => t.id === remote.track_id) ?? remote.track ?? null;
-  if (!track) return;
-  const pos = Math.max(0, Number(remote.position_sec) || 0);
-  const session = sessionFor(remote);
-  const restored = session ? applySessionSnapshot(session, pos) : null;
-  if (restored) {
-    audioService.prime(trackUrl(restored), pos, levelFor(restored));
-    return;
-  }
-  setState('playback', {
-    currentTrack: track,
-    isPlaying: false,
-    isLoading: false,
-    loadError: false,
-    phase: 'paused',
-    currentTime: pos,
-    duration: track.duration ?? 0,
-    queue: [createQueueEntry(track, 'context', isPodcastTrack(track) ? 'podcast' : 'single', {
-      id: 'resume',
-      kind: isPodcastTrack(track) ? 'podcast' : 'single',
-      label: track.artist,
-    })],
-    index: 0,
-  });
-  updateMediaSession(track);
-  audioService.prime(trackUrl(track), pos, levelFor(track));
-}
-
-/**
- * How long before the blend the next track is committed.
- *
- * At the commit point the incoming deck is loaded and cued, and the route stops
- * being editable: direction changes, requests and DJ changes from here on apply
- * to the track *after* this one. That is what a DJ does, and it is the whole
- * reason the surface can be touched mid-song without breaking the mix.
- */
-const COMMIT_LEAD_SECONDS = 45;
-/** Shortest a track may play before the DJ is allowed to mix out of it. */
-const MIN_PLAY_SECONDS = 90;
-const MIN_PLAY_FRACTION = 0.6;
-/** Below this the analysis is a structural guess, not measured features. */
-const TRUSTED_CONFIDENCE = 0.35;
-
-/** Cleared explicitly, field by field: a store update merges, so `{ status:
- * 'idle' }` alone would leave the finished mix's technique and cue behind for
- * the readout to keep showing. */
-const IDLE_TRANSITION = {
-  status: 'idle',
-  technique: undefined,
-  nextTrackId: undefined,
-  at: undefined,
-} as const;
-
-/**
- * Automatic handoffs that fail back to back, so a station-wide upstream
- * outage cannot burn through the whole route in an instant.
- *
- * A dead candidate is dropped and the next one tried immediately — that is
- * the point of the runway. But `evaluateDjRunway` re-fires on every
- * `timeupdate`, several times a second, and nothing before this stopped it
- * re-arming the very next candidate the moment one failed. An upstream outage
- * fails every candidate the same way, so that loop cleared an entire
- * pre-planned route — eight songs, none of which ever sounded — before the
- * listener could react. After `MAX_CONSECUTIVE_AUTO_HANDOFF_FAILURES` in a
- * row, automatic attempts pause for `AUTO_HANDOFF_COOLDOWN_MS` (the backend's
- * own upstream backoff window) while the current track keeps playing
- * undisturbed; a listener-requested skip (`autoSkip`) is never gated by this
- * — only the automatic path is.
- */
-const MAX_CONSECUTIVE_AUTO_HANDOFF_FAILURES = 2;
-const AUTO_HANDOFF_COOLDOWN_MS = 30_000;
-let autoHandoffFailures = 0;
-let autoHandoffCooldownUntil = 0;
-
-interface CommittedTransition {
-  queueId: string;
-  fromKey: string;
-  toKey: string;
-}
-let committedTransition: CommittedTransition | null = null;
-/** Claim on the commitment. Arming a transition cancels whatever was armed
- * before, and that cancellation reports back — so every callback has to be able
- * to tell whether it is still the one in charge, or the ghost of the handoff it
- * just replaced. */
-let commitSeq = 0;
-
-/** Duration of what is actually loaded, preferring the media element over the
- * catalogue metadata — a plan clamped against a wrong duration is exactly how a
- * cue lands in the middle of a song. */
-function playingDuration(): number {
-  const duration = audioService.snapshot().duration;
-  if (Number.isFinite(duration) && duration > 0) return duration;
-  const declared = state.playback.currentTrack?.duration ?? 0;
-  return Number.isFinite(declared) && declared > 0 ? declared : 0;
-}
-
-/**
- * Turn a planned transition into one that is safe to perform *right now*.
- *
- * Every rule here exists because its absence produced an audible failure:
- *
- * - a cue is only honoured when it was planned out of the track that is
- *   playing (`fromKey`), otherwise it belongs to a different timeline;
- * - the cue is clamped into the real duration, so a missing or zero `out_cue`
- *   becomes an end-of-track fade instead of a mix at 0:00;
- * - a track always gets a minimum airing before the DJ may leave it;
- * - a low-confidence analysis is never beatmatched, only faded.
- *
- * The result is that a bad plan degrades to a plain fade. It never cuts.
- */
-function resolveTransition(
-  fromKey: string,
-  duration: number,
-  item: AutoPlanItem | undefined,
-): LiveTransitionPlan | null {
-  if (!Number.isFinite(duration) || duration <= 4) return null;
-  const chained = item?.fromKey === fromKey ? item.transition : undefined;
-  const trusted = (chained?.confidence ?? 0) >= TRUSTED_CONFIDENCE;
-  const requested = chained?.overlap_seconds ?? 6;
-  const overlap = Math.max(1.5, Math.min(trusted ? requested : Math.min(requested, 6), duration * 0.25));
-  const latest = duration - overlap - 1;
-  if (latest <= 0) return null;
-  const earliest = Math.min(Math.min(MIN_PLAY_SECONDS, duration * MIN_PLAY_FRACTION), latest);
-  const proposed = chained && Number.isFinite(chained.out_cue) && (chained.out_cue ?? 0) > 0
-    ? Number(chained.out_cue)
-    : latest;
-  return {
-    technique: trusted ? chained!.technique : 'safe_fade',
-    out_cue: Math.min(latest, Math.max(earliest, proposed)),
-    in_cue: trusted ? chained!.in_cue : 0,
-    overlap_seconds: overlap,
-    overlap_bars: chained?.overlap_bars ?? 0,
-    playback_rate: trusted ? chained!.playback_rate : 1,
-    confidence: chained?.confidence ?? 0,
-  };
-}
-
-/** Hand the runway over to the mixer and freeze it there. */
-function commitTransition(
-  next: PlaybackQueueEntry,
-  fromKey: string,
-  plan: LiveTransitionPlan,
-  manual: boolean,
-): void {
-  const toKey = queueIdentity(next);
-  const outgoing = state.playback.currentTrack;
-  const outgoingDuration = playingDuration();
-  const token = ++commitSeq;
-  const owns = () => commitSeq === token;
-  committedTransition = { queueId: next.queueId, fromKey, toKey };
-  setState('autoMode', 'transition', {
-    status: 'armed',
-    technique: plan.technique,
-    nextTrackId: toKey,
-    at: manual ? state.playback.currentTime : plan.out_cue,
-  });
-  audioService.armTransition(trackUrl(next), plan, {
-    onDominant: () => {
-      if (!owns()) return;
-      autoHandoffFailures = 0;
-      if (!manual) listeningLearning.complete(outgoing, outgoingDuration);
-      const queue = state.playback.queue;
-      const index = queue.findIndex((entry) => entry.queueId === next.queueId);
-      // The incoming deck is already audible; there is no undo. Follow it.
-      concludeAttempt(activeAttempt, 'handoff');
-      activeAttempt = null;
-      const snapshot = audioService.snapshot();
-      setState('playback', {
-        currentTrack: next,
-        index: index === -1 ? state.playback.index : index,
-        currentTime: snapshot.position,
-        duration: snapshot.duration > 0 ? snapshot.duration : next.duration ?? 0,
-        isPlaying: snapshot.playing,
-        isLoading: false,
-        loadError: false,
-        phase: 'playing',
-      });
-      setState('autoMode', 'transition', {
-        status: 'mixing',
-        technique: plan.technique,
-        nextTrackId: toKey,
-      });
-      updateMediaSession(next, 'handoff_dominant', true);
-      pushPlaybackState();
-    },
-    onComplete: (position) => {
-      if (!owns()) return;
-      committedTransition = null;
-      setState('playback', { currentTime: position, duration: playingDuration() });
-      setState('autoMode', 'transition', IDLE_TRANSITION);
-      // `releaseDeck` paused the outgoing element immediately before this
-      // callback. On iOS that element may still be the OS's chosen media
-      // session, so re-assert B only after A is definitely out of the programme.
-      updateMediaSession(state.playback.currentTrack, 'handoff_settled', true);
-      const pending = pendingImmediateAutoTrack;
-      pendingImmediateAutoTrack = null;
-      if (state.autoMode.active && pending) {
-        queueMicrotask(() => mixAutoTrackNow(pending));
-      } else if (state.autoMode.active) {
-        void generatedQueue?.ensureRunway();
-      }
-    },
-    onCancel: () => {
-      if (!owns()) return;
-      committedTransition = null;
-      setState('autoMode', 'transition', IDLE_TRANSITION);
-    },
-    onError: () => {
-      if (!owns()) return;
-      committedTransition = null;
-      setState('autoMode', 'transition', IDLE_TRANSITION);
-      const outgoingEnded = audioService.snapshot().ended;
-      // `audio.ts` has deliberately kept the outgoing deck alive. Loading the
-      // URL that just failed here used to throw that protection away, replace
-      // the audible deck, and make Auto skip through several broken tracks in
-      // silence. Drop the failed handoff and let the DJ refill the runway while
-      // the current song keeps playing.
-      if (!dropAutoRouteOccurrence(next.queueId)) return;
-      if (outgoingEnded) {
-        // `ended` deliberately left the committed handoff in charge. If its
-        // incoming deck never became playable, ownership is still on the song
-        // that just finished; promote another verified runway entry rather than
-        // exposing the failed URL as the current 0:00 Retry track.
-        if (promotePreparedAutoSuccessor()) actions.next('ended');
-        else {
-          prefetchUpcoming();
-          enterStarved();
-        }
-        return;
-      }
-      // A listener-requested skip is always worth attempting and always worth
-      // reporting on its own — it does not retry unattended, so it cannot
-      // spiral, and it does not count toward or trip the breaker below.
-      if (manual) {
-        toast.error(tr('toast.trackUnavailableSkipping'));
-        return;
-      }
-      autoHandoffFailures += 1;
-      if (autoHandoffFailures >= MAX_CONSECUTIVE_AUTO_HANDOFF_FAILURES) {
-        autoHandoffCooldownUntil = performance.now() + AUTO_HANDOFF_COOLDOWN_MS;
-        toast.error(tr('toast.autoModeHandoffPaused'));
-      } else {
-        toast.error(tr('toast.trackUnavailableSkipping'));
-      }
-    },
-  }, { manual, level: levelFor(next) });
-}
-
-/** How far ahead of the commit point an unmeasured transition asks to be
- * re-planned, leaving room for the answer to arrive in time to be used. */
-const REFINE_LEAD_SECONDS = 20;
-let refinedPair = '';
-
-function djItemRef(track: Track): DjItemRef {
-  return {
-    id: track.id,
-    track_id: track.source === 'preview' ? undefined : track.id,
-    youtube_id: track.youtube_id ?? (track.source === 'preview' ? track.id : undefined),
-    source: track.source,
-    title: track.title,
-    artist: track.artist,
-    duration: track.duration,
-  };
-}
-
-function autoRecommendationIdentity(track: Track): string {
-  if (track.recommendation?.identity) return track.recommendation.identity;
-  return track.source === 'preview'
-    ? `music:youtube:${track.youtube_id || track.id}`
-    : `music:track:${track.id}`;
-}
-
-/**
- * Upgrade a conservative transition once its analysis exists.
- *
- * The planner answers instantly with a fade for anything it has not measured
- * yet. This asks again just before the handoff is committed: by then the
- * background analysis has usually landed, and the fade becomes the beatmatched
- * blend it was always meant to be. If it has not, nothing is lost — the fade
- * was already safe.
- */
-function maybeRefineTransition(current: Track, next: PlaybackQueueEntry, fromKey: string): void {
-  const toKey = queueIdentity(next);
-  const pair = `${fromKey}>${toKey}`;
-  if (refinedPair === pair) return;
-  const item = state.autoMode.plan[next.queueId];
-  if (!item || item.fromKey !== fromKey) return;
-  if ((item.transition?.confidence ?? 0) >= TRUSTED_CONFIDENCE) return;
-  refinedPair = pair;
-  void api
-    .refineDjTransition({
-      dj_profile: state.autoMode.djProfile,
-      from: djItemRef(current),
-      to: djItemRef(next),
-    })
-    .then((result) => {
-      if (!result.measured || !state.autoMode.active) return;
-      if (state.autoMode.plan[next.queueId]?.fromKey !== fromKey) return;
-      setState('autoMode', 'plan', next.queueId, 'transition', result.transition);
-    })
-    .catch(() => {
-      /* the conservative plan stands */
-    });
-}
-
-/** Watch the runway from `timeupdate` and commit when the moment arrives. */
-function evaluateDjRunway(): void {
-  if (!state.autoMode.active || committedTransition || audioService.mixPhase() !== 'idle') return;
-  if (performance.now() < autoHandoffCooldownUntil) return;
-  const pb = state.playback;
-  const current = pb.currentTrack;
-  const next = pb.queue[pb.index + 1];
-  if (!current || !next || pb.loadError) return;
-  if (!trackPrepared(next)) {
-    const videoId = playbackYoutubeId(next);
-    if (videoId) prefetchPreviews([videoId], { download: true });
-    promotePreparedAutoSuccessor();
-    return;
-  }
-  const fromKey = queueIdentity(current);
-  const plan = resolveTransition(fromKey, playingDuration(), state.autoMode.plan[next.queueId]);
-  if (!plan) return;
-  if (pb.currentTime >= plan.out_cue - COMMIT_LEAD_SECONDS - REFINE_LEAD_SECONDS) {
-    maybeRefineTransition(current, next, fromKey);
-  }
-  if (pb.currentTime < plan.out_cue - COMMIT_LEAD_SECONDS) return;
-  commitTransition(next, fromKey, plan, false);
-}
-
-/** Index that new manual entries must land after, so they cannot displace a
- * handoff that is already loaded and cued. */
-function insertionFloor(): number {
-  const pb = state.playback;
-  if (!committedTransition) return pb.index;
-  const committed = pb.queue.findIndex((entry) => entry.queueId === committedTransition!.queueId);
-  return committed > pb.index ? committed : pb.index;
-}
-
-/**
- * What a repair is allowed to do with one route entry.
- *
- * A `manual` entry carries no `autoRoute` at all — `enqueue` and `playNext`
- * drop explicit requests straight into the route span — but a song asked for by
- * name is every bit as pinned as one that was dragged there, and both
- * `applyPlan` and `exitAutoMode` already treat the two alike. Classifying on
- * `autoRoute` alone would hand the planner permission to delete them.
- */
-function autoRouteKind(entry: PlaybackQueueEntry): DjRouteKind {
-  if (entry.queueLane === 'manual' || entry.autoRoute?.kind === 'user') return 'user';
-  return entry.autoRoute?.kind ?? 'generated';
-}
-
-/** User-owned route occurrences survive a manual pivot. Generated guesses and
- * bridges belonged to the old musical path and do not. */
-function explicitAutoRunway(): PlaybackQueueEntry[] {
-  return futureEntries(state.playback.queue, state.playback.index)
-    .filter((entry) => autoRouteKind(entry) === 'user');
-}
-
-/** A song selected while DJ is driving means "mix this now", everywhere.
- *
- * The existing manual handoff is the audio primitive: it keeps the outgoing
- * deck alive until the requested media is ready and degrades to a short safe
- * fade. If two decks are already audible there is no honest three-deck cancel;
- * retain only the latest request and chain it as soon as that blend settles. */
-function mixAutoTrackNow(track: Track): void {
-  if (!state.autoMode.active || isPodcastTrack(track)) return;
-  const pb = state.playback;
-  if (pb.currentTrack && queueIndexOf([pb.currentTrack], track) === 0) {
-    if (pb.loadError) actions.retryCurrent();
-    else if (!pb.isPlaying && !pb.isLoading) actions.resumePlayback();
-    return;
-  }
-  if (audioService.mixPhase() === 'crossfading') {
-    pendingImmediateAutoTrack = track;
-    setState('autoMode', 'activity', {
-      id: ++generatedActivityId,
-      status: 'working',
-      key: 'autoMode.agent.immediateQueued',
-      values: { title: track.title },
-    });
-    return;
-  }
-
-  discardFutureAutoplay();
-  cancelPendingRadio();
-  pendingImmediateAutoTrack = null;
-  if (audioService.mixPhase() !== 'idle') audioService.cancelMix('superseded');
-  const explicit = explicitAutoRunway();
-  const requested = {
-    ...createQueueEntry(track, 'manual', 'play_next'),
-    autoRoute: { kind: 'user' as const, placement: 'dj' as const },
-  };
-  const current = pb.currentTrack;
-
-  setState('autoMode', {
-    heard: [...state.autoMode.heard, track].slice(-40),
-    plan: {},
-    staleSeams: [],
-    transition: IDLE_TRANSITION,
-    activity: {
-      id: ++generatedActivityId,
-      status: 'working',
-      key: 'autoMode.agent.mixingImmediate',
-      values: { title: track.title },
-    },
-  });
-
-  if (!current || pb.index < 0) {
-    setState('playback', {
-      queue: [requested, ...explicit],
-      index: -1,
-      radioMode: false,
-      radioLoading: false,
-      radioSeedId: null,
-    });
-    loadIndex(0);
-    void ensureGeneratedQueue().start('auto_mode', requested, state.autoMode.profile);
-    return;
-  }
-
-  const prefix = pb.queue.slice(0, pb.index + 1);
-  setState('playback', {
-    queue: [...prefix, requested, ...explicit],
-    radioMode: false,
-    radioLoading: false,
-    radioSeedId: null,
-  });
-  const fromKey = queueIdentity(current);
-  commitTransition(requested, fromKey, {
-    technique: 'safe_fade',
-    out_cue: 0,
-    in_cue: 0,
-    overlap_seconds: 1.6,
-    overlap_bars: 0,
-    playback_rate: 1,
-    confidence: 0,
-  }, true);
-  void ensureGeneratedQueue().start('auto_mode', requested, state.autoMode.profile);
-}
-
-/** Apply the first route returned by a source-only DJ plan. */
-function startAutoFromSourcePlan(response: DjPlanResponse): boolean {
-  if (!response.opening) return false;
-  const opening = planItemTrack(response.opening);
-  const openingEntry = {
-    ...createQueueEntry(opening, 'generated', 'auto_mode'),
-    autoRoute: { kind: 'generated' as const },
-  };
-  const candidates = response.items
-    .map((item) => ({ item, track: planItemTrack(item) }))
-    .filter(({ track }) => queueIndexOf([openingEntry], track) === -1);
-  const entries = candidates.map(({ track }) => ({
-    ...createQueueEntry(track, 'generated', 'auto_mode'),
-    autoRoute: { kind: 'generated' as const },
-  }));
-  const plan: Record<string, AutoPlanItem> = {};
-  let fromKey = queueIdentity(openingEntry);
-  candidates.forEach(({ item }, index) => {
-    const entry = entries[index];
-    plan[entry.queueId] = {
-      trackId: queueIdentity(entry),
-      source: item.source_pool,
-      reasonKey: autoReasonKey(item),
-      reasonValues: item.source_pool === 'related' ? { title: opening.title } : undefined,
-      fromKey,
-      transition: item.transition,
-      bpm: item.analysis?.bpm,
-      key: item.analysis?.key,
-      sourceSetId: item.source_set_id,
-      sourceSetLabel: item.source_set_label,
-      lineage: item.lineage,
-    };
-    fromKey = queueIdentity(entry);
-  });
-  setState('playback', {
-    queue: [openingEntry, ...entries],
-    index: -1,
-    shuffle: false,
-    repeat: 'off',
-    radioMode: false,
-    radioLoading: false,
-    radioSeedId: null,
-  });
-  ensureGeneratedQueue().adopt('auto_mode', openingEntry, state.autoMode.profile, {
-    sessionId: response.session_id,
-    nextSegmentIndex: (response.segment_index ?? 0) + 1,
-  });
-  setState('autoMode', {
-    heard: [opening],
-    plan,
-    staleSeams: [],
-    phase: entries.length ? 'ready' : 'degraded',
-    activity: {
-      id: ++generatedActivityId,
-      status: 'done',
-      key: 'autoMode.agent.openedSource',
-      values: { title: opening.title },
-    },
-  });
-  loadIndex(0);
-  prefetchUpcoming();
-  return true;
-}
-
-async function startAutoFromSources(): Promise<void> {
-  if (!state.autoMode.active || state.playback.currentTrack || state.autoMode.sources.length === 0) return;
-  const sessionEpoch = autoSessionEpoch;
-  autoOpeningAborter?.abort();
-  const aborter = new AbortController();
-  autoOpeningAborter = aborter;
-  setState('autoMode', {
-    phase: 'planning',
-    activity: { id: ++generatedActivityId, status: 'working', key: 'autoMode.agent.openingSource' },
-  });
-  try {
-    const response = await api.planDjQueue({
-      dj_profile: state.autoMode.djProfile,
-      direction: state.autoMode.direction,
-      session_id: randomId(),
-      segment_index: 0,
-      sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
-      heard: [],
-      exclude: state.autoMode.avoidedIdentities,
-      limit: 8,
-    }, aborter.signal);
-    if (aborter.signal.aborted || !state.autoMode.active || sessionEpoch !== autoSessionEpoch || state.playback.currentTrack) return;
-    if (!startAutoFromSourcePlan(response)) throw new Error('no opening');
-  } catch (error) {
-    if (aborter.signal.aborted) return;
-    setState('autoMode', {
-      phase: 'degraded',
-      activity: { id: ++generatedActivityId, status: 'error', key: 'autoMode.agent.openingFailed' },
-    });
-    toast.error(tr('toast.autoModeOpeningFailed'));
-  } finally {
-    if (autoOpeningAborter === aborter) autoOpeningAborter = null;
-  }
-}
-
-async function confirmNormalMode(
-  kind: 'podcast' | 'radio',
-  proceed: () => void | Promise<void>,
-): Promise<void> {
-  const ok = await confirmDialog({
-    title: tr('modeChange.toNormalTitle'),
-    message: tr(kind === 'podcast' ? 'modeChange.podcastMessage' : 'modeChange.radioMessage'),
-    confirmLabel: tr(kind === 'podcast' ? 'modeChange.playPodcast' : 'modeChange.startRadio'),
-  });
-  if (!ok || !state.autoMode.active) return;
-  actions.exitAutoMode();
-  await proceed();
-}
-
-/**
- * Take one occurrence out of the route, along with any bridges the DJ built to
- * reach it — they exist only to arrive somewhere nobody is going any more.
- *
- * Returns the entry that was dropped so the caller can name it, or null when
- * the request is refused: the cued handoff is already loaded and is not
- * anybody's to remove.
- */
-function dropAutoRouteOccurrence(queueId: string): PlaybackQueueEntry | null {
-  if (!state.autoMode.active || committedTransition?.queueId === queueId) return null;
-  const track = state.playback.queue.find((entry) => entry.queueId === queueId);
-  if (!track) return null;
-  const owned = new Set(state.playback.queue
-    .filter((entry) => entry.autoRoute?.kind === 'bridge' && entry.autoRoute.ownerQueueId === queueId)
-    .map((entry) => entry.queueId));
-  owned.add(queueId);
-  setState('playback', 'queue', (queue) => queue.filter((entry) => !owned.has(entry.queueId)));
-  setState('autoMode', 'plan', (plan) => Object.fromEntries(
-    Object.entries(plan).filter(([id]) => !owned.has(id)),
-  ));
-  setState('autoMode', 'staleSeams', (seams) => seams.filter((id) => !owned.has(id)));
-  void generatedQueue?.ensureRunway();
-  return track;
-}
-
-/** Keep a song out of the rest of this session, undoably. Removal is the
- * caller's business; this only decides what the planner may reach for. */
-function avoidAutoIdentity(track: Track): void {
-  const identity = autoRecommendationIdentity(track);
-  const sessionEpoch = autoSessionEpoch;
-  setState('autoMode', 'avoidedIdentities', (identities) => (
-    identities.includes(identity) ? identities : [...identities, identity]
-  ));
-  toast.action(tr('autoMode.route.avoided', { title: track.title }), tr('common.undo'), () => {
-    if (!state.autoMode.active || autoSessionEpoch !== sessionEpoch) return;
-    setState('autoMode', 'avoidedIdentities', (identities) => identities.filter((value) => value !== identity));
-  });
-}
-
-let replanTimer: ReturnType<typeof setTimeout> | null = null;
-const REPLAN_DEBOUNCE_MS = 800;
-
-/**
- * Rewrite the uncommitted runway after a direction change.
- *
- * Debounced and coalesced: a listener nudging three controls in a row is one
- * intention, not three replans. Nothing that is already committed is touched,
- * so the music that is playing — and the one blend that is prepared — carries
- * on undisturbed.
- */
-/**
- * What the listener just asked for, in their terms.
- *
- * The booth reports back the instruction it received, not the internal profile
- * it derived from it — "retuning to balanced" was a leftover from a control the
- * listener no longer touches, and it told them nothing about their own request.
- * A literal string is the listener's own words; a value starting with
- * `autoMode.` is translated on the way out.
- */
-let replanNote = '';
-
-function scheduleRunwayReplan(note: string): void {
-  if (!state.autoMode.active) return;
-  replanNote = note;
-  if (replanTimer) clearTimeout(replanTimer);
-  setState('autoMode', {
-    pendingDirection: true,
-    // Answer the gesture immediately. Waiting out the debounce before saying
-    // anything reads as a surface that ignored you.
-    activity: {
-      id: ++generatedActivityId,
-      status: 'working',
-      key: 'autoMode.agent.heard',
-      values: { note },
-    },
-  });
-  replanTimer = setTimeout(() => {
-    replanTimer = null;
-    setState('autoMode', 'pendingDirection', false);
-    if (state.autoMode.active) void ensureGeneratedQueue().replan(state.autoMode.profile);
-  }, REPLAN_DEBOUNCE_MS);
-}
-
-function cancelRunwayReplan(): void {
-  if (replanTimer) clearTimeout(replanTimer);
-  replanTimer = null;
-  replanNote = '';
-  setState('autoMode', 'pendingDirection', false);
-}
-
-/**
- * How far short of the duration an `ended` is treated as a cut stream.
- *
- * A track that really finished ends within a frame of its duration. One that
- * ends thirty seconds early did not finish — the stream was cut, which over a
- * patchy mobile link is the common case, and advancing the queue there loses the
- * rest of a song the listener was in the middle of.
- */
-const PREMATURE_END_SECONDS = 3;
-
-/** The queue entry playback ran out on, so a late plan knows what it resumes. */
-let starvedQueueId: string | null = null;
-
-/**
- * Out of music, but not done.
- *
- * Everything that could bring the next track is already in flight or scheduled —
- * the generated-queue retry backoff, a reconnecting socket, the app coming back
- * to the foreground — and each of those calls `resumeFromStarved`. The old code
- * set `paused` here, which was indistinguishable from a listener pausing and so
- * nothing ever looked at it again: on a drive, one bad minute of signal ended
- * the music for the rest of the journey.
- */
-function enterStarved(): void {
-  starvedQueueId = state.playback.queue[state.playback.index]?.queueId ?? null;
-  setState('playback', { isPlaying: false, isLoading: false, phase: 'starved' });
-  emitPlaybackEvent('ui_queue_starved', {
-    lane_remaining: futureEntries(state.playback.queue, state.playback.index).length,
-    auto_mode: state.autoMode.active,
-    radio: state.playback.radioMode,
-    // Starving in the foreground is a spinner; starving with the phone locked is
-    // a drive that goes quiet, because the refill it waits on cannot complete.
-    hidden: typeof document !== 'undefined' && document.visibilityState === 'hidden',
-  });
-}
-
-/** Pick the music back up if the runway has since been extended. */
-function resumeFromStarved(): void {
-  if (state.playback.phase !== 'starved') return;
-  const pb = state.playback;
-  if (pb.queue[pb.index]?.queueId !== starvedQueueId) return;
-  if (pb.index >= pb.queue.length - 1) {
-    // Nothing yet. Ask again — for autoplay this is also what re-arms the
-    // controller's own retry, which is otherwise only started by a failure.
-    void ensureAutoplay(true);
-    void generatedQueue?.refillNow();
-    return;
-  }
-  if (state.autoMode.active) promotePreparedAutoSuccessor();
-  const next = state.playback.queue[state.playback.index + 1];
-  if (!next || !trackPrepared(next)) {
-    prefetchUpcoming();
-    return;
-  }
-  starvedQueueId = null;
-  loadIndex(state.playback.index + 1, { trigger: 'ended' });
-}
-
-/** Inside the last minute of a track, a thin lane is refilled without waiting
- * for the track change that would otherwise have triggered it. */
-const RUNWAY_LEAD_SECONDS = 60;
-/** How often an empty lane is allowed to re-ask for music inside that minute. */
-const EMPTY_RUNWAY_RETRY_MS = 5_000;
-let runwayCheckedFor = '';
-let lastEmptyRefillAt = 0;
-
-/**
- * Notice a lane running out before the music does.
- *
- * Refills used to be requested only when a track *started*. If the request that
- * followed a track change failed, nothing asked again until the next track
- * change — which, at the end of the lane, never came. Riding `timeupdate` costs
- * one comparison per event and gives a thin lane a whole minute of runway to be
- * filled in, retries included.
- */
-function watchRunway(snapshot: ProgramPlaybackSnapshot): void {
-  const pb = state.playback;
-  const duration = snapshot.duration;
-  if (!Number.isFinite(duration) || duration <= 0) return;
-  if (duration - snapshot.position > RUNWAY_LEAD_SECONDS) return;
-  const key = pb.queue[pb.index]?.queueId ?? '';
-  if (!key) return;
-  // The check is latched per track, but an empty runway un-latches it: a lane
-  // that was long enough a moment ago and is not any more has to be asked about
-  // again, and this last minute is the only chance to fix it before `ended`
-  // arrives and there is nothing to play.
-  const empty = pb.index >= pb.queue.length - 1;
-  if (runwayCheckedFor === key && !empty) return;
-  // `timeupdate` arrives four times a second, so the un-latched case needs a
-  // rate of its own or a lane that stays empty becomes a request storm.
-  if (empty && Date.now() - lastEmptyRefillAt < EMPTY_RUNWAY_RETRY_MS) return;
-  if (empty) lastEmptyRefillAt = Date.now();
-  runwayCheckedFor = key;
-  // Also re-stages: an entry that landed after this track started would not
-  // otherwise be cued up on the idle deck in time to matter.
-  stageNext();
-  // Forced when the lane is actually empty. Waiting for `ended` to discover it
-  // means asking the network from a page iOS has already frozen, which is how a
-  // drive ends in silence — the answer arrives when the phone is unlocked.
-  void ensureAutoplay(empty);
-  if (pb.radioMode || state.autoMode.active) {
-    void (empty ? generatedQueue?.refillNow() : generatedQueue?.ensureRunway());
-  }
-}
-
-/**
- * How this track boundary is about to be crossed, as flags on `ui_track_ended`.
- *
- * The whole point of a drive is that nobody is watching it. Without this, a car
- * journey that went quiet between two songs can only be reconstructed from
- * memory; with it, every boundary says whether it was handed over from a deck
- * that already had the stream (the only continuation a locked iPhone allows),
- * blended by the DJ, fetched from the network, or met with an empty queue.
- */
-function boundaryFacts(): Record<string, boolean> {
-  const next = nextEntry();
-  return {
-    hidden: typeof document !== 'undefined' && document.visibilityState === 'hidden',
-    handoff_dj: audioService.mixPhase() !== 'idle',
-    handoff_staged: !!next && stagedEntry?.queueId === next.queueId,
-    starved: !next,
-  };
-}
-
-/** Move a verified generated fallback to the next slot without jumping over a
- * listener request. Returns true when the immediate successor can play without
- * first acquiring internet bytes. */
-function promotePreparedAutoSuccessor(): boolean {
-  const pb = state.playback;
-  const immediate = pb.queue[pb.index + 1];
-  if (!immediate) return false;
-  if (trackPrepared(immediate)) return true;
-  if (immediate.queueLane !== 'generated') return false;
-  let readyIndex = -1;
-  for (let index = pb.index + 2; index < pb.queue.length; index += 1) {
-    const candidate = pb.queue[index];
-    if (candidate.queueLane !== 'generated') break;
-    if (trackPrepared(candidate)) {
-      readyIndex = index;
-      break;
-    }
-  }
-  if (readyIndex === -1) return false;
-  setState('playback', 'queue', (queue) => {
-    const copy = queue.slice();
-    const [ready] = copy.splice(readyIndex, 1);
-    copy.splice(pb.index + 1, 0, ready);
-    return copy;
-  });
-  return true;
-}
-
-/** React to the engine's acquisition verdict instead of guessing readiness
- * from an accepted job. Terminal failures remove only future occurrences and
- * preserve the lane/context ordering already encoded by the queue. */
-function onPreviewPreparation(videoId: string, status: PreviewPreparation): void {
-  const pb = state.playback;
-  if (pb.currentTrack && playbackYoutubeId(pb.currentTrack) === videoId) {
-    setState('playback', 'previewPreparation', status);
-  }
-  const future = pb.queue.slice(Math.max(0, pb.index + 1));
-  const matching = future.filter((entry) => playbackYoutubeId(entry) === videoId);
-  if (status.state === 'unavailable' && matching.length > 0) {
-    const failedIds = new Set(matching.map((entry) => entry.queueId));
-    for (const entry of matching) generatedQueue?.exclude(entry);
-
-    if (state.autoMode.active) {
-      for (const entry of matching) {
-        if (entry.queueLane === 'generated') dropAutoRouteOccurrence(entry.queueId);
-      }
-    }
-    // Auto's route helper may already have removed generated entries and their
-    // bridges. This second pass owns manual/context and non-Auto generated
-    // lanes, and is intentionally occurrence-scoped.
-    setState('playback', 'queue', (queue) => queue.filter((entry) => !failedIds.has(entry.queueId)));
-    if (stagedEntry && failedIds.has(stagedEntry.queueId)) {
-      stagedEntry = null;
-      audioService.clearStaged();
-    }
-    emitPlaybackEvent('ui_preview_unavailable', {
-      occurrences: matching.length,
-      retry_after_sec: status.retry_after ?? 0,
-    }, {
-      video_id: videoId,
-      queue_lane: matching[0]?.queueLane,
-      queue_source: matching[0]?.queueSource,
-    });
-    if (matching.some((entry) => entry.queueLane === 'generated')) {
-      void generatedQueue?.refillNow();
-    }
-    prefetchUpcoming();
-  }
-  if (status.state === 'ready') promotePreparedAutoSuccessor();
-  stageNext();
-  resumeFromStarved();
-}
-
-function onEnded(): void {
-  // The track played to its end either way, so its delivery is reportable before
-  // anything is decided about what follows.
-  concludeAttempt(activeAttempt, 'ended');
-  // A committed handoff owns the end of this track: the mixer starts the blend
-  // off the same moment, and advancing the queue here would cancel it.
-  if (audioService.mixPhase() !== 'idle') {
-    emitPlaybackEvent('ui_track_ended', boundaryFacts());
-    return;
-  }
-  const snapshot = audioService.snapshot();
-  const duration = playingDuration();
-  const position = snapshot.position;
-  // The store's clock only advances while the page is awake, so after a spell
-  // with the screen off it is stale. The element is the authority at this point.
-  setState('playback', { currentTime: position, duration });
-  const premature = duration > 0 && position < duration - PREMATURE_END_SECONDS;
-  // Seconds, not milliseconds: the endpoint drops any `_ms` value over five
-  // minutes, which a podcast duration passes comfortably.
-  emitPlaybackEvent('ui_track_ended', {
-    position_sec: Math.round(position),
-    duration_sec: Math.round(duration),
-    premature,
-    ...boundaryFacts(),
-  });
-  if (premature && recoverCurrent('stall')) {
-    // A cut stream, not a finished song: reload and carry on from here rather
-    // than skipping the rest of it.
-    emitPlaybackEvent('ui_premature_end', { position_sec: Math.round(position) });
-    return;
-  }
-  const pb = state.playback;
-  if (pb.repeat === 'one') {
-    audioService.seek(0);
-    void audioService.resume().catch(() => {});
-    return;
-  }
-  // Whatever happens next, the track that just played is over: leave the
-  // transport reading complete instead of frozen wherever the page last looked.
-  if (duration > 0) setState('playback', 'currentTime', duration);
-  listeningLearning.complete(pb.currentTrack, duration);
-  if (pb.index < pb.queue.length - 1 || pb.repeat === 'all') {
-    if (state.autoMode.active) promotePreparedAutoSuccessor();
-    const successor = nextEntry();
-    if (successor && !trackPrepared(successor)) {
-      prefetchUpcoming();
-      enterStarved();
-      return;
-    }
-    actions.next('ended');
-    return;
-  }
-  const continuousIntent = pb.radioMode
-    ? 'radio'
-    : state.autoMode.active
-      ? 'auto_mode'
-      : null;
-  if (!continuousIntent && !pb.autoplayEnabled) {
-    // The listener turned continuous play off: the end of the queue is the end,
-    // and saying "finding more music" would be a lie.
-    setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
-    return;
-  }
-  const endedQueueId = pb.queue[pb.index]?.queueId;
-  const extend = continuousIntent
-    ? generatedQueue?.refillNow() ?? Promise.resolve(false)
-    : ensureAutoplay(true);
-  enterStarved();
-  void extend.then((ready) => {
-    const current = state.playback.queue[state.playback.index];
-    if (state.playback.phase !== 'starved' || current?.queueId !== endedQueueId) return;
-    if (continuousIntent && generatedQueue?.activeIntent() !== continuousIntent) return;
-    if (ready && state.playback.index < state.playback.queue.length - 1) resumeFromStarved();
-  });
-}
-
-/** Apply a playlist mutation response (authoritative playlists + settings). */
 function applyPlaylistMutation(res: { playlists?: PlaylistMap; settings?: LibrarySettings }): void {
   if (res.playlists) setState('playlists', res.playlists);
   if (res.settings) setState('librarySettings', res.settings);
 }
-
 
 export const actions = {
   syncLibrary,
@@ -2146,14 +208,14 @@ export const actions = {
     pendingImmediateAutoTrack = null;
     autoOpeningAborter?.abort();
     autoOpeningAborter = null;
-    autoHandoffFailures = 0;
-    autoHandoffCooldownUntil = 0;
+    dj.autoHandoffFailures = 0;
+    dj.autoHandoffCooldownUntil = 0;
     autoPlaybackPrefs = {
       shuffle: state.playback.shuffle,
       repeat: state.playback.repeat,
     };
-    discardFutureAutoplay();
-    cancelPendingRadio();
+    transport.discardFutureAutoplay();
+    transport.cancelPendingRadio();
     // Take the wheel while preserving explicit queue occurrences.
     const prefix = state.playback.queue.slice(0, state.playback.index + 1);
     const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
@@ -2198,7 +260,7 @@ export const actions = {
 
   /** Leave Auto: generated guesses disappear; user route occurrences survive. */
   exitAutoMode(): void {
-    cancelRunwayReplan();
+    dj.cancelRunwayReplan();
     pendingImmediateAutoTrack = null;
     autoOpeningAborter?.abort();
     autoOpeningAborter = null;
@@ -2211,7 +273,7 @@ export const actions = {
       .filter((entry) => (
         entry.queueLane === 'manual'
         || entry.autoRoute?.kind === 'user'
-        || (audioService.mixPhase() === 'crossfading' && committedTransition?.queueId === entry.queueId)
+        || (audioService.mixPhase() === 'crossfading' && dj.committedTransition?.queueId === entry.queueId)
       ))
       .map((entry) => ({ ...entry, queueLane: 'manual' as const, queueSource: 'add_to_queue' as const, autoRoute: undefined }));
     setState('playback', 'queue', [...prefix, ...survivors]);
@@ -2249,8 +311,8 @@ export const actions = {
     // A source is direction, never an implied playback request — and rewriting
     // the runway is not one, so a session waiting on a red light takes the
     // steer exactly like a sounding one. `removeAutoSource` always did.
-    if (state.playback.currentTrack) scheduleRunwayReplan(tr('autoMode.note.direction'));
-    else void startAutoFromSources();
+    if (state.playback.currentTrack) dj.scheduleRunwayReplan(tr('autoMode.note.direction'));
+    else void dj.startAutoFromSources();
   },
 
   /** Steer the session from one song.
@@ -2276,7 +338,7 @@ export const actions = {
     if (!state.autoMode.active) return;
     setState('autoMode', 'sources', (sources) => sources.filter((source) => source.id !== id));
     if (state.playback.currentTrack && state.autoMode.heard.length) {
-      scheduleRunwayReplan(tr('autoMode.note.direction'));
+      dj.scheduleRunwayReplan(tr('autoMode.note.direction'));
     }
   },
 
@@ -2288,16 +350,16 @@ export const actions = {
    * belong on one control rather than two.
    */
   removeAutoRouteOccurrence(queueId: string): void {
-    const track = dropAutoRouteOccurrence(queueId);
+    const track = dj.dropAutoRouteOccurrence(queueId);
     if (!track) return;
     toast.action(tr('autoMode.note.dropped', { title: track.title }), tr('autoMode.route.avoidSession'), () => {
-      if (state.autoMode.active) avoidAutoIdentity(track);
+      if (state.autoMode.active) dj.avoidAutoIdentity(track);
     });
   },
 
   avoidAutoTrackForSession(queueId: string): void {
-    const track = dropAutoRouteOccurrence(queueId);
-    if (track) avoidAutoIdentity(track);
+    const track = dj.dropAutoRouteOccurrence(queueId);
+    if (track) dj.avoidAutoIdentity(track);
   },
 
   setAutoProfile(profile: AutoProfile): void {
@@ -2307,7 +369,7 @@ export const actions = {
       /* private mode / storage disabled */
     }
     setState('autoMode', 'profile', profile);
-    scheduleRunwayReplan(tr(`autoMode.note.crate.${profile}`));
+    dj.scheduleRunwayReplan(tr(`autoMode.note.crate.${profile}`));
   },
 
   setAutoDjProfile(profile: DjProfile): void {
@@ -2317,14 +379,14 @@ export const actions = {
       /* private mode / storage disabled */
     }
     setState('autoMode', 'djProfile', profile);
-    scheduleRunwayReplan(tr(`autoMode.note.dj.${profile}`));
+    dj.scheduleRunwayReplan(tr(`autoMode.note.dj.${profile}`));
   },
 
   /** `note` is what the listener asked for, for the booth to repeat back: their
    * own words when they typed them, otherwise the control they moved. */
   setAutoDirection(direction: Partial<DjDirection>, note?: string): void {
     setState('autoMode', 'direction', (current) => ({ ...current, ...direction }));
-    scheduleRunwayReplan(note ?? tr('autoMode.note.direction'));
+    dj.scheduleRunwayReplan(note ?? tr('autoMode.note.direction'));
   },
 
   /** Say something in the booth's voice without touching the route — used while
@@ -2336,7 +398,7 @@ export const actions = {
 
   async placeAutoTrack(track: Track, beforeQueueId?: string): Promise<void> {
     if (!state.autoMode.active || isPodcastTrack(track)) return;
-    const floor = insertionFloor();
+    const floor = dj.insertionFloor();
     const route = state.playback.queue.slice(floor + 1);
     const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
     const occurrence = {
@@ -2345,7 +407,7 @@ export const actions = {
     };
     if (!seed) {
       setState('playback', { queue: [occurrence], index: 0, shuffle: false, repeat: 'off' });
-      loadIndex(0);
+      transport.loadIndex(0);
       void ensureGeneratedQueue().start('auto_mode', occurrence, state.autoMode.profile);
       return;
     }
@@ -2363,8 +425,8 @@ export const actions = {
     try {
       const response = await api.placeDjTrack({
         dj_profile: state.autoMode.djProfile,
-        seed: djItemRef(seed),
-        route: route.map((entry) => ({ ...djItemRef(entry), queue_id: entry.queueId })),
+        seed: dj.djItemRef(seed),
+        route: route.map((entry) => ({ ...dj.djItemRef(entry), queue_id: entry.queueId })),
         track,
         requested_queue_id: occurrence.queueId,
         before_queue_id: beforeQueueId,
@@ -2373,15 +435,15 @@ export const actions = {
         exclude: state.autoMode.avoidedIdentities,
       });
       if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
-      const currentRoute = state.playback.queue.slice(insertionFloor() + 1);
+      const currentRoute = state.playback.queue.slice(dj.insertionFloor() + 1);
       if (currentRoute.map((entry) => entry.queueId).join('|') !== routeSignature) {
-        const currentFloor = insertionFloor();
+        const currentFloor = dj.insertionFloor();
         const before = beforeQueueId
           ? state.playback.queue.findIndex((entry) => entry.queueId === beforeQueueId)
           : currentFloor + 1;
         const at = before > currentFloor ? before : currentFloor + 1;
         setState('playback', 'queue', (queue) => [...queue.slice(0, at), occurrence, ...queue.slice(at)]);
-        prefetchUpcoming();
+        transport.prefetchUpcoming();
         return;
       }
       const entries = response.items.map((item) => {
@@ -2447,7 +509,7 @@ export const actions = {
         ));
         void generatedQueue?.ensureRunway();
       });
-      prefetchUpcoming();
+      transport.prefetchUpcoming();
     } catch {
       // The user's placement is authoritative even if musical analysis is not.
       setState('playback', 'queue', (queue) => [
@@ -2461,7 +523,7 @@ export const actions = {
         key: 'autoMode.agent.placedFallback',
         values: { title: track.title },
       });
-      prefetchUpcoming();
+      transport.prefetchUpcoming();
     }
   },
 
@@ -2481,7 +543,7 @@ export const actions = {
    */
   async repairAutoRoute(): Promise<void> {
     if (!state.autoMode.active || state.autoMode.repairing) return;
-    const floor = insertionFloor();
+    const floor = dj.insertionFloor();
     const seed = state.playback.queue[floor] ?? state.playback.currentTrack;
     const route = state.playback.queue.slice(floor + 1);
     // One seam is a transition, not a route. There is nothing to re-seam.
@@ -2492,7 +554,7 @@ export const actions = {
     const previousQueue = state.playback.queue.slice();
     const previousPlan = { ...state.autoMode.plan };
     const previousStaleSeams = state.autoMode.staleSeams.slice();
-    const anchors = route.filter((entry) => autoRouteKind(entry) === 'user').map((entry) => entry.queueId);
+    const anchors = route.filter((entry) => dj.autoRouteKind(entry) === 'user').map((entry) => entry.queueId);
 
     setState('autoMode', {
       repairing: true,
@@ -2501,18 +563,18 @@ export const actions = {
     try {
       const response = await api.repairDjRoute({
         dj_profile: state.autoMode.djProfile,
-        seed: djItemRef(seed),
+        seed: dj.djItemRef(seed),
         route: route.map((entry) => ({
-          ...djItemRef(entry),
+          ...dj.djItemRef(entry),
           queue_id: entry.queueId,
-          route_kind: autoRouteKind(entry),
+          route_kind: dj.autoRouteKind(entry),
         })),
         sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
         heard: state.autoMode.heard,
         exclude: state.autoMode.avoidedIdentities,
       });
       if (!state.autoMode.active || sessionEpoch !== autoSessionEpoch) return;
-      const currentFloor = insertionFloor();
+      const currentFloor = dj.insertionFloor();
       const unchanged = state.playback.queue
         .slice(currentFloor + 1)
         .map((entry) => entry.queueId)
@@ -2583,14 +645,14 @@ export const actions = {
         staleSeams: [],
         activity: { id: ++generatedActivityId, status: 'done', key: 'autoMode.agent.repaired' },
       });
-      prefetchUpcoming();
+      transport.prefetchUpcoming();
       toast.action(tr('autoMode.note.repaired'), tr('common.undo'), () => {
         if (!state.autoMode.active || autoSessionEpoch !== sessionEpoch) return;
-        if (insertionFloor() !== floor) return;
+        if (dj.insertionFloor() !== floor) return;
         if (state.playback.queue[floor]?.queueId !== previousQueue[floor]?.queueId) return;
         setState('playback', 'queue', previousQueue);
         setState('autoMode', { plan: previousPlan, staleSeams: previousStaleSeams });
-        prefetchUpcoming();
+        transport.prefetchUpcoming();
       });
     } catch {
       // Nothing was written — the queue is only touched once an answer lands —
@@ -2616,7 +678,7 @@ export const actions = {
       const pb = state.playback;
       const next = pb.queue[pb.index + 1];
       const current = pb.currentTrack;
-      listeningLearning.skip(current, playingDuration());
+      listeningLearning.skip(current, dj.playingDuration());
       if (audioService.mixPhase() !== 'idle') {
         // A blend was already prepared for this exact pair: bring it forward.
         audioService.startMixNow();
@@ -2624,8 +686,8 @@ export const actions = {
         const fromKey = queueIdentity(current);
         const item = state.autoMode.plan[next.queueId];
         const chained = item?.fromKey === fromKey ? item.transition : undefined;
-        const trusted = (chained?.confidence ?? 0) >= TRUSTED_CONFIDENCE;
-        commitTransition(next, fromKey, {
+        const trusted = (chained?.confidence ?? 0) >= dj.TRUSTED_CONFIDENCE;
+        dj.commitTransition(next, fromKey, {
           technique: trusted ? chained!.technique : 'safe_fade',
           out_cue: 0, // a manual skip blends from wherever the track is now
           in_cue: trusted ? chained!.in_cue : 0,
@@ -2672,15 +734,15 @@ export const actions = {
     },
   ): void {
     if (!tracks[i]) return;
-    discardFutureAutoplay();
+    transport.discardFutureAutoplay();
     const isRadio = opts?.radio === true;
-    if (!isRadio) cancelPendingRadio();
+    if (!isRadio) transport.cancelPendingRadio();
     if (!isRadio && state.autoMode.active) {
       const selected = tracks[i];
       if (isPodcastTrack(selected)) {
-        void confirmNormalMode('podcast', () => actions.playFrom(tracks, i, opts));
+        void dj.confirmNormalMode('podcast', () => actions.playFrom(tracks, i, opts));
       } else {
-        mixAutoTrackNow(selected);
+        dj.mixAutoTrackNow(selected);
       }
       return;
     }
@@ -2702,7 +764,7 @@ export const actions = {
       radioLoading: isRadio ? state.playback.radioLoading : false,
       radioSeedId: isRadio ? (tracks[i]?.id ?? null) : null,
     });
-    loadIndex(i);
+    transport.loadIndex(i);
   },
 
   /** Play a single track (queue = just this track). */
@@ -2723,19 +785,19 @@ export const actions = {
   /** Play a podcast episode: queue = just this episode; stream via a minted token. */
   async playEpisode(ep: PodcastEpisode, showTitle?: string, feedId?: string): Promise<void> {
     if (state.autoMode.active) {
-      await confirmNormalMode('podcast', () => actions.playEpisode(ep, showTitle, feedId));
+      await dj.confirmNormalMode('podcast', () => actions.playEpisode(ep, showTitle, feedId));
       return;
     }
-    discardFutureAutoplay();
-    cancelPendingRadio();
+    transport.discardFutureAutoplay();
+    transport.cancelPendingRadio();
     const track = podcastEpisodeToTrack(ep, showTitle, feedId);
     // Tapping the same episode again while its token is still being minted must
     // not mint a second one.
     const pb = state.playback;
     if (pb.currentTrack?.id === track.id && (pb.isLoading || pb.isPlaying)) return;
     userPlaybackStartedThisSession = true;
-    const generation = beginLoad();
-    createPlaybackAttempt(track, generation, 'podcast');
+    const generation = transport.beginLoad();
+    transport.createPlaybackAttempt(track, generation, 'podcast');
     setState('playback', {
       currentTrack: track,
       queue: [createQueueEntry(track, 'context', 'podcast', {
@@ -2754,13 +816,13 @@ export const actions = {
       radioLoading: false,
       radioSeedId: null,
     });
-    updateMediaSession(track);
+    transport.updateMediaSession(track);
     try {
       const { stream_token } = await api.podcastPeek(ep.enclosure_url);
       if (!stream_token) throw new Error('no token');
       await audioService.load(podcastStreamUrl(stream_token), 1);
     } catch {
-      onPlaybackFailed(generation, 'load');
+      transport.onPlaybackFailed(generation, 'load');
     }
   },
 
@@ -2822,7 +884,7 @@ export const actions = {
     if (pb.phase === 'starved') {
       audioService.unlockAudio();
       setState('playback', 'needsGesture', false);
-      resumeFromStarved();
+      dj.resumeFromStarved();
       return;
     }
     // An Auto session with nobody planning for it: the workspace was entered
@@ -2835,10 +897,10 @@ export const actions = {
       }
       void ensureGeneratedQueue().start('auto_mode', pb.currentTrack, state.autoMode.profile);
     }
-    const generation = beginLoad();
-    const attempt = createPlaybackAttempt(pb.currentTrack, generation, 'resume');
+    const generation = transport.beginLoad();
+    const attempt = transport.createPlaybackAttempt(pb.currentTrack, generation, 'resume');
     setState('playback', { isLoading: true, phase: 'loading' });
-    void audioService.resume(origin).catch(() => onPlaybackFailed(attempt.generation, 'load'));
+    void audioService.resume(origin).catch(() => transport.onPlaybackFailed(attempt.generation, 'load'));
   },
 
   /** Stop, and mean it. The other half of the pair above. */
@@ -2848,7 +910,7 @@ export const actions = {
     vibrate();
     if (pb.loadError) return;
     if (pb.phase === 'loading' || pb.phase === 'recovering') {
-      cancelActiveAttempt('user_pause');
+      transport.cancelActiveAttempt('user_pause');
       setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
       const previewId = pb.currentTrack.source === 'preview' ? playbackYoutubeId(pb.currentTrack) : null;
       if (previewId) void api.cancelPreview(previewId).catch(() => {});
@@ -2860,8 +922,8 @@ export const actions = {
   retryCurrent(): void {
     const pb = state.playback;
     if (!pb.currentTrack || pb.index < 0) return;
-    consecutiveLoadFailures = 0;
-    loadIndex(pb.index, { restart: true, trigger: 'retry', freshDeck: true });
+    transport.consecutiveLoadFailures = 0;
+    transport.loadIndex(pb.index, { restart: true, trigger: 'retry', freshDeck: true });
   },
 
   next(trigger: PlaybackTrigger = 'next'): void {
@@ -2870,12 +932,12 @@ export const actions = {
     if (audioService.mixPhase() !== 'idle') audioService.cancelMix('load');
     const pb = state.playback;
     if (pb.queue.length === 0) return;
-    if (pb.index < pb.queue.length - 1) loadIndex(pb.index + 1, { trigger });
+    if (pb.index < pb.queue.length - 1) transport.loadIndex(pb.index + 1, { trigger });
     else if (pb.repeat === 'all') {
-      const cycle = repeatCycle(pb.queue);
+      const cycle = transport.repeatCycle(pb.queue);
       if (cycle.length > 0) {
         setState('playback', { queue: cycle, index: 0 });
-        loadIndex(0, { trigger });
+        transport.loadIndex(0, { trigger });
       }
     }
   },
@@ -2886,19 +948,19 @@ export const actions = {
       return;
     }
     const pb = state.playback;
-    if (pb.index > 0) loadIndex(pb.index - 1);
+    if (pb.index > 0) transport.loadIndex(pb.index - 1);
     else actions.seek(0);
   },
 
   seek(t: number): void {
     audioService.seek(t);
     setState('playback', 'currentTime', Math.max(0, t));
-    pushPlaybackState();
+    sessionController.pushPlaybackState();
   },
 
   /** Jump to a specific entry in the current queue. */
   jumpTo(i: number): void {
-    loadIndex(i);
+    transport.loadIndex(i);
   },
 
   // ── Queue management (client-side; the playback queue lives in the store) ──
@@ -2912,12 +974,12 @@ export const actions = {
       actions.playTrack(track);
       return;
     }
-    discardFutureAutoplay();
-    const at = manualInsertIndex(state.playback.queue, insertionFloor(), 'last');
+    transport.discardFutureAutoplay();
+    const at = manualInsertIndex(state.playback.queue, dj.insertionFloor(), 'last');
     const entry = createQueueEntry(track, 'manual', 'add_to_queue');
     setState('playback', 'queue', (q) => [...q.slice(0, at), entry, ...q.slice(at)]);
     toast.success(tr('toast.addedToQueue'));
-    prefetchUpcoming();
+    transport.prefetchUpcoming();
   },
 
   /** Play a track right now WITHOUT discarding the queue: jumps to it if it is
@@ -2937,14 +999,14 @@ export const actions = {
       return;
     }
     if (state.autoMode.active) {
-      if (isPodcastTrack(track)) void confirmNormalMode('podcast', () => actions.playNow(track));
-      else mixAutoTrackNow(track);
+      if (isPodcastTrack(track)) void dj.confirmNormalMode('podcast', () => actions.playNow(track));
+      else dj.mixAutoTrackNow(track);
       return;
     }
     // Explicitly requested a different track: cancel generators but preserve
     // the manual/context runway behind the interruption.
-    discardFutureAutoplay();
-    cancelPendingRadio();
+    transport.discardFutureAutoplay();
+    transport.cancelPendingRadio();
     setState('playback', {
       radioMode: false,
       radioLoading: false,
@@ -2953,7 +1015,7 @@ export const actions = {
     const insertAt = pb.index + 1;
     const entry = createQueueEntry(track, 'manual', 'play_next');
     setState('playback', 'queue', (q) => [...q.slice(0, insertAt), entry, ...q.slice(insertAt)]);
-    loadIndex(insertAt);
+    transport.loadIndex(insertAt);
   },
 
   /** Insert a track right after the current one (starts playback if idle). */
@@ -2967,13 +1029,13 @@ export const actions = {
       actions.playTrack(track);
       return;
     }
-    discardFutureAutoplay();
+    transport.discardFutureAutoplay();
     // Never in front of a handoff that is already loaded and cued.
-    const at = insertionFloor() + 1;
+    const at = dj.insertionFloor() + 1;
     const entry = createQueueEntry(track, 'manual', 'play_next');
     setState('playback', 'queue', (q) => [...q.slice(0, at), entry, ...q.slice(at)]);
     toast.success(tr('toast.playNextConfirmed'));
-    prefetchUpcoming();
+    transport.prefetchUpcoming();
   },
 
   /** Remove the queue entry at `i`, keeping playback coherent. */
@@ -2984,7 +1046,7 @@ export const actions = {
     if (i === pb.index) {
       setState('playback', 'queue', next);
       if (next.length === 0) {
-        cancelActiveAttempt('queue_empty');
+        transport.cancelActiveAttempt('queue_empty');
         audioService.stop();
         setState('playback', {
           currentTrack: null,
@@ -2995,7 +1057,7 @@ export const actions = {
           phase: 'idle',
         });
       } else {
-        loadIndex(Math.min(i, next.length - 1));
+        transport.loadIndex(Math.min(i, next.length - 1));
       }
       return;
     }
@@ -3021,7 +1083,7 @@ export const actions = {
       if (to <= index) index++;
     }
     setState('playback', { queue: q, index });
-    prefetchUpcoming();
+    transport.prefetchUpcoming();
   },
 
   /**
@@ -3035,13 +1097,13 @@ export const actions = {
   promoteInAutoRoute(queueId: string): void {
     const pb = state.playback;
     const from = pb.queue.findIndex((entry) => entry.queueId === queueId);
-    const to = insertionFloor() + 1;
+    const to = dj.insertionFloor() + 1;
     if (from <= pb.index || from === to || to > from) return;
     const queue = pb.queue.slice();
     const [entry] = queue.splice(from, 1);
     queue.splice(to, 0, entry);
     setState('playback', 'queue', queue);
-    prefetchUpcoming();
+    transport.prefetchUpcoming();
   },
 
   /**
@@ -3073,7 +1135,7 @@ export const actions = {
       .map((entry) => entry.queueId));
     if (!blockIds.has(ownerId) || (beforeQueueId && blockIds.has(beforeQueueId))) return;
 
-    const floor = insertionFloor();
+    const floor = dj.insertionFloor();
     const start = state.playback.queue.findIndex((entry) => blockIds.has(entry.queueId));
     if (start <= floor) return;
     const block = state.playback.queue.filter((entry) => blockIds.has(entry.queueId));
@@ -3097,7 +1159,7 @@ export const actions = {
       const live = new Set(queue.map((entry) => entry.queueId));
       return [...new Set([...seams.filter((id) => live.has(id)), ...opened])];
     });
-    prefetchUpcoming();
+    transport.prefetchUpcoming();
     const owner = block.find((entry) => entry.queueId === ownerId) ?? source;
     toast.action(tr('autoMode.route.moved', { title: owner.title }), tr('autoMode.route.fix'), () => {
       if (state.autoMode.active) void actions.repairAutoRoute();
@@ -3109,7 +1171,7 @@ export const actions = {
     const pb = state.playback;
     const queue = pb.queue.filter((entry, index) => index <= pb.index || entry.queueLane !== 'manual');
     setState('playback', 'queue', queue);
-    prefetchUpcoming();
+    transport.prefetchUpcoming();
   },
 
   /** Backwards-compatible name for callers outside the queue panel. */
@@ -3132,7 +1194,7 @@ export const actions = {
     const at = pb.index + 1;
     queue.splice(at, 0, entry);
     setState('playback', 'queue', queue);
-    loadIndex(at);
+    transport.loadIndex(at);
   },
 
   /** Start a radio station seeded from a track.
@@ -3156,12 +1218,12 @@ export const actions = {
       return;
     }
     if (state.autoMode.active) {
-      await confirmNormalMode('radio', () => actions.startRadio(seed));
+      await dj.confirmNormalMode('radio', () => actions.startRadio(seed));
       return;
     }
     const t = toast.loading(tr('toast.startingRadio'));
-    discardFutureAutoplay();
-    cancelPendingRadio();
+    transport.discardFutureAutoplay();
+    transport.cancelPendingRadio();
     setState('playback', {
       radioMode: true,
       radioLoading: true,
@@ -3226,7 +1288,7 @@ export const actions = {
    * rest of the pending mix is dropped from the queue. Invoked from the radio
    * badge popup in the player. */
   stopRadio(): void {
-    cancelPendingRadio();
+    transport.cancelPendingRadio();
     const cur = state.playback.queue[state.playback.index];
     const manual = futureEntries(state.playback.queue, state.playback.index, 'manual');
     setState('playback', {
@@ -3244,14 +1306,14 @@ export const actions = {
     const prevPlaylists = Object.fromEntries(Object.entries(state.playlists).map(([n, ids]) => [n, ids.slice()]));
     const prevPlayback = { ...state.playback, queue: state.playback.queue.slice() };
     invalidateLibrarySync();
-    removeTrackReferences(id);
+    sessionController.removeTrackReferences(id);
     try {
       await api.deleteTrack(id);
       await actions.syncLibrary();
       toast.success(tr('toast.trackDeleted'));
     } catch {
       setState({ library: prevLib, playlists: prevPlaylists });
-      restorePlaybackSnapshot(prevPlayback);
+      sessionController.restorePlaybackSnapshot(prevPlayback);
       toast.error(tr('toast.deleteFailed'));
       void actions.syncLibrary();
     }
@@ -3327,7 +1389,7 @@ export const actions = {
       shuffle: nextShuffle,
       queue: [...prefix, ...manual, ...orderedContext, ...generated],
     });
-    prefetchUpcoming();
+    transport.prefetchUpcoming();
   },
 
   setVolume(v: number): void {
@@ -3348,23 +1410,23 @@ export const actions = {
 
   cycleRepeat(): void {
     const next: RepeatMode = state.playback.repeat === 'off' ? 'all' : state.playback.repeat === 'all' ? 'one' : 'off';
-    if (next !== 'off') discardFutureAutoplay();
+    if (next !== 'off') transport.discardFutureAutoplay();
     setState('playback', 'repeat', next);
-    if (next === 'off') queueMicrotask(() => void ensureAutoplay());
+    if (next === 'off') queueMicrotask(() => void transport.ensureAutoplay());
   },
 
   async setAutoplayEnabled(enabled: boolean): Promise<boolean> {
     const previous = state.playback.autoplayEnabled;
     if (enabled === previous) return true;
     setState('playback', 'autoplayEnabled', enabled);
-    if (enabled) queueMicrotask(() => void ensureAutoplay(true));
-    else discardFutureAutoplay();
+    if (enabled) queueMicrotask(() => void transport.ensureAutoplay(true));
+    else transport.discardFutureAutoplay();
     try {
       await api.setAutoplayEnabled(enabled);
       return true;
     } catch {
       setState('playback', 'autoplayEnabled', previous);
-      if (previous) queueMicrotask(() => void ensureAutoplay(true));
+      if (previous) queueMicrotask(() => void transport.ensureAutoplay(true));
       toast.error(tr('toast.updateFailed'));
       return false;
     }
@@ -3373,12 +1435,12 @@ export const actions = {
   async setVolumeLeveling(enabled: boolean): Promise<boolean> {
     const previous = state.playback.volumeLeveling;
     if (enabled === previous) return true;
-    applyVolumeLeveling(enabled);
+    transport.applyVolumeLeveling(enabled);
     try {
       await api.setVolumeLeveling(enabled);
       return true;
     } catch {
-      applyVolumeLeveling(previous);
+      transport.applyVolumeLeveling(previous);
       toast.error(tr('toast.updateFailed'));
       return false;
     }
@@ -3682,7 +1744,7 @@ export const actions = {
     const updatedAt = Number(remote.updated_at) || 0;
     if (updatedAt && Date.now() / 1000 - updatedAt > 24 * 3600) return; // stale (>24h)
     if (remote.device_id === state.device.device_id) {
-      restoreSameDevicePlayback(remote);
+      sessionController.restoreSameDevicePlayback(remote);
       return;
     }
     // Honour the 30-min "No" cooldown unless the other device has played since.
@@ -3706,10 +1768,10 @@ export const actions = {
     if (!track) return;
     userPlaybackStartedThisSession = true;
     const pos = Math.max(0, Number(r.position_sec) || 0);
-    const session = sessionFor(r);
-    if (session && playRestoredSession(session, pos)) return;
+    const session = sessionController.sessionFor(r);
+    if (session && sessionController.playRestoredSession(session, pos)) return;
     actions.playTrack(track);
-    if (pos > 0) setTimeout(() => actions.seek(pos), 400);
+    if (pos > 0) storeLifetime.timeout(() => actions.seek(pos), 400);
   },
   /**
    * Publish this session now, because it is about to be somebody else's.
@@ -3721,7 +1783,7 @@ export const actions = {
    */
   publishSession(): void {
     if (!state.playback.currentTrack) return;
-    pushPlaybackState({ keepalive: true, body: playbackStateBody({ position_sec: livePosition() }) });
+    sessionController.pushPlaybackState({ keepalive: true, body: sessionController.playbackStateBody({ position_sec: sessionController.livePosition() }) });
   },
   /** Decline the resume offer and suppress it for 30 minutes. */
   dismissResume(): void {
@@ -3809,7 +1871,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
       index: state.playback.index,
     }),
     identity: queueIdentity,
-    isCommitted: (entry) => committedTransition?.queueId === entry.queueId,
+    isCommitted: (entry) => dj.committedTransition?.queueId === entry.queueId,
     requestPlan: (intent, profile, seed, limit, exclude, signal, generatedSession) => {
       const seedBody = {
         id: seed.id,
@@ -3828,7 +1890,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
           direction: state.autoMode.direction,
           session_id: generatedSession?.id,
           segment_index: generatedSession?.segmentIndex,
-          context: state.autoMode.heard.slice(-8).map(djItemRef),
+          context: state.autoMode.heard.slice(-8).map(dj.djItemRef),
           seed: seedBody,
           sources: state.autoMode.sources.map(({ id, label, tracks, activation }) => ({ id, label, tracks, activation })),
           heard: state.autoMode.heard,
@@ -3848,7 +1910,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         ? previousUpcoming.filter((entry) => (
             entry.queueLane === 'manual'
             || entry.autoRoute?.kind === 'user'
-            || committedTransition?.queueId === entry.queueId
+            || dj.committedTransition?.queueId === entry.queueId
           ))
         : [];
       const retained = replace
@@ -3867,7 +1929,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
         const runway = previousUpcoming.map((entry) => {
           const preserved = entry.queueLane === 'manual'
             || entry.autoRoute?.kind === 'user'
-            || committedTransition?.queueId === entry.queueId;
+            || dj.committedTransition?.queueId === entry.queueId;
           return preserved ? entry : entries[generatedIndex++];
         }).filter((entry): entry is PlaybackQueueEntry => Boolean(entry));
         runway.push(...entries.slice(generatedIndex));
@@ -3927,12 +1989,12 @@ function ensureGeneratedQueue(): GeneratedQueueController {
           return seams.filter((id) => live.has(id) && plan[id] === undefined);
         });
       }
-      prefetchUpcoming();
+      transport.prefetchUpcoming();
       // New runway. If the music ran out waiting for exactly this, start it
       // again — the plan arriving is the event, and nothing else is watching.
       if (entries.length > 0) {
-        stageNext();
-        resumeFromStarved();
+        transport.stageNext();
+        dj.resumeFromStarved();
       }
       return entries.length;
     },
@@ -3957,7 +2019,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
             status: 'working',
             key: replacing ? 'autoMode.agent.redrawing' : 'autoMode.agent.searching',
             values: replacing
-              ? { note: replanNote }
+              ? { note: dj.replanNote }
               : { title: state.playback.currentTrack?.title ?? '' },
           },
         });
@@ -3976,7 +2038,7 @@ function ensureGeneratedQueue(): GeneratedQueueController {
               ? 'autoMode.agent.steered'
               : 'autoMode.agent.queued',
           values: {
-            note: replanNote,
+            note: dj.replanNote,
             count: response?.items.length ?? 0,
             tracks: response?.items.slice(0, 2).map((item) => item.title).join(' · ') ?? '',
             related: counts.related,
@@ -3998,6 +2060,7 @@ export { applyTheme, resolveTheme, systemPrefersDark } from './theme';
 import { applyTheme } from './theme';
 
 let socket: AppSocket | null = null;
+let storeLifetime = new Lifetime();
 let _warmTimer: ReturnType<typeof setTimeout> | null = null;
 const listeningLearning = new ListeningLearning((event, payload) => {
   void api.emitDiscoveryEvent(event, payload).catch(() => {});
@@ -4037,13 +2100,14 @@ function installAudioUnlock(): void {
     }
   };
   // Capture, so it runs ahead of the click handler that starts the first track.
-  window.addEventListener('pointerdown', unlock, { capture: true });
-  window.addEventListener('touchend', unlock, { capture: true });
-  window.addEventListener('keydown', unlock, { capture: true });
+  storeLifetime.listen(window, 'pointerdown', unlock, { capture: true });
+  storeLifetime.listen(window, 'touchend', unlock, { capture: true });
+  storeLifetime.listen(window, 'keydown', unlock, { capture: true });
 }
 
 export function initStore(): void {
   if (socket) return;
+  storeLifetime = new Lifetime();
 
   // Read now, spent later. Live clears the marker as soon as it has opened the
   // room it was sent here to open, and that can happen before the library sync
@@ -4052,7 +2116,7 @@ export function initStore(): void {
 
   installAudioUnlock();
   setProgramOutputReporter((event) => {
-    emitPlaybackEvent(
+    transport.emitPlaybackEvent(
       'ui_program_output',
       {
         carrier_playing: event.carrierPlaying,
@@ -4069,11 +2133,11 @@ export function initStore(): void {
     );
     if (state.playback.currentTrack) {
       const modeChanged = event.event === 'fallback_entered' || event.event === 'fallback_recovered';
-      updateMediaSession(state.playback.currentTrack, 'output_change', modeChanged);
+      transport.updateMediaSession(state.playback.currentTrack, 'output_change', modeChanged);
     }
   });
-  programMediaSession.setReporter((event) => {
-    emitPlaybackEvent(
+  transport.programMediaSession.setReporter((event) => {
+    transport.emitPlaybackEvent(
       'ui_media_session_sync',
       {
         metadata_revision: event.revision,
@@ -4090,7 +2154,7 @@ export function initStore(): void {
     );
   });
   setProgramTransportReporter((event) => {
-    emitPlaybackEvent(
+    transport.emitPlaybackEvent(
       event.kind === 'inactive_deck_play' ? 'ui_inactive_deck_play' : 'ui_program_transport',
       {
         active_deck: event.activeIndex,
@@ -4109,7 +2173,7 @@ export function initStore(): void {
     // A stale element just tried to reclaim the platform session. Publish the
     // canonical programme again after the audio layer has stopped it.
     if (event.kind === 'inactive_deck_play' && state.playback.currentTrack) {
-      updateMediaSession(state.playback.currentTrack, 'source_anomaly', true);
+      transport.updateMediaSession(state.playback.currentTrack, 'source_anomaly', true);
     }
   });
 
@@ -4124,15 +2188,15 @@ export function initStore(): void {
       .then((settings) => {
         if (typeof settings.autoplay_enabled === 'boolean') {
           setState('playback', 'autoplayEnabled', settings.autoplay_enabled);
-          if (settings.autoplay_enabled) queueMicrotask(() => void ensureAutoplay());
-          else discardFutureAutoplay();
+          if (settings.autoplay_enabled) queueMicrotask(() => void transport.ensureAutoplay());
+          else transport.discardFutureAutoplay();
         }
         // Reconcile the localStorage mirror the store booted from. A ramp
         // rather than a jump, so a device that disagreed with the account
         // corrects itself without a lurch a second into the session.
         if (typeof settings.volume_leveling === 'boolean'
           && settings.volume_leveling !== state.playback.volumeLeveling) {
-          applyVolumeLeveling(settings.volume_leveling);
+          transport.applyVolumeLeveling(settings.volume_leveling);
         }
       })
       .catch(() => {});
@@ -4144,20 +2208,20 @@ export function initStore(): void {
   const a = { addEventListener: (
     type: ProgramMediaEventName,
     handler: (snapshot: ProgramPlaybackSnapshot, event: Event) => void,
-  ) => onProgramEvent(type, handler) };
+  ) => storeLifetime.add(onProgramEvent(type, handler)) };
   a.addEventListener('play', () => {
     setState('playback', 'isPlaying', true);
-    pushPlaybackState();
+    sessionController.pushPlaybackState();
   });
   a.addEventListener('pause', () => {
-    clearStallTimer();
+    transport.clearStallTimer();
     if (state.playback.phase !== 'loading' && state.playback.phase !== 'recovering') {
       setState('playback', { isPlaying: false, isLoading: false, phase: 'paused' });
     }
-    updateMediaSession(state.playback.currentTrack, 'paused');
-    pushPlaybackState();
+    transport.updateMediaSession(state.playback.currentTrack, 'paused');
+    sessionController.pushPlaybackState();
   });
-  a.addEventListener('ended', () => onEnded());
+  a.addEventListener('ended', () => dj.onEnded());
   a.addEventListener('error', (snapshot) => {
     // `stop()` clears src, which some engines report as an error. Nothing is
     // loaded and nothing is expected to be — not a playback failure.
@@ -4166,8 +2230,8 @@ export function initStore(): void {
     // paused. A stale or temporarily unreachable stream may reject that
     // best-effort preload, but nobody asked Soundsible to play it. Only a real
     // playback attempt is allowed to fail visibly.
-    if (!activeAttempt) return;
-    onPlaybackFailed(loadGeneration, 'media_error', {
+    if (!transport.activeAttempt) return;
+    transport.onPlaybackFailed(transport.loadGeneration, 'media_error', {
       media_error_code: snapshot.mediaErrorCode,
       network_state: snapshot.networkState,
       ready_state: snapshot.readyState,
@@ -4176,14 +2240,14 @@ export function initStore(): void {
   // A seek the listener asked for. Remembered so that the `waiting` it is about
   // to cause is not filed as a stream that died.
   a.addEventListener('seeking', () => {
-    if (activeAttempt) activeAttempt.seekPending = true;
+    if (transport.activeAttempt) transport.activeAttempt.seekPending = true;
   });
   // Buffering, both cold (nothing has sounded yet) and mid-track. Either way the
   // transport shows progress instead of a stuck play button — but only the second
   // one is a delivery failure, and they are counted apart.
   a.addEventListener('waiting', () => {
     if (!state.playback.currentTrack) return;
-    const attempt = activeAttempt;
+    const attempt = transport.activeAttempt;
     if (attempt && attempt.bufferStartedAt === null) {
       attempt.bufferStartedAt = performance.now();
       if (attempt.audibleAt !== null) {
@@ -4195,25 +2259,25 @@ export function initStore(): void {
     // A wait long enough to notice is a wait worth explaining. The reading is
     // throttled inside, so a track that stalls repeatedly asks once.
     void refreshLinkReading();
-    scheduleStallRecovery(attempt?.audibleAt == null ? STARTUP_RECOVERY_MS : STALL_RECOVERY_MS);
+    transport.scheduleStallRecovery(attempt?.audibleAt == null ? transport.STARTUP_RECOVERY_MS : transport.STALL_RECOVERY_MS);
   });
   a.addEventListener('canplay', () => {
     // `canplay` can precede actual audio by a noticeable amount; `playing` is
     // the only event that closes the user's click-to-sound attempt.
-    const attempt = activeAttempt;
+    const attempt = transport.activeAttempt;
     if (attempt && attempt.canPlayAt === null) attempt.canPlayAt = performance.now();
   });
   // First 'playing' after a user-initiated load → click-to-sound latency.
   a.addEventListener('playing', (snapshot) => {
-    clearStallTimer();
+    transport.clearStallTimer();
     setState('playback', { isLoading: false, loadError: false, phase: 'playing' });
-    updateMediaSession(state.playback.currentTrack, 'playing');
-    consecutiveLoadFailures = 0;
-    flushWhenAudible();
+    transport.updateMediaSession(state.playback.currentTrack, 'playing');
+    transport.consecutiveLoadFailures = 0;
+    transport.flushWhenAudible();
     // Only verified previews can reach this deck, so staging here reads the
     // engine's disk cache instead of competing with the track that just began.
-    stageNext();
-    const attempt = activeAttempt;
+    transport.stageNext();
+    const attempt = transport.activeAttempt;
     if (!attempt || state.playback.currentTrack?.id !== attempt.trackId) return;
     const now = performance.now();
     const spell = attempt.bufferStartedAt === null ? 0 : Math.max(0, now - attempt.bufferStartedAt);
@@ -4227,7 +2291,7 @@ export function initStore(): void {
       // the sound has only just started — so any number reported here describes
       // the wait that `click_to_playing_ms` already describes. `ui_play_delivery`
       // asks the stall question at a time when it has an answer.
-      emitAttempt(attempt, 'ui_click_to_playing', 'playing', {
+      transport.emitAttempt(attempt, 'ui_click_to_playing', 'playing', {
         click_to_playing_ms: Math.round(now - attempt.startedAt),
         ...(attempt.loadedMetadataAt === null ? {} : {
           loadedmetadata_ms: Math.round(attempt.loadedMetadataAt - attempt.startedAt),
@@ -4242,7 +2306,7 @@ export function initStore(): void {
         buffered_ahead_ms: Math.max(0, Math.round((snapshot.bufferedEnd - snapshot.position) * 1000)),
       });
     } else if (attempt.recoveryCount > attempt.reportedRecoveryCount) {
-      emitAttempt(attempt, 'ui_recovery_succeeded', 'playing', {
+      transport.emitAttempt(attempt, 'ui_recovery_succeeded', 'playing', {
         rebuffer_count: attempt.rebufferCount,
         rebuffer_ms: Math.round(attempt.rebufferMs),
         recovery_count: attempt.recoveryCount,
@@ -4254,25 +2318,25 @@ export function initStore(): void {
     const position = snapshot.position;
     setState('playback', 'currentTime', position);
     listeningLearning.update(state.playback.currentTrack, position, snapshot.playing);
-    evaluateDjRunway();
-    watchRunway(snapshot);
+    dj.evaluateDjRunway();
+    dj.watchRunway(snapshot);
   });
   const setDur = (snapshot: ProgramPlaybackSnapshot) => {
     setState('playback', 'duration', snapshot.duration);
-    updatePositionState();
+    transport.updatePositionState();
   };
   a.addEventListener('durationchange', setDur);
   a.addEventListener('loadedmetadata', (snapshot) => {
-    const attempt = activeAttempt;
+    const attempt = transport.activeAttempt;
     if (attempt && attempt.loadedMetadataAt === null) attempt.loadedMetadataAt = performance.now();
     setDur(snapshot);
   });
   // A seek from anywhere — our transport, the lock screen, a car button — has
   // to re-anchor the OS scrubber or it keeps counting from the old position.
-  a.addEventListener('seeked', () => updatePositionState());
-  a.addEventListener('ratechange', () => updatePositionState());
+  a.addEventListener('seeked', () => transport.updatePositionState());
+  a.addEventListener('ratechange', () => transport.updatePositionState());
   let hiddenSince: number | null = null;
-  document.addEventListener('visibilitychange', () => {
+  storeLifetime.listen(document, 'visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       hiddenSince = Date.now();
       return;
@@ -4291,9 +2355,9 @@ export function initStore(): void {
       });
       // The element is the authority after a spell asleep, and the OS card may
       // have been reading a state nobody corrected while the page was frozen.
-      updateMediaSession(state.playback.currentTrack, 'visibility_resume', true);
+      transport.updateMediaSession(state.playback.currentTrack, 'visibility_resume', true);
       if (hiddenSince !== null && drift > 1) {
-        emitPlaybackEvent('ui_visibility_resume', {
+        transport.emitPlaybackEvent('ui_visibility_resume', {
           hidden_sec: Math.round((Date.now() - hiddenSince) / 1000),
           drift_sec: Math.round(drift),
         });
@@ -4306,21 +2370,21 @@ export function initStore(): void {
     // sequence WebKit punishes, so a page that never had one waits for a tap.
     if (audioService.graphReady()) audioService.unlockAudio();
     // Whatever stopped while we were away gets one more chance now.
-    resumeFromStarved();
+    dj.resumeFromStarved();
     if (state.playback.phase === 'buffering') {
-      const attempt = activeAttempt;
-      scheduleStallRecovery(attempt?.audibleAt == null ? STARTUP_RECOVERY_MS : STALL_RECOVERY_MS);
+      const attempt = transport.activeAttempt;
+      transport.scheduleStallRecovery(attempt?.audibleAt == null ? transport.STARTUP_RECOVERY_MS : transport.STALL_RECOVERY_MS);
     }
   });
   // Page Lifecycle's counterpart to the above, fired on the document: iOS can
   // freeze a backgrounded page outright, and a page that is thawed rather than
   // merely revealed does not always get a `visibilitychange` of its own.
-  document.addEventListener('resume', () => {
+  storeLifetime.listen(document, 'resume', () => {
     if (audioService.graphReady()) audioService.unlockAudio();
-    resumeFromStarved();
+    dj.resumeFromStarved();
   });
 
-  programMediaSession.installActions({
+  transport.programMediaSession.installActions({
     play: () => actions.resumePlayback('media_session'),
     pause: () => actions.pausePlayback('media_session'),
     next: () => {
@@ -4330,9 +2394,9 @@ export function initStore(): void {
     previous: () => actions.prev(),
     seekTo: (position) => actions.seek(position),
     seekBackward: (offset) =>
-      actions.seek(Math.max(0, state.playback.currentTime - (offset ?? osSeekStep('backward')))),
+      actions.seek(Math.max(0, state.playback.currentTime - (offset ?? transport.osSeekStep('backward')))),
     seekForward: (offset) =>
-      actions.seek(state.playback.currentTime + (offset ?? osSeekStep('forward'))),
+      actions.seek(state.playback.currentTime + (offset ?? transport.osSeekStep('forward'))),
   });
 
   socket = createSocket();
@@ -4341,17 +2405,20 @@ export function initStore(): void {
     socket!.emit('playback_register', state.device);
     void api.registerDevice(state.device).catch(() => {});
     void actions.loadDownloads(); // re-seed the queue after a (re)connect
+    invalidateLibrarySync(); // recover library and loudness events missed offline
+    void actions.syncLibrary();
     // The station is reachable again: if the music ran out while it was not,
     // this is the moment that ends the silence.
-    resumeFromStarved();
+    dj.resumeFromStarved();
   });
   socket.on('disconnect', () => setState('online', false));
   // A sweep measured more of the library. Nothing re-levels mid-song; the new
   // numbers ride the refreshed library and apply from the next track on.
   socket.on('loudness_updated', () => {
+    invalidateLibrarySync();
     // New numbers landed, so what was asked for before is now answerable from
     // the library. Anything still missing after the resync is worth asking again.
-    loudnessAsked.clear();
+    transport.loudnessAsked.clear();
     actions.syncLibrarySoon();
   });
 
@@ -4368,8 +2435,8 @@ export function initStore(): void {
     // saves, favourites, deletes) the top seeds may shift, so re-warm the
     // persistent related-mix cache in the background. The server picks its own
     // top seeds; this is fire-and-forget.
-    if (_warmTimer) clearTimeout(_warmTimer);
-    _warmTimer = setTimeout(() => { void api.warmDiscoverSeeds([]).catch(() => {}); }, 4000);
+    if (_warmTimer) storeLifetime.clearTimeout(_warmTimer);
+    _warmTimer = storeLifetime.timeout(() => { void api.warmDiscoverSeeds([]).catch(() => {}); }, 4000);
   });
   // The collection changes without the library changing — a song saved or
   // hearted on another device, or a catalog row that just finished resolving to
@@ -4391,10 +2458,10 @@ export function initStore(): void {
     // A handoff from another device carries that device's whole session, so
     // this one continues it rather than starting the same song over on its own.
     const handedOver = trk && typeof trk.id === 'string'
-      ? sessionFor({ ...(data?.state ?? {}), track_id: trk.id })
+      ? sessionController.sessionFor({ ...(data?.state ?? {}), track_id: trk.id })
       : null;
     const handoffPosition = Number(data?.state?.position_sec);
-    if (handedOver && playRestoredSession(
+    if (handedOver && sessionController.playRestoredSession(
       handedOver,
       Number.isFinite(handoffPosition) ? Math.max(0, handoffPosition) : 0,
     )) {
@@ -4412,7 +2479,7 @@ export function initStore(): void {
       };
       actions.playTrack(t);
       const pos = Number(data?.state?.position_sec);
-      if (Number.isFinite(pos) && pos > 0) setTimeout(() => actions.seek(pos), 400);
+      if (Number.isFinite(pos) && pos > 0) storeLifetime.timeout(() => actions.seek(pos), 400);
     } else if (state.playback.currentTrack) {
       void audioService.resume().catch(() => {});
     }
@@ -4430,20 +2497,20 @@ export function initStore(): void {
   // Keep the published position fresh so other devices resume near where we are
   // — and the session with it, including while paused: a route reordered or a
   // source added during a break is part of what a handoff hands over.
-  setInterval(() => {
+  storeLifetime.interval(() => {
     if (!state.playback.currentTrack) return;
-    if (state.playback.isPlaying || sessionOutOfDate()) pushPlaybackState();
+    if (state.playback.isPlaying || sessionController.sessionOutOfDate()) sessionController.pushPlaybackState();
   }, 15000);
 
   const pushStateOnUnload = () => {
     if (!state.playback.currentTrack) return;
-    pushPlaybackState({
+    sessionController.pushPlaybackState({
       keepalive: true,
-      body: playbackStateBody({ position_sec: livePosition(), is_playing: false }),
+      body: sessionController.playbackStateBody({ position_sec: sessionController.livePosition(), is_playing: false }),
     });
   };
-  window.addEventListener('beforeunload', pushStateOnUnload);
-  window.addEventListener('pagehide', pushStateOnUnload);
+  storeLifetime.listen(window, 'beforeunload', pushStateOnUnload);
+  storeLifetime.listen(window, 'pagehide', pushStateOnUnload);
 
   void actions.syncLibrary().then(() => searchForResume(resumeAttempts));
   void actions.loadDownloads();
@@ -4454,8 +2521,8 @@ export function initStore(): void {
   // lib/shortcuts so it can be tested without a DOM; the store only supplies
   // the context snapshot and the callbacks.
   if (typeof window !== 'undefined') {
-    window.addEventListener(
-      'keydown',
+    storeLifetime.listen(
+      window, 'keydown',
       createShortcutHandler(
         () => ({
           autoModeActive: state.autoMode.active,
@@ -4493,4 +2560,28 @@ export function initStore(): void {
       ),
     );
   }
+}
+
+/** End the session before another account or root owns the same audio service. */
+export function disposeStore(): void {
+  storeLifetime.dispose();
+  disposeLibrarySync();
+  autoSessionEpoch += 1;
+  autoOpeningAborter?.abort();
+  generatedQueue?.stop();
+  generatedQueue = null;
+  transport.dispose();
+  sessionController.dispose();
+  dj.dispose();
+  socket?.removeAllListeners();
+  socket?.disconnect();
+  socket = null;
+  setProgramOutputReporter(null);
+  setProgramTransportReporter(null);
+  audioService.stop();
+  setState('online', false);
+  userPlaybackStartedThisSession = false;
+  transport = createTransport(playbackHost);
+  sessionController = createSession(playbackHost);
+  dj = createDj(playbackHost);
 }

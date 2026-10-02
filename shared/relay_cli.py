@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 from urllib.request import urlopen
+from urllib.parse import urlsplit
 
 from shared.relay_server import is_tailscale_ipv4, serve, wait_for_tailscale_ipv4
 
@@ -282,6 +283,9 @@ def _verify(args: argparse.Namespace) -> int:
     proxy = args.proxy.rstrip("/")
     health_url = f"{proxy}/healthz"
     try:
+        parsed = urlsplit(proxy)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise ValueError("Relay must use an HTTP URL")
         with urlopen(health_url, timeout=5) as response:
             health = json.loads(response.read())
     except Exception as exc:

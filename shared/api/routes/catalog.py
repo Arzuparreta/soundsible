@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextvars import copy_context
 from typing import Any
 
 import requests
@@ -1080,20 +1078,9 @@ def _search_uncached(query: str, types: set[str], limit: int) -> dict[str, Any]:
     if not types or "all" in types or "track" in types or "library_track" in types:
         providers.append(("youtube", lambda: _youtube_search(query, limit)))
 
-    provider_rows: dict[str, list[dict[str, Any]]] = {}
-    with ThreadPoolExecutor(max_workers=_SEARCH_WORKERS, thread_name_prefix="catalog-search") as executor:
-        futures = {
-            executor.submit(copy_context().run, fn): name
-            for name, fn in providers
-        }
-        for future in as_completed(futures):
-            name = futures[future]
-            try:
-                rows = future.result()
-                provider_rows[name] = rows
-            except Exception as exc:
-                logger.info("Catalog provider %s failed: %s", name, exc)
-                failures.append({"source": name, "error": sanitize_cli_message(str(exc))})
+    from shared.provider_pool import search_providers
+
+    provider_rows, failures, timings = search_providers.collect(providers, budget=2.5)
 
     # Provider completion order is timing-dependent. Merge in a fixed public
     # order so even exact score ties cannot become account/device dependent.
@@ -1116,6 +1103,7 @@ def _search_uncached(query: str, types: set[str], limit: int) -> dict[str, Any]:
         "items": [_public(row) for row in ranked if row["id"] in keep],
         "sections": sections,
         "partial_failures": failures,
+        "provider_timings_ms": timings,
     }
 
 
@@ -1123,7 +1111,10 @@ def _cached_search(query: str, types: set[str], limit: int) -> tuple[dict[str, A
     # `v2` because the shape gained `top_result` and the sections gained
     # `layout`/`total`: a hot reload must not serve pre-migration bodies.
     key = f"v2:{limit}:{','.join(sorted(types))}:{query.casefold()}"
-    return _memo_resolve(_catalog_memo, key, lambda: _search_uncached(query, types, limit))
+    body, cached = _memo_resolve(_catalog_memo, key, lambda: _search_uncached(query, types, limit))
+    if body.get("partial_failures"):
+        _catalog_memo.invalidate(key)
+    return body, cached
 
 
 @catalog_bp.route("/api/catalog/search", methods=["GET"])

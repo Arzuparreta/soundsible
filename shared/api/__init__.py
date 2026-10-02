@@ -1238,7 +1238,8 @@ def _mark_track_metadata_updated(lib, track_id: str, cover_source: Optional[str]
     if cover_source is not None:
         track.cover_source = cover_source
     track.metadata_modified_by_user = True
-    lib._save_metadata()
+    if not lib._save_metadata(changed_ids={track_id}):
+        return False
     _mirror_track_into_odst_downloader(track)
     emit_to_user('library_updated', payload={'cover_changed': cover_source is not None})
     return True
@@ -1795,6 +1796,10 @@ def stop_api() -> None:
         logger.exception("API: Error stopping loudness idle worker")
 
     try:
+        from shared.provider_pool import search_providers
+        search_providers.shutdown()
+        from player.library_exports import stop_exports
+        stop_exports()
         orchestrator.shutdown(wait=False)
     except Exception:
         logger.exception("API: Error stopping orchestrator")

@@ -1,16 +1,19 @@
 /**
  * Fetching the library and keeping the fetches from piling up.
  *
- * Refreshing means refetching the whole thing and replacing `state.library`,
- * which rebuilds the identity index and every derived list. That is fine once;
- * it is not fine once per finished download.
+ * The initial snapshot is paged. Later refreshes apply a revision delta and
+ * leave the track collection untouched for playlist-only changes.
  */
 
 import { api } from '../lib/api';
+import { mergeLibraryPage, readLibraryChanges, type LibraryCursor } from '../lib/librarySync';
 import { invalidateCatalogSync, syncCatalog } from './catalog';
 import { setState, state } from './core';
 
-let inFlight = false;
+let inFlight: Promise<void> | null = null;
+let aborter: AbortController | null = null;
+let cursor: LibraryCursor | null = null;
+const positions = new Map<string, number>();
 let pending = false;
 let version = 0;
 let coalesceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -33,55 +36,63 @@ const COALESCE_MS = 1500;
  */
 export function invalidateLibrarySync(): void {
   version += 1;
+  cursor = null;
+  aborter?.abort();
   // The catalog is a projection of the same manifest, so a reply that is wrong
   // for one is wrong for the other.
   invalidateCatalogSync();
 }
 
-export async function syncLibrary(): Promise<void> {
-  if (inFlight) {
-    pending = true;
-    return;
-  }
-  inFlight = true;
+export function syncLibrary(): Promise<void> {
+  pending = true;
+  if (inFlight) return inFlight;
+  inFlight = (async () => {
+    while (pending) {
+      pending = false;
+      await syncOnce();
+    }
+  })().finally(() => { inFlight = null; });
+  return inFlight;
+}
+
+async function syncOnce(): Promise<void> {
   const syncVersion = ++version;
+  aborter = new AbortController();
   setState('loading', true);
   try {
     const [lib, saved] = await Promise.all([
-      api.getLibrary(),
+      readLibraryChanges(api.getLibrary, cursor, aborter.signal),
       api.getSaved().catch(() => state.saved.slice()),
     ]);
     if (syncVersion !== version) return;
+    const tracks = mergeLibraryPage(state.library, lib, positions);
+    if (tracks !== state.library) setState('library', tracks);
     setState({
-      library: lib.tracks ?? [],
       playlists: lib.playlists ?? {},
       librarySettings: lib.settings ?? {},
       podcastSubscriptions: lib.podcast_subscriptions ?? [],
       saved,
       libraryError: false,
     });
-    // Artists, genres and years describe this same payload. Not awaited:
-    // callers that await a sync are waiting to act on tracks, and the grids
-    // they are not looking at must not hold that up.
-    void syncCatalog();
+    cursor = lib.epoch != null && lib.revision != null ? { epoch: lib.epoch, revision: lib.revision } : null;
+    if (tracks !== state.library || lib.mode !== 'delta' || lib.tracks?.length || lib.removed?.length) void syncCatalog();
   } catch {
-    // Offline or engine down — keep whatever we have, but stop claiming it is
-    // the whole story. An empty list after a failed fetch is not an empty
-    // library, and the view says so.
     if (syncVersion === version) setState('libraryError', true);
   } finally {
     if (syncVersion === version) {
       setState('loading', false);
-      // Settled either way: success means the list is the library, failure is
-      // reported through `libraryError`. Both are answers, so stop making
-      // callers wait on a sync that is over.
       setState('libraryReady', true);
     }
-    inFlight = false;
-    const runAgain = pending;
-    pending = false;
-    if (runAgain) queueMicrotask(() => void syncLibrary());
+    aborter = null;
   }
+}
+
+/** Release pending work on account changes or application teardown. */
+export function disposeLibrarySync(): void {
+  invalidateLibrarySync();
+  pending = false;
+  if (coalesceTimer) clearTimeout(coalesceTimer);
+  coalesceTimer = undefined;
 }
 
 /**

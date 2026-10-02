@@ -30,7 +30,7 @@ async function mockEngine(page: Page) {
           has_password: true,
         },
       };
-    } else if (path === '/api/library') {
+    } else if (path === '/api/library/changes') {
       body = {
         tracks: Array.from({ length: 80 }, (_, index) => catalogTrack(index + 1)),
         playlists: {},
@@ -52,6 +52,7 @@ async function mockEngine(page: Page) {
     } else if (path === '/api/discovery/music/feed') {
       body = { sections: [], items: [] };
     }
+    if (path === '/api/library/changes') body = { ...body as object, epoch: 'browser-fixture', revision: 1, mode: 'snapshot', positions: {}, removed: [], next_cursor: null };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

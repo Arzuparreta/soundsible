@@ -228,8 +228,8 @@ class JobOrchestrator:
                 with request_scope.request_scope(), self.commit_lock:
                     logger.info("Orchestrator: Executing coalesced metadata commit...")
                     try:
-                        commit_func()
-                        if emit_func:
+                        committed = commit_func()
+                        if committed is not False and emit_func:
                             emit_func()
                     except Exception as e:
                         logger.error(f"Orchestrator: Metadata commit failed: {e}")

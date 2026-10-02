@@ -140,7 +140,7 @@ def test_catalog_search_returns_partial_failures(monkeypatch):
     body = _make_app().test_client().get("/api/catalog/search?q=queen").get_json()
 
     assert body["items"] == []
-    assert body["partial_failures"] == [{"source": "deezer", "error": "down"}]
+    assert body["partial_failures"] == [{"source": "deezer", "error": "Provider unavailable", "reason": "failed"}]
 
 
 def test_catalog_search_uses_public_creator_consensus_without_hiding_literal_results(monkeypatch):

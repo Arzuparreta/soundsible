@@ -52,6 +52,8 @@ def isolated_runtime(tmp_path_factory, monkeypatch):
     try:
         yield runtime
     finally:
+        from player.library_exports import stop_exports
+        stop_exports()
         unbind_user(token)
         try:
             import shared.api as api_mod

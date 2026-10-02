@@ -96,6 +96,28 @@ def get_library():
     return jsonify({"error": "Library not loaded"}), 404
 
 
+@library_bp.route("/api/library/changes", methods=["GET"])
+def get_library_changes():
+    from shared.library_repository import LibraryConflict
+
+    try:
+        values = {}
+        for key in ("since", "cursor", "revision", "limit"):
+            if key in request.args:
+                value = int(request.args[key])
+                if value < 0:
+                    raise ValueError(key)
+                values[key] = value
+        lib, _, _ = _get_api()["get_core"]()
+        payload = lib.db.library_page(epoch=request.args.get("epoch"), **values)
+        annotate_tracks(payload["tracks"])
+        return jsonify(payload)
+    except ValueError:
+        return jsonify({"error": "Pagination values must be nonnegative integers"}), 400
+    except LibraryConflict as exc:
+        return jsonify({"error": str(exc), "retry": True}), 409
+
+
 @library_bp.route("/api/library/youtube-ids", methods=["GET"])
 def get_library_youtube_ids():
     api = _get_api()
@@ -609,135 +631,60 @@ def _schedule_favourite_resolve(favourite: dict) -> None:
         logger.debug("Could not queue favourite resolve: %s", exc)
 
 
+def _mutate_playlist(command, name, data):
+    from shared.library_mutations import apply_playlist_command, LibraryMutationError
+    from shared.library_repository import LibraryConflict
+
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    try:
+        metadata = lib.mutate_playlists(lambda snapshot: apply_playlist_command(snapshot, command, name, data))
+    except LibraryMutationError as exc:
+        return jsonify({"error": str(exc)}), exc.status
+    except LibraryConflict as exc:
+        return jsonify({"error": str(exc)}), 409
+    except Exception:
+        logger.exception("Playlist transaction failed")
+        return jsonify({"error": "Could not save playlist"}), 503
+    api["emit_to_user"]("library_updated")
+    return _playlist_mutation_response(metadata)
+
+
 @library_bp.route("/api/library/playlists", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_create", limit=60, window_sec=60)
 def create_playlist():
-    api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
-    if not metadata:
-        return jsonify({"error": "Library not loaded"}), 404
-    data = request.json or {}
-    name = (data.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "name is required"}), 400
-    if name in metadata.playlists:
-        return jsonify({"error": "Playlist already exists"}), 409
-    metadata.create_playlist(name)
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
-
+    return _mutate_playlist("create", None, request.get_json(silent=True))
 
 @library_bp.route("/api/library/playlists", methods=["PATCH"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_reorder", limit=60, window_sec=60)
 def reorder_playlists():
-    api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
-    if not metadata:
-        return jsonify({"error": "Library not loaded"}), 404
-    data = request.json or {}
-    order = data.get("order")
-    if not isinstance(order, list):
-        return jsonify({"error": "order must be a list of playlist names"}), 400
-    metadata.reorder_playlists(order)
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
-
+    return _mutate_playlist("reorder", None, request.get_json(silent=True))
 
 @library_bp.route("/api/library/playlists/<path:name>/tracks", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_add_track", limit=120, window_sec=60)
 def add_track_to_playlist(name):
-    name = unquote(name)
-    api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
-    if not metadata:
-        return jsonify({"error": "Library not loaded"}), 404
-    if name not in metadata.playlists:
-        return jsonify({"error": "Playlist not found"}), 404
-    data = request.json or {}
-    track_id = data.get("track_id")
-    if not track_id:
-        return jsonify({"error": "track_id is required"}), 400
-    if not metadata.add_to_playlist(name, track_id):
-        return jsonify({"error": "Add to playlist failed"}), 500
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
-
+    return _mutate_playlist("add", unquote(name), request.get_json(silent=True))
 
 @library_bp.route("/api/library/playlists/<path:name>/tracks/<track_id>", methods=["DELETE"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_remove_track", limit=120, window_sec=60)
 def remove_track_from_playlist(name, track_id):
-    name = unquote(name)
-    api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
-    if not metadata:
-        return jsonify({"error": "Library not loaded"}), 404
-    if name not in metadata.playlists:
-        return jsonify({"error": "Playlist not found"}), 404
-    if not metadata.remove_from_playlist(name, track_id):
-        return jsonify({"error": "Remove from playlist failed"}), 500
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
-
+    return _mutate_playlist("remove", unquote(name), {"track_id": track_id})
 
 @library_bp.route("/api/library/playlists/<path:name>", methods=["PATCH"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_update", limit=80, window_sec=60)
 def update_playlist(name):
-    name = unquote(name)
-    api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
-    if not metadata:
-        return jsonify({"error": "Library not loaded"}), 404
-    if name not in metadata.playlists:
-        return jsonify({"error": "Playlist not found"}), 404
-    data = request.json or {}
-    if "name" in data:
-        new_name = (data.get("name") or "").strip()
-        if not new_name:
-            return jsonify({"error": "name cannot be empty"}), 400
-        if not metadata.rename_playlist(name, new_name):
-            return jsonify({"error": "Rename failed (new name may already exist)"}), 409
-        name = new_name
-    if "track_ids" in data:
-        track_ids = data.get("track_ids")
-        if not isinstance(track_ids, list):
-            return jsonify({"error": "track_ids must be a list"}), 400
-        metadata.set_playlist_tracks(name, list(track_ids))
-    if "cover_track_id" in data:
-        raw_cover = data.get("cover_track_id")
-        if raw_cover is not None and not isinstance(raw_cover, str):
-            return jsonify({"error": "cover_track_id must be a string or null"}), 400
-        cover_tid = (raw_cover or "").strip() or None
-        if not metadata.set_playlist_cover_track_id(name, cover_tid):
-            return jsonify({"error": "Invalid cover_track_id (not in playlist)"}), 400
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
-
+    return _mutate_playlist("update", unquote(name), request.get_json(silent=True))
 
 @library_bp.route("/api/library/playlists/<path:name>", methods=["DELETE"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_delete", limit=60, window_sec=60)
 def delete_playlist(name):
-    name = unquote(name)
-    api = _get_api()
-    lib, metadata = api["_ensure_lib_metadata"]()
-    if not metadata:
-        return jsonify({"error": "Library not loaded"}), 404
-    if not metadata.delete_playlist(name):
-        return jsonify({"error": "Playlist not found"}), 404
-    lib._save_metadata()
-    api["emit_to_user"]("library_updated")
-    return _playlist_mutation_response(metadata)
-
+    return _mutate_playlist("delete", unquote(name), {})
 
 @library_bp.route("/api/library/repair", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)

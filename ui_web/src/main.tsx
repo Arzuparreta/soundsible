@@ -1,6 +1,6 @@
 /* SolidJS player entry point for mobile, desktop, PWA, and the desktop shell. */
 import { render } from 'solid-js/web';
-import { Show, createEffect, lazy, onMount } from 'solid-js';
+import { Show, createEffect, lazy, onMount, onCleanup, untrack } from 'solid-js';
 import { HashRouter, Route, useNavigate, useParams } from '@solidjs/router';
 import Shell from './app';
 // Library is the landing route; Login and Invite are the pre-auth screens. All
@@ -28,7 +28,7 @@ const DesignPreview = lazy(() => import('./pages/DesignPreview'));
 const Placeholder = lazy(() =>
   import('./routes/Placeholder').then((m) => ({ default: m.Placeholder })),
 );
-import { initStore, state } from './stores';
+import { initStore, disposeStore, state } from './stores';
 import { applyVisualPreferences } from './lib/visualPreferences';
 import { initLocale, t } from './lib/i18n';
 import { registerServiceWorker } from './lib/pwa';
@@ -171,7 +171,8 @@ function App() {
     // invite page — must not strand a signed-in user on a dead-link screen.
     // Once there is a session the token is irrelevant: drop it and go to the root.
     if (inviteToken()) window.location.hash = '#/';
-    initStore();
+    untrack(initStore);
+    onCleanup(disposeStore);
   });
 
   return (

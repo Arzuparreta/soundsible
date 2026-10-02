@@ -90,7 +90,8 @@ class LibraryManager:
         except Exception as exc:  # never block a library on a dating pass
             self._log(f"Could not date pre-existing tracks: {exc}")
         self._library_revision = self.db.get_library_revision()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self._export_lock = threading.Lock()
         # Paths whose write failed once (e.g. read-only music mount). Logged once,
         # then skipped, so a read-only output dir doesn't spam every save.
         self._unwritable_paths: set[str] = set()
@@ -220,11 +221,11 @@ class LibraryManager:
 
         if self.provider:
             try:
-                self.provider.save_library(self.metadata)
+                self.provider.save_library(LibraryMetadata.from_json(json_str))
             except Exception as exc:
                 self._log(f"Remote library export failed: {exc}")
 
-    def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None) -> bool:
+    def _save_metadata(self, *, id_replacements: Optional[Dict[str, str]] = None, changed_ids: Optional[set[str]] = None) -> bool:
         """
         Commit the canonical SQLite snapshot, then refresh portable exports.
         """
@@ -234,15 +235,44 @@ class LibraryManager:
         with self._lock:
             try:
                 self._library_revision = self.db.replace_library(
-                    self.metadata, id_replacements=id_replacements
+                    self.metadata, id_replacements=id_replacements,
+                    expected_revision=self._library_revision, changed_ids=changed_ids,
                 )
-                # replace_library is also the alias-normalization boundary, so
-                # serialize only after it has moved every durable reference.
-                self._export_metadata(self.metadata.to_json())
-                return True
             except Exception as e:
                 self._log(f"Error saving metadata: {e}")
+                # A rejected write cannot remain visible as committed state.
+                self.metadata = self.db.load_library_metadata()
+                self._library_revision = self.db.get_library_revision()
                 return False
+        # Export failure is never a rejected canonical commit.
+        try:
+            self.export_committed_library()
+        except Exception as exc:
+            self._log(f"Library export failed after commit: {exc}")
+        return True
+
+    def export_committed_library(self):
+        """Serialize exports without holding the library mutation lock."""
+        with self._export_lock:
+            metadata = self.db.load_library_metadata()
+            if metadata is not None:
+                self._export_metadata(metadata.to_json())
+
+    def mutate_playlists(self, operation):
+        from player.library_exports import schedule_export
+
+        with self._lock:
+            header, revision = self.db.mutate_playlists(operation)
+            if self.metadata is not None and self._library_revision == revision - 1:
+                # Tracks did not change; preserve their objects and indexes.
+                self.metadata.playlists = header.playlists
+                self.metadata.settings = header.settings
+                self.metadata.last_updated = header.last_updated
+                self._library_revision = revision
+            # If another writer changed tracks, leave our revision stale so
+            # the next read refreshes them; never label stale tracks current.
+        schedule_export(self)
+        return header
 
     def sync_library(self, silent: bool = None) -> bool:
         """
@@ -759,8 +789,9 @@ class LibraryManager:
                 self.metadata.tracks.append(new_track)
                 self.metadata.version += 1
                 
-                # Note: Save changes everywhere
-                self._save_metadata()
+                # Persist the rekey and every durable reference together.
+                if not self._save_metadata(id_replacements={track.id: new_track.id}, changed_ids={track.id, new_track.id}):
+                    return False
                 
                 # Note: 5. Cleanup old remote file (if hash changed).
                 # Editing tags re-hashes the file, so the old object may still be

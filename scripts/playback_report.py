@@ -345,13 +345,46 @@ def build_report(path: Path, *, days: int) -> dict:
     }
 
 
+def evaluate_acceptance(report: dict, policy: dict) -> dict:
+    """Evaluate explicit budgets; missing evidence never counts as a pass."""
+    failures, missing = [], []
+    for name, budget in policy.get("buckets", {}).items():
+        observed = report["buckets"].get(name, {})
+        if observed.get("samples", 0) < budget["min_samples"]:
+            missing.append(f"{name}: insufficient starts")
+            continue
+        if observed["p95_ms"] > budget["max_p95_ms"]:
+            failures.append(f"{name}: first-sound p95 exceeded")
+        if observed.get("failures", 0) > budget.get("max_failures", 0):
+            failures.append(f"{name}: failed playback attempts")
+    for name, budget in policy.get("stability", {}).items():
+        observed = report["stability"].get(name, {})
+        if observed.get("audible_minutes", 0) < budget["min_minutes"] or observed.get("rebuffers_per_hour") is None:
+            missing.append(f"{name}: insufficient delivery evidence")
+            continue
+        if observed["rebuffers_per_hour"] > budget["max_rebuffers_per_hour"]:
+            failures.append(f"{name}: rebuffer budget exceeded")
+    if not policy.get("buckets") or not policy.get("stability"):
+        missing.append("Policy must cover both startup and sustained delivery")
+    if report["media_session"]["declaration_mismatches"]:
+        failures.append("Media Session declaration mismatches")
+    return {"status": "failed" if failures else "inconclusive" if missing else "passed",
+            "failures": failures, "missing": missing}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Report local Soundsible playback SLOs.")
     parser.add_argument("path", type=Path, help="Path to play-timing.jsonl")
     parser.add_argument("--days", type=int, default=7)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--check", type=Path, help="JSON acceptance budgets; missing evidence exits 2")
     args = parser.parse_args()
     report = build_report(args.path, days=max(1, args.days))
+    if args.check:
+        acceptance = evaluate_acceptance(report, json.loads(args.check.read_text()))
+        report["acceptance"] = acceptance
+        print(json.dumps(report if args.json else acceptance, indent=2, sort_keys=True))
+        return {"passed": 0, "failed": 1, "inconclusive": 2}[acceptance["status"]]
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0

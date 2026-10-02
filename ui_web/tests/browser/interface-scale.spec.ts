@@ -36,7 +36,7 @@ async function mockEngine(page: Page, authenticated: boolean) {
             },
           }
         : { requires_login: true, user: null };
-    } else if (path === '/api/library') {
+    } else if (path === '/api/library/changes') {
       body = {
         tracks: TRACKS,
         playlists: { 'Lista con nombre largo': ['track-1', 'track-2'] },
@@ -60,6 +60,7 @@ async function mockEngine(page: Page, authenticated: boolean) {
     } else if (path === '/api/discovery/music/feed') {
       body = { sections: [] };
     }
+    if (path === '/api/library/changes') body = { ...body as object, epoch: 'browser-fixture', revision: 1, mode: 'snapshot', positions: {}, removed: [], next_cursor: null };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

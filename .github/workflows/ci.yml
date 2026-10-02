@@ -131,10 +131,8 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Bandit security scan
-        run: bandit -r . -f txt -o bandit-report.txt || true
-      - name: Show bandit report
-        run: cat bandit-report.txt
+      - name: Enforce reviewed production security baseline
+        run: python scripts/security_gate.py
 
   ui_build:
     runs-on: ubuntu-latest

@@ -256,6 +256,8 @@ async function loadStore(
       const list = deckHandlers.get(type) ?? [];
       list.push((event) => handler(audioService.snapshot(), event));
       deckHandlers.set(type, list);
+      const bound = list[list.length - 1];
+      return () => deckHandlers.set(type, (deckHandlers.get(type) ?? []).filter((entry) => entry !== bound));
     }),
     setProgramOutputReporter: vi.fn((fn: typeof programOutputReporter) => {
       programOutputReporter = fn;
@@ -345,6 +347,7 @@ async function loadStore(
       on: (event: string, handler: (data?: unknown) => void) => socketHandlers.set(event, handler),
       emit: vi.fn(),
       disconnect: vi.fn(),
+      removeAllListeners: () => socketHandlers.clear(),
     })),
     dispatchDiscoverSeed: vi.fn(),
   }));
@@ -3094,5 +3097,35 @@ describe('playback delivery telemetry', () => {
 
     expect(rowsFor(api, 'ui_play_delivery')).toHaveLength(0);
     expect(rowsFor(api, 'ui_attempt_cancelled').length).toBeGreaterThan(0);
+  });
+});
+
+
+describe('playback session lifecycle', () => {
+  it('cancels recovery and detaches old listeners through repeated session teardown', async () => {
+    const store = await loadStore({
+      getLibrary: vi.fn().mockResolvedValue({ tracks: [t1, t2], playlists: {}, settings: {} }),
+    });
+    vi.useFakeTimers();
+    try {
+      for (let cycle = 0; cycle < 20; cycle += 1) {
+        store.initStore();
+        await vi.advanceTimersByTimeAsync(0);
+        store.actions.playTrack(t1);
+        store.fireDeckEvent('playing');
+        store.fireDeckEvent('waiting');
+        store.disposeStore();
+        const calls = store.audioService.recover.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(13000);
+        expect(store.audioService.recover.mock.calls.length).toBe(calls);
+        const publications = store.api.putPlaybackState.mock.calls.length;
+        store.fireDeckEvent('play');
+        store.fireSocketEvent('playback_next_requested');
+        expect(store.api.putPlaybackState.mock.calls.length).toBe(publications);
+      }
+    } finally {
+      store.disposeStore();
+      vi.useRealTimers();
+    }
   });
 });

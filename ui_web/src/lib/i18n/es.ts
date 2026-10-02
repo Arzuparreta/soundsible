@@ -381,6 +381,7 @@ export const es: Dict = {
     ytDirectSection: 'Video detectado',
     ytResultsSection: 'Resultados en YouTube',
     ytFallbackCta: '¿No lo encuentras? Ver en YouTube',
+    partialResults: "Resultados incompletos: no han respondido {sources}.",
     catalogErrorHint: 'No se pudo completar la búsqueda.',
     catalogNoResults: 'Sin resultados en Música.',
     searchInYt: 'Buscar en YouTube',
