@@ -26,19 +26,21 @@ for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac
         sys.modules[_module] = MagicMock()
 
 from odst_tool import youtube_downloader as yd  # noqa: E402
+import yt_dlp  # noqa: E402
+from odst_tool.youtube import search  # noqa: E402
 from shared.resolution_confidence import classify_confidence, score_candidate  # noqa: E402
 
 
 @pytest.fixture
 def downloader(tmp_path, monkeypatch):
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", MagicMock())
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", MagicMock())
     return yd.YouTubeDownloader(output_dir=tmp_path)
 
 
 def test_asks_the_surface_that_carries_durations(downloader, monkeypatch):
     seen = {}
 
-    def fake_search(query, max_results=10, use_ytmusic=True, enrich_missing=True):
+    def fake_search(query, cookies, max_results=10, use_ytmusic=True, enrich_missing=True):
         seen.update(
             query=query,
             max_results=max_results,
@@ -47,7 +49,7 @@ def test_asks_the_surface_that_carries_durations(downloader, monkeypatch):
         )
         return [{"id": "abcdefghijk", "title": "x", "duration": 200, "channel": "y"}]
 
-    monkeypatch.setattr(downloader, "search_youtube", fake_search)
+    monkeypatch.setattr(search, "search_youtube", fake_search)
 
     downloader.search_match_candidates("Queen", "Bohemian Rhapsody", max_results=6)
 
@@ -63,9 +65,9 @@ def test_ignores_the_browse_preference(downloader, monkeypatch):
     monkeypatch.setenv("SOUNDSIBLE_YT_SEARCH_SOURCE", "ytmusic")
     seen = {}
     monkeypatch.setattr(
-        downloader,
+        search,
         "search_youtube",
-        lambda query, **kw: seen.update(kw) or [],
+        lambda query, cookies, **kw: seen.update(kw) or [],
     )
 
     downloader.search_match_candidates("Queen", "Bohemian Rhapsody")
@@ -75,7 +77,7 @@ def test_ignores_the_browse_preference(downloader, monkeypatch):
 
 def test_empty_track_asks_nothing(downloader, monkeypatch):
     called = []
-    monkeypatch.setattr(downloader, "search_youtube", lambda *a, **kw: called.append(1) or [])
+    monkeypatch.setattr(search, "search_youtube", lambda *a, **kw: called.append(1) or [])
 
     assert downloader.search_match_candidates("", "") == []
     assert called == []

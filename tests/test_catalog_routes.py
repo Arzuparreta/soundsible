@@ -673,7 +673,6 @@ def test_resolve_candidates_warms_preview_stream_cache_for_best_id(monkeypatch, 
             "artist": "Queen",
         }
     ]
-    fake_dl.downloader.get_stream_url.return_value = "https://rr.googlevideo.com/warmed-url"
     fake_api["get_downloader"] = MagicMock(return_value=fake_dl)
     monkeypatch.setattr(catalog_routes, "_get_api", lambda: fake_api)
 
@@ -692,7 +691,7 @@ def test_resolve_candidates_warms_preview_stream_cache_for_best_id(monkeypatch, 
     assert prefetched == [(["abcdefghijk"], False)]
     # The warm runs on the prefetch worker, so the request thread never blocks
     # on a second yt-dlp extraction.
-    fake_dl.downloader.get_stream_url.assert_not_called()
+    fake_dl.downloader.get_resolved_stream.assert_not_called()
 
 
 def test_resolve_candidates_skips_warm_on_db_cache_hit(monkeypatch, tmp_path):

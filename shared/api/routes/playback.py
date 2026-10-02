@@ -158,19 +158,7 @@ def _get_preview_stream_cached(
         if durable is not None:
             return durable
         dl = api["get_downloader"](open_browser=False)
-        resolver = getattr(dl.downloader, "get_resolved_stream", None)
-        if callable(resolver):
-            stream = resolver(video_id, skip_fast_path=skip_fast_path) or ""
-        else:
-            url = dl.downloader.get_stream_url(video_id) or ""
-            if not url:
-                return ""
-            proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-            stream = resolved_stream(
-                url,
-                egress="relay" if proxy else "direct",
-                proxy_url=proxy or None,
-            )
+        stream = dl.downloader.get_resolved_stream(video_id, skip_fast_path=skip_fast_path) or ""
         if isinstance(stream, ResolvedStream):
             _durable_stream_cache_put(video_id, stream)
         return stream

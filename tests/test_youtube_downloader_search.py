@@ -17,6 +17,13 @@ for _module in ("yt_dlp", "mutagen", "mutagen.id3", "mutagen.mp3", "mutagen.flac
         sys.modules[_module] = MagicMock()
 
 from odst_tool import youtube_downloader as yd
+import yt_dlp  # noqa: E402
+from odst_tool.youtube import search, ytdlp  # noqa: E402
+
+
+def _stream_url(downloader, video_id):
+    resolved = downloader.get_resolved_stream(video_id)
+    return resolved.url if resolved else None
 
 
 class _FakeYoutubeDL:
@@ -52,7 +59,7 @@ def test_ytmusic_search_enriches_flat_entries_with_artist(monkeypatch, tmp_path)
     otherwise — callers that score candidates ask `search_match_candidates`,
     whose search returns durations of its own.
     """
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _FakeYoutubeDL)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _FakeYoutubeDL)
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
     monkeypatch.setattr(
         downloader,
@@ -65,7 +72,7 @@ def test_ytmusic_search_enriches_flat_entries_with_artist(monkeypatch, tmp_path)
         asked.append(video_id)
         return "Queen - Topic"
 
-    monkeypatch.setattr(yd, "_oembed_creator", fake_oembed)
+    monkeypatch.setattr(search, "oembed_creator", fake_oembed)
 
     results = downloader.search_youtube("bohemian rhapsody", max_results=1, use_ytmusic=True)
 
@@ -80,7 +87,7 @@ def test_ytmusic_search_enriches_flat_entries_with_artist(monkeypatch, tmp_path)
 
 
 def test_ytmusic_search_can_skip_blocking_artist_enrichment(monkeypatch, tmp_path):
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _FakeYoutubeDL)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _FakeYoutubeDL)
 
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
     monkeypatch.setattr(
@@ -105,7 +112,7 @@ def test_download_profile_uses_bounded_network_resilience(monkeypatch):
     monkeypatch.delenv("SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE", raising=False)
     monkeypatch.delenv("SOUNDSIBLE_YTDLP_RETRY_SLEEP", raising=False)
 
-    args = yd._ytdlp_download_resilience_args()
+    args = ytdlp.download_resilience_args()
 
     assert args == [
         "--socket-timeout",
@@ -124,7 +131,7 @@ def test_download_profile_honors_environment_overrides(monkeypatch):
     monkeypatch.setenv("SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE", "4M")
     monkeypatch.setenv("SOUNDSIBLE_YTDLP_RETRY_SLEEP", "linear=2:10")
 
-    args = yd._ytdlp_download_resilience_args()
+    args = ytdlp.download_resilience_args()
 
     assert args == [
         "--socket-timeout",
@@ -139,17 +146,17 @@ def test_download_profile_honors_environment_overrides(monkeypatch):
 
 
 def test_audio_selector_never_falls_back_to_unrestricted_best_video():
-    assert yd.YDL_FORMAT_AUDIO == (
+    assert ytdlp.YDL_FORMAT_AUDIO == (
         "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/worst[acodec!=none]"
     )
-    assert "/best/" not in yd.YDL_FORMAT_AUDIO
+    assert "/best/" not in ytdlp.YDL_FORMAT_AUDIO
 
 
 def test_audio_selector_preview_tier_prefers_low_bitrate_audio_first():
     """The preview selector must lead with abr-banded audio so the engine
     moves the fewest bytes possible on a preview click, while still
     containing the full fallback chain so any video resolves."""
-    preview = yd.YDL_FORMAT_AUDIO_PREVIEW
+    preview = ytdlp.YDL_FORMAT_AUDIO_PREVIEW
     parts = [p for p in preview.split("/") if p]
     assert parts[0].startswith("bestaudio[ext=m4a][abr<=130]")
     assert parts[1].startswith("bestaudio[ext=webm][abr<=170]")
@@ -169,9 +176,9 @@ def test_audio_selector_preview_tier_prefers_low_bitrate_audio_first():
     assert "/best/" not in preview
 
 
-def test_get_stream_url_returns_direct_url_from_extract_info_in_process(monkeypatch, tmp_path):
+def test_resolved_stream_returns_direct_url_from_extract_info_in_process(monkeypatch, tmp_path):
     """Cold-path in-process resolution: extract_info() returns a dict with a
-    'url' field, and get_stream_url returns it without spawning a subprocess."""
+    'url' field, and get_resolved_stream returns it without spawning a subprocess."""
     captured_opts = {}
 
     class _YDL:
@@ -188,19 +195,19 @@ def test_get_stream_url_returns_direct_url_from_extract_info_in_process(monkeypa
         def extract_info(self, url, download=False):
             assert url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
             assert download is False
-            assert self.opts["format"] == yd.YDL_FORMAT_AUDIO_PREVIEW
+            assert self.opts["format"] == ytdlp.YDL_FORMAT_AUDIO_PREVIEW
             return {
                 "id": "dQw4w9WgXcQ",
                 "title": "Never Gonna Give You Up",
                 "url": "https://rr.googlevideo.com/preview/audio",
             }
 
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YDL)
     monkeypatch.delenv("SOUNDSIBLE_YT_PROXY", raising=False)
 
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
 
-    url = downloader.get_stream_url("dQw4w9WgXcQ")
+    url = _stream_url(downloader, "dQw4w9WgXcQ")
 
     assert url == "https://rr.googlevideo.com/preview/audio"
     # Noplaylist + quiet + no_warnings must be present so the extractor stays
@@ -210,9 +217,9 @@ def test_get_stream_url_returns_direct_url_from_extract_info_in_process(monkeypa
     assert captured_opts.get("no_warnings") is True
 
 
-def test_get_stream_url_reads_url_from_requested_formats_when_top_level_missing(monkeypatch, tmp_path):
+def test_resolved_stream_reads_url_from_requested_formats_when_top_level_missing(monkeypatch, tmp_path):
     """When the chosen URL lives under `requested_formats` (typical when yt-dlp
-    separates muxed streams), get_stream_url walks it instead of returning None."""
+    separates muxed streams), get_resolved_stream walks it instead of returning None."""
 
     class _YDL:
         def __init__(self, opts):
@@ -232,14 +239,14 @@ def test_get_stream_url_reads_url_from_requested_formats_when_top_level_missing(
                 ],
             }
 
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YDL)
     monkeypatch.delenv("SOUNDSIBLE_YT_PROXY", raising=False)
 
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
-    assert downloader.get_stream_url("dQw4w9WgXcQ") == "https://rr.googlevideo.com/aac"
+    assert _stream_url(downloader, "dQw4w9WgXcQ") == "https://rr.googlevideo.com/aac"
 
 
-def test_get_stream_url_returns_none_for_format_not_available(monkeypatch, tmp_path):
+def test_resolved_stream_returns_none_for_format_not_available(monkeypatch, tmp_path):
     """A 'Requested format is not available' error should be swallowed as a
     soft failure (None), not propagated through the __ERROR__ sentinel."""
 
@@ -256,20 +263,20 @@ def test_get_stream_url_returns_none_for_format_not_available(monkeypatch, tmp_p
         def extract_info(self, url, download=False):
             raise Exception("Requested format is not available for this video")
 
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _RaisingYDL)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _RaisingYDL)
     monkeypatch.delenv("SOUNDSIBLE_YT_PROXY", raising=False)
 
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
-    assert downloader.get_stream_url("dQw4w9WgXcQ") is None
+    assert _stream_url(downloader, "dQw4w9WgXcQ") is None
 
 
-def test_get_stream_url_rejects_empty_or_none_video_id(tmp_path):
+def test_resolved_stream_rejects_empty_or_none_video_id(tmp_path):
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
-    assert downloader.get_stream_url("") is None
-    assert downloader.get_stream_url(None) is None  # type: ignore[arg-type]
+    assert _stream_url(downloader, "") is None
+    assert _stream_url(downloader, None) is None  # type: ignore[arg-type]
 
 
-def test_get_stream_url_uses_proxy_first_when_set(monkeypatch, tmp_path):
+def test_resolved_stream_uses_proxy_first_when_set(monkeypatch, tmp_path):
     """With SOUNDSIBLE_YT_PROXY set the first attempt must spawn with proxy
     in opts and the subsequent ipv4 default must not be reached."""
     seen = []
@@ -291,21 +298,21 @@ def test_get_stream_url_uses_proxy_first_when_set(monkeypatch, tmp_path):
                 "url": f"https://rr.googlevideo.com/proxy-hit/{len(seen)}",
             }
 
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YDL)
     monkeypatch.setenv("SOUNDSIBLE_YT_PROXY", "http://residential.invalid:8080")
 
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
-    url = downloader.get_stream_url("dQw4w9WgXcQ")
+    url = _stream_url(downloader, "dQw4w9WgXcQ")
 
     assert url == "https://rr.googlevideo.com/proxy-hit/1"
     assert seen == ["http://residential.invalid:8080"]  # stopped at attempt 1
 
 
 def test_cookie_fallback_only_handles_authentication_and_format_failures():
-    assert yd._should_retry_download_with_cookies("ERROR: Sign in to confirm your age")
-    assert yd._should_retry_download_with_cookies("ERROR: HTTP Error 403: Forbidden")
-    assert yd._should_retry_download_with_cookies("Requested format is not available")
-    assert not yd._should_retry_download_with_cookies(
+    assert ytdlp.should_retry_with_cookies("ERROR: Sign in to confirm your age")
+    assert ytdlp.should_retry_with_cookies("ERROR: HTTP Error 403: Forbidden")
+    assert ytdlp.should_retry_with_cookies("Requested format is not available")
+    assert not ytdlp.should_retry_with_cookies(
         "Got error: 137 bytes read, 10400093 more expected"
     )
 
@@ -349,7 +356,7 @@ def test_get_related_videos_tries_rd_mix_flat_first(monkeypatch, tmp_path):
             self.opts = opts
             instances.append(self)
 
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YDL)
 
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
     # Disable cookies to keep the first attempt's opts predictable.
@@ -401,7 +408,7 @@ def test_get_related_videos_falls_back_to_ytmusic_search_when_rd_mix_empty(monke
             self.urls.append(url)
             return self._response
 
-    monkeypatch.setattr(yd.yt_dlp, "YoutubeDL", _YDL)
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", _YDL)
 
     downloader = yd.YouTubeDownloader(output_dir=Path(tmp_path))
     downloader.cookie_file = None
@@ -414,9 +421,9 @@ def test_get_related_videos_falls_back_to_ytmusic_search_when_rd_mix_empty(monke
     monkeypatch.setattr(downloader, "peek_brief", _no_peek)
     # _peek_video_metadata runs in the fallback — make it return metadata so the search query is built.
     monkeypatch.setattr(
-        downloader,
-        "_peek_video_metadata",
-        lambda url: {"track": "Seed Title", "channel": "Seed Artist"},
+        search,
+        "peek_video_metadata",
+        lambda url, cookies: {"track": "Seed Title", "channel": "Seed Artist"},
     )
 
     # The surface is configurable and no longer defaults to YouTube Music, so
@@ -440,7 +447,7 @@ def test_search_and_mix_preserve_explicit_performer_with_one_extraction(monkeypa
             return {'entries': [{'id': '43S_qfT6vpo', 'title': 'La vereda de la puerta de atrás',
                                  'artist': 'Extremoduro', 'channel': 'Warner Music Spain', 'duration': 244}]}
 
-    monkeypatch.setattr(yd.yt_dlp, 'YoutubeDL', Extractor)
+    monkeypatch.setattr(yt_dlp, 'YoutubeDL', Extractor)
     downloader = yd.YouTubeDownloader(output_dir=tmp_path)
     for result in [downloader.search_youtube('Extremoduro', use_ytmusic=False, enrich_missing=False),
                    downloader.get_related_videos('43S_qfT6vpo', enrich=False)]:
@@ -452,7 +459,7 @@ def test_search_and_mix_preserve_explicit_performer_with_one_extraction(monkeypa
 
 def test_match_scoring_still_receives_original_upload_title(monkeypatch, tmp_path):
     downloader = yd.YouTubeDownloader(output_dir=tmp_path)
-    monkeypatch.setattr(downloader, 'search_youtube', lambda *args, **kwargs: [{
+    monkeypatch.setattr(search, 'search_youtube', lambda *args, **kwargs: [{
         'id': '43S_qfT6vpo', 'title': 'Song', 'source_title': 'Artist - Song (Official Video)',
         'channel': 'Artist', 'artist': 'Artist',
     }])

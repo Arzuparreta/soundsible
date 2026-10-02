@@ -1,440 +1,41 @@
+"""The engine's handle on YouTube: one output folder, one set of cookies.
+
+The work lives in `odst_tool.youtube`; this class binds it to where files
+go and which cookies to use, and acquires tracks from search, from a video
+or from a file already on disk.
+"""
+
 import logging
 import os
-import shutil
-import subprocess
-import threading
+import random
 import time
-import re
-import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Callable
-from urllib.parse import quote, urlparse, parse_qs
-import yt_dlp
-import requests
-from .config import (
-    DEFAULT_OUTPUT_DIR,
-    SEARCH_STRATEGY_PRIMARY,
-    SEARCH_STRATEGY_FALLBACK,
-    DURATION_TOLERANCE_SEC,
-    DEFAULT_QUALITY,
-    QUALITY_PROFILES,
-    TRACKS_DIR,
-    FORBIDDEN_KEYWORDS,
-    prefer_ytmusic,
-)
-from .audio_utils import AudioProcessor
+from typing import Any, Callable, Dict, List, Optional
+
+from shared.constants import DEFAULT_CONFIG_DIR
 from shared.models import Track
-from shared.musicbrainz import normalize_recording_mbid
-from shared.music_identity import youtube_music_metadata
-from shared.stream_resolution import ResolvedStream, resolved_stream
-from shared.venv_utils import get_subprocess_python
+from shared.stream_resolution import ResolvedStream
+
+from .audio_utils import AudioProcessor
+from .config import DEFAULT_OUTPUT_DIR, DEFAULT_QUALITY, DOWNLOAD_DELAY_RANGE, TRACKS_DIR
+from .youtube import download, search, streams
+from .youtube.ids import is_valid_video_id, video_id_from_url
+from .youtube.tracks import store_track, video_metadata, with_canonical_mbid
+from .youtube.ytdlp import Cookies
 
 logger = logging.getLogger(__name__)
 
-_FALSE_ENV_VALUES = {"0", "false", "no", "off"}
-_YTDLP_SOCKET_TIMEOUT_DEFAULT = "30"
-_YTDLP_HTTP_CHUNK_SIZE_DEFAULT = "10M"
-_YTDLP_RETRY_SLEEP_DEFAULT = "exp=1:20"
-
-
-def _music_fields(entry: Dict[str, Any], channel: str) -> Dict[str, Any]:
-    """The song an extracted entry is, keeping `channel` as provenance only.
-
-    yt-dlp's `artist`/`artists` come from YouTube's own music metadata; say so,
-    so the channel is only read for a performer when the entry has none.
-    """
-    return youtube_music_metadata({
-        **entry,
-        "channel": channel,
-        "artist_metadata_explicit": bool(entry.get("artist") or entry.get("artists")),
-    })
-
-
-def _recording_mbid_from_metadata(metadata: Any) -> str | None:
-    if not isinstance(metadata, dict):
-        return None
-    direct = normalize_recording_mbid(metadata.get("musicbrainz_id"))
-    if direct:
-        return direct
-    external_ids = metadata.get("external_ids")
-    if isinstance(external_ids, dict):
-        return normalize_recording_mbid(external_ids.get("musicbrainz_id"))
-    return None
-
-
-def _yt_dlp_force_ipv4() -> bool:
-    return (os.getenv("SOUNDSIBLE_YTDLP_FORCE_IPV4", "true") or "").strip().lower() not in _FALSE_ENV_VALUES
-
-
-def _add_ytdlp_cli_network_args(args: List[str]) -> None:
-    yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-    if yt_proxy:
-        args.extend(["--proxy", yt_proxy])
-    elif _yt_dlp_force_ipv4():
-        args.append("--force-ipv4")
-
-
-def _ytdlp_download_resilience_args() -> List[str]:
-    """Return bounded network settings for long-running yt-dlp downloads."""
-    socket_timeout = (
-        os.getenv("SOUNDSIBLE_YTDLP_SOCKET_TIMEOUT", _YTDLP_SOCKET_TIMEOUT_DEFAULT).strip()
-        or _YTDLP_SOCKET_TIMEOUT_DEFAULT
-    )
-    http_chunk_size = (
-        os.getenv("SOUNDSIBLE_YTDLP_HTTP_CHUNK_SIZE", _YTDLP_HTTP_CHUNK_SIZE_DEFAULT).strip()
-        or _YTDLP_HTTP_CHUNK_SIZE_DEFAULT
-    )
-    retry_sleep = (
-        os.getenv("SOUNDSIBLE_YTDLP_RETRY_SLEEP", _YTDLP_RETRY_SLEEP_DEFAULT).strip()
-        or _YTDLP_RETRY_SLEEP_DEFAULT
-    )
-    return [
-        "--socket-timeout",
-        socket_timeout,
-        "--http-chunk-size",
-        http_chunk_size,
-        "--retry-sleep",
-        f"http:{retry_sleep}",
-        "--retry-sleep",
-        f"fragment:{retry_sleep}",
-    ]
-
-
-def _should_retry_download_with_cookies(output: str) -> bool:
-    lowered = (output or "").lower()
-    return any(
-        marker in lowered
-        for marker in (
-            "requested format is not available",
-            "the page needs to be reloaded",
-            "sign in to confirm",
-            "confirm your age",
-            "age-restricted",
-            "this video is private",
-            "http error 403",
-        )
-    )
-
-
-def _apply_ytdlp_network_options(opts: Dict[str, Any]) -> Dict[str, Any]:
-    from shared.ffmpeg_runtime import apply_ytdlp_ffmpeg_options
-
-    yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-    if yt_proxy:
-        opts["proxy"] = yt_proxy
-    elif _yt_dlp_force_ipv4():
-        opts["source_address"] = "0.0.0.0"
-    apply_ytdlp_ffmpeg_options(opts)
-    return opts
-
-
-# ── YouTube session reuse ────────────────────────────────────────────────────
-# Resolving a stream normally makes yt-dlp download the video's watch page —
-# about 1 MB of HTML — for no reason other than to pick a session identifier out
-# of it. The identifier is not per-video, so fetching it once and reusing it lets
-# every later resolution skip that megabyte: measured 1338 KB -> 451 KB per
-# resolution, which on a relayed station is the difference that shows.
-#
-# Without one YouTube answers "Sign in to confirm you're not a bot", so a stale
-# or missing value must fall back to the full path rather than fail.
-_VISITOR_DATA_URL = "https://www.youtube.com/sw.js_data"
-_VISITOR_DATA_TTL_SEC = 3600
-_visitor_data_lock = threading.Lock()
-_visitor_data_cache: Dict[str, Any] = {"value": None, "fetched_at": 0.0}
-
-_OEMBED_URL = "https://www.youtube.com/oembed"
-_meta_session_lock = threading.Lock()
-_meta_session: Optional[requests.Session] = None
-
-
-def _youtube_meta_session() -> requests.Session:
-    """Pooled session for the small YouTube metadata calls (oembed, sw.js_data).
-
-    These are a fan-out to one host, and on a relayed station every fresh
-    connection is a ~330 ms handshake before the first byte. Pooling turns a
-    row of them into one handshake plus cheap follow-ups.
-    """
-    global _meta_session
-    if _meta_session is not None:
-        return _meta_session
-    with _meta_session_lock:
-        if _meta_session is None:
-            session = requests.Session()
-            adapter = requests.adapters.HTTPAdapter(
-                pool_connections=4, pool_maxsize=16, max_retries=0
-            )
-            session.mount("https://", adapter)
-            session.mount("http://", adapter)
-            _meta_session = session
-    return _meta_session
-
-
-def _youtube_proxies() -> Optional[Dict[str, str]]:
-    """Relay settings for a plain YouTube request, when one is configured."""
-    yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-    return {"http": yt_proxy, "https": yt_proxy} if yt_proxy else None
-
-
-def _oembed_creator(video_id: str) -> Optional[str]:
-    """The channel behind a video, from YouTube's public oembed endpoint.
-
-    One small JSON response instead of a full extraction: eight of these run in
-    ~120 ms against ~5.2 s for eight `extract_info` calls. It carries no
-    duration, which is why anything that scores candidates asks a search that
-    returns one rather than leaning on enrichment.
-    """
-    if not _is_valid_youtube_video_id(video_id):
-        return None
-    try:
-        response = _youtube_meta_session().get(
-            _OEMBED_URL,
-            params={"url": f"https://www.youtube.com/watch?v={video_id}", "format": "json"},
-            timeout=10,
-            proxies=_youtube_proxies(),
-        )
-        if not response.ok:
-            return None
-        author = (response.json() or {}).get("author_name")
-        return author.strip() if isinstance(author, str) and author.strip() else None
-    except Exception as exc:
-        logger.debug("[Search] oembed lookup failed for %s: %s", video_id, exc)
-        return None
-
-
-def _parse_visitor_data(payload: str) -> Optional[str]:
-    """Pull the visitor identifier out of the sw.js_data envelope."""
-    body = payload.lstrip()
-    if body.startswith(")]}'"):
-        body = body.split("\n", 1)[-1]
-    try:
-        import json as _json
-
-        def walk(node: Any) -> Optional[str]:
-            if isinstance(node, str) and len(node) > 20 and node[:2] in ("Cg", "Ch", "Cs"):
-                return node
-            if isinstance(node, list):
-                for child in node:
-                    found = walk(child)
-                    if found:
-                        return found
-            return None
-
-        found = walk(_json.loads(body))
-        if found:
-            return found
-    except Exception:
-        pass
-    match = re.search(r'"(C[a-zA-Z0-9_%-]{20,140})"', payload)
-    return match.group(1) if match else None
-
-
-def _youtube_visitor_data() -> Optional[str]:
-    """A cached visitor identifier, refreshed hourly, or None if unavailable."""
-    now = time.time()
-    cached = _visitor_data_cache.get("value")
-    if cached and now - float(_visitor_data_cache.get("fetched_at") or 0) < _VISITOR_DATA_TTL_SEC:
-        return cached
-    with _visitor_data_lock:
-        cached = _visitor_data_cache.get("value")
-        if cached and now - float(_visitor_data_cache.get("fetched_at") or 0) < _VISITOR_DATA_TTL_SEC:
-            return cached
-        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-        proxies = {"http": yt_proxy, "https": yt_proxy} if yt_proxy else None
-        try:
-            response = requests.get(
-                _VISITOR_DATA_URL,
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=15,
-                proxies=proxies,
-            )
-            response.raise_for_status()
-            value = _parse_visitor_data(response.text)
-        except Exception as exc:
-            logger.debug("[Preview] visitor_data fetch failed: %s", exc)
-            value = None
-        if value:
-            _visitor_data_cache["value"] = value
-            _visitor_data_cache["fetched_at"] = now
-        return value
-
-
-def _reset_visitor_data_cache() -> None:
-    """Drop the cached identifier so the next resolution fetches a fresh one."""
-    with _visitor_data_lock:
-        _visitor_data_cache["value"] = None
-        _visitor_data_cache["fetched_at"] = 0.0
-
-
-def _yt_thumbnail_url(video_id: Optional[str]) -> Optional[str]:
-    """YouTube thumbnail URL (mqdefault). Returns None if video_id is falsy."""
-    if not video_id:
-        return None
-    return f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
-
-
-def _is_valid_youtube_video_id(video_id: Optional[str]) -> bool:
-    """True if this looks like a YouTube video id (11 chars, alphanumeric + -_). Filters RDAM*, channel IDs, etc."""
-    if not video_id or not isinstance(video_id, str):
-        return False
-    s = video_id.strip()
-    if len(s) != 11:
-        return False
-    return all(c.isalnum() or c in "-_" for c in s)
-
-
-def _is_garbage_embedded_title(value: Any) -> bool:
-    """True if tags look like a placeholder (e.g. yt-dlp parse-metadata mistakes)."""
-    if value is None:
-        return True
-    t = str(value).strip().lower()
-    if not t:
-        return True
-    return t in (
-        "title",
-        "track",
-        "unknown",
-        "unknown title",
-        "audio",
-        "video",
-        "untitled",
-    )
-
-
-def _strip_hint_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
-def _hint_positive_int(value: Any) -> Optional[int]:
-    if isinstance(value, bool):
-        return None
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
-        return None
-    return number if number > 0 else None
-
-
-def _extract_video_id_from_url(url: str) -> Optional[str]:
-    """Extract YouTube video ID from youtube.com or youtu.be URL."""
-    if not url or not isinstance(url, str):
-        return None
-    url = url.strip()
-    parsed = urlparse(url)
-    if "youtu.be" in parsed.netloc:
-        vid = (parsed.path or "").strip("/").split("?")[0].split("/")[0]
-        return vid if _is_valid_youtube_video_id(vid) else None
-    if "youtube.com" in parsed.netloc:
-        qs = parse_qs(parsed.query)
-        vid = (qs.get("v") or [None])[0]
-        return str(vid) if vid and _is_valid_youtube_video_id(str(vid)) else None
-    return None
-
-# Prefer audio-only streams. If YouTube exposes only a progressive stream, choose
-# the smallest audio-bearing fallback instead of an unnecessarily large video.
-YDL_FORMAT_AUDIO = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/worst[acodec!=none]"
-
-# Preview-tier selector: prefer the lowest useful audio bitrate first so the
-# engine moves the fewest bytes possible during a preview (≈ itag 140 AAC 128k
-# or itag 251 Opus 160k). The trailing fallback chain matches YDL_FORMAT_AUDIO
-# so any video still resolves even when the abr-banded picks reject everything
-# (e.g. Hi-Res lossless-only uploads where yt-dlp reports no abr field).
-YDL_FORMAT_AUDIO_PREVIEW = (
-    "bestaudio[ext=m4a][abr<=130]/bestaudio[ext=webm][abr<=170]/"
-    "worstaudio[ext=m4a]/worstaudio[ext=webm]/worst[acodec!=none]/"
-    "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/worst[acodec!=none]"
-)
-
-def _audio_only(path: Path) -> Path:
-    """Strip anything that is not the music before this file becomes a track.
-
-    `YDL_FORMAT_AUDIO` ends in `worst[acodec!=none]`, which is the right last
-    resort for availability — a song that only exists inside a progressive
-    upload is still a song — but what it hands back is a 360p video with the
-    audio muxed in. Stored as-is it costs the listener four times the bytes of
-    the music, and `--embed-thumbnail`'s 1280x720 PNG then sits in the header,
-    where a decoder must read all of it before the first sample. One library
-    reached 95 of 95 MP4s like that.
-
-    The clean-up is a remux, so the audio is untouched, and it runs before the
-    hash is taken: the file that enters the library is the file it is named
-    after, and no track id has to be remapped.
-    """
-    try:
-        from shared.library_repair import repair_file
-
-        result = repair_file(path)
-        return Path(result.path) if result else path
-    except Exception as exc:  # never let tidying cost a completed download
-        logger.debug("Could not strip non-audio streams from %s: %s", path, exc)
-        return path
-
-
-_YTDLP_PROGRESS_LINE = re.compile(
-    r"\[download\]\s+(?P<pct>\d+\.?\d*)%\s+of\s+(?:~\s*)?(?P<total>[\d.]+)(?P<tunit>[KMGT]?i?B)"
-    r"(?:\s+at\s+(?P<speed>\S+))?(?:\s+ETA\s+(?P<eta>\S+))?",
-    re.IGNORECASE,
-)
-# Note: Some yt-dlp builds use "100% of 3.21MiB in 00:05" (no at/ETA on that line).
-_YTDLP_PROGRESS_IN = re.compile(
-    r"\[download\]\s+(?P<pct>\d+\.?\d*)%\s+of\s+(?:~\s*)?(?P<total>[\d.]+)(?P<tunit>[KMGT]?i?B)\s+in\s+",
-    re.IGNORECASE,
-)
-
-
-def _size_str_to_bytes(amount: str, unit: str) -> Optional[int]:
-    try:
-        v = float(amount)
-    except (TypeError, ValueError):
-        return None
-    u = (unit or "").strip().upper().replace("İ", "I")
-    if u in ("B",):
-        return int(v)
-    if u in ("KIB", "KB"):
-        return int(v * 1024)
-    if u in ("MIB", "MB"):
-        return int(v * 1024**2)
-    if u in ("GIB", "GB"):
-        return int(v * 1024**3)
-    if u in ("TIB", "TB"):
-        return int(v * 1024**4)
-    return None
-
-
-def _parse_ytdlp_download_progress(line: str) -> Optional[Dict[str, Any]]:
-    if "[ExtractAudio]" in line or "[Metadata]" in line or "[Merger]" in line:
-        return {"phase": "processing"}
-    if "Post-processing" in line:
-        return {"phase": "processing"}
-    m = _YTDLP_PROGRESS_LINE.search(line)
-    speed = None
-    eta = None
-    if m:
-        speed = m.group("speed")
-        eta = m.group("eta")
-    else:
-        m = _YTDLP_PROGRESS_IN.search(line)
-    if not m:
-        return None
-    pct = float(m.group("pct"))
-    total_b = _size_str_to_bytes(m.group("total"), m.group("tunit"))
-    out: Dict[str, Any] = {
-        "phase": "downloading",
-        "percent": min(100.0, max(0.0, pct)),
-        "speed": speed.strip() if speed else None,
-        "eta": eta.strip() if eta else None,
-    }
-    if total_b is not None:
-        out["total_bytes"] = total_b
-    return out
-
 
 class YouTubeDownloader:
-    """Handles searching and downloading from YouTube."""
-    
-    def __init__(self, output_dir: Path = DEFAULT_OUTPUT_DIR, cookie_browser: Optional[str] = None, cookie_file: Optional[str] = None, quality: str = DEFAULT_QUALITY):
+    """Searches, streams and downloads from YouTube into one library folder."""
+
+    def __init__(
+        self,
+        output_dir: Path = DEFAULT_OUTPUT_DIR,
+        cookie_browser: Optional[str] = None,
+        cookie_file: Optional[str] = None,
+        quality: str = DEFAULT_QUALITY,
+    ):
         self.output_dir = output_dir
         self.tracks_dir = output_dir / TRACKS_DIR
         self.tracks_dir.mkdir(parents=True, exist_ok=True)
@@ -443,104 +44,80 @@ class YouTubeDownloader:
         self.cookie_browser = cookie_browser
         self.cookie_file = cookie_file
         self.quality = quality
-        
-        # Note: Auto-detect cookies.txt if no cookie source provided
+
         if not self.cookie_file and not self.cookie_browser:
-            try:
-                from shared.constants import DEFAULT_CONFIG_DIR
-                potential_path = Path(DEFAULT_CONFIG_DIR).expanduser() / "cookies.txt"
-                if potential_path.exists():
-                    self.cookie_file = str(potential_path)
-                    logger.debug("Auto-detected cookies at %s", self.cookie_file)
-            except ImportError:
-                pass
+            detected = Path(DEFAULT_CONFIG_DIR).expanduser() / "cookies.txt"
+            if detected.exists():
+                self.cookie_file = str(detected)
+                logger.debug("Auto-detected cookies at %s", self.cookie_file)
 
-    def process_track(self, metadata: Dict[str, Any], source: str = "manual") -> Optional[Track]:
-        """
-        Full workflow for a single track: Search -> Download -> Process -> Return Track.
-        """
-        metadata = dict(metadata or {})
-        metadata.setdefault("title", "Unknown Title")
-        metadata.setdefault("artist", "Unknown Artist")
-        metadata.setdefault("album", "")
-        musicbrainz_id = _recording_mbid_from_metadata(metadata)
-        metadata.pop("musicbrainz_id", None)
-        if musicbrainz_id:
-            metadata["musicbrainz_id"] = musicbrainz_id
-        clean_metadata = metadata
+    @property
+    def cookies(self) -> Cookies:
+        return Cookies(file=self.cookie_file, browser=self.cookie_browser)
 
-        # Note: Search for video
-        video_info = self._search_youtube(clean_metadata)
-        
+    # Finding and resolving
+
+    def search_youtube(
+        self,
+        query: str,
+        max_results: int = 10,
+        use_ytmusic: bool = True,
+        enrich_missing: bool = True,
+    ) -> List[Dict[str, Any]]:
+        return search.search_youtube(
+            query, self.cookies,
+            max_results=max_results, use_ytmusic=use_ytmusic, enrich_missing=enrich_missing,
+        )
+
+    def search_match_candidates(self, artist: str, title: str, max_results: int = 8) -> List[Dict[str, Any]]:
+        return search.search_match_candidates(artist, title, self.cookies, max_results=max_results)
+
+    def get_related_videos(self, seed_video_id: str, max_results: int = 25, enrich: bool = True) -> List[Dict[str, Any]]:
+        return search.get_related_videos(seed_video_id, self.cookies, max_results=max_results, enrich=enrich)
+
+    def peek_brief(self, url_or_id: str) -> Optional[Dict[str, Any]]:
+        return search.peek_brief(url_or_id, self.cookies)
+
+    def get_resolved_stream(self, video_id: str, *, skip_fast_path: bool = False) -> Optional[ResolvedStream]:
+        return streams.get_resolved_stream(video_id, self.cookies, skip_fast_path=skip_fast_path)
+
+    # Acquiring
+
+    def _download_audio(self, url: str, progress_callback: Optional[Callable[..., None]] = None) -> Path:
+        return download.download_audio(url, self.temp_dir, self.cookies, self.quality, progress_callback)
+
+    def _store(self, temp_file: Path, meta: Dict[str, Any], duration: int, bitrate: int, *,
+               youtube_id: Optional[str], cover_source: Optional[str]) -> Track:
+        return store_track(
+            temp_file, meta, self.tracks_dir,
+            duration=duration, bitrate=bitrate, compressed=(self.quality != "ultra"),
+            youtube_id=youtube_id, cover_source=cover_source,
+        )
+
+    def process_track(self, metadata: Dict[str, Any]) -> Optional[Track]:
+        """Search for a song by artist and title, then download the best match."""
+        meta = dict(metadata or {})
+        meta.setdefault("title", "Unknown Title")
+        meta.setdefault("artist", "Unknown Artist")
+        meta.setdefault("album", "")
+        with_canonical_mbid(meta)
+
+        video_info = search.find_track(meta, self.cookies)
         if not video_info:
             return None
-            
-        # Note: Rate limit protection sleep random amount
-        import time
-        import random
-        from .config import DOWNLOAD_DELAY_RANGE
         time.sleep(random.uniform(*DOWNLOAD_DELAY_RANGE))
-            
-        # Note: 3. Download audio
-        url = video_info.get('webpage_url') or video_info.get('url')
-        temp_file = self._download_audio(url)
-        
-        if not temp_file:
-            return None
-            
+        temp_file = self._download_audio(video_info.get("webpage_url") or video_info.get("url"))
         try:
-            # Note: 4. Process file (hash, metadata, move)
-            file_hash = AudioProcessor.calculate_hash(str(temp_file))
-            extension = temp_file.suffix[1:]
-            final_path = self.tracks_dir / f"{file_hash}.{extension}"
-            
-            # Note: Embed metadata (using clean version)
-            AudioProcessor.embed_metadata(
-                str(temp_file), 
-                clean_metadata, 
-                clean_metadata.get('album_art_url')
+            AudioProcessor.embed_metadata(str(temp_file), meta, meta.get("album_art_url"))
+            duration, bitrate, _size = AudioProcessor.get_audio_details(str(temp_file))
+            video_id = video_info.get("id")
+            return self._store(
+                temp_file, meta, duration, bitrate,
+                youtube_id=video_id if is_valid_video_id(video_id) else None,
+                cover_source=meta.get("cover_source"),
             )
-            
-            # Note: Verify audio details
-            duration, bitrate, size = AudioProcessor.get_audio_details(str(temp_file))
-            
-            # Note: Move to final location (renaming to hash)
-            shutil.move(str(temp_file), str(final_path))
-            
-            # Note: 5. Create track object
-            yt_id = video_info.get('id') if _is_valid_youtube_video_id(video_info.get('id')) else None
-            track = Track(
-                id=file_hash,
-                title=clean_metadata['title'],
-                artist=clean_metadata['artist'],
-                album=clean_metadata['album'],
-                album_artist=clean_metadata.get('album_artist'),
-                duration=duration if duration > 0 else clean_metadata['duration_sec'],
-                file_hash=file_hash,
-                original_filename=f"{clean_metadata['artist']} - {clean_metadata['title']}.{extension}",
-                compressed=(self.quality != 'ultra'),
-                file_size=size,
-                bitrate=bitrate,
-                format=extension,
-                year=clean_metadata.get('year'),
-                genre=None,
-                track_number=clean_metadata.get('track_number'),
-                artists=clean_metadata.get('artists'),
-                disc_number=clean_metadata.get('disc_number'),
-                disc_total=clean_metadata.get('disc_total'),
-                is_compilation=bool(clean_metadata.get('is_compilation')),
-                is_local=True,
-                local_path=None,
-                musicbrainz_id=clean_metadata.get("musicbrainz_id"),
-                isrc=clean_metadata.get("isrc"),
-                cover_source=clean_metadata.get("cover_source"),
-                metadata_modified_by_user=False,
-                youtube_id=yt_id
-            )
-            return track
-            
         except Exception as e:
-            logger.warning("Error processing downloaded file %s: %s", metadata.get("title", "unknown"), e)
+            logger.warning("Error processing downloaded file %s: %s", meta.get("title", "unknown"), e)
             if temp_file.exists():
                 os.remove(temp_file)
             return None
@@ -549,143 +126,41 @@ class YouTubeDownloader:
         self,
         url: str,
         metadata_hint: Optional[Dict[str, Any]] = None,
-        source: str = "youtube_url",
         progress_callback: Optional[Callable[..., None]] = None,
     ) -> Optional[Track]:
-        """
-        Process a direct YouTube URL. Single yt-dlp run (download only), then read metadata from file.
-        Matches CLI behavior: one format selection, one download.
-        """
-        if progress_callback:
-            try:
-                progress_callback({"phase": "preparing"})
-            except Exception:
-                pass
+        """Download one YouTube video and read what it is from the file itself."""
+        def report(update: Dict[str, Any]) -> None:
+            if progress_callback:
+                try:
+                    progress_callback(update)
+                except Exception:
+                    pass
+
+        report({"phase": "preparing"})
         temp_file = self._download_audio(url, progress_callback=progress_callback)
-        if not temp_file or not temp_file.exists():
+        if not temp_file.exists():
             raise Exception("Download failed: Audio file was not created by yt-dlp. Check if ffmpeg is installed.")
 
         try:
-            if progress_callback:
-                try:
-                    progress_callback({"phase": "processing", "percent": 92.0})
-                except Exception:
-                    pass
-            duration, bitrate, size = AudioProcessor.get_audio_details(str(temp_file))
-            video_id = _extract_video_id_from_url(url)
-            clean_meta = AudioProcessor.get_metadata_from_file(str(temp_file))
-            if _is_garbage_embedded_title(clean_meta.get("title")):
-                clean_meta["title"] = ""
-            if _is_garbage_embedded_title(clean_meta.get("artist")):
-                clean_meta["artist"] = ""
-            clean_meta.setdefault('album', '')
-            clean_meta.setdefault('duration_sec', duration or 0)
-            clean_meta.setdefault('track_number', 1)
-            if isinstance(metadata_hint, dict):
-                ht = _strip_hint_str(metadata_hint.get("title"))
-                if ht and not _is_garbage_embedded_title(ht):
-                    clean_meta["title"] = ht
-                ha = _strip_hint_str(metadata_hint.get("artist"))
-                hc = _strip_hint_str(metadata_hint.get("channel"))
-                artist_hint = ha or hc
-                if artist_hint:
-                    clean_meta["artist"] = artist_hint
-                if metadata_hint.get("duration_sec") is not None:
-                    clean_meta["duration_sec"] = metadata_hint["duration_sec"]
-                if metadata_hint.get("album") is not None:
-                    alb = _strip_hint_str(metadata_hint.get("album"))
-                    clean_meta["album"] = alb
-                # Where the catalog placed the song, when it was saved from a
-                # record. Authoritative over the upload's own tags, which name
-                # whatever release YouTube filed it under.
-                album_artist = _strip_hint_str(metadata_hint.get("album_artist"))
-                if album_artist:
-                    clean_meta["album_artist"] = album_artist
-                for key in ("track_number", "disc_number", "year"):
-                    position = _hint_positive_int(metadata_hint.get(key))
-                    if position:
-                        clean_meta[key] = position
-                musicbrainz_id = _recording_mbid_from_metadata(metadata_hint)
-                if musicbrainz_id:
-                    clean_meta["musicbrainz_id"] = musicbrainz_id
-            embedded_musicbrainz_id = _recording_mbid_from_metadata(clean_meta)
-            clean_meta.pop("musicbrainz_id", None)
-            if embedded_musicbrainz_id:
-                clean_meta["musicbrainz_id"] = embedded_musicbrainz_id
-            if _is_garbage_embedded_title(clean_meta.get("title")) or _is_garbage_embedded_title(
-                clean_meta.get("artist")
-            ):
-                peek = self._peek_video_metadata(url)
-                if peek:
-                    pt = _strip_hint_str(peek.get("track") or peek.get("title"))
-                    if pt and not _is_garbage_embedded_title(pt):
-                        clean_meta["title"] = pt
-                    pa = _strip_hint_str(
-                        peek.get("artist") or peek.get("channel") or peek.get("uploader") or ""
-                    )
-                    if pa and (_is_garbage_embedded_title(clean_meta.get("artist")) or not clean_meta.get("artist")):
-                        clean_meta["artist"] = pa
-                    if not clean_meta.get("album") and peek.get("album"):
-                        clean_meta["album"] = _strip_hint_str(peek.get("album"))
-            clean_meta.setdefault('title', 'Unknown Title')
-            clean_meta.setdefault('artist', 'Unknown Artist')
-            clean_meta.setdefault('album', '')
-            clean_meta.setdefault('duration_sec', duration or 0)
-            clean_meta.setdefault('track_number', 1)
-
+            report({"phase": "processing", "percent": 92.0})
+            duration, bitrate, _size = AudioProcessor.get_audio_details(str(temp_file))
+            meta = video_metadata(
+                AudioProcessor.get_metadata_from_file(str(temp_file)),
+                metadata_hint,
+                duration,
+                peek=lambda: search.peek_video_metadata(url, self.cookies),
+            )
             try:
-                AudioProcessor.embed_metadata(
-                    str(temp_file),
-                    clean_meta,
-                    None,  # Keep the downloaded artwork; mqdefault would replace it.
-                )
+                # No cover URL: keep the artwork yt-dlp embedded; mqdefault would replace it.
+                AudioProcessor.embed_metadata(str(temp_file), meta, None)
             except Exception as e:
                 logger.warning("Could not re-embed metadata on downloaded file: %s", e)
-
-            try:
-                size = os.path.getsize(str(temp_file))
-            except OSError:
-                pass
-
-            if progress_callback:
-                try:
-                    progress_callback({"phase": "processing", "percent": 97.0})
-                except Exception:
-                    pass
-            file_hash = AudioProcessor.calculate_hash(str(temp_file))
-            extension = temp_file.suffix[1:]
-            final_path = self.tracks_dir / f"{file_hash}.{extension}"
-            shutil.move(str(temp_file), str(final_path))
-
-            track = Track(
-                id=file_hash,
-                title=clean_meta['title'],
-                artist=clean_meta['artist'],
-                album=clean_meta.get('album') or '',
-                album_artist=clean_meta.get('album_artist'),
-                duration=duration if duration > 0 else clean_meta.get('duration_sec') or 0,
-                file_hash=file_hash,
-                original_filename=f"{clean_meta['artist']} - {clean_meta['title']}.{extension}",
-                compressed=(self.quality != 'ultra'),
-                file_size=size,
-                bitrate=bitrate,
-                format=extension,
-                year=clean_meta.get('year'),
-                genre=None,
-                track_number=clean_meta.get('track_number') or 1,
-                artists=clean_meta.get('artists'),
-                disc_number=clean_meta.get('disc_number'),
-                disc_total=clean_meta.get('disc_total'),
-                is_compilation=bool(clean_meta.get('is_compilation')),
-                is_local=True,
-                local_path=None,
-                musicbrainz_id=clean_meta.get("musicbrainz_id"),
-                isrc=None,
-                cover_source="youtube",
-                metadata_modified_by_user=False,
-                youtube_id=video_id
+            report({"phase": "processing", "percent": 97.0})
+            meta["track_number"] = meta.get("track_number") or 1
+            return self._store(
+                temp_file, meta, duration, bitrate,
+                youtube_id=video_id_from_url(url), cover_source="youtube",
             )
-            return track
         except Exception as e:
             if temp_file and temp_file.exists():
                 try:
@@ -706,67 +181,23 @@ class YouTubeDownloader:
         """Process an already-downloaded audio file (e.g. podcast enclosure) into a library Track."""
         if not temp_file or not temp_file.exists():
             return None
-        clean_meta = dict(clean_meta or {})
-        clean_meta.setdefault("title", "Unknown Title")
-        clean_meta.setdefault("artist", "Unknown Artist")
-        clean_meta.setdefault("album", "")
-        clean_meta.setdefault("duration_sec", 0)
-        clean_meta.setdefault("track_number", 1)
-        musicbrainz_id = _recording_mbid_from_metadata(clean_meta)
-        clean_meta.pop("musicbrainz_id", None)
-        if musicbrainz_id:
-            clean_meta["musicbrainz_id"] = musicbrainz_id
+        meta = dict(clean_meta or {})
+        meta.setdefault("title", "Unknown Title")
+        meta.setdefault("artist", "Unknown Artist")
+        meta.setdefault("album", "")
+        meta.setdefault("duration_sec", 0)
+        meta.setdefault("track_number", 1)
+        with_canonical_mbid(meta)
         try:
-            duration, bitrate, size = AudioProcessor.get_audio_details(str(temp_file))
+            duration, bitrate, _size = AudioProcessor.get_audio_details(str(temp_file))
             try:
-                AudioProcessor.embed_metadata(
-                    str(temp_file),
-                    clean_meta,
-                    cover_art_url,
-                )
+                AudioProcessor.embed_metadata(str(temp_file), meta, cover_art_url)
             except Exception as e:
                 logger.warning("Could not embed metadata on local file: %s", e)
-            try:
-                size = os.path.getsize(str(temp_file))
-            except OSError:
-                pass
-            file_hash = AudioProcessor.calculate_hash(str(temp_file))
-            extension = (temp_file.suffix[1:] or "mp3").lower()
-            if not extension:
-                extension = "mp3"
-            final_path = self.tracks_dir / f"{file_hash}.{extension}"
-            shutil.move(str(temp_file), str(final_path))
-            return Track(
-                id=file_hash,
-                title=clean_meta["title"],
-                artist=clean_meta["artist"],
-                album=clean_meta.get("album") or "",
-                album_artist=clean_meta.get("album_artist"),
-                duration=duration if duration > 0 else int(clean_meta.get("duration_sec") or 0),
-                file_hash=file_hash,
-                original_filename=f"{clean_meta['artist']} - {clean_meta['title']}.{extension}",
-                compressed=(self.quality != "ultra"),
-                file_size=size,
-                bitrate=bitrate,
-                format=extension,
-                year=clean_meta.get("year"),
-                genre=clean_meta.get("genre"),
-                track_number=clean_meta.get("track_number") or 1,
-                artists=clean_meta.get("artists"),
-                disc_number=clean_meta.get("disc_number"),
-                disc_total=clean_meta.get("disc_total"),
-                is_compilation=bool(clean_meta.get("is_compilation")),
-                is_local=True,
-                local_path=None,
-                musicbrainz_id=clean_meta.get("musicbrainz_id"),
-                isrc=None,
-                cover_source=cover_source,
-                metadata_modified_by_user=False,
-                youtube_id=youtube_id,
-                media_kind=clean_meta.get("media_kind"),
-                podcast_feed_id=clean_meta.get("podcast_feed_id"),
-                podcast_episode_guid=clean_meta.get("podcast_episode_guid"),
-                podcast_rss_url=clean_meta.get("podcast_rss_url"),
+            meta["track_number"] = meta.get("track_number") or 1
+            return self._store(
+                temp_file, meta, duration, bitrate,
+                youtube_id=youtube_id, cover_source=cover_source,
             )
         except Exception as e:
             if temp_file.exists():
@@ -776,779 +207,3 @@ class YouTubeDownloader:
                     pass
             logger.error("finalize_local_audio_file failed: %s", e)
             return None
-
-    def _search_youtube(self, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Search YouTube using configured strategies.
-        Returns video info dict or None.
-        """
-        queries = []
-        
-        # Note: Strategy 1 topic search (artist - title official audio)
-        q1 = SEARCH_STRATEGY_PRIMARY.format(
-            artist=metadata['artist'], 
-            title=metadata['title']
-        )
-        queries.append(q1)
-        
-        # Note: Strategy 2 fallback (artist - title)
-        q2 = SEARCH_STRATEGY_FALLBACK.format(
-            artist=metadata['artist'], 
-            title=metadata['title']
-        )
-        queries.append(q2)
-        
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': True, # Note: Don't download, just get info
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'ios', 'web'], # Note: Try mobile clients first
-                }
-            }
-        }
-        _apply_ytdlp_network_options(ydl_opts)
-        
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            ydl_opts['cookiefile'] = self.cookie_file
-        elif self.cookie_browser:
-            ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            for query in queries:
-                try:
-                    # Note: Search 5 results
-                    results = ydl.extract_info(f"ytsearch5:{query}", download=False)
-                    if not results or 'entries' not in results:
-                        continue
-                        
-                    best_match = None
-                    highest_score = 0
-                    
-                    for entry in results['entries']:
-                        if not entry: continue
-                        
-                        is_valid, score = self._is_valid_match(entry, metadata)
-                        
-                        if is_valid:
-                            if score > highest_score:
-                                highest_score = score
-                                best_match = entry
-                    
-                    if best_match:
-                        logger.debug("Found match: %s (Score: %.2f)", best_match.get("title"), highest_score)
-                        return best_match
-                        
-                except Exception as e:
-                    logger.warning("Search error for %s: %s", query, e)
-                    continue
-                    
-        return None
-
-    def _is_valid_match(self, video_info: Dict[str, Any], metadata: Dict[str, Any]) -> tuple[bool, float]:
-        """
-        Check if a video is a valid match using word intersection.
-        """
-        title = video_info.get('title', '').lower()
-        
-        # Note: 1. Duration check (only if duration is known)
-        target_duration = metadata.get('duration_sec', 0)
-        if target_duration > 0:
-            actual_duration = video_info.get('duration', 0)
-            diff = abs(actual_duration - target_duration)
-            if diff > DURATION_TOLERANCE_SEC:
-                return False, 0.0
-        
-        # Note: 2. Keyword exclusion
-        for keyword in FORBIDDEN_KEYWORDS:
-            if keyword in title and keyword not in metadata['title'].lower():
-                return False, 0.0
-
-        # Note: 3. Robust word matching
-        # Note: We check if most words from our query are present in the video title
-        query_text = f"{metadata['artist']} {metadata['title']}".lower()
-        query_words = set(re.findall(r'\w+', query_text))
-        video_words = set(re.findall(r'\w+', title))
-        
-        # Note: Remove small generic words from comparison
-        stop_words = {'a', 'the', 'of', 'and', 'official', 'audio', 'video', 'music'}
-        query_words = query_words - stop_words
-        
-        if not query_words:
-            return True, 1.0 # Note: Should not happen
-            
-        intersection = query_words.intersection(video_words)
-        match_ratio = len(intersection) / len(query_words)
-        
-        # Note: Use existing threshold
-        if match_ratio >= 0.5: # Note: Half of the important words match
-            return True, match_ratio
-            
-        return False, 0.0
-
-    def _download_audio(
-        self, url: str, progress_callback: Optional[Callable[..., None]] = None
-    ) -> Optional[Path]:
-        """Download via yt-dlp CLI (subprocess).
-
-        Strategy: try native audio first (no re-encode — faster, fewer failures
-        with non-standard YouTube videos). Only re-encode if the native attempt
-        fails or the quality profile explicitly demands a specific codec.
-        """
-        import time
-        temp_filename = f"temp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex[:6]}"
-        output_template = str(self.temp_dir / f"{temp_filename}.%(ext)s")
-        profile = QUALITY_PROFILES.get(self.quality, QUALITY_PROFILES[DEFAULT_QUALITY])
-
-        def _build_args(native: bool = False) -> list[str]:
-            args = [
-                get_subprocess_python(), "-u", "-m", "yt_dlp",
-                "-f", YDL_FORMAT_AUDIO,
-            ]
-            if not native:
-                # `best` keeps the stream's own codec. Converting YouTube's
-                # Opus or AAC to FLAC stores the same sound at up to twelve
-                # times the size.
-                codec = profile['format']
-                args.extend(["-x", "--audio-format", codec])
-                if profile.get('bitrate', 0) > 0 and codec == 'mp3':
-                    args.extend(["--audio-quality", str(profile['bitrate'])])
-            _add_ytdlp_cli_network_args(args)
-            args.extend(_ytdlp_download_resilience_args())
-            args.extend([
-                # yt-dlp's own default first, as the stream resolver does. The
-                # android and ios responses now arrive without their audio URLs
-                # (no PO token), and web alone may offer only the 49k AAC
-                # (itag 139), which `bestaudio[ext=m4a]` then happily picks.
-                "--extractor-args", "youtube:player_client=default,android,ios",
-                "--add-metadata",
-                "--embed-thumbnail",
-                "--parse-metadata", "playlist_index:%(track_number)s",
-                "-o", output_template,
-                "--retries", "10",
-                "--no-warnings",
-                "--newline",
-                "--progress",
-            ])
-            return args
-
-        cookie_args = []
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            cookie_args = ["--cookies", self.cookie_file]
-        elif self.cookie_browser:
-            cookie_args = ["--cookies-from-browser", self.cookie_browser]
-
-        def _with_cookie_args(args_list):
-            if not cookie_args:
-                return list(args_list)
-            return [*args_list[:-1], *cookie_args, args_list[-1]]
-
-        def _run_stream(args_list):
-            combined_chunks = []
-            proc = subprocess.Popen(
-                args_list,
-                cwd=str(self.temp_dir),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env={**os.environ, "PYTHONUNBUFFERED": "1"},
-            )
-            try:
-                if proc.stdout:
-                    for line in proc.stdout:
-                        combined_chunks.append(line)
-                        if progress_callback:
-                            try:
-                                parsed = _parse_ytdlp_download_progress(line.rstrip())
-                                if parsed:
-                                    progress_callback(parsed)
-                            except Exception as ex:
-                                logger.debug("progress_callback error: %s", ex)
-                proc.wait(timeout=600)
-            except subprocess.TimeoutExpired:
-                try:
-                    proc.kill()
-                except OSError:
-                    pass
-                raise
-            return proc.returncode, "".join(combined_chunks)
-
-        # — Attempt 1: native audio (no re-encode) — fastest, most reliable —
-        native_args = _build_args(native=True) + [url]
-        returncode, combined_output = _run_stream(native_args)
-        if returncode == 0:
-            ext = None
-            for f in self.temp_dir.glob(f"{temp_filename}.*"):
-                return _audio_only(f)
-            # yt-dlp sometimes names with a different extension; try common ones
-            for ext in ("m4a", "webm", "opus", "mp3", "ogg", "aac"):
-                p = self.temp_dir / f"{temp_filename}.{ext}"
-                if p.exists():
-                    return _audio_only(p)
-
-        # — Attempt 2: cookies (native) —
-        if returncode != 0 and cookie_args and _should_retry_download_with_cookies(combined_output):
-            returncode, combined_output = _run_stream(_with_cookie_args(native_args))
-            if returncode == 0:
-                for f in self.temp_dir.glob(f"{temp_filename}.*"):
-                    return _audio_only(f)
-
-        # — Attempt 3: re-encode (with -x, cookies if available) —
-        encode_args = _build_args(native=False) + [url]
-        final_args = _with_cookie_args(encode_args) if cookie_args else encode_args
-        returncode, combined_output = _run_stream(final_args)
-        if returncode == 0:
-            for f in self.temp_dir.glob(f"{temp_filename}.*"):
-                return _audio_only(f)
-
-        # — All attempts exhausted —
-        raise Exception(combined_output or f"yt-dlp exited {returncode}")
-
-    def _peek_video_metadata(self, url: str) -> Dict[str, Any]:
-        """Single extract_info (no download) to recover title/artist when embedded tags are wrong.
-
-        Try without cookies first: browser cookie jars can make yt-dlp fail format resolution for
-        metadata-only extracts ("Requested format is not available") while public URLs work anonymously.
-        Fall back to cookies.txt then browser cookies for age-restricted / signed-in cases.
-        """
-        base: Dict[str, Any] = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
-        }
-        _apply_ytdlp_network_options(base)
-        attempts: List[Dict[str, Any]] = [dict(base)]
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            attempts.append({**base, "cookiefile": self.cookie_file})
-        if self.cookie_browser:
-            attempts.append({**base, "cookiesfrombrowser": (self.cookie_browser, None, None, None)})
-        last_err: Optional[Exception] = None
-        for opts in attempts:
-            try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                if isinstance(info, dict) and info:
-                    return info
-            except Exception as e:
-                last_err = e
-                logger.debug("peek_video_metadata attempt failed for %s: %s", url, e)
-        if last_err:
-            logger.warning("peek_video_metadata failed for %s: %s", url, last_err)
-        return {}
-
-    def peek_brief(self, url_or_id: str) -> Optional[Dict[str, Any]]:
-        """Lightweight YouTube metadata for UI (no download). Same general shape as search_youtube rows."""
-        raw = (url_or_id or "").strip()
-        if not raw:
-            return None
-        if raw.startswith("http://") or raw.startswith("https://"):
-            url = raw
-        elif _is_valid_youtube_video_id(raw):
-            url = f"https://www.youtube.com/watch?v={raw}"
-        else:
-            return None
-        info = self._peek_video_metadata(url)
-        if not info:
-            return None
-        vid_raw = info.get("id") or _extract_video_id_from_url(url)
-        vid_s = str(vid_raw).strip() if vid_raw is not None else ""
-        title = (info.get("track") or info.get("title") or "").strip() or "Unknown"
-        duration = int(info.get("duration") or 0)
-        thumb = (info.get("thumbnail") or "").strip()
-        if not thumb and vid_s and _is_valid_youtube_video_id(vid_s):
-            thumb = _yt_thumbnail_url(vid_s) or ""
-        webpage = (info.get("webpage_url") or "").strip()
-        if vid_s and _is_valid_youtube_video_id(vid_s):
-            webpage = f"https://www.youtube.com/watch?v={vid_s}"
-        elif not webpage:
-            webpage = url
-        out_id = vid_s if _is_valid_youtube_video_id(vid_s) else vid_raw
-        channel = str(info.get("channel") or info.get("uploader") or "").strip()
-        return {
-            "id": out_id,
-            "title": title,
-            "duration": duration,
-            "thumbnail": thumb,
-            "webpage_url": webpage,
-            "channel": channel,
-            **_music_fields(info, channel),
-        }
-
-    def search_youtube(
-        self,
-        query: str,
-        max_results: int = 10,
-        use_ytmusic: bool = True,
-        enrich_missing: bool = True,
-    ) -> List[Dict[str, Any]]:
-        """
-        Search YouTube or YouTube Music with plain text. Returns yt-dlp-derived dicts:
-        id, duration, thumbnail, webpage_url and channel (channel, uploader or
-        artist — whichever yt-dlp provides), plus the song fields of
-        `youtube_music_metadata`: title and artist are the song, source_title
-        the upload's own title.
-        No filtering — pass-through for UI; a proper search layer can be added later.
-        use_ytmusic=True: https://music.youtube.com/search?q=...#songs with extract_flat
-        (fast; channel/artist may be empty). Full per-video extract was very slow (~tens of
-        seconds) and often set url= relative paths that broke clients expecting absolute
-        watch URLs. No cookies on this path; downloads still use cookies elsewhere.
-        use_ytmusic=False: ytsearchN:query with extract_flat (fast; uploader present).
-        """
-        if not query or not query.strip():
-            return []
-        query = query.strip()
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extractor_args': {
-                'youtube': {'player_client': ['android', 'ios', 'web']}
-            }
-        }
-        _apply_ytdlp_network_options(ydl_opts)
-        if use_ytmusic:
-            ydl_opts['extract_flat'] = True
-            ydl_opts['playlistend'] = max_results
-            ydl_opts['ignoreerrors'] = True
-        else:
-            ydl_opts['extract_flat'] = True
-            if self.cookie_file and os.path.exists(self.cookie_file):
-                ydl_opts['cookiefile'] = self.cookie_file
-            elif self.cookie_browser:
-                ydl_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
-
-        if use_ytmusic:
-            search_input = f"https://music.youtube.com/search?q={quote(query)}#songs"
-        else:
-            search_input = f"ytsearch{max_results}:{query}"
-
-        def to_item(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-            if not entry:
-                return None
-            video_id = entry.get('id')
-            if not video_id:
-                return None
-            title = (entry.get('title') or '').strip()
-            if not title or title.lower() == 'unknown':
-                return None
-            vid_s = str(video_id).strip()
-            if _is_valid_youtube_video_id(vid_s):
-                webpage_url = f"https://www.youtube.com/watch?v={vid_s}"
-            else:
-                raw = (entry.get('webpage_url') or entry.get('url') or '').strip()
-                if raw.startswith('http://') or raw.startswith('https://'):
-                    webpage_url = raw
-                elif raw.startswith('/'):
-                    webpage_url = f"https://www.youtube.com{raw}"
-                elif raw:
-                    webpage_url = f"https://www.youtube.com/{raw.lstrip('/')}"
-                else:
-                    webpage_url = f"https://www.youtube.com/watch?v={vid_s}"
-            raw_creator = (
-                entry.get('channel')
-                or entry.get('uploader')
-                or entry.get('artist')
-            )
-            if raw_creator is None:
-                creator = ''
-            elif isinstance(raw_creator, str):
-                creator = raw_creator.strip()
-            elif isinstance(raw_creator, (list, tuple)):
-                creator = ', '.join(str(x) for x in raw_creator if x).strip()
-            else:
-                creator = str(raw_creator).strip()
-            return {
-                'id': video_id,
-                'title': title,
-                'duration': entry.get('duration') or 0,
-                'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
-                'webpage_url': webpage_url,
-                'channel': creator,
-                **_music_fields(entry, creator),
-            }
-
-        def enrich_missing_creators(items: List[Dict[str, Any]]) -> None:
-            """Fill in the channel for rows that came back without one.
-
-            YouTube Music's search returns ids and titles and nothing else, so
-            every row needs this. It used to run a full extraction per row —
-            8 rows measured 5.2 s, on top of a 0.9 s search — which is what made
-            a cold resolve feel broken. The oembed endpoint answers the same
-            question in a fraction of that: 8 rows in ~120 ms.
-
-            Duration is deliberately not recovered here. oembed does not carry
-            one, and the callers that actually need a duration score candidates
-            against a known track — those ask `search_match_candidates`, whose
-            search returns durations in the first place.
-            """
-            missing = [
-                item
-                for item in items
-                if not (item.get("artist") or item.get("channel") or "").strip()
-                and _is_valid_youtube_video_id(str(item.get("id") or "").strip())
-            ]
-            if not missing:
-                return
-
-            max_workers = min(8, len(missing))
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(_oembed_creator, str(item.get("id") or "")): item
-                    for item in missing
-                }
-                for future in as_completed(futures):
-                    item = futures[future]
-                    creator = future.result()
-                    if creator:
-                        item["artist"] = creator
-                        item["channel"] = creator
-                        item.update(youtube_music_metadata(item))
-
-        out: List[Dict[str, Any]] = []
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                result = ydl.extract_info(search_input, download=False)
-            if not result or 'entries' not in result:
-                return []
-            raw_entries = result['entries']
-            if raw_entries is None:
-                return []
-            entries_list = list(raw_entries) if not isinstance(raw_entries, list) else raw_entries
-            if use_ytmusic:
-                entries_list = entries_list[:max_results]
-            for entry in entries_list:
-                item = to_item(entry)
-                if item is not None:
-                    out.append(item)
-            if use_ytmusic and enrich_missing:
-                enrich_missing_creators(out)
-        except Exception as e:
-            logger.warning("YouTube search error (use_ytmusic=%s): %s", use_ytmusic, e)
-            # Note: No silent fallback -- let the caller decide or propagate the error
-            raise e
-        return out
-
-    def search_match_candidates(
-        self, artist: str, title: str, max_results: int = 8
-    ) -> List[Dict[str, Any]]:
-        """Candidates to score against a track we already know.
-
-        Deliberately the plain YouTube surface rather than the configured browse
-        source. Scoring weighs title, channel and duration, and YouTube Music's
-        search carries none of the last two: recovering them costs a full
-        extraction per candidate — 5.2 s for eight — while plain search returns
-        all three in one 0.9 s call. The ranking YouTube Music would add is
-        redundant here anyway, because `best_candidate` re-ranks every result
-        against the artist, title and duration we already hold.
-        """
-        query = f"{title} {artist}".strip()
-        if not query:
-            return []
-        rows = self.search_youtube(
-            query,
-            max_results=max_results,
-            use_ytmusic=False,
-            enrich_missing=False,
-        )
-        # Matching scores the upload itself — its official/lyrics/version
-        # markers — so it gets the title as uploaded, not the song title.
-        return [{**row, "title": row.get("source_title") or row.get("title")} for row in rows]
-
-    def get_related_videos(
-        self,
-        seed_video_id: str,
-        max_results: int = 25,
-        enrich: bool = True,
-    ) -> List[Dict[str, Any]]:
-        """
-        Fetch related/mix videos for a seed from YouTube.
-
-        Order of attempts (revised for low-latency radio starts):
-          1. RD mix playlist (flat extraction) — one yt-dlp call, deterministic,
-             matches YouTube's official "Radio" mix for the seed. No fan-out.
-          2. YouTube Music search by seed metadata (peek + ytmusic search). When
-             `enrich=False`, skips the per-item `peek_brief` fan-out that can add
-             several seconds. Used as a fallback when RD mix isn't available.
-          3. RD mix without flat extraction (full per-entry extract) — last resort.
-
-        Returns same shape as search_youtube.
-        """
-        if not _is_valid_youtube_video_id(seed_video_id):
-            return []
-
-        def to_item(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-            if not entry:
-                return None
-            video_id = entry.get('id')
-            if not video_id:
-                return None
-            title = (entry.get('title') or '').strip() or 'Unknown'
-            webpage_url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
-            channel = entry.get('channel') or entry.get('uploader') or ''
-            return {
-                'id': video_id,
-                'title': title,
-                'duration': entry.get('duration') or 0,
-                'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg" if video_id else ''),
-                'webpage_url': webpage_url,
-                'channel': channel,
-                **_music_fields(entry, channel),
-            }
-
-        def _try_extract(ydl_opts: dict, url: str) -> List[Dict[str, Any]]:
-            out = []
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                result = ydl.extract_info(url, download=False)
-            if not result or 'entries' not in result:
-                logger.debug(
-                    "[Discover] get_related_videos: no entries in result (keys: %s)",
-                    list(result.keys()) if result else "None",
-                )
-                return []
-            raw_entries = result['entries']
-            if raw_entries is None:
-                return []
-            entries_list = list(raw_entries) if not isinstance(raw_entries, list) else raw_entries
-            for entry in entries_list[:max_results]:
-                item = to_item(entry)
-                if item is not None:
-                    out.append(item)
-            return out
-
-        base_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'socket_timeout': 12,
-            'extractor_args': {
-                'youtube': {'player_client': ['android', 'ios', 'web']}
-            }
-        }
-        _apply_ytdlp_network_options(base_opts)
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            base_opts['cookiefile'] = self.cookie_file
-        elif self.cookie_browser:
-            base_opts['cookiesfrombrowser'] = (self.cookie_browser, None, None, None)
-
-        mix_url = f"https://www.youtube.com/watch?v={seed_video_id}&list=RD{seed_video_id}&start_radio=1"
-
-        # — Attempt 1: RD mix playlist (flat extraction) — one yt-dlp call, no fan-out —
-        opts_flat = {**base_opts, 'extract_flat': 'in_playlist', 'noplaylist': False}
-        try:
-            results = _try_extract(opts_flat, mix_url)
-            if results:
-                return results
-        except Exception as e:
-            logger.debug("[Discover] get_related_videos RD flat failed: %s", e)
-
-        # — Attempt 2: YouTube Music search by video metadata —
-        try:
-            info = self._peek_video_metadata(f"https://www.youtube.com/watch?v={seed_video_id}")
-            if info:
-                raw_title = info.get('track') or info.get('title') or ''
-                raw_artist = info.get('artist') or info.get('channel') or info.get('uploader') or ''
-                title = str(raw_title).strip()
-                artist = str(raw_artist).strip() if isinstance(raw_artist, (str, list, tuple)) else ''
-                if isinstance(artist, (list, tuple)):
-                    artist = ', '.join(str(x) for x in artist if x)
-                query = f"{title} {artist}".strip()
-                if query:
-                    results = self.search_youtube(
-                        query,
-                        max_results=max_results,
-                        use_ytmusic=prefer_ytmusic(),
-                        enrich_missing=enrich,
-                    )
-                    results = [r for r in results if str(r.get('id', '')) != seed_video_id]
-                    if results:
-                        return results
-        except Exception as e:
-            logger.debug("[Discover] get_related_videos search fallback failed: %s", e)
-
-        # — Attempt 3: RD mix without flat extraction (full) — last resort —
-        opts_full = {**base_opts, 'noplaylist': False}
-        try:
-            results = _try_extract(opts_full, mix_url)
-            if results:
-                return results
-        except Exception as e:
-            logger.debug("[Discover] get_related_videos RD full failed: %s", e)
-
-        return []
-
-    def get_resolved_stream(
-        self, video_id: str, *, skip_fast_path: bool = False
-    ) -> Optional[ResolvedStream]:
-        """Resolve audio together with the network path that owns the URL.
-
-        `skip_fast_path` is for a caller retrying after the CDN itself
-        rejected a URL the fast path produced: extraction succeeds and hands
-        back a signed URL, but googlevideo 403s the audio-only formats this
-        station asks for when the player client behind them has no PO token
-        (`android_vr` does not, for anything but 360p muxed). That rejection
-        never reaches `_try`'s except clause — it happens later, when the
-        caller actually fetches bytes — so re-resolving without this flag
-        would just ask the same client again and fail the same way.
-        """
-        if not video_id or not str(video_id).strip():
-            return None
-        yt_url = f"https://www.youtube.com/watch?v={video_id}"
-
-        def _try(
-            opts: Dict[str, Any],
-            *,
-            egress: str,
-            proxy_url: Optional[str] = None,
-            require_audio_only: bool = False,
-        ) -> tuple[Optional[ResolvedStream], bool]:
-            started = time.monotonic()
-            try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    info = ydl.extract_info(yt_url, download=False)
-            except Exception as exc:
-                msg = str(exc) or exc.__class__.__name__
-                if "Requested format is not available" in msg:
-                    return None, False
-                if "Sign in to confirm" in msg:
-                    return None, False
-                logger.warning(
-                    "[Preview] yt-dlp extract failed for %s: %s",
-                    video_id,
-                    msg[:300],
-                )
-                return None, True
-            if not isinstance(info, dict) or not info:
-                return None, False
-            selected = info
-            url = info.get("url")
-            if not isinstance(url, str) or not url:
-                for collection in (info.get("requested_formats") or [], info.get("formats") or []):
-                    for fmt in collection:
-                        candidate = fmt.get("url") if isinstance(fmt, dict) else None
-                        if isinstance(candidate, str) and candidate:
-                            url = candidate
-                            selected = fmt
-                            break
-                    if isinstance(url, str) and url:
-                        break
-            if not isinstance(url, str) or not url:
-                return None, False
-            if require_audio_only and selected.get("vcodec") != "none":
-                logger.info(
-                    "[Preview] Fast path for %s degraded to muxed format %s; using fallback clients",
-                    video_id,
-                    selected.get("format_id") or info.get("format_id") or "unknown",
-                )
-                return None, False
-            return (
-                resolved_stream(
-                    url,
-                    egress="relay" if egress == "relay" else "direct",
-                    proxy_url=proxy_url,
-                    resolution_ms=round((time.monotonic() - started) * 1000),
-                ),
-                False,
-            )
-
-        base_opts: Dict[str, Any] = {
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "format": YDL_FORMAT_AUDIO_PREVIEW,
-            "extractor_args": {"youtube": {"player_client": ["default", "android", "ios"]}},
-        }
-
-        yt_proxy = os.getenv("SOUNDSIBLE_YT_PROXY", "").strip()
-
-        # Fast path first. `android_vr` is the only client of the three below
-        # whose formats survive today — the android and ios responses are
-        # fetched and then discarded for want of a PO token — so asking for it
-        # alone drops two round trips, and a reused session identifier drops the
-        # 1 MB watch page. Measured on a relayed station: 2658 ms and 1590 KB
-        # down to 1774 ms and 451 KB.
-        #
-        # Everything below stays as the fallback: this path leans on a session
-        # identifier and a single client, and both are YouTube's to break.
-        visitor = _youtube_visitor_data() if not skip_fast_path else None
-        if visitor:
-            fast_opts: Dict[str, Any] = {
-                **base_opts,
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["android_vr"],
-                        "player_skip": ["webpage", "configs"],
-                        "visitor_data": [visitor],
-                    }
-                },
-            }
-            if yt_proxy:
-                fast_opts["proxy"] = yt_proxy
-            elif _yt_dlp_force_ipv4():
-                fast_opts["source_address"] = "0.0.0.0"
-            result, _hard_error = _try(
-                fast_opts,
-                egress="relay" if yt_proxy else "direct",
-                proxy_url=yt_proxy or None,
-                require_audio_only=True,
-            )
-            if result:
-                return result
-            # A rejected identifier looks like a hard error; drop it so the next
-            # resolution fetches a fresh one instead of failing the same way.
-            _reset_visitor_data_cache()
-
-        # A relay is the primary path when configured. Its result retains the
-        # proxy URL so every later byte follows the same egress.
-        if yt_proxy:
-            opts = _apply_ytdlp_network_options({**base_opts, "proxy": yt_proxy})
-            result, hard_error = _try(opts, egress="relay", proxy_url=yt_proxy)
-            if hard_error:
-                return None
-            if result:
-                return result
-
-        # Cookie attempts are explicit direct paths. Do not call
-        # _apply_ytdlp_network_options here: that helper intentionally injects
-        # the configured relay and would silently mislabel the result.
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            opts = {**base_opts, "cookiefile": self.cookie_file}
-            opts["source_address"] = "::"
-            from shared.ffmpeg_runtime import apply_ytdlp_ffmpeg_options
-
-            apply_ytdlp_ffmpeg_options(opts)
-            result, hard_error = _try(opts, egress="direct")
-            if hard_error:
-                return None
-            if result:
-                return result
-
-        opts = {**base_opts}
-        if _yt_dlp_force_ipv4():
-            opts["source_address"] = "0.0.0.0"
-        from shared.ffmpeg_runtime import apply_ytdlp_ffmpeg_options
-
-        apply_ytdlp_ffmpeg_options(opts)
-        result, hard_error = _try(opts, egress="direct")
-        if hard_error:
-            return None
-        if result:
-            return result
-
-        if self.cookie_file and os.path.exists(self.cookie_file):
-            opts = {**base_opts, "cookiefile": self.cookie_file}
-            opts["source_address"] = "0.0.0.0"
-            apply_ytdlp_ffmpeg_options(opts)
-            result, hard_error = _try(opts, egress="direct")
-            if hard_error:
-                return None
-            if result:
-                return result
-
-        logger.warning("[Preview] All attempts failed for %s.", video_id)
-        return None
-
-    def get_stream_url(self, video_id: str) -> Optional[str]:
-        """Compatibility wrapper for callers that do not fetch the URL."""
-        resolved = self.get_resolved_stream(video_id)
-        return resolved.url if resolved else None
