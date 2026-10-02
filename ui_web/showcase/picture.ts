@@ -9,6 +9,15 @@ import type { Page } from '@playwright/test';
 export async function stillFrame(page: Page): Promise<Buffer> {
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => Promise.all([document.fonts.ready, ...[...document.images].map((image) => image.decode().catch(() => undefined))]));
+  // A paused infinite animation keeps the frame it had reached — the queue's
+  // equalizer while a song is paused — and `animations: 'disabled'` leaves it
+  // there, so the picture depended on how fast the machine got to it. Every
+  // one of them starts from its first frame instead.
+  await page.evaluate(() => {
+    for (const animation of document.getAnimations()) {
+      if (!Number.isFinite(animation.effect?.getTiming().iterations ?? 1)) animation.currentTime = 0;
+    }
+  });
   const frames: Buffer[] = [];
   for (let attempt = 0; attempt < 30; attempt++) {
     frames.push(await page.screenshot({ animations: 'disabled', caret: 'hide', scale: 'device' }));
