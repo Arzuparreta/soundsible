@@ -220,8 +220,15 @@ jobs:
       # and uninstalls it. Not on release tags, which never ran it: the UI smoke
       # is the flakiest thing in desktop CI (UIA timeouts on a cold runner) and
       # must not be what stops a release.
+      #
+      # On ARM64 it only warns. The hosted windows-11-arm runner shows a privacy
+      # dialog on every fresh image, sometimes swallows the global quit, and then
+      # misses the relaunch deadline; x64 runs the same smoke on the same code and
+      # still fails the job when the app is really broken.
       - name: Install, exercise native UI, and uninstall
+        id: ui_smoke
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        continue-on-error: ${{ matrix.arch == 'arm64' }}
         shell: pwsh
         run: |
           $installer = Get-ChildItem `
@@ -232,6 +239,12 @@ jobs:
             -Installer $installer.FullName `
             -ArtifactDirectory "desktop-shell/windows-smoke-artifacts/${{ matrix.arch }}" `
             -UiSmoke
+
+      - name: Report an ARM64 UI smoke failure
+        if: ${{ steps.ui_smoke.outcome == 'failure' && matrix.arch == 'arm64' }}
+        shell: pwsh
+        run: |
+          Write-Output "::warning title=ARM64 UI smoke failed::The native UI smoke failed on the ARM64 runner. It is advisory there; the x64 job runs the same smoke and gates. Diagnostics are in the soundsible-windows-smoke-arm64 artifact."
 
       - name: Upload Windows diagnostics
         if: ${{ always() && !startsWith(github.ref, 'refs/tags/') }}
