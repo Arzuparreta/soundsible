@@ -41,11 +41,5 @@ def prefer_ytmusic() -> bool:
     return raw not in ("youtube", "yt", "plain")
 
 
-SEARCH_STRATEGY_PRIMARY = "{artist} - {title} official audio"
-SEARCH_STRATEGY_FALLBACK = "{artist} - {title}"
-DURATION_TOLERANCE_SEC = 20
-FORBIDDEN_KEYWORDS = ['cover', 'live', 'remix', 'karaoke', 'instrumental', 'performed by']
-DOWNLOAD_DELAY_RANGE = (1, 5)  # Seconds between searched downloads, against throttling
-
 LIBRARY_FILENAME = "library.json"
 TRACKS_DIR = "tracks"

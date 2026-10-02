@@ -361,21 +361,6 @@ def trigger_downloader_sync():
     return jsonify({"status": "started"})
 
 
-@downloader_bp.route("/api/download", methods=["POST"])
-@require_scope(SCOPE_DOWNLOAD_ADD, allow_trusted_network=True)
-@rate_limit("downloader_legacy_download", limit=60, window_sec=60)
-def start_download_legacy():
-    api = _get_api()
-    data = request.json
-    url = data.get("url")
-    if url:
-        api["queue_manager_dl"].add({"song_str": url}, user_id=api["user_id"])
-        if not api["queue_manager_dl"].is_processing:
-            api["start_downloader_pump"]()
-        return jsonify({"status": "started"})
-    return jsonify({"error": "No URL provided"}), 400
-
-
 @downloader_bp.route("/api/downloader/config", methods=["GET"])
 def get_downloader_config():
     api = _get_api()

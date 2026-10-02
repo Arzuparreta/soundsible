@@ -9,7 +9,6 @@ import errno
 import signal
 import threading
 import json
-import uuid
 import logging
 import time
 from html import escape as html_escape
@@ -1040,44 +1039,33 @@ def _process_single_queue_item_bound(item):
                     except OSError:
                         pass
         elif song_str:
+            def _on_progress(payload):
+                if not isinstance(payload, dict):
+                    return
+                kwargs = {}
+                if payload.get("percent") is not None:
+                    kwargs["percent"] = float(payload["percent"])
+                for key in ("speed", "eta", "phase", "total_bytes"):
+                    if payload.get(key) is not None:
+                        kwargs[key] = payload[key]
+                if kwargs:
+                    queue_manager_dl.update_progress(item_id, attempt=attempt, **kwargs)
+
             if source_type in {"youtube_url", "ytmusic_search", "youtube_search"} or "youtube.com" in song_str or "youtu.be" in song_str:
                 song_str = normalize_youtube_url(song_str)
                 queue_manager_dl.add_log(f"Downloading direct YouTube: {song_str}...")
-                runtime_hint = _fill_youtube_runtime_hint(dl, song_str, item, metadata_evidence)
-
-                def _on_progress(payload):
-                    if not isinstance(payload, dict):
-                        return
-                    kwargs = {}
-                    if payload.get("percent") is not None:
-                        kwargs["percent"] = float(payload["percent"])
-                    if payload.get("speed") is not None:
-                        kwargs["speed"] = payload["speed"]
-                    if payload.get("eta") is not None:
-                        kwargs["eta"] = payload["eta"]
-                    if payload.get("phase") is not None:
-                        kwargs["phase"] = payload["phase"]
-                    if payload.get("total_bytes") is not None:
-                        kwargs["total_bytes"] = payload["total_bytes"]
-                    if kwargs:
-                        queue_manager_dl.update_progress(item_id, attempt=attempt, **kwargs)
-
                 track = dl.downloader.process_video(
                     song_str,
-                    metadata_hint=runtime_hint,
+                    metadata_hint=_fill_youtube_runtime_hint(dl, song_str, item, metadata_evidence),
                     progress_callback=_on_progress,
                 )
             else:
-                fake_meta = {
-                    'title': song_str,
-                    'artist': 'Unknown',
-                    'album': 'Manual',
-                    'duration_sec': 0,
-                    'id': f"manual_{uuid.uuid4().hex[:8]}",
-                }
-                if metadata_evidence:
-                    fake_meta.update({k: v for k, v in metadata_evidence.items() if v is not None})
-                track = dl.downloader.process_track(fake_meta)
+                queue_manager_dl.add_log(f"Searching YouTube: {song_str}...")
+                track = dl.downloader.process_query(
+                    song_str,
+                    metadata_hint={k: v for k, v in metadata_evidence.items() if v is not None},
+                    progress_callback=_on_progress,
+                )
 
         if track:
             # Persist the reusable result before any personal-library work.
