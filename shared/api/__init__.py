@@ -1504,7 +1504,7 @@ def remap_track_ids_for_all_users(id_map: dict, replacements=None) -> dict:
                 for track in lib.metadata.tracks:
                     replacement = (replacements or {}).get(track.id)
                     if replacement:
-                        for field in ('file_hash', 'format', 'file_size', 'bitrate', 'compressed', 'local_path'):
+                        for field in ('file_hash', 'format', 'file_size', 'bitrate', 'local_path'):
                             setattr(track, field, getattr(replacement, field))
                         changed = True
 

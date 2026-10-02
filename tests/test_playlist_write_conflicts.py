@@ -44,7 +44,6 @@ def _track(track_id: str) -> Track:
         duration=255,
         file_hash=track_id,
         original_filename=f"{track_id}.m4a",
-        compressed=False,
         file_size=10,
         bitrate=128,
         format="m4a",

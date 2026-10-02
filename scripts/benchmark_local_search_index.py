@@ -76,8 +76,7 @@ def library(count):
         title=f"Song {i}" + (" (Official Video)" if i % 13 == 0 else ""),
         artist=f"Artist {i // 100}",
         album=f"{'Álbum' if (i // 10) % 7 == 0 else 'Album'} {i // 10}",
-        duration=180, file_hash=f"hash{i}", original_filename=f"{i}.mp3",
-        compressed=False, file_size=1000, bitrate=320, format="mp3",
+        duration=180, file_hash=f"hash{i}", original_filename=f"{i}.mp3", file_size=1000, bitrate=320, format="mp3",
     ) for i in range(count)], {}, {})
 
 
@@ -142,7 +141,7 @@ def writes(writers, directory, size, repeats):
         "title": lambda tracks, n: setattr(tracks[n], "title", f"Edited {n}"),
         "append": lambda tracks, n: tracks.append(Track(
             id=f"appended-{n}", title=f"Appended {n}", artist="Artist 1", album="Album 1", duration=180,
-            file_hash=f"appended{n}", original_filename="a.mp3", compressed=False, file_size=1, bitrate=320, format="mp3")),
+            file_hash=f"appended{n}", original_filename="a.mp3", file_size=1, bitrate=320, format="mp3")),
         "duration": lambda tracks, n: setattr(tracks[n], "duration", 181 + n),
         # Every later track moves up one position.
         "remove_middle": lambda tracks, n: tracks.pop(len(tracks) // 2),

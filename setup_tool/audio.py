@@ -1,7 +1,7 @@
 """
 Audio file processing utilities.
 
-This module handles audio metadata extraction, file hashing, and format conversion.
+This module handles audio metadata extraction, file hashing and tagging.
 """
 
 import hashlib
@@ -11,14 +11,9 @@ from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
 from mutagen.oggvorbis import OggVorbis
 from mutagen.mp4 import MP4
-import ffmpeg
 from pathlib import Path
 
-from shared.constants import (
-    SUPPORTED_AUDIO_FORMATS,
-    DEFAULT_MP3_BITRATE,
-    DEFAULT_OGG_QUALITY
-)
+from shared.constants import SUPPORTED_AUDIO_FORMATS
 from shared.musicbrainz import (
     MUSICBRAINZ_MP4_RECORDING_TAG,
     MUSICBRAINZ_UFID_OWNER,
@@ -308,87 +303,6 @@ class AudioProcessor:
                 'cover_art': False
             }
     
-    @staticmethod
-    def compress_to_mp3(input_path: str, output_path: str, 
-                       bitrate: int = DEFAULT_MP3_BITRATE) -> bool:
-        """
-        Convert audio file to MP3 format.
-        
-        Args:
-            input_path: Source audio file
-            output_path: Destination MP3 file
-            bitrate: Target bitrate in kbps (default 320)
-            
-        Returns:
-            True if conversion successful
-        """
-        try:
-            # Note: Use ffmpeg to convert
-            stream = ffmpeg.input(input_path)
-            stream = ffmpeg.output(
-                stream,
-                output_path,
-                audio_bitrate=f'{bitrate}k',
-                acodec='libmp3lame',
-                map_metadata=0  # Note: Preserve metadata
-            )
-            ffmpeg.run(stream, overwrite_output=True, quiet=True)
-            return True
-            
-        except ffmpeg.Error as e:
-            print(f"FFmpeg conversion error: {e}")
-            return False
-    
-    @staticmethod
-    def compress_to_ogg(input_path: str, output_path: str,
-                       quality: int = DEFAULT_OGG_QUALITY) -> bool:
-        """
-        Convert audio file to OGG Vorbis format.
-        
-        Args:
-            input_path: Source audio file
-            output_path: Destination OGG file
-            quality: VBR quality level 0-10 (default 8)
-            
-        Returns:
-            True if conversion successful
-        """
-        try:
-            stream = ffmpeg.input(input_path)
-            stream = ffmpeg.output(
-                stream,
-                output_path,
-                acodec='libvorbis',
-                audio_quality=quality,
-                map_metadata=0
-            )
-            ffmpeg.run(stream, overwrite_output=True, quiet=True)
-            return True
-            
-        except ffmpeg.Error as e:
-            print(f"FFmpeg conversion error: {e}")
-            return False
-    
-    @staticmethod
-    def should_compress(file_path: str) -> Tuple[bool, str]:
-        """
-        Determine if a file should be compressed.
-        
-        Args:
-            file_path: Path to audio file
-            
-        Returns:
-            Tuple of (should_compress: bool, reason: str)
-        """
-        ext = Path(file_path).suffix.lower()
-        
-        # Note: We now support streaming lossless formats directly
-        if ext in ['.mp3', '.ogg', '.opus', '.aac', '.flac', '.wav', '.alac', '.m4a']:
-            return False, f"Format supported for direct streaming ({ext})"
-        
-        # Note: Default don't compress unknown formats, let the user decide
-        return False, "Format not recognized for auto-compression"
-
     @staticmethod
     def update_tags(file_path: str, tags: Dict[str, str]) -> bool:
         """

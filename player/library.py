@@ -875,12 +875,9 @@ class LibraryManager:
             new_track, uploaded = uploader._process_single_file(
                 Path(local_path),
                 source_root,
-                compress=False, # Note: Don't re-compress if possible, just upload
-                bitrate=track.bitrate or 320,
-                existing_tracks={}, # Note: Clear to force new object construction
-                cover_image_path=None, # Note: Already embedded
-                auto_fetch=False,
-                force_reprocess=True
+                existing_tracks={},  # Empty, so a new Track is built
+                cover_image_path=None,  # Already embedded
+                force_reprocess=True,
             )
             
             if new_track:

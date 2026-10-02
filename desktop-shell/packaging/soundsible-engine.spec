@@ -14,7 +14,6 @@ VENDOR_DIR = REPO_ROOT / "desktop-shell" / "packaging" / "vendor"
 
 pyinstaller_binaries = []
 # Keep the native suffix: Windows tools and yt-dlp discover *.exe by name.
-# Install in bin/ so PyInstaller does not shadow the ffmpeg-python package.
 for tool in ("ffmpeg", "ffprobe"):
     binary = VENDOR_DIR / (tool + (".exe" if sys.platform == "win32" else ""))
     if binary.is_file():

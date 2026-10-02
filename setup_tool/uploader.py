@@ -13,7 +13,6 @@ from shared.models import PlayerConfig, Track, LibraryMetadata
 # Note: From setup_tool.cloud import cloudstorage <-- removed
 from setup_tool.provider_factory import StorageProviderFactory
 from setup_tool.audio import AudioProcessor
-from shared.constants import DEFAULT_MP3_BITRATE
 
 # Note: Optional progress reporting
 try:
@@ -81,10 +80,9 @@ class UploadEngine:
         
         return files
 
-    def run(self, source_path: str, compress: bool = True, 
-            parallel: int = 4, bitrate: int = DEFAULT_MP3_BITRATE, 
+    def run(self, source_path: str,
+            parallel: int = 4,
             cover_image_path: Optional[str] = None,
-            auto_fetch: bool = False,
             progress: Optional[Progress] = None) -> LibraryMetadata:
         """
         Execute the upload process.
@@ -125,14 +123,11 @@ class UploadEngine:
         with ThreadPoolExecutor(max_workers=parallel) as executor:
             future_to_file = {
                 executor.submit(
-                    self._process_single_file, 
-                    file_path, 
-                    source_dir, 
-                    compress, 
-                    bitrate,
+                    self._process_single_file,
+                    file_path,
+                    source_dir,
                     existing_tracks,
                     cover_image_path,
-                    auto_fetch
                 ): file_path for file_path in audio_files
             }
 
@@ -165,123 +160,65 @@ class UploadEngine:
 
         return updated_library
 
-    def _process_single_file(self, file_path: Path, source_root: Path, 
-                             compress: bool, bitrate: int, 
+    def _process_single_file(self, file_path: Path, source_root: Path,
                              existing_tracks: Dict[str, Track],
                              cover_image_path: Optional[str] = None,
-                             auto_fetch: bool = False,
                              force_reprocess: bool = False) -> Tuple[Optional[Track], bool]:
         """
-        Process a single audio file: hash, compress, embed art, upload.
+        Process a single audio file: hash, embed art, upload. Files are stored as
+        they are; nothing is re-encoded.
         """
         try:
-            # Note: Calculate hash first to check for duplicates
             file_hash = AudioProcessor.calculate_hash(str(file_path))
-            
-            # Note: Check for duplicates, BUT allow overwrite if details
-            # Note: 1. We are manually setting a cover (allows fixing missing covers by re-uploading same file)
-            # Note: 2. Force_reprocess is true (explicitly requested update)
+
+            # A file already in the library is skipped unless a cover is being
+            # set on it, or a re-process was asked for explicitly.
             if file_hash in existing_tracks and not cover_image_path and not force_reprocess:
                 return existing_tracks[file_hash], False
 
-            # Note: Extract metadata
             metadata = AudioProcessor.extract_metadata(str(file_path))
-            
-            # Note: Auto-fetch / cover logic
-            fetched_cover_path = None
-            if auto_fetch and not cover_image_path and not metadata.get('cover_art', False):
-                # Note: Legacy iTunes autofetch removed with GTK frontend cleanup.
-                fetched_cover_path = None
 
-            # Note: Determine active cover source
-            active_cover_path = cover_image_path or fetched_cover_path
-            
             from shared.artwork import artwork_store
-            original_cover = (Path(active_cover_path).read_bytes() if active_cover_path
+            original_cover = (Path(cover_image_path).read_bytes() if cover_image_path
                               else AudioProcessor.extract_cover_art(str(file_path)))
             previous_art = artwork_store().ref(file_hash)
-            original_art = (previous_art['hash'] if previous_art and not active_cover_path else None)
+            original_art = (previous_art['hash'] if previous_art and not cover_image_path else None)
             if not original_art and original_cover:
                 original_art = artwork_store().put(original_cover)
 
-            # Note: Logic if we need to embed art we might need a temp copy
-            working_file_path = file_path
+            # A new cover is embedded into a temporary copy, never the original.
+            final_file_path = file_path
             is_temp_copy = False
-            
-            compression_needed, _ = AudioProcessor.should_compress(str(file_path))
-            will_compress = compress and compression_needed
-            
-            # Note: Case 1 embedding into original format (no compression)
-            if active_cover_path and not will_compress:
+            if cover_image_path:
                 import shutil
                 import tempfile
                 fd, temp_path = tempfile.mkstemp(suffix=file_path.suffix)
                 os.close(fd)
                 shutil.copy2(file_path, temp_path)
-                working_file_path = Path(temp_path)
+                final_file_path = Path(temp_path)
                 is_temp_copy = True
-                
-                AudioProcessor.embed_artwork(str(working_file_path), active_cover_path)
-            
-            # Note: Compression decision
-            should_compress, reason = AudioProcessor.should_compress(str(working_file_path))
-            final_file_path = working_file_path
-            is_compressed_copy = False
-            
-            if compress and should_compress:
-                import tempfile
-                fd, temp_path = tempfile.mkstemp(suffix=".mp3")
-                os.close(fd)
-                
-                success = AudioProcessor.compress_to_mp3(str(working_file_path), temp_path, bitrate)
-                if success:
-                    final_file_path = Path(temp_path)
-                    is_compressed_copy = True
-                    metadata['format'] = 'mp3'
-                    metadata['bitrate'] = bitrate
-                    
-                    # Note: Embed art into the NEW mp3 if we have it
-                    if active_cover_path:
-                         AudioProcessor.embed_artwork(str(final_file_path), active_cover_path)
-            
-            # Note: Use temp copy if no compression happened
-            if is_temp_copy and not is_compressed_copy:
-                 final_file_path = working_file_path
+                AudioProcessor.embed_artwork(str(final_file_path), cover_image_path)
 
-            # Note: Upload details
             track_id = file_hash
             remote_key = f"tracks/{track_id}.{metadata['format']}"
-            
+
             uploaded = self.storage.upload_file(str(final_file_path), remote_key)
             if uploaded and original_art:
-                artwork_store().bind(track_id, original_art, "manual" if active_cover_path else (previous_art["source"] if previous_art else "embedded"), only_missing=True)
-            
-            # Note: For local providers, we want the absolute path to the file in the "bucket"
+                artwork_store().bind(track_id, original_art, "manual" if cover_image_path else (previous_art["source"] if previous_art else "embedded"), only_missing=True)
+
+            # A local provider stores the file at an absolute path in its "bucket".
             final_local_path = None
             if self.config.provider.value == 'local':
                 if hasattr(self.storage, '_get_path'):
                     final_local_path = str(self.storage._get_path(remote_key).absolute())
-            
-            # Note: Update metadata with remote URL? no, URL is generated.
-            # Note: But we might want size
+
             metadata['size'] = os.path.getsize(final_file_path)
-
-             # Note: Cleanup temp files
-            if is_compressed_copy:
-                os.remove(final_file_path)
-            
             if is_temp_copy:
-                 os.remove(working_file_path)
+                os.remove(final_file_path)
 
-            # Note: Cleanup fetched cover
-            if fetched_cover_path and os.path.exists(fetched_cover_path):
-                os.remove(fetched_cover_path)
-            
             if not uploaded:
                 return None, False
 
-            # Note: Create track object
-            # Note: Validate metadata fields are not none
             title = metadata.get('title', 'Unknown') or 'Unknown'
             artist = metadata.get('artist', 'Unknown') or 'Unknown' 
             album = metadata.get('album', 'Unknown') or 'Unknown'
@@ -304,7 +241,6 @@ class UploadEngine:
                 file_size=metadata.get('size', 0) or 0,
                 file_hash=file_hash,
                 original_filename=orig_name,
-                compressed=is_compressed_copy,
                 cover_art_key=None,
                 year=metadata.get('year'),
                 genre=metadata.get('genre'),

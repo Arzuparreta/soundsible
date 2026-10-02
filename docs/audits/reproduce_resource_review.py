@@ -26,7 +26,7 @@ def payload_probe():
     for count in (1000, 10000, 50000):
         tracks = [Track(
             id=str(i), title="Title", artist="Artist", album="Album", duration=240,
-            file_hash=str(i), original_filename=f"{i}.mp3", compressed=False,
+            file_hash=str(i), original_filename=f"{i}.mp3",
             file_size=1000000, bitrate=320, format="mp3",
         ) for i in range(count)]
         metadata = LibraryMetadata(version=1, tracks=tracks, playlists={}, settings={})

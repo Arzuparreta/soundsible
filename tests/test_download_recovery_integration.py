@@ -10,7 +10,7 @@ from shared.user_context import user_context
 
 def prepared(runtime):
     track = Track(id='prepared', title='Prepared', artist='Artist', album='Album', duration=1,
-                  file_hash='prepared', original_filename='prepared.flac', compressed=False,
+                  file_hash='prepared', original_filename='prepared.flac',
                   file_size=4, bitrate=1, format='flac')
     path = runtime.music_dir / 'tracks/prepared.flac'
     path.parent.mkdir(parents=True, exist_ok=True)

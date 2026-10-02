@@ -37,7 +37,6 @@ class Track:
         duration: Duration in seconds
         file_hash: SHA256 hash of the file
         original_filename: Original file name before upload
-        compressed: Whether the file was compressed during upload
         file_size: Size in bytes
         bitrate: Bitrate in kbps (e.g., 320, 1411 for lossless)
         format: Audio format (mp3, flac, ogg, wav, etc.)
@@ -58,7 +57,6 @@ class Track:
     duration: int
     file_hash: str
     original_filename: str
-    compressed: bool
     file_size: int
     bitrate: int
     format: str

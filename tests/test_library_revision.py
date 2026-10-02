@@ -17,7 +17,7 @@ from shared.user_context import user_context
 def model():
     return LibraryMetadata(1, [Track(
         id="song", title="Canción", artist="Artist", album="Album", duration=180,
-        file_hash="hash", original_filename="song.mp3", compressed=False,
+        file_hash="hash", original_filename="song.mp3",
         file_size=1000, bitrate=320, format="mp3", artists=["Artist"],
     )], {"Playlist": ["song"]}, {"nested": {"flags": [True]}},
         podcast_subscriptions=[{"id": "feed"}], podcast_episode_cache={"feed": {"episodes": []}})

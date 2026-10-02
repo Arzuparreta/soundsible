@@ -22,7 +22,6 @@ def _track(track_id: str, path: Path, *, mtime: int = 1, size: int = 10) -> Trac
         duration=120,
         file_hash=track_id,
         original_filename=path.name,
-        compressed=False,
         file_size=size,
         bitrate=320,
         format=path.suffix.lstrip(".") or "mp3",

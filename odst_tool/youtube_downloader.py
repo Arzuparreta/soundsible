@@ -93,7 +93,7 @@ class YouTubeDownloader:
                youtube_id: Optional[str], cover_source: Optional[str]) -> Track:
         return store_track(
             temp_file, meta, self.tracks_dir,
-            duration=duration, bitrate=bitrate, compressed=(self.quality != "ultra"),
+            duration=duration, bitrate=bitrate,
             youtube_id=youtube_id, cover_source=cover_source,
         )
 

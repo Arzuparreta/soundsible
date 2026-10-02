@@ -52,4 +52,3 @@ player is built with `npm` in `ui_web/`.
 | [Deezer public API](https://developers.deezer.com/) | Public API | Discovery metadata only — no audio comes from Deezer |
 | [MusicBrainz](https://musicbrainz.org/) | Public API | Recording and release identification |
 | [FFmpeg](https://ffmpeg.org/) | LGPL / GPL | Audio conversion and extraction |
-| [ffmpeg-python](https://github.com/kkroening/ffmpeg-python) | Apache 2.0 | Python bindings for FFmpeg |

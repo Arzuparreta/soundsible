@@ -117,7 +117,6 @@ class LibraryScanner:
             duration=meta.get("duration", 0),
             file_hash=file_hash,
             original_filename=file_path.name,
-            compressed=False,
             file_size=size,
             bitrate=meta.get("bitrate", 0),
             format=meta.get("format", file_path.suffix.lstrip(".").lower() or "mp3"),

@@ -33,7 +33,6 @@ def _track(index: int) -> Track:
         duration=180,
         file_hash=f"hash-{index}",
         original_filename=f"{index}.mp3",
-        compressed=False,
         file_size=1000,
         bitrate=192,
         format="mp3",

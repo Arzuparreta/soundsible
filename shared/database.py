@@ -74,6 +74,7 @@ RETIRED_TABLES = (
 # Where each track's audio came from, recorded by that upgrader. Nothing
 # writes or reads them any more.
 RETIRED_TRACK_COLUMNS = (
+    "compressed",
     "audio_source",
     "audio_source_url",
     "audio_license_url",
@@ -324,7 +325,6 @@ class DatabaseManager:
                 duration INTEGER,
                 file_hash TEXT,
                 original_filename TEXT,
-                compressed BOOLEAN,
                 file_size INTEGER,
                 bitrate INTEGER,
                 format TEXT,
@@ -828,7 +828,6 @@ class DatabaseManager:
         data.pop("last_updated", None)
         data.pop("album_id", None)
         stored_artists = data.pop("artists_json", None)
-        data["compressed"] = bool(data.get("compressed"))
         data["is_local"] = bool(data.get("is_local"))
         data["metadata_modified_by_user"] = bool(data.get("metadata_modified_by_user"))
         data["is_compilation"] = bool(data.get("is_compilation"))
@@ -2007,7 +2006,6 @@ class DatabaseManager:
         data.pop("last_updated", None)
         data.pop("album_id", None)
         stored_artists = data.pop("artists_json", None)
-        data["compressed"] = bool(data.get("compressed"))
         data["is_local"] = bool(data.get("is_local"))
         data["metadata_modified_by_user"] = bool(data.get("metadata_modified_by_user"))
         data["is_compilation"] = bool(data.get("is_compilation"))
@@ -2095,21 +2093,15 @@ class DatabaseManager:
     def get_stats(self) -> Dict[str, int]:
         """Track counts in one pass.
 
-        `is_local` and `compressed` are unindexed, so each of the three separate
-        COUNT(*) queries this replaced was its own full scan — on a liveness
-        probe that the desktop shell and the player poll continuously.
+        `is_local` is unindexed, so separate COUNT(*) queries would each be a
+        full scan — on a liveness probe that the desktop shell and the player
+        poll continuously.
         """
         with self._get_connection() as conn:
             row = conn.execute(
-                """
-                SELECT COUNT(*),
-                       COALESCE(SUM(is_local = 1), 0),
-                       COALESCE(SUM(compressed = 1), 0)
-                FROM tracks
-                """
+                "SELECT COUNT(*), COALESCE(SUM(is_local = 1), 0) FROM tracks"
             ).fetchone()
-            # `cloud` stays an approximation, as before.
-            return {"tracks": row[0], "local": row[1], "cloud": row[2]}
+            return {"tracks": row[0], "local": row[1]}
 
     def clear_all(self):
         """Wipe all data from the local database."""

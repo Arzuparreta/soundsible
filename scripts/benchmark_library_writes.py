@@ -76,7 +76,7 @@ def main():
     for count in args.sizes:
         value = LibraryMetadata(1, [Track(
             id=str(i), title=f'Title {i}', artist=f'Artist {i // 100}', album=f'Album {i // 10}',
-            duration=180, file_hash=str(i), original_filename=f'{i}.mp3', compressed=False,
+            duration=180, file_hash=str(i), original_filename=f'{i}.mp3',
             file_size=1000, bitrate=320, format='mp3',
         ) for i in range(count)], {'List': [str(i) for i in range(min(count, 100))], 'Empty': []}, {},
             last_updated='2026-01-01T00:00:00')

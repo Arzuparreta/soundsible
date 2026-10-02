@@ -122,7 +122,7 @@ def pool_paths(monkeypatch):
 def _track(track_id: str, path) -> Track:
     return Track(
         id=track_id, title="Corpo e Canção", artist="Antdot", album="Single",
-        duration=3, file_hash=track_id, original_filename=path.name, compressed=False,
+        duration=3, file_hash=track_id, original_filename=path.name,
         file_size=path.stat().st_size, bitrate=96, format=path.suffix.lstrip("."),
         youtube_id="K3JGxj2rvAs", added_at="2026-07-02T10:00:00", local_path=str(path),
         is_local=True,

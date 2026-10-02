@@ -420,10 +420,6 @@ feedparser-sgmllib==2.0.1 \
     --hash=sha256:113d6e0d7e1196200a13013044999aef75772d515f25a3e77c5e2047eb82c212 \
     --hash=sha256:32d46a92fe429d033c6793a45d4af28a150ff3e74f5bfdb598e26811ce4c2664
     # via feedparser
-ffmpeg-python==0.2.0 \
-    --hash=sha256:65225db34627c578ef0e11c8b1eb528bb35e024752f6f10b78c011f6f64c4127 \
-    --hash=sha256:ac441a0404e053f8b6a1113a77c0f452f1cfc62f6344a769475ffdc0f56c23c5
-    # via -r requirements.txt
 flask==3.1.3 \
     --hash=sha256:0ef0e52b8a9cd932855379197dd8f94047b359ca0a78695144304cb45f87c9eb \
     --hash=sha256:f4bcbefc124291925f1a26446da31a5178f9483862233b23c0c96a20701f670c
@@ -439,10 +435,6 @@ flask-socketio==5.6.1 \
     --hash=sha256:51a3f71b28b4476c650829607e3a993e076034db6c3cc31f718f0a4b45939d42 \
     --hash=sha256:fe5bd995c3ed4da9a98f335d0d830fa1a19d84a64789f6265642a671fdacaeac
     # via -r requirements.txt
-future==1.0.0 \
-    --hash=sha256:929292d34f5872e70396626ef385ec22355a1fae8ad29e1a734c3e43f9fbc216 \
-    --hash=sha256:bd2968309307861edae1458a4f8a4f3598c03be43b97521076aebf5d94c07b05
-    # via ffmpeg-python
 gevent==26.7.0 \
     --hash=sha256:01ceab7e608dc1b9859d9511a0a29d7ce2e7d909ab19fddc860e70a2ed5b10ce \
     --hash=sha256:055a643026dc28daff2be228555a2097937448cc9b58307edebcf81b9d78ff4b \

@@ -30,7 +30,6 @@ def _track(track_id: str, **overrides) -> Track:
         "duration": 180,
         "file_hash": track_id,
         "original_filename": f"{track_id}.flac",
-        "compressed": False,
         "file_size": 10,
         "bitrate": 900,
         "format": "flac",

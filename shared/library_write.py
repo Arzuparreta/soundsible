@@ -55,7 +55,7 @@ CATALOG_COLUMNS = ('artist', 'artists_json', 'album', 'album_artist', 'year', 'g
 
 TRACK_COLUMNS = (
     'id', 'title', 'artist', 'album', 'duration', 'file_hash', 'original_filename',
-    'compressed', 'file_size', 'bitrate', 'format', 'cover_art_key', 'year', 'genre',
+    'file_size', 'bitrate', 'format', 'cover_art_key', 'year', 'genre',
     'track_number', 'disc_number', 'disc_total', 'is_compilation', 'media_kind',
     'podcast_feed_id', 'podcast_episode_guid', 'podcast_rss_url', 'artists_json',
     'is_local', 'local_path', 'local_mtime_ns', 'musicbrainz_id', 'isrc', 'album_artist',

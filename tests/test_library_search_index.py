@@ -38,8 +38,7 @@ _WORDS = [
 def _track(track_id, title, artist, album, album_artist=None):
     return Track(
         id=track_id, title=title, artist=artist, album=album, album_artist=album_artist,
-        duration=180, file_hash=f"hash-{track_id}", original_filename=f"{track_id}.mp3",
-        compressed=False, file_size=1000, bitrate=320, format="mp3",
+        duration=180, file_hash=f"hash-{track_id}", original_filename=f"{track_id}.mp3", file_size=1000, bitrate=320, format="mp3",
     )
 
 

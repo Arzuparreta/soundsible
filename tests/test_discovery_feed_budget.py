@@ -47,7 +47,6 @@ def library():
             duration=180,
             file_hash=f"hash-t{i}",
             original_filename=f"t{i}.mp3",
-            compressed=False,
             file_size=1000,
             bitrate=320,
             format="mp3",

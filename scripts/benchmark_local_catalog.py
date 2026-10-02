@@ -49,8 +49,7 @@ def main():
     for size in args.sizes:
         tracks = [Track(
             id=f"t{i:06}", title=f"Song {i}", artist=f"Artist {i // 100}", album=f"Album {i // 10}",
-            duration=180, file_hash=f"hash{i}", original_filename=f"{i}.mp3",
-            compressed=False, file_size=1000, bitrate=320, format="mp3",
+            duration=180, file_hash=f"hash{i}", original_filename=f"{i}.mp3", file_size=1000, bitrate=320, format="mp3",
         ) for i in range(size)]
         catalog._library_tracks = lambda: tracks
         for query in ("artist", "song", "album 17", "absent"):

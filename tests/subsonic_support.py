@@ -52,7 +52,6 @@ def track(
         duration=duration,
         file_hash=f"hash-{track_id}",
         original_filename=f"{track_id}.{fmt}",
-        compressed=False,
         file_size=4096,
         bitrate=bitrate,
         format=fmt,
