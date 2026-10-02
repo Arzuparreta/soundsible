@@ -23,7 +23,7 @@ class PlaybackService : MediaLibraryService() {
     private val main = Handler(Looper.getMainLooper())
     private val reset: () -> Unit = {
         transport?.second?.dispatcher?.cancelAll(); transport = null
-        main.post { if (session != null) { player.stop(); player.clearMediaItems() } }
+        main.post { if (session != null) { player.stop(); player.clearMediaItems(); player.shuffleModeEnabled = false; player.repeatMode = Player.REPEAT_MODE_OFF } }
     }
     override fun onCreate() {
         super.onCreate()

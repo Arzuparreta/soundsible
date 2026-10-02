@@ -96,6 +96,12 @@ public class PlaybackTest {
                 Thread.sleep(500);
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertFalse(controller.isPlaying()); audio.abandonAudioFocus(focus); controller.play(); });
                 Thread.sleep(300);
+                // Bridge modes belong to the service, not the Activity. Queue indices remain original.
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'shuffle',enabled:true}).then(()=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'repeat',mode:2})).then(s=>window.__modes=s)");
+                waitFor(web, scenario, "window.__modes?.shuffle===true && window.__modes?.repeat===2 && window.__modes?.queue.length===2 && window.__modes?.index===1 && window.__modes?.hasNext===true");
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'repeat',mode:9}).then(()=>window.__invalid=false,()=>window.__invalid=true)");
+                waitFor(web, scenario, "window.__invalid===true");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertTrue(controller.getShuffleModeEnabled()); assertEquals(Player.REPEAT_MODE_ALL, controller.getRepeatMode()); });
                 scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
                 Thread.sleep(900);
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertTrue(controller.isPlaying()); assertTrue(controller.getCurrentPosition() > 12500); });
@@ -105,6 +111,11 @@ public class PlaybackTest {
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> assertTrue(controller.getCurrentPosition() > 12500));
                 try (android.os.ParcelFileDescriptor command = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/soundsible-s2-program.png");
                      java.io.InputStream output = new android.os.ParcelFileDescriptor.AutoCloseInputStream(command)) { while (output.read() != -1) {} }
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__restored=s)");
+                waitFor(web, scenario, "window.__restored?.shuffle===true && window.__restored?.repeat===2 && window.__restored?.index===1");
+                // Restore sequential end semantics via the same asynchronous bridge.
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'shuffle',enabled:false}).then(()=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'repeat',mode:0})).then(s=>window.__sequential=s)");
+                waitFor(web, scenario, "window.__sequential?.shuffle===false && window.__sequential?.repeat===0 && window.__sequential?.hasNext===false");
                 // Ending is observed from native state, not a JS clock.
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> controller.seekTo(599700));
                 Thread.sleep(1200);
@@ -143,10 +154,12 @@ public class PlaybackTest {
                 waitFor(web, scenario, "!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song').click()");
                 waitFor(web, scenario, "Array.from(document.querySelectorAll('[data-testid=android-program] button')).some(b=>b.textContent==='Pause')");
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'shuffle',enabled:true}).then(()=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'repeat',mode:1})).then(()=>window.__logoutModes=true)");
+                waitFor(web, scenario, "window.__logoutModes===true");
                 // Account change clears queue before another identity can start a program.
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('header button')).find(b=>b.textContent==='Sign out').click()");
                 waitFor(web, scenario, "!!document.querySelector('input[type=password]') && !document.querySelector('[data-testid=android-program]')");
-                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> assertEquals(0, controller.getMediaItemCount()));
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(0, controller.getMediaItemCount()); assertFalse(controller.getShuffleModeEnabled()); assertEquals(Player.REPEAT_MODE_OFF, controller.getRepeatMode()); });
             } finally { InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> controller.release()); }
         } finally { connection.clearSession(true); }
     }

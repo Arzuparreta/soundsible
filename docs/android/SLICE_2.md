@@ -93,3 +93,20 @@ No marcar NORMAL entero ni S2 completo como terminados.
 Referencias primarias usadas para servicio/foreground/controladores y transporte:
 [background playback](https://developer.android.com/media/media3/session/background-playback),
 [network stacks](https://developer.android.com/media/media3/exoplayer/network-stacks).
+
+## S2b: modos nativos de cola
+
+El puente nativo acepta `shuffle` con `enabled` booleano obligatorio y `repeat`
+con `mode` obligatorio (0 off, 1 una canción, 2 toda la cola). Valida generación y
+comando disponible antes de mutar el controlador. Snapshot/evento añaden `shuffle`,
+`repeat`, `hasNext` y `hasPrevious`; éstos proceden de Media3, no se calculan por
+`index + 1`. Los índices siguen identificando ocurrencias en el orden original.
+
+Los modos sobreviven a recreación/background junto al servicio y se restablecen
+al cambiar la cuenta/origen o cerrar sesión. No se persisten tras muerte del
+proceso. Este corte es el contrato nativo: los botones y el tipado Solid compartido
+se incorporarán con el runtime autenticado; no afirmar que la UI ofrece ya estas
+acciones. El siguiente corte sigue siendo integrar ese runtime asíncrono, sin
+adaptar la interfaz de mezcla síncrona con éxitos ficticios.
+
+Semántica de modos e índices: [Media3 playlists](https://developer.android.com/media/media3/exoplayer/playlists).

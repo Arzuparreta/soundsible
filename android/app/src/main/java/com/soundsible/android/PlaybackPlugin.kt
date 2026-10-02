@@ -34,6 +34,8 @@ class PlaybackPlugin : Plugin() {
         if (p != null) for (i in 0 until p.mediaItemCount) queue.put(p.getMediaItemAt(i).mediaId)
         return JSObject().put("generation", EngineConnection.shared(context).generation)
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
+            .put("shuffle", p?.shuffleModeEnabled ?: false).put("repeat", p?.repeatMode ?: Player.REPEAT_MODE_OFF)
+            .put("hasNext", p?.hasNextMediaItem() ?: false).put("hasPrevious", p?.hasPreviousMediaItem() ?: false)
             .put("state", p?.playbackState ?: Player.STATE_IDLE).put("index", p?.currentMediaItemIndex ?: -1)
             .put("id", p?.currentMediaItem?.mediaId ?: "").put("queue", queue)
             .put("title", p?.mediaMetadata?.title?.toString() ?: "").put("artist", p?.mediaMetadata?.artist?.toString() ?: "")
@@ -70,6 +72,16 @@ class PlaybackPlugin : Plugin() {
                 "play" -> { if (p.playerError != null || p.playbackState == Player.STATE_ENDED) { p.seekTo(p.currentMediaItemIndex, if (p.playbackState == Player.STATE_ENDED) 0 else p.currentPosition); p.prepare() }; p.play() }
                 "pause" -> p.pause()
                 "seek" -> p.seekTo((call.getDouble("positionMs") ?: 0.0).toLong().coerceAtLeast(0))
+                "shuffle" -> {
+                    require(p.isCommandAvailable(Player.COMMAND_SET_SHUFFLE_MODE))
+                    p.shuffleModeEnabled = call.getBoolean("enabled") ?: error("NO_SHUFFLE_MODE")
+                }
+                "repeat" -> {
+                    require(p.isCommandAvailable(Player.COMMAND_SET_REPEAT_MODE))
+                    val mode = call.getInt("mode") ?: error("NO_REPEAT_MODE")
+                    require(mode in Player.REPEAT_MODE_OFF..Player.REPEAT_MODE_ALL)
+                    p.repeatMode = mode
+                }
                 "next" -> p.seekToNextMediaItem()
                 "previous" -> p.seekToPreviousMediaItem()
                 "stop" -> { p.stop(); p.clearMediaItems() }

@@ -179,3 +179,31 @@ Mantener las aceptaciones de despliegue/phone de S1 y todos los gates de paridad
 Antes de trabajar: `git status --short --branch`, leer AGENTS y verificar archivos
 actuales. Actualizar este traspaso con cada slice: commit, pruebas/evidencias,
 capacidad pendiente y próximo paso. No arrastrar resultados antiguos como actuales.
+
+## Entrega S2b: modos de la cola nativa
+
+Continuación de S2a en la misma rama: comandos asíncronos `shuffle`/`repeat` y
+snapshots con modos y disponibilidad de siguiente/anterior según Media3. Mantiene
+índices de ocurrencias originales; conserva modos en background/recreación y los
+restablece al reset de cuenta/origen. Parámetros obligatorios y modos inválidos
+se rechazan sin mutación. Ver [contrato S2b](SLICE_2.md#s2b-modos-nativos-de-cola).
+
+Este corte modifica sólo Kotlin/tests Android y documentación. No añade botones
+ni el tipado de estos campos a Solid; eso queda junto a la integración asíncrona
+con el runtime autenticado, que sigue siendo el próximo slice prioritario. No
+marca NORMAL completo, S2 completo ni alpha lista. No se vuelve a ejecutar la
+suite browser por este corte sin cambios en `ui_web`.
+
+Validación local: APK en API 36, **7 tests instrumentados pasan / 0 omitidos**, con
+programa HTTP y HTTPS verificado, modos mediante puente real, modos conservados
+tras recreación/background, rechazo de repeat inválido, vuelta a secuencial y
+limpieza de ambos modos al logout. Se mantienen las pruebas S1 y S2a. El helper
+reconstruye el APK normal sin CA de fixture y ejecuta lint. Evidencia específica:
+[evidence/s2b.json](evidence/s2b.json). Emulador no prueba aceptación acústica,
+Bluetooth o coche. No se ha ejecutado el workflow GitHub ni publicado release.
+
+El usuario pidió subir todo trabajo pendiente: se subieron las ramas locales de
+auditoría y corrección de seek iOS, además de esta línea Android. Cambios sin
+commit del worktree de fiabilidad se conservaron en
+`wip/reliability-worktree-backup`: respaldo **sin validar para integrar**, creado
+sin alterar su working tree/índice y excluyendo su enlace local `.venv`.
