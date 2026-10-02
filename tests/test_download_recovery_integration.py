@@ -59,7 +59,7 @@ def test_cancel_during_acquisition_prevents_library_commit(isolated_runtime, mon
     def acquire(*args, **kwargs):
         queue.remove_item(item['id'], user_id=uid)
         return track
-    fake = SimpleNamespace(downloader=SimpleNamespace(process_track=acquire))
+    fake = SimpleNamespace(downloader=SimpleNamespace(process_query=acquire))
     monkeypatch.setattr(api, 'queue_manager_dl', queue)
     monkeypatch.setattr(api, 'get_downloader', lambda *a, **k: fake)
     api._process_single_queue_item(item)

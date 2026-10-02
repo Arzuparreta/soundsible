@@ -8,7 +8,6 @@ webpage_url and channel, plus the song fields of `youtube_music_metadata`
 from __future__ import annotations
 
 import logging
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -17,13 +16,7 @@ import yt_dlp
 
 from shared.music_identity import youtube_music_metadata
 
-from ..config import (
-    DURATION_TOLERANCE_SEC,
-    FORBIDDEN_KEYWORDS,
-    SEARCH_STRATEGY_FALLBACK,
-    SEARCH_STRATEGY_PRIMARY,
-    prefer_ytmusic,
-)
+from ..config import prefer_ytmusic
 from .ids import is_valid_video_id, thumbnail_url, video_id_from_url, watch_url
 from .web import oembed_creator
 from .ytdlp import Cookies, apply_network_options
@@ -370,57 +363,3 @@ def get_related_videos(
         logger.debug("[Discover] get_related_videos RD full failed: %s", e)
 
     return []
-
-
-def _is_valid_match(video_info: Dict[str, Any], metadata: Dict[str, Any]) -> tuple[bool, float]:
-    """Check if a video is a valid match using word intersection."""
-    title = video_info.get("title", "").lower()
-
-    target_duration = metadata.get("duration_sec", 0)
-    if target_duration > 0:
-        if abs(video_info.get("duration", 0) - target_duration) > DURATION_TOLERANCE_SEC:
-            return False, 0.0
-
-    for keyword in FORBIDDEN_KEYWORDS:
-        if keyword in title and keyword not in metadata["title"].lower():
-            return False, 0.0
-
-    # Most of the query's meaningful words must appear in the video title.
-    query_words = set(re.findall(r"\w+", f"{metadata['artist']} {metadata['title']}".lower()))
-    query_words -= {"a", "the", "of", "and", "official", "audio", "video", "music"}
-    if not query_words:
-        return True, 1.0
-    match_ratio = len(query_words & set(re.findall(r"\w+", title))) / len(query_words)
-    if match_ratio >= 0.5:
-        return True, match_ratio
-    return False, 0.0
-
-
-def find_track(metadata: Dict[str, Any], cookies: Cookies) -> Optional[Dict[str, Any]]:
-    """The best search result for an artist and title, or None."""
-    queries = [
-        SEARCH_STRATEGY_PRIMARY.format(artist=metadata["artist"], title=metadata["title"]),
-        SEARCH_STRATEGY_FALLBACK.format(artist=metadata["artist"], title=metadata["title"]),
-    ]
-    ydl_opts = _extract_options(extract_flat=True, **cookies.ydl_options())
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        for query in queries:
-            try:
-                results = ydl.extract_info(f"ytsearch5:{query}", download=False)
-                if not results or "entries" not in results:
-                    continue
-                best_match = None
-                highest_score = 0
-                for entry in results["entries"]:
-                    if not entry:
-                        continue
-                    is_valid, score = _is_valid_match(entry, metadata)
-                    if is_valid and score > highest_score:
-                        highest_score = score
-                        best_match = entry
-                if best_match:
-                    logger.debug("Found match: %s (Score: %.2f)", best_match.get("title"), highest_score)
-                    return best_match
-            except Exception as e:
-                logger.warning("Search error for %s: %s", query, e)
-    return None

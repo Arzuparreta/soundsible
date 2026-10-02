@@ -1,29 +1,32 @@
 """The engine's handle on YouTube: one output folder, one set of cookies.
 
 The work lives in `odst_tool.youtube`; this class binds it to where files
-go and which cookies to use, and acquires tracks from search, from a video
-or from a file already on disk.
+go and which cookies to use, and acquires tracks from a text search, from a
+video or from a file already on disk.
 """
 
 import logging
 import os
-import random
-import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from shared.constants import DEFAULT_CONFIG_DIR
 from shared.models import Track
+from shared.resolution_confidence import best_candidate
 from shared.stream_resolution import ResolvedStream
 
 from .audio_utils import AudioProcessor
-from .config import DEFAULT_OUTPUT_DIR, DEFAULT_QUALITY, DOWNLOAD_DELAY_RANGE, TRACKS_DIR
+from .config import DEFAULT_OUTPUT_DIR, DEFAULT_QUALITY, TRACKS_DIR
 from .youtube import download, search, streams
-from .youtube.ids import is_valid_video_id, video_id_from_url
+from .youtube.ids import video_id_from_url, watch_url
 from .youtube.tracks import store_track, video_metadata, with_canonical_mbid
 from .youtube.ytdlp import Cookies
 
 logger = logging.getLogger(__name__)
+
+# A title that does not match, a different version (live, remix, cover…), or a
+# score earned without the title: none of these is the song that was asked for.
+_UNACCEPTED_MATCHES = {"no_match", "other_version", "weak"}
 
 
 class YouTubeDownloader:
@@ -94,33 +97,33 @@ class YouTubeDownloader:
             youtube_id=youtube_id, cover_source=cover_source,
         )
 
-    def process_track(self, metadata: Dict[str, Any]) -> Optional[Track]:
-        """Search for a song by artist and title, then download the best match."""
-        meta = dict(metadata or {})
-        meta.setdefault("title", "Unknown Title")
-        meta.setdefault("artist", "Unknown Artist")
-        meta.setdefault("album", "")
-        with_canonical_mbid(meta)
+    def process_query(
+        self,
+        query: str,
+        metadata_hint: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Callable[..., None]] = None,
+    ) -> Track:
+        """Download the YouTube upload that best matches a song named in text.
 
-        video_info = search.find_track(meta, self.cookies)
-        if not video_info:
-            return None
-        time.sleep(random.uniform(*DOWNLOAD_DELAY_RANGE))
-        temp_file = self._download_audio(video_info.get("webpage_url") or video_info.get("url"))
-        try:
-            AudioProcessor.embed_metadata(str(temp_file), meta, meta.get("album_art_url"))
-            duration, bitrate, _size = AudioProcessor.get_audio_details(str(temp_file))
-            video_id = video_info.get("id")
-            return self._store(
-                temp_file, meta, duration, bitrate,
-                youtube_id=video_id if is_valid_video_id(video_id) else None,
-                cover_source=meta.get("cover_source"),
-            )
-        except Exception as e:
-            logger.warning("Error processing downloaded file %s: %s", meta.get("title", "unknown"), e)
-            if temp_file.exists():
-                os.remove(temp_file)
-            return None
+        Candidates are scored by `shared.resolution_confidence`, as every other
+        path that turns a song into a video is. The winner must match the title
+        and be the version asked for; otherwise nothing is downloaded.
+        `metadata_hint` sharpens the search (artist, title, duration) and then
+        tags the file, as it does for `process_video`.
+        """
+        hint = dict(metadata_hint or {})
+        title = str(hint.get("title") or query or "").strip()
+        artist = str(hint.get("artist") or "").strip()
+        candidates = search.search_match_candidates(artist, title, self.cookies)
+        best, score, reason, _ranked = best_candidate(artist, title, hint.get("duration_sec"), candidates)
+        if not best or reason in _UNACCEPTED_MATCHES:
+            raise Exception(f"No YouTube upload matches {query!r}")
+        logger.debug("Best match for %r: %s (%.2f, %s)", query, best.get("id"), score, reason)
+        return self.process_video(
+            best.get("webpage_url") or watch_url(best["id"]),
+            metadata_hint=hint,
+            progress_callback=progress_callback,
+        )
 
     def process_video(
         self,
