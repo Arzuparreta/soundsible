@@ -504,9 +504,8 @@ def repair_library(
     and to the favourites manager.
 
     Every track comes back in `tracks`, repaired or not, built with
-    `dataclasses.replace` — never rebuilt field by field, which is how
-    `odst_tool/optimize_library.py` quietly drops `youtube_id`, `musicbrainz_id`
-    and `added_at` from everything it touches.
+    `dataclasses.replace` — never rebuilt field by field, which would drop
+    `youtube_id`, `musicbrainz_id` and `added_at` from everything it touches.
     """
     from shared.path_resolver import resolve_local_track_path
     from setup_tool.audio import AudioProcessor

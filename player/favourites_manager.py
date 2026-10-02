@@ -279,8 +279,8 @@ class FavouritesManager:
     @serialized
     def remap_library_id(self, old_id: str, new_id: str) -> bool:
         """
-        Follow a library track whose id was rewritten (the optimizer re-keys ids
-        to content hashes). Keeps the snapshot and `added_at` intact, which
+        Follow a library track whose id was rewritten (a repair re-keys ids to
+        content hashes). Keeps the snapshot and `added_at` intact, which
         remove()+add() would throw away.
         """
         if not old_id or not new_id or old_id == new_id:

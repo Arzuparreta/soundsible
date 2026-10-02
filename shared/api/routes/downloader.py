@@ -351,19 +351,6 @@ def trigger_downloader():
     return jsonify({"status": "already_running"})
 
 
-# Re-encodes files in the shared pool and rewrites track ids for everyone.
-@downloader_bp.route("/api/downloader/optimize", methods=["POST"])
-@require_instance_admin()
-@rate_limit("downloader_optimize", limit=10, window_sec=300)
-def trigger_downloader_optimize():
-    # run_optimization_task submits to the orchestrator and returns; no
-    # outer Thread needed (plan T3).
-    from shared.api import run_optimization_task
-    dry_run = request.json.get("dry_run", True)
-    run_optimization_task(dry_run)
-    return jsonify({"status": "started"})
-
-
 # Talks to the instance's storage backend.
 @downloader_bp.route("/api/downloader/sync", methods=["POST"])
 @require_instance_admin()

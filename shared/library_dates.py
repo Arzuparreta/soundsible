@@ -26,7 +26,7 @@ backed by a file — and both carry that same moment in ``added_at``.
   identity already held answers with the date it has been held since; only an
   identity held nowhere is given a new one.
 - **Carried through everything that changes how a song is held without letting
-  go of it**: marking and unmarking it, tag edits and re-keys, the optimizer's
+  go of it**: marking and unmarking it, tag edits and re-keys, a repair's
   re-hashing, deleting the file of a saved song (the entry already holds the
   same date), a saved catalog row learning its video.
 - **Released only when the last holding goes** — unsaving a song that has no

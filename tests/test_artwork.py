@@ -1,4 +1,4 @@
-"""Originals survive audio optimization; serving never invents missing detail."""
+"""Originals survive a re-keyed audio file; serving never invents missing detail."""
 import io
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path

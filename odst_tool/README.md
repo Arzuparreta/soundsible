@@ -27,6 +27,3 @@ imported by the engine, not installed on its own.
 ## Usage
 
 Use the **main Soundsible webapp**: start the API (e.g. from `run.py` → Launch Web Player), then open `http://localhost:5005/player/`. The downloader is built into the player UI (Search and **Discover**; Discover uses Deezer for browsing only, then the same YouTube search path to queue downloads — see `docs/ARCHITECTURE.md`).
-
-The standalone tkinter GUI and its `setup_env.sh` / `downloader_gui.sh` helpers
-were removed; the embedded downloader replaces them.
