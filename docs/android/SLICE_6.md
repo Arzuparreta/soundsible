@@ -62,6 +62,12 @@ El helper ejecuta una fase persistente, force-stop real del APK y otra fase offl
 comprobando hash y corrupción del mismo tamaño. Resultados en HANDOFF/evidencia.
 La fase de reinicio se excluye de la suite principal y el helper la invoca con
 argumentos propios; no ejecutarla suelta sin el protocolo de dos fases.
+Se instalan APK y APK de tests una vez; `am instrument` ejecuta las fases y
+`am force-stop` separa los procesos. Gradle connectedDebugAndroidTest desinstala
+la app después de cada corrida y no debe usarse para ambas fases persistentes.
+`scripts/android.py integration --offline-restart-only` repite únicamente ese
+protocolo, conserva evidencia principal previa y no valida la suite principal.
+La integración normal ejecuta primero toda la suite y después el protocolo.
 
 La validación encontró un fallo previo en el proxy de previews WebM por HTTPS:
 el mtime que contabiliza lecturas/LRU también generaba el ETag de send_file.

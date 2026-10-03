@@ -51,9 +51,9 @@ public class OfflineRestartTest {
                 try(java.io.RandomAccessFile output=new java.io.RandomAccessFile(file,"rw")) {output.seek(0);output.write(new byte[]{0,0,0,0});}
                 assertTrue(file.setLastModified(modified+1000));assertNull(connection.getOffline().local("member-track",connection.getGeneration()));
                 assertEquals("error",connection.getOffline().state(connection.getGeneration()).getJSONArray("items").getJSONObject(0).getString("state"));
-                connection.clearSession(true);assertEquals(0,connection.getOffline().state(connection.getGeneration()).getJSONArray("items").length());
                 control(connection,origin,false);
+                connection.clearSession(true);assertEquals(0,connection.getOffline().state(connection.getGeneration()).getJSONArray("items").length());
             }
-        } finally { if(!"prepare".equals(phase)) {control(connection,origin,false);connection.clearSession(true);} }
+        } finally { if(!"prepare".equals(phase)) {if(!connection.getOrigin().isEmpty()) control(connection,origin,false);connection.clearSession(true);} }
     }
 }

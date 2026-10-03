@@ -1,6 +1,6 @@
 # Soundsible para Android: desarrollo del port
 
-**Estado: cliente de desarrollo con conexión, programa nativo local/preview y cola/transporte Solid asíncronos (S2i); offline B en validación (S6a), no alpha.**
+**Estado: cliente de desarrollo con conexión, programa nativo local/preview y cola/transporte Solid asíncronos (S2i); copias offline explícitas validadas (S6a), no alpha.**
 La APK conecta a una instancia, inicia sesión como cuenta, conserva la sesión en
 Android y navega canciones, álbumes, artistas y playlists con carátulas y eventos.
 Comparte la fila visual Solid; no carga el runtime Web Audio. Los archivos de la

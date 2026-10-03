@@ -93,9 +93,11 @@ def adb(*args: str, serial: str | None = None) -> None:
     run(str(binary), *(["-s", serial] if serial else []), *args)
 
 
-def integration() -> None:
+def integration(*, restart_only: bool = False) -> None:
     """Own three disposable engines and run real native account integration on an AVD."""
     doctor()
+    if restart_only and os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
+        raise RuntimeError("Restart protocol cannot be combined with a single-class instrumentation filter")
     binary = str(sdk() / "platform-tools/adb")
     devices = [
         line.split()[0]
@@ -129,7 +131,8 @@ def integration() -> None:
                         '<debug-overrides><trust-anchors><certificates src="@raw/android_fixture_ca" /></trust-anchors></debug-overrides></network-security-config>',
                     )
                 )
-                for port, passwordless in ((5097, False), (5098, True), (5099, False)):
+                fixtures = ((5097, False),) if restart_only else ((5097, False), (5098, True), (5099, False))
+                for port, passwordless in fixtures:
                     with socket.socket() as probe:
                         probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                         try:
@@ -179,33 +182,66 @@ def integration() -> None:
                             if time.monotonic() >= deadline:
                                 raise RuntimeError("Fixture startup timed out; see android/build/fixture.log") from None
                             time.sleep(0.2)
-                gradle(
-                    ":app:connectedDebugAndroidTest",
-                    "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest",
-                    "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
-                    "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
-                    "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
-                )
-                shutil.rmtree(ANDROID / "build/integration-results", ignore_errors=True)
-                shutil.copytree(
-                    ANDROID / "app/build/outputs/androidTest-results",
-                    ANDROID / "build/integration-results",
-                    dirs_exist_ok=True,
-                )
+                if not restart_only:
+                    gradle(
+                        ":app:connectedDebugAndroidTest",
+                        "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest",
+                        "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
+                        "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
+                        "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
+                    )
+                    shutil.rmtree(ANDROID / "build/integration-results", ignore_errors=True)
+                    shutil.copytree(
+                        ANDROID / "app/build/outputs/androidTest-results",
+                        ANDROID / "build/integration-results",
+                        dirs_exist_ok=True,
+                    )
                 if not os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
+                    # connectedDebugAndroidTest uninstalls its target afterwards.
+                    # Install once and invoke the runner directly so phase two
+                    # observes process death rather than a fresh installation.
+                    gradle(":app:assembleDebug", ":app:assembleDebugAndroidTest")
+                    adb("install", "-r", str(ANDROID / "app/build/outputs/apk/debug/app-debug.apk"))
+                    adb(
+                        "install",
+                        "-r",
+                        str(ANDROID / "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"),
+                    )
+                    metadata = json.loads((ANDROID / "build-info.json").read_text())
                     for phase in ("prepare", "offline"):
                         if phase == "offline":
                             adb("shell", "am", "force-stop", "com.soundsible.android.dev")
-                        gradle(
-                            ":app:connectedDebugAndroidTest",
-                            "-Pandroid.testInstrumentationRunnerArguments.class=com.soundsible.android.OfflineRestartTest",
-                            f"-Pandroid.testInstrumentationRunnerArguments.offlinePhase={phase}",
-                            "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
+                        output = run(
+                            binary,
+                            "shell",
+                            "am",
+                            "instrument",
+                            "-w",
+                            "-e",
+                            "class",
+                            "com.soundsible.android.OfflineRestartTest",
+                            "-e",
+                            "offlinePhase",
+                            phase,
+                            "-e",
+                            "fixtureOrigin",
+                            "http://10.0.2.2:5097",
+                            "-e",
+                            "expectedVersion",
+                            metadata["version"],
+                            "com.soundsible.android.dev.test/androidx.test.runner.AndroidJUnitRunner",
+                            capture=True,
                         )
-                        shutil.copytree(
-                            ANDROID / "app/build/outputs/androidTest-results",
-                            ANDROID / f"build/integration-results/restart-{phase}",
-                            dirs_exist_ok=True,
+                        result = ANDROID / f"build/integration-results/restart-{phase}"
+                        shutil.rmtree(result, ignore_errors=True)
+                        result.mkdir(parents=True)
+                        (result / "instrumentation.txt").write_text(output)
+                        print(output)
+                        if not re.search(r"OK \(1 test\)", output) or "FAILURES!!!" in output:
+                            raise RuntimeError(f"Offline restart phase {phase} failed; see {result}")
+                        (result / "result.json").write_text(
+                            json.dumps({"phase": phase, "tests": 1, "failures": 0, "errors": 0, "skipped": 0}, indent=2)
+                            + "\n"
                         )
                 adb("pull", "/sdcard/Download/soundsible-s1-library.png", str(ANDROID / "build/library.png"))
                 adb("pull", "/sdcard/Download/soundsible-s2-program.png", str(ANDROID / "build/program.png"))
@@ -228,7 +264,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("doctor", "prepare", "build", "install", "smoke", "integration"))
     parser.add_argument("--serial", help="adb device serial (or set ANDROID_SERIAL)")
+    parser.add_argument(
+        "--offline-restart-only",
+        action="store_true",
+        help="integration: run only the prepare/force-stop/offline protocol; does not validate the main suite",
+    )
     args = parser.parse_args()
+    if args.offline_restart_only and args.command != "integration":
+        parser.error("--offline-restart-only requires integration")
     if args.serial:
         os.environ["ANDROID_SERIAL"] = args.serial
     try:
@@ -250,7 +293,7 @@ def main() -> int:
                 serial=args.serial,
             )
         elif args.command == "integration":
-            integration()
+            integration(restart_only=args.offline_restart_only)
         else:
             # Tests install/run the packaged APK and exercise App.getInfo through
             # the real bridge, including offline reopening and locale persistence.

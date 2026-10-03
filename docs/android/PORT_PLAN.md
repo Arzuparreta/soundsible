@@ -5,7 +5,7 @@
 Cada slice termina con implementación, pruebas pertinentes, evidencia, actualización
 del traspaso y commit enfocado. No hay publicación por completar un slice.
 `S0`, el núcleo funcional de `S1` y los cortes `S2a`/`S2b`/`S2c`/`S2d`/`S2e`/`S2f`/`S2g`/`S2h`/`S2i` están implementados.
-`S2` completo y posteriores siguen **pendientes**.
+`S6a` también está implementado y validado. `S2` completo y posteriores siguen **pendientes**.
 HTTP/HTTPS se prueban con fixture real; la aceptación pública/DNS/Tailscale de S1 sigue abierta; ver HANDOFF.
 Una casilla sólo cambia con evidencia; interfaces y workflows no cuentan como
 comportamiento validado. Mantener visibles capacidades añadidas a Solid mientras
@@ -45,7 +45,7 @@ y después integrar por PR y publicar mediante los gates establecidos.
 | Live emitir | `audio/capture.ts`, `docs/LIVE.md` | Programa completo al relay; volumen local independiente; pausas/silencio; listener oye y reconecta | Pendiente |
 | Audio nativo/lockscreen/Bluetooth | PlaybackService Media3 | Estado/posición/metadata, focus y políticas de pausa en emulador; llamadas/Bluetooth y evidencia física para beta | Servicio/metadata/carátulas/notificación/foco probados en emulador; teléfono, llamadas/Bluetooth y lockscreen físico pendientes |
 | Android Auto | `/api/car/*`, `docs/CAR_INTEGRATION.md` | Browse/play/control, errores/red y metadata durante DJ en contrato multimedia; DHU y coche para beta | Pendiente |
-| Offline | [Decisión aprobada](OFFLINE_DECISION.md) | Copias completas, vuelos/espacio/cuenta/UI validados | B aprobado; S6a en validación. Alpha requiere además paridad completa |
+| Offline | [Decisión aprobada](OFFLINE_DECISION.md) | Copias completas, vuelos/espacio/cuenta/UI validados | S6a implementado/validado en emulador; evidencia en HANDOFF. Alpha requiere además paridad completa |
 | Actualizaciones/distribución | [Release gates](RELEASE_GATES.md) | Clave permanente, versión/code coherentes, actualización conserva datos y session | Pendiente |
 
 Las referencias son puntos de entrada, no una lista exhaustiva de endpoints.

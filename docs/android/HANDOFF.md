@@ -655,3 +655,46 @@ este alcance y revisar la paridad pendiente en PORT_PLAN.md sin volver a pedir
 aprobación de cada corte. Podcasts/radio, DJ/Live y Android Auto siguen abiertos.
 Offline B está aprobado; S6a se implementa antes de continuar S2j.
 S2i es un artefacto de desarrollo, no una release ni una alpha pública.
+
+
+## Entrega S6a: Disponible sin conexión
+
+Implementación subida como `724a67f` en `feat/android-port-foundation`. Copias
+explícitas de música adquirida desde menús de canción/colección; gestor y filtro
+local en el menú de biblioteca. No hay preparación en shells ni adquisición de
+previews. SQLite/archivos privados, cuotas/reserva, verificación multimedia/hash,
+worker/servicio foreground y cancelación por cuenta/generación/ticket. NORMAL usa
+el mismo Media3 mediante OfflineDataSource. Ver [contrato S6a](SLICE_6.md).
+
+Offline HTTP/HTTPS comprueba lote deduplicado, motor inaccesible, reproducción,
+seek/pausa/cierre, Activity recreation, límite, parcial/archivo inválido,
+cancelación sin resurrección y logout local. El protocolo persistente instala
+APK/tests **una vez** y usa `am instrument` en dos fases con `am force-stop` entre
+ellas: restaura perfil/copia, reproduce sin API y detecta corrupción del mismo
+tamaño. `connectedDebugAndroidTest` desinstala al terminar; no sirve para retener
+datos entre fases. Un finally que usaba transporte después de olvidar origen
+ocultaba inicialmente esa reinstalación; ambos problemas del test se corrigieron.
+
+Validación S6a: typecheck/Vitest **1.363 tests / 149 archivos** en el checkpoint
+offline; **59 Python** (58 rutas/cache y uno fixture real). **4 tests unitarios
+nativos** (dos de retry y dos de reparación de socket). Suite principal completa
+API 36: **15 tests, cero fallos/errores/omitidos**. Protocolo corregido de reinicio:
+**dos fases de un test, cero fallos**, vía `scripts/android.py integration
+--offline-restart-only`. El helper conserva por separado XML de la suite principal
+y logs/result.json de cada fase. APK/test APK/lint normales pasan y no llevan CA
+temporal. [Evidencia S6a](evidence/s6a.json). Las cuatro suites browser se repetirán
+antes del PR acumulado exigido por AGENTS; no reutilizar S2i como resultado S6a.
+No se ejecutó CI GitHub, escucha física ni aceptación de coche.
+
+La pasada completa encontró un ETag ligado a mtime/LRU en previews y un EOF de
+socket TLS reutilizado antes de cabeceras. El proxy ahora usa revisión de commit/
+remux estable; admite cachés antiguas sin validator. Audio permite un intercambio
+GET nuevo sólo para ese EOF en conexión reutilizada, nunca cuerpo/timeout/TLS/
+cancelación/HTTP error. Se observó esa reparación en la pasada completa; cooldown
+y presupuesto 429/503 siguen cubiertos. Detalles y límites en SLICE_6.
+
+Build de instrumentación: metadata del HEAD previo (`ccec0f9`), `dirty=true`;
+no presentar ese APK como build limpio de release. Se reconstruirá desde HEAD
+limpio tras cerrar el siguiente corte. S6a no cierra paridad ni habilita alpha.
+Autorización vigente: continuar S2j y la matriz completa, push de avances; después
+PR a main y release con gates de firma/actualización y paridad completos.
