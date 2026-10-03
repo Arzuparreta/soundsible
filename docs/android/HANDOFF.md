@@ -809,9 +809,9 @@ Observación se aborta al desconectar y retoma al reconectar.
 Resultados locales: UI **1.387 tests / 154 archivos**; Python **44 tests** de pump,
 recovery, persistencia, podcasts y fixture real de adquisición. Dos APK tests HTTP/
 HTTPS del directorio pasan. Regresión principal: **22 tests, cero fallos/omitidos**
-según TestRunner; las fases offline persistentes/build normal siguen ejecutándose
-al escribir este checkpoint. Consultar integration-results y el helper completo
-antes de dar las fases por pasadas. Últimos browser completos siguen siendo S2j.
+según TestRunner, más **dos fases offline persistentes** que pasan. El helper
+terminó correctamente y retiró la CA temporal. Su build normal ya incluyó fuentes
+de Radio en desarrollo: no es un APK limpio del commit S2l ni valida Radio. Últimos browser completos siguen siendo S2j.
 
 Ruff check pasa. Format check de fixture/test pasa; shared/api/__init__.py tiene
 formato histórico fuera del cambio, no se reformatea entero por este slice. Su
