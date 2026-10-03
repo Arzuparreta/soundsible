@@ -56,6 +56,15 @@ def test_android_preview_provider_uses_real_proxy_and_preserves_other_reader(tmp
             )
             assert partial.status_code == 206 and partial.content == warm.content[100:200]
             assert partial.headers["X-Soundsible-Playback-Cache"] == "disk"
+            reset = client.post(
+                origin + "/__fixture/preview",
+                headers={"X-Android-Fixture": "isolated"},
+                json={"clear_cache": True},
+                timeout=10,
+            )
+            assert reset.status_code == 200, reset.text
+            cold = client.get(origin + "/api/preview/stream/C1111111111", timeout=30)
+            assert cold.status_code == 200 and cold.headers["X-Soundsible-Playback-Cache"] == "cold"
             assert (
                 client.post(
                     origin + "/__fixture/preview", headers={"X-Android-Fixture": "isolated"}, json={"slow": True}
@@ -81,7 +90,7 @@ def test_android_preview_provider_uses_real_proxy_and_preserves_other_reader(tmp
                 assert time.monotonic() < deadline, status.text
                 time.sleep(0.1)
             stats = client.get(origin + "/api/android-fixture/preview-stats", timeout=10).json()
-            assert len(stats["upstream"]) == 2  # One WebM transfer, one shared MP4 transfer.
+            assert len(stats["upstream"]) == 3  # WebM, explicit cold reset/reacquisition, shared MP4.
             assert all(not row["cookie_present"] and row["range"] == "bytes=0-" for row in stats["upstream"])
         finally:
             process.terminate()

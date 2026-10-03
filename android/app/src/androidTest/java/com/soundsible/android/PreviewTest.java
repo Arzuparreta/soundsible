@@ -58,7 +58,7 @@ public class PreviewTest {
             waitFor(web, scenario, "!!document.querySelector('input[type=password]')");
             web.evaluate(scenario, "document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
             waitFor(web, scenario, "!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member saved song' && !b.disabled)");
-            control(connection, origin, "{\"slow\":true,\"status\":0,\"clear_stats\":true}");
+            control(connection, origin, "{\"slow\":true,\"status\":0,\"clear_stats\":true,\"clear_cache\":true}");
             web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member saved song').click()"); observe(web, scenario);
             waitFor(web, scenario, "window.__preview?.id==='B1111111111' && window.__preview.state===2 && !window.__preview.playing");
             waitFor(web, scenario, "window.__preview?.id==='B1111111111' && window.__preview?.preview?.preparation?.state==='streamable' && window.__preview.playing");

@@ -700,7 +700,7 @@ Autorización vigente: continuar S2j y la matriz completa, push de avances; desp
 PR a main y release con gates de firma/actualización y paridad completos.
 
 
-## S2j: checkpoint de búsqueda y guardado explícito
+## Entrega S2j: búsqueda y guardado explícito
 
 La continuación autorizada implementa Discover de canciones: catálogo seleccionado,
 resultados locales/directos/pendientes de resolución, bookmark/retirada confirmado
@@ -711,19 +711,43 @@ rematching. Última consulta/acción/cuenta prevalece; menús capturan su contex
 No adquirir archivos, añadir fuentes especulativas ni ofrecer búsqueda offline.
 [Contrato y aceptación S2j](SLICE_2.md#s2j-búsqueda-y-guardado-explícito-de-canciones).
 
-Typecheck/Vitest final: **1.373 tests / 151 archivos**, cero fallos. Fixture Python
-real: **un test** de búsqueda/matching/caché/guardado/retirada/aislamiento pasa;
-proveedores y candidates son sintéticos, rutas y permisos siguen reales. Dos
-recorridos iniciales empaquetados HTTP/HTTPS pasan: buscar, reproducir, guardar,
-retirar, volver a Library, alternar cuenta sin fuga y recuperar 403 con Retry.
-Tras añadir reconocimiento de la identidad guardada y guard de identidad inválida,
-la pasada completa de APK está **en curso**. No declarar todavía S2j cerrado ni
-usar los dos recorridos anteriores como resultado de esa fuente final. Cuatro
-perfiles browser siguen exigidos antes del PR acumulado. No CI/proveedor vivo/
-dispositivo/coche aceptados por estos fixtures.
+Validación final: **1.373 tests / 151 archivos** de typecheck/Vitest; **60 tests
+Python** de rutas/cache y fixtures; **4 tests unitarios nativos**. Suite APK API 36:
+**17 tests principales y dos fases de reinicio**, cero fallos/errores/omitidos.
+Recorridos HTTP/HTTPS: buscar, reproducir, guardar/retirar, Library, alternar cuenta
+sin fuga y recuperar 403 con Retry. APK/test APK/lint normales pasan tras retirar
+la CA efímera. Chromium completo: **278 pasan / 66 omitidos**; WebKit completo:
+**269 pasan / 75 omitidos**, ejecución secuencial, un worker y montaje readonly.
+[Evidencia S2j](evidence/s2j.json). No CI/proveedor vivo/dispositivo/coche aceptados.
+
+La primera pasada completa detectó interferencia del fixture: reproducir Saved
+preparaba la siguiente canción B y el test de preview esperaba cache fría. El
+control de pruebas ahora limpia sólo las entradas sintéticas conocidas y rechaza
+limpieza con fills activos; PreviewTest solicita ese estado inicial. Se conservan
+las assertions de buffering/progressive, sin cambiar la política de cache real.
+La repetición completa pasa. Metadata de instrumentación: HEAD anterior, dirty;
+regenerar APK normal desde HEAD limpio después del commit.
 
 Siguiente vertical después de cerrar S2j: podcasts y radio en el mismo servicio,
 con resume/±15s reales y fuentes autorizadas por el motor; inventariar primero
 contratos y acciones actuales. Descubrimiento de entidades, adquisición/importación,
 settings/edición/lyrics/handoff, DJ/Live/Auto y firma/actualización siguen abiertos.
 El usuario exige mantener paridad completa antes de integrar/publicar alpha.
+
+
+### Próximo corte S2k: podcasts
+
+Primero, suscripciones y episodios por las rutas reales del motor, reproducción
+proxy autorizada en el mismo Media3, resume y ±15s. El servicio debe guardar
+progreso en background y aislarlo por origen/cuenta e identidad estable de episodio;
+completados reinician desde cero. GUID/enclosure no son video IDs de preview.
+No aceptar URL arbitraria ni reenviar cookie del motor al proveedor: usar tokens
+mintados por el motor y construir allí la fuente interna. Incluir cancelación,
+Range/seek, Activity recreation, cambio de cuenta y expiración del token con
+proveedor sintético; no debilitar SSRF para el fixture. Biblioteca debe conservar
+la identidad de episodios adquiridos además de las canciones.
+
+Radio significa recomendaciones musicales NORMAL (`startRadio` y
+GeneratedQueueController), no estaciones de internet. Después de podcasts, conservar
+el seed ya reproduciéndose y las inserciones manuales al activar esa planificación;
+no depender de timers WebView en background. Dirección/DJ/Live siguen pendientes.

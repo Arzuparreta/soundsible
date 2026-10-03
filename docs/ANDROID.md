@@ -1,6 +1,6 @@
 # Soundsible para Android: desarrollo del port
 
-**Estado: cliente de desarrollo con conexión, programa nativo local/preview y cola/transporte Solid asíncronos (S2i); copias offline explícitas validadas (S6a), no alpha.**
+**Estado: cliente de desarrollo con conexión, programa nativo local/preview y cola/transporte Solid asíncronos (S2j); copias offline explícitas validadas (S6a), no alpha.**
 La APK conecta a una instancia, inicia sesión como cuenta, conserva la sesión en
 Android y navega canciones, álbumes, artistas y playlists con carátulas y eventos.
 Comparte la fila visual Solid; no carga el runtime Web Audio. Los archivos de la
@@ -202,5 +202,7 @@ cuentan; carátulas offline usan placeholder. Logout elimina las copias del perf
 Ver [decisión y límites](android/OFFLINE_DECISION.md). No hay mezcla, DJ/Live ni Android Auto. La cola de desarrollo admite hasta 1.000 ocurrencias locales/preview.
 S2i usa el proxy del motor para previews guardados, con progreso y retry 429/503
 acotado; sus carátulas nativas usan placeholder.
+S2j añade búsqueda de canciones y guardado explícito confirmado por el motor,
+sin adquirir archivos; reproduce mediante el mismo servicio nativo.
 El siguiente trabajo de S2 integra el contrato asíncrono con la UI autenticada
 completa y añade adquisición/podcasts/radio. Ver [contrato y pendientes](android/SLICE_2.md).

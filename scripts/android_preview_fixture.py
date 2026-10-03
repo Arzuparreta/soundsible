@@ -170,6 +170,17 @@ def install(app, root: Path):
         if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
             return jsonify({"error": "fixture only"}), 403
         body = request.get_json() or {}
+        if body.get("clear_cache"):
+            from shared import preview_cache
+
+            # Search/Library can prepare upcoming previews. Cold-path tests
+            # require their own empty cache, without changing production policy.
+            with preview_cache._fills_lock:
+                if any(video_id in preview_cache._fills for video_id in ids):
+                    return jsonify({"error": "fixture cache still filling"}), 409
+                for video_id in ids:
+                    preview_cache._audio_path(video_id).unlink(missing_ok=True)
+                    preview_cache._meta_path(video_id).unlink(missing_ok=True)
         for key in controls:
             if key in body:
                 controls[key] = body[key]
