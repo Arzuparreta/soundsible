@@ -737,6 +737,8 @@ El usuario exige mantener paridad completa antes de integrar/publicar alpha.
 
 ### Próximo corte S2k: podcasts
 
+[Scaffolding y aceptación end-to-end](SLICE_2K.md); implementación pendiente.
+
 Primero, suscripciones y episodios por las rutas reales del motor, reproducción
 proxy autorizada en el mismo Media3, resume y ±15s. El servicio debe guardar
 progreso en background y aislarlo por origen/cuenta e identidad estable de episodio;
