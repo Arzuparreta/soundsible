@@ -31,6 +31,7 @@ import re
 import subprocess
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -445,6 +446,7 @@ def _flatten_cached_mp4(
         if replacement is not None:
             os.replace(replacement, path)
             layout = FLAT_MP4_LAYOUT
+            meta["revision"] = uuid.uuid4().hex
         meta.update({
             "content_type": content_type,
             "size": path.stat().st_size,
@@ -586,6 +588,7 @@ class CacheWriter:
                 "content_type": self.content_type,
                 "size": committed.stat().st_size,
                 "layout": layout,
+                "revision": uuid.uuid4().hex,
             })
             os.replace(committed, target)
             if committed != self._part:

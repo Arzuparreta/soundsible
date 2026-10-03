@@ -2,6 +2,20 @@ import type { Dict } from './en';
 
 export const zh: Dict = {
   android: {
+    offlineAvailable: "离线可用",
+    offlineRemove: "从此设备移除",
+    offlineCancel: "取消准备",
+    offlineManage: "管理离线音乐",
+    offlineOnly: "仅此设备",
+    offlineAll: "所有歌曲",
+    offlineSpace: "存储上限",
+    offlineEmpty: "尚未准备任何歌曲。",
+    offlineReady: "已就绪",
+    offlinePreparing: "正在准备歌曲",
+    offlineNoSpace: "空间不足。请移除副本或提高上限。",
+    offlineIntegrity: "副本不完整或已损坏。请重新准备。",
+    offlineFailed: "准备失败。连接后重试。",
+
     previewPreparing: '正在准备歌曲',
     previewRetry: '等待重试歌曲',
     closeProgram: '关闭播放器',

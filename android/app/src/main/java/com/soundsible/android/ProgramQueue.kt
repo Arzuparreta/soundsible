@@ -34,16 +34,17 @@ object ProgramQueue {
             val title = row.optString("title"); val artist = row.optString("artist"); val album = row.optString("album")
             require(listOf(title, artist, album).all { it.length <= 4096 })
             val key = java.util.UUID.randomUUID().toString()
+            val offline = source == "local" && connection.offline.canUse(connection.generation) && connection.offline.local(id,connection.generation) != null
             val path = if (source == "preview") "/api/preview/stream/" else "/api/static/stream/"
             MediaItem.Builder().setMediaId(id)
                 .setUri(connection.origin + path + android.net.Uri.encode(id) + "?android_generation=" + connection.generation + "&android_occurrence=" + key)
-                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).setArtworkUri(if (source == "local") ProgramArtwork.uri(connection.generation, id) else null)
-                    .setExtras(Bundle().apply { putString(KEY, key); putString(SOURCE, source) }).build()).build()
+                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).setArtworkUri(if (source == "local" && !offline) ProgramArtwork.uri(connection.generation, id) else null)
+                    .setExtras(Bundle().apply { putString(KEY, key); putString(SOURCE, source); putBoolean("offline", offline) }).build()).build()
         }
     }
     /** Called on the service's player looper: validate actual queue, then mutate it once. */
     fun edit(player: Player, connection: EngineConnection, args: Bundle, beforeRetry: () -> Unit = {}) {
-        require(args.getLong("generation", -1) == connection.generation && connection.cookieHeader(connection.generation) != null)
+        require(args.getLong("generation", -1) == connection.generation && (connection.cookieHeader(connection.generation) != null || connection.offline.canUse(connection.generation)))
         require(args.getString("queueToken") == token(player))
         val action = args.getString("action")
         if (action == "append" || action == "insertAfter") {

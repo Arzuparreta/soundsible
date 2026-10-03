@@ -15,18 +15,19 @@ historial del chat ni memoria privada. Ver [guía](../ANDROID.md),
   el siguiente slice»: S0 se subió y S1 implementa conexión/biblioteca de lectura.
 - Objetivo completo: teléfono, DJ, Live y Android Auto. No publicar una alpha
   parcial; los artifacts CI son de desarrollo y pueden ser accesibles públicamente.
-- Offline no está decidido. Caso de interés: un vuelo. Preocupan la lógica,
-  sincronización y dos botones «Descargar». **Resolver con el usuario antes de
-  la alpha; implementar sólo si se aprueba.** No convertir una idea en requisito
-  implementado ni decidir por omisión. Ver OFFLINE_DECISION.
+- Offline B aprobado el 2026-10-03: música ya adquirida, copias explícitas,
+  «Disponible sin conexión» en menús de tres puntos. Ningún botón de preparación
+  en shells. Una biblioteca, espacio/progreso centralizados. Ver OFFLINE_DECISION.
 - No hay teléfono Android propio. Separar emulador, dispositivos remotos y
   teléfono/coche reales; no llamar a CI aceptación acústica.
-- Cada implementación termina con commit en rama, nunca main. Esta preparación
-  autorizaba inicialmente sólo commit. La instrucción posterior autoriza push;
-  no autoriza PR, merge ni publicación. No delegar sin autorización.
+- Cada implementación termina con commit y push en rama, nunca main directo.
+  Autorización vigente: continuar hasta paridad completa; después integrar todo
+  por PR a main y cortar release con información/instrucciones de alpha.
+  El usuario confirma mantener paridad completa antes de alpha (no alpha parcial).
+  No delegar sin autorización.
 - Respetar AGENTS: versión central, nada de `npm run build` local, suite completa
-  de cuatro perfiles cuando se toca `ui_web`, y base remota actual/impact label
-  si posteriormente se solicita PR.
+  de cuatro perfiles antes de abrir PR que toque `ui_web`, y base remota actual
+  e impact label al abrir/integrar el PR autorizado tras completar la paridad.
 - La app iOS es Swift independiente, no Solid sincronizado. Su runtime sigue
   sin validación de dispositivo. Mantener las advertencias sobre iOS/PAL.
 
@@ -649,7 +650,8 @@ proxy y guardas S2i; no introducir otro player ni adquisición especulativa.
 Definir estados vacíos, búsqueda cancelable y respuestas obsoletas por consulta y
 generación; comprobar permisos/errores y que guardar no confunda bookmark con
 adquisición local. Validar UI empaquetada y rutas reales con fixture sintético,
-HTTP/HTTPS, duplicados y cambio de cuenta. Antes de implementarlo, acordar el
-alcance exacto y revisar paridad pendiente en PORT_PLAN.md. Podcasts/radio, DJ/Live,
-Android Auto, recuperación tras process death y decisión offline siguen abiertos.
+HTTP/HTTPS, duplicados y cambio de cuenta. La autorización actual permite continuar
+este alcance y revisar la paridad pendiente en PORT_PLAN.md sin volver a pedir
+aprobación de cada corte. Podcasts/radio, DJ/Live y Android Auto siguen abiertos.
+Offline B está aprobado; S6a se implementa antes de continuar S2j.
 S2i es un artefacto de desarrollo, no una release ni una alpha pública.

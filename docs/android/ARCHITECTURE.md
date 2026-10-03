@@ -263,3 +263,14 @@ espera el estado cerrado recibido por IPC antes de resolver. No cambia identidad
 una cola nueva no hereda intención/modos ni claves. Media3 retira la notificación
 por timeline vacío, manteniendo el player/session mientras existan controllers.
 [Contrato S2h](SLICE_2.md#s2h-cierre-explícito-del-programa).
+
+### Copias explícitas del teléfono (S6a)
+
+OfflineStore pertenece a la aplicación, no a la Activity. SQLite y archivos
+privados guardan sólo copias completas de música adquirida y metadata limitada,
+ligadas al origen y cuenta que confirmó el transporte nativo. OfflineService
+ejecuta preparación explícita en foreground; generación/tickets cancelan resultados
+obsoletos. OfflineDataSource entrega el archivo verificado al mismo Media3 y
+preserva Range/seek. No hay un segundo motor ni file URI/cookie en JavaScript.
+La biblioteca local se deriva de esas copias; logout/cambio/401 observado eliminan
+perfil y trabajos. Ver [contrato, límites y aceptación S6a](SLICE_6.md).

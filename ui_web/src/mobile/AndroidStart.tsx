@@ -16,6 +16,8 @@ import { openContextMenu, ContextMenuOutlet } from '../lib/contextMenu';
 import { OverlayOutlet } from '../lib/overlay';
 import { programLibraryMenu } from '../lib/program/libraryMenu';
 import ProgramQueue from '../components/ProgramQueue';
+import { offline, availableLibrary, availableProgram, type OfflineState, type OfflineCommand } from './offline';
+import { offlineActions, openOfflineManager } from './OfflineManager';
 import logo from '../../../branding/logo-mark.svg';
 import styles from './AndroidStart.module.css';
 
@@ -34,7 +36,8 @@ export default function AndroidStart() {
   });
   async function play(tracks: Track[], selectedIndex: number) {
     authFailureHandled = false;
-    const queue = mixedProgram(tracks, selectedIndex);
+    const available = stale() && offlineState() ? availableProgram(tracks, selectedIndex, offlineState()!) : { tracks, index: selectedIndex };
+    const queue = mixedProgram(available.tracks, available.index);
     if (queue.index < 0) return;
     await runtime.execute({ action: 'queue', index: queue.index, tracks: queue.tracks }).catch(() => {});
   }
@@ -48,6 +51,25 @@ export default function AndroidStart() {
   const [eventsOnline, setEventsOnline] = createSignal(false);
   const [snapshot, setSnapshot] = createSignal<BrowseSnapshot | null>(null);
   const [revision, setRevision] = createSignal(0);
+  const [offlineState, setOfflineState] = createSignal<OfflineState | null>(null);
+  async function offlineCommand(command: OfflineCommand) {
+    const current = epoch;
+    try {
+      const result = await offline.command({ ...command, ...(command.action === 'prepare' ? { playlists: snapshot()?.playlists ?? command.playlists } : {}), generation });
+      if (current === epoch) {
+        const lostProfile = !result.user && !!offlineState()?.user && !!user();
+        if (JSON.stringify(result) !== JSON.stringify(offlineState())) setOfflineState(result);
+        if (lostProfile) await expireSession();
+      }
+    } catch { if (current === epoch) setError(t('android.offlineFailed')); }
+  }
+  async function restoreOffline() {
+    const current = epoch;
+    const result = await offline.command({ action: 'state', generation });
+    if (current !== epoch) return;
+    setOfflineState(result);
+    if (result.user && result.items.length) { setUser(result.user); setSnapshot(availableLibrary(result)); setStale(true); }
+  }
   let username: HTMLInputElement | undefined;
   let password: HTMLInputElement | undefined;
   let epoch = 0;
@@ -62,7 +84,7 @@ export default function AndroidStart() {
       if (active?.queue.length) void nativeProgramTransport.command({ generation, action: 'stop', queueToken: active.queueToken }).catch(() => {});
       runtime.unbind();
     }
-    setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setRevision(0); setEventsOnline(false); setStale(false);
+    setOfflineState(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setRevision(0); setEventsOnline(false); setStale(false);
   }
   let expiration: Promise<void> | null = null;
   function expireSession(): Promise<void> {
@@ -114,6 +136,7 @@ export default function AndroidStart() {
     if (current !== epoch) return;
     setNeedsLogin(!state.user);
     if (!state.user) { await expireSession(); return; }
+    if (user() && user()!.id !== state.user.id) { await expireSession(); return; }
     setUser(state.user);
     await sync();
     if (current !== epoch || !user()) return;
@@ -134,7 +157,6 @@ export default function AndroidStart() {
     setBusy(true); setError('');
     try {
       await resolveIdentity();
-      if (current === epoch) setStale(false);
     } catch (failure) {
       if (current !== epoch) return;
       if (failure instanceof ApiError && failure.status === 401) await expireSession();
@@ -189,12 +211,17 @@ export default function AndroidStart() {
     setUnauthorizedHandler(() => { void expireSession(); });
     void engine.state().then(state => {
       generation = state.generation; useEngine(state); void runtime.bind(generation); setOrigin(state.origin); setServer(state.origin);
-      if (state.origin) void revalidateIdentity();
+      if (state.origin) void restoreOffline().catch(() => {}).then(() => revalidateIdentity());
     }).finally(() => window.__SOUNDSIBLE_BOOT__?.complete());
+    let lastOfflinePoll = 0;
+    const offlineInterval = setInterval(() => {
+      const preparing = offlineState()?.items.some(item => item.state === 'queued' || item.state === 'downloading');
+      if (generation >= 0 && document.visibilityState === 'visible' && Date.now() - lastOfflinePoll >= (preparing ? 1000 : 10000)) { lastOfflinePoll = Date.now(); void offlineCommand({ action: 'state' }); }
+    }, 1000);
     const interval = setInterval(() => { if (user() && document.visibilityState === 'visible') void sync(); }, 30000);
     const resume = () => { if (user() && document.visibilityState === 'visible') void sync(); };
     document.addEventListener('visibilitychange', resume);
-    onCleanup(() => { clearInterval(interval); document.removeEventListener('visibilitychange', resume); reset(false); runtime.unbind(); setUnauthorizedHandler(null); });
+    onCleanup(() => { clearInterval(interval); clearInterval(offlineInterval); document.removeEventListener('visibilitychange', resume); reset(false); runtime.unbind(); setUnauthorizedHandler(null); });
   });
   return <main class={user() || program()?.queue.length ? styles.connected : styles.start} data-testid={server() ? 'android-configured' : 'android-unconfigured'}>
     <Show when={user()} fallback={<><img src={logo} alt="" width="64" height="64" /><h1>{t('android.title')}</h1></>}>
@@ -221,9 +248,12 @@ export default function AndroidStart() {
     <Show when={program()?.queue.length ? program() : null}>{state => <><ProgramTransport state={state()} pending={programPending()} command={runtime.execute} /><ProgramQueue state={state()} pending={programPending()} command={runtime.execute} /></>}</Show>
     <Show when={user()}>
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
-      <Show when={!eventsOnline()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
+      <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
-        {data => <LibraryBrowser snapshot={data()} revision={revision()} activeId={program()?.id} onPlay={play} onMenu={(track, event) => openContextMenu(programLibraryMenu(track, program, programPending, runtime.execute), event)} />}
+        {data => <LibraryBrowser snapshot={data()} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
+          onManageOffline={() => { const captured = generation; openOfflineManager(offlineState, command => captured === generation ? offlineCommand(command) : Promise.resolve()); }}
+          onCollectionMenu={(tracks, title, event) => openContextMenu({ title, actions: offlineActions(tracks, offlineState, offlineCommand, () => generation) }, event)}
+          onMenu={(track, event) => { const menu = programLibraryMenu(track, program, programPending, runtime.execute); openContextMenu({ ...menu, actions: [...(menu.actions ?? []), ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event); }} />}
       </Show>
     </Show>
     <OverlayOutlet /><ContextMenuOutlet />

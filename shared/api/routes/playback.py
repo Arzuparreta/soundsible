@@ -514,13 +514,21 @@ def _serve_cached_preview(
         cached_bytes = os.path.getsize(path)
     except OSError:
         pass
-    response = send_file(str(path), mimetype=content_type, conditional=True)
+    metadata = preview_cache.cached_metadata(video_id)
+    # mtime is LRU recency, not a content validator: mark_served touches it on
+    # every read. Pin If-Range to the committed layout, including atomic remuxes.
+    # Legacy entries have no validator until reacquired, but still serve ranges.
+    response = send_file(
+        str(path), mimetype=content_type, conditional=False,
+        etag=metadata.get("revision") or False,
+    )
+    response.headers.pop("Last-Modified", None)
+    response.make_conditional(request.environ, accept_ranges=True, complete_length=cached_bytes)
     preview_cache.mark_served(video_id)
     response.headers["Cache-Control"] = "private, max-age=86400"
     response.headers["X-Soundsible-Playback-Source"] = "preview"
     response.headers["X-Soundsible-Playback-Cache"] = cache_state
     response.headers["X-Soundsible-Playback-Egress"] = egress
-    metadata = preview_cache.cached_metadata(video_id)
     return _report_stream_response(
         response,
         track_id=video_id,

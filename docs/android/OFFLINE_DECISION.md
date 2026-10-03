@@ -1,49 +1,60 @@
-# Offline: decisión de producto pendiente
+# Offline: decisión aprobada
 
-**No implementar todavía. Bloquea la primera alpha hasta resolverse.**
-El usuario quiere estudiar escuchar durante un vuelo, pero aún no ha aprobado
-ni el alcance ni su integración en la lógica/UI. La implementación iOS es una
-referencia de código sin aceptación de dispositivo; no es una especificación
-aprobada para Android.
+Fecha: 2026-10-03. El usuario elige **incluir B: copias explícitas de música ya
+adquirida en el servidor**, con nombre «Disponible sin conexión». Acciones dentro
+de menús de tres puntos de canciones/colecciones; ningún botón de preparación en
+los shells. La corrección técnica y almacenamiento quedan a criterio de implementación.
+El usuario confirma mantener paridad completa antes de alpha; push de avances y
+continuar hasta paridad, después PR a main y release. No publicar alpha parcial.
 
-## Diferencia que debe entender el usuario
+## Contrato de producto
 
-Hoy «Descargar» adquiere música para la biblioteca **del servidor**.
-Tener esa canción en un teléfono desconectado sería retener una copia local.
-No mezclar la operación de servidor con disponibilidad en el dispositivo.
-Una canción guardada/bookmark tampoco equivale a un archivo adquirido ni a una
-copia offline. Referencias: `components/trackActions.tsx`, `collection.download`
-y `collection.save` en los diccionarios, `stores` y `ios/App/Support/OfflineStore.swift`.
+Adquirir música para el servidor y retener una copia en el teléfono son operaciones
+distintas. Guardado/bookmark y preview no equivalen a archivo adquirido. Sólo
+canciones locales de música son elegibles en este primer offline; no se adquieren
+previews implícitamente. Álbum/playlist prepara sus miembros locales actuales; no
+sincroniza ni adquiere nuevas incorporaciones automáticamente.
 
-Hipótesis a evaluar, **no decisión ni control que implementar**: una acción
-«Disponible sin conexión» sobre canciones/colecciones, con estado discreto en
-contexto y gestión de espacio centralizada. Evitar dos botones llamados
-«Descargar» y evitar duplicar playlists o crear una biblioteca paralela confusa.
+Una biblioteca, con filtro «Sólo en este dispositivo» en su menú. Preparación,
+retirada y cancelación viven en los menús de canciones/colecciones. Gestión de
+progreso, errores y espacio accesible desde el mismo menú de biblioteca. Preparado
+significa archivo completo, longitud comprobada, duración reconocida y checksum;
+una copia parcial o fallida nunca cuenta como disponible. Carátulas offline usan
+placeholder; se conserva metadata para canciones/álbumes/artistas/playlists.
 
-## Preguntas para el estudio antes de decidir
+Copias explícitas sin expulsión automática. Límite inicial 2 GiB, configurable a
+512 MiB/2 GiB/8 GiB desde gestión; máximo 1.000 canciones por perfil en este corte.
+El límite puede reducirse sin borrar copias: nuevas preparaciones deben caber.
+Espacio real del dispositivo mantiene reserva. Cancelar/retirar libera sólo copias
+del teléfono, nunca archivos del servidor.
 
-- ¿Sólo canciones ya adquiridas, o preparar también selecciones aún no adquiridas?
-  ¿Qué ocurre con previews, podcasts, radio y DJ cuando no hay servidor?
-- ¿Disponibilidad explícita por canción/colección, caché automática, o ambas?
-  ¿Cómo sabe el usuario que ha terminado de preparar el vuelo?
-- ¿Qué UI muestra música disponible, parcialmente preparada y ausente? Probar
-  con bocetos el menú actual y el recorrido antes/durante/después del vuelo.
-- ¿Límite de espacio, cancelación, descargas parciales, integridad, deduplicación,
-  colección que cambia y archivos que se eliminan en el servidor?
-- ¿Datos necesarios para navegar/reproducir sin conexión? Mantener índices en
-  disco y uso de memoria acotado, no otra biblioteca completa residente.
-- ¿Cuenta/servidor cambiados, token revocado, logout, retención y sincronización
-  de progreso/favoritos? Distinguir intención local de confirmación del servidor.
-- ¿Qué acciones exigen red y cómo se explican sin llenar la UI de errores?
-  ¿Qué información/analítica sale al reconectar?
+## Antes, durante y después del vuelo
 
-## Salida obligatoria del estudio
+Antes: abrir menú de canción/colección, elegir «Disponible sin conexión» y consultar
+gestión hasta que todos los miembros deseados estén listos. Mezclas con previews
+preparan únicamente miembros adquiridos. Se muestran número listo/total y fallos.
+Durante: app inicia desde assets locales y metadata del perfil verificado; biblioteca
+filtra copias listas al no alcanzar el motor. NORMAL/cola/seek/shuffle/repeat usan
+el mismo servicio multimedia con archivos privados. No crea servidor autónomo.
+Después: revalidar cuenta, refrescar biblioteca y volver a rutas online. No se
+envían mutaciones de favoritos/playlists/progreso pendientes: este corte no las
+crea. Archivos eliminados del servidor permanecen retirables en el filtro local.
 
-Registrar una decisión fechada: **incluir**, **posponer** o **descartar**, con
-motivo y aceptación del usuario. Si se incluye: concretar journeys, mocks UI,
-modelo de disponibilidad/sync, API necesaria, almacenamiento, pruebas y slices;
-implementarlos y validarlos antes de la alpha. Si se pospone/descarta: actualizar
-los gates y explicar honestamente esa limitación sin anunciar offline musical.
+## Cuenta y ciclo de vida
 
-La caché PWA actual es del shell, no música offline. La APK actual tampoco
-reproduce música sin conexión: sólo puede arrancar su pantalla empaquetada.
+Perfil ligado a origen y cuenta verificada por auth nativo. Logout, cambio de
+servidor/cuenta o revocación 401 observada eliminan copias y cancelan preparación.
+Sin red no se puede conocer una revocación remota: las copias preparadas siguen
+disponibles hasta reconexión o logout local. Activity recreation no corta la
+preparación. Descarga explícita mediante servicio foreground dataSync; límite del
+SO/interrupción/muerte de proceso deja preparación incompleta recuperable por Retry,
+sin declarar disponibilidad ni reanudar red por sorpresa al arrancar.
+
+## Aceptación y publicación
+
+Validar ruta real, preparación UI, persistencia, arranque con motor inaccesible,
+reproducción/seek/background, lote/duplicados/cancelación, fallo parcial, espacio,
+integridad, aislamiento y logout. Registrar evidencia en HANDOFF al cerrar.
+Offline aprobado no cierra la matriz restante de teléfono/DJ/Live/Android Auto.
+La alpha sigue bloqueada por paridad; aceptación física de coche/sonido conserva
+sus gates. iOS es referencia de código, no aceptación de dispositivo.

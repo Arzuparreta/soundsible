@@ -29,6 +29,7 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var artwork: ProgramArtwork
     @Volatile private var transport: Pair<Long, OkHttpClient>? = null
     private val audioCalls = java.util.concurrent.ConcurrentHashMap<okhttp3.Call, String>()
+    private val connectedCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
     private fun cancelAudio(key: String? = null) { audioCalls.entries.filter { key == null || it.value == key }.forEach { it.key.cancel() } }
     private val main = Handler(Looper.getMainLooper())
     private val reset: () -> Unit = {
@@ -59,12 +60,21 @@ class PlaybackService : MediaLibraryService() {
             val selected = connection.origin
             val client = synchronized(this) { transport?.takeIf { it.first == epoch }?.second ?: connection.client.newBuilder().retryOnConnectionFailure(false).eventListener(object : okhttp3.EventListener() {
                 override fun callStart(call: okhttp3.Call) { audioCalls[call] = call.request().url.queryParameter("android_occurrence") ?: "" }
-                override fun callEnd(call: okhttp3.Call) { audioCalls.remove(call) }
-                override fun callFailed(call: okhttp3.Call, ioe: java.io.IOException) { audioCalls.remove(call) }
+                override fun connectStart(call: okhttp3.Call, address: java.net.InetSocketAddress, proxy: java.net.Proxy) { connectedCalls.add(call) }
+                override fun callEnd(call: okhttp3.Call) { audioCalls.remove(call); connectedCalls.remove(call) }
+                override fun callFailed(call: okhttp3.Call, ioe: java.io.IOException) { audioCalls.remove(call); connectedCalls.remove(call) }
             }).addInterceptor { chain ->
                 if (epoch != connection.generation || selected != connection.origin || chain.request().url.queryParameter("android_generation") != epoch.toString()) throw java.io.IOException("STALE_SESSION")
                 val cookie = connection.cookieHeader(epoch) ?: throw java.io.IOException("NO_SESSION")
-                val response = chain.proceed(chain.request().newBuilder().url(chain.request().url.newBuilder().removeAllQueryParameters("android_generation").removeAllQueryParameters("android_occurrence").build()).header("Cookie", cookie).build())
+                val request = chain.request().newBuilder().url(chain.request().url.newBuilder().removeAllQueryParameters("android_generation").removeAllQueryParameters("android_occurrence").build()).header("Cookie", cookie).build()
+                val response = try { chain.proceed(request) } catch (failure: java.io.IOException) {
+                    // Never replay a body or an HTTP error. OkHttp has retired this
+                    // failed pooled socket; a new exchange rechecks the account.
+                    val connected = connectedCalls.contains(chain.call())
+                    if (BuildConfig.DEBUG) android.util.Log.d("AudioConnection", "Headers failed; connected=$connected cancelled=${chain.call().isCanceled()}")
+                    if (request.method != "GET" || !AudioConnectionRepair.allowed(failure, connected, false, chain.call().isCanceled()) || epoch != connection.generation || selected != connection.origin) throw failure
+                    chain.proceed(request)
+                }
                 if (epoch != connection.generation) { response.close(); throw java.io.IOException("STALE_SESSION") }
                 if (response.isSuccessful && ::previews.isInitialized) previews.loaded(chain.request().url.queryParameter("android_occurrence") ?: "")
                 if (response.code == 401) main.post { if (epoch == connection.generation) player.pause() }
@@ -74,7 +84,8 @@ class PlaybackService : MediaLibraryService() {
             }
             OkHttpDataSource.Factory(client).createDataSource()
         }
-        val localFactory = DefaultMediaSourceFactory(factory).setLoadErrorHandlingPolicy(object : androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(0) {
+        val resolved = androidx.media3.datasource.DataSource.Factory { OfflineDataSource(connection, factory) }
+        val localFactory = DefaultMediaSourceFactory(resolved).setLoadErrorHandlingPolicy(object : androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(0) {
             override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long = C.TIME_UNSET
         })
         val sources = object : androidx.media3.exoplayer.source.MediaSource.Factory {

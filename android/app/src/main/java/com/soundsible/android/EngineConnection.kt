@@ -17,7 +17,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** One selected instance and one account. Secrets never cross the JS bridge. */
-class EngineConnection(context: Context) {
+class EngineConnection(private val context: Context) {
+    val offline: OfflineStore get() = OfflineStore.shared(context)
     private val prefs = context.getSharedPreferences("engine", Context.MODE_PRIVATE)
     private val lock = Any()
     @Volatile var generation = 0L
@@ -70,21 +71,24 @@ class EngineConnection(context: Context) {
             url.query == null && url.fragment == null) { "ORIGIN_ONLY" }
         require(url.isHttps || InetAddress.getAllByName(url.host).all { privateAddress(it) }) { "HTTP_PRIVATE_ONLY" }
         val next = url.toString().removeSuffix("/")
-        synchronized(lock) {
+        val previous = origin
+        val result = synchronized(lock) {
             resetLocked()
             if (next != origin) { cookie = null; prefs.edit().remove("session").apply() }
             origin = next
             prefs.edit().putString("origin", origin).apply()
-            return generation
+            generation
         }
+        if (previous != next) offline.clear() else offline.interrupt()
+        return result
     }
 
-    fun clearSession(forget: Boolean = false) = synchronized(lock) {
+    fun clearSession(forget: Boolean = false) { synchronized(lock) {
         resetLocked()
         cookie = null
         prefs.edit().remove("session").apply()
         if (forget) { origin = ""; prefs.edit().remove("origin").apply() }
-    }
+    }; offline.clear() }
 
     private fun resetLocked() {
         generation++
@@ -94,7 +98,7 @@ class EngineConnection(context: Context) {
         resetListeners.forEach { it() }
     }
 
-    fun close() = synchronized(lock) { resetLocked() }
+    fun close() { synchronized(lock) { resetLocked() }; offline.interrupt() }
 
     fun cancel(id: String) {
         // The bridge can receive cancel before the executor has registered its Call.

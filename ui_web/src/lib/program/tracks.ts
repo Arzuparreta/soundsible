@@ -11,7 +11,7 @@ export function programTrack(track: Track): ProgramTrack | null {
   return { source, id: track.id, title: track.title, artist: track.artist, album: track.album };
 }
 export const programCover = (track?: ProgramTrack): string | undefined =>
-  track?.source === 'local' ? coverUrl(track.id, 'thumb') : undefined;
+  track?.source === 'local' && !track.offline ? coverUrl(track.id, 'thumb') : undefined;
 
 export function mixedProgram(tracks: Track[], selectedIndex: number): { tracks: ProgramTrack[]; index: number } {
   const converted = tracks.map(programTrack);

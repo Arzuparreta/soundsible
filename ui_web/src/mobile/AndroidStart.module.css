@@ -22,3 +22,9 @@
 .notice { color: var(--ink-secondary); font-size: var(--text-label); padding: 8px 0; }
 .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .tabs [aria-pressed=true] { border-color: var(--accent-ink); color: var(--accent-ink); }
+
+.libraryTools { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
+.libraryTools .field { flex: 1; min-width: 0; }
+.collectionHeading { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.collectionHeading h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.library .menuTrigger { flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ink-primary); font-size: 24px; border-radius: var(--radius-sm); }

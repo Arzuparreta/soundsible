@@ -20,8 +20,9 @@ Antes de habilitar el workflow de publicación deben cumplirse:
 
 1. Matriz de paridad completa del teléfono, DJ, Live y Android Auto, con pruebas
    de acciones reales y evidencia para cada fila, no sólo pantallas/compilación.
-2. [Offline](OFFLINE_DECISION.md) resuelto con el usuario; si se incluye,
-   implementación y aceptación completas. No decidirlo automáticamente.
+2. [Offline B](OFFLINE_DECISION.md) aprobado por el usuario: copias explícitas de
+   música adquirida, «Disponible sin conexión» dentro de menús. Su implementación
+   y aceptación deben estar completas; aprobación no equivale a validación.
 3. Evidencia funcional automatizada del port completo y límites físicos
    declarados. No confundir contratos/servicio multimedia probados con escucha
    real o aceptación de coche; los gates físicos completos corresponden a beta.

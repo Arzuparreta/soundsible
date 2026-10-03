@@ -1,6 +1,20 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
   android: {
+    offlineAvailable: "Available offline",
+    offlineRemove: "Remove from this device",
+    offlineCancel: "Cancel preparation",
+    offlineManage: "Manage offline music",
+    offlineOnly: "Only on this device",
+    offlineAll: "All songs",
+    offlineSpace: "Storage limit",
+    offlineEmpty: "No songs prepared yet.",
+    offlineReady: "Ready",
+    offlinePreparing: "Preparing songs",
+    offlineNoSpace: "Not enough space. Remove copies or increase the limit.",
+    offlineIntegrity: "The copy is incomplete or damaged. Prepare it again.",
+    offlineFailed: "Preparation failed. Retry when connected.",
+
     previewPreparing: 'Preparing preview',
     previewRetry: 'Waiting to retry preview',
     closeProgram: 'Close player',

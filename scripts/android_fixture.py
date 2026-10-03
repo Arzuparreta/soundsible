@@ -118,6 +118,7 @@ def main() -> None:
     stream_failure = {}
     stream_cut = {}
     stream_delay = {}
+    offline_body = {}
     connection_failure = {}
     artwork_mode = {}
 
@@ -131,6 +132,16 @@ def main() -> None:
                 sleep(2)
         if request.path.startswith("/api/static/stream/"):
             name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
+            mode = offline_body.get(name)
+            if mode == "oversize":
+                return app.response_class(
+                    b"not audio",
+                    status=200,
+                    headers={"Content-Length": str(600 * 1024 * 1024)},
+                    content_type="audio/wav",
+                )
+            if mode == "invalid":
+                return app.response_class(b"not audio", status=200, content_type="audio/wav")
             if stream_delay.get(name):
                 sleep(5)
             if stream_failure.get(name):
@@ -148,6 +159,9 @@ def main() -> None:
             if mode == "large":
                 return app.response_class(b"x" * (2 * 1024 * 1024 + 1), mimetype="image/png")
         if request.path.startswith("/api/static/stream/"):
+            name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
+            if offline_body.get(name) == "oversize":
+                response.headers["Content-Length"] = str(600 * 1024 * 1024)
             stream_requests.append(
                 {"path": request.path, "range": request.headers.get("Range"), "status": response.status_code}
             )
@@ -198,6 +212,8 @@ def main() -> None:
             artwork_mode[name] = (request.get_json() or {}).get("mode", "")
         elif action == "audio-failure":
             stream_failure[name] = int((request.get_json() or {}).get("status", 0))
+        elif action == "offline-body":
+            offline_body[name] = (request.get_json() or {}).get("mode", "")
         elif action == "stream-delay":
             stream_delay[name] = bool((request.get_json() or {}).get("enabled"))
         elif action == "stream-cut":

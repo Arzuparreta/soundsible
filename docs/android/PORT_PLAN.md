@@ -23,9 +23,11 @@ se desarrolla el port para que la paridad no se congele en un inventario antiguo
 | S5 | Android Auto | S2/S3; servicio de biblioteca, estado/control coherentes y evidencia DHU/dispositivo. |
 | S6 | Offline y distribución | Decisión offline resuelta; implementación si se aprueba, firma y actualización verificadas. |
 
-La investigación offline puede hacerse en paralelo al desarrollo, pero **no está
-autorizada su implementación**. La decisión no se resuelve por omisión al llegar
-al slice de publicación.
+Offline B está aprobado (2026-10-03): copias explícitas de música adquirida,
+«Disponible sin conexión» dentro de menús. Su implementación y aceptación se
+adelantan en el corte S6a; no sustituyen la paridad restante ni habilitan alpha.
+El usuario autoriza continuar autónomamente hasta paridad completa, subir avances
+y después integrar por PR y publicar mediante los gates establecidos.
 
 ## Inventario de capacidades y aceptación
 
@@ -43,7 +45,7 @@ al slice de publicación.
 | Live emitir | `audio/capture.ts`, `docs/LIVE.md` | Programa completo al relay; volumen local independiente; pausas/silencio; listener oye y reconecta | Pendiente |
 | Audio nativo/lockscreen/Bluetooth | PlaybackService Media3 | Estado/posición/metadata, focus y políticas de pausa en emulador; llamadas/Bluetooth y evidencia física para beta | Servicio/metadata/carátulas/notificación/foco probados en emulador; teléfono, llamadas/Bluetooth y lockscreen físico pendientes |
 | Android Auto | `/api/car/*`, `docs/CAR_INTEGRATION.md` | Browse/play/control, errores/red y metadata durante DJ en contrato multimedia; DHU y coche para beta | Pendiente |
-| Offline | [Decisión pendiente](OFFLINE_DECISION.md) | Decisión documentada; si se aprueba, vuelos/espacio/sync/UI validados | Sin decidir; gate de alpha |
+| Offline | [Decisión aprobada](OFFLINE_DECISION.md) | Copias completas, vuelos/espacio/cuenta/UI validados | B aprobado; S6a en validación. Alpha requiere además paridad completa |
 | Actualizaciones/distribución | [Release gates](RELEASE_GATES.md) | Clave permanente, versión/code coherentes, actualización conserva datos y session | Pendiente |
 
 Las referencias son puntos de entrada, no una lista exhaustiva de endpoints.

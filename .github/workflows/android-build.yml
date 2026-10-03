@@ -10,6 +10,7 @@ on:
       - 'branding/**'
       - 'scripts/android.py'
       - 'scripts/android_fixture.py'
+      - 'scripts/android_preview_fixture.py'
       - 'scripts/android_test_tls.py'
       - 'shared/**'
       - 'requirements.txt'
@@ -24,6 +25,7 @@ on:
       - 'branding/**'
       - 'scripts/android.py'
       - 'scripts/android_fixture.py'
+      - 'scripts/android_preview_fixture.py'
       - 'scripts/android_test_tls.py'
       - 'shared/**'
       - 'requirements.txt'
@@ -70,12 +72,15 @@ jobs:
         run: npm test --prefix ui_web
       - name: Build development APK and instrumentation APK
         run: python scripts/android.py build
+      - name: Native retry unit tests
+        working-directory: android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Packaged offline startup and real account integration (API 36)
+      - name: Packaged offline playback, process restart and real account integration (API 36)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36

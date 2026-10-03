@@ -1,6 +1,6 @@
 # Soundsible para Android: desarrollo del port
 
-**Estado: cliente de desarrollo con conexión y programa de audio nativo y cola y transporte Solid asíncronos (S2f), no alpha.**
+**Estado: cliente de desarrollo con conexión, programa nativo local/preview y cola/transporte Solid asíncronos (S2i); offline B en validación (S6a), no alpha.**
 La APK conecta a una instancia, inicia sesión como cuenta, conserva la sesión en
 Android y navega canciones, álbumes, artistas y playlists con carátulas y eventos.
 Comparte la fila visual Solid; no carga el runtime Web Audio. Los archivos de la
@@ -8,13 +8,14 @@ biblioteca reproducen con Media3, transporte/seek y shuffle/repeat; la cola perm
 seleccionar, mover, quitar y añadir desde la biblioteca sin reconstruir las fuentes; el servicio conserva
 el programa al recrear la Activity, también al fallar la conexión, y ofrece
 reintento explícito de audio conservando posición/pausa. Usa la sesión multimedia
-de Android. Previews,
-podcasts/radio, UI completa, edición/adquisición y teléfono/coche siguen pendientes.
+de Android. Previews guardados también usan el proxy nativo del motor.
+Podcasts/radio, UI completa, edición/adquisición y teléfono/coche siguen pendientes.
 
 El objetivo es la experiencia completa del teléfono: biblioteca, descubrimiento,
 adquisición, NORMAL, podcasts, radio, DJ y Live, más Android Auto. No se publicará
-una alpha incompleta. Antes de la alpha también hay que decidir si habrá offline;
-si se aprueba, habrá que implementarlo y validarlo. No es una decisión tomada.
+una alpha incompleta. Offline B está aprobado: copias explícitas de música adquirida,
+«Disponible sin conexión» dentro de menús de tres puntos. S6a implementa y valida
+este contrato; no sustituye los requisitos de paridad completa.
 
 ## Retomar el trabajo
 
@@ -23,7 +24,8 @@ Leer primero [el traspaso](android/HANDOFF.md), después
 [slices y matriz de paridad](android/PORT_PLAN.md),
 [el primer slice funcional](android/SLICE_1.md),
 [el programa nativo y continuación S2](android/SLICE_2.md),
-[la decisión offline pendiente](android/OFFLINE_DECISION.md) y
+[la decisión offline aprobada](android/OFFLINE_DECISION.md),
+[el contrato offline S6a](android/SLICE_6.md) y
 [distribución y aceptación](android/RELEASE_GATES.md).
 Estos documentos y sus referencias al código son suficientes sin acceso al chat.
 
@@ -190,8 +192,14 @@ al login, 403 muestra falta de permiso. Logout/cambio destruyen el programa.
 El programa sobrevive a recreación y background de la Activity, pero este corte
 no restaura la cola tras muerte del proceso. S2g añade carátulas privadas al programa, cola y sesión/notificación nativa.
 S2h permite cerrar el reproductor con ×: vacía el programa y retira la notificación,
-sin borrar login; funciona también con el servidor inaccesible. No hay offline,
-mezcla, DJ/Live ni Android Auto. La cola de desarrollo admite hasta 1.000 ocurrencias locales/preview.
+sin borrar login; funciona también con el servidor inaccesible.
+S6a añade copias explícitas de música adquirida: «Disponible sin conexión» en los
+menús de tres puntos de canciones/colecciones. Preparar y retirar copias sólo afecta
+al teléfono. Gestión de preparación y espacio, y filtro local, están en el menú de
+biblioteca; no hay un segundo botón Descargar en el shell. Antes del vuelo espera
+que todas las canciones deseadas figuren listas en gestión. Copias parciales no
+cuentan; carátulas offline usan placeholder. Logout elimina las copias del perfil.
+Ver [decisión y límites](android/OFFLINE_DECISION.md). No hay mezcla, DJ/Live ni Android Auto. La cola de desarrollo admite hasta 1.000 ocurrencias locales/preview.
 S2i usa el proxy del motor para previews guardados, con progreso y retry 429/503
 acotado; sus carátulas nativas usan placeholder.
 El siguiente trabajo de S2 integra el contrato asíncrono con la UI autenticada

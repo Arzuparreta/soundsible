@@ -130,8 +130,14 @@ def install(app, root: Path):
         if request.path.startswith("/api/preview/stream/"):
             requests.append(
                 {
+                    "path": request.path,
                     "status": response.status_code,
                     "range": request.headers.get("Range"),
+                    "if_range": request.headers.get("If-Range"),
+                    "encoding": request.headers.get("Accept-Encoding"),
+                    "content_range": response.headers.get("Content-Range"),
+                    "length": response.headers.get("Content-Length"),
+                    "etag": response.headers.get("ETag"),
                     "cache": response.headers.get("X-Soundsible-Playback-Cache"),
                 }
             )

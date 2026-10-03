@@ -1,0 +1,4 @@
+<resources>
+    <string name="offline_title">离线可用</string>
+    <string name="offline_preparing">正在准备歌曲</string>
+</resources>

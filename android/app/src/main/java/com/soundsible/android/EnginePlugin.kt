@@ -61,7 +61,15 @@ class EnginePlugin : Plugin() {
                     epoch, id, call.getInt("timeoutMs")?.toLong() ?: call.getLong("timeoutMs") ?: 8000L).use { response ->
                     val visibleHeaders = JSObject()
                     listOf("ETag", "Content-Type", "Content-Range").forEach { key -> response.header(key)?.let { visibleHeaders.put(key, it) } }
-                    call.resolve(JSObject().put("status", response.code).put("headers", visibleHeaders).put("body", response.body?.string() ?: ""))
+                    val text = response.body?.string() ?: ""
+                    val path = call.getString("path")
+                    if (epoch == connection.generation) {
+                        if (response.code == 401) connection.offline.clear()
+                        if (response.isSuccessful && path in listOf("/api/auth/state", "/api/auth/login")) {
+                            org.json.JSONObject(text).optJSONObject("user")?.let { connection.offline.bind(it) }
+                        }
+                    }
+                    call.resolve(JSObject().put("status", response.code).put("headers", visibleHeaders).put("body", text))
                 }
             } catch (_: Exception) { call.reject("The server could not be reached or the session changed.", "NETWORK_OR_STALE") }
             finally { ownedRequests.remove(id) }

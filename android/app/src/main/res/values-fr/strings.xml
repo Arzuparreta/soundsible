@@ -1,0 +1,4 @@
+<resources>
+    <string name="offline_title">Disponible hors connexion</string>
+    <string name="offline_preparing">Préparation des morceaux</string>
+</resources>

@@ -38,7 +38,7 @@ class PlaybackPlugin : Plugin() {
         if (p != null) for (i in 0 until p.mediaItemCount) {
             val item = p.getMediaItemAt(i)
             queue.put(item.mediaId)
-            items.put(JSObject().put("source", item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)).put("key", ProgramQueue.key(p, i)).put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: ""))
+            items.put(JSObject().put("offline", item.mediaMetadata.extras?.getBoolean("offline") ?: false).put("source", item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)).put("key", ProgramQueue.key(p, i)).put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: ""))
         }
         val extras = p?.sessionExtras
         val preview = if (hasItems && extras?.getString("previewKey") == ProgramQueue.key(p!!, p.currentMediaItemIndex) && extras.getLong("previewGeneration") == EngineConnection.shared(context).generation) {
@@ -74,7 +74,7 @@ class PlaybackPlugin : Plugin() {
             when (call.getString("action")) {
                 "queue" -> {
                     require(p.isCommandAvailable(Player.COMMAND_CHANGE_MEDIA_ITEMS) && p.isCommandAvailable(Player.COMMAND_PLAY_PAUSE))
-                    require(connection.cookieHeader(connection.generation) != null)
+                    require(connection.cookieHeader(connection.generation) != null || connection.offline.canUse(connection.generation))
                     val rows = call.getArray("tracks") ?: error("NO_TRACKS")
                     val items = ProgramQueue.items(connection, rows)
                     val index = call.getInt("index") ?: 0

@@ -2,6 +2,20 @@ import type { Dict } from './en';
 
 export const fr: Dict = {
   android: {
+    offlineAvailable: "Disponible hors connexion",
+    offlineRemove: "Retirer de cet appareil",
+    offlineCancel: "Annuler la préparation",
+    offlineManage: "Gérer la musique hors connexion",
+    offlineOnly: "Uniquement sur cet appareil",
+    offlineAll: "Tous les morceaux",
+    offlineSpace: "Limite de stockage",
+    offlineEmpty: "Aucun morceau préparé.",
+    offlineReady: "Prêts",
+    offlinePreparing: "Préparation des morceaux",
+    offlineNoSpace: "Espace insuffisant. Retirez des copies ou augmentez la limite.",
+    offlineIntegrity: "La copie est incomplète ou endommagée. Préparez-la à nouveau.",
+    offlineFailed: "La préparation a échoué. Réessayez avec une connexion.",
+
     previewPreparing: 'Préparation du morceau',
     previewRetry: 'En attente de réessayer le morceau',
     closeProgram: 'Fermer le lecteur',

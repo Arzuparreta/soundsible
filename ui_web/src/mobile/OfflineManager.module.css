@@ -1,0 +1,7 @@
+.manager { padding: 16px; max-height: 80dvh; overflow: auto; overflow-wrap: anywhere; }
+.manager h2 { font-size: var(--text-title); margin-bottom: 8px; }
+.manager button, .manager select { min-height: 44px; padding: 8px 12px; margin: 4px 8px 4px 0; border: 1px solid var(--hairline); border-radius: var(--radius-sm); color: var(--ink-primary); background: var(--bg-elevated); font: inherit; max-width: 100%; }
+.item { border-top: 1px solid var(--hairline); padding: 12px 0; }
+.item p { margin: 4px 0; }
+.item small { color: var(--ink-secondary); }
+.item progress { display: block; width: 100%; margin: 8px 0; }

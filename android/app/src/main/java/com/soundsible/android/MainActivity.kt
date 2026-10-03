@@ -18,6 +18,7 @@ class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(EnginePlugin::class.java)
         registerPlugin(PlaybackPlugin::class.java)
+        registerPlugin(OfflinePlugin::class.java)
         super.onCreate(savedInstanceState)
         bridge.setWebViewClient(object : BridgeWebViewClient(bridge) {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {

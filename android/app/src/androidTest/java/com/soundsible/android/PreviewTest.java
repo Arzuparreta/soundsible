@@ -26,7 +26,9 @@ public class PreviewTest {
             if ("true".equals(web.evaluate(scenario, condition))) return;
             Thread.sleep(100);
         }
-        fail(condition + ": " + web.evaluate(scenario, "document.body.innerText") + " snapshot=" + web.evaluate(scenario, "JSON.stringify(window.__preview)"));
+        EngineConnection diagnostic = EngineConnection.shared(InstrumentationRegistry.getInstrumentation().getTargetContext());
+        String requests = ""; try { requests = stats(diagnostic, diagnostic.getOrigin()).getJSONArray("requests").toString(); } catch (Exception ignored) {}
+        fail(condition + " requests=" + requests + ": " + web.evaluate(scenario, "document.body.innerText") + " snapshot=" + web.evaluate(scenario, "JSON.stringify(window.__preview)"));
     }
     private void control(EngineConnection connection, String origin, String json) throws Exception {
         try (okhttp3.Response response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/__fixture/preview").header("X-Android-Fixture", "isolated")

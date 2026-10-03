@@ -2,6 +2,20 @@ import type { Dict } from './en';
 
 export const es: Dict = {
   android: {
+    offlineAvailable: "Disponible sin conexión",
+    offlineRemove: "Quitar de este dispositivo",
+    offlineCancel: "Cancelar preparación",
+    offlineManage: "Gestionar música sin conexión",
+    offlineOnly: "Sólo en este dispositivo",
+    offlineAll: "Todas las canciones",
+    offlineSpace: "Límite de espacio",
+    offlineEmpty: "Todavía no hay canciones preparadas.",
+    offlineReady: "Listas",
+    offlinePreparing: "Preparando canciones",
+    offlineNoSpace: "No hay espacio suficiente. Quita copias o aumenta el límite.",
+    offlineIntegrity: "La copia está incompleta o dañada. Prepárala otra vez.",
+    offlineFailed: "No se pudo preparar. Reintenta cuando haya conexión.",
+
     previewPreparing: 'Preparando canción',
     previewRetry: 'Esperando para reintentar la canción',
     closeProgram: 'Cerrar reproductor',

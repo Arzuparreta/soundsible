@@ -10,7 +10,7 @@ export interface ProgramState {
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
 }
 export interface ProgramOccurrence extends ProgramTrack { key: string }
-export interface ProgramTrack { source: 'local' | 'preview'; id: string; title: string; artist: string; album?: string }
+export interface ProgramTrack { offline?: boolean; source: 'local' | 'preview'; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
   | { action: 'stop'; queueToken: string }

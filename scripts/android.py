@@ -181,15 +181,32 @@ def integration() -> None:
                             time.sleep(0.2)
                 gradle(
                     ":app:connectedDebugAndroidTest",
+                    "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest",
                     "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
                     "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
                     "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
                 )
+                shutil.rmtree(ANDROID / "build/integration-results", ignore_errors=True)
                 shutil.copytree(
                     ANDROID / "app/build/outputs/androidTest-results",
                     ANDROID / "build/integration-results",
                     dirs_exist_ok=True,
                 )
+                if not os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
+                    for phase in ("prepare", "offline"):
+                        if phase == "offline":
+                            adb("shell", "am", "force-stop", "com.soundsible.android.dev")
+                        gradle(
+                            ":app:connectedDebugAndroidTest",
+                            "-Pandroid.testInstrumentationRunnerArguments.class=com.soundsible.android.OfflineRestartTest",
+                            f"-Pandroid.testInstrumentationRunnerArguments.offlinePhase={phase}",
+                            "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
+                        )
+                        shutil.copytree(
+                            ANDROID / "app/build/outputs/androidTest-results",
+                            ANDROID / f"build/integration-results/restart-{phase}",
+                            dirs_exist_ok=True,
+                        )
                 adb("pull", "/sdcard/Download/soundsible-s1-library.png", str(ANDROID / "build/library.png"))
                 adb("pull", "/sdcard/Download/soundsible-s2-program.png", str(ANDROID / "build/program.png"))
             finally:
