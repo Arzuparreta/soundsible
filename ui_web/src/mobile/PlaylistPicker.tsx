@@ -2,13 +2,14 @@ import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import { openOverlay } from '../lib/overlay';
 import { promptDialog } from '../lib/prompt';
 import { request } from '../lib/http';
+import { playlistNames } from '../lib/playlistOrder';
 import { savedFromTrack } from '../lib/saved';
 import { t } from '../lib/i18n';
 import { EmptyState } from '../components/EmptyState';
 import styles from '../components/PlaylistPicker.module.css';
 import type { PlaylistMap, Track } from '../types/music';
 
-export function openNativePlaylistPicker(track: Track, playlists: () => PlaylistMap, current: () => boolean, refresh: () => Promise<void>): void {
+export function openNativePlaylistPicker(track: Track, playlists: () => PlaylistMap, current: () => boolean, refresh: () => Promise<void>, order?: () => unknown): void {
   openOverlay(close => {
     const [busy, setBusy] = createSignal(false); const [error, setError] = createSignal(false);
     const controller = new AbortController(); let disposed = false;
@@ -39,7 +40,7 @@ export function openNativePlaylistPicker(track: Track, playlists: () => Playlist
       <header class={styles.head}><span class={styles.title}>{t('playlistPicker.title')}</span></header>
       <button class={styles.new} disabled={busy()} onClick={() => void create()}>{t('playlistPicker.new')}</button>
       <Show when={error()}><p role="alert">{t('toast.addToPlaylistFailed')}</p></Show>
-      <For each={Object.keys(playlists())} fallback={<EmptyState compact>{t('playlistPicker.empty')}</EmptyState>}>{name => <button class={styles.item} disabled={busy()} onClick={() => void add(name)}><span class={styles.itemName}>{name}</span><span class={styles.itemCount}>{playlists()[name]?.length ?? 0}</span></button>}</For>
+      <For each={playlistNames(playlists(), order?.())} fallback={<EmptyState compact>{t('playlistPicker.empty')}</EmptyState>}>{name => <button class={styles.item} disabled={busy()} onClick={() => void add(name)}><span class={styles.itemName}>{name}</span><span class={styles.itemCount}>{playlists()[name]?.length ?? 0}</span></button>}</For>
     </div>;
   }, { ariaLabel: () => t('playlistPicker.title') });
 }

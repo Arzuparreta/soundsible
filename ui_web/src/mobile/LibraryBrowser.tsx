@@ -5,19 +5,20 @@ import { VirtualBrowseRows } from '../components/VirtualBrowseRows';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { EmptyState } from '../components/EmptyState';
 import { t } from '../lib/i18n';
+import { playlistNames } from '../lib/playlistOrder';
 import { trackCount } from '../lib/format';
-import type { CatalogAlbum, CatalogArtist, PlaylistMap, Track } from '../types/music';
+import type { CatalogAlbum, CatalogArtist, LibrarySettings, PlaylistMap, Track } from '../types/music';
 import { availableLibrary, type OfflineState } from './offline';
 import { openContextMenu } from '../lib/contextMenu';
 import styles from './AndroidStart.module.css';
 
-export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap }
+export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap; settings?: LibrarySettings }
 /** Read-only account surface. Shares the existing row/artwork/tokens; imports no player runtime. */
-export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string; onMenu?: (track: Track, event?: MouseEvent) => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent) => void }) {
+export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string; onMenu?: (track: Track, event?: MouseEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MouseEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string }) => void }) {
   const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists' | 'favourites'>('songs');
   const [collection, setCollection] = createSignal<{ title: string; ids: string[]; kind: 'albums' | 'artists' | 'playlists'; id: string } | null>(null);
   const [onlyAvailable, setOnlyAvailable] = createSignal(false);
-  const library = createMemo(() => (props.disconnected || onlyAvailable()) && props.offline ? availableLibrary(props.offline) : props.snapshot);
+  const library = createMemo<BrowseSnapshot>(() => (props.disconnected || onlyAvailable()) && props.offline ? availableLibrary(props.offline) : props.snapshot);
   const localCollections = (kind: 'albums' | 'artists') => {
     const groups = new Map<string, { id: string; title: string; ids: string[]; artist: string }>();
     for (const track of library().tracks) {
@@ -80,7 +81,7 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
         <button type="button" aria-pressed={tab() === item} onClick={() => selectTab(item)}>{item === 'playlists' ? t('playlists.title') : t(`library.${item}`)}</button>
       }</For>
     </nav>
-    <Show when={collection()}>{item => <div class={styles.collectionHeading}><button type="button" onClick={() => { detailEpoch++; setCollection(null); }}>{t('common.back')}</button><h2>{item().title}</h2><Show when={props.onCollectionMenu}><button class={styles.menuTrigger} data-collection-menu aria-label={t('songRow.ariaMore')} onClick={event => props.onCollectionMenu?.(collectionTracks(), item().title, event)}>⋯</button></Show></div>}</Show>
+    <Show when={collection()}>{item => <div class={styles.collectionHeading}><button type="button" onClick={() => { detailEpoch++; setCollection(null); }}>{t('common.back')}</button><h2>{item().title}</h2><Show when={props.onCollectionMenu}><button class={styles.menuTrigger} data-collection-menu aria-label={t('songRow.ariaMore')} onClick={event => props.onCollectionMenu?.(collectionTracks(), item().title, event, { kind: item().kind, id: item().id })}>⋯</button></Show></div>}</Show>
     <Show when={detailError()}><p role="alert">{t('common.loadFailed')}</p></Show>
     <Show when={collection() || tab() === 'songs' || tab() === 'favourites'} fallback={
       <Show when={tab() === 'playlists'} fallback={
@@ -98,18 +99,25 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
             </Show>
           </Show>
         </Show>
-      }><For each={Object.entries(library().playlists ?? {})}>{([name, ids]) =>
-          <MusicListRowView title={name} subtitle={trackCount(ids.length)} seed={name}
-            onActivate={() => { setCollection({ title: name, ids, kind: 'playlists', id: name }); setQuery(''); }} />
+      }><For each={playlistNames(library().playlists ?? {}, library().settings?.playlist_order)} fallback={<EmptyState>{t('playlists.empty')}</EmptyState>}>{name =>
+          <MusicListRowView title={name} subtitle={trackCount(library().playlists?.[name]?.length ?? 0)} seed={name}
+            cover={props.disconnected ? undefined : (() => { const id = library().settings?.playlist_covers?.[name] ?? library().playlists?.[name]?.find(id => library().tracks.some(track => track.id === id && track.source !== 'preview')); return id ? coverUrl(id, 'thumb') : undefined; })()}
+            onMenu={props.onPlaylistMenu ? event => props.onPlaylistMenu?.(name, event) : undefined} onActivate={() => { setCollection({ title: name, ids: library().playlists?.[name] ?? [], kind: 'playlists', id: name }); setQuery(''); }} />
       }</For></Show>
     }>
       <div class={styles.libraryTools}><label class={styles.field}>{t('library.searchLibrary')}<input type="search" value={query()} onInput={event => setQuery(event.currentTarget.value)} /></label>
       <Show when={props.onManageOffline}><button class={styles.menuTrigger} data-library-menu aria-label={t('songRow.ariaMore')} onClick={event => openContextMenu({ title: t('library.title'), actions: [
         { label: t(onlyAvailable() ? 'android.offlineAll' : 'android.offlineOnly'), disabled: props.disconnected, selected: onlyAvailable() || props.disconnected, onSelect: () => { detailEpoch++; setCollection(null); setOnlyAvailable(value => !value); } },
         { label: t('android.offlineManage'), onSelect: () => props.onManageOffline?.() },
+        ...(tab() === 'playlists' && props.onCreatePlaylist ? [{ label: t('playlistPicker.new'), disabled: props.disconnected, onSelect: () => props.onCreatePlaylist?.() }] : []),
       ] }, event)}>⋯</button></Show></div>
       <Show when={tracks().length} fallback={<EmptyState>{t('library.emptyLibrary')}</EmptyState>}>
-<VirtualBrowseRows favourite={props.isFavourite} offline={props.disconnected} onMenu={props.onMenu} tracks={tracks()} activeId={props.activeId} onPlay={props.onPlay ? index => props.onPlay?.(tracks(), index) : undefined} />
+<VirtualBrowseRows favourite={props.isFavourite} offline={props.disconnected} onMenu={props.onMenu ? (track, event, index) => {
+  const selected = collection();
+  const occurrence = selected?.kind === 'playlists' && index !== undefined ? tracks().slice(0, index).filter(row => row.id === track.id).length : -1;
+  const positions = selected?.ids.flatMap((id, position) => id === track.id ? [position] : []) ?? [];
+  props.onMenu?.(track, event, selected?.kind === 'playlists' && positions[occurrence] !== undefined ? { playlist: selected.id, index: positions[occurrence] } : undefined);
+} : undefined} tracks={tracks()} activeId={props.activeId} onPlay={props.onPlay ? index => props.onPlay?.(tracks(), index) : undefined} />
       </Show>
     </Show>
   </section>;

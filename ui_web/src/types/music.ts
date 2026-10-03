@@ -199,6 +199,7 @@ export interface CatalogSaveResponse {
 export type PlaylistMap = Record<string, string[]>;
 
 export interface LibrarySettings {
+  playlist_order?: string[];
   playlist_covers?: Record<string, string>;
 }
 

@@ -875,3 +875,24 @@ marks en arranque offline frío; no confundirlo con copias de música S6a.
 Continuación: gestión completa de playlists/acciones, Radio/autoplay completos y
 resto de paridad de PORT_PLAN. Mantener commit/push en rama por trabajo validado,
 seguir sin terminar el turno por un slice. PR/merge/release sólo al cerrar gates.
+
+## S2o: gestión de playlists validada
+
+[Contrato](SLICE_2O.md), [evidencia](evidence/s2o.json). Rename/duplicate/delete,
+orden persistido y carátula adquirida en menús. Filas filtradas conservan la
+ocurrencia original aunque repitan ID. Nuevas rutas de edición exigen snapshot
+capturado; 409 conserva cambios concurrentes y motores antiguos no reciben una
+escritura incondicional de fallback. Todo el payload se valida antes de modificar.
+
+UI **1.400 tests /159 archivos**, Python **149**, APK **dos HTTP/HTTPS verificado**
+pasan. El recorrido confirma pertenencia y orden en servidor y pantalla antes de
+capturar la siguiente operación. Los primeros fallos eran observaciones del test
+anteriores al refresh: añadir una canción y ordenar devolvían antes de actualizar
+la UI; se mantienen los guards CAS. El test AutoMode dejaba un timer tras teardown:
+fixture ahora drena timers y cleanup, sin modificar gesto de producto; commit
+`1e1f2fe` subido por separado. La repetición UI no tiene errores sin capturar.
+
+Última suite APK completa sigue S2m 25 + dos fases restart; browser completos S2j.
+Repetir sobre head final antes del PR. Instrumentación dirty/HEAD previo, no release.
+Continuación activa: perfiles/refill/cancelación de Radio NORMAL, autoplay y resto
+de matriz. No finalizar por checkpoint; PR/merge/release requieren paridad completa.

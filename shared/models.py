@@ -553,6 +553,8 @@ class LibraryMetadata:
     def create_playlist(self, name: str, track_ids: Optional[List[str]] = None) -> None:
         """Create a new playlist."""
         self.playlists[name] = track_ids or []
+        if isinstance(self.settings.get("playlist_order"), list):
+            self.settings["playlist_order"] = self.ordered_playlist_names()
         self.last_updated = utc_now_iso_naive()
     
     def add_to_playlist(self, playlist_name: str, track_id: str) -> bool:
@@ -599,6 +601,8 @@ class LibraryMetadata:
         if name not in self.playlists:
             return False
         del self.playlists[name]
+        if isinstance(self.settings.get("playlist_order"), list):
+            self.settings["playlist_order"] = self.ordered_playlist_names()
         pc = self.settings.get("playlist_covers")
         if isinstance(pc, dict):
             pc.pop(name, None)
@@ -614,7 +618,10 @@ class LibraryMetadata:
         """
         if old_name not in self.playlists or new_name in self.playlists:
             return False
+        order = self.ordered_playlist_names()
         self.playlists[new_name] = self.playlists.pop(old_name)
+        if isinstance(self.settings.get("playlist_order"), list):
+            self.settings["playlist_order"] = [new_name if name == old_name else name for name in order]
         pc = self.settings.get("playlist_covers")
         if isinstance(pc, dict) and old_name in pc:
             pc[new_name] = pc.pop(old_name)
@@ -672,6 +679,15 @@ class LibraryMetadata:
         self.last_updated = utc_now_iso_naive()
         return True
 
+    def ordered_playlist_names(self) -> List[str]:
+        """Explicit order survives JSON serializers that sort mapping keys."""
+        stored = self.settings.get("playlist_order")
+        result = []
+        for name in stored if isinstance(stored, list) else []:
+            if isinstance(name, str) and name in self.playlists and name not in result:
+                result.append(name)
+        return result + sorted(name for name in self.playlists if name not in result)
+
     def reorder_playlists(self, ordered_names: List[str]) -> None:
         """Rebuild playlists dict in the given order (preserves only listed names)."""
         new_playlists = {}
@@ -679,6 +695,7 @@ class LibraryMetadata:
             if name in self.playlists:
                 new_playlists[name] = self.playlists[name]
         self.playlists = new_playlists
+        self.settings["playlist_order"] = list(new_playlists)
         pc = self.settings.get("playlist_covers")
         if isinstance(pc, dict):
             valid = set(self.playlists.keys())
