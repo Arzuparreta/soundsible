@@ -45,11 +45,22 @@ it('starts radio from the actual current music occurrence without replacing audi
   const execute = vi.fn(async () => {});
   const menu = programLibraryMenu(track, () => state, () => false, execute);
   menu.actions!.find(action => action.label === 'trackActions.startRadio')!.onSelect();
-  expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'radio', enabled: true, profile: 'balanced', queueToken: 'order' });
+  expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'radio', enabled: true, profile: 'balanced', queueToken: 'order', key: 'current' });
 });
 it('stops native radio through an explicit contextual action', () => {
   const state = { ...initial, index: 0, items: [{ ...track, source: 'local', key: 'current' }], radio: { active: true, phase: 'ready', profile: 'explore' } } as ProgramState;
   const execute = vi.fn(async () => {});
   programLibraryMenu(track, () => state, () => false, execute).actions!.find(action => action.label === 'nowPlaying.stopRadioConfirm')!.onSelect();
-  expect(execute).toHaveBeenCalledWith({ action: 'radio', enabled: false, profile: 'explore', queueToken: 'order' });
+  expect(execute).toHaveBeenCalledWith({ action: 'radio', enabled: false, profile: 'explore', queueToken: 'order', key: 'current' });
+});
+
+it('replans a selected radio profile and rejects selection after the seed occurrence advances', () => {
+  let state = { ...initial, index: 0, items: [{ ...track, source: 'local', key: 'current' }], radio: { active: true, phase: 'ready', profile: 'balanced' } } as ProgramState;
+  const execute = vi.fn(async () => {});
+  const menu = programLibraryMenu(track, () => state, () => false, execute);
+  menu.actions!.find(action => action.label === 'autoMode.profile.explore')!.onSelect();
+  expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'radio', enabled: true, profile: 'explore', queueToken: 'order', key: 'current' });
+  state = { ...state, items: [{ ...state.items[0], key: 'next-occurrence' }] };
+  menu.actions!.find(action => action.label === 'autoMode.profile.familiar')!.onSelect();
+  expect(execute).toHaveBeenCalledTimes(1);
 });

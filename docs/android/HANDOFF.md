@@ -896,3 +896,28 @@ fixture ahora drena timers y cleanup, sin modificar gesto de producto; commit
 Repetir sobre head final antes del PR. Instrumentación dirty/HEAD previo, no release.
 Continuación activa: perfiles/refill/cancelación de Radio NORMAL, autoplay y resto
 de matriz. No finalizar por checkpoint; PR/merge/release requieren paridad completa.
+
+## S2p: perfiles Radio y refill en background
+
+[Contrato](SLICE_2P.md). Menú de canción actual añade Familiar/Equilibrado/Explorar
+con selección observada; replantear conserva current y pausa. Comando de UI envía
+key y el servicio rechaza una ocurrencia antigua aunque el token de cola siga igual.
+
+UI **1.401 tests /159 archivos** pasa. APK **dos HTTP/HTTPS verificado** pasan en
+`/tmp/soundsible-s2p-native-observed.log`: avanzar al umbral, Activity CREATED,
+planner/refill sin WebView, crecimiento sin duplicaciones nuevas, vuelta al seed,
+Explore desde menú real, pausa/key conservadas, comando stale rechazado, Stop
+Radio conserva tres ocurrencias manuales. No confundir append manual duplicado
+intencionadamente con duplicación de recomendaciones.
+
+Correcciones del recorrido: snapshots periódicos podían capturar token anterior
+a la respuesta inicial del planner; helper consulta estado fresco antes de comandos
+y falla inmediatamente ante rechazo. Explore puede devolver `degraded` con
+recomendaciones locales válidas: comprobar candidates además de ready/degraded.
+Cadenas de evaluateJavascript son JSON, no texto sin comillas. Una pasada bajo
+carga dejó WebView sin responder; la repetición secuencial llegó al diagnóstico
+real y la final pasa. No se debilitan guards de escritura o se inventa éxito.
+
+Suite completa anterior sigue S2m 25 + restart2; browser S2j. Instrumentación
+sobre HEAD S2o dirty, desarrollo. Continuar [S2q autoplay](SLICE_2Q.md) y matriz
+completa; ningún checkpoint termina autorización PR/merge/release tras paridad.

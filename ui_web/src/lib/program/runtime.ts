@@ -14,7 +14,7 @@ export interface ProgramOccurrence extends ProgramTrack { key: string; generated
 export interface ProgramTrack { offline?: boolean; source: 'local' | 'preview' | 'podcast'; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
-  | { action: 'radio'; enabled: boolean; profile: 'familiar' | 'balanced' | 'explore'; queueToken: string }
+  | { action: 'radio'; enabled: boolean; profile: 'familiar' | 'balanced' | 'explore'; queueToken: string; key?: string }
   | { action: 'stop'; queueToken: string }
   | { action: 'seek'; positionMs: number }
   | { action: 'skip'; seconds: -15 | 15; index: number; key: string; queueToken: string }

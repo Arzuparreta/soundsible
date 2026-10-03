@@ -164,6 +164,7 @@ class PlaybackService : MediaLibraryService() {
                         player.setMediaItems(items, index, podcasts.position(items[index])); player.prepare(); player.play()
                     } else if (args.getString("action") == "radio") {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
+                        args.getString("key")?.let { require(it == ProgramQueue.key(player, player.currentMediaItemIndex)) }
                         if (args.getBoolean("enabled")) radio.start(args.getString("profile") ?: "balanced") else radio.stop()
                     } else if (args.getString("action") == "stop") {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))

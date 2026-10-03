@@ -22,8 +22,9 @@ public class RadioTest {
         web.evaluate(scenario,"window.__radioTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__radio=s),100)");
     }
     private void command(StartupTest web, ActivityScenario<MainActivity> scenario, String fields) throws Exception {
-        web.evaluate(scenario,"window.__done=false;Capacitor.Plugins.SoundsiblePlayback.command({...window.__radio,"+fields+"}).then(()=>window.__done=true).catch(e=>window.__error=e.message)");
-        waitFor(web,scenario,"window.__done===true");
+        web.evaluate(scenario,"window.__done=false;window.__error=null;Capacitor.Plugins.SoundsiblePlayback.state().then(fresh=>Capacitor.Plugins.SoundsiblePlayback.command({...fresh,"+fields+"})).then(()=>window.__done=true).catch(e=>window.__error=e.message)");
+        waitFor(web,scenario,"window.__done===true || !!window.__error");
+        assertEquals(web.evaluate(scenario,"window.__error"),"true",web.evaluate(scenario,"window.__done===true"));
     }
     @Test public void httpRadio() throws Exception {run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"));}
     @Test public void tlsRadio() throws Exception {run(InstrumentationRegistry.getArguments().getString("tlsOrigin"));}
@@ -64,6 +65,31 @@ public class RadioTest {
             waitFor(web,scenario,"window.__radio.items[2]?.title==='Another manual occurrence' && !window.__radio.items[2]?.generated");
             scenario.recreate();waitFor(web,scenario,"!!document.querySelector('[data-testid=android-library]') && !document.documentElement.hasAttribute('data-booting')");observe(web,scenario);
             waitFor(web,scenario,"window.__radio?.radio?.active && window.__radio.items.length>2");
+            // Advance far enough to exhaust the initial runway; refill must happen
+            // in the service even while the Activity is stopped.
+            int initialCount=Integer.parseInt(web.evaluate(scenario,"window.__radio.items.length"));
+            command(web,scenario,"action:'select',index:5,key:window.__radio.items[5].key");
+            scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
+            long refillDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(20);
+            while(true){
+                try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/__fixture/radio-stats").header("X-Android-Fixture","isolated").build()).execute()){
+                    assertEquals(200,response.code());if(new JSONObject(response.body().string()).getInt("calls")>=3)break;
+                }
+                assertTrue("Runway refill did not run while Activity stopped",System.nanoTime()<refillDeadline);Thread.sleep(100);
+            }
+            scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
+            waitFor(web,scenario,"window.__radio.items.length>"+initialCount+" && new Set(window.__radio.items.map(i=>i.id)).size===window.__radio.items.length-1");
+            command(web,scenario,"action:'select',index:0,key:window.__radio.items[0].key");
+            command(web,scenario,"action:'pause'");
+            web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
+            waitFor(web,scenario,"!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Explore')");
+            web.evaluate(scenario,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Explore').click()");
+            waitFor(web,scenario,"window.__radio.radio?.profile==='explore' && ['ready','degraded'].includes(window.__radio.radio.phase) && window.__radio.items.slice(3).some(i=>i.generated)");
+            assertEquals(key,web.evaluate(scenario,"window.__radio.items[0].key"));
+            assertEquals("false",web.evaluate(scenario,"window.__radio.playWhenReady"));
+            web.evaluate(scenario,"window.__staleRadio=false;Capacitor.Plugins.SoundsiblePlayback.command({...window.__radio,action:'radio',enabled:true,profile:'familiar',key:'stale-occurrence'}).catch(()=>window.__staleRadio=true)");
+            waitFor(web,scenario,"window.__staleRadio===true");
+            assertEquals(JSONObject.quote("explore"),web.evaluate(scenario,"window.__radio.radio.profile"));
             command(web,scenario,"action:'radio',enabled:false,profile:'balanced'");
             waitFor(web,scenario,"!window.__radio.radio?.active && window.__radio.items.length===3");
             assertEquals(key,web.evaluate(scenario,"window.__radio.items[0].key"));

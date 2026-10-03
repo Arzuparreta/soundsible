@@ -28,8 +28,17 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
       label: t(captured.radio?.active ? 'nowPlaying.stopRadioConfirm' : 'trackActions.startRadio'), disabled: !captured.ready || pending(),
       onSelect: () => {
         if (!captured.ready || pending() || state()?.generation !== captured.generation) return;
-        void execute({ action: 'radio', enabled: !captured.radio?.active, profile: captured.radio?.profile ?? 'balanced', queueToken: captured.queueToken }).catch(() => {});
+        void execute({ action: 'radio', enabled: !captured.radio?.active, profile: captured.radio?.profile ?? 'balanced', queueToken: captured.queueToken, key: captured.items[captured.index]?.key }).catch(() => {});
       },
-    }] : []),
+    }, ...(captured.radio?.active ? (['familiar', 'balanced', 'explore'] as const).map(profile => ({
+      label: t(`autoMode.profile.${profile}`), selected: captured.radio?.profile === profile,
+      disabled: !captured.ready || pending(),
+      onSelect: () => {
+        const observed = state();
+        if (!captured.ready || pending() || observed?.generation !== captured.generation ||
+          observed.items[observed.index]?.key !== captured.items[captured.index]?.key) return;
+        void execute({ action: 'radio', enabled: true, profile, queueToken: captured.queueToken, key: captured.items[captured.index]?.key }).catch(() => {});
+      },
+    })) : [])] : []),
   ] };
 }
