@@ -26,11 +26,15 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var player: ExoPlayer
     private lateinit var connection: EngineConnection
     private lateinit var previews: PreviewProgram
+    private lateinit var podcasts: PodcastProgressStore
+    private val progressTicker = object : Runnable { override fun run() { if (session != null) { savePodcast(); main.postDelayed(this, 5000) } } }
+    private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
     private lateinit var artwork: ProgramArtwork
     @Volatile private var transport: Pair<Long, OkHttpClient>? = null
     private val audioCalls = java.util.concurrent.ConcurrentHashMap<okhttp3.Call, String>()
+    private val podcastSources = java.util.concurrent.ConcurrentHashMap<PodcastDataSource, String>()
     private val connectedCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
-    private fun cancelAudio(key: String? = null) { audioCalls.entries.filter { key == null || it.value == key }.forEach { it.key.cancel() } }
+    private fun cancelAudio(key: String? = null) { podcastSources.entries.filter { key == null || it.value == key }.forEach { it.key.cancel() }; audioCalls.entries.filter { key == null || it.value == key }.forEach { it.key.cancel() } }
     private val main = Handler(Looper.getMainLooper())
     private val reset: () -> Unit = {
         cancelAudio()
@@ -39,6 +43,7 @@ class PlaybackService : MediaLibraryService() {
     }
     /** On the player looper; does not touch account generation, cookie or library. */
     private fun closeProgram() {
+        savePodcast()
         previews.clear()
         player.pause(); player.stop(); player.clearMediaItems()
         // stop retains a previous playback error. Preparing an empty timeline clears it without a source.
@@ -54,6 +59,7 @@ class PlaybackService : MediaLibraryService() {
         super.onCreate()
         connection = EngineConnection.shared(this)
         artwork = ProgramArtwork(connection)
+        podcasts = PodcastProgressStore(this)
         val factory = androidx.media3.datasource.DataSource.Factory {
             // Each source pins the selected account; every HTTP request revalidates it.
             val epoch = connection.generation
@@ -94,6 +100,12 @@ class PlaybackService : MediaLibraryService() {
             override fun getSupportedTypes() = localFactory.supportedTypes
             override fun createMediaSource(item: MediaItem): androidx.media3.exoplayer.source.MediaSource {
                 val extras = item.mediaMetadata.extras
+                if (extras?.getString(ProgramQueue.SOURCE) == "podcast") {
+                    val podcastFactory = androidx.media3.datasource.DataSource.Factory { run { val key = extras.getString(ProgramQueue.KEY) ?: ""; lateinit var source: PodcastDataSource
+                        source = PodcastDataSource(connection, factory, extras.getString(ProgramQueue.ENCLOSURE) ?: error("NO_ENCLOSURE"), item.localConfiguration?.uri?.getQueryParameter("android_generation")?.toLongOrNull() ?: -1, key, { podcastSources[it] = key }) { podcastSources.remove(source) }
+                        source } }
+                    return DefaultMediaSourceFactory(podcastFactory).setLoadErrorHandlingPolicy(object : androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(0) { override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long = C.TIME_UNSET }).createMediaSource(item)
+                }
                 return if (extras?.getString(ProgramQueue.SOURCE) == "preview")
                     androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(factory, PreviewExtractors()).setLoadErrorHandlingPolicy(
                         previews.policy(extras.getString(ProgramQueue.KEY) ?: "", connection.generation)).createMediaSource(item)
@@ -102,14 +114,24 @@ class PlaybackService : MediaLibraryService() {
         }
         player = ExoPlayer.Builder(this).setMediaSourceFactory(sources)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
+            .setSeekBackIncrementMs(15000).setSeekForwardIncrementMs(15000)
             .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
         previews = PreviewProgram(connection, player, main, { session }) { key -> cancelAudio(key) }
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
                 if (item?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) == "preview") artwork.clear()
                 previews.sync()
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && item?.mediaMetadata?.extras?.getBoolean(ProgramQueue.PODCAST) == true) {
+                    val resume = podcasts.position(item); if (resume > 0) player.seekTo(resume)
+                }
             }
-            override fun onEvents(player: Player, events: Player.Events) { previews.sync() }
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                podcasts.save(oldPosition.mediaItem, oldPosition.positionMs, if (oldPosition.mediaItem == player.currentMediaItem) player.duration else -1, reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
+            }
+            override fun onEvents(player: Player, events: Player.Events) { previews.sync(); savePodcast()
+                val keys = (0 until player.mediaItemCount).map { ProgramQueue.key(player, it) }.toSet()
+                podcastSources.entries.filter { it.value !in keys }.forEach { it.key.cancel() }
+            }
         })
         connection.resetListeners.add(reset)
         session = MediaLibrarySession.Builder(this, player, object : MediaLibrarySession.Callback {
@@ -134,13 +156,15 @@ class PlaybackService : MediaLibraryService() {
                     if (args.getString("action") == "stop") {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
                         closeProgram()
-                    } else ProgramQueue.edit(player, connection, args) { previews.manualRetry() }
+                    } else ProgramQueue.edit(player, connection, args, { previews.manualRetry() }, podcasts::position)
                     SessionResult(SessionResult.RESULT_SUCCESS) } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })
             }
         }).setBitmapLoader(artwork).setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
+        main.post(progressTicker)
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
     override fun onDestroy() {
+        savePodcast()
         connection.resetListeners.remove(reset)
         previews.close()
         artwork.close()

@@ -1,12 +1,13 @@
-# S2k: primer vertical de podcasts (pendiente de implementación)
+# S2k: primer vertical de podcasts
 
 ## Resultado que debe demostrar
 
 Desde suscripciones de la cuenta, abrir episodios y reproducir uno con el mismo
 Media3 del programa NORMAL. Pausar, avanzar/retroceder quince segundos, reabrir la
 actividad y continuar desde progreso real. Una copia adquirida y el streaming del
-mismo enclosure deben compartir progreso. Este documento es scaffolding de trabajo,
-no evidencia ni capacidad implementada. S2j está cerrado; no marcar S2k como hecho.
+mismo enclosure deben compartir progreso. Este vertical está implementado y validado; los resultados están en
+[evidence/s2k.json](evidence/s2k.json). Directorio, seguimiento y adquisición
+completa siguen pendientes para cerrar podcasts.
 
 ## Referencias verificadas
 
@@ -77,3 +78,40 @@ GeneratedQueueController. Auditar después de podcasts; conservar seed en playba
 sin reiniciar, inserciones manuales y planificación fiable en background. No crear
 un directorio de estaciones como sustituto. DJ/Live/Auto y firma/actualización
 siguen siendo gates independientes; este vertical no habilita alpha ni merge.
+
+
+## Contrato implementado
+
+`ProgramTrack.source=podcast` distingue enclosure de preview de vídeo. JS entrega
+identidad y metadata acotadas; nativo minta por POST un token autorizado y construye
+el proxy del origen verificado. Cada apertura/rango usa un token nuevo, sin guardar
+URLs de audio del proveedor ni credenciales en snapshots. Una apertura puede
+reutilizar el DataSource tras close; cancelación de una ocurrencia sí lo invalida.
+Peek y cuerpos se cancelan por cierre/cuenta/ocurrencia. Fallos de red/503 conservan
+posición e intención de pausa y ofrecen Retry explícito; no hay replay infinito.
+
+El servicio guarda progreso cada cinco segundos y en eventos/seek/pausa/cierre,
+con máximo quinientos episodios entre perfiles. Origen/cuenta confirmada se obtienen
+del perfil nativo. Hash de enclosure y alias feed/GUID unen streaming y adquirido;
+una copia local sin enclosure también puede leer/escribir ese progreso. Se preserva
+completion al retirar un item cuyo duration ya se perdió; volver atrás lo reinicia.
+±15s se calcula en el looper desde posición real, con clamp; controles Media3
+remotos tienen los mismos incrementos. No se persiste todavía toda la timeline.
+
+PodcastBrowser conserva suscripciones y episodios adquiridos separados de música.
+Abre feeds reales, refresh/paginación, Retry y playback de un episodio. Acquired del
+motor conserva feed/GUID y RSS, no enclosure: se une por esa procedencia y sólo se
+enriquece el descriptor de reproducción desde el RSS. La fila comunica adquirido
+con el texto compartido Downloaded; no supone copia offline en el teléfono.
+Cuenta/teardown invalidan respuestas pendientes. Carátulas externas usan placeholder.
+
+Fixture sustituye únicamente I/O de un hostname público reservado por proveedor
+localhost; las reglas SSRF, parser, tokens y proxy reales permanecen. Audio AAC/MP4
+sintético con Range, auditoría sin cookies, fallo de peek 503 controlado y una copia
+adquirida sintética prueban contratos distintos. Crear la copia en el fixture no
+prueba todavía el pipeline de adquisición. El proxy de producción ahora cierra su
+Response upstream al acabar/cancelar el lector o fallar cabeceras/status.
+
+Directory, follow/unfollow y adquisición/progreso/errores completos son la siguiente
+ampliación de podcasts. Radio sigue pendiente; ninguno de estos cortes cierra la
+matriz completa ni autoriza publicar una alpha parcial. Resultados y metadata se registran en HANDOFF y evidence/s2k.json.

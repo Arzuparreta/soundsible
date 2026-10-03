@@ -10,11 +10,12 @@ export interface ProgramState {
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
 }
 export interface ProgramOccurrence extends ProgramTrack { key: string }
-export interface ProgramTrack { offline?: boolean; source: 'local' | 'preview'; id: string; title: string; artist: string; album?: string }
+export interface ProgramTrack { offline?: boolean; source: 'local' | 'preview' | 'podcast'; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
   | { action: 'stop'; queueToken: string }
   | { action: 'seek'; positionMs: number }
+  | { action: 'skip'; seconds: -15 | 15; index: number; key: string; queueToken: string }
   | { action: 'shuffle'; enabled: boolean }
   | { action: 'repeat'; mode: 0 | 1 | 2 }
   | { action: 'select' | 'remove' | 'retry'; index: number; key: string; queueToken: string }

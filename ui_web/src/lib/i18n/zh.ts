@@ -23,7 +23,7 @@ export const zh: Dict = {
     insertAfter: '加入当前曲目之后',
     repeatOff: '关闭',
     repeatOne: '单曲',
-    repeatAll: '整个队列', refresh: "刷新", permissionDenied: "你的账户无权访问此资源。", title: '连接你的 Soundsible', unconfigured: '尚未连接服务器。', server: "服务器地址", serverHint: "远程连接使用 HTTPS；HTTP 仅限私人局域网或 Tailscale。", connect: "连接", username: "用户名", password: "密码", login: "登录", logout: "退出登录", changeServer: "更换服务器", connectFailed: "连接失败。请检查地址、网络和服务器证书。", wrongLogin: "用户名或密码错误。", browseOnly: '开发版本：本地和已保存歌曲使用原生播放。其他模式尚未实现。', seek: '播放位置', eventsPending: "实时更新已断开。请重试或刷新音乐库。" },
+    repeatAll: '整个队列', refresh: "刷新", permissionDenied: "你的账户无权访问此资源。", title: '连接你的 Soundsible', unconfigured: '尚未连接服务器。', server: "服务器地址", serverHint: "远程连接使用 HTTPS；HTTP 仅限私人局域网或 Tailscale。", connect: "连接", username: "用户名", password: "密码", login: "登录", logout: "退出登录", changeServer: "更换服务器", connectFailed: "连接失败。请检查地址、网络和服务器证书。", wrongLogin: "用户名或密码错误。", browseOnly: '开发版本：音乐和播客。DJ、Live 和 Android Auto 尚未实现。', seek: '播放位置', eventsPending: "实时更新已断开。请重试或刷新音乐库。" },
   savedEntities: {
     albums: "已收藏专辑",
     artists: "已收藏艺人",

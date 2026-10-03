@@ -735,9 +735,9 @@ settings/edición/lyrics/handoff, DJ/Live/Auto y firma/actualización siguen abi
 El usuario exige mantener paridad completa antes de integrar/publicar alpha.
 
 
-### Próximo corte S2k: podcasts
+### S2k: podcasts, implementado a continuación
 
-[Scaffolding y aceptación end-to-end](SLICE_2K.md); implementación pendiente.
+[Contrato y aceptación end-to-end](SLICE_2K.md); resultados a continuación.
 
 Primero, suscripciones y episodios por las rutas reales del motor, reproducción
 proxy autorizada en el mismo Media3, resume y ±15s. El servicio debe guardar
@@ -753,3 +753,46 @@ Radio significa recomendaciones musicales NORMAL (`startRadio` y
 GeneratedQueueController), no estaciones de internet. Después de podcasts, conservar
 el seed ya reproduciéndose y las inserciones manuales al activar esa planificación;
 no depender de timers WebView en background. Dirección/DJ/Live siguen pendientes.
+
+
+## Entrega S2k: episodios, resume y ±15s
+
+Primer vertical de podcasts implementado: suscripciones/episodios reales, refresh/
+paginación, streaming proxy autorizado en el mismo Media3, progreso privado del
+servicio en background, aliases enclosure/feed/GUID y controles ±15s desde posición
+nativa. Biblioteca conserva episodios adquiridos separados de música: el motor no
+retiene enclosure en Track; se une por feed/GUID y se enriquece el descriptor desde
+RSS. Archivo adquirido y streaming comparten progreso; completed reinicia en cero.
+Snapshot no entrega tokens/URLs de audio. Cada rango/apertura minta un token fresco.
+Copias offline B siguen limitadas a música. Ver [contrato S2k](SLICE_2K.md).
+
+Validación: typecheck/Vitest **1.380 tests / 153 archivos**; **6 unitarios nativos**;
+**109 Python** de preview/cache, podcasts/RSS/tokens/reader y fixtures. La prueba
+fixture podcast se repitió después de añadir la copia adquirida: también pasa.
+Suite principal API 36: **20 tests, cero fallos/errores/omitidos**, más **dos fases
+persistentes offline**. Tras ampliar aliases/recuperación y la prueba adquirida,
+**tres tests podcast finales pasan** (HTTP, HTTPS verificado y store nativo).
+Comprueban resume tras recreación/cierre, ±15s y límites, pausa durante recuperación
+503, cambio de streaming a archivo adquirido con progreso, aislamiento de perfiles,
+completion al retirar duration y proveedor sin cookies. APK/test APK/lint normales
+pasan y se retira la CA temporal. [Evidencia S2k](evidence/s2k.json).
+
+Las últimas cuatro suites browser completas son S2j; deberán repetirse sobre el
+HEAD final antes del PR acumulado. No presentar esos tests como validación del
+podcast APK ni marcar CI/proveedor vivo/teléfono/coche aceptados. Build de
+instrumentación sobre HEAD anterior, dirty; regenerar APK limpio después de commit.
+El helper ahora archiva pruebas filtradas en integration-targeted/<class>, sin
+reemplazar la suite completa ni sus fases de reinicio en integration-results.
+
+Correcciones verificadas: DataSource debe admitir reaperturas tras close para seek,
+sin revivir una ocurrencia cancelada. Proxy cierra Response upstream en fin/cancel/
+fallo. Tests inicialmente esperaban shell sin servidor tras recrear sesión y luego
+pulsaban la fila homónima de cola; ahora esperan Library y seleccionan dentro de
+PodcastBrowser. Fixture adquirido requería album en el modelo real; se corrigió,
+con prueba Python del archivo/rango. No se debilitaron assertions ni SSRF.
+
+Siguiente trabajo autorizado: ampliar podcasts con directorio y seguir/dejar de
+seguir, adquisición real/progreso y acciones de episodios; después Radio NORMAL.
+Continuar sin cerrar el turno por un checkpoint. DJ/Live/Auto, UI/acciones completas,
+firma/actualización y demás filas de PORT_PLAN siguen siendo requisitos antes del
+PR/merge/release. No se ha publicado alpha parcial ni integrado a main.

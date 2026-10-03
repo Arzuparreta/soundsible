@@ -11,7 +11,7 @@ import { availableLibrary, type OfflineState } from './offline';
 import { openContextMenu } from '../lib/contextMenu';
 import styles from './AndroidStart.module.css';
 
-export interface BrowseSnapshot { tracks: Track[]; playlists?: PlaylistMap }
+export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap }
 /** Read-only account surface. Shares the existing row/artwork/tokens; imports no player runtime. */
 export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string; onMenu?: (track: Track, event?: MouseEvent) => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent) => void }) {
   const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists'>('songs');

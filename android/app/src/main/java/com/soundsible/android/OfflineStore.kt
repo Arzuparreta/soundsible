@@ -59,6 +59,7 @@ class OfflineStore private constructor(private val context: Context) {
     @Synchronized private fun requireProfile(epoch: Long) {
         require(epoch == connection.generation && prefs.getString("origin", "") == connection.origin && prefs.contains("user")) { "STALE_PROFILE" }
     }
+    @Synchronized fun profileKey(epoch: Long): String { requireProfile(epoch); return prefs.getString("profile", "") ?: error("NO_PROFILE") }
     @Synchronized fun canUse(epoch: Long): Boolean = epoch == connection.generation && prefs.getString("origin", "") == connection.origin && prefs.contains("user")
     @Synchronized fun state(epoch: Long): JSONObject {
         require(epoch == connection.generation)

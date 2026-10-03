@@ -190,12 +190,16 @@ def integration(*, restart_only: bool = False) -> None:
                         "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
                         "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
                     )
-                    shutil.rmtree(ANDROID / "build/integration-results", ignore_errors=True)
-                    shutil.copytree(
-                        ANDROID / "app/build/outputs/androidTest-results",
-                        ANDROID / "build/integration-results",
-                        dirs_exist_ok=True,
+                    test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class")
+                    results = (
+                        ANDROID / "build/integration-targeted" / re.sub(r"[^A-Za-z0-9_.-]", "_", test_filter)[:100]
+                        if test_filter
+                        else ANDROID / "build/integration-results"
                     )
+                    # A focused retry must not replace the evidence of the full
+                    # suite or its process-restart phases.
+                    shutil.rmtree(results, ignore_errors=True)
+                    shutil.copytree(ANDROID / "app/build/outputs/androidTest-results", results, dirs_exist_ok=True)
                 if not os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
                     # connectedDebugAndroidTest uninstalls its target afterwards.
                     # Install once and invoke the runner directly so phase two

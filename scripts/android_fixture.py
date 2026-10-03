@@ -116,6 +116,9 @@ def main() -> None:
     from android_catalog_fixture import install as install_catalog
 
     install_catalog(app)
+    from android_podcast_fixture import install as install_podcasts
+
+    install_podcasts(app, root, accounts)
 
     stream_requests = []
     stream_failure = {}

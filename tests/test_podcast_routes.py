@@ -240,3 +240,42 @@ def test_a_failed_read_is_not_kept_as_a_fresh_one(client):
     # Asked for by hand, the failure is reported rather than papered over.
     refreshed, _ = _open(client, api, error=OSError("timed out"), query="?refresh=1")
     assert refreshed.status_code == 502
+
+
+def test_enclosure_proxy_closes_upstream_on_reader_cancel(client):
+    upstream = MagicMock()
+    upstream.status_code = 206
+    upstream.headers = {"Content-Type": "audio/mp4", "Content-Range": "bytes 0-9/20", "Content-Length": "10"}
+    upstream.iter_content.return_value = iter([b"12345", b"67890"])
+    with (
+        patch.object(
+            podcasts, "decode_enclosure_stream_token", return_value={"enclosure_url": "https://example.com/episode"}
+        ),
+        patch.object(podcasts.requests, "get", return_value=upstream) as get,
+    ):
+        response = client.get(
+            "/api/podcasts/stream/token", headers={"Range": "bytes=0-9", "Cookie": "engine-secret"}, buffered=False
+        )
+        assert response.status_code == 206
+        assert response.headers["Content-Range"] == "bytes 0-9/20"
+        assert next(response.response) == b"12345"
+        response.close()
+    upstream.close.assert_called()
+    assert get.call_args.kwargs["headers"] == {
+        "User-Agent": "SoundsiblePodcast/1.0",
+        "Accept": "audio/*,*/*",
+        "Range": "bytes=0-9",
+    }
+
+
+def test_enclosure_proxy_closes_failed_upstream(client):
+    upstream = MagicMock()
+    upstream.raise_for_status.side_effect = OSError("provider refused")
+    with (
+        patch.object(
+            podcasts, "decode_enclosure_stream_token", return_value={"enclosure_url": "https://example.com/episode"}
+        ),
+        patch.object(podcasts.requests, "get", return_value=upstream),
+    ):
+        assert client.get("/api/podcasts/stream/token").status_code == 502
+    upstream.close.assert_called_once()

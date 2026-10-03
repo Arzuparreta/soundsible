@@ -9,6 +9,8 @@ import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
 import type { User } from '../lib/session';
 import { engine, useEngine, watchEngine } from './engine';
 import LibraryBrowser, { type BrowseSnapshot } from './LibraryBrowser';
+import PodcastBrowser from './PodcastBrowser';
+import { isPodcastTrack } from '../lib/track';
 import CatalogSearch from './CatalogSearch';
 import { nativeProgramTransport, mixedProgram } from './playback';
 import { createProgramRuntime, type ProgramState } from '../lib/program/runtime';
@@ -52,7 +54,7 @@ export default function AndroidStart() {
   const [eventsOnline, setEventsOnline] = createSignal(false);
   const [snapshot, setSnapshot] = createSignal<BrowseSnapshot | null>(null);
   const [savedEntries, setSavedEntries] = createSignal<SavedEntry[]>([]);
-  const [surface, setSurface] = createSignal<'library' | 'search'>('library');
+  const [surface, setSurface] = createSignal<'library' | 'search' | 'podcasts'>('library');
   const [revision, setRevision] = createSignal(0);
   const [offlineState, setOfflineState] = createSignal<OfflineState | null>(null);
   async function offlineCommand(command: OfflineCommand) {
@@ -119,7 +121,7 @@ export default function AndroidStart() {
       if (!Array.isArray(saved.saved)) throw new Error('Invalid saved-song snapshot');
       const index = buildIdentityIndex(data.tracks);
       const resolved = saved.saved.map(entry => savedToTrack(entry, index)).filter((track): track is Track => !!track);
-      setSnapshot({ ...data, tracks: musicLibraryRows(data.tracks, resolved) }); setSavedEntries(saved.saved); setRevision(n => n + 1); setStale(false); setError('');
+      setSnapshot({ ...data, podcast_tracks: data.tracks.filter(isPodcastTrack), tracks: musicLibraryRows(data.tracks, resolved) }); setSavedEntries(saved.saved); setRevision(n => n + 1); setStale(false); setError('');
     } catch (failure) {
       if (current !== epoch || job !== syncEpoch) return;
       if (failure instanceof ApiError && failure.status === 401) await expireSession();
@@ -253,8 +255,8 @@ export default function AndroidStart() {
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
-        {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => setSurface('library')}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button></nav>
-          <Show when={surface() === 'library'} fallback={<CatalogSearch generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} />}>
+        {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => setSurface('library')}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button></nav>
+          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'podcasts'} fallback={<CatalogSearch generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} />}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} /></Show>}>
           <LibraryBrowser snapshot={data()} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
           onManageOffline={() => { const captured = generation; openOfflineManager(offlineState, command => captured === generation ? offlineCommand(command) : Promise.resolve()); }}
           onCollectionMenu={(tracks, title, event) => openContextMenu({ title, actions: offlineActions(tracks, offlineState, offlineCommand, () => generation) }, event)}

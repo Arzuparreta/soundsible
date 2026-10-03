@@ -8,10 +8,16 @@ import org.json.JSONArray
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.SessionCommand
 import java.security.MessageDigest
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /** Stable occurrence identity crosses MediaSession IPC in metadata; never contains credentials. */
 @UnstableApi
 object ProgramQueue {
+    const val PODCAST = "soundsible_podcast"
+    const val ENCLOSURE = "soundsible_enclosure"
+    const val EPISODE = "soundsible_episode"
+    const val FEED = "soundsible_feed"
+    const val PROFILE = "soundsible_profile"
     const val SOURCE = "soundsible_source"
     const val KEY = "soundsible_occurrence"
     val command = SessionCommand("soundsible.queue.edit", Bundle.EMPTY)
@@ -23,27 +29,39 @@ object ProgramQueue {
     const val LIMIT = 1000
     /** Metadata only crosses the bridge. Credentials and source addresses stay native. */
     fun items(connection: EngineConnection, rows: JSONArray): List<MediaItem> {
-        require(rows.length() in 1..LIMIT)
+        require(rows.length() in 1..LIMIT && rows.toString().toByteArray(Charsets.UTF_8).size <= 256 * 1024)
         return (0 until rows.length()).map { i ->
             val row = rows.getJSONObject(i)
             val source = row.getString("source")
-            require(source in listOf("local", "preview"))
+            require(source in listOf("local", "preview", "podcast"))
             val id = row.getString("id")
             if (source == "preview") require(Regex("^[A-Za-z0-9_-]{11}$").matches(id))
-            require(id.isNotBlank() && id.length <= 512)
+            val podcast = source == "podcast" || row.optString("mediaKind") == "podcast_episode"
+            require(id.isNotBlank() && id.length <= if (podcast) 8192 else 512)
+            val enclosure = if (podcast) row.optString("enclosure", "") else ""
+            val episode = row.optString("episodeGuid", ""); val feed = row.optString("feedId", "")
+            require(episode.length <= 8192 && feed.length <= 8192)
+            if (podcast) {
+                require(enclosure.isNotEmpty() || (source == "local" && episode.isNotEmpty() && feed.isNotEmpty()))
+                if (enclosure.isNotEmpty()) {
+                    val url = enclosure.toHttpUrl()
+                    require(enclosure.length <= 8192 && url.encodedUsername.isEmpty() && url.encodedPassword.isEmpty())
+                }
+            }
             val title = row.optString("title"); val artist = row.optString("artist"); val album = row.optString("album")
             require(listOf(title, artist, album).all { it.length <= 4096 })
             val key = java.util.UUID.randomUUID().toString()
             val offline = source == "local" && connection.offline.canUse(connection.generation) && connection.offline.local(id,connection.generation) != null
-            val path = if (source == "preview") "/api/preview/stream/" else "/api/static/stream/"
+            require(connection.cookieHeader(connection.generation) != null || offline)
+            val path = if (source == "preview") "/api/preview/stream/" else if (source == "podcast") "/api/android-podcast/" else "/api/static/stream/"
             MediaItem.Builder().setMediaId(id)
                 .setUri(connection.origin + path + android.net.Uri.encode(id) + "?android_generation=" + connection.generation + "&android_occurrence=" + key)
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).setArtworkUri(if (source == "local" && !offline) ProgramArtwork.uri(connection.generation, id) else null)
-                    .setExtras(Bundle().apply { putString(KEY, key); putString(SOURCE, source); putBoolean("offline", offline) }).build()).build()
+                    .setExtras(Bundle().apply { putBoolean(PODCAST, podcast); if (podcast) { putString(ENCLOSURE, enclosure); putString(EPISODE, episode); putString(FEED, feed); putString(PROFILE, connection.offline.profileKey(connection.generation)) }; putString(KEY, key); putString(SOURCE, source); putBoolean("offline", offline) }).build()).build()
         }
     }
     /** Called on the service's player looper: validate actual queue, then mutate it once. */
-    fun edit(player: Player, connection: EngineConnection, args: Bundle, beforeRetry: () -> Unit = {}) {
+    fun edit(player: Player, connection: EngineConnection, args: Bundle, beforeRetry: () -> Unit = {}, resume: (MediaItem) -> Long = { 0 }) {
         require(args.getLong("generation", -1) == connection.generation && (connection.cookieHeader(connection.generation) != null || connection.offline.canUse(connection.generation)))
         require(args.getString("queueToken") == token(player))
         val action = args.getString("action")
@@ -69,6 +87,11 @@ object ProgramQueue {
         val index = args.getInt("index", -1)
         require(index in 0 until player.mediaItemCount && args.getString("key") == key(player, index) && key(player, index).isNotBlank())
         when (args.getString("action")) {
+            "skip" -> {
+                require(index == player.currentMediaItemIndex && player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(PODCAST) == true && player.isCurrentMediaItemSeekable)
+                val seconds = args.getInt("seconds", 0); require(seconds == -15 || seconds == 15)
+                player.seekTo(PodcastPosition.skip(player.currentPosition, player.duration, seconds))
+            }
             "play" -> {
                 require(index == player.currentMediaItemIndex)
                 if (player.playerError != null || player.playbackState == Player.STATE_ENDED) beforeRetry()
@@ -83,7 +106,7 @@ object ProgramQueue {
                 beforeRetry()
                 player.prepare() // Retry at the retained position and keep the latest playWhenReady intention.
             }
-            "select" -> { if (index == player.currentMediaItemIndex && (player.playerError != null || player.playbackState == Player.STATE_ENDED)) beforeRetry(); player.seekTo(index, 0); if (player.playerError != null || player.playbackState == Player.STATE_ENDED) player.prepare(); player.play() }
+            "select" -> { if (index == player.currentMediaItemIndex && (player.playerError != null || player.playbackState == Player.STATE_ENDED)) beforeRetry(); player.seekTo(index, resume(player.getMediaItemAt(index))); if (player.playerError != null || player.playbackState == Player.STATE_ENDED) player.prepare(); player.play() }
             "move" -> { val target = args.getInt("toIndex", -1); require(target in 0 until player.mediaItemCount); player.moveMediaItem(index, target) }
             "remove" -> { if (player.mediaItemCount == 1) { player.stop(); player.clearMediaItems() } else player.removeMediaItem(index) }
             else -> error("INVALID_EDIT")

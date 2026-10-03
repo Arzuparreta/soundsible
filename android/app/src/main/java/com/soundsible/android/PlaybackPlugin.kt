@@ -38,7 +38,7 @@ class PlaybackPlugin : Plugin() {
         if (p != null) for (i in 0 until p.mediaItemCount) {
             val item = p.getMediaItemAt(i)
             queue.put(item.mediaId)
-            items.put(JSObject().put("offline", item.mediaMetadata.extras?.getBoolean("offline") ?: false).put("source", item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)).put("key", ProgramQueue.key(p, i)).put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: ""))
+            items.put(JSObject().put("offline", item.mediaMetadata.extras?.getBoolean("offline") ?: false).put("mediaKind", if (item.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true) "podcast_episode" else null).put("source", item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)).put("key", ProgramQueue.key(p, i)).put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: ""))
         }
         val extras = p?.sessionExtras
         val preview = if (hasItems && extras?.getString("previewKey") == ProgramQueue.key(p!!, p.currentMediaItemIndex) && extras.getLong("previewGeneration") == EngineConnection.shared(context).generation) {
@@ -79,10 +79,11 @@ class PlaybackPlugin : Plugin() {
                     val items = ProgramQueue.items(connection, rows)
                     val index = call.getInt("index") ?: 0
                     require(index in items.indices)
-                    p.setMediaItems(items, index, 0); p.prepare(); p.play()
+                    p.setMediaItems(items, index, PodcastProgressStore(context).position(items[index])); p.prepare(); p.play()
                 }
-                "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop" -> {
+                "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip" -> {
                     val args = Bundle().apply {
+                        putInt("seconds", call.getInt("seconds") ?: 0)
                         putLong("generation", connection.generation)
                         putString("action", call.getString("action")); putString("queueToken", if (call.getString("action") == "play") ProgramQueue.token(p) else call.getString("queueToken")); putString("key", if (call.getString("action") == "play" && p.mediaItemCount > 0) ProgramQueue.key(p, p.currentMediaItemIndex) else call.getString("key"))
                         putString("tracks", call.getArray("tracks")?.toString())

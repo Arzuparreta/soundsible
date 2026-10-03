@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-03",
+  "slice": "S2k podcast episodes, native resume and 15-second seek",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "37a834afa16a779d9dd616810519dc630c90219c",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "ui": {
+      "passed": 1380,
+      "files": 153
+    },
+    "native_unit": {
+      "passed": 6,
+      "failures": 0
+    },
+    "python": {
+      "passed": 109,
+      "failures": 0,
+      "scope": "preview/cache, podcast RSS/routes/tokens/reader and three real isolated provider fixtures"
+    },
+    "python_final_fixture": {
+      "passed": 1,
+      "scope": "podcast fixture expanded to real acquired engine Track shape and byte Range"
+    },
+    "android_main": {
+      "tests": 20,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "api": 36,
+      "scope": "full main suite before final podcast alias/acquired/recovery assertions"
+    },
+    "android_restart": {
+      "tests": 2,
+      "failures": 0,
+      "phases": [
+        "prepare",
+        "offline"
+      ]
+    },
+    "android_final_podcast": {
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "scope": "HTTP, verified HTTPS, acquired/resume/503 recovery and native account/alias/completion store",
+      "artifacts": "android/build/integration-targeted/com.soundsible.android.PodcastTest"
+    },
+    "normal_apk_and_lint": "passed after temporary CA removal",
+    "browser": "not rerun for this checkpoint; all four complete profiles required on final cumulative PR head"
+  },
+  "observations": [
+    "DataSource reopens after close for new ranges; cancellation permanently invalidates its occurrence.",
+    "Acquired engine Track retains feed/GUID and RSS, not enclosure. UI/native aliases join it to streamed progress.",
+    "Completed endpoint remains complete when item removal loses duration; backward seek resets completion.",
+    "Proxy closes upstream on end, cancellation and HTTP failure.",
+    "Fixture missing album and test selectors targeting unconfigured shell/queue row were corrected without weakening assertions."
+  ],
+  "limits": [
+    "Development artifact. Full parity remains mandatory before main integration and public alpha.",
+    "No GitHub CI, live provider or physical acoustic/car acceptance claimed.",
+    "Directory, follow/unfollow, acquisition pipeline and other podcast actions remain pending.",
+    "Artwork for external podcast feeds is a placeholder; offline B covers acquired music only.",
+    "Instrumentation metadata is dirty and refers to prior HEAD; clean normal APK rebuilt after commit."
+  ]
+}
