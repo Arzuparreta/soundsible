@@ -156,7 +156,7 @@ def integration() -> None:
                     environment = {**os.environ, "PYTHONPATH": str(ROOT)}
                     process = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=log, stderr=log)
                     processes.append(process)
-                    deadline = time.monotonic() + 20
+                    deadline = time.monotonic() + 60
                     while True:
                         if process.poll() is not None:
                             raise RuntimeError(

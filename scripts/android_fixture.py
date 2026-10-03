@@ -110,6 +110,10 @@ def main() -> None:
                 }
             )
 
+    from android_preview_fixture import install
+
+    install(app, root)
+
     stream_requests = []
     stream_failure = {}
     stream_cut = {}

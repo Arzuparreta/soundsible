@@ -1,13 +1,16 @@
+import type { PreviewPreparation } from '../api';
 /** Single-output async contract. Independent of Solid, Capacitor and the Web Audio mixer. */
 export interface ProgramState {
   generation: number; sequence: number; ready: boolean; playing: boolean;
   playWhenReady: boolean; errorKind: '' | 'connection' | 'server' | 'auth' | 'permission' | 'source';
   state: number; index: number; id: string; title: string; artist: string;
   items: ProgramOccurrence[]; queueToken: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
+  seekable?: boolean;
+  preview?: { key: string; preparation: PreviewPreparation | null; retryAttempt: number; retryPending: boolean; retryNotBeforeMs: number } | null;
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
 }
 export interface ProgramOccurrence extends ProgramTrack { key: string }
-export interface ProgramTrack { id: string; title: string; artist: string; album?: string }
+export interface ProgramTrack { source: 'local' | 'preview'; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
   | { action: 'stop'; queueToken: string }

@@ -180,8 +180,8 @@ Ver [los requisitos de publicación](android/RELEASE_GATES.md).
 
 ## Primer programa nativo (S2a)
 
-Tocar una canción local crea una cola NORMAL con los archivos de esa vista;
-las canciones guardadas en preview aún no pueden reproducirse. Play/Pause,
+Tocar una canción reproducible crea una cola NORMAL con archivos y previews
+guardados de esa vista; las entradas sin vídeo resuelto permanecen desactivadas. Play/Pause,
 Previous/Next y seek usan MediaController; título/posición/estado proceden del
 servicio. La notificación multimedia lleva la misma metadata y controles.
 Una fuente fallida permite reintentar con Play; 401 revalida la sesión y vuelve
@@ -191,6 +191,8 @@ El programa sobrevive a recreación y background de la Activity, pero este corte
 no restaura la cola tras muerte del proceso. S2g añade carátulas privadas al programa, cola y sesión/notificación nativa.
 S2h permite cerrar el reproductor con ×: vacía el programa y retira la notificación,
 sin borrar login; funciona también con el servidor inaccesible. No hay offline,
-mezcla, DJ/Live ni Android Auto. La cola de desarrollo admite hasta 1.000 archivos.
+mezcla, DJ/Live ni Android Auto. La cola de desarrollo admite hasta 1.000 ocurrencias locales/preview.
+S2i usa el proxy del motor para previews guardados, con progreso y retry 429/503
+acotado; sus carátulas nativas usan placeholder.
 El siguiente trabajo de S2 integra el contrato asíncrono con la UI autenticada
-completa y añade previews/podcasts/radio. Ver [contrato y pendientes](android/SLICE_2.md).
+completa y añade adquisición/podcasts/radio. Ver [contrato y pendientes](android/SLICE_2.md).

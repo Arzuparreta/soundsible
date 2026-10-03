@@ -40,7 +40,7 @@ public class ClosureTest {
                 .header("X-Android-Fixture", "isolated").post(RequestBody.create(body, MediaType.get("application/json"))).build()).execute()) { assertEquals(200, response.code()); }
     }
     private void queue(ActivityScenario<MainActivity> scenario, long generation) throws Exception {
-        web.evaluate(scenario, "window.__phase=null;window.__started=null;window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + generation + ",action:'queue',tracks:[{id:'member-track',title:'close fixture',artist:'member'}],index:0}).then(s=>window.__started=s)");
+        web.evaluate(scenario, "window.__phase=null;window.__started=null;window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + generation + ",action:'queue',tracks:[{source:'local',id:'member-track',title:'close fixture',artist:'member'}],index:0}).then(s=>window.__started=s)");
         waitFor(scenario, "!!document.querySelector('[data-program-close]')");
     }
     private void nativeState(MediaController controller, boolean closed) {
@@ -130,7 +130,7 @@ public class ClosureTest {
                     web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Refresh' && !b.disabled).click()");
                     waitFor(scenario, "!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
                     // Adding to a closed program must not inherit the old Play/shuffle/repeat intention.
-                    web.evaluate(scenario, "window.__fresh=null;window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + epoch + ",action:'append',queueToken:s.queueToken,tracks:[{id:'member-track',title:'fresh program'}]})).then(s=>window.__fresh=s)");
+                    web.evaluate(scenario, "window.__fresh=null;window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + epoch + ",action:'append',queueToken:s.queueToken,tracks:[{source:'local',id:'member-track',title:'fresh program'}]})).then(s=>window.__fresh=s)");
                     waitFor(scenario, "window.__fresh?.items.length===1 && !window.__fresh?.playWhenReady && !window.__fresh?.shuffle && window.__fresh?.repeat===0");
                     nativeState(controller, false);
                     InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> assertNotEquals("New program must have new occurrences", oldKey.get(), ProgramQueue.INSTANCE.key(controller, 0)));

@@ -2,12 +2,14 @@ import type { Dict } from './en';
 
 export const fr: Dict = {
   android: {
+    previewPreparing: 'Préparation du morceau',
+    previewRetry: 'En attente de réessayer le morceau',
     closeProgram: 'Fermer le lecteur',
     playbackInterrupted: 'Lecture interrompue. La file et la position sont conservées. Réessayez quand le serveur est disponible.',
     insertAfter: 'Ajouter après le titre actuel',
     repeatOff: 'Désactivé',
     repeatOne: 'Un titre',
-    repeatAll: 'Toute la file', refresh: "Actualiser", permissionDenied: "Votre compte ne peut pas accéder à cette ressource.", title: 'Connectez votre Soundsible', unconfigured: 'Aucun serveur n’est encore connecté.', server: "Adresse du serveur", serverHint: "HTTPS à distance ; HTTP uniquement sur votre réseau privé ou Tailscale.", connect: "Connecter", username: "Utilisateur", password: "Mot de passe", login: "Se connecter", logout: "Se déconnecter", changeServer: "Changer de serveur", connectFailed: "Connexion impossible. Vérifiez adresse, réseau et certificat du serveur.", wrongLogin: "Utilisateur ou mot de passe incorrect.", browseOnly: 'Version de développement : lecture native des morceaux locaux. Aperçus et autres modes à venir.', seek: 'Position de lecture', eventsPending: "Mises à jour déconnectées. Réessayez ou actualisez la bibliothèque." },
+    repeatAll: 'Toute la file', refresh: "Actualiser", permissionDenied: "Votre compte ne peut pas accéder à cette ressource.", title: 'Connectez votre Soundsible', unconfigured: 'Aucun serveur n’est encore connecté.', server: "Adresse du serveur", serverHint: "HTTPS à distance ; HTTP uniquement sur votre réseau privé ou Tailscale.", connect: "Connecter", username: "Utilisateur", password: "Mot de passe", login: "Se connecter", logout: "Se déconnecter", changeServer: "Changer de serveur", connectFailed: "Connexion impossible. Vérifiez adresse, réseau et certificat du serveur.", wrongLogin: "Utilisateur ou mot de passe incorrect.", browseOnly: 'Version de développement : lecture native des morceaux locaux et enregistrés. Autres modes à venir.', seek: 'Position de lecture', eventsPending: "Mises à jour déconnectées. Réessayez ou actualisez la bibliothèque." },
   savedEntities: {
     albums: "Albums enregistrés",
     artists: "Artistes enregistrés",

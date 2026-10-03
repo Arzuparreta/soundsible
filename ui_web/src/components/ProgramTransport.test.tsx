@@ -5,7 +5,7 @@ import ProgramTransport from './ProgramTransport';
 import type { ProgramState } from '../lib/program/runtime';
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 afterEach(cleanup);
-const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 3, index: 1, id: 'a', title: 'Song', artist: '', items: [{ key: 'first', id: 'a', title: 'a', artist: '' }, { key: 'second', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a', 'a'], positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
+const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 3, index: 1, id: 'a', title: 'Song', artist: '', items: [{ source: 'local', key: 'first', id: 'a', title: 'a', artist: '' }, { source: 'local', key: 'second', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a', 'a'], positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
 it('uses native availability on the last occurrence and does not claim play before observation', async () => {
   const command = vi.fn(async () => {});
   const [state, setState] = createSignal(initial);
@@ -59,4 +59,23 @@ it('retries the retained occurrence without replacing queue or implicitly playin
   for (const errorKind of ['auth', 'permission', 'source'] as const) {
     setState({ ...state(), errorKind }); expect(screen.queryByText('common.retry')).toBeNull();
   }
+});
+it('shows observed preview progress and disables manual retry during the server cooldown', async () => {
+  vi.useFakeTimers();
+  try {
+    const [state, setState] = createSignal<ProgramState>({ ...initial, state: 1, error: 2000, errorKind: 'server', items: initial.items.map(item => ({ ...item, source: 'preview' })), preview: { key: 'second', preparation: { state: 'pending', progress: 0.25 }, retryAttempt: 2, retryPending: false, retryNotBeforeMs: Date.now() + 1000 } });
+    render(() => <ProgramTransport state={state()} pending={false} command={async () => {}} />);
+    expect((screen.getByRole('progressbar') as HTMLProgressElement).value).toBe(0.25);
+    expect((screen.getByText('common.retry') as HTMLButtonElement).disabled).toBe(true);
+    expect(document.querySelector('[data-program-artwork]')?.getAttribute('style')).not.toContain('/api/static/cover');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect((screen.getByText('common.retry') as HTMLButtonElement).disabled).toBe(false);
+    setState({ ...state(), error: 0, state: 2, preview: { ...state().preview!, retryPending: true } });
+    expect(screen.getByText('android.previewRetry')).toBeTruthy();
+    expect(screen.queryByText('common.pause')).toBeNull();
+  } finally { cleanup(); vi.useRealTimers(); }
+});
+it('does not offer seek for an unseekable native source even when its duration is known', () => {
+  render(() => <ProgramTransport state={{ ...initial, seekable: false }} pending={false} command={async () => {}} />);
+  expect((screen.getByRole('slider') as HTMLInputElement).disabled).toBe(true);
 });

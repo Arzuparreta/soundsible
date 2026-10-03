@@ -26,7 +26,7 @@ class PlaybackPlugin : Plugin() {
     }
     private val ticker = object : Runnable { override fun run() { if (alive && visible) { publish(); main.postDelayed(this, 500) } } }
     override fun load() {
-        pending = MediaController.Builder(context, SessionToken(context, ComponentName(context, PlaybackService::class.java))).buildAsync().also { future ->
+        pending = MediaController.Builder(context, SessionToken(context, ComponentName(context, PlaybackService::class.java))).setListener(object : MediaController.Listener { override fun onExtrasChanged(controller: MediaController, extras: Bundle) { publish() } }).buildAsync().also { future ->
             future.addListener({ try { if (alive) { controller = future.get(); controller?.addListener(listener); if (visible) main.post(ticker) } } catch (_: Exception) {} }, java.util.concurrent.Executor { task -> main.post(task) })
         }
     }
@@ -38,20 +38,29 @@ class PlaybackPlugin : Plugin() {
         if (p != null) for (i in 0 until p.mediaItemCount) {
             val item = p.getMediaItemAt(i)
             queue.put(item.mediaId)
-            items.put(JSObject().put("key", ProgramQueue.key(p, i)).put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: ""))
+            items.put(JSObject().put("source", item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)).put("key", ProgramQueue.key(p, i)).put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: ""))
         }
-        return JSObject().put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
+        val extras = p?.sessionExtras
+        val preview = if (hasItems && extras?.getString("previewKey") == ProgramQueue.key(p!!, p.currentMediaItemIndex) && extras.getLong("previewGeneration") == EngineConnection.shared(context).generation) {
+            JSObject().put("key", extras.getString("previewKey"))
+                .put("preparation", extras.getString("previewPreparation")?.let { JSObject(it) })
+                .put("retryAttempt", extras.getInt("previewRetryAttempt"))
+                .put("retryPending", extras.getBoolean("previewRetryPending"))
+                .put("retryNotBeforeMs", extras.getLong("previewRetryNotBefore"))
+        } else null
+        val authFailure = preview != null && extras?.getBoolean("previewAuthFailure") == true
+        return JSObject().put("preview", preview).put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
             .put("items", items).put("queueToken", if (p != null) ProgramQueue.token(p) else "")
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
-            .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", PlaybackRecovery.kind(p?.playerError))
+            .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", if (authFailure) "auth" else PlaybackRecovery.kind(p?.playerError))
             .put("shuffle", p?.shuffleModeEnabled ?: false).put("repeat", p?.repeatMode ?: Player.REPEAT_MODE_OFF)
             .put("hasNext", p?.hasNextMediaItem() ?: false).put("hasPrevious", p?.hasPreviousMediaItem() ?: false)
             .put("state", p?.playbackState ?: Player.STATE_IDLE).put("index", if (hasItems) p!!.currentMediaItemIndex else -1)
             .put("id", p?.currentMediaItem?.mediaId ?: "").put("queue", queue)
             .put("title", if (hasItems) p!!.mediaMetadata.title?.toString() ?: "" else "").put("artist", if (hasItems) p!!.mediaMetadata.artist?.toString() ?: "" else "")
-            .put("positionMs", if (hasItems) p!!.currentPosition else 0).put("durationMs", if (hasItems) p!!.duration.coerceAtLeast(0) else 0)
+            .put("seekable", hasItems && p!!.isCurrentMediaItemSeekable).put("positionMs", if (hasItems) p!!.currentPosition else 0).put("durationMs", if (hasItems) p!!.duration.coerceAtLeast(0) else 0)
             .put("error", p?.playerError?.errorCode ?: 0)
-            .put("errorStatus", generateSequence(p?.playerError as Throwable?) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode ?: 0)
+            .put("errorStatus", if (authFailure) 401 else generateSequence(p?.playerError as Throwable?) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode ?: 0)
     }
     private fun publish() { if (alive && visible) notifyListeners("playbackState", snapshot()) }
     override fun handleOnPause() { visible = false; main.removeCallbacks(ticker) }
@@ -72,12 +81,12 @@ class PlaybackPlugin : Plugin() {
                     require(index in items.indices)
                     p.setMediaItems(items, index, 0); p.prepare(); p.play()
                 }
-                "select", "move", "remove", "append", "insertAfter", "retry", "stop" -> {
+                "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop" -> {
                     val args = Bundle().apply {
                         putLong("generation", connection.generation)
-                        putString("action", call.getString("action")); putString("queueToken", call.getString("queueToken")); putString("key", call.getString("key"))
+                        putString("action", call.getString("action")); putString("queueToken", if (call.getString("action") == "play") ProgramQueue.token(p) else call.getString("queueToken")); putString("key", if (call.getString("action") == "play" && p.mediaItemCount > 0) ProgramQueue.key(p, p.currentMediaItemIndex) else call.getString("key"))
                         putString("tracks", call.getArray("tracks")?.toString())
-                        putInt("index", call.getInt("index") ?: -1); putInt("toIndex", call.getInt("toIndex") ?: -1)
+                        putInt("index", if (call.getString("action") == "play") p.currentMediaItemIndex else call.getInt("index") ?: -1); putInt("toIndex", call.getInt("toIndex") ?: -1)
                     }
                     val result = p.sendCustomCommand(ProgramQueue.command, args)
                     result.addListener({
@@ -89,7 +98,6 @@ class PlaybackPlugin : Plugin() {
                     }, java.util.concurrent.Executor { task -> main.post(task) })
                     return@post
                 }
-                "play" -> { if (p.playerError != null || p.playbackState == Player.STATE_ENDED) { p.seekTo(p.currentMediaItemIndex, if (p.playbackState == Player.STATE_ENDED) 0 else p.currentPosition); p.prepare() }; p.play() }
                 "pause" -> p.pause()
                 "seek" -> p.seekTo((call.getDouble("positionMs") ?: 0.0).toLong().coerceAtLeast(0))
                 "shuffle" -> {

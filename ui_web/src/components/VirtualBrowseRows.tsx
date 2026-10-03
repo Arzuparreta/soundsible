@@ -1,6 +1,7 @@
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { createSignal, onMount, onCleanup, For, Show } from 'solid-js';
 import { MusicListRowView } from './MusicListRowView';
+import { programTrack } from '../lib/program/tracks';
 import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 
@@ -27,8 +28,8 @@ export function VirtualBrowseRows(props: { tracks: Track[]; onPlay?: (index: num
     <div style={{ height: `${rows.getTotalSize()}px`, position: 'relative' }}>
       <For each={rows.getVirtualItems()}>{item => <div style={{ position: 'absolute', width: '100%', top: '0', transform: `translateY(${item.start}px)` }}>
         <Show when={props.tracks[item.index]}>{track => <MusicListRowView title={track().title} subtitle={track().artist}
-          seed={track().id} cover={trackCoverUrl(track(), 'thumb')} disabled={!props.onPlay || track().source === 'preview'}
-          onMenu={props.onMenu && track().source !== 'preview' ? event => props.onMenu?.(track(), event) : undefined}
+          seed={track().id} cover={trackCoverUrl(track(), 'thumb')} disabled={!props.onPlay || !programTrack(track())}
+          onMenu={props.onMenu && programTrack(track()) ? event => props.onMenu?.(track(), event) : undefined}
           active={props.activeId === track().id} playback onActivate={() => props.onPlay?.(item.index)} />}</Show>
       </div>}</For>
     </div>

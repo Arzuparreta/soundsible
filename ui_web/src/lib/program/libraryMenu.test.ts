@@ -11,8 +11,8 @@ it('captures the current occurrence and sends only metadata', () => {
   state = { ...initial, index: 0, queueToken: 'changed' };
   menu.actions![0].onSelect(); menu.actions![1].onSelect();
   expect(execute.mock.calls).toEqual([
-    [{ action: 'insertAfter', tracks: [track], queueToken: 'order', index: 1, key: 'second' }],
-    [{ action: 'append', tracks: [track], queueToken: 'order' }],
+    [{ action: 'insertAfter', tracks: [{ ...track, source: 'local' }], queueToken: 'order', index: 1, key: 'second' }],
+    [{ action: 'append', tracks: [{ ...track, source: 'local' }], queueToken: 'order' }],
   ]);
 });
 it('permits empty-queue insertions with no anchor', () => {
@@ -34,4 +34,9 @@ it('blocks deferred selections after an account change or during a command', () 
   state = { ...initial, generation: 2 }; menu.actions![1].onSelect();
   state = initial; pending = true; menu.actions![0].onSelect();
   expect(execute).not.toHaveBeenCalled();
+});
+it('allows a valid saved preview and forwards its source without external metadata', () => {
+  const execute = vi.fn(async () => {});
+  programLibraryMenu({ ...track, source: 'preview', id: 'A1111111111', cover: 'https://external.invalid' }, () => initial, () => false, execute).actions![1].onSelect();
+  expect(execute).toHaveBeenCalledWith({ action: 'append', queueToken: 'order', tracks: [{ ...track, id: 'A1111111111', source: 'preview' }] });
 });

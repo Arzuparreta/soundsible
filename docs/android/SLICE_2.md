@@ -344,3 +344,70 @@ rechaza queueToken obsoleto. Append posterior tiene nuevas keys y permanece
 pausado con modos por defecto; activar una fila explícitamente vuelve a reproducir.
 Una respuesta del stream retrasado no resucita el programa después de cerrar.
 La biblioteca se revalida por red al restaurar API: no es persistencia offline.
+
+
+## S2i: previews guardados por el proxy del motor
+
+El contrato de `ProgramTrack` exige `source: local | preview`. JS sólo envía id,
+título, artista y álbum. La misma conversión controla filas, menús y colas mixtas;
+excluye podcasts y previews sin id ASCII válido de once caracteres. El id preview
+es `Track.id`, aunque exista un `youtube_id` distinto. Filtrar entradas no
+reproducibles conserva el índice seleccionado y los duplicados; cada ocurrencia
+recibe un UUID nuevo. Nativo rechaza todo el lote antes de modificar el programa
+si una fuente/id/metadata no es válida.
+
+Media3 construye `/api/static/stream/<id>` o `/api/preview/stream/<id>`. Los
+marcadores internos de generación y ocurrencia se retiran antes del HTTP.
+EngineConnection mantiene cookie, origen seleccionado, HTTP privado, TLS
+verificado y rechazo de redirects. No se usa stream-url ni se recibe una URL
+externa del puente. Previews tienen placeholder en programa, cola y metadata
+nativa; las miniaturas de biblioteca conservan su transporte seguro.
+
+El GET de audio inicia o comparte la adquisición del motor. No hay prefetch de
+bytes ni descargas especulativas Android. PreviewProgram pertenece al servicio,
+consulta status del preview actual cada segundo con una sola petición en vuelo
+y publica extras de MediaSession asociados a generación/UUID. El snapshot añade
+`preview` (o null), con `key`, `preparation`, `retryAttempt`, `retryPending` y
+`retryNotBeforeMs`. Preparation conserva los estados/campos del API existente;
+un dato ausente es desconocido. Poll termina en ready/unavailable/error/cambio/cierre; cold sólo se sondea
+mientras el player sigue buffering. Su
+fallo de red no reemplaza el error del audio; 401 pausa y expone sesión expirada.
+`playing` siempre es ExoPlayer.isPlaying, nunca una respuesta queued/streamable.
+
+Sólo los previews 429/503 tienen retry automático: dos reintentos como máximo,
+iniciados en los treinta segundos tras el primer fallo. Retry-After admite
+segundos y fecha HTTP; sin valor válido las esperas son dos y cuatro segundos.
+Una espera superior al presupuesto termina en error recuperable conservando su
+cooldown. El presupuesto pertenece al intento explícito/UUID/generación y no se
+renueva por rangos o seeks. Retry manual renueva el presupuesto sólo tras el
+cooldown; Play/Prepare y seleccionar la misma ocurrencia fallida no pueden
+saltárselo. Archivos locales conservan la política S2f. Pausa no fuerza Play al
+llegar bytes ni al completar un retry.
+
+Cambiar/retirar ocurrencia, reemplazar cola, cerrar programa, cambiar cuenta o
+destruir servicio cancela interés, sondeo, carga y espera propios. Mover el mismo
+UUID conserva el intento. Las llamadas de audio se registran hasta callEnd o
+callFailed, incluyendo cuerpos abiertos que ya no aparecen en el dispatcher de
+OkHttp. La cancelación no invoca cancel global por vídeo: cerrar el lector deja
+al motor cancelar únicamente cuando no queda otro lector/interés de prefetch.
+Recrear/destruir Activity libera el controlador, sin terminar el programa.
+
+El fixture extiende el motor desechable con proveedor localhost, AAC/MP4
+con índice inicial, MP4 fragmentado y WebM/Opus sintetizados por ffmpeg. Sólo sustituye resolución; rutas,
+cache, verificación de decodificación, prefix/rate y Range son los reales. Nunca
+resuelve fuera del fixture. Los controles de fallo/progreso siguen aislados en
+localhost. La prueba Python comprueba cache/rangos y que cerrar un lector no
+corta a otro; instrumentación comprueba el recorrido empaquetado HTTP/HTTPS.
+Proveedor vivo, teléfono, escucha física, Bluetooth/coche/lockscreen físico y
+resumption tras process death siguen sin aceptación. Cache del motor no es
+cache offline Android. Ver evidencia y traspaso antes de continuar.
+
+
+En respuestas `X-Soundsible-Playback-Cache: progressive`, PreviewExtractors
+construye el extractor MP4 fragmentado sin la lectura inicial MFRA al final del
+archivo. La fábrica por defecto de Media3 activa ese flag incluso con flags cero;
+se comprobó en el bytecode de la dependencia fijada. Leer el final de un spool
+incompleto provocó timeout real en instrumentación. Para archivos completos se
+conservan extractores e índice normales; el MP4 con índice inicial conserva seek.
+El snapshot incluye `seekable` nativo y la UI desactiva seek cuando Media3 no lo
+ofrece, aunque se conozca duración. No se inventa un seek map para fragmentos.

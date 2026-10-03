@@ -1,3 +1,4 @@
+import { programTrack } from './tracks';
 import type { ActionMenuOptions } from '../../components/ActionMenu';
 import { t } from '../i18n';
 import type { Track } from '../../types/music';
@@ -7,8 +8,9 @@ import type { ProgramCommand, ProgramState } from './runtime';
 export function programLibraryMenu(track: Track, state: () => ProgramState | null, pending: () => boolean,
   execute: (command: ProgramCommand) => Promise<void>): ActionMenuOptions {
   const captured = state();
-  const disabled = !captured?.ready || pending() || captured.items.length >= 1000 || track.source === 'preview';
-  const tracks = [{ id: track.id, title: track.title, artist: track.artist, album: track.album }];
+  const candidate = programTrack(track);
+  const disabled = !captured?.ready || pending() || captured.items.length >= 1000 || !candidate;
+  const tracks = candidate ? [candidate] : [];
   const select = (action: 'append' | 'insertAfter') => {
     // A deferred sheet selection must never migrate to a different logged-in account.
     if (disabled || pending() || state()?.generation !== captured?.generation) return;

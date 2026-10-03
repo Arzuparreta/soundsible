@@ -9,7 +9,7 @@ import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
 import type { User } from '../lib/session';
 import { engine, useEngine, watchEngine } from './engine';
 import LibraryBrowser, { type BrowseSnapshot } from './LibraryBrowser';
-import { nativeProgramTransport, localProgram } from './playback';
+import { nativeProgramTransport, mixedProgram } from './playback';
 import { createProgramRuntime, type ProgramState } from '../lib/program/runtime';
 import ProgramTransport from '../components/ProgramTransport';
 import { openContextMenu, ContextMenuOutlet } from '../lib/contextMenu';
@@ -34,9 +34,9 @@ export default function AndroidStart() {
   });
   async function play(tracks: Track[], selectedIndex: number) {
     authFailureHandled = false;
-    const queue = localProgram(tracks, selectedIndex);
+    const queue = mixedProgram(tracks, selectedIndex);
     if (queue.index < 0) return;
-    await runtime.execute({ action: 'queue', index: queue.index, tracks: queue.tracks.map(({ id, title, artist, album }) => ({ id, title, artist, album })) }).catch(() => {});
+    await runtime.execute({ action: 'queue', index: queue.index, tracks: queue.tracks }).catch(() => {});
   }
   const [origin, setOrigin] = createSignal('');
   const [server, setServer] = createSignal('');

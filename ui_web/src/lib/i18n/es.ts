@@ -2,12 +2,14 @@ import type { Dict } from './en';
 
 export const es: Dict = {
   android: {
+    previewPreparing: 'Preparando canción',
+    previewRetry: 'Esperando para reintentar la canción',
     closeProgram: 'Cerrar reproductor',
     playbackInterrupted: 'Reproducción interrumpida. Se conservan cola y posición. Reintenta cuando el servidor esté disponible.',
     insertAfter: 'Añadir después de la actual',
     repeatOff: 'Desactivado',
     repeatOne: 'Una canción',
-    repeatAll: 'Toda la cola', refresh: "Actualizar", permissionDenied: "Tu cuenta no tiene permiso para acceder a este recurso.", title: 'Conecta tu Soundsible', unconfigured: 'Todavía no hay un servidor conectado.', server: "Dirección del servidor", serverHint: "HTTPS para acceso remoto; HTTP sólo en tu LAN privada o Tailscale.", connect: "Conectar", username: "Usuario", password: "Contraseña", login: "Entrar", logout: "Cerrar sesión", changeServer: "Cambiar servidor", connectFailed: "No se pudo conectar. Revisa dirección, red y certificado del servidor.", wrongLogin: "Usuario o contraseña incorrectos.", browseOnly: 'Build de desarrollo: canciones locales con audio nativo. Previews y otros modos pendientes.', seek: 'Posición de reproducción', eventsPending: "Actualizaciones desconectadas. Puedes reintentar o refrescar la biblioteca." },
+    repeatAll: 'Toda la cola', refresh: "Actualizar", permissionDenied: "Tu cuenta no tiene permiso para acceder a este recurso.", title: 'Conecta tu Soundsible', unconfigured: 'Todavía no hay un servidor conectado.', server: "Dirección del servidor", serverHint: "HTTPS para acceso remoto; HTTP sólo en tu LAN privada o Tailscale.", connect: "Conectar", username: "Usuario", password: "Contraseña", login: "Entrar", logout: "Cerrar sesión", changeServer: "Cambiar servidor", connectFailed: "No se pudo conectar. Revisa dirección, red y certificado del servidor.", wrongLogin: "Usuario o contraseña incorrectos.", browseOnly: 'Build de desarrollo: canciones locales y guardadas con audio nativo. Otros modos pendientes.', seek: 'Posición de reproducción', eventsPending: "Actualizaciones desconectadas. Puedes reintentar o refrescar la biblioteca." },
   savedEntities: {
     albums: "Álbumes guardados",
     artists: "Artistas guardados",

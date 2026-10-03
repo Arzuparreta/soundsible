@@ -572,7 +572,7 @@ y [cerrado con API inaccesible](evidence/close-unreachable-s2h-api36.png), todo 
 El JSON registra el build dirty sobre el commit anterior; después de commit se
 regenera el APK normal limpio con su source_revision. No release/alpha.
 
-### Siguiente corte propuesto: S2i, preview nativo por el proxy del motor
+### Propuesta de S2i (implementada a continuación)
 
 Primer vertical para canciones guardadas que hoy se muestran pero no se reproducen.
 Auditar primero las fuentes/ids reales de Track/source=preview y el contrato actual
@@ -591,3 +591,65 @@ suposición. Probar ruta real del motor con proveedor sintético aislado, cache 
 motor completa/progresiva, duplicates/mezcla, Activity/background/cierre y HTTP/
 HTTPS verificado. Fixtures no prueban proveedor vivo ni escucha física. Ningún
 cache temporal del motor supone offline Android aprobado; la decisión sigue abierta.
+
+
+### Entrega S2i: previews guardados en el programa nativo
+
+La biblioteca permite reproducir canciones guardadas con source preview y mezclar
+locales/previews sin perder índice ni UUID de ocurrencia. El descriptor compartido
+sólo admite metadata e id; el servicio construye el proxy del motor y conserva
+cookie/origen/TLS en nativo. No solicita stream-url ni envía credenciales al
+proveedor. Programa, cola y metadata Android usan placeholder para preview.
+[Contrato S2i](SLICE_2.md#s2i-previews-guardados-por-el-proxy-del-motor).
+
+El servicio observa preparación real del preview actual con una petición en vuelo,
+extras asociados a generación/UUID y estado playing exclusivamente de Media3.
+Detiene sondeo al llegar ready/unavailable, error, cambio o cierre; cold sólo se
+sondea mientras el player sigue buffering. Cancelar retira únicamente lectores y
+esperas propios. Audio registra cuerpos abiertos hasta callEnd/callFailed; Activity
+recreation no cancela el programa. Seek refleja isCurrentMediaItemSeekable.
+
+429/503 permiten dos retries iniciados dentro de treinta segundos del primer
+fallo, respetando Retry-After y conservando intención de pausa y cola. Agotado el
+presupuesto aparece Retry explícito, deshabilitado durante cooldown. Play pasa por
+el custom command del servicio con índice/UUID/token/generación; las guardas de
+Prepare/Play y selección de la misma ocurrencia también impiden saltar cooldown.
+Los archivos locales conservan la política previa.
+
+La instrumentación usa rutas/cache/Range reales del motor y un proveedor localhost
+con MP4 AAC indexado, MP4 fragmentado y WebM Opus sintéticos. Se corrigió una lectura
+MFRA inicial al final del spool progresivo que bloqueaba el extractor fragmentado:
+sólo las respuestas progressive usan ese extractor sin lectura de cola; archivos
+completos conservan el índice normal. También se corrigió Play que inicialmente
+preparaba antes de validar cooldown. Ambas regresiones quedan cubiertas. Los
+ajustes de helpers de arranque/recreación y UUID y la espera de commit de cache
+conservan las assertions: EOF del lector no significa commit terminado.
+
+### Validación S2i
+
+Typecheck/Vitest: 1.355 tests, 146 archivos. Retry nativo: dos tests unitarios.
+Python: 57 tests de rutas/cache/fixture, incluido motor real y lectores compartidos.
+APK/test APK/lint e integración API 36: 13 tests, cero fallos/errores/omitidos,
+con HTTP, HTTPS verificado y passwordless. Fuentes congeladas en la pasada final.
+Chromium completo: 278 pasan / 66 omitidos. WebKit completo: 269 pasan / 75
+omitidos. Cero fallos; ejecución secuencial, emulador parado, WebKit con mount
+de sólo lectura y un worker. [Evidencia S2i](evidence/s2i.json).
+La integración elimina su CA temporal y reconstruye el APK normal al terminar.
+Tras commit se vuelve a generar desde HEAD limpio y se verifica source_revision;
+el JSON de evidencia registra el build de instrumentación sobre el commit anterior.
+No CI GitHub, proveedor vivo ni aceptación acústica/física ejecutados.
+
+### Siguiente corte propuesto: S2j, búsqueda y guardado explícito de canciones
+
+Auditar el contrato real de búsqueda/adquisición y Library antes de ampliar UI.
+Primer vertical acotado: buscar canciones en el motor seleccionado, distinguir
+resultados locales/previews, guardar explícitamente una canción y reproducirla por
+el mismo programa nativo. Reutilizar descriptor sanitizado, identidad de ocurrencia,
+proxy y guardas S2i; no introducir otro player ni adquisición especulativa.
+Definir estados vacíos, búsqueda cancelable y respuestas obsoletas por consulta y
+generación; comprobar permisos/errores y que guardar no confunda bookmark con
+adquisición local. Validar UI empaquetada y rutas reales con fixture sintético,
+HTTP/HTTPS, duplicados y cambio de cuenta. Antes de implementarlo, acordar el
+alcance exacto y revisar paridad pendiente en PORT_PLAN.md. Podcasts/radio, DJ/Live,
+Android Auto, recuperación tras process death y decisión offline siguen abiertos.
+S2i es un artefacto de desarrollo, no una release ni una alpha pública.

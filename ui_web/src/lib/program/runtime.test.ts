@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createProgramRuntime, ProgramSessionChanged, type ProgramState, type ProgramTransport } from './runtime';
-const state = (generation = 1, sequence = 1): ProgramState => ({ generation, sequence, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 2, index: 0, id: 'a', title: 'a', artist: '', items: [{ key: 'first', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a'], positionMs: 0, durationMs: 1000, error: 0, errorStatus: 0, shuffle: false, repeat: 0, hasNext: false, hasPrevious: false });
+const state = (generation = 1, sequence = 1): ProgramState => ({ generation, sequence, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 2, index: 0, id: 'a', title: 'a', artist: '', items: [{ source: 'local', key: 'first', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a'], positionMs: 0, durationMs: 1000, error: 0, errorStatus: 0, shuffle: false, repeat: 0, hasNext: false, hasPrevious: false });
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 function fixture(overrides: Partial<ProgramTransport> = {}) {
   let event!: (state: ProgramState) => void;
