@@ -27,7 +27,7 @@ export default function AndroidStart() {
   const runtime = createProgramRuntime(nativeProgramTransport, {
     state: state => {
       setProgram(state);
-      if (state?.errorStatus === 401 && !authFailureHandled) { authFailureHandled = true; void sync(); }
+      if (state?.errorStatus === 401 && !authFailureHandled) { authFailureHandled = true; void expireSession(); }
     },
     pending: setProgramPending,
     error: () => setError(t('common.loadFailed')),
@@ -128,9 +128,23 @@ export default function AndroidStart() {
     });
     if (current !== epoch) stop(); else cancelEvents = stop;
   }
-  async function refresh() {
+  async function revalidateIdentity() {
     const current = epoch;
-    await sync();
+    setBusy(true); setError('');
+    try {
+      await resolveIdentity();
+      if (current === epoch) setStale(false);
+    } catch (failure) {
+      if (current !== epoch) return;
+      if (failure instanceof ApiError && failure.status === 401) await expireSession();
+      else if (failure instanceof ApiError && failure.status === 403) { setError(t('android.permissionDenied')); setStale(false); }
+      else setStale(true);
+    } finally { if (current === epoch) setBusy(false); }
+  }
+  async function refresh() {
+    if (busy()) return;
+    const current = epoch;
+    if (user()) await sync(); else await revalidateIdentity();
     if (current === epoch && user() && !eventsOnline()) {
       try { await attachEvents(current); } catch { if (current === epoch) setEventsOnline(false); }
     }
@@ -172,16 +186,16 @@ export default function AndroidStart() {
   }
   onMount(() => {
     setUnauthorizedHandler(() => { void expireSession(); });
-    void engine.state().then(async state => {
+    void engine.state().then(state => {
       generation = state.generation; useEngine(state); void runtime.bind(generation); setOrigin(state.origin); setServer(state.origin);
-      if (state.origin) { setBusy(true); try { await resolveIdentity(); } catch { setError(t('android.connectFailed')); } finally { setBusy(false); } }
+      if (state.origin) void revalidateIdentity();
     }).finally(() => window.__SOUNDSIBLE_BOOT__?.complete());
     const interval = setInterval(() => { if (user() && document.visibilityState === 'visible') void sync(); }, 30000);
     const resume = () => { if (user() && document.visibilityState === 'visible') void sync(); };
     document.addEventListener('visibilitychange', resume);
     onCleanup(() => { clearInterval(interval); document.removeEventListener('visibilitychange', resume); reset(false); runtime.unbind(); setUnauthorizedHandler(null); });
   });
-  return <main class={user() ? styles.connected : styles.start} data-testid={server() ? 'android-configured' : 'android-unconfigured'}>
+  return <main class={user() || program()?.queue.length ? styles.connected : styles.start} data-testid={server() ? 'android-configured' : 'android-unconfigured'}>
     <Show when={user()} fallback={<><img src={logo} alt="" width="64" height="64" /><h1>{t('android.title')}</h1></>}>
       {account => <header><h1>{t('library.title')}</h1><p>{account().display_name} · {server()}</p>
         <button type="button" disabled={busy()} onClick={() => void refresh()}>{t('android.refresh')}</button>
@@ -201,10 +215,12 @@ export default function AndroidStart() {
     </Show>
     <Show when={error()}><p role="alert">{error()}</p></Show>
     <Show when={busy()}><p role="status">{t('common.loading')}</p></Show>
+    <Show when={stale() && !user()}><p role="status">{t('library.unreachable')} <button disabled={busy()} onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
+    <Show when={!user() && server() && !needsLogin()}><button disabled={busy()} onClick={() => void refresh()}>{t('android.refresh')}</button><button disabled={busy()} onClick={() => void leave(false)}>{t('android.logout')}</button><button disabled={busy()} onClick={() => void leave(true)}>{t('android.changeServer')}</button></Show>
+    <Show when={program()?.queue.length ? program() : null}>{state => <><ProgramTransport state={state()} pending={programPending()} command={runtime.execute} /><ProgramQueue state={state()} pending={programPending()} command={runtime.execute} /></>}</Show>
     <Show when={user()}>
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
       <Show when={!eventsOnline()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
-      <Show when={program()?.queue.length ? program() : null}>{state => <><ProgramTransport state={state()} pending={programPending()} command={runtime.execute} /><ProgramQueue state={state()} pending={programPending()} command={runtime.execute} /></>}</Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
         {data => <LibraryBrowser snapshot={data()} revision={revision()} activeId={program()?.id} onPlay={play} onMenu={(track, event) => openContextMenu(programLibraryMenu(track, program, programPending, runtime.execute), event)} />}
       </Show>

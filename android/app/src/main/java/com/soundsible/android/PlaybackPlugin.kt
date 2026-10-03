@@ -42,6 +42,7 @@ class PlaybackPlugin : Plugin() {
         return JSObject().put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
             .put("items", items).put("queueToken", if (p != null) ProgramQueue.token(p) else "")
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
+            .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", PlaybackRecovery.kind(p?.playerError))
             .put("shuffle", p?.shuffleModeEnabled ?: false).put("repeat", p?.repeatMode ?: Player.REPEAT_MODE_OFF)
             .put("hasNext", p?.hasNextMediaItem() ?: false).put("hasPrevious", p?.hasPreviousMediaItem() ?: false)
             .put("state", p?.playbackState ?: Player.STATE_IDLE).put("index", p?.currentMediaItemIndex ?: -1)
@@ -70,7 +71,7 @@ class PlaybackPlugin : Plugin() {
                     require(index in items.indices)
                     p.setMediaItems(items, index, 0); p.prepare(); p.play()
                 }
-                "select", "move", "remove", "append", "insertAfter" -> {
+                "select", "move", "remove", "append", "insertAfter", "retry" -> {
                     val args = Bundle().apply {
                         putLong("generation", connection.generation)
                         putString("action", call.getString("action")); putString("queueToken", call.getString("queueToken")); putString("key", call.getString("key"))

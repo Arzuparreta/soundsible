@@ -1,6 +1,7 @@
 /** Single-output async contract. Independent of Solid, Capacitor and the Web Audio mixer. */
 export interface ProgramState {
   generation: number; sequence: number; ready: boolean; playing: boolean;
+  playWhenReady: boolean; errorKind: '' | 'connection' | 'server' | 'auth' | 'permission' | 'source';
   state: number; index: number; id: string; title: string; artist: string;
   items: ProgramOccurrence[]; queueToken: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
@@ -12,7 +13,7 @@ export type ProgramCommand =
   | { action: 'seek'; positionMs: number }
   | { action: 'shuffle'; enabled: boolean }
   | { action: 'repeat'; mode: 0 | 1 | 2 }
-  | { action: 'select' | 'remove'; index: number; key: string; queueToken: string }
+  | { action: 'select' | 'remove' | 'retry'; index: number; key: string; queueToken: string }
   | { action: 'move'; index: number; toIndex: number; key: string; queueToken: string }
   | { action: 'append'; tracks: ProgramTrack[]; queueToken: string }
   | { action: 'insertAfter'; tracks: ProgramTrack[]; queueToken: string; index: number; key: string }

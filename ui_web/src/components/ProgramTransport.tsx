@@ -14,7 +14,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
   return <section class={styles.program} data-testid="android-program" aria-label={t('nowPlaying.nowPlayingSection')} aria-busy={props.pending}>
     <p>{props.state.title || props.state.id}<br /><small>{props.state.artist}</small></p>
     <button disabled={disabled() || !props.state.hasPrevious} onClick={() => void run({ action: 'previous' })}>{t('common.prev')}</button>
-    <button disabled={disabled()} onClick={() => void run({ action: props.state.playing ? 'pause' : 'play' })}>{props.state.playing ? t('common.pause') : t('common.play')}</button>
+    <button disabled={disabled()} onClick={() => void run({ action: props.state.playWhenReady ? 'pause' : 'play' })}>{props.state.playWhenReady ? t('common.pause') : t('common.play')}</button>
     <button disabled={disabled() || !props.state.hasNext} onClick={() => void run({ action: 'next' })}>{t('common.next')}</button>
     <button disabled={disabled()} aria-pressed={props.state.shuffle} onClick={() => void run({ action: 'shuffle', enabled: !props.state.shuffle })}>{t('nowPlaying.shuffle')}</button>
     <label>{t('nowPlaying.repeat')} <select aria-label={t('nowPlaying.repeat')} value={props.state.repeat} disabled={disabled()} onChange={event => void run({ action: 'repeat', mode: Number(event.currentTarget.value) as 0 | 1 | 2 })}>
@@ -22,6 +22,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
     </select></label>
     <input aria-label={t('android.seek')} disabled={disabled() || props.state.durationMs <= 0} type="range" min="0" max={props.state.durationMs || 0} value={seeking() ?? props.state.positionMs} step="1000" aria-valuetext={clockTime((seeking() ?? props.state.positionMs) / 1000)} onInput={event => setSeeking(Number(event.currentTarget.value))} onChange={event => { const target = Number(event.currentTarget.value); void run({ action: 'seek', positionMs: target }).finally(() => setSeeking(null)); }} />
     <small>{clockTime(props.state.positionMs / 1000)} / {clockTime(props.state.durationMs / 1000)}</small>
-    <Show when={props.state.error}><p role="alert">{t(props.state.errorStatus === 403 ? 'android.permissionDenied' : 'common.loadFailed')}</p></Show>
+    <Show when={!props.state.error && props.state.state === 2}><p role="status">{t('common.loading')}</p></Show>
+    <Show when={props.state.error}><p role="alert">{t(props.state.errorKind === 'permission' || props.state.errorStatus === 403 ? 'android.permissionDenied' : props.state.errorKind === 'connection' || props.state.errorKind === 'server' ? 'android.playbackInterrupted' : 'common.loadFailed')}</p><Show when={props.state.errorKind === 'connection' || props.state.errorKind === 'server'}><button data-program-retry disabled={disabled()} onClick={() => void run({ action: 'retry', index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>{t('common.retry')}</button></Show></Show>
   </section>;
 }

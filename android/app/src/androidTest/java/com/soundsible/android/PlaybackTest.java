@@ -39,6 +39,28 @@ public class PlaybackTest {
         try (okhttp3.Response response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/__fixture/audio-failure")
             .header("X-Android-Fixture", "isolated").post(okhttp3.RequestBody.create("{\"account\":\"member\",\"status\":" + status + "}", okhttp3.MediaType.get("application/json"))).build()).execute()) { assertEquals(200, response.code()); }
     }
+    private void connectionFailure(EngineConnection connection, String origin, String action, boolean enabled) throws Exception {
+        try (okhttp3.Response response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/__fixture/" + action)
+            .header("X-Android-Fixture", "isolated").post(okhttp3.RequestBody.create("{\"account\":\"member\",\"enabled\":" + enabled + "}", okhttp3.MediaType.get("application/json"))).build()).execute()) { assertEquals(200, response.code()); }
+    }
+    private void apiPermissionFailure(EngineConnection connection, String origin) throws Exception {
+        try (okhttp3.Response response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/__fixture/connection-failure")
+            .header("X-Android-Fixture", "isolated").post(okhttp3.RequestBody.create("{\"enabled\":true,\"status\":403}", okhttp3.MediaType.get("application/json"))).build()).execute()) { assertEquals(200, response.code()); }
+    }
+    private int streamRequests(EngineConnection connection, String origin) throws Exception {
+        try (okhttp3.Response response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/api/android-fixture/audio-stats")
+            .header("Cookie", connection.cookieHeader(connection.getGeneration())).build()).execute()) { assertEquals(200, response.code()); return new JSONObject(response.body().string()).getInt("total"); }
+    }
+    private void awaitPlaying(MediaController controller) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        java.util.concurrent.atomic.AtomicBoolean playing = new java.util.concurrent.atomic.AtomicBoolean();
+        while (System.nanoTime() < deadline) {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> playing.set(controller.isPlaying()));
+            if (playing.get()) return;
+            Thread.sleep(100);
+        }
+        fail("Native playback did not become ready and playing");
+    }
     private void runProgram(String origin) throws Exception {
         assumeNotNull(origin);
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -160,6 +182,7 @@ public class PlaybackTest {
                      java.io.InputStream output = new android.os.ParcelFileDescriptor.AutoCloseInputStream(capture)) { while (output.read() != -1) {} }
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=program-queue] [data-row-main]')).find(b=>b.textContent==='third occurrence').click()");
                 waitFor(web, scenario, "Array.from(document.querySelectorAll('[data-testid=program-queue] [data-row-main]')).some(b=>b.textContent==='third occurrence' && b.getAttribute('aria-current')==='true') && document.querySelector('[data-testid=android-program]').textContent.includes('Pause') && !document.querySelector('[data-testid=program-queue] [data-queue-action=remove]').disabled");
+                awaitPlaying(controller);
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(1, controller.getCurrentMediaItemIndex()); assertEquals("third occurrence", controller.getMediaMetadata().title.toString()); assertTrue(controller.getCurrentPosition() < 5000); controller.pause(); controller.seekTo(17000); });
                 web.evaluate(scenario, "document.querySelector('[data-testid=program-queue] [data-queue-action=remove]').click()");
                 waitFor(web, scenario, "document.querySelectorAll('[data-testid=program-queue] [data-row-main]').length===2 && !document.querySelector('[data-testid=program-queue] [data-queue-action=remove]').disabled");
@@ -220,22 +243,75 @@ public class PlaybackTest {
                 web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'stop'}).then(()=>window.Capacitor.Plugins.SoundsiblePlayback.state()).then(s=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'insertAfter',index:-1,key:'',queueToken:s.queueToken,tracks:[{id:'member-track',title:'empty after'}]}))");
                 waitFor(web, scenario, "document.querySelectorAll('[data-testid=program-queue] [data-row-main]').length===1 && document.querySelector('[data-testid=android-program]').textContent.includes('empty after')");
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(0, controller.getCurrentMediaItemIndex()); assertFalse(controller.getPlayWhenReady()); assertTrue(controller.getCurrentPosition() < 1000); });
+                // S2f: actual truncated HTTP body -> retained paused program -> Activity recreation while API unavailable.
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'queue',tracks:[{id:'member-track',title:'recover first'},{id:'member-track',title:'recover current'},{id:'member-track',title:'recover last'}],index:1}).then(()=>window.__recoveryStarted=true)");
+                waitFor(web, scenario, "window.__recoveryStarted===true && document.querySelector('[data-testid=android-program]').textContent.includes('Pause')");
+                awaitPlaying(controller);
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> controller.pause());
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__recoveryBefore=s)");
+                waitFor(web, scenario, "window.__recoveryBefore?.items.length===3");
+                final AtomicReference<String> recoveryToken = new AtomicReference<>();
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> recoveryToken.set(ProgramQueue.INSTANCE.token(controller)));
+                connectionFailure(connection, origin, "stream-cut", true);
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> controller.seekTo(540000));
+                waitFor(web, scenario, "!!document.querySelector('[data-program-retry]') && document.querySelector('[data-testid=android-program]').textContent.includes('Playback interrupted')");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertFalse(controller.getPlayWhenReady()); assertEquals(1, controller.getCurrentMediaItemIndex()); assertEquals(540000, controller.getCurrentPosition()); assertEquals(recoveryToken.get(), ProgramQueue.INSTANCE.token(controller)); });
+                int failedRequests = streamRequests(connection, origin);
+                Thread.sleep(1200);
+                assertEquals("No background retry while failed", failedRequests, streamRequests(connection, origin));
+                connectionFailure(connection, origin, "connection-failure", true);
+                scenario.recreate();
+                waitFor(web, scenario, "!!document.querySelector('[data-program-retry]') && document.querySelector('[data-testid=android-program]').textContent.includes('recover current') && document.body.innerText.includes(\"Couldn't reach your station\") && !document.querySelector('input[type=password]')");
+                web.evaluate(scenario, "document.querySelector('[data-testid=android-program]').scrollIntoView({block:'start',behavior:'instant'});window.__recoveryPainted=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__recoveryPainted=true))");
+                waitFor(web, scenario, "window.__recoveryPainted===true");
+                try (android.os.ParcelFileDescriptor capture = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/soundsible-s2f-recovery.png");
+                     java.io.InputStream output = new android.os.ParcelFileDescriptor.AutoCloseInputStream(capture)) { while (output.read() != -1) {} }
+                web.evaluate(scenario, "window.__recoveryGeometry={width:document.querySelector('[data-testid=program-queue]').getBoundingClientRect().width,viewport:innerWidth,available:document.querySelector('main').clientWidth-parseFloat(getComputedStyle(document.querySelector('main')).paddingLeft)-parseFloat(getComputedStyle(document.querySelector('main')).paddingRight),retryBottom:document.querySelector('[data-program-retry]').getBoundingClientRect().bottom,height:innerHeight,mainScroll:document.querySelector('main').scrollTop}");
+                assertEquals("Recovery geometry: " + web.evaluate(scenario, "JSON.stringify(window.__recoveryGeometry)"), "true", web.evaluate(scenario, "Math.abs(window.__recoveryGeometry.width-window.__recoveryGeometry.available)<=1 && window.__recoveryGeometry.retryBottom<=window.__recoveryGeometry.height"));
+                apiPermissionFailure(connection, origin);
+                scenario.recreate();
+                waitFor(web, scenario, "document.body.innerText.includes('Your account cannot access this resource.') && !document.body.innerText.includes(\"Couldn't reach your station\") && !document.querySelector('input[type=password]') && !!document.querySelector('[data-testid=android-program]')");
+                connectionFailure(connection, origin, "stream-cut", false);
+                connectionFailure(connection, origin, "connection-failure", false);
+                web.evaluate(scenario, "document.querySelector('[data-program-retry]').click()");
+                waitFor(web, scenario, "!document.querySelector('[data-program-retry]') && document.querySelector('[data-testid=android-program]').textContent.includes('9:00')");
+                web.evaluate(scenario, "window.__recovered=false;window.__recoveredTimer=setInterval(()=>window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>{if(s.state===3){window.__recovered=true;clearInterval(window.__recoveredTimer)}}),100)");
+                waitFor(web, scenario, "window.__recovered===true");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertFalse(controller.getPlayWhenReady()); assertEquals(540000, controller.getCurrentPosition()); assertEquals(recoveryToken.get(), ProgramQueue.INSTANCE.token(controller)); assertTrue(controller.getShuffleModeEnabled()); assertEquals(Player.REPEAT_MODE_ALL, controller.getRepeatMode()); });
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Refresh').click()");
+                waitFor(web, scenario, "!!document.querySelector('[data-testid=android-library]') && !document.querySelector('input[type=password]')");
+
+                // Recovery with a retained Play intention resumes only on explicit retry.
+                connectionFailure(connection, origin, "stream-cut", true);
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { controller.play(); controller.seekTo(420000); });
+                waitFor(web, scenario, "!!document.querySelector('[data-program-retry]') && document.querySelector('[data-testid=android-program]').textContent.includes('Pause')");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertTrue(controller.getPlayWhenReady()); assertFalse(controller.isPlaying()); assertEquals(recoveryToken.get(), ProgramQueue.INSTANCE.token(controller)); });
+                connectionFailure(connection, origin, "stream-cut", false);
+                web.evaluate(scenario, "document.querySelector('[data-program-retry]').click();window.__playingRecovered=false;window.__playingTimer=setInterval(()=>window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>{if(s.playing){window.__playingRecovered=true;clearInterval(window.__playingTimer)}}),100)");
+                waitFor(web, scenario, "window.__playingRecovered===true");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(1, controller.getCurrentMediaItemIndex()); assertEquals(recoveryToken.get(), ProgramQueue.INSTANCE.token(controller)); assertTrue(controller.getCurrentPosition() >= 420000 && controller.getCurrentPosition() < 425000); controller.pause(); });
                 // A new source failure is visible, and explicit play retries the same position/queue.
                 audioFailure(connection, origin, 503);
                 web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'queue',tracks:[{id:'member-track',title:'retry',artist:'member'}],index:0})");
                 waitFor(web, scenario, "!!document.querySelector('[data-testid=android-program] [role=alert]')");
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertFalse(controller.isPlaying()); assertEquals(1, controller.getMediaItemCount()); });
                 audioFailure(connection, origin, 0);
-                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-program] button')).find(b=>b.textContent==='Play').click()");
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-program] button')).find(b=>b.matches('[data-program-retry]')).click()");
                 waitFor(web, scenario, "Array.from(document.querySelectorAll('[data-testid=android-program] button')).some(b=>b.textContent==='Pause')");
                 audioFailure(connection, origin, 403);
                 web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'queue',tracks:[{id:'member-track',title:'denied',artist:'member'}],index:0})");
                 waitFor(web, scenario, "document.body.innerText.includes('Your account cannot access this resource.')");
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> assertFalse(controller.isPlaying()));
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'retry',queueToken:s.queueToken,index:s.index,key:s.items[s.index].key})).then(()=>window.__permissionRetryRejected=false,()=>window.__permissionRetryRejected=true)");
+                waitFor(web, scenario, "window.__permissionRetryRejected===true && !document.querySelector('[data-program-retry]')");
                 audioFailure(connection, origin, 0);
                 // Revoke the real session while a new audio source is in flight. 401 must leave login, not a playing queue.
                 try (okhttp3.Response response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/__fixture/revoke")
                     .header("X-Android-Fixture", "isolated").post(okhttp3.RequestBody.create("{\"account\":\"member\"}", okhttp3.MediaType.get("application/json"))).build()).execute()) { assertEquals(200, response.code()); }
+                connectionFailure(connection, origin, "connection-failure", true);
+                scenario.recreate();
+                waitFor(web, scenario, "document.body.innerText.includes(\"Couldn't reach your station\") && !document.querySelector('input[type=password]') && !!document.querySelector('[data-testid=android-program]')");
+                connectionFailure(connection, origin, "connection-failure", false);
                 web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'queue',tracks:[{id:'member-track',title:'revoked',artist:'member'}],index:0})");
                 waitFor(web, scenario, "!!document.querySelector('input[type=password]') && !document.querySelector('[data-testid=android-program]')");
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertFalse(controller.isPlaying()); assertEquals(0, controller.getMediaItemCount()); });

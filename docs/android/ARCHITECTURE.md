@@ -227,3 +227,14 @@ menú abierto antes de una transición OS. La selección diferida no cruza cuent
 No hay reconstrucción del programa ni autoplay al llenar una cola vacía.
 El menú y sus outlets reutilizan la presentación compartida sin stores de mezcla.
 [Contrato y semántica shuffle](SLICE_2.md#s2e-añadir-desde-biblioteca-y-colecciones).
+
+### Recuperación explícita del programa de S2f
+
+playing e intención playWhenReady son estados distintos del player. El error se
+clasifica nativamente; retry usa el custom command restringido al UID y guards de
+época/orden/ocurrencia, validando también el error actual del servicio. prepare
+conserva el programa y respeta la intención actual sin reconstruir fuentes.
+Audio no reintenta de fondo ni se reanuda por una señal genérica de red.
+La UI puede observar el servicio durante fallo de revalidación de identidad sin
+inventar una cuenta autenticada. Un 401 limpia también ese estado; un 403 no se
+convierte en logout. [Contrato S2f](SLICE_2.md#s2f-recuperación-explícita-de-conexión).

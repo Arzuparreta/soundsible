@@ -170,9 +170,8 @@ continúa sin decisión y no se implementa aquí. No alpha.
 
 ## Siguiente tarea concreta
 
-Continuar con S2e: acciones NORMAL de biblioteca para poner después/añadir a la
-cola sin sustituir el programa actual, ampliando el contrato asíncrono y la
-validación nativa. Ver la propuesta al final de este traspaso y [S2](SLICE_2.md).
+Continuar según el último corte propuesto al final de este archivo. S2e y S2f
+ya cubren inserción de biblioteca y recuperación explícita del programa local. Ver la propuesta al final de este traspaso y [S2](SLICE_2.md).
 Después adaptar rutas/acciones completas antes de montar AuthenticatedPlayer o
 retirar LibraryBrowser. Fuentes previews/podcasts/resume/±15s/radio, artwork y
 aceptación phone/Auto mantienen sus gates. No introducir un segundo dueño Web Audio.
@@ -373,3 +372,71 @@ HTTP/HTTPS y recreación mientras está desconectado, sin convertirlo en offline
 caché de audio. Auditar primero el comportamiento actual de Media3 y del datasource;
 no añadir retry automático ilimitado ni saltar certificados. Adquisición/preview,
 rutas completas, podcasts/radio/artwork/DJ/Live/Android Auto y offline siguen aparte.
+
+### Entrega S2f: recuperación explícita del programa
+
+El snapshot separa playing de intención playWhenReady y clasifica errores nativos.
+Retry sólo para conexión/servidor, con generación/huella/key/index validados contra
+el error y la ocurrencia actuales del servicio; prepare conserva la cola y la
+intención más reciente. Pause funciona durante buffering/fallo. No hay retry de
+audio en background (política Media3 explícita y retry transparente de OkHttp
+inactivo). Certificados/handshake, fuente, 401 y 403 no reciben ese Retry.
+
+La Activity muestra el programa del servicio aunque no pueda revalidar identidad;
+el arranque local no espera una petición remota. Refresh usa la cookie nativa sin
+reconfigurar ni sustituir el programa. Un 401 limpia también si aún no hay identidad
+resuelta; un 403 muestra permiso y permite revalidar con Refresh. Logout/cambio
+siguen disponibles y limpian antes de otra cuenta. No se persiste una biblioteca ni
+audio. Se usa la composición connected si existe programa, para mantener ancho útil
+de la cola al fallar la identidad. [Contrato S2f](SLICE_2.md#s2f-recuperación-explícita-de-conexión).
+
+Pruebas instrumentadas: lectura WAV realmente truncada tras headers, HTTP/HTTPS
+verificado, conservación de claves/índice/posición/pausa/modos, ausencia de nuevas
+peticiones de audio tras error, recreación con API 503, revalidación 403 sin logout,
+Retry con intención Play conservada y stream 401 que limpia sin identidad resuelta.
+Para lectura truncada no usar ConnectionResetError en el generator del fixture:
+el middleware del motor lo suprime como desconexión del cliente y deja una respuesta
+incompleta esperando timeout. RuntimeError posterior a headers cierra el cuerpo.
+
+Fallos corregidos durante validación: test viejo asumía que label Pause implicaba
+isPlaying; ahora puede cancelar intención en buffering, así que se espera estado
+nativo antes de seek. La primera captura mostraba cola estrecha con composición
+start al perder identidad; se usa connected y se exige ancho igual al área útil.
+La aserción inicial olvidaba la barra de scroll: ahora usa clientWidth y padding
+reales, con tolerancia de un píxel, además del Retry dentro de viewport. WebKit
+parcial se interrumpió para esta revisión; sólo su repetición completa cuenta.
+
+### Validación final de S2f
+
+Typecheck/Vitest: **1.350 tests / 146 archivos**. APK debug/test y lint correctos;
+integración API 36 **7 pasan / 0 omitidos / 0 fallos** con fixtures HTTP y HTTPS
+verificado, incluyendo lectura truncada real, intención Play/pausa, 401/403 antes
+de resolver identidad y medición del ancho útil. Captura final revisada.
+Chromium completo: **278 pasan / 66 omitidos**; WebKit completo readonly/1 worker:
+**269 pasan / 75 omitidos / 0 fallos**, después de Chromium y del trabajo APK/unit,
+con emulador detenido y fuentes congeladas. Durante/después de Chromium no cambió
+su grafo web ni hubo HMR/page reload; los cambios posteriores fueron AndroidStart
+(sólo entrada nativa), fixtures/tests y Kotlin. WebKit parcial no cuenta.
+
+Versión central, firma APK, ausencia de CA fixture/Web Audio, Ruff del fixture,
+diff y enlaces locales verificados. [Evidencia S2f](evidence/s2f.json) y
+[captura de recuperación](evidence/recovery-s2f-api36.png), sólo datos sintéticos.
+Metadata de validación conserva dirty=true/base previa; el build limpio posterior
+al commit usa ese HEAD y dirty=false. Commit: `git log --oneline
+--grep='recover native program after connection loss'`. No se atribuyen checks
+backend de otros slices, CI GitHub ni aceptación física. No release/alpha.
+
+### Siguiente corte propuesto: S2g, carátulas del programa y notificación
+
+Completar metadata/artwork de las ocurrencias nativas y de la sesión multimedia,
+reutilizando carátulas del motor. Crear la fuente de imagen desde id en nativo;
+no enviar cookies/URI de engine desde JS ni usar un fetch público para imagen privada.
+Validar generación/origen, límites de bytes/decodificación/tiempo y cancelación;
+evitar que respuestas tardías o caché muestren una cuenta anterior. Placeholder
+cuando falte cover o falle servidor; un fallo de artwork no corta audio ni exige
+login por un 404 de imagen. Probar imágenes HTTP/HTTPS reales, duplicados/cambio de
+ocurrencia, Activity recreation, logout/cambio de cuenta, imagen ausente/inválida y
+notificación/MediaSession en el emulador. Auditar primero DefaultMediaNotificationProvider
+/BitmapLoader y APIs exactas de la versión fijada. No presentar notificación como
+catálogo Android Auto ni aceptación física. UI/rutas completas, adquisición/previews,
+podcasts/radio/DJ/Live, muerte de proceso y decisión offline siguen pendientes.

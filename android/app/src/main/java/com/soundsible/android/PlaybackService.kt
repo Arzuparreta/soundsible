@@ -38,7 +38,7 @@ class PlaybackService : MediaLibraryService() {
             // Each source pins the selected account; every HTTP request revalidates it.
             val epoch = connection.generation
             val selected = connection.origin
-            val client = synchronized(this) { transport?.takeIf { it.first == epoch }?.second ?: connection.client.newBuilder().addInterceptor { chain ->
+            val client = synchronized(this) { transport?.takeIf { it.first == epoch }?.second ?: connection.client.newBuilder().retryOnConnectionFailure(false).addInterceptor { chain ->
                 if (epoch != connection.generation || selected != connection.origin || chain.request().url.queryParameter("android_generation") != epoch.toString()) throw java.io.IOException("STALE_SESSION")
                 val cookie = connection.cookieHeader(epoch) ?: throw java.io.IOException("NO_SESSION")
                 val response = chain.proceed(chain.request().newBuilder().url(chain.request().url.newBuilder().removeAllQueryParameters("android_generation").build()).header("Cookie", cookie).build())
@@ -50,7 +50,9 @@ class PlaybackService : MediaLibraryService() {
             }
             OkHttpDataSource.Factory(client).createDataSource()
         }
-        player = ExoPlayer.Builder(this).setMediaSourceFactory(DefaultMediaSourceFactory(factory))
+        player = ExoPlayer.Builder(this).setMediaSourceFactory(DefaultMediaSourceFactory(factory).setLoadErrorHandlingPolicy(object : androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(0) {
+                override fun getRetryDelayMsFor(loadErrorInfo: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long = C.TIME_UNSET
+            }))
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
         connection.resetListeners.add(reset)

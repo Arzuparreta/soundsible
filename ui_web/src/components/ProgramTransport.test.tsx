@@ -5,7 +5,7 @@ import ProgramTransport from './ProgramTransport';
 import type { ProgramState } from '../lib/program/runtime';
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 afterEach(cleanup);
-const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playing: false, state: 3, index: 1, id: 'a', title: 'Song', artist: '', items: [{ key: 'first', id: 'a', title: 'a', artist: '' }, { key: 'second', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a', 'a'], positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
+const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 3, index: 1, id: 'a', title: 'Song', artist: '', items: [{ key: 'first', id: 'a', title: 'a', artist: '' }, { key: 'second', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a', 'a'], positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
 it('uses native availability on the last occurrence and does not claim play before observation', async () => {
   const command = vi.fn(async () => {});
   const [state, setState] = createSignal(initial);
@@ -13,7 +13,7 @@ it('uses native availability on the last occurrence and does not claim play befo
   expect((screen.getByText('common.next') as HTMLButtonElement).disabled).toBe(false);
   await fireEvent.click(screen.getByText('common.play'));
   expect(command).toHaveBeenCalledWith({ action: 'play' }); expect(screen.queryByText('common.pause')).toBeNull();
-  setState({ ...initial, playing: true, hasNext: false });
+  setState({ ...initial, playing: true, playWhenReady: true, hasNext: false });
   expect(screen.getByText('common.pause')).toBeTruthy(); expect((screen.getByText('common.next') as HTMLButtonElement).disabled).toBe(true);
 });
 it('keeps a dragged seek across ticks but clears it on another occurrence of the same id', async () => {
@@ -40,4 +40,23 @@ it('keeps seek when the current occurrence moves, and clears it for a replacemen
   await fireEvent.input(slider, { target: { value: '12000' } });
   setState({ ...initial, index: 0, items: [...initial.items].reverse(), positionMs: 2000 }); expect(slider.value).toBe('12000');
   setState({ ...initial, index: 0, items: [initial.items[0]], queue: ['a'], positionMs: 0 }); expect(slider.value).toBe('0');
+});
+
+it('shows buffering without claiming audible playback and lets Pause cancel pending Play', async () => {
+  const command = vi.fn(async () => {});
+  render(() => <ProgramTransport state={{ ...initial, state: 2, playWhenReady: true }} pending={false} command={command} />);
+  expect(screen.getByRole('status').textContent).toBe('common.loading');
+  await fireEvent.click(screen.getByText('common.pause'));
+  expect(command).toHaveBeenCalledWith({ action: 'pause' });
+});
+it('retries the retained occurrence without replacing queue or implicitly playing a paused program', async () => {
+  const command = vi.fn(async () => {});
+  const [state, setState] = createSignal({ ...initial, error: 2000, errorKind: 'connection' as ProgramState['errorKind'] });
+  render(() => <ProgramTransport state={state()} pending={false} command={command} />);
+  await fireEvent.click(screen.getByText('common.retry'));
+  expect(command).toHaveBeenCalledWith({ action: 'retry', index: 1, key: 'second', queueToken: 'token' });
+  expect(screen.getByText('common.play')).toBeTruthy();
+  for (const errorKind of ['auth', 'permission', 'source'] as const) {
+    setState({ ...state(), errorKind }); expect(screen.queryByText('common.retry')).toBeNull();
+  }
 });

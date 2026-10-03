@@ -1,0 +1,97 @@
+{
+  "date": "2026-10-03",
+  "slice": "S2f explicit native program connection recovery",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "b5699a9380ec16eb68e10d93b8bcccd8b36e3477",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "unit": {
+      "passed": 1350,
+      "files": 146,
+      "command": "npm test --prefix ui_web"
+    },
+    "android": {
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "api": 36,
+      "normal_apk_and_lint": "passed",
+      "fixtures": [
+        "HTTP",
+        "verified HTTPS",
+        "passwordless HTTP"
+      ]
+    },
+    "chromium": {
+      "passed": 278,
+      "skipped": 66,
+      "failures": 0,
+      "profiles": [
+        "chromium-mobile",
+        "chromium-desktop"
+      ],
+      "workers": 2
+    },
+    "other": [
+      "central version sync",
+      "native JS excludes AudioContext/mixer runtime",
+      "normal APK excludes fixture resources",
+      "ruff check/format on fixture script",
+      "git diff --check",
+      "documentation file links resolve",
+      "apksigner verify"
+    ],
+    "webkit": {
+      "passed": 269,
+      "skipped": 75,
+      "failures": 0,
+      "profiles": [
+        "webkit-mobile",
+        "webkit-desktop"
+      ],
+      "workers": 1,
+      "readonly_mount": true
+    },
+    "browser_source_changes": "Web graph stayed unchanged during/after Chromium; subsequent changes were native-only AndroidStart/test files and Kotlin/fixture. No HMR/page reload in Vite log. Final WebKit followed Chromium and all APK/unit work, with emulator stopped and sources frozen."
+  },
+  "cases": [
+    "real WAV response truncated after headers produces recoverable transport failure",
+    "paused retry retains 540000ms, current index, occurrence keys, shuffle and repeat",
+    "no new audio requests while failed before explicit retry",
+    "Activity recreation with API 503 retains visible service program without requesting login",
+    "queue uses all available content width including scrollbar/padding",
+    "API 403 before identity resolution shows permission and retains program without logout",
+    "Refresh revalidates persisted native session without resetting queue",
+    "retained Play intention retries and resumes from 420000ms only on explicit action",
+    "native retry rejects source permission 403",
+    "actual session revocation and stream 401 clear program even before Activity identity resolved",
+    "buffering exposes cancellation of Play intention and never claims audible playback"
+  ],
+  "initial_failures": [
+    "Old presentation test inferred Pause from isPlaying; updated fixture intent and added buffering/recovery tests.",
+    "ConnectionResetError generator was suppressed by engine disconnect middleware and left response waiting for timeout; RuntimeError after headers genuinely closes HTTP body.",
+    "TLS run exposed old position test seeking before source became ready: Pause now represents intent; await native isPlaying before seek.",
+    "First disconnected capture used start composition and narrowed queue; choose connected when native program exists.",
+    "Initial width assertion missed scrollbar: compare exact main client content width less actual padding (one pixel tolerance), retaining viewport Retry check.",
+    "Partial WebKit run stopped for native geometry/identity review; only full final repetition counts."
+  ],
+  "limitations": [
+    "development surface; full NORMAL routes and acquisition pending",
+    "emulated API outage uses 503; physical signal loss and actual server shutdown not verified",
+    "verified fixture HTTPS does not prove public DNS/Tailscale/server deployment acceptance",
+    "no automatic audio recovery, process-death queue persistence or approved offline/audio-cache implementation",
+    "no acoustic physical phone/Bluetooth/headphones/car acceptance",
+    "previews/podcasts/radio/artwork/DJ/Live/Android Auto still pending",
+    "no PR/merge/public alpha or GitHub workflow run"
+  ],
+  "local_reports": [
+    "android/build/integration-results/connected/debug/",
+    "android/app/build/reports/lint-results-debug.html"
+  ],
+  "screenshot": "recovery-s2f-api36.png"
+}

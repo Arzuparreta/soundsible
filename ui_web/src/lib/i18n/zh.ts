@@ -2,6 +2,7 @@ import type { Dict } from './en';
 
 export const zh: Dict = {
   android: {
+    playbackInterrupted: '播放已中断。队列和进度已保留。服务器恢复后请重试。',
     insertAfter: '加入当前曲目之后',
     repeatOff: '关闭',
     repeatOne: '单曲',

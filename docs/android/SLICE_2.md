@@ -207,3 +207,45 @@ claves nuevas/existentes, inserción intermedia, pausa/posición/modos, append m
 suena, recreación de Activity, ancla antigua tras navegación OS, generación/orden
 antiguos y lotes inválidos/demasiado grandes sin modificación parcial. Ver
 [traspaso y resultados finales](HANDOFF.md#entrega-s2e).
+
+## S2f: recuperación explícita de conexión
+
+El snapshot distingue `playing` (audio nativo realmente en curso),
+`playWhenReady` (intención de Play) y `errorKind`: connection/server/auth/permission/
+source o vacío. La clasificación sigue la cadena de causas nativa: 401/403 tienen
+semántica propia; 408/429/5xx son recuperables; errores de lectura/conexión HTTP
+son connection. Certificados/handshake y errores de fuente no ofrecen Retry.
+No se cambian confianza TLS, routing privado, origen ni cookie.
+
+El transporte muestra buffering y permite Pause aunque todavía no haya audio.
+Muestra el error recuperable con Retry, sin derivar éxito de aceptar un comando.
+El comando `retry` captura generación, huella de cola y key/index actual; el servicio
+valida esos datos y que su error real siga siendo recuperable. Sólo hace prepare
+sobre el mismo player: conserva fuentes, claves, índice, posición y la intención
+más reciente de Play/pausa. Una pausa queda pausada tras Retry; una intención de
+Play se reanuda sólo al pedir Retry. El comando no sustituye la cola ni inicia una
+sesión nueva. No ofrece recuperación automática al volver la red.
+
+El datasource de audio desactiva el retry transparente de OkHttp. La política de
+Media3 devuelve TIME_UNSET para el delay de retry, además de mínimo cero: sólo
+cambiar el mínimo no define por sí solo todo el comportamiento de reintento.
+Referencia: [política de carga](https://developer.android.com/reference/androidx/media3/exoplayer/upstream/DefaultLoadErrorHandlingPolicy).
+Un read timeout de la conexión sigue delimitando una lectura bloqueada; no se
+impone un timeout global que cortaría canciones largas. Semántica prepare/error e
+intención: [eventos del player](https://developer.android.com/media/media3/exoplayer/listening-to-player-events).
+
+Al recrear Activity con servidor inaccesible, el programa del servicio se muestra
+sin necesitar otra respuesta de biblioteca. No se inventa identidad ni se guarda
+una biblioteca offline. Retry de conexión revalida la cuenta con su cookie nativa;
+fallos de red conservan el programa, 401 lo limpia incluso si no se había resuelto
+la identidad de esta Activity, y 403 mantiene el estado de permiso sin tratarlo como
+caída de red. Logout/cambio siguen borrando sesión antes de otra cuenta.
+
+La prueba usa una respuesta WAV truncada después de sus headers (Content-Length
+original) en el fixture aislado, no un error JS. Para recreación simula API no
+disponible con 503 y permiso denegado con 403, y luego restaura el mismo servidor HTTP/HTTPS verificado.
+Verifica posición pausada, claves/modos, ausencia de peticiones automáticas tras
+fallo, reanudación con intención Play, rechazo de Retry ante 403 y limpieza por stream
+401 aun sin identidad resuelta. El arranque local no espera esa revalidación. Sigue sin probar
+apagado real de servidor, pérdida de cobertura del teléfono ni aceptación acústica.
+No implementa caché de audio, persistencia tras process death ni offline aprobado.

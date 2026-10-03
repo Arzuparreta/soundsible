@@ -112,9 +112,13 @@ def main() -> None:
 
     stream_requests = []
     stream_failure = {}
+    stream_cut = {}
+    connection_failure = {}
 
     @app.before_request
     def audio_failure():
+        if connection_failure.get("enabled") and request.path.startswith("/api/"):
+            return jsonify({"error": "fixture API failure"}), connection_failure.get("status", 503)
         if request.path.startswith("/api/static/stream/"):
             name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
             if stream_failure.get(name):
@@ -126,11 +130,26 @@ def main() -> None:
             stream_requests.append(
                 {"path": request.path, "range": request.headers.get("Range"), "status": response.status_code}
             )
+            name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
+            if stream_cut.get(name) and response.status_code in (200, 206):
+                original = response.response
+
+                def cut_body():
+                    try:
+                        for chunk in original:
+                            yield chunk[:1024]
+                            raise RuntimeError("fixture stream cut after headers")
+                    finally:
+                        if hasattr(original, "close"):
+                            original.close()
+
+                response.direct_passthrough = False
+                response.response = cut_body()
         return response
 
     @app.route("/api/android-fixture/audio-stats")
     def audio_stats():
-        return jsonify({"requests": stream_requests[-100:]})
+        return jsonify({"requests": stream_requests[-100:], "total": len(stream_requests)})
 
     @app.route(f"/__fixture/ready/{args.run_id}")
     def ready():
@@ -156,6 +175,11 @@ def main() -> None:
         uid = accounts[name]
         if action == "audio-failure":
             stream_failure[name] = int((request.get_json() or {}).get("status", 0))
+        elif action == "stream-cut":
+            stream_cut[name] = bool((request.get_json() or {}).get("enabled"))
+        elif action == "connection-failure":
+            connection_failure["enabled"] = bool((request.get_json() or {}).get("enabled"))
+            connection_failure["status"] = int((request.get_json() or {}).get("status", 503))
         elif action == "revoke":
             revoke_user_sessions(uid)
         elif action == "event":
