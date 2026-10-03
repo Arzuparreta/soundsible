@@ -79,6 +79,10 @@ def main() -> None:
                 * 600
             )
         with user_context(uid):
+            # Deterministic playback tests explicitly opt out. Product default
+            # remains on; autoplay acceptance enables the real preference.
+            from shared.discovery_intelligence import save_discovery_settings
+            save_discovery_settings({"autoplay_enabled": False})
             library = get_user_core(uid).library
             library.metadata.add_track(
                 Track(

@@ -1,6 +1,6 @@
-# S2q: autoplay NORMAL, siguiente implementación
+# S2q: autoplay NORMAL propiedad del servicio
 
-Este documento es un contrato pendiente, no una capacidad implementada.
+Implementación y aceptación en curso; consultar HANDOFF para resultados concretos.
 
 Fuente de preferencia: GET/PATCH `/api/discovery/settings`, campo booleano
 `autoplay_enabled`; el motor por defecto lo activa. Cargar con la cuenta y generación
@@ -28,3 +28,17 @@ no modificar el default de producto para proteger assertions históricas.
 
 Antes de implementar, revalidar fuentes: UI puede haber avanzado desde este
 inventario. La matriz PHONE/DJ/Live/Auto y firma/release sigue siendo obligatoria.
+
+El servicio comparte decoder, límites y retry con Radio, con intent y ocurrencias
+separados. Tras una tanda corta vuelve a comprobar el umbral: no esperar otro
+evento del player para rellenar. Preferencias desconocidas o fallidas no activan
+planificación; menú ofrece recarga. Una escritura fallida conserva la preferencia
+confirmada anterior y expone error. Cambiar Radio suspende explícitamente autoplay
+antes de solicitar otro plan, sin borrar la preferencia. Cambios de cuenta y
+callbacks pendientes se guardan por serial/generación. El seed futuro no modifica
+la ocurrencia ni posición actuales.
+
+El menú de tres puntos del programa cambia la preferencia real, sin toggle
+optimista. La cola distingue Autoplay de Radio. Perfil autoplay es balanced; no
+es un selector de perfil DJ. No marcar autoplay completo hasta comprobar también
+podcasts, cancelación/cuenta con petición pendiente y recuperación extendida.

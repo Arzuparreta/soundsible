@@ -38,7 +38,7 @@ class PlaybackPlugin : Plugin() {
         if (p != null) for (i in 0 until p.mediaItemCount) {
             val item = p.getMediaItemAt(i)
             queue.put(item.mediaId)
-            items.put(JSObject().put("generated", item.mediaMetadata.extras?.getBoolean("radioGenerated") ?: false).put("offline", item.mediaMetadata.extras?.getBoolean("offline") ?: false).put("mediaKind", if (item.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true) "podcast_episode" else null).put("source", item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)).put("key", ProgramQueue.key(p, i)).put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: ""))
+            items.put(JSObject().put("generated", (item.mediaMetadata.extras?.getBoolean("radioGenerated") == true || item.mediaMetadata.extras?.getBoolean("autoplayGenerated") == true)).put("generatedSource", if (item.mediaMetadata.extras?.getBoolean("autoplayGenerated") == true) "autoplay" else if (item.mediaMetadata.extras?.getBoolean("radioGenerated") == true) "radio" else null).put("offline", item.mediaMetadata.extras?.getBoolean("offline") ?: false).put("mediaKind", if (item.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true) "podcast_episode" else null).put("source", item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)).put("key", ProgramQueue.key(p, i)).put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: ""))
         }
         val extras = p?.sessionExtras
         val preview = if (hasItems && extras?.getString("previewKey") == ProgramQueue.key(p!!, p.currentMediaItemIndex) && extras.getLong("previewGeneration") == EngineConnection.shared(context).generation) {
@@ -49,12 +49,15 @@ class PlaybackPlugin : Plugin() {
                 .put("retryNotBeforeMs", extras.getLong("previewRetryNotBefore"))
         } else null
         val radioError = if (extras?.getLong("radioGeneration") == EngineConnection.shared(context).generation) extras.getInt("radioErrorStatus") else 0
-        val authFailure = (preview != null && extras?.getBoolean("previewAuthFailure") == true) || radioError == 401
+        val autoplayError = if (extras?.getLong("autoplayGeneration") == EngineConnection.shared(context).generation) extras.getInt("autoplayErrorStatus") else 0
+        val plannerError = if (radioError != 0) radioError else autoplayError
+        val authFailure = (preview != null && extras?.getBoolean("previewAuthFailure") == true) || plannerError == 401
         val radio = if (extras?.getLong("radioGeneration") == EngineConnection.shared(context).generation) JSObject().put("active", extras.getBoolean("radioActive")).put("phase", extras.getString("radioPhase")).put("profile", extras.getString("radioProfile")) else null
-        return JSObject().put("radio", radio).put("preview", preview).put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
+        val autoplay = if (extras?.getLong("autoplayGeneration") == EngineConnection.shared(context).generation) JSObject().put("enabled", if (extras.getBoolean("autoplayKnown")) extras.getBoolean("autoplayEnabled") else null).put("settingsPhase", extras.getString("autoplaySettingsPhase")).put("active", extras.getBoolean("autoplayActive")).put("phase", extras.getString("autoplayPhase")) else null
+        return JSObject().put("autoplay", autoplay).put("radio", radio).put("preview", preview).put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
             .put("items", items).put("queueToken", if (p != null) ProgramQueue.token(p) else "")
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
-            .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", if (authFailure) "auth" else if (radioError == 403) "permission" else PlaybackRecovery.kind(p?.playerError))
+            .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", if (authFailure) "auth" else if (plannerError == 403) "permission" else PlaybackRecovery.kind(p?.playerError))
             .put("shuffle", p?.shuffleModeEnabled ?: false).put("repeat", p?.repeatMode ?: Player.REPEAT_MODE_OFF)
             .put("hasNext", p?.hasNextMediaItem() ?: false).put("hasPrevious", p?.hasPreviousMediaItem() ?: false)
             .put("state", p?.playbackState ?: Player.STATE_IDLE).put("index", if (hasItems) p!!.currentMediaItemIndex else -1)
@@ -62,7 +65,7 @@ class PlaybackPlugin : Plugin() {
             .put("title", if (hasItems) p!!.mediaMetadata.title?.toString() ?: "" else "").put("artist", if (hasItems) p!!.mediaMetadata.artist?.toString() ?: "" else "")
             .put("seekable", hasItems && p!!.isCurrentMediaItemSeekable).put("positionMs", if (hasItems) p!!.currentPosition else 0).put("durationMs", if (hasItems) p!!.duration.coerceAtLeast(0) else 0)
             .put("error", p?.playerError?.errorCode ?: 0)
-            .put("errorStatus", if (authFailure) 401 else if (radioError == 403) 403 else generateSequence(p?.playerError as Throwable?) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode ?: 0)
+            .put("errorStatus", if (authFailure) 401 else if (plannerError == 403) 403 else generateSequence(p?.playerError as Throwable?) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode ?: 0)
     }
     private fun publish() { if (alive && visible) notifyListeners("playbackState", snapshot()) }
     override fun handleOnPause() { visible = false; main.removeCallbacks(ticker) }
@@ -74,9 +77,9 @@ class PlaybackPlugin : Plugin() {
             require((call.getInt("generation")?.toLong() ?: -1L) == connection.generation)
             val p = controller ?: error("NOT_READY")
             when (call.getString("action")) {
-                "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio" -> {
+                "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay" -> {
                     val args = Bundle().apply {
-                        putBoolean("enabled", call.getBoolean("enabled") ?: false); putString("profile", call.getString("profile"))
+                        putBoolean("reload", call.getBoolean("reload") ?: false); putBoolean("enabled", call.getBoolean("enabled") ?: false); putString("profile", call.getString("profile"))
                         putInt("seconds", call.getInt("seconds") ?: 0)
                         putLong("generation", connection.generation)
                         putString("action", call.getString("action")); putString("queueToken", if (call.getString("action") in listOf("play", "queue")) ProgramQueue.token(p) else call.getString("queueToken")); putString("key", if (call.getString("action") == "play" && p.mediaItemCount > 0) ProgramQueue.key(p, p.currentMediaItemIndex) else call.getString("key"))

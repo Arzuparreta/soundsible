@@ -921,3 +921,36 @@ real y la final pasa. No se debilitan guards de escritura o se inventa éxito.
 Suite completa anterior sigue S2m 25 + restart2; browser S2j. Instrumentación
 sobre HEAD S2o dirty, desarrollo. Continuar [S2q autoplay](SLICE_2Q.md) y matriz
 completa; ningún checkpoint termina autorización PR/merge/release tras paridad.
+
+## S2q: primer vertical autoplay NORMAL validado
+
+Fuentes dirty posteriores a S2p `e059b85` (subido). [Contrato S2q](SLICE_2Q.md).
+AutoplayProgram carga/escribe preferencia real en worker nativo, guards de serial/
+generación, seed móvil, umbral manual, repeat/podcasts/Radio, prioridad manual y
+cierre. RadioProgram comparte intent/decoder/retry sin compartir sesión; tanda
+corta vuelve a comprobar runway. Cola distingue Autoplay/Radio, ajuste en menú
+programa de tres puntos y respuesta observada. Fixtures deterministas fijan
+preferencia false por cuenta; default de producto sigue true.
+
+UI **1.402 /159**, cuatro Python fixtures reales y Ruff pasan. APK dos HTTP/HTTPS
+pasan en `/tmp/soundsible-s2q-native-confirmed.log`; menú real, threshold manual,
+refill background, disable confirmado, repeat, Radio y cierre. Normal APK/lint
+sin CA también pasa. Suite completa final **31, cero fallos/omitidos**, más **dos fases persistentes
+offline que pasan**, log `/tmp/soundsible-s2q-native-main-final.log`. APK/test/lint
+normal pasa sin CA temporal. Primera suite tuvo dos fallos de PlaylistManagement:
+Move up suponía que sólo había dos listas, pero LibraryActions creaba una tercera.
+Ahora observa posición anterior y verifica intercambio/preservación; repetición
+completa pasa. Última browser completa sigue S2j; repetir antes del PR final.
+
+Tests corrigieron el uso de índice antes de observar runway y la expectativa de
+activar autoplay con tres peticiones manuales futuras: el guard era correcto.
+El caso repeat avanza primero para aislar esa política del umbral manual. Quedan
+podcast/cancelación/cuenta con planner pendiente y recuperación extendida antes
+de llamar autoplay completo. [S2r metadatos](SLICE_2R.md) es contrato siguiente,
+no implementación. Continuar sin finalizar por checkpoint hasta paridad/release.
+
+Continuación activa S2r: formulario de metadata extraído sin stores/audio web y
+adaptador Native REST, todavía sin conectar a programa/shell. Typecheck y tres
+tests de presentación pasan; Native metadata/artwork y recorrido APK pendientes.
+Estos archivos no pertenecen al APK de aceptación S2q ni al commit de autoplay.
+Mantener commits separados y continuar hasta paridad/PR/merge/release autorizados.

@@ -2,9 +2,11 @@ import { createSignal } from 'solid-js';
 import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import ProgramTransport from './ProgramTransport';
+import { openContextMenu } from '../lib/contextMenu';
 import type { ProgramState } from '../lib/program/runtime';
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
-afterEach(cleanup);
+vi.mock('../lib/contextMenu', () => ({ openContextMenu: vi.fn() }));
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 3, index: 1, id: 'a', title: 'Song', artist: '', items: [{ source: 'local', key: 'first', id: 'a', title: 'a', artist: '' }, { source: 'local', key: 'second', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a', 'a'], positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
 it('uses native availability on the last occurrence and does not claim play before observation', async () => {
   const command = vi.fn(async () => {});
@@ -78,4 +80,17 @@ it('shows observed preview progress and disables manual retry during the server 
 it('does not offer seek for an unseekable native source even when its duration is known', () => {
   render(() => <ProgramTransport state={{ ...initial, seekable: false }} pending={false} command={async () => {}} />);
   expect((screen.getByRole('slider') as HTMLInputElement).disabled).toBe(true);
+});
+
+it('captures explicit autoplay preference intent and prevents a menu from changing another account', async () => {
+  const command = vi.fn(async () => {});
+  const [state, setState] = createSignal<ProgramState>({ ...initial, autoplay: { enabled: false, settingsPhase: 'ready', active: false, phase: 'idle' } });
+  render(() => <ProgramTransport state={state()} pending={false} command={command} />);
+  await fireEvent.click(document.querySelector('[data-program-menu]')!);
+  const action = vi.mocked(openContextMenu).mock.calls[0][0].actions![0];
+  setState({ ...state(), autoplay: { ...state().autoplay!, enabled: true } });
+  action.onSelect();
+  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'autoplay', enabled: true, reload: false });
+  setState({ ...state(), generation: 2 }); action.onSelect();
+  expect(command).toHaveBeenCalledTimes(1);
 });

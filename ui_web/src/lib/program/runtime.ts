@@ -6,15 +6,17 @@ export interface ProgramState {
   state: number; index: number; id: string; title: string; artist: string;
   items: ProgramOccurrence[]; queueToken: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
   radio?: { active: boolean; phase: string; profile: 'familiar' | 'balanced' | 'explore' } | null;
+  autoplay?: { enabled: boolean | null; settingsPhase: string; active: boolean; phase: string } | null;
   seekable?: boolean;
   preview?: { key: string; preparation: PreviewPreparation | null; retryAttempt: number; retryPending: boolean; retryNotBeforeMs: number } | null;
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
 }
-export interface ProgramOccurrence extends ProgramTrack { key: string; generated?: boolean }
+export interface ProgramOccurrence extends ProgramTrack { key: string; generated?: boolean; generatedSource?: 'radio' | 'autoplay' | null }
 export interface ProgramTrack { offline?: boolean; source: 'local' | 'preview' | 'podcast'; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
   | { action: 'radio'; enabled: boolean; profile: 'familiar' | 'balanced' | 'explore'; queueToken: string; key?: string }
+  | { action: 'autoplay'; enabled: boolean; reload?: boolean }
   | { action: 'stop'; queueToken: string }
   | { action: 'seek'; positionMs: number }
   | { action: 'skip'; seconds: -15 | 15; index: number; key: string; queueToken: string }

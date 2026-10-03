@@ -13,7 +13,8 @@ import java.util.concurrent.Executors
 /** NORMAL recommendation runway. Its requests and timers belong to the service. */
 @UnstableApi
 class RadioProgram(private val connection: EngineConnection, private val player: Player, private val main: Handler,
-                   private val session: () -> MediaLibrarySession?) : AutoCloseable {
+                   private val session: () -> MediaLibrarySession?, private val intent: String = "radio",
+                   private val allowPlan: () -> Boolean = { true }, private val selectSeed: () -> androidx.media3.common.MediaItem? = { player.currentMediaItem }) : AutoCloseable {
     private val worker = Executors.newSingleThreadExecutor()
     private var seed: JSONObject? = null
     private var profile = "balanced"
@@ -29,9 +30,10 @@ class RadioProgram(private val connection: EngineConnection, private val player:
     private val generated = mutableSetOf<String>()
     private var scheduled = false
     private val refill = Runnable { scheduled = false; plan() }
+    fun active(): Boolean = seed != null
     fun start(nextProfile: String) {
         require(nextProfile in listOf("familiar", "balanced", "explore"))
-        val item = player.currentMediaItem ?: error("NO_SEED")
+        val item = selectSeed() ?: error("NO_SEED")
         require(item.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true && connection.cookieHeader(connection.generation) != null)
         stop(); profile = nextProfile; generation = connection.generation
         seed = JSONObject().put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: "")
@@ -60,20 +62,25 @@ class RadioProgram(private val connection: EngineConnection, private val player:
         generated.retainAll(present)
         // Drop consumed history only at the queue bound; manual future rows survive.
         if (player.mediaItemCount > 990 && player.currentMediaItemIndex > 0) player.removeMediaItems(0, player.currentMediaItemIndex)
-        if (requestId == null && !scheduled && phase !in listOf("exhausted", "blocked", "warming") && player.mediaItemCount - player.currentMediaItemIndex - 1 <= 5) { scheduled = true; main.post(refill) }
+        if (requestId == null && !scheduled && allowPlan() && phase !in listOf("exhausted", "blocked", "warming") && player.mediaItemCount - player.currentMediaItemIndex - 1 <= 5) { scheduled = true; main.post(refill) }
     }
     private fun publish() {
-        session()?.let { owner -> owner.setSessionExtras(android.os.Bundle(owner.sessionExtras).apply { putLong("radioGeneration", connection.generation); putBoolean("radioActive", seed != null); putString("radioPhase", phase); putString("radioProfile", profile); putInt("radioErrorStatus", errorStatus) }) }
+        session()?.let { owner -> owner.setSessionExtras(android.os.Bundle(owner.sessionExtras).apply { putLong("${intent}Generation", connection.generation); putBoolean("${intent}Active", seed != null); putString("${intent}Phase", phase); putString("${intent}Profile", profile); putInt("${intent}ErrorStatus", errorStatus) }) }
     }
     private fun plan() {
+        if (intent == "autoplay" && seed != null) selectSeed()?.let { item ->
+            seed = JSONObject().put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: "")
+                .put(if (item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "preview") "youtube_id" else "track_id", item.mediaId)
+        }
         val original = seed ?: return
+        if (!allowPlan()) { phase = "following_queue"; publish(); return }
         if (closed || requestId != null || generation != connection.generation) return
         val room = minOf(8, ProgramQueue.LIMIT - player.mediaItemCount)
         if (room <= 0) { phase = "exhausted"; publish(); return }
         val token = serial; val epoch = generation
         val id = "radio:" + java.util.UUID.randomUUID(); requestId = id
         val exclusions = heard + (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
-        val body = JSONObject().put("intent", "radio").put("profile", profile).put("seed", original).put("limit", room).put("exclude", JSONArray(exclusions.toList())).toString().toRequestBody("application/json".toMediaType())
+        val body = JSONObject().put("intent", intent).put("profile", profile).put("seed", original).put("limit", room).put("exclude", JSONArray(exclusions.toList())).toString().toRequestBody("application/json".toMediaType())
         phase = "planning"; publish()
         worker.execute {
             var answer: JSONObject? = null; var status = 0
@@ -84,6 +91,7 @@ class RadioProgram(private val connection: EngineConnection, private val player:
             main.post {
                 if (closed || serial != token || generation != connection.generation || seed == null) return@post
                 requestId = null
+                if (!allowPlan()) { phase = "following_queue"; publish(); return@post }
                 if (status in listOf(401, 403)) { errorStatus = status; if (status == 401) player.pause(); phase = "blocked"; publish(); return@post }
                 val response = answer
                 try {
@@ -91,10 +99,10 @@ class RadioProgram(private val connection: EngineConnection, private val player:
                     val available = minOf(room, ProgramQueue.LIMIT - player.mediaItemCount)
                     val rows = if (available > 0 && response != null) RadioPlan.rows(response, nowExclude, available) else JSONArray()
                     if (rows.length() > 0) {
-                        val items = ProgramQueue.items(connection, rows).map { item -> item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setExtras(android.os.Bundle(item.mediaMetadata.extras).apply { putBoolean("radioGenerated", true) }).build()).build() }
+                        val items = ProgramQueue.items(connection, rows).map { item -> item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setExtras(android.os.Bundle(item.mediaMetadata.extras).apply { putBoolean("${intent}Generated", true) }).build()).build() }
                         generated.addAll(items.map { it.mediaMetadata.extras!!.getString(ProgramQueue.KEY)!! })
                         player.addMediaItems(items); attempt = 0
-                        phase = if (response!!.optBoolean("degraded")) "degraded" else "ready"; publish(); return@post
+                        phase = if (response!!.optBoolean("degraded")) "degraded" else "ready"; publish(); sync(); return@post
                     }
                 } catch (_: Exception) { }
                 val temporary = response == null || response.optBoolean("warming") || response.optString("empty_reason") == "temporary_failure"

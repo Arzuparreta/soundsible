@@ -68,9 +68,14 @@ public class PlaylistManagementTest {
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='Managed playlist')");
             rowMenu(web,scenario,"Managed playlist",0,"Duplicate");prompt(web,scenario,"Managed copy");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='Managed copy')");awaitIds(connection,origin,"Managed copy","[\"B1111111111\",\"member-track\"]");
+            int before=Integer.parseInt(web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).findIndex(b=>b.textContent==='Managed playlist')"));
+            assertTrue("Playlist must have a preceding row",before>0);
+            String preceding=web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]'))["+(before-1)+"].textContent");
             rowMenu(web,scenario,"Managed playlist",0,"Move up");
-            waitFor(web,scenario,"document.querySelector('[data-testid=android-library] [data-row-main]')?.textContent==='Managed playlist'");
-            assertEquals("Managed playlist",api(connection,origin,"/api/library",null).getJSONObject("settings").getJSONArray("playlist_order").getString(0));
+            waitFor(web,scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]'))["+(before-1)+"]?.textContent==='Managed playlist'");
+            var order=api(connection,origin,"/api/library",null).getJSONObject("settings").getJSONArray("playlist_order");
+            assertEquals("Managed playlist",order.getString(before-1));
+            assertEquals(preceding,JSONObject.quote(order.getString(before)));
             rowMenu(web,scenario,"Managed copy",0,"Delete playlist");choose(web,scenario,"Delete");
             waitFor(web,scenario,"!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='Managed copy')");
             var library=api(connection,origin,"/api/library",null);assertFalse(library.getJSONObject("playlists").has("Managed copy"));assertTrue(library.getJSONArray("tracks").length()>0);
