@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, within } from '@solidjs/testing-library';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@solidjs/testing-library';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { actions, buildTrackMenu, openActionMenu, openContextMenu, openPlaylistPicker, openMetadataEditor, state } = vi.hoisted(() => ({
   buildTrackMenu: vi.fn(() => [{ label: 'trackMenu', onSelect: () => {} }]),
@@ -60,8 +60,11 @@ function renderAuto(panel: 'browser' | 'stage' | 'route' = 'stage') {
 
 // `autoTrackDragging` is module state shared by every drop target, so a test
 // that starts a drag has to end it or the next one renders mid-gesture.
+beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   fireEvent(window, new Event('dragend'));
+  cleanup();
+  vi.runOnlyPendingTimers();
   vi.clearAllMocks();
   vi.useRealTimers();
   localStorage.clear();
