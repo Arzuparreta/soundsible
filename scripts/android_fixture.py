@@ -113,6 +113,9 @@ def main() -> None:
     from android_preview_fixture import install
 
     install(app, root)
+    from android_catalog_fixture import install as install_catalog
+
+    install_catalog(app)
 
     stream_requests = []
     stream_failure = {}

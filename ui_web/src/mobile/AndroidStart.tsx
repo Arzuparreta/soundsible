@@ -9,6 +9,7 @@ import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
 import type { User } from '../lib/session';
 import { engine, useEngine, watchEngine } from './engine';
 import LibraryBrowser, { type BrowseSnapshot } from './LibraryBrowser';
+import CatalogSearch from './CatalogSearch';
 import { nativeProgramTransport, mixedProgram } from './playback';
 import { createProgramRuntime, type ProgramState } from '../lib/program/runtime';
 import ProgramTransport from '../components/ProgramTransport';
@@ -50,6 +51,8 @@ export default function AndroidStart() {
   const [stale, setStale] = createSignal(false);
   const [eventsOnline, setEventsOnline] = createSignal(false);
   const [snapshot, setSnapshot] = createSignal<BrowseSnapshot | null>(null);
+  const [savedEntries, setSavedEntries] = createSignal<SavedEntry[]>([]);
+  const [surface, setSurface] = createSignal<'library' | 'search'>('library');
   const [revision, setRevision] = createSignal(0);
   const [offlineState, setOfflineState] = createSignal<OfflineState | null>(null);
   async function offlineCommand(command: OfflineCommand) {
@@ -84,7 +87,7 @@ export default function AndroidStart() {
       if (active?.queue.length) void nativeProgramTransport.command({ generation, action: 'stop', queueToken: active.queueToken }).catch(() => {});
       runtime.unbind();
     }
-    setOfflineState(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setRevision(0); setEventsOnline(false); setStale(false);
+    setOfflineState(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setSavedEntries([]); setSurface('library'); setRevision(0); setEventsOnline(false); setStale(false);
   }
   let expiration: Promise<void> | null = null;
   function expireSession(): Promise<void> {
@@ -116,7 +119,7 @@ export default function AndroidStart() {
       if (!Array.isArray(saved.saved)) throw new Error('Invalid saved-song snapshot');
       const index = buildIdentityIndex(data.tracks);
       const resolved = saved.saved.map(entry => savedToTrack(entry, index)).filter((track): track is Track => !!track);
-      setSnapshot({ ...data, tracks: musicLibraryRows(data.tracks, resolved) }); setRevision(n => n + 1); setStale(false); setError('');
+      setSnapshot({ ...data, tracks: musicLibraryRows(data.tracks, resolved) }); setSavedEntries(saved.saved); setRevision(n => n + 1); setStale(false); setError('');
     } catch (failure) {
       if (current !== epoch || job !== syncEpoch) return;
       if (failure instanceof ApiError && failure.status === 401) await expireSession();
@@ -250,10 +253,13 @@ export default function AndroidStart() {
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
-        {data => <LibraryBrowser snapshot={data()} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
+        {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => setSurface('library')}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button></nav>
+          <Show when={surface() === 'library'} fallback={<CatalogSearch generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} />}>
+          <LibraryBrowser snapshot={data()} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
           onManageOffline={() => { const captured = generation; openOfflineManager(offlineState, command => captured === generation ? offlineCommand(command) : Promise.resolve()); }}
           onCollectionMenu={(tracks, title, event) => openContextMenu({ title, actions: offlineActions(tracks, offlineState, offlineCommand, () => generation) }, event)}
-          onMenu={(track, event) => { const menu = programLibraryMenu(track, program, programPending, runtime.execute); openContextMenu({ ...menu, actions: [...(menu.actions ?? []), ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event); }} />}
+          onMenu={(track, event) => { const menu = programLibraryMenu(track, program, programPending, runtime.execute); openContextMenu({ ...menu, actions: [...(menu.actions ?? []), ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event); }} />
+          </Show></>}
       </Show>
     </Show>
     <OverlayOutlet /><ContextMenuOutlet />

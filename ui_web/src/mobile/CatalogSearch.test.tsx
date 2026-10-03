@@ -1,0 +1,93 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
+import { cleanup, fireEvent, render, waitFor } from '@solidjs/testing-library';
+import { setLocale } from '../lib/i18n';
+import type { CatalogItem, CatalogSearchResponse, SavedEntry, Track } from '../types/music';
+import CatalogSearch from './CatalogSearch';
+const mocks = vi.hoisted(() => ({ search: vi.fn(), resolve: vi.fn(), save: vi.fn(), menu: vi.fn() }));
+vi.mock('../lib/api', async () => ({ ApiError: (await import('../lib/http')).ApiError, api: { searchCatalog: mocks.search, resolveCatalogItem: mocks.resolve, setSavedEntries: mocks.save } }));
+vi.mock('../lib/contextMenu', () => ({ openContextMenu: mocks.menu }));
+const row: CatalogItem = { id: 'deezer:track:1', title: 'Song', artist: 'Artist', source: 'deezer', type: 'track', duration: 120, external_ids: { deezer_id: '1' } };
+const result = (items: CatalogItem[]): CatalogSearchResponse => ({ query: 'song', items, sections: [] });
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
+beforeEach(() => { cleanup(); setLocale('en'); vi.clearAllMocks(); mocks.search.mockResolvedValue(result([row])); mocks.resolve.mockResolvedValue({ video_id: 'A1111111111' }); mocks.save.mockResolvedValue(undefined); });
+it('discards stale queries even when a provider ignores abort', async () => {
+  const old = deferred<CatalogSearchResponse>();
+  mocks.search.mockImplementation((query: string) => query === 'old' ? old.promise : Promise.resolve(result([{ ...row, title: 'New song' }])));
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'old' } });
+  await waitFor(() => expect(mocks.search).toHaveBeenCalledTimes(1));
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'new' } });
+  await waitFor(() => expect(view.getByText('New song')).toBeTruthy());
+  old.resolve(result([row])); await Promise.resolve();
+  expect(view.queryByText('Song')).toBeNull();
+  expect(mocks.search.mock.calls[0][1].aborted).toBe(true);
+});
+it('cancels an obsolete resolution before it can replace the native program', async () => {
+  const resolved = deferred<{ video_id: string }>(); mocks.resolve.mockReturnValue(resolved.promise);
+  const play = vi.fn();
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={play} onChanged={vi.fn()} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  fireEvent.click(view.container.querySelector('[data-row-main]')!);
+  expect(mocks.resolve).toHaveBeenCalledTimes(1);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'other' } });
+  resolved.resolve({ video_id: 'A1111111111' }); await Promise.resolve();
+  expect(play).not.toHaveBeenCalled();
+  expect(mocks.resolve.mock.calls[0][1].aborted).toBe(true);
+});
+it('saves exact resolved identity only after server confirmation, without acquisition', async () => {
+  const saved = deferred<void>(); mocks.save.mockReturnValue(saved.promise);
+  const changed = vi.fn().mockResolvedValue(undefined);
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={changed} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'More options: Song' }));
+  const action = mocks.menu.mock.calls[0][0].actions[1]; expect(action.selected).toBe(false); action.onSelect();
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+  expect(mocks.save.mock.calls[0][0][0].keys).toContain('yt:A1111111111');
+  expect(mocks.save.mock.calls[0][1]).toBe(true);
+  expect(changed).not.toHaveBeenCalled();
+  saved.resolve(); await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+  expect(view.container.querySelector('audio')).toBeNull();
+});
+it('removes a saved bookmark without resolving or deleting audio', async () => {
+  const entry: SavedEntry = { title: 'Song', artist: 'Artist', keys: ['deezer:1', 'yt:A1111111111'] };
+  const changed = vi.fn().mockResolvedValue(undefined);
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[entry]} disconnected={false} onPlay={vi.fn()} onChanged={changed} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'More options: Song' }));
+  const action = mocks.menu.mock.calls[0][0].actions[1]; expect(action.selected).toBe(true); action.onSelect();
+  await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+  expect(mocks.resolve).not.toHaveBeenCalled(); expect(mocks.save.mock.calls[0][1]).toBe(false);
+});
+it('invalidates deferred menu actions when the account changes', async () => {
+  const [generation, setGeneration] = createSignal(1);
+  const view = render(() => <CatalogSearch generation={generation()} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'More options: Song' }));
+  const action = mocks.menu.mock.calls[0][0].actions[1]; setGeneration(2); action.onSelect();
+  expect(mocks.resolve).not.toHaveBeenCalled(); expect(mocks.save).not.toHaveBeenCalled();
+});
+it('recognizes confirmed saved identity for native highlighting and replay without rematching', async () => {
+  const track: Track = { id: 'C1111111111', title: 'Song', artist: 'Artist', source: 'preview', originKeys: ['cat:deezer:track:1', 'deezer:1', 'yt:C1111111111'] };
+  const play = vi.fn();
+  const view = render(() => <CatalogSearch generation={1} tracks={[track]} saved={[]} disconnected={false} activeId="C1111111111" onPlay={play} onChanged={vi.fn()} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  expect(view.container.querySelector('[data-now-playing]')).toBeTruthy();
+  fireEvent.click(view.container.querySelector('[data-row-main]')!);
+  expect(play).toHaveBeenCalledWith(track); expect(mocks.resolve).not.toHaveBeenCalled();
+});
+it('reports an invalid provider identity instead of acknowledging nonexistent playback', async () => {
+  mocks.search.mockResolvedValue(result([{ ...row, source: 'youtube', raw: { id: 'invalid' } }]));
+  const play = vi.fn();
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={play} onChanged={vi.fn()} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  fireEvent.click(view.container.querySelector('[data-row-main]')!);
+  await waitFor(() => expect(view.getByRole('alert')).toBeTruthy());
+  expect(play).not.toHaveBeenCalled();
+});

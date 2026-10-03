@@ -698,3 +698,32 @@ no presentar ese APK como build limpio de release. Se reconstruirá desde HEAD
 limpio tras cerrar el siguiente corte. S6a no cierra paridad ni habilita alpha.
 Autorización vigente: continuar S2j y la matriz completa, push de avances; después
 PR a main y release con gates de firma/actualización y paridad completos.
+
+
+## S2j: checkpoint de búsqueda y guardado explícito
+
+La continuación autorizada implementa Discover de canciones: catálogo seleccionado,
+resultados locales/directos/pendientes de resolución, bookmark/retirada confirmado
+por API y reproducción nativa. `catalogTrack` es una función pura compartida con
+web, con los mismos exports anteriores de catalogItem. No se importa el player web.
+Índice de identidad Saved y links resueltos reconocen el preview actual y evitan
+rematching. Última consulta/acción/cuenta prevalece; menús capturan su contexto.
+No adquirir archivos, añadir fuentes especulativas ni ofrecer búsqueda offline.
+[Contrato y aceptación S2j](SLICE_2.md#s2j-búsqueda-y-guardado-explícito-de-canciones).
+
+Typecheck/Vitest final: **1.373 tests / 151 archivos**, cero fallos. Fixture Python
+real: **un test** de búsqueda/matching/caché/guardado/retirada/aislamiento pasa;
+proveedores y candidates son sintéticos, rutas y permisos siguen reales. Dos
+recorridos iniciales empaquetados HTTP/HTTPS pasan: buscar, reproducir, guardar,
+retirar, volver a Library, alternar cuenta sin fuga y recuperar 403 con Retry.
+Tras añadir reconocimiento de la identidad guardada y guard de identidad inválida,
+la pasada completa de APK está **en curso**. No declarar todavía S2j cerrado ni
+usar los dos recorridos anteriores como resultado de esa fuente final. Cuatro
+perfiles browser siguen exigidos antes del PR acumulado. No CI/proveedor vivo/
+dispositivo/coche aceptados por estos fixtures.
+
+Siguiente vertical después de cerrar S2j: podcasts y radio en el mismo servicio,
+con resume/±15s reales y fuentes autorizadas por el motor; inventariar primero
+contratos y acciones actuales. Descubrimiento de entidades, adquisición/importación,
+settings/edición/lyrics/handoff, DJ/Live/Auto y firma/actualización siguen abiertos.
+El usuario exige mantener paridad completa antes de integrar/publicar alpha.

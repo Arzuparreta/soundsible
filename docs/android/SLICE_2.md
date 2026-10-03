@@ -411,3 +411,34 @@ incompleto provocó timeout real en instrumentación. Para archivos completos se
 conservan extractores e índice normales; el MP4 con índice inicial conserva seek.
 El snapshot incluye `seekable` nativo y la UI desactiva seek cuando Media3 no lo
 ofrece, aunque se conozca duración. No se inventa un seek map para fragmentos.
+
+
+## S2j: búsqueda y guardado explícito de canciones
+
+Primer vertical de descubrimiento: buscar canciones locales y de catálogo desde
+Discover, resolver un recording sin identidad de audio y reproducirlo por el mismo
+programa nativo. Guardar/retirar usa `/api/library/saved/set`, nunca adquisición
+`/api/catalog/save`. La confirmación sólo llega desde el servidor; biblioteca
+revalida saved y resuelve sus previews con el índice compartido. Álbumes/artistas
+remotos, adquisición/importación y descubrimiento completo siguen en la matriz.
+
+`lib/catalogTrack.ts` extrae la conversión pura que también usa el cliente web;
+no importa stores/Web Audio. La pantalla nativa comparte SearchField/MusicListRowView,
+identidades y builders Saved. Resolver mantiene keys de catálogo/proveedor y añade
+el video id exacto. Una copia acquired se prefiere si el índice la reconoce.
+La reproducción de búsqueda cambia explícitamente a una canción; no inventa fuentes
+para resultados todavía sin resolver ni prepara toda la búsqueda por sorpresa.
+
+Consulta debounce/cancelación, epoch de búsqueda y cuenta, acción más reciente y
+AbortSignal impiden que una resolución antigua sustituya el programa. Un menú
+captura consulta/cuenta/intención; deja de actuar tras cambio o teardown. Mutaciones
+enviadas permanecen en su cuenta y refrescan sólo una superficie vigente. Offline
+no busca ni prepara previews: se usa biblioteca Disponible sin conexión de S6a.
+Errores, resultados vacíos, Retry y proveedores parciales usan textos compartidos.
+
+Fixtures sustituyen proveedores externos y candidates del downloader, conservando
+rutas reales, ranking/dedupe, matching/confianza/caché, permisos y Saved. Pruebas
+cubren respuestas fuera de orden, cancelación de resolución, confirmación de
+bookmark y retirada sin adquisición. El APK debe demostrar búsqueda → guardar →
+Library → audio nativo, aislamiento al alternar cuentas y HTTP/HTTPS real. No
+atribuir a fixtures validación del proveedor vivo ni escucha física.
