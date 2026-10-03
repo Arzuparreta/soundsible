@@ -852,3 +852,26 @@ pasan antes de los últimos guards de prompt. APK todavía pendiente. Sus fuente
 están separadas del commit S2m; no dar acciones por aceptadas sólo por scaffolding.
 Continuar hasta la paridad y después PR/merge/release autorizados; no finalizar por
 este checkpoint ni cambiar el requisito a alpha parcial.
+
+## S2n: favoritos y pertenencia playlist validados
+
+[Contrato](SLICE_2N.md), [evidencia](evidence/s2n.json). PUT favourites con intención
+explícita e idempotente; el toggle anterior conserva contrato. Unmark de canción
+eliminada no la vuelve a guardar. Canciones adquiridas no necesitan resolver otro
+video al marcarse. Filas compartidas y filtro favoritos reflejan snapshot confirmado.
+Selector create/add comparte estilos/textos, confirma ID en playlist y refresh
+antes de cerrar; preview se guarda por identidad sin adquisición. Cuenta reemplazada
+aborta selector y cierra prompt; callbacks capturados no migran.
+
+UI **1.396 tests /157 archivos**; Python **44** manager/promoción/rutas; APK **dos
+HTTP/HTTPS verificado**, incluidos favourite/unmark/filtro, archivo conservado,
+playlist creada con un ID confirmado y owner sin playlist del member. No hay audio
+HTML. APK/test/lint normal pasa sin CA temporal. Última regresión completa sigue
+siendo S2m **25 + dos restart**, anterior al APK S2n; browser completos siguen S2j.
+Repetir ambos sobre el head final antes del PR. Build source_revision anterior,
+dirty: no artifact limpio ni release. Filtro favorito no persiste metadata de
+marks en arranque offline frío; no confundirlo con copias de música S6a.
+
+Continuación: gestión completa de playlists/acciones, Radio/autoplay completos y
+resto de paridad de PORT_PLAN. Mantener commit/push en rama por trabajo validado,
+seguir sin terminar el turno por un slice. PR/merge/release sólo al cerrar gates.

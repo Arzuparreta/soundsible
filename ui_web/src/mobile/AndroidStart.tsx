@@ -1,7 +1,9 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { t } from '../lib/i18n';
 import { musicLibraryRows } from '../lib/musicLibrary';
-import { buildIdentityIndex } from '../lib/playbackIdentity';
+import { buildIdentityIndex, trackKeys } from '../lib/playbackIdentity';
+import { songMarkAction } from './songMarks';
+import { openNativePlaylistPicker } from './PlaylistPicker';
 import { savedToTrack } from '../lib/saved';
 import type { SavedEntry, Track } from '../types/music';
 import { registerArtworkMetadata } from '../lib/media';
@@ -54,6 +56,7 @@ export default function AndroidStart() {
   const [eventsOnline, setEventsOnline] = createSignal(false);
   const [snapshot, setSnapshot] = createSignal<BrowseSnapshot | null>(null);
   const [savedEntries, setSavedEntries] = createSignal<SavedEntry[]>([]);
+  const isFavourite = (track: Track) => { const keys = trackKeys(track); return savedEntries().some(entry => entry.favourite && entry.keys.some(key => keys.includes(key))); };
   const [surface, setSurface] = createSignal<'library' | 'search' | 'podcasts'>('library');
   const [revision, setRevision] = createSignal(0);
   const [offlineState, setOfflineState] = createSignal<OfflineState | null>(null);
@@ -257,10 +260,17 @@ export default function AndroidStart() {
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
         {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => setSurface('library')}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button></nav>
           <Show when={surface() === 'library'} fallback={<Show when={surface() === 'podcasts'} fallback={<CatalogSearch generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} />}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}>
-          <LibraryBrowser snapshot={data()} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
+          <LibraryBrowser isFavourite={isFavourite} snapshot={data()} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
           onManageOffline={() => { const captured = generation; openOfflineManager(offlineState, command => captured === generation ? offlineCommand(command) : Promise.resolve()); }}
           onCollectionMenu={(tracks, title, event) => openContextMenu({ title, actions: offlineActions(tracks, offlineState, offlineCommand, () => generation) }, event)}
-          onMenu={(track, event) => { const menu = programLibraryMenu(track, program, programPending, runtime.execute); openContextMenu({ ...menu, actions: [...(menu.actions ?? []), ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event); }} />
+          onMenu={(track, event) => {
+            const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
+            const menu = programLibraryMenu(track, program, programPending, runtime.execute);
+            openContextMenu({ ...menu, actions: [...(menu.actions ?? []),
+              songMarkAction(track, savedEntries, () => epoch, () => !current(), sync, () => { if (current()) setError(t('common.loadFailed')); }),
+              { label: t('trackActions.addToPlaylist'), disabled: !current(), onSelect: () => { if (current()) openNativePlaylistPicker(track, () => snapshot()?.playlists ?? {}, current, sync); } },
+              ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event);
+          }} />
           </Show></>}
       </Show>
     </Show>

@@ -191,7 +191,7 @@ class FavouritesManager:
         return [dict(entry, keys=list(entry["keys"])) for entry in changed]
 
     @serialized
-    def set_favourite(self, raw_entry: Dict[str, Any], favourite: Optional[bool] = None) -> bool:
+    def set_favourite(self, raw_entry: Dict[str, Any], favourite: Optional[bool] = None, *, save_if_missing: bool = True) -> bool:
         """
         Mark or unmark a song, saving it first if it is not in the library yet.
 
@@ -205,6 +205,8 @@ class FavouritesManager:
         with self._lock:
             existing = self._find(entry["keys"])
             if existing is None:
+                if favourite is False and not save_if_missing:
+                    return False
                 # Favouriting a song you had not saved saves it, in one act.
                 entry["favourite"] = True if favourite is None else bool(favourite)
                 self._admit(entry)

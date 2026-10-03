@@ -685,6 +685,29 @@ def set_saved():
     return jsonify({"status": "success", "changed": len(changed)})
 
 
+@library_bp.route("/api/library/favourites", methods=["PUT"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_set_favourite", limit=120, window_sec=60)
+def set_favourite():
+    """Set a captured intention without toggling another client's updated mark."""
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify(error="object body required"), 400
+    entry, marked = data.get("entry"), data.get("marked")
+    if not isinstance(entry, dict) or not isinstance(marked, bool):
+        return jsonify(error="entry and boolean marked are required"), 400
+    api = _get_api()
+    api["get_core"]()
+    try:
+        result = api["favourites_manager"].set_favourite(entry, favourite=marked, save_if_missing=False)
+    except ValueError:
+        return jsonify(error="entry needs at least one identity key"), 400
+    if result and not any(isinstance(key, str) and key.startswith("lib:") for key in entry.get("keys", [])):
+        _schedule_favourite_resolve(entry)
+    api["emit_to_user"]("favourites_updated")
+    return jsonify(is_favourite=result)
+
+
 @library_bp.route("/api/library/favourites/toggle", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_toggle_favourite", limit=120, window_sec=60)

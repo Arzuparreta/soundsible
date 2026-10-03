@@ -13,8 +13,8 @@ import styles from './AndroidStart.module.css';
 
 export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap }
 /** Read-only account surface. Shares the existing row/artwork/tokens; imports no player runtime. */
-export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string; onMenu?: (track: Track, event?: MouseEvent) => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent) => void }) {
-  const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists'>('songs');
+export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string; onMenu?: (track: Track, event?: MouseEvent) => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent) => void }) {
+  const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists' | 'favourites'>('songs');
   const [collection, setCollection] = createSignal<{ title: string; ids: string[]; kind: 'albums' | 'artists' | 'playlists'; id: string } | null>(null);
   const [onlyAvailable, setOnlyAvailable] = createSignal(false);
   const library = createMemo(() => (props.disconnected || onlyAvailable()) && props.offline ? availableLibrary(props.offline) : props.snapshot);
@@ -42,7 +42,7 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
     return rows;
   });
   const tracks = createMemo(() => {
-    const rows = collectionTracks();
+    const rows = tab() === 'favourites' ? collectionTracks().filter(track => props.isFavourite?.(track)) : collectionTracks();
     const filter = query().trim().toLocaleLowerCase();
     return filter ? rows.filter(track => `${track.title} ${track.artist} ${track.album ?? ''}`.toLocaleLowerCase().includes(filter)) : rows;
   });
@@ -76,13 +76,13 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
   return <section class={styles.library} data-testid="android-library">
     <p class={styles.notice}>{t('android.browseOnly')}</p>
     <nav aria-label={t('library.title')} class={styles.tabs}>
-      <For each={['songs', 'albums', 'artists', 'playlists'] as const}>{item =>
+      <For each={[...(['songs', 'albums', 'artists', 'playlists'] as const), ...(props.isFavourite ? ['favourites' as const] : [])]}>{item =>
         <button type="button" aria-pressed={tab() === item} onClick={() => selectTab(item)}>{item === 'playlists' ? t('playlists.title') : t(`library.${item}`)}</button>
       }</For>
     </nav>
     <Show when={collection()}>{item => <div class={styles.collectionHeading}><button type="button" onClick={() => { detailEpoch++; setCollection(null); }}>{t('common.back')}</button><h2>{item().title}</h2><Show when={props.onCollectionMenu}><button class={styles.menuTrigger} data-collection-menu aria-label={t('songRow.ariaMore')} onClick={event => props.onCollectionMenu?.(collectionTracks(), item().title, event)}>⋯</button></Show></div>}</Show>
     <Show when={detailError()}><p role="alert">{t('common.loadFailed')}</p></Show>
-    <Show when={collection() || tab() === 'songs'} fallback={
+    <Show when={collection() || tab() === 'songs' || tab() === 'favourites'} fallback={
       <Show when={tab() === 'playlists'} fallback={
         <Show when={!albums.error && !artists.error} fallback={<p role="alert">{t('common.loadFailed')} <button onClick={() => { void retryAlbums(); void retryArtists(); }}>{t('common.retry')}</button></p>}>
           <Show when={!albums.loading && !artists.loading} fallback={<p role="status">{t('common.loading')}</p>}>
@@ -109,7 +109,7 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
         { label: t('android.offlineManage'), onSelect: () => props.onManageOffline?.() },
       ] }, event)}>⋯</button></Show></div>
       <Show when={tracks().length} fallback={<EmptyState>{t('library.emptyLibrary')}</EmptyState>}>
-<VirtualBrowseRows offline={props.disconnected} onMenu={props.onMenu} tracks={tracks()} activeId={props.activeId} onPlay={props.onPlay ? index => props.onPlay?.(tracks(), index) : undefined} />
+<VirtualBrowseRows favourite={props.isFavourite} offline={props.disconnected} onMenu={props.onMenu} tracks={tracks()} activeId={props.activeId} onPlay={props.onPlay ? index => props.onPlay?.(tracks(), index) : undefined} />
       </Show>
     </Show>
   </section>;
