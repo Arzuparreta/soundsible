@@ -53,17 +53,17 @@ class PreviewProgram(private val connection: EngineConnection, private val playe
         serial++; main.removeCallbacks(poll); requestId?.let(connection::cancel); requestId = null
         key = ""; preparation = null; authFailure = false
         retry = PreviewRetry(SystemClock::elapsedRealtime, System::currentTimeMillis)
-        session()?.setSessionExtras(Bundle.EMPTY)
+        session()?.let { owner -> owner.setSessionExtras(Bundle(owner.sessionExtras).apply { keySet().filter { it.startsWith("preview") }.forEach { remove(it) } }) }
     }
     private fun publish() {
         if (key.isEmpty()) return
-        session()?.setSessionExtras(Bundle().apply {
+        session()?.let { owner -> owner.setSessionExtras(Bundle(owner.sessionExtras).apply {
             putString("previewKey", key); putLong("previewGeneration", epoch)
             putString("previewPreparation", preparation); putInt("previewRetryAttempt", retry.attempts)
             putBoolean("previewRetryPending", retry.pending)
             putLong("previewRetryNotBefore", retry.remaining().let { if (it > 0) System.currentTimeMillis().let { wall -> wall + it.coerceAtMost(Long.MAX_VALUE - wall) } else 0 })
             putBoolean("previewAuthFailure", authFailure)
-        })
+        }) }
     }
     private fun poll() {
         if (closed || requestId != null || !shouldPoll()) return

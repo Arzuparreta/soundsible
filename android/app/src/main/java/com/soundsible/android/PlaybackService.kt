@@ -26,6 +26,7 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var player: ExoPlayer
     private lateinit var connection: EngineConnection
     private lateinit var previews: PreviewProgram
+    private lateinit var radio: RadioProgram
     private lateinit var podcasts: PodcastProgressStore
     private val progressTicker = object : Runnable { override fun run() { if (session != null) { savePodcast(); main.postDelayed(this, 5000) } } }
     private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
@@ -44,6 +45,7 @@ class PlaybackService : MediaLibraryService() {
     /** On the player looper; does not touch account generation, cookie or library. */
     private fun closeProgram() {
         savePodcast()
+        radio.clear()
         previews.clear()
         player.pause(); player.stop(); player.clearMediaItems()
         // stop retains a previous playback error. Preparing an empty timeline clears it without a source.
@@ -117,6 +119,7 @@ class PlaybackService : MediaLibraryService() {
             .setSeekBackIncrementMs(15000).setSeekForwardIncrementMs(15000)
             .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
         previews = PreviewProgram(connection, player, main, { session }) { key -> cancelAudio(key) }
+        radio = RadioProgram(connection, player, main) { session }
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
                 if (item?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) == "preview") artwork.clear()
@@ -128,7 +131,7 @@ class PlaybackService : MediaLibraryService() {
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
                 podcasts.save(oldPosition.mediaItem, oldPosition.positionMs, if (oldPosition.mediaItem == player.currentMediaItem) player.duration else -1, reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
             }
-            override fun onEvents(player: Player, events: Player.Events) { previews.sync(); savePodcast()
+            override fun onEvents(player: Player, events: Player.Events) { previews.sync(); radio.sync(); savePodcast()
                 val keys = (0 until player.mediaItemCount).map { ProgramQueue.key(player, it) }.toSet()
                 podcastSources.entries.filter { it.value !in keys }.forEach { it.key.cancel() }
             }
@@ -153,10 +156,19 @@ class PlaybackService : MediaLibraryService() {
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
                 return Futures.immediateFuture(try {
-                    if (args.getString("action") == "stop") {
+                    if (args.getString("action") == "queue") {
+                        require(args.getLong("generation", -1) == connection.generation)
+                        val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")))
+                        val index = args.getInt("index", -1); require(index in items.indices)
+                        radio.clear()
+                        player.setMediaItems(items, index, podcasts.position(items[index])); player.prepare(); player.play()
+                    } else if (args.getString("action") == "radio") {
+                        require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
+                        if (args.getBoolean("enabled")) radio.start(args.getString("profile") ?: "balanced") else radio.stop()
+                    } else if (args.getString("action") == "stop") {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
                         closeProgram()
-                    } else ProgramQueue.edit(player, connection, args, { previews.manualRetry() }, podcasts::position)
+                    } else ProgramQueue.edit(player, connection, args, { previews.manualRetry() }, podcasts::position, radio.manualInsertion())
                     SessionResult(SessionResult.RESULT_SUCCESS) } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })
             }
         }).setBitmapLoader(artwork).setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
@@ -166,6 +178,7 @@ class PlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         savePodcast()
         connection.resetListeners.remove(reset)
+        radio.close()
         previews.close()
         artwork.close()
         cancelAudio()

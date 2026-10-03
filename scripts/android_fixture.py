@@ -119,6 +119,9 @@ def main() -> None:
     from android_podcast_fixture import install as install_podcasts
 
     install_podcasts(app, root, accounts)
+    from android_radio_fixture import install as install_radio
+
+    install_radio(app, root, accounts)
 
     stream_requests = []
     stream_failure = {}

@@ -40,3 +40,16 @@ it('allows a valid saved preview and forwards its source without external metada
   programLibraryMenu({ ...track, source: 'preview', id: 'A1111111111', cover: 'https://external.invalid' }, () => initial, () => false, execute).actions![1].onSelect();
   expect(execute).toHaveBeenCalledWith({ action: 'append', queueToken: 'order', tracks: [{ ...track, id: 'A1111111111', source: 'preview' }] });
 });
+it('starts radio from the actual current music occurrence without replacing audio', () => {
+  const state = { ...initial, index: 0, items: [{ ...track, source: 'local', key: 'current' }] } as ProgramState;
+  const execute = vi.fn(async () => {});
+  const menu = programLibraryMenu(track, () => state, () => false, execute);
+  menu.actions!.find(action => action.label === 'trackActions.startRadio')!.onSelect();
+  expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'radio', enabled: true, profile: 'balanced', queueToken: 'order' });
+});
+it('stops native radio through an explicit contextual action', () => {
+  const state = { ...initial, index: 0, items: [{ ...track, source: 'local', key: 'current' }], radio: { active: true, phase: 'ready', profile: 'explore' } } as ProgramState;
+  const execute = vi.fn(async () => {});
+  programLibraryMenu(track, () => state, () => false, execute).actions!.find(action => action.label === 'nowPlaying.stopRadioConfirm')!.onSelect();
+  expect(execute).toHaveBeenCalledWith({ action: 'radio', enabled: false, profile: 'explore', queueToken: 'order' });
+});

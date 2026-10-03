@@ -819,3 +819,36 @@ cambio cierra Response upstream del downloader podcast mediante context manager.
 
 Continuación activa: Radio NORMAL nativo. No cerrar por este checkpoint. No se ha
 creado PR, integrado main ni publicado release; paridad completa sigue obligatoria.
+
+## S2m: primer vertical Radio NORMAL nativo
+
+[Contrato y pendientes](SLICE_2M.md), [evidencia](evidence/s2m.json).
+Planner real `/api/discovery/music/plan`, propietario servicio, seed estable,
+lookahead y cancelación por cuenta/cierre/reemplazo. Activar sobre actual conserva
+ocurrencia, pausa y posición. Append manual entra delante de recomendaciones;
+Stop Radio retira sólo sus futuras ocurrencias. Snapshot distingue recomendaciones.
+Extras preview/radio coexisten. Reemplazar cola se hace en el servicio y se observa
+por IPC con token nuevo incluso si los IDs se repiten.
+
+Validación: UI **1.389 / 154** antes de S2n; Python **14** planner y fixture real
+con adquisición sintética/stream Range. APK **tres tests** (HTTP, HTTPS verificado,
+decoder acotado). Regresión principal **25 tests, cero fallos/omitidos**, más **dos
+fases persistentes offline que pasan**. El Radio final comprueba fallo inicial 503,
+retry con Activity CREATED, regreso/recreación, seed/pausa/seek conservados,
+deduplicación, append manual por delante y Stop Radio conservando las dos peticiones
+manuales. No confundir este vertical con Radio/autoplay completamente aceptados:
+refill automático tras avance, perfil/UI completos, recuperación/cancelación
+extendidas y proveedor vivo siguen pendientes. DJ/Live/Auto mantienen sus gates.
+
+Primeros fallos fueron del setup: transporte antes de configurar origen, luego
+comando antes del primer snapshot. Se esperó estado ready real. Endpoint fixture
+stats tenía nombre Flask repetido: ahora radio_stats es único. No se debilitaron
+las assertions. Normal APK/lint se reconstruyen sin CA temporal; mientras S2n
+está en curso el árbol/build son dirty, no artifact limpio de release.
+
+Continuación activa S2n: favoritos explícitos, filtro/estados de filas y selector
+playlist sin runtime web de audio. Sus **37 tests backend** y **1.395 /156 UI**
+pasan antes de los últimos guards de prompt. APK todavía pendiente. Sus fuentes
+están separadas del commit S2m; no dar acciones por aceptadas sólo por scaffolding.
+Continuar hasta la paridad y después PR/merge/release autorizados; no finalizar por
+este checkpoint ni cambiar el requisito a alpha parcial.

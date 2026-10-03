@@ -61,13 +61,13 @@ object ProgramQueue {
         }
     }
     /** Called on the service's player looper: validate actual queue, then mutate it once. */
-    fun edit(player: Player, connection: EngineConnection, args: Bundle, beforeRetry: () -> Unit = {}, resume: (MediaItem) -> Long = { 0 }) {
+    fun edit(player: Player, connection: EngineConnection, args: Bundle, beforeRetry: () -> Unit = {}, resume: (MediaItem) -> Long = { 0 }, manualInsertion: Int? = null) {
         require(args.getLong("generation", -1) == connection.generation && (connection.cookieHeader(connection.generation) != null || connection.offline.canUse(connection.generation)))
         require(args.getString("queueToken") == token(player))
         val action = args.getString("action")
         if (action == "append" || action == "insertAfter") {
             val empty = player.mediaItemCount == 0
-            val insertion = if (action == "append") player.mediaItemCount else {
+            val insertion = if (action == "append") (manualInsertion ?: player.mediaItemCount).also { require(it in 0..player.mediaItemCount) } else {
                 val anchor = args.getInt("index", -1)
                 if (empty) { require(anchor == -1 && args.getString("key") == ""); 0 }
                 else {

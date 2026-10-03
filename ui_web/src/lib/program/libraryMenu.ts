@@ -24,5 +24,12 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
   return { title: track.title, subtitle: track.artist, actions: [
     { label: t('android.insertAfter'), disabled, onSelect: () => select('insertAfter') },
     { label: t('trackActions.addToQueue'), disabled, onSelect: () => select('append') },
+    ...(candidate && candidate.mediaKind !== 'podcast_episode' && captured?.items[captured.index]?.id === candidate.id ? [{
+      label: t(captured.radio?.active ? 'nowPlaying.stopRadioConfirm' : 'trackActions.startRadio'), disabled: !captured.ready || pending(),
+      onSelect: () => {
+        if (!captured.ready || pending() || state()?.generation !== captured.generation) return;
+        void execute({ action: 'radio', enabled: !captured.radio?.active, profile: captured.radio?.profile ?? 'balanced', queueToken: captured.queueToken }).catch(() => {});
+      },
+    }] : []),
   ] };
 }
