@@ -170,6 +170,56 @@ public class PlaybackTest {
                 web.evaluate(scenario, "document.querySelector('[data-testid=program-queue] [data-queue-action=remove]').click()");
                 waitFor(web, scenario, "!document.querySelector('[data-testid=program-queue]') && !document.querySelector('[data-testid=android-program]')");
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(0, controller.getMediaItemCount()); assertFalse(controller.isPlaying()); assertTrue(controller.getShuffleModeEnabled()); assertEquals(Player.REPEAT_MODE_ALL, controller.getRepeatMode()); });
+                // S2e: add from the real library menu without replacing the service's program.
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
+                waitFor(web, scenario, "!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add to queue')");
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add to queue').click()");
+                waitFor(web, scenario, "document.querySelectorAll('[data-testid=program-queue] [data-row-main]').length===1 && document.querySelector('[data-testid=android-program]').textContent.includes('Play')");
+                web.evaluate(scenario, "window.__insertReady=false;window.__insertReadyTimer=setInterval(()=>window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>{if(s.state===3 && s.durationMs>=600000){window.__insertReady=true;clearInterval(window.__insertReadyTimer)}}),100)");
+                waitFor(web, scenario, "window.__insertReady===true");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(1, controller.getMediaItemCount()); assertFalse(controller.getPlayWhenReady()); assertTrue(controller.getShuffleModeEnabled()); assertEquals(Player.REPEAT_MODE_ALL, controller.getRepeatMode()); controller.seekTo(23000); });
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__beforeInsert=s)");
+                waitFor(web, scenario, "window.__beforeInsert?.items.length===1");
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member private song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
+                waitFor(web, scenario, "!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add after current')");
+                web.evaluate(scenario, "window.__menuPainted=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__menuPainted=true))");
+                waitFor(web, scenario, "window.__menuPainted===true && Array.from(document.querySelectorAll('[role=dialog] button')).filter(b=>b.textContent==='Add after current'||b.textContent==='Add to queue').every(b=>{const r=b.getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight && r.left>=0 && r.right<=innerWidth})");
+                try (android.os.ParcelFileDescriptor capture = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/soundsible-s2e-menu.png");
+                     java.io.InputStream output = new android.os.ParcelFileDescriptor.AutoCloseInputStream(capture)) { while (output.read() != -1) {} }
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add after current').click()");
+                waitFor(web, scenario, "document.querySelectorAll('[data-testid=program-queue] [data-row-main]').length===2");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(0, controller.getCurrentMediaItemIndex()); assertFalse(controller.getPlayWhenReady()); assertTrue("Insertion retained seek: " + controller.getCurrentPosition(), controller.getCurrentPosition() >= 23000 && controller.getCurrentPosition() < 24000); });
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__inserted=s)");
+                waitFor(web, scenario, "window.__inserted?.items.length===2 && window.__inserted.items[0].key===window.__beforeInsert.items[0].key && window.__inserted.items[0].id===window.__inserted.items[1].id && window.__inserted.items[0].key!==window.__inserted.items[1].key");
+                // The same order token cannot authorize 'after current' once OS navigation changed the anchor.
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> controller.seekTo(1, 27000));
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'insertAfter',queueToken:window.__inserted.queueToken,index:0,key:window.__inserted.items[0].key,tracks:[{id:'member-track'}]}).then(()=>window.__anchorRejected=false,()=>window.__anchorRejected=true)");
+                waitFor(web, scenario, "window.__anchorRejected===true");
+                // Invalid batches are atomic; enforce the remaining capacity on the service queue.
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'append',queueToken:window.__inserted.queueToken,tracks:[{id:'member-track'},{id:''}]}).then(()=>window.__batchRejected=false,()=>window.__batchRejected=true)");
+                waitFor(web, scenario, "window.__batchRejected===true");
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'append',queueToken:window.__inserted.queueToken,tracks:Array.from({length:999},()=>({id:'member-track'}))}).then(()=>window.__limitRejected=false,()=>window.__limitRejected=true)");
+                waitFor(web, scenario, "window.__limitRejected===true");
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'append',queueToken:window.__beforeInsert.queueToken,tracks:[{id:'member-track'}]}).then(()=>window.__insertOrderRejected=false,()=>window.__insertOrderRejected=true)");
+                waitFor(web, scenario, "window.__insertOrderRejected===true");
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + (connection.getGeneration()-1) + ",action:'append',queueToken:window.__inserted.queueToken,tracks:[{id:'member-track'}]}).then(()=>window.__insertAccountRejected=false,()=>window.__insertAccountRejected=true)");
+                waitFor(web, scenario, "window.__insertAccountRejected===true");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(2, controller.getMediaItemCount()); assertEquals(1, controller.getCurrentMediaItemIndex()); assertTrue(controller.getCurrentPosition() >= 27000 && controller.getCurrentPosition() < 28000); controller.play(); });
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'append',queueToken:s.queueToken,tracks:[{id:'member-track',title:'appended',artist:'member'}]}))");
+                waitFor(web, scenario, "document.querySelectorAll('[data-testid=program-queue] [data-row-main]').length===3 && document.querySelector('[data-testid=android-program]').textContent.includes('Pause')");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(1, controller.getCurrentMediaItemIndex()); assertEquals("appended", controller.getMediaItemAt(2).mediaMetadata.title.toString()); assertTrue(controller.getCurrentPosition() >= 27000); assertTrue(controller.getPlayWhenReady()); controller.pause(); });
+                scenario.recreate();
+                waitFor(web, scenario, "document.querySelectorAll('[data-testid=program-queue] [data-row-main]').length===3 && document.querySelector('[data-testid=android-program]').textContent.includes('Play')");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(1, controller.getCurrentMediaItemIndex()); assertTrue(controller.getShuffleModeEnabled()); assertEquals(Player.REPEAT_MODE_ALL, controller.getRepeatMode()); });
+                // Insert in the middle of the visible order, preserving its existing successor/key.
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>{window.__middleBefore=s;return window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'insertAfter',queueToken:s.queueToken,index:s.index,key:s.items[s.index].key,tracks:[{id:'member-track',title:'inserted middle'}]})})");
+                waitFor(web, scenario, "window.Capacitor && document.querySelectorAll('[data-testid=program-queue] [data-row-main]').length===4");
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__middleAfter=s)");
+                waitFor(web, scenario, "window.__middleAfter?.items.length===4 && window.__middleAfter.items[2].title==='inserted middle' && window.__middleAfter.items[3].key===window.__middleBefore.items[2].key && new Set(window.__middleAfter.items.map(i=>i.key)).size===4");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(1, controller.getCurrentMediaItemIndex()); assertFalse(controller.getPlayWhenReady()); });
+                web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'stop'}).then(()=>window.Capacitor.Plugins.SoundsiblePlayback.state()).then(s=>window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'insertAfter',index:-1,key:'',queueToken:s.queueToken,tracks:[{id:'member-track',title:'empty after'}]}))");
+                waitFor(web, scenario, "document.querySelectorAll('[data-testid=program-queue] [data-row-main]').length===1 && document.querySelector('[data-testid=android-program]').textContent.includes('empty after')");
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { assertEquals(0, controller.getCurrentMediaItemIndex()); assertFalse(controller.getPlayWhenReady()); assertTrue(controller.getCurrentPosition() < 1000); });
                 // A new source failure is visible, and explicit play retries the same position/queue.
                 audioFailure(connection, origin, 503);
                 web.evaluate(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + connection.getGeneration() + ",action:'queue',tracks:[{id:'member-track',title:'retry',artist:'member'}],index:0})");

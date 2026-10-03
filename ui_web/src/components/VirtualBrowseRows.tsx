@@ -5,7 +5,7 @@ import { trackCoverUrl } from '../lib/media';
 import type { Track } from '../types/music';
 
 /** Read-only use of the shared song row: bounded DOM even for a full home library. */
-export function VirtualBrowseRows(props: { tracks: Track[]; onPlay?: (index: number) => void; activeId?: string }) {
+export function VirtualBrowseRows(props: { tracks: Track[]; onPlay?: (index: number) => void; activeId?: string; onMenu?: (track: Track, event?: MouseEvent) => void }) {
   let scroll!: HTMLDivElement;
   const [height, setHeight] = createSignal(56);
   const rows = createVirtualizer({
@@ -28,6 +28,7 @@ export function VirtualBrowseRows(props: { tracks: Track[]; onPlay?: (index: num
       <For each={rows.getVirtualItems()}>{item => <div style={{ position: 'absolute', width: '100%', top: '0', transform: `translateY(${item.start}px)` }}>
         <Show when={props.tracks[item.index]}>{track => <MusicListRowView title={track().title} subtitle={track().artist}
           seed={track().id} cover={trackCoverUrl(track(), 'thumb')} disabled={!props.onPlay || track().source === 'preview'}
+          onMenu={props.onMenu && track().source !== 'preview' ? event => props.onMenu?.(track(), event) : undefined}
           active={props.activeId === track().id} playback onActivate={() => props.onPlay?.(item.index)} />}</Show>
       </div>}</For>
     </div>

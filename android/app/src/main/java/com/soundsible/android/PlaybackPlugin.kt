@@ -65,22 +65,16 @@ class PlaybackPlugin : Plugin() {
                     require(p.isCommandAvailable(Player.COMMAND_CHANGE_MEDIA_ITEMS) && p.isCommandAvailable(Player.COMMAND_PLAY_PAUSE))
                     require(connection.cookieHeader(connection.generation) != null)
                     val rows = call.getArray("tracks") ?: error("NO_TRACKS")
-                    require(rows.length() in 1..1000)
-                    val items = (0 until rows.length()).map { i ->
-                        val row = rows.getJSONObject(i)
-                        val id = row.getString("id")
-                        require(id.isNotBlank() && id.length <= 512)
-                        MediaItem.Builder().setMediaId(id).setUri(connection.origin + "/api/static/stream/" + android.net.Uri.encode(id) + "?android_generation=" + connection.generation)
-                            .setMediaMetadata(MediaMetadata.Builder().setTitle(row.optString("title")).setArtist(row.optString("artist")).setAlbumTitle(row.optString("album")).setExtras(Bundle().apply { putString(ProgramQueue.KEY, java.util.UUID.randomUUID().toString()) }).build()).build()
-                    }
+                    val items = ProgramQueue.items(connection, rows)
                     val index = call.getInt("index") ?: 0
                     require(index in items.indices)
                     p.setMediaItems(items, index, 0); p.prepare(); p.play()
                 }
-                "select", "move", "remove" -> {
+                "select", "move", "remove", "append", "insertAfter" -> {
                     val args = Bundle().apply {
                         putLong("generation", connection.generation)
                         putString("action", call.getString("action")); putString("queueToken", call.getString("queueToken")); putString("key", call.getString("key"))
+                        putString("tracks", call.getArray("tracks")?.toString())
                         putInt("index", call.getInt("index") ?: -1); putInt("toIndex", call.getInt("toIndex") ?: -1)
                     }
                     val result = p.sendCustomCommand(ProgramQueue.command, args)

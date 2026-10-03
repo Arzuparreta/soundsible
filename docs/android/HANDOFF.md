@@ -328,3 +328,48 @@ verificados. No se atribuyen aquí tests backend antiguos ni CI GitHub no ejecut
 [Evidencia S2d](evidence/s2d.json) y [cola visible](evidence/queue-s2d-api36.png).
 Metadata de validación conserva dirty=true; no es una release. Commit final:
 `git log --oneline --grep='edit NORMAL queue by native occurrence'`.
+
+### Entrega S2e
+
+Añadir después de la actual/al final desde filas locales de biblioteca y
+colecciones. Usa menús/outlets compartidos y comandos asíncronos hacia el único
+player nativo. No importa stores de mezcla. Factoría de fuentes nativa compartida
+con reemplazo de cola, UUID nuevo por entrada; JS sólo proporciona metadatos.
+Guards de generación/orden y, para insertAfter, ocurrencia actualmente seleccionada.
+Lote y capacidad total se validan antes de mutar. Una cola vacía queda preparada en
+pausa. En shuffle «después» es posición visible, no promesa de próximo audio.
+Detalles: [S2e](SLICE_2.md#s2e-añadir-desde-biblioteca-y-colecciones).
+
+### Validación final de S2e
+
+Typecheck/Vitest: **1.348 tests / 146 archivos**. APK debug/test y lint correctos;
+integración API 36 **7 pasan / 0 omitidos / 0 fallos** con HTTP/HTTPS verificado.
+Chromium completo: **278 pasan / 66 omitidos**. WebKit completo readonly/1 worker:
+**269 pasan / 75 omitidos / 0 fallos**, después de Chromium y con emulador detenido.
+Sin cambios en fuentes del grafo web durante ambas suites. Firma APK, versión
+central, ausencia de CA fixture/Web Audio, diff y enlaces locales verificados.
+
+El HTTP instrumentado falló inicialmente por seleccionar «primera fila»: el test
+de sockets había añadido una entrada de catálogo sin WAV real. La espera de READY
+reveló el error de fuente. Ahora el test abre el menú de la canción fixture por su
+label y espera audio preparado antes del seek. HTTPS pasó esos intentos; ambos
+pasan al final. No se ocultó el fallo ni se retiró la prueba de posición.
+
+[Evidencia S2e](evidence/s2e.json) y [menú en viewport](evidence/menu-s2e-api36.png).
+La captura usa sólo cuenta/datos sintéticos del fixture TLS. Metadata de validación
+conserva dirty=true y base anterior; no es una release. El APK limpio posterior al
+commit debe usar ese nuevo HEAD y dirty=false. Commit: `git log --oneline
+--grep='insert library tracks into native NORMAL queue'`. No CI GitHub, PR/merge ni
+aceptación acústica de dispositivo se atribuyen a estos checks locales.
+
+### Siguiente corte propuesto: S2f, recuperación de conexión del programa NORMAL
+
+Antes de adquisición/previews y de retirar LibraryBrowser, definir y probar la
+recuperación del programa local al perder/restaurar el servidor. Conservar cola,
+ocurrencias, posición y pausa; mostrar estado recuperable y reintento explícito sin
+relogin artificial ni reproducción duplicada. Diferenciar red, 401 y 403; logout
+sigue vaciando antes de otra cuenta. Probar corte real de stream/red, recuperación
+HTTP/HTTPS y recreación mientras está desconectado, sin convertirlo en offline ni
+caché de audio. Auditar primero el comportamiento actual de Media3 y del datasource;
+no añadir retry automático ilimitado ni saltar certificados. Adquisición/preview,
+rutas completas, podcasts/radio/artwork/DJ/Live/Android Auto y offline siguen aparte.

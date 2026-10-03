@@ -174,3 +174,36 @@ Los labels de acciones incluyen el índice para distinguir títulos repetidos.
 Sigue siendo la superficie Android de desarrollo, no la UI NORMAL completa ni
 un catálogo Android Auto. Límite de 1.000 archivos, sin append/adquisición,
 previews/podcasts/radio/artwork/handoff ni resumption. No alpha ni offline.
+
+## S2e: añadir desde biblioteca y colecciones
+
+Las filas locales de LibraryBrowser abren el menú compartido (sheet en touch,
+popover con ratón) con «Añadir después de la actual» y «Añadir a la cola».
+Previews no ofrecen este menú; no hay adquisición nueva. Los callbacks no importan
+stores de mezcla ni prometen confirmación antes de observar el servicio.
+
+`append` lleva tracks/queueToken; `insertAfter` añade index/key de la ocurrencia
+actual al abrir el menú. Ambos llevan generación y pasan por el custom command
+restringido al UID. El servicio comprueba su orden real; para insertAfter comprueba
+además que el ancla siga siendo la actual, incluso si un comando OS cambió de
+canción sin cambiar el orden. Rechaza acciones antiguas sin modificar nada.
+Una selección diferida del sheet no puede trasladarse a otra cuenta.
+
+La factoría nativa compartida con `queue` sólo acepta ids/metadatos: no usa URI,
+cookie ni key de JS. Cada inserción crea nuevos UUIDs, también para ids repetidos.
+Valida el lote entero antes de añadir, el límite total de 1.000 y los límites de
+id/metadatos. No reconstruye entradas existentes. Media3 mantiene la ocurrencia
+actual, posición, play/pausa y modos al añadir durante reproducción o pausa.
+Una cola vacía se prepara explícitamente en pausa, incluso si stop/clear había
+conservado playWhenReady. No se llama prepare/play sobre una cola no vacía como
+reintento implícito de un error. No se persiste el programa tras muerte del proceso.
+
+«Después» significa la siguiente posición de la cola visible. Con shuffle activo,
+Media3 conserva el orden aleatorio en lo posible; no se promete que esa nueva fila
+suene inmediatamente después. Véase [playlist/shuffle de Media3](https://developer.android.com/media/media3/exoplayer/playlists).
+
+La integración HTTP/HTTPS verificado comprueba acciones reales desde el menú,
+claves nuevas/existentes, inserción intermedia, pausa/posición/modos, append mientras
+suena, recreación de Activity, ancla antigua tras navegación OS, generación/orden
+antiguos y lotes inválidos/demasiado grandes sin modificación parcial. Ver
+[traspaso y resultados finales](HANDOFF.md#entrega-s2e).

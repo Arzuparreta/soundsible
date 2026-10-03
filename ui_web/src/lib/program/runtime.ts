@@ -14,6 +14,8 @@ export type ProgramCommand =
   | { action: 'repeat'; mode: 0 | 1 | 2 }
   | { action: 'select' | 'remove'; index: number; key: string; queueToken: string }
   | { action: 'move'; index: number; toIndex: number; key: string; queueToken: string }
+  | { action: 'append'; tracks: ProgramTrack[]; queueToken: string }
+  | { action: 'insertAfter'; tracks: ProgramTrack[]; queueToken: string; index: number; key: string }
   | { action: 'queue'; tracks: ProgramTrack[]; index: number };
 export interface ProgramTransport {
   state(): Promise<ProgramState>;

@@ -217,3 +217,13 @@ continúan observando un único player. Virtualización con clave estable y medi
 real de cada fila evita reconstruir DOM con los ticks o solapar controles en edición.
 El seek sigue la clave actual, conservándose al moverla y limpiándose al sustituirla
 por otra entrada del mismo id e índice.
+
+### Inserciones desde biblioteca de S2e
+
+El mismo custom command añade append/insertAfter. Las fuentes y UUIDs se crean en
+el servicio desde metadatos; el límite total y el lote se validan antes de mutar.
+insertAfter guarda y valida la ocurrencia actual además del orden, para rechazar un
+menú abierto antes de una transición OS. La selección diferida no cruza cuentas.
+No hay reconstrucción del programa ni autoplay al llenar una cola vacía.
+El menú y sus outlets reutilizan la presentación compartida sin stores de mezcla.
+[Contrato y semántica shuffle](SLICE_2.md#s2e-añadir-desde-biblioteca-y-colecciones).

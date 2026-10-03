@@ -4,7 +4,7 @@
 
 Cada slice termina con implementación, pruebas pertinentes, evidencia, actualización
 del traspaso y commit enfocado. No hay publicación por completar un slice.
-`S0`, el núcleo funcional de `S1` y los cortes `S2a`/`S2b`/`S2c`/`S2d` están implementados.
+`S0`, el núcleo funcional de `S1` y los cortes `S2a`/`S2b`/`S2c`/`S2d`/`S2e` están implementados.
 `S2` completo y posteriores siguen **pendientes**.
 HTTP/HTTPS se prueban con fixture real; la aceptación pública/DNS/Tailscale de S1 sigue abierta; ver HANDOFF.
 Una casilla sólo cambia con evidencia; interfaces y workflows no cuentan como
@@ -35,7 +35,7 @@ al slice de publicación.
 | Cuenta/configuración/permisos | `lib/session.ts`, `routes/Settings.tsx`, `/api/auth/*` | Cuenta persistida y roles respetados; logout/cambio sin fuga; ajustes disponibles según permisos | Login/logout/roles y persistencia S1; Settings y aceptación remota pendientes |
 | Biblioteca, entidades, favoritos, playlists, metadatos | `routes/Library.tsx`, `components/MusicListRow.tsx`, stores, `trackActions.tsx` | Mismas acciones y estados guardados; actualizaciones y errores recuperables | Lectura/colecciones/covers/eventos S1; edición y acciones pendientes |
 | Búsqueda/descubrimiento/adquisición/importación | `routes/Search.tsx`, `lib/catalogItem.ts`, `routes/Migrate.tsx`, descargas | Flujo descubrir → guardar/adquirir → reproducir; proveedores fallidos y progreso; selector de archivos nativo | Pendiente |
-| NORMAL y cola | `lib/audio/contracts.ts`, stores | Orden/ocurrencias, transporte y acciones de fila; seek/cambio/fin; fallos sin doble audio | S2d: archivos, cola por ocurrencias y edición nativa, seek/fin/foco/servicio, contrato asíncrono y controles Solid con shuffle/repeat; UI completa/edición/reconexión extendida pendientes |
+| NORMAL y cola | `lib/audio/contracts.ts`, stores | Orden/ocurrencias, transporte y acciones de fila; seek/cambio/fin; fallos sin doble audio | S2e: archivos, cola por ocurrencias, edición e inserción desde biblioteca, seek/fin/foco/servicio, contrato asíncrono y controles Solid con shuffle/repeat; UI completa/edición/reconexión extendida pendientes |
 | Podcasts/radio/previews | `types/podcast.ts`, stores, `lib/api.ts` | Streaming y archivos reales, resume y ±15s, range correcto y preparación temporal | Pendiente |
 | DJ | `components/AutoMode.tsx`, `stores/dj.ts`, `audio/mixer.ts`, `docs/AUTO_MODE.md` | Sesiones/contextos, dirección, edición, requests, técnicas/FX, metadata dominante, fallback y recuperación | Pendiente |
 | Letras/compartir/multidispositivo | `components/LyricsPanel.tsx`, `lib/share.ts`, `stores/runtime.ts` | Letras temporizadas, compartir e invites/deep links; registro, handoff y controles en cuenta correcta | Pendiente |

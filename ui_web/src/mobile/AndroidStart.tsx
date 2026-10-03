@@ -12,6 +12,9 @@ import LibraryBrowser, { type BrowseSnapshot } from './LibraryBrowser';
 import { nativeProgramTransport, localProgram } from './playback';
 import { createProgramRuntime, type ProgramState } from '../lib/program/runtime';
 import ProgramTransport from '../components/ProgramTransport';
+import { openContextMenu, ContextMenuOutlet } from '../lib/contextMenu';
+import { OverlayOutlet } from '../lib/overlay';
+import { programLibraryMenu } from '../lib/program/libraryMenu';
 import ProgramQueue from '../components/ProgramQueue';
 import logo from '../../../branding/logo-mark.svg';
 import styles from './AndroidStart.module.css';
@@ -203,8 +206,9 @@ export default function AndroidStart() {
       <Show when={!eventsOnline()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={program()?.queue.length ? program() : null}>{state => <><ProgramTransport state={state()} pending={programPending()} command={runtime.execute} /><ProgramQueue state={state()} pending={programPending()} command={runtime.execute} /></>}</Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
-        {data => <LibraryBrowser snapshot={data()} revision={revision()} activeId={program()?.id} onPlay={play} />}
+        {data => <LibraryBrowser snapshot={data()} revision={revision()} activeId={program()?.id} onPlay={play} onMenu={(track, event) => openContextMenu(programLibraryMenu(track, program, programPending, runtime.execute), event)} />}
       </Show>
     </Show>
+    <OverlayOutlet /><ContextMenuOutlet />
   </main>;
 }
