@@ -1,0 +1,110 @@
+{
+  "date": "2026-10-03",
+  "slice": "S2h explicit native program closure",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "d0408b16a15d46630374183a0f4038e07d0c0fd4",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "unit": {
+      "passed": 1351,
+      "files": 146,
+      "command": "npm test --prefix ui_web"
+    },
+    "android": {
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "api": 36,
+      "fixtures": [
+        "HTTP",
+        "verified HTTPS",
+        "passwordless HTTP"
+      ],
+      "normal_apk_and_lint": "passed"
+    },
+    "chromium": {
+      "passed": 278,
+      "skipped": 66,
+      "failures": 0,
+      "profiles": [
+        "chromium-mobile",
+        "chromium-desktop"
+      ],
+      "workers": 2
+    },
+    "webkit": {
+      "passed": 269,
+      "skipped": 75,
+      "failures": 0,
+      "profiles": [
+        "webkit-mobile",
+        "webkit-desktop"
+      ],
+      "workers": 1,
+      "readonly_mount": true
+    },
+    "other": [
+      "central version sync",
+      "native JS excludes AudioContext/mixer",
+      "normal APK excludes fixture resources",
+      "ruff check/format",
+      "git diff --check",
+      "documentation file links resolve",
+      "apksigner verify"
+    ],
+    "webkit_diagnosis": {
+      "initial_full_run": {
+        "passed": 268,
+        "skipped": 75,
+        "failed": 1,
+        "failure": "queue-editing menu Add to queue click timeout on webkit-mobile"
+      },
+      "isolated_repetitions": 3,
+      "isolated_passed": 3,
+      "source_changes": false,
+      "root_cause": "not reproduced; no root cause confirmed",
+      "final_full_run": "269 passed / 75 skipped / 0 failed"
+    }
+  },
+  "cases": [
+    "Close sends captured generation and queue fingerprint through the own-UID service command; stale queue fingerprint is rejected",
+    "No optimistic clearing: service mutates the player and the plugin waits for closed IPC state before resolving",
+    "Playing, paused, buffering with delayed response headers, and real audio 503 are closed while REST API returns 503",
+    "Actual native player has no items, metadata, artwork URI, Play intention, modes or playback error after close",
+    "Android platform session title and album art clear; media notification disappears",
+    "Account generation and cookie remain identical; Activity recreation does not reconstruct a program",
+    "Append creates new occurrence keys and remains paused with default modes; explicit library activation starts native audio again",
+    "Delayed old stream response does not resurrect a closed program",
+    "finishAndRemoveTask during real native playback followed by relaunch retains playing and occurrence key, with an instrumented MediaController bound",
+    "Existing account, artwork, queue edits, playback recovery, focus and revocation tests retained"
+  ],
+  "initial_failures": [
+    "Typecheck located an existing account-reset stop call that needed the captured queue token; updated before final unit/browser runs",
+    "Configured Activity recreation used the unconfigured-start helper; replaced with configured boot/empty-program acceptance",
+    "Pinned Media3 stop retains prior error; closure now prepares an empty timeline and stops again only when necessary, without an audio source or HTTP",
+    "320px capture showed title narrowed by transport controls; final header isolates artwork/title/44px close from the transport row",
+    "Previous recovery test relied on modes inherited through stop; it now explicitly sets shuffle/repeat before the induced stream failure and retains all recovery assertions",
+    "First full WebKit run: queue-editing menu timed out opening Add to queue; isolated diagnosis and full rerun required. Initial green count was recorded before verifying the summary and corrected before push."
+  ],
+  "artifacts": {
+    "open_screenshot": "close-open-s2h-api36.png",
+    "closed_unreachable_screenshot": "close-unreachable-s2h-api36.png",
+    "integration_xml": "android/build/integration-results/connected/debug/",
+    "apk": "android/app/build/outputs/apk/debug/app-debug.apk"
+  },
+  "browser_source_changes": "Final unit and Chromium suites follow the header correction, with all ui_web sources frozen; subsequent changes only Java instrumentation and documentation. Final WebKit starts after Chromium and all native work, with emulator stopped, read-only mount and one worker.",
+  "limitations": [
+    "Development artifact, no release/public alpha",
+    "No physical sound, recent-task swipe, lockscreen, wired/Bluetooth/headphone or manufacturer acceptance",
+    "Task removal case retains an instrumented controller binding; no claim of process-death recovery",
+    "Player/session and artwork executor remain owned by the service while controllers are bound; active audio/image work and cached image are cleared",
+    "Full routes, acquisition/previews, podcasts/radio, DJ/Live and Android Auto catalogue remain pending",
+    "Offline decision unresolved and no implementation inferred"
+  ],
+  "github_ci": "not run"
+}

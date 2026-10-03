@@ -188,7 +188,9 @@ Una fuente fallida permite reintentar con Play; 401 revalida la sesión y vuelve
 al login, 403 muestra falta de permiso. Logout/cambio destruyen el programa.
 
 El programa sobrevive a recreación y background de la Activity, pero este corte
-no restaura la cola tras muerte del proceso. S2g añade carátulas privadas al programa, cola y sesión/notificación nativa. No hay offline,
+no restaura la cola tras muerte del proceso. S2g añade carátulas privadas al programa, cola y sesión/notificación nativa.
+S2h permite cerrar el reproductor con ×: vacía el programa y retira la notificación,
+sin borrar login; funciona también con el servidor inaccesible. No hay offline,
 mezcla, DJ/Live ni Android Auto. La cola de desarrollo admite hasta 1.000 archivos.
 El siguiente trabajo de S2 integra el contrato asíncrono con la UI autenticada
 completa y añade previews/podcasts/radio. Ver [contrato y pendientes](android/SLICE_2.md).

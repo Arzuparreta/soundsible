@@ -1,6 +1,7 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
   android: {
+    closeProgram: 'Close player',
     playbackInterrupted: 'Playback interrupted. Your queue and position are retained. Retry when the server is available.',
     insertAfter: 'Add after current',
     repeatOff: 'Off',

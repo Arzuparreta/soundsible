@@ -2,6 +2,7 @@ import type { Dict } from './en';
 
 export const es: Dict = {
   android: {
+    closeProgram: 'Cerrar reproductor',
     playbackInterrupted: 'Reproducción interrumpida. Se conservan cola y posición. Reintenta cuando el servidor esté disponible.',
     insertAfter: 'Añadir después de la actual',
     repeatOff: 'Desactivado',

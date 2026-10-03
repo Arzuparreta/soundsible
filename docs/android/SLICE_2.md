@@ -295,3 +295,52 @@ notificación con el color privado correcto, además de los casos existentes de
 recreación, duplicados/edición, foco y recuperación. El encoder de miniaturas del motor
 es JPEG: las pruebas admiten tres puntos por canal, no exigen píxel idéntico al PNG.
 Esto no prueba escucha acústica, pantalla bloqueada física, Bluetooth ni Android Auto.
+
+
+## S2h: cierre explícito del programa
+
+El botón × de la cabecera lleva etiqueta accesible localizada “Cerrar reproductor”
+y área mínima 44 × 44 px. Envía `stop` con generación y queueToken capturados; no
+borra estado de UI por anticipado. Sólo el UID propio puede enviar ese custom command.
+El servicio verifica generación y huella de la cola, incluso sin cookie/red disponible:
+un cierre tardío de otro programa se rechaza. No depende de REST ni borra la cuenta.
+
+En el looper del player: pausa, stop, vaciado de fuentes/ocurrencias, reset de
+shuffle/repeat e intención, cancelación/limpieza del cargador de carátulas y del
+cliente audio, incluida expulsión de conexiones idle del cliente retenido. En la
+versión Media3 fijada, stop conserva un error anterior. Si sigue presente después
+de vaciar, prepare sobre timeline vacío lo limpia y otro stop deja STATE_IDLE;
+no hay fuente de audio ni petición de red en esa preparación. Se verificó en los
+JAR reales de ExoPlayerImpl (`stopInternal`/`prepare`) y en el caso 503 instrumentado.
+
+La respuesta del servicio confirma la mutación. El plugin espera además observar
+por IPC cola vacía, intención falsa, modos por defecto, idle y error nulo antes de
+resolver el snapshot (máximo 3 segundos, guardando generación/controlador). Un
+snapshot sin items usa index -1, metadata vacía y posición/duración cero. El runtime
+serializa las acciones posteriores; no presenta éxito a partir de una cola local
+vacía. El error de confirmación permanece visible si se rechaza/no se observa.
+
+El timeline vacío hace retirar notificación y foreground por el gestor estándar
+de Media3; se solicita actualización sin cancelar un id de notificación manual.
+La sesión/player siguen disponibles mientras hay controllers enlazados. No se
+libera una sesión debajo de la Activity ni se guarda resumption en disco. El
+loader de carátulas descarta su único resultado y cancela trabajos, conservando
+su executor para una activación posterior; destroy libera ese executor.
+
+Cerrar programa y retirar tarea de recientes son acciones distintas. No se
+sobrescribe onTaskRemoved: la versión fijada conserva reproducción cuando existe
+foreground y alguna sesión con isPlaying verdadero; de lo contrario llama a
+pauseAllPlayersAndStopSelf. La destrucción final depende de los enlaces restantes.
+[Contrato de servicio](https://developer.android.com/reference/androidx/media3/session/MediaSessionService) y
+[reproducción en background](https://developer.android.com/media/media3/session/background-playback).
+El test usa finishAndRemoveTask, un MediaController de instrumentación enlazado y
+reapertura en API 36, conservando key/playing. No prueba swipe físico ni muerte del
+proceso, auriculares/llamadas/Bluetooth o política de fabricantes.
+
+Casos de cierre HTTP/HTTPS verificado: Play, pausa, buffering con headers retrasados,
+error de audio 503 y API 503; metadata/artwork de sesión Android y notificación
+retiradas; mismo cookie/generación; Activity recreada no reconstruye cola. Se
+rechaza queueToken obsoleto. Append posterior tiene nuevas keys y permanece
+pausado con modos por defecto; activar una fila explícitamente vuelve a reproducir.
+Una respuesta del stream retrasado no resucita el programa después de cerrar.
+La biblioteca se revalida por red al restaurar API: no es persistencia offline.

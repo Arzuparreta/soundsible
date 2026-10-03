@@ -113,6 +113,7 @@ def main() -> None:
     stream_requests = []
     stream_failure = {}
     stream_cut = {}
+    stream_delay = {}
     connection_failure = {}
     artwork_mode = {}
 
@@ -126,6 +127,8 @@ def main() -> None:
                 sleep(2)
         if request.path.startswith("/api/static/stream/"):
             name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
+            if stream_delay.get(name):
+                sleep(5)
             if stream_failure.get(name):
                 return jsonify({"error": "synthetic audio failure"}), stream_failure[name]
 
@@ -191,6 +194,8 @@ def main() -> None:
             artwork_mode[name] = (request.get_json() or {}).get("mode", "")
         elif action == "audio-failure":
             stream_failure[name] = int((request.get_json() or {}).get("status", 0))
+        elif action == "stream-delay":
+            stream_delay[name] = bool((request.get_json() or {}).get("enabled"))
         elif action == "stream-cut":
             stream_cut[name] = bool((request.get_json() or {}).get("enabled"))
         elif action == "connection-failure":

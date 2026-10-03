@@ -252,3 +252,14 @@ Errores de imagen no se propagan al player ni borran login.
 La UI de programa/cola usa el proxy local privado existente y el gradiente compartido;
 el proxy ahora limita bytes y revalida generación antes de publicar. Ver
 [contrato y límites S2g](SLICE_2.md#s2g-carátulas-privadas-del-programa-y-sesión).
+
+
+### Cierre de programa (S2h)
+
+`stop` lleva queueToken y pasa por el custom command del servicio, con guard de
+UID/generación/cola; funciona sin REST/cookie para cerrar el programa actual. El
+servicio vacía fuentes, intención/modos/error y recursos de audio/artwork. El plugin
+espera el estado cerrado recibido por IPC antes de resolver. No cambia identidad;
+una cola nueva no hereda intención/modos ni claves. Media3 retira la notificación
+por timeline vacío, manteniendo el player/session mientras existan controllers.
+[Contrato S2h](SLICE_2.md#s2h-cierre-explícito-del-programa).

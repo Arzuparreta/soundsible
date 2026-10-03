@@ -9,7 +9,8 @@ export interface ProgramState {
 export interface ProgramOccurrence extends ProgramTrack { key: string }
 export interface ProgramTrack { id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
-  | { action: 'play' | 'pause' | 'next' | 'previous' | 'stop' }
+  | { action: 'play' | 'pause' | 'next' | 'previous' }
+  | { action: 'stop'; queueToken: string }
   | { action: 'seek'; positionMs: number }
   | { action: 'shuffle'; enabled: boolean }
   | { action: 'repeat'; mode: 0 | 1 | 2 }

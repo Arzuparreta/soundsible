@@ -105,6 +105,7 @@ class ProgramArtwork(private val connection: EngineConnection) : BitmapLoader, A
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: error("INVALID_IMAGE")
     }
+    fun clear() { reset() }
     override fun close() {
         connection.resetListeners.remove(reset)
         synchronized(lock) { closed = true; reset() }

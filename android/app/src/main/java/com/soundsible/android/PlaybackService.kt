@@ -30,7 +30,18 @@ class PlaybackService : MediaLibraryService() {
     private val main = Handler(Looper.getMainLooper())
     private val reset: () -> Unit = {
         transport?.second?.dispatcher?.cancelAll(); transport = null
-        main.post { if (session != null) { player.stop(); player.clearMediaItems(); player.shuffleModeEnabled = false; player.repeatMode = Player.REPEAT_MODE_OFF } }
+        main.post { if (session != null) closeProgram() }
+    }
+    /** On the player looper; does not touch account generation, cookie or library. */
+    private fun closeProgram() {
+        player.pause(); player.stop(); player.clearMediaItems()
+        // stop retains a previous playback error. Preparing an empty timeline clears it without a source.
+        if (player.playerError != null) { player.prepare(); player.stop() }
+        player.shuffleModeEnabled = false; player.repeatMode = Player.REPEAT_MODE_OFF
+        artwork.clear()
+        transport?.second?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll() }; transport = null
+        // Media3 removes the notification/foreground when its timeline is empty.
+        triggerNotificationUpdate()
     }
     override fun onCreate() {
         super.onCreate()
@@ -70,7 +81,12 @@ class PlaybackService : MediaLibraryService() {
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
-                return Futures.immediateFuture(try { ProgramQueue.edit(player, connection, args); SessionResult(SessionResult.RESULT_SUCCESS) } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })
+                return Futures.immediateFuture(try {
+                    if (args.getString("action") == "stop") {
+                        require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
+                        closeProgram()
+                    } else ProgramQueue.edit(player, connection, args)
+                    SessionResult(SessionResult.RESULT_SUCCESS) } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })
             }
         }).setBitmapLoader(artwork).setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
     }

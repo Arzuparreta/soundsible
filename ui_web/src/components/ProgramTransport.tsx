@@ -14,8 +14,9 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
   const run = (command: ProgramCommand) => props.command(command).catch(() => {});
   const disabled = () => !props.state.ready || props.pending;
   return <section class={styles.program} data-testid="android-program" aria-label={t('nowPlaying.nowPlayingSection')} aria-busy={props.pending}>
-    <span class={styles.artwork} data-program-artwork aria-hidden="true" style={coverStyle(props.state.id, coverUrl(props.state.id, 'thumb'))} />
+    <div class={styles.heading}><span class={styles.artwork} data-program-artwork aria-hidden="true" style={coverStyle(props.state.id, coverUrl(props.state.id, 'thumb'))} />
     <p>{props.state.title || props.state.id}<br /><small>{props.state.artist}</small></p>
+    <button data-program-close aria-label={t('android.closeProgram')} title={t('android.closeProgram')} disabled={disabled()} onClick={() => void run({ action: 'stop', queueToken: props.state.queueToken })}>×</button></div>
     <button disabled={disabled() || !props.state.hasPrevious} onClick={() => void run({ action: 'previous' })}>{t('common.prev')}</button>
     <button disabled={disabled()} onClick={() => void run({ action: props.state.playWhenReady ? 'pause' : 'play' })}>{props.state.playWhenReady ? t('common.pause') : t('common.play')}</button>
     <button disabled={disabled() || !props.state.hasNext} onClick={() => void run({ action: 'next' })}>{t('common.next')}</button>

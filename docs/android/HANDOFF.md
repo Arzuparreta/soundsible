@@ -508,3 +508,86 @@ suponer un comportamiento no probado de swipe en teléfono. Mantener foco/ruido
 con sus límites de aceptación física documentados. Este corte sigue siendo de
 desarrollo: rutas completas, adquisición/previews, podcasts/radio, DJ/Live,
 Android Auto y decisión offline permanecen pendientes.
+
+
+### Entrega S2h: cierre explícito del programa
+
+× en la cabecera Solid, con aria-label localizado y 44 × 44 px, envía stop con
+queueToken/generación. El custom command del servicio valida UID propio y cola;
+no requiere REST ni cookie para cerrar. Pausa, vacía fuentes/ocurrencias, resetea
+modos/intención/error y cancela audio/artwork; el plugin espera ver el estado vacío
+por IPC antes de resolver. No se cambia identidad, sesión o biblioteca. Snapshot
+vacío usa index -1 y metadata/progreso cero. Media3 retira notificación por timeline
+vacío; se conserva sesión/player mientras estén enlazados controllers.
+[Contrato S2h](SLICE_2.md#s2h-cierre-explícito-del-programa).
+
+Se inspeccionaron las APIs/JAR fijados de MediaSessionService,
+MediaNotificationManager y ExoPlayerImpl. Stop retiene un error previo: tras vaciar,
+prepare sin fuentes y otro stop limpian ese error sin red ni autoplay. El bitmap
+loader tiene clear independiente de cuenta para cancelar trabajos y descartar su
+último resultado. El cliente audio se cancela y expulsa conexiones idle. La
+conexión de cuenta y lectura de biblioteca siguen independientes del programa.
+
+Cierre instrumentado desde Play, pausa, headers de audio retrasados y error 503,
+con API devolviendo 503 en cada caso. Cola/UI/notificación y metadata/artwork Android
+quedan vacías; cookie/generación no cambian. Activity recreation no reconstruye la
+cola. Una huella obsoleta se rechaza. Append posterior crea nuevas keys, permanece
+pausado y usa modos por defecto; una activación explícita de biblioteca reproduce
+otra vez. Respuestas de audio retrasadas no resucitan el programa.
+
+Recientes no equivale a cerrar programa. No se modifica onTaskRemoved: en la versión
+fijada exige foreground e isPlaying para conservarlo; si no, llama a
+pauseAllPlayersAndStopSelf. El caso finishAndRemoveTask/reapertura en API 36 conserva
+playing/key y luego permite cerrar, con un controller de instrumentación enlazado.
+No es prueba física de swipe/lockscreen/auriculares/Bluetooth, ni process death o
+política de fabricantes. No se implementó persistencia/offline ni publicación.
+
+Los fallos iniciales se resolvieron sin eliminar aceptación: el helper de arranque
+sin servidor no era válido para recreación configurada; stop realmente retenía
+error y se corrigió; la captura a 320 px mostró título estrechado por los controles,
+y se separó la cabecera. Después la prueba de recovery S2f dependía de modos heredados
+de stop: ahora configura shuffle/repeat antes de interrumpir, manteniendo sus
+assertions de conservación. Las suites completas se repiten tras el cambio UI final.
+
+### Validación final de S2h
+
+Typecheck/Vitest: **1.351 tests / 146 archivos**, cero fallos. APK/test APK/lint e
+integración API 36: **11 tests, cero fallos/errores/omitidos**, HTTP/HTTPS verificado
+y casos S1/passwordless conservados. Chromium completo: **278 pasan / 66 omitidos**;
+Primera suite WebKit S2h: **268 pasan / 75 omitidos / 1 fallo** en menú de cola móvil.
+El caso pasó tres veces aislado sin cambios de fuentes/assertions; la repetición
+completa final pasó **269 / 75 omitidos / cero fallos**. No se confirmó causa del
+timeout inicial; la evidencia lo conserva y no lo presenta como un bug corregido.
+El recuento verde se había escrito antes de verificar el primer resumen y se
+corrigió antes del push. Las suites finales unit y
+Chromium se ejecutaron después de corregir la cabecera; cambios posteriores sólo
+instrumentación/documentación. WebKit se ejecutó tras todo trabajo nativo y Chromium,
+con fuentes UI congeladas, emulador parado, mount de sólo lectura y un worker.
+No se ejecutó CI GitHub ni aceptación acústica/física.
+
+Ruff/check/format, versión central, diff, enlaces locales y firma APK pasan. APK
+normal sin CA/recursos de fixture; bundle nativo sin AudioContext/runtime de mezcla.
+[Evidencia S2h](evidence/s2h.json), [cabecera/cierre](evidence/close-open-s2h-api36.png)
+y [cerrado con API inaccesible](evidence/close-unreachable-s2h-api36.png), todo sintético.
+El JSON registra el build dirty sobre el commit anterior; después de commit se
+regenera el APK normal limpio con su source_revision. No release/alpha.
+
+### Siguiente corte propuesto: S2i, preview nativo por el proxy del motor
+
+Primer vertical para canciones guardadas que hoy se muestran pero no se reproducen.
+Auditar primero las fuentes/ids reales de Track/source=preview y el contrato actual
+`/api/preview/stream/<video_id>`, prefetch/status/cancel y progressive-preview del motor.
+Introducir un discriminante de fuente en ProgramTrack/metadata nativa, conservando
+UUID de ocurrencias y seleccionando por índice incluso con local/preview mezclados.
+Nativo construye la fuente desde id validado; no recibe URL/CDN/cookie de JS, y no
+usa stream-url para enviar la sesión del motor a un proveedor externo.
+
+Reutilizar preparación/errores/transiciones actuales del motor: cancelación por
+cola/generación/cierre, preparación pendiente real sin fingir playing, progreso y
+Range sobre proxy, 401/403/429/503 y Retry acotado sin reemplazar programa. Retirar
+la desactivación de preview sólo para el flujo realmente validado. Mantener
+carátulas seguras/placeholder y no ampliar adquisición, podcasts/radio o DJ por
+suposición. Probar ruta real del motor con proveedor sintético aislado, cache de
+motor completa/progresiva, duplicates/mezcla, Activity/background/cierre y HTTP/
+HTTPS verificado. Fixtures no prueban proveedor vivo ni escucha física. Ningún
+cache temporal del motor supone offline Android aprobado; la decisión sigue abierta.

@@ -10,6 +10,18 @@ function fixture(overrides: Partial<ProgramTransport> = {}) {
   return { runtime: createProgramRuntime(transport, observer), observer, transport, stop, event: (s: ProgramState) => event(s) };
 }
 describe('asynchronous program ownership', () => {
+  it('keeps the program until native closure is observed and sends the captured queue identity', async () => {
+    const closed = deferred<ProgramState>(); const command = vi.fn(() => closed.promise);
+    const f = fixture({ command }); await f.runtime.bind(1);
+    const closing = f.runtime.execute({ action: 'stop', queueToken: 'token' }); await Promise.resolve();
+    expect(command).toHaveBeenCalledWith({ action: 'stop', queueToken: 'token', generation: 1 });
+    expect(f.observer.state).toHaveBeenLastCalledWith(expect.objectContaining({ queue: ['a'] }));
+    expect(f.observer.pending).toHaveBeenLastCalledWith(true);
+    closed.resolve({ ...state(1, 2), state: 1, index: -1, id: '', title: '', items: [], queue: [], queueToken: 'empty' });
+    await closing;
+    expect(f.observer.state).toHaveBeenLastCalledWith(expect.objectContaining({ items: [], queueToken: 'empty' }));
+    expect(f.observer.pending).toHaveBeenLastCalledWith(false);
+  });
   it('does not let a late command reply or initial snapshot replace a newer event', async () => {
     const initial = deferred<ProgramState>(); const reply = deferred<ProgramState>();
     const f = fixture({ state: () => initial.promise, command: () => reply.promise });

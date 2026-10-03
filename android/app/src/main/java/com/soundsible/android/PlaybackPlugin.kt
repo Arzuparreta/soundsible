@@ -32,6 +32,7 @@ class PlaybackPlugin : Plugin() {
     }
     private fun snapshot(): JSObject {
         val p = controller
+        val hasItems = p != null && p.mediaItemCount > 0
         val queue = JSArray()
         val items = JSArray()
         if (p != null) for (i in 0 until p.mediaItemCount) {
@@ -45,10 +46,10 @@ class PlaybackPlugin : Plugin() {
             .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", PlaybackRecovery.kind(p?.playerError))
             .put("shuffle", p?.shuffleModeEnabled ?: false).put("repeat", p?.repeatMode ?: Player.REPEAT_MODE_OFF)
             .put("hasNext", p?.hasNextMediaItem() ?: false).put("hasPrevious", p?.hasPreviousMediaItem() ?: false)
-            .put("state", p?.playbackState ?: Player.STATE_IDLE).put("index", p?.currentMediaItemIndex ?: -1)
+            .put("state", p?.playbackState ?: Player.STATE_IDLE).put("index", if (hasItems) p!!.currentMediaItemIndex else -1)
             .put("id", p?.currentMediaItem?.mediaId ?: "").put("queue", queue)
-            .put("title", p?.mediaMetadata?.title?.toString() ?: "").put("artist", p?.mediaMetadata?.artist?.toString() ?: "")
-            .put("positionMs", p?.currentPosition ?: 0).put("durationMs", p?.duration?.coerceAtLeast(0) ?: 0)
+            .put("title", if (hasItems) p!!.mediaMetadata.title?.toString() ?: "" else "").put("artist", if (hasItems) p!!.mediaMetadata.artist?.toString() ?: "" else "")
+            .put("positionMs", if (hasItems) p!!.currentPosition else 0).put("durationMs", if (hasItems) p!!.duration.coerceAtLeast(0) else 0)
             .put("error", p?.playerError?.errorCode ?: 0)
             .put("errorStatus", generateSequence(p?.playerError as Throwable?) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode ?: 0)
     }
@@ -71,7 +72,7 @@ class PlaybackPlugin : Plugin() {
                     require(index in items.indices)
                     p.setMediaItems(items, index, 0); p.prepare(); p.play()
                 }
-                "select", "move", "remove", "append", "insertAfter", "retry" -> {
+                "select", "move", "remove", "append", "insertAfter", "retry", "stop" -> {
                     val args = Bundle().apply {
                         putLong("generation", connection.generation)
                         putString("action", call.getString("action")); putString("queueToken", call.getString("queueToken")); putString("key", call.getString("key"))
@@ -82,7 +83,8 @@ class PlaybackPlugin : Plugin() {
                     result.addListener({
                         try {
                             require(alive && args.getLong("generation") == connection.generation && result.get().resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS)
-                            call.resolve(snapshot())
+                            if (args.getString("action") == "stop") awaitClosed(call, p, connection, args.getLong("generation"), android.os.SystemClock.elapsedRealtime() + 3000)
+                            else call.resolve(snapshot())
                         } catch (_: Exception) { call.reject("Queue changed or session unavailable", "PLAYBACK_COMMAND") }
                     }, java.util.concurrent.Executor { task -> main.post(task) })
                     return@post
@@ -102,12 +104,20 @@ class PlaybackPlugin : Plugin() {
                 }
                 "next" -> p.seekToNextMediaItem()
                 "previous" -> p.seekToPreviousMediaItem()
-                "stop" -> { p.stop(); p.clearMediaItems() }
                 else -> error("INVALID_COMMAND")
             }
             call.resolve(snapshot())
         } catch (_: Exception) { call.reject("Playback unavailable or session changed", "PLAYBACK_COMMAND") }
     } }
+    /** Custom-command result acknowledges service mutation; observe its IPC state before resolving. */
+    private fun awaitClosed(call: PluginCall, player: MediaController, connection: EngineConnection, epoch: Long, deadline: Long) {
+        if (!alive || controller !== player || connection.generation != epoch) { call.reject("Session changed", "PLAYBACK_COMMAND"); return }
+        if (player.mediaItemCount == 0 && !player.playWhenReady && !player.shuffleModeEnabled && player.repeatMode == Player.REPEAT_MODE_OFF && player.playbackState == Player.STATE_IDLE && player.playerError == null) {
+            call.resolve(snapshot()); return
+        }
+        if (android.os.SystemClock.elapsedRealtime() >= deadline) { call.reject("Program closure was not observed", "PLAYBACK_COMMAND"); return }
+        main.postDelayed({ awaitClosed(call, player, connection, epoch, deadline) }, 20)
+    }
     override fun handleOnDestroy() {
         alive = false; main.removeCallbacksAndMessages(null); controller?.removeListener(listener)
         pending?.let { MediaController.releaseFuture(it) }; controller = null

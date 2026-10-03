@@ -58,7 +58,8 @@ export default function AndroidStart() {
     epoch++; syncEpoch++; controller.abort(); controller = new AbortController();
     cancelEvents?.(); cancelEvents = undefined;
     if (stopPlayback) {
-      if (user()) void nativeProgramTransport.command({ generation, action: 'stop' }).catch(() => {});
+      const active = program();
+      if (active?.queue.length) void nativeProgramTransport.command({ generation, action: 'stop', queueToken: active.queueToken }).catch(() => {});
       runtime.unbind();
     }
     setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setRevision(0); setEventsOnline(false); setStale(false);
