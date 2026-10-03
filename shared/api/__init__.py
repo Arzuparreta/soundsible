@@ -964,61 +964,61 @@ def _process_single_queue_item_bound(item):
             queue_manager_dl.add_log(f"Downloading podcast enclosure...")
             _max_bytes = 600 * 1024 * 1024
             headers = {"User-Agent": "SoundsiblePodcast/1.0"}
-            r = requests.get(enclosure_url, stream=True, timeout=(15, 600), headers=headers, allow_redirects=True)
-            r.raise_for_status()
-            ctype = (r.headers.get("Content-Type") or "").lower()
-            if not (
-                ctype.startswith("audio/")
-                or "mpeg" in ctype
-                or "mp3" in ctype
-                or "mp4" in ctype
-                or "octet-stream" in ctype
-                or ctype.startswith("binary/")
-            ):
-                raise Exception(f"Unexpected content type: {ctype or 'unknown'}")
-            suf = ".mp3"
-            if "mp4" in ctype or "m4a" in ctype or "aac" in ctype:
-                suf = ".m4a"
-            elif "ogg" in ctype or "opus" in ctype:
-                suf = ".ogg"
-            total = 0
-            tmp_path = None
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=suf) as tmp:
-                    tmp_path = tmp.name
-                    for chunk in r.iter_content(chunk_size=65536):
-                        if not chunk:
-                            continue
-                        total += len(chunk)
-                        if total > _max_bytes:
-                            raise Exception("Episode file too large")
-                        tmp.write(chunk)
-                p = Path(tmp_path)
-                clean_meta = {
-                    "title": (item.get("podcast_title") or "Episode").strip(),
-                    "artist": (item.get("podcast_show_title") or "Podcast").strip(),
-                    "album": (item.get("podcast_album") or item.get("podcast_show_title") or "Podcasts").strip(),
-                    "duration_sec": int(item.get("duration_sec") or 0),
-                    "track_number": 1,
-                    "media_kind": "podcast_episode",
-                    "podcast_feed_id": fid or None,
-                    "podcast_episode_guid": eg or None,
-                    "podcast_rss_url": (item.get("podcast_rss_url") or "").strip() or None,
-                    "genre": "Podcast",
-                }
-                cover = (item.get("thumbnail_url") or "").strip() or None
-                track = dl.downloader.finalize_local_audio_file(
-                    p,
-                    clean_meta,
-                    cover_art_url=cover,
-                    cover_source="podcast" if cover else "none",
-                )
-            finally:
-                if tmp_path and track is None:
-                    try:
-                        os.remove(tmp_path)
-                    except OSError:
-                        pass
+            with requests.get(enclosure_url, stream=True, timeout=(15, 600), headers=headers, allow_redirects=True) as r:
+                r.raise_for_status()
+                ctype = (r.headers.get("Content-Type") or "").lower()
+                if not (
+                    ctype.startswith("audio/")
+                    or "mpeg" in ctype
+                    or "mp3" in ctype
+                    or "mp4" in ctype
+                    or "octet-stream" in ctype
+                    or ctype.startswith("binary/")
+                ):
+                    raise Exception(f"Unexpected content type: {ctype or 'unknown'}")
+                suf = ".mp3"
+                if "mp4" in ctype or "m4a" in ctype or "aac" in ctype:
+                    suf = ".m4a"
+                elif "ogg" in ctype or "opus" in ctype:
+                    suf = ".ogg"
+                total = 0
+                tmp_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suf) as tmp:
+                        tmp_path = tmp.name
+                        for chunk in r.iter_content(chunk_size=65536):
+                            if not chunk:
+                                continue
+                            total += len(chunk)
+                            if total > _max_bytes:
+                                raise Exception("Episode file too large")
+                            tmp.write(chunk)
+                    p = Path(tmp_path)
+                    clean_meta = {
+                        "title": (item.get("podcast_title") or "Episode").strip(),
+                        "artist": (item.get("podcast_show_title") or "Podcast").strip(),
+                        "album": (item.get("podcast_album") or item.get("podcast_show_title") or "Podcasts").strip(),
+                        "duration_sec": int(item.get("duration_sec") or 0),
+                        "track_number": 1,
+                        "media_kind": "podcast_episode",
+                        "podcast_feed_id": fid or None,
+                        "podcast_episode_guid": eg or None,
+                        "podcast_rss_url": (item.get("podcast_rss_url") or "").strip() or None,
+                        "genre": "Podcast",
+                    }
+                    cover = (item.get("thumbnail_url") or "").strip() or None
+                    track = dl.downloader.finalize_local_audio_file(
+                        p,
+                        clean_meta,
+                        cover_art_url=cover,
+                        cover_source="podcast" if cover else "none",
+                    )
+                finally:
+                    if tmp_path and track is None:
+                        try:
+                            os.remove(tmp_path)
+                        except OSError:
+                            pass
         elif song_str:
             def _on_progress(payload):
                 if not isinstance(payload, dict):

@@ -796,3 +796,26 @@ seguir, adquisición real/progreso y acciones de episodios; después Radio NORMA
 Continuar sin cerrar el turno por un checkpoint. DJ/Live/Auto, UI/acciones completas,
 firma/actualización y demás filas de PORT_PLAN siguen siendo requisitos antes del
 PR/merge/release. No se ha publicado alpha parcial ni integrado a main.
+
+## S2l: directorio y adquisición podcast
+
+[Contrato S2l](SLICE_2L.md). Implementados búsqueda, RSS sin suscripción implícita,
+follow/unfollow confirmado y adquisición durable con fallo/retry/cancel desde
+menús de tres puntos. Unfollow conserva archivos. Streaming y adquirido comparten
+progreso. GUID sin feed/RSS coincidente nunca une shows diferentes. La cola elimina
+los completados: refrescar Library cuando desaparecen, confirmar archivo allí.
+Observación se aborta al desconectar y retoma al reconectar.
+
+Resultados locales: UI **1.387 tests / 154 archivos**; Python **44 tests** de pump,
+recovery, persistencia, podcasts y fixture real de adquisición. Dos APK tests HTTP/
+HTTPS del directorio pasan. Regresión principal: **22 tests, cero fallos/omitidos**
+según TestRunner; las fases offline persistentes/build normal siguen ejecutándose
+al escribir este checkpoint. Consultar integration-results y el helper completo
+antes de dar las fases por pasadas. Últimos browser completos siguen siendo S2j.
+
+Ruff check pasa. Format check de fixture/test pasa; shared/api/__init__.py tiene
+formato histórico fuera del cambio, no se reformatea entero por este slice. Su
+cambio cierra Response upstream del downloader podcast mediante context manager.
+
+Continuación activa: Radio NORMAL nativo. No cerrar por este checkpoint. No se ha
+creado PR, integrado main ni publicado release; paridad completa sigue obligatoria.

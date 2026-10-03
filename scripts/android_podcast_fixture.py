@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,7 +18,7 @@ def install(app, root: Path, accounts):
     external = "https://podcasts.fixture.example"
     audio = (root / "preview.mp4").read_bytes()
     records = []
-    controls = {"peek_status": 0}
+    controls = {"peek_status": 0, "enclosure_status": 0}
     peek_requests = []
     feeds = {}
     for name, uid in accounts.items():
@@ -31,6 +32,10 @@ def install(app, root: Path, accounts):
                 {"id": f"{name}-feed", "title": f"{name} fixture podcast", "rss_url": url}
             )
             library._save_metadata()
+
+    feeds["/directory/feed.xml"] = (
+        f'<?xml version="1.0"?><rss version="2.0"><channel><title>fixture directory podcast</title><link>{external}</link><description>synthetic</description><item><guid>directory-episode-guid</guid><title>fixture directory episode</title><enclosure url="{external}/directory/episode.mp4" type="audio/mp4" length="{len(audio)}"/></item></channel></rss>'.encode()
+    )
 
     class Provider(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -52,8 +57,11 @@ def install(app, root: Path, accounts):
                 self.end_headers()
                 self.wfile.write(data)
                 return
-            if self.path not in [f"/{name}/episode.mp4" for name in accounts]:
+            if self.path not in [f"/{name}/episode.mp4" for name in [*accounts, "directory"]]:
                 self.send_error(404)
+                return
+            if controls["enclosure_status"]:
+                self.send_error(controls["enclosure_status"])
                 return
             start, end = 0, len(audio) - 1
             value = self.headers.get("Range")
@@ -88,6 +96,32 @@ def install(app, root: Path, accounts):
     upstream_get = requests.get
 
     def get(url, **kwargs):
+        if isinstance(url, str) and url.startswith("https://itunes.apple.com/"):
+            term = kwargs.get("params", {}).get("term", "")
+            rows = (
+                [
+                    {
+                        "collectionId": 900002,
+                        "collectionName": "fixture directory podcast",
+                        "artistName": "fixture host",
+                        "feedUrl": external + "/directory/feed.xml",
+                    }
+                ]
+                if "fixture" in term
+                else []
+            )
+            response = requests.Response()
+            response.status_code = 200
+            response._content = json.dumps({"results": rows}).encode()
+            response.headers["Content-Type"] = "application/json"
+            records.append(
+                {
+                    "path": "directory-search",
+                    "range": None,
+                    "cookie_present": bool(kwargs.get("headers", {}).get("Cookie")),
+                }
+            )
+            return response
         if isinstance(url, str) and url.startswith(external + "/"):
             url = f"http://127.0.0.1:{provider.server_port}" + url[len(external) :]
         return upstream_get(url, **kwargs)
@@ -107,8 +141,9 @@ def install(app, root: Path, accounts):
         if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
             return jsonify({"error": "fixture only"}), 403
         body = request.get_json() or {}
-        if "peek_status" in body:
-            controls["peek_status"] = int(body["peek_status"])
+        for key in controls:
+            if key in body:
+                controls[key] = int(body[key])
         if body.get("acquire_episode"):
             uid = require_user_id()
             name = next(name for name, value in accounts.items() if value == uid)

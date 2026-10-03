@@ -105,6 +105,87 @@ def test_podcast_feed_token_and_range_keep_real_account_isolation(tmp_path):
                 origin + "/api/static/stream/member-podcast-acquired", headers={"Range": "bytes=100-199"}, timeout=10
             )
             assert local_stream.status_code == 206 and local_stream.content == stream.content
+            directory = member.get(origin + "/api/discovery/podcasts/search?q=fixture", timeout=10)
+            assert directory.status_code == 200
+            entry = directory.json()["results"][0]
+            browse = member.get(
+                origin + "/api/podcasts/episodes-by-url", params={"rss_url": entry["feed_url"]}, timeout=10
+            )
+            assert browse.status_code == 200, browse.text
+            followed = member.post(origin + "/api/podcasts/subscribe", json={"rss_url": entry["feed_url"]}, timeout=10)
+            assert followed.status_code == 200, followed.text
+            subscription = followed.json()["subscription"]
+            ep = browse.json()["episodes"][0]
+            control = {"X-Android-Fixture": "isolated"}
+            member.post(
+                origin + "/__fixture/podcast", headers=control, json={"enclosure_status": 503}, timeout=10
+            ).raise_for_status()
+            intake = member.post(
+                origin + "/api/downloader/queue",
+                json={
+                    "items": [
+                        {
+                            "source_type": "podcast_enclosure",
+                            "enclosure_url": ep["enclosure_url"],
+                            "guid": ep["guid"],
+                            "podcast_feed_id": subscription["id"],
+                            "podcast_rss_url": entry["feed_url"],
+                            "title": ep["title"],
+                            "show_title": subscription["title"],
+                        }
+                    ]
+                },
+                timeout=10,
+            )
+            assert intake.status_code == 200, intake.text
+            job_id = intake.json()["ids"][0]
+
+            def await_job(status):
+                deadline = time.monotonic() + 60
+                while True:
+                    job = next(
+                        (
+                            row
+                            for row in member.get(origin + "/api/downloader/queue/status", timeout=10).json()["queue"]
+                            if row["id"] == job_id
+                        ),
+                        None,
+                    )
+                    if status == "completed" and job is None:
+                        assert any(
+                            row.get("podcast_episode_guid") == ep["guid"]
+                            for row in member.get(origin + "/api/library", timeout=10).json()["tracks"]
+                        )
+                        return
+                    if job and job["status"] == status:
+                        return job
+                    assert time.monotonic() < deadline, job
+                    time.sleep(0.2)
+
+            await_job("failed")
+            member.post(
+                origin + "/__fixture/podcast", headers=control, json={"enclosure_status": 0}, timeout=10
+            ).raise_for_status()
+            retry = member.post(origin + f"/api/downloader/queue/{job_id}/retry", timeout=10)
+            assert retry.status_code == 200, retry.text
+            await_job("completed")
+            downloaded = next(
+                row
+                for row in member.get(origin + "/api/library", timeout=10).json()["tracks"]
+                if row.get("podcast_episode_guid") == ep["guid"]
+            )
+            assert downloaded["media_kind"] == "podcast_episode" and downloaded["podcast_feed_id"] == subscription["id"]
+            assert (
+                member.delete(origin + "/api/podcasts/subscriptions/" + subscription["id"], timeout=10).status_code
+                == 200
+            )
+            assert any(
+                row["id"] == downloaded["id"]
+                for row in member.get(origin + "/api/library", timeout=10).json()["tracks"]
+            )
+            assert not any(
+                row["id"] == downloaded["id"] for row in owner.get(origin + "/api/library", timeout=10).json()["tracks"]
+            )
             records = member.get(origin + "/api/android-fixture/podcast-stats", timeout=10).json()["upstream"]
             assert any(row["range"] == "bytes=100-199" for row in records)
             assert all(not row["cookie_present"] for row in records)
