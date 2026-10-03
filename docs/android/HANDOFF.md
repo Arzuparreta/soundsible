@@ -440,3 +440,71 @@ notificación/MediaSession en el emulador. Auditar primero DefaultMediaNotificat
 /BitmapLoader y APIs exactas de la versión fijada. No presentar notificación como
 catálogo Android Auto ni aceptación física. UI/rutas completas, adquisición/previews,
 podcasts/radio/DJ/Live, muerte de proceso y decisión offline siguen pendientes.
+
+
+### Entrega S2g: carátulas privadas del programa y notificación
+
+`ProgramQueue` crea artworkUri desde id/generación. `ProgramArtwork` es el BitmapLoader
+nativo de MediaLibrarySession: cookie/origen privados, HTTP privado/HTTPS verificado,
+sin redirects ni fallback público. Dos workers/16 trabajos en espera; 8 segundos,
+2 MiB, inspección de dimensiones hasta 16 megapíxeles y muestreo a 512 px. Retiene
+sólo el último future en memoria; reset cancela HTTP/futures y descarta el resultado.
+Los errores no borran sesión ni cambian el player. La URI/bytes/cookie no vuelven a JS.
+La UI de programa/cola reutiliza covers/gradientes y proxy privado de S1, ahora con
+límite de cuerpo y revalidación de generación durante lectura/antes de respuesta.
+[Contrato S2g](SLICE_2.md#s2g-carátulas-privadas-del-programa-y-sesión).
+
+La instrumentación verifica el bitmap de la sesión Android y large icon de la
+notificación con carátula privada real, además de HTTP/HTTPS, duplicados, Activity,
+foco y los casos de recuperación existentes. Un cargador de imagen separado falla
+con el audio activo sin cambiar índice/playing/error ni borrar cookie. Imágenes de
+otra cuenta nunca muestran su color privado; se acepta placeholder del motor o
+rechazo. Se prueban 404, bytes inválidos, cuerpo excesivo y logout durante respuesta
+lenta, seguido de login de otra cuenta. No hay prueba física de lockscreen/Bluetooth,
+ni catálogo Android Auto. La imagen correcta de metadata/notification no demuestra
+sonido acústico.
+
+El primer run falló en cuatro assertions por exigir RGB exacto al PNG sintético:
+el motor genera thumb JPEG, con diferencias de un punto por canal. Se corrigió la
+assertion para tolerar hasta tres puntos, manteniendo discriminación de cuentas.
+También se ajustó la expectativa de imagen ajena: el endpoint puede responder con
+placeholder, no necesariamente 404. La revisión final amplió la prueba de privacidad
+a canales con la misma tolerancia y liberó referencias de trabajos cancelados.
+
+### Validación final de S2g
+
+Typecheck/Vitest: **1.350 tests / 146 archivos**, sin fallos. APK/test APK/lint e
+integración API 36: **9 tests, cero fallos/errores/omitidos**, HTTP y HTTPS verificado
+con casos S1/passwordless anteriores conservados. Chromium completo: **278 pasan /
+66 omitidos**; WebKit completo: **269 pasan / 75 omitidos**, sin fallos. Fuentes UI
+congeladas antes de unit/Chromium y preparación APK; cambios posteriores sólo nativo,
+instrumentación y documentación. WebKit fue después de todo trabajo nativo y Chromium,
+con emulador detenido, mount de sólo lectura y un worker. No se ejecutó GitHub CI.
+
+Ruff/check/format, sincronización de versión central, diff y enlaces locales pasan.
+APK normal firmado, sin CA/recursos de fixture; JS nativo sigue sin AudioContext ni
+runtime de mezcla. [Evidencia S2g](evidence/s2g.json) y
+[captura de cola](evidence/queue-artwork-s2g-api36.png) con datos sintéticos. El JSON
+registra el build de validación dirty sobre el commit anterior; el APK normal se
+regenera limpio después del commit de este corte. Ningún artifact es una release.
+
+### Siguiente corte propuesto: S2h, cierre explícito del programa nativo
+
+Punto de partida: `PlaybackPlugin.command("stop")` hace stop/clear desde el controller
+y resuelve un snapshot inmediato; aún no resetea playWhenReady/modos ni confirma la
+mutación mediante el custom command del servicio. `ProgramArtwork` retiene el último
+resultado hasta reset/destroy. Añadir una acción visible para cerrar el programa,
+con confirmación asíncrona del servicio y limpieza del cargador sin cambiar cuenta. Vaciar fuentes/ocurrencias,
+resetear intención/modos, retirar metadata/carátula/notificación y liberar recursos
+sin borrar login ni biblioteca. Debe funcionar aun con API inaccesible y no dejar
+una cola que reaparezca al recrear Activity; una activación posterior crea otro
+programa con nuevas keys, sin autoplay procedente de intención vieja.
+
+Revisar APIs fijadas de Media3 para estado vacío/foreground/notificación, y la
+semántica de retirar tarea de recientes frente a cerrar programa. Probar UI +
+MediaController + notificación con Play, pausa, buffering/error, servidor 503,
+recreación y nueva reproducción, sin introducir persistencia/process death ni
+suponer un comportamiento no probado de swipe en teléfono. Mantener foco/ruido
+con sus límites de aceptación física documentados. Este corte sigue siendo de
+desarrollo: rutas completas, adquisición/previews, podcasts/radio, DJ/Live,
+Android Auto y decisión offline permanecen pendientes.

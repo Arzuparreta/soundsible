@@ -32,7 +32,19 @@ class MainActivity : BridgeActivity() {
                         val epoch = parts[1].toLong()
                         val path = uri.encodedPath!!.substringAfter("/__engine/$epoch") + (uri.encodedQuery?.let { "?$it" } ?: "")
                         plugin.connection.execute(path, "GET", null, emptyMap(), epoch, "cover-${System.nanoTime()}", 8000).use {
-                            val bytes = it.body?.bytes() ?: ByteArray(0)
+                            require(it.body != null && it.body!!.contentLength() <= ProgramArtwork.MAX_BYTES)
+                            val output = java.io.ByteArrayOutputStream()
+                            val chunk = ByteArray(8192)
+                            it.body!!.byteStream().use { input ->
+                                while (true) {
+                                    val count = input.read(chunk)
+                                    if (count < 0) break
+                                    require(output.size() + count <= ProgramArtwork.MAX_BYTES && epoch == plugin.connection.generation)
+                                    output.write(chunk, 0, count)
+                                }
+                            }
+                            val bytes = output.toByteArray()
+                            require(epoch == plugin.connection.generation)
                             require(it.code == 200 && it.header("Content-Type", "")!!.startsWith("image/"))
                             WebResourceResponse(it.header("Content-Type")!!.substringBefore(';'), null, 200, "OK",
                                 mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(bytes))

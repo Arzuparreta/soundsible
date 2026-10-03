@@ -71,7 +71,7 @@ Los controles OS observan la misma sesión. Sólo el UID de la aplicación puede
 reemplazar la cola; clientes externos deben ser trusted y no reciben comandos
 para inyectar fuentes. El servicio todavía no ofrece un catálogo de browsing:
 **MediaLibrarySession no significa Android Auto implementado**. Título/artista
-son metadata nativa; carátulas en la notificación quedan pendientes.
+son metadata nativa; S2g añade carátulas privadas a la sesión/notificación.
 
 La superficie de desarrollo activa archivos locales en las filas/virtualización
 Solid compartidas y ofrece transporte/seek básicos. Las canciones preview siguen
@@ -249,3 +249,49 @@ fallo, reanudación con intención Play, rechazo de Retry ante 403 y limpieza po
 401 aun sin identidad resuelta. El arranque local no espera esa revalidación. Sigue sin probar
 apagado real de servidor, pérdida de cobertura del teléfono ni aceptación acústica.
 No implementa caché de audio, persistencia tras process death ni offline aprobado.
+
+
+## S2g: carátulas privadas del programa y sesión
+
+`ProgramQueue.items` crea `artworkUri` desde el id validado y la generación nativa:
+`soundsible-artwork://<generation>/<id>`. JS sigue enviando sólo ids/metadatos;
+no puede suministrar origen, URI de imagen ni cookie al programa. El BitmapLoader
+`ProgramArtwork` obtiene `/api/static/cover/<id>?size=thumb` en el origen seleccionado,
+con cookie nativa y la misma política de HTTPS/HTTP privado de EngineConnection.
+No sigue redirects, no intenta una imagen pública ante errores ni usa disco.
+La sesión usa `MediaLibrarySession.Builder.setBitmapLoader`; el proveedor estándar
+de notificación publica esa carátula. API contrastada con los JAR de Media3 fijados
+en el proyecto y [documentación de MediaSession](https://developer.android.com/reference/androidx/media3/session/MediaSession.Builder#setBitmapLoader(androidx.media3.common.util.BitmapLoader)).
+
+Dos workers y hasta 16 trabajos en espera limitan concurrencia. Cada petición tiene
+8 segundos de timeout global y un máximo de 2 MiB de cuerpo, incluso sin Content-Length.
+La decodificación inspecciona dimensiones antes de asignar bitmap: máximo 16 megapíxeles
+de origen y muestreo hasta 512 px por lado. Se admiten PNG/JPEG/WebP. Sólo se conserva
+el último future/bitmap en memoria para evitar descargas duplicadas de notificación y
+sesión. Los errores se descartan para permitir otro intento al pedir la misma imagen;
+no hay retry de red automático ni invalidación por edición de una carátula ya
+cargada mientras siga siendo la última URI solicitada (también entre duplicados). Ese refresco queda pendiente de integrar los eventos
+con el programa completo.
+
+Logout/cambio de servidor cancelan futures y HTTP y descartan el resultado en memoria.
+Antes de leer y publicar se comprueban generación y origen; una respuesta tardía de otra
+cuenta no completa el future. Destruir Activity conserva el servicio/cargador; destruir
+el servicio los libera. Fallos 404, bytes inválidos y tamaño excesivo sólo afectan a la
+imagen: no vacían el programa, no generan error de audio ni convierten una imagen 401
+en logout. El transporte de audio/identidad mantiene sus propias reglas de revocación.
+
+Las superficies Solid de programa y cola reutilizan `coverUrl`/`coverStyle` y el proxy
+local autenticado de S1. El gradiente existente permanece debajo si la imagen falla.
+El proxy ahora limita también el cuerpo privado a 2 MiB y revalida generación durante
+la lectura y antes de entregarlo; sus respuestas continúan siendo `no-store`.
+Los límites de decodificación anteriores corresponden al cargador de sesión nativo,
+no al decodificador del WebView.
+
+Instrumentación: carátulas reales de dos cuentas por HTTP y HTTPS verificado, imágenes
+ajenas sin fuga del color privado (placeholder o rechazo), URI externa/query rechazada,
+duplicados, 404/bytes inválidos/cuerpo excesivo, cancelación en vuelo y cuenta posterior.
+El programa verifica bitmap de metadata de la sesión Android y large icon de la
+notificación con el color privado correcto, además de los casos existentes de
+recreación, duplicados/edición, foco y recuperación. El encoder de miniaturas del motor
+es JPEG: las pruebas admiten tres puntos por canal, no exigen píxel idéntico al PNG.
+Esto no prueba escucha acústica, pantalla bloqueada física, Bluetooth ni Android Auto.

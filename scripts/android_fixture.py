@@ -114,11 +114,16 @@ def main() -> None:
     stream_failure = {}
     stream_cut = {}
     connection_failure = {}
+    artwork_mode = {}
 
     @app.before_request
     def audio_failure():
         if connection_failure.get("enabled") and request.path.startswith("/api/"):
             return jsonify({"error": "fixture API failure"}), connection_failure.get("status", 503)
+        if request.path.startswith("/api/static/cover/"):
+            name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
+            if artwork_mode.get(name) == "slow":
+                sleep(2)
         if request.path.startswith("/api/static/stream/"):
             name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
             if stream_failure.get(name):
@@ -126,6 +131,15 @@ def main() -> None:
 
     @app.after_request
     def record_range(response):
+        if request.path.startswith("/api/static/cover/") and response.status_code == 200:
+            name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
+            mode = artwork_mode.get(name)
+            if mode == "missing":
+                return app.response_class(b"", status=404)
+            if mode == "invalid":
+                return app.response_class(b"not an image", mimetype="image/png")
+            if mode == "large":
+                return app.response_class(b"x" * (2 * 1024 * 1024 + 1), mimetype="image/png")
         if request.path.startswith("/api/static/stream/"):
             stream_requests.append(
                 {"path": request.path, "range": request.headers.get("Range"), "status": response.status_code}
@@ -173,7 +187,9 @@ def main() -> None:
             return jsonify({"error": "fixture only"}), 403
         name = (request.get_json(silent=True) or {}).get("account", "member")
         uid = accounts[name]
-        if action == "audio-failure":
+        if action == "artwork":
+            artwork_mode[name] = (request.get_json() or {}).get("mode", "")
+        elif action == "audio-failure":
             stream_failure[name] = int((request.get_json() or {}).get("status", 0))
         elif action == "stream-cut":
             stream_cut[name] = bool((request.get_json() or {}).get("enabled"))

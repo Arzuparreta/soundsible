@@ -51,6 +51,10 @@ public class PlaybackTest {
         try (okhttp3.Response response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/api/android-fixture/audio-stats")
             .header("Cookie", connection.cookieHeader(connection.getGeneration())).build()).execute()) { assertEquals(200, response.code()); return new JSONObject(response.body().string()).getInt("total"); }
     }
+    private void artworkMode(EngineConnection connection, String origin, String mode) throws Exception {
+        try (okhttp3.Response response = connection.getClient().newCall(new okhttp3.Request.Builder().url(origin + "/__fixture/artwork")
+            .header("X-Android-Fixture", "isolated").post(okhttp3.RequestBody.create("{\"mode\":\"" + mode + "\"}", okhttp3.MediaType.get("application/json"))).build()).execute()) { assertEquals(200, response.code()); }
+    }
     private void awaitPlaying(MediaController controller) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
         java.util.concurrent.atomic.AtomicBoolean playing = new java.util.concurrent.atomic.AtomicBoolean();
@@ -107,7 +111,44 @@ public class PlaybackTest {
                 assertNotNull("Native media notification missing", token);
                 android.media.session.MediaController systemController = new android.media.session.MediaController(context, token);
                 assertEquals("member private song", systemController.getMetadata().getString(android.media.MediaMetadata.METADATA_KEY_TITLE));
+                long artworkDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                android.graphics.Bitmap nativeCover = null;
+                while (System.nanoTime() < artworkDeadline) {
+                    nativeCover = systemController.getMetadata().getBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART);
+                    if (nativeCover != null) break;
+                    Thread.sleep(100);
+                }
+                assertNotNull("Authenticated platform session artwork missing", nativeCover);
+                ArtworkTest.assertColor(0xffc53030, nativeCover.getPixel(nativeCover.getWidth() / 2, nativeCover.getHeight() / 2));
+                boolean notificationCover = false;
+                for (android.service.notification.StatusBarNotification entry : notifications.getActiveNotifications()) {
+                    android.graphics.drawable.Icon icon = entry.getNotification().getLargeIcon();
+                    if (icon != null) {
+                        android.graphics.drawable.Drawable drawable = icon.loadDrawable(context);
+                        if (drawable instanceof android.graphics.drawable.BitmapDrawable) {
+                            android.graphics.Bitmap bitmap = ((android.graphics.drawable.BitmapDrawable) drawable).getBitmap();
+                            ArtworkTest.assertColor(0xffc53030, bitmap.getPixel(bitmap.getWidth() / 2, bitmap.getHeight() / 2));
+                            notificationCover = true;
+                        }
+                    }
+                }
+                assertTrue("Native media notification artwork missing", notificationCover);
+                waitFor(web, scenario, "document.querySelector('[data-program-artwork]')?.style.background.includes('/__engine/')");
                 systemController.getTransportControls().play();
+                awaitPlaying(controller);
+                try (ProgramArtwork independentArtwork = new ProgramArtwork(connection)) {
+                    artworkMode(connection, origin, "invalid");
+                    try {
+                        independentArtwork.loadBitmap(ProgramArtwork.Companion.uri(connection.getGeneration(), "member-track")).get(10, TimeUnit.SECONDS);
+                        fail("Invalid image should not decode");
+                    } catch (java.util.concurrent.ExecutionException expected) { assertNotNull(expected.getCause()); }
+                    InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                        assertTrue("Artwork failure must not interrupt audio", controller.isPlaying());
+                        assertNull(controller.getPlayerError());
+                        assertEquals(1, controller.getCurrentMediaItemIndex());
+                    });
+                    assertNotNull(connection.cookieHeader(connection.getGeneration()));
+                } finally { artworkMode(connection, origin, ""); }
                 Thread.sleep(300);
                 InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> assertTrue(controller.isPlaying()));
                 // A competing Android media focus request must pause the native program.

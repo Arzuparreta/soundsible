@@ -238,3 +238,17 @@ Audio no reintenta de fondo ni se reanuda por una señal genérica de red.
 La UI puede observar el servicio durante fallo de revalidación de identidad sin
 inventar una cuenta autenticada. Un 401 limpia también ese estado; un 403 no se
 convierte en logout. [Contrato S2f](SLICE_2.md#s2f-recuperación-explícita-de-conexión).
+
+
+### Artwork del programa (S2g)
+
+La metadata nativa lleva una URI interna creada desde id/generación, nunca una URL
+aportada por JS. `ProgramArtwork`, instalado como BitmapLoader de la sesión, descarga
+la miniatura autenticada mediante EngineConnection y entrega el bitmap al proveedor
+estándar de notificación/metadata Android. Concurrencia, bytes, dimensiones y tiempo
+están limitados; el único resultado retenido es el último de la generación activa,
+sin cache de disco. Reset cancela tanto future como Call antes de la cuenta posterior.
+Errores de imagen no se propagan al player ni borran login.
+La UI de programa/cola usa el proxy local privado existente y el gradiente compartido;
+el proxy ahora limita bytes y revalida generación antes de publicar. Ver
+[contrato y límites S2g](SLICE_2.md#s2g-carátulas-privadas-del-programa-y-sesión).

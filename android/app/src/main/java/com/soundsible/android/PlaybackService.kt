@@ -25,6 +25,7 @@ class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private lateinit var player: ExoPlayer
     private lateinit var connection: EngineConnection
+    private lateinit var artwork: ProgramArtwork
     @Volatile private var transport: Pair<Long, OkHttpClient>? = null
     private val main = Handler(Looper.getMainLooper())
     private val reset: () -> Unit = {
@@ -34,6 +35,7 @@ class PlaybackService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
         connection = EngineConnection.shared(this)
+        artwork = ProgramArtwork(connection)
         val factory = androidx.media3.datasource.DataSource.Factory {
             // Each source pins the selected account; every HTTP request revalidates it.
             val epoch = connection.generation
@@ -70,11 +72,12 @@ class PlaybackService : MediaLibraryService() {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
                 return Futures.immediateFuture(try { ProgramQueue.edit(player, connection, args); SessionResult(SessionResult.RESULT_SUCCESS) } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })
             }
-        }).setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
+        }).setBitmapLoader(artwork).setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
     override fun onDestroy() {
         connection.resetListeners.remove(reset)
+        artwork.close()
         transport?.second?.dispatcher?.cancelAll(); transport = null
         session?.release(); session = null; player.release(); main.removeCallbacksAndMessages(null)
         super.onDestroy()

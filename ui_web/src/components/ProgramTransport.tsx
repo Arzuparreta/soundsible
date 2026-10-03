@@ -1,4 +1,6 @@
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
+import { coverStyle } from '../lib/cover';
+import { coverUrl } from '../lib/media';
 import { clockTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import type { ProgramState, ProgramCommand } from '../lib/program/runtime';
@@ -12,6 +14,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
   const run = (command: ProgramCommand) => props.command(command).catch(() => {});
   const disabled = () => !props.state.ready || props.pending;
   return <section class={styles.program} data-testid="android-program" aria-label={t('nowPlaying.nowPlayingSection')} aria-busy={props.pending}>
+    <span class={styles.artwork} data-program-artwork aria-hidden="true" style={coverStyle(props.state.id, coverUrl(props.state.id, 'thumb'))} />
     <p>{props.state.title || props.state.id}<br /><small>{props.state.artist}</small></p>
     <button disabled={disabled() || !props.state.hasPrevious} onClick={() => void run({ action: 'previous' })}>{t('common.prev')}</button>
     <button disabled={disabled()} onClick={() => void run({ action: props.state.playWhenReady ? 'pause' : 'play' })}>{props.state.playWhenReady ? t('common.pause') : t('common.play')}</button>

@@ -1,6 +1,7 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import { MusicListRowView } from './MusicListRowView';
+import { coverUrl } from '../lib/media';
 import { t } from '../lib/i18n';
 import type { ProgramCommand, ProgramState } from '../lib/program/runtime';
 import styles from './ProgramQueue.module.css';
@@ -45,7 +46,7 @@ export default function ProgramQueue(props: { state: ProgramState; pending: bool
           const row = () => entries().get(key)!;
           const target = () => ({ index: row().index, key, queueToken: props.state.queueToken });
           return <Show when={entries().has(key)}><div class={styles.row} data-queue-key={key} data-index={row().index} ref={element => queueMicrotask(() => { if (element.isConnected) rows.measureElement(element); })} style={{ transform: `translateY(${positions().get(key) ?? 0}px)` }}>
-            <MusicListRowView title={row().entry.title || row().entry.id} subtitle={row().entry.artist} seed={row().entry.id} actionLabel={`${row().index + 1} · ${row().entry.title || row().entry.id} — ${row().entry.artist}`} index={row().index + 1} playback active={props.state.index === row().index}
+            <MusicListRowView title={row().entry.title || row().entry.id} subtitle={row().entry.artist} seed={row().entry.id} cover={coverUrl(row().entry.id, 'thumb')} actionLabel={`${row().index + 1} · ${row().entry.title || row().entry.id} — ${row().entry.artist}`} index={row().index + 1} playback active={props.state.index === row().index}
               disabled={disabled()} playbackTrack={props.state.items[props.state.index]?.key} onActivate={() => run({ action: 'select', ...target() })} />
               <Show when={editing()}><div class={styles.edit}>
                 <button type="button" data-queue-action="up" aria-label={`${t('musicList.moveUp')}: ${row().index + 1} · ${row().entry.title}`} disabled={disabled() || row().index === 0} onClick={() => run({ action: 'move', ...target(), toIndex: row().index - 1 })}>↑</button>

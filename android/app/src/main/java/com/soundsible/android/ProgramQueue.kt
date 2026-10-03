@@ -31,7 +31,7 @@ object ProgramQueue {
             require(listOf(title, artist, album).all { it.length <= 4096 })
             MediaItem.Builder().setMediaId(id)
                 .setUri(connection.origin + "/api/static/stream/" + android.net.Uri.encode(id) + "?android_generation=" + connection.generation)
-                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album)
+                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).setArtworkUri(ProgramArtwork.uri(connection.generation, id))
                     .setExtras(Bundle().apply { putString(KEY, java.util.UUID.randomUUID().toString()) }).build()).build()
         }
     }
