@@ -59,3 +59,16 @@ APK normal, test APK, JVM17 y lint pasan después de retirar la CA temporal. Rep
 más dos fases offline desde commit limpio. Ningún resultado acredita escucha
 física ni paridad completa. Después continuar Library/Discover/Settings, DJ,
 Live, Android Auto, firma y actualización; PR/main/alpha sólo al cerrar gates.
+
+
+## Recuperación local conserva la biblioteca online
+
+La actualización del error de filesystem relee sólo el estado offline. La
+restauración de usuario/biblioteca local queda reservada al arranque sin red;
+no sustituir snapshot online ni marcar station inaccesible por un error local.
+OfflineRemovalTest exige ausencia del aviso de station inaccesible y presencia
+del preview guardado original tras el error. Dos casos HTTP/HTTPS pasan dentro
+del targeted6 de /tmp/soundsible-s2ab-native.log, assets4e04083 dirty=true;
+APK/test APK/JVM17/lint normales sin CA pasan. UI1465/172 pasa en
+/tmp/soundsible-s2aa-online-recovery-ui.log. No atribuir esta corrección posterior
+a la principal limpia dc29b73.

@@ -103,17 +103,17 @@ export default function AndroidStart() {
       }
     } catch {
       if (current === epoch) {
-        await restoreOffline().catch(() => {});
+        await restoreOffline(false).catch(() => {});
         if (current === epoch) setError(t(command.action === 'remove' ? 'android.offlineRemovalFailed' : 'android.offlineFailed'));
       }
     }
   }
-  async function restoreOffline() {
+  async function restoreOffline(restoreLibrary = true) {
     const current = epoch;
     const result = await offline.command({ action: 'state', generation });
     if (current !== epoch) return;
     setOfflineState(result);
-    if (result.user && result.items.length) { setUser(result.user); setSnapshot(availableLibrary(result)); setStale(true); }
+    if (restoreLibrary && result.user && result.items.length) { setUser(result.user); setSnapshot(availableLibrary(result)); setStale(true); }
   }
   let username: HTMLInputElement | undefined;
   let password: HTMLInputElement | undefined;
@@ -158,7 +158,7 @@ export default function AndroidStart() {
         setOfflineState(state);
         if (state.items.some(item => item.track.id === id)) throw new Error('Offline copy retirement not confirmed');
       } catch (failure) {
-        if (owner === epoch) await restoreOffline().catch(() => {});
+        if (owner === epoch) await restoreOffline(false).catch(() => {});
         throw failure;
       }
     }, sync);

@@ -1278,3 +1278,12 @@ pasa en /tmp/soundsible-s2aa-online-recovery-ui.log. Próximo: incorporar draft
 PlannerRetirementTest y comprobar HTTP/HTTPS Radio/autoplay, junto a la nueva
 assertion de biblioteca conectada en OfflineRemovalTest. Continuar luego resto
 paridad; PR/main/release aún pendientes.
+
+
+Recuperación local posterior validada: restoreOffline(false) actualiza estado de
+copias conservando biblioteca conectada. Native HTTP/HTTPS exige no mostrar
+station inaccesible ni perder preview guardado tras error de filesystem; dos
+casos dentro de targeted6 pasan (/tmp/soundsible-s2ab-native.log), assets4e04083
+dirty=true. UI1465/172 y APK/test APK/JVM17/lint normales sin CA pasan. No equivale
+a nueva principal limpia. S2ab cuatro casos del mismo conjunto también pasan;
+registrar su entrega aparte y continuar paridad restante.

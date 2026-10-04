@@ -52,6 +52,8 @@ public class OfflineRemovalTest {
             waitFor(scenario, "!!document.querySelector('[data-testid=android-offline-manager]')");
             click(scenario, "Remove from this device");
             waitFor(scenario, "document.querySelector('[data-testid=android-offline-manager]')?.textContent.includes('Could not remove the copy. Try again.')");
+            assertEquals("A local deletion refusal must not mark the reachable station offline", "false", web.evaluate(scenario, "document.body.innerText.includes(\"Couldn't reach your station\")"));
+            assertEquals("A local deletion refusal must retain the connected saved preview library", "true", web.evaluate(scenario, "!!document.querySelector('[data-browse-track-id=B1111111111]')"));
             var item = store.state(generation).getJSONArray("items").getJSONObject(0);
             assertEquals("error", item.getString("state")); assertEquals("storage", item.getString("error"));
             assertNull(store.local("member-track", generation)); assertFalse(audio.exists()); assertTrue(held.exists());
