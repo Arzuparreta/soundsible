@@ -23,7 +23,9 @@ class SoundsibleApp : Application() {
         client = SoundsibleClient(UrlConnectionTransport(), tokenStore)
         deviceIdentity = DeviceIdentity(this)
         // Best-effort: boot the embedded interpreter for the future local
-        // engine. Remote pairing never depends on it.
-        LocalEngine.start(AndroidPlatform(this))
+        // engine. Remote pairing never depends on it. Off the main thread:
+        // first-run asset extraction can take tens of seconds.
+        val platform = com.chaquo.python.android.AndroidPlatform(this)
+        Thread({ LocalEngine.start(platform) }, "soundsible-python-boot").start()
     }
 }

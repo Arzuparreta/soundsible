@@ -1,5 +1,7 @@
 package com.soundsible.player
 
+import android.os.Build
+import android.util.Log
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.soundsible.player.data.ServerConnection
@@ -31,6 +33,24 @@ object LocalEngine {
     /** Why Python failed to start, for the UI. Null when it started fine. */
     @Volatile var startupError: String? = null
         private set
+
+    /** True while a boot attempt is still running. */
+    @Volatile var isBooting: Boolean = false
+        private set
+
+    /**
+     * One-line device facts for the unavailable message: CPU ABIs and free
+     * internal storage, the two environmental causes of a dead interpreter.
+     */
+    fun deviceFacts(filesDir: File): String {
+        val abis = Build.SUPPORTED_ABIS.joinToString(",")
+        val freeMb = try {
+            filesDir.usableSpace / (1024 * 1024)
+        } catch (_: Exception) {
+            -1
+        }
+        return "ABI [$abis] free ${freeMb}MB"
+    }
 
     /** Loopback engine state, once it has written its runtime file. */
     data class LocalState(val baseUrl: String, val ownerTokenFile: String)
@@ -92,6 +112,7 @@ object LocalEngine {
     }
 
     fun start(platform: AndroidPlatform) {
+        isBooting = true
         try {
             if (!Python.isStarted()) {
                 Python.start(platform)
@@ -101,10 +122,23 @@ object LocalEngine {
             sqliteVersion = info.get("sqlite_version")?.toString()
             startupError = null
         } catch (e: Exception) {
+            Log.e("SoundsiblePython", "Embedded Python failed to start", e)
             pythonVersion = null
             sqliteVersion = null
-            startupError = (e.message ?: e.javaClass.simpleName).take(300)
+            startupError = chainOf(e).take(400)
+        } finally {
+            isBooting = false
         }
+    }
+
+    private fun chainOf(e: Throwable): String {
+        val parts = mutableListOf<String>()
+        var cur: Throwable? = e
+        while (cur != null && parts.size < 3) {
+            parts += "${cur.javaClass.simpleName}: ${cur.message}"
+            cur = cur.cause
+        }
+        return parts.joinToString(" <- ")
     }
 
     /** Test seam: reset probed state without an interpreter. */

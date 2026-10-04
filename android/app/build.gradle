@@ -13,7 +13,10 @@ android {
         minSdk = 26
         targetSdk = 34
         // Kept in step with shared/version.py by scripts/version_sync.py.
-        versionCode = 1
+        // versionCode is a build counter, not the product version: bump it
+        // whenever the installable artifact changes meaningfully so builds
+        // are distinguishable on device.
+        versionCode = 2
         versionName = "0.19.1"
 
         ndk {

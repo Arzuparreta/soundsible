@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import com.chaquo.python.android.AndroidPlatform
 import com.soundsible.player.LocalEngine
 import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
@@ -35,12 +36,16 @@ class PairingActivity : Activity() {
         val pairingCode = findViewById<EditText>(R.id.pairingCode)
         val deviceToken = findViewById<EditText>(R.id.deviceToken)
         val status = findViewById<TextView>(R.id.pairingStatus)
-        findViewById<TextView>(R.id.localEngineStatus).text = if (LocalEngine.isAvailable) {
-            "On-device Python ${LocalEngine.pythonVersion} ready (local engine in progress)."
-        } else {
-            "On-device Python unavailable" +
-                (LocalEngine.startupError?.let { ": $it" } ?: "") +
-                "; pairing with a server still works."
+        refreshEngineStatus()
+        // Boot runs on a background thread and may finish after this screen
+        // appears; tapping the line retries a failed boot.
+        findViewById<TextView>(R.id.localEngineStatus).setOnClickListener {
+            if (!LocalEngine.isAvailable && !LocalEngine.isBooting) {
+                Thread({
+                    LocalEngine.start(AndroidPlatform(this@PairingActivity.application))
+                }, "soundsible-python-retry").start()
+            }
+            refreshEngineStatus()
         }
 
         findViewById<Button>(R.id.pairButton).setOnClickListener {
@@ -131,6 +136,30 @@ class PairingActivity : Activity() {
                 status.text = "The local engine did not become ready (phase: $phase)." +
                     (if (!error.isNullOrEmpty()) "\n${error.take(500)}" else "")
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshEngineStatus()
+    }
+
+    private fun refreshEngineStatus() {
+        val build = try {
+            val info = packageManager.getPackageInfo(packageName, 0)
+            "build ${info.longVersionCode}"
+        } catch (_: Exception) {
+            ""
+        }
+        findViewById<TextView>(R.id.localEngineStatus).text = when {
+            LocalEngine.isAvailable ->
+                "On-device Python ${LocalEngine.pythonVersion} ready $build (tap to retry)."
+            LocalEngine.isBooting ->
+                "Starting on-device Python… $build"
+            else ->
+                "On-device Python unavailable $build (${LocalEngine.deviceFacts(filesDir)})" +
+                    (LocalEngine.startupError?.let { ": $it" } ?: "") +
+                    "; pairing with a server still works. Tap to retry."
         }
     }
 
