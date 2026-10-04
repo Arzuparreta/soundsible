@@ -16,7 +16,7 @@ android {
         // versionCode is a build counter, not the product version: bump it
         // whenever the installable artifact changes meaningfully so builds
         // are distinguishable on device.
-        versionCode = 13
+        versionCode = 14
         versionName = "0.19.1"
 
         ndk {

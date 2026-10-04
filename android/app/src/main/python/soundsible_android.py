@@ -110,6 +110,21 @@ def _run():
     )
     _set_phase("starting")
     try:
+        # A previous boot's state (port, token file) must never pass for this
+        # one's: the port is re-reserved and the owner token re-minted below.
+        from shared.desktop_runtime import runtime_state_file
+        from shared.runtime import runtime_with_overrides, RuntimeConfig
+
+        stale = runtime_state_file(
+            runtime_with_overrides(base=RuntimeConfig.default(), host="127.0.0.1", port=0)
+        )
+        try:
+            stale.unlink()
+        except OSError:
+            pass
+    except Exception:
+        pass
+    try:
         configure_ffmpeg()
     except Exception:
         pass

@@ -51,15 +51,17 @@ class MainActivity : Activity() {
             openLibrary()
             return
         }
-        // Local engine: make sure it is (still) up, restarting it if needed.
+        // Local engine: the stored port/token die with every engine restart
+        // (random port per boot, rotated owner token). Never trust them:
+        // (re)start the service, then adopt whatever the ready engine
+        // reports via its state file.
         withContext(Dispatchers.IO) {
-            if (!LocalEngine.isHealthy(connection.baseUrl)) {
-                startForegroundService(Intent(this@MainActivity, EngineService::class.java))
-            }
+            startForegroundService(Intent(this@MainActivity, EngineService::class.java))
         }
         repeat(100) {
-            val healthy = withContext(Dispatchers.IO) { LocalEngine.isHealthy(connection.baseUrl) }
-            if (healthy) {
+            val fresh = withContext(Dispatchers.IO) { LocalEngine.localConnection() }
+            if (fresh != null && withContext(Dispatchers.IO) { LocalEngine.isHealthy(fresh.baseUrl) }) {
+                app.tokenStore.save(fresh)
                 openLibrary()
                 return
             }
