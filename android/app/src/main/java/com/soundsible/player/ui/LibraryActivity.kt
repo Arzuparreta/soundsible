@@ -47,6 +47,7 @@ class LibraryActivity : AppCompatActivity() {
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
         webView.settings.mediaPlaybackRequiresUserGesture = false
+        webView.addJavascriptInterface(SoundsibleNative(this), "SoundsibleNative")
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(

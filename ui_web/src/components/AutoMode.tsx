@@ -145,6 +145,9 @@ export function AutoMode(props: {
       music: trackMusic(track),
       cover: trackCoverUrl(track, 'thumb'),
       position: index + 1,
+      // Tapping an occurrence plays it from there, like every other queue
+      // list; the cued handoff stays locked because it is already mixing.
+      onActivate: committed ? undefined : () => actions.playQueueEntry(track.queueId),
       // A committed handoff is loaded and cued: whatever the route did around
       // it, the blend it will actually play is the planned one. The row says so
       // with its own material rather than with a badge — no route row carries
