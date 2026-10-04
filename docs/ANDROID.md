@@ -86,7 +86,8 @@ Known limits of the on-device engine:
   per-ABI binaries is the next backend step.
 - **Process-bound**: the engine lives as long as the app process. No
   foreground service yet, so Android may stop it in the background.
-- **Size**: ~95 MB APK (interpreter + pip set for two ABIs).
+- **Size**: ~70 MB APK (arm64-only; private interpreter + pip set). x86_64
+  stays available for emulator testing by re-adding it to `abiFilters`.
 
 Staged work remaining, each with its own verification:
 

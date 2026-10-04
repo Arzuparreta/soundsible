@@ -18,8 +18,9 @@ android {
 
         ndk {
             // The embedded Python interpreter is native code: one copy per
-            // ABI. arm64-v8a covers current phones; x86_64 covers emulators.
-            abiFilters "arm64-v8a", "x86_64"
+            // ABI. Release ships arm64-v8a only (real phones); add x86_64
+            // locally when testing on an emulator.
+            abiFilters "arm64-v8a"
         }
     }
 
