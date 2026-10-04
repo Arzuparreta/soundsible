@@ -28,6 +28,10 @@ object LocalEngine {
 
     val isAvailable: Boolean get() = pythonVersion != null
 
+    /** Why Python failed to start, for the UI. Null when it started fine. */
+    @Volatile var startupError: String? = null
+        private set
+
     /** Loopback engine state, once it has written its runtime file. */
     data class LocalState(val baseUrl: String, val ownerTokenFile: String)
 
@@ -95,9 +99,11 @@ object LocalEngine {
             val info = Python.getInstance().getModule("soundsible_local").callAttr("runtime_info")
             pythonVersion = info.get("python_version")?.toString()
             sqliteVersion = info.get("sqlite_version")?.toString()
-        } catch (_: Exception) {
+            startupError = null
+        } catch (e: Exception) {
             pythonVersion = null
             sqliteVersion = null
+            startupError = (e.message ?: e.javaClass.simpleName).take(300)
         }
     }
 
@@ -105,5 +111,6 @@ object LocalEngine {
     internal fun resetForTests() {
         pythonVersion = null
         sqliteVersion = null
+        startupError = null
     }
 }

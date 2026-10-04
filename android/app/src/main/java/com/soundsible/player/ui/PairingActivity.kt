@@ -38,7 +38,9 @@ class PairingActivity : Activity() {
         findViewById<TextView>(R.id.localEngineStatus).text = if (LocalEngine.isAvailable) {
             "On-device Python ${LocalEngine.pythonVersion} ready (local engine in progress)."
         } else {
-            "On-device Python unavailable; pairing with a server still works."
+            "On-device Python unavailable" +
+                (LocalEngine.startupError?.let { ": $it" } ?: "") +
+                "; pairing with a server still works."
         }
 
         findViewById<Button>(R.id.pairButton).setOnClickListener {
