@@ -36,6 +36,14 @@ class JsonTest {
         }
     }
 
+    @Test fun parsesTheLocalEngineProbeShape() {
+        // Mirrors what LocalEngine does with runtime_info_json() output.
+        val raw = """{"python_version": "3.13.9", "implementation": "CPython", "sqlite_version": "3.47.2"}"""
+        val probe = parseJsonObject(raw)
+        assertEquals("3.13.9", probe.optString("python_version", "").ifEmpty { null })
+        assertEquals("3.47.2", probe.optString("sqlite_version", "").ifEmpty { null })
+    }
+
     @Test fun roundTripsBuilderOutput() {
         val o = parseJsonObject(
             com.soundsible.player.data.JsonObject.builder()

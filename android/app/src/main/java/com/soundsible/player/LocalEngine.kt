@@ -143,12 +143,21 @@ object LocalEngine {
                 trace("python-start-return")
             }
             trace("import-soundsible_local")
-            val info = Python.getInstance().getModule("soundsible_local").callAttr("runtime_info")
-            trace("probe-return keys=${info.asMap().keys}")
-            pythonVersion = info.get("python_version")?.toString()
-            sqliteVersion = info.get("sqlite_version")?.toString()
+            // Read the probe as a JSON string, not a bridge dict: key lookup
+            // on the returned mapping read back null on device despite the
+            // keys being present. Strings round-trip exactly.
+            val raw = Python.getInstance().getModule("soundsible_local")
+                .callAttr("runtime_info_json").toString()
+            trace("probe-return raw=$raw")
+            val probe = parseJsonObject(raw)
+            pythonVersion = probe.optString("python_version", "").ifEmpty { null }
+            sqliteVersion = probe.optString("sqlite_version", "").ifEmpty { null }
             trace("probed python=$pythonVersion sqlite=$sqliteVersion")
-            startupError = null
+            if (pythonVersion == null) {
+                startupError = "probe returned no version: ${raw.take(200)}"
+            } else {
+                startupError = null
+            }
         } catch (t: Throwable) {
             // Throwable, not Exception: native loader failures arrive as
             // UnsatisfiedLinkError and friends, which Exception misses and
