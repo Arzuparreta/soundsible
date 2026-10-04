@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A self-hosted engine on a LAN is plain HTTP with no certificate any public
+     authority would sign (same reasoning as the iOS NSAllowsLocalNetworking
+     exception). Allow cleartext to private/local hosts and Tailscale; public
+     internet cleartext stays restricted to what usesCleartextTraffic permits. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

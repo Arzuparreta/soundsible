@@ -1,0 +1,8 @@
+// Top-level build file for the Soundsible Android client.
+//
+// Version truth lives in shared/version.py. The app module's versionName is a
+// copy kept in step by scripts/version_sync.py -- do not bump it by hand.
+plugins {
+    id("com.android.application") version "8.5.2" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+}

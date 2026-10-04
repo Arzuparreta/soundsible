@@ -1,0 +1,81 @@
+name: Android
+
+# The Android client mirrors the iOS split: pure logic that is unit-tested on
+# every run, plus a real APK build that proves the manifest, resources, Kotlin
+# and Media3 wiring compile and sign. Nothing here installs, pairs, plays or
+# drives the app on a device -- see docs/ANDROID.md for what that leaves open.
+on:
+  push:
+    branches: [main, dev]
+    paths: &android-paths
+      - 'android/**'
+      - 'scripts/build_android_apk.sh'
+      - 'scripts/version_sync.py'
+      - '.github/workflows/android.yml'
+  pull_request:
+    branches: [main, dev]
+    paths: *android-paths
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Version drift check
+        run: python3 scripts/version_sync.py --check
+
+      - name: Unit tests
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Build signed APK (local debug key)
+        working-directory: android
+        run: |
+          set -euo pipefail
+          if [ ! -f keystores/debug.keystore ]; then
+            mkdir -p keystores
+            keytool -genkeypair \
+              -keystore keystores/debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 3650 \
+              -storepass android -keypass android \
+              -dname "CN=Soundsible Debug, OU=Debug, O=Soundsible, L=Local, ST=Local, C=US"
+          fi
+          ./gradlew :app:assembleRelease
+
+      - name: Verify APK signature
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "::error::No APK was produced at $APK"; exit 1; }
+          ls -lh "$APK"
+          apksigner="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -x "$apksigner" || apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
+          "$apksigner" verify --print-certs "$APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundsible-android-apk
+          path: android/app/build/outputs/apk/release/app-release.apk

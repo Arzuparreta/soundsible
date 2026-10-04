@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accent sampled from ios/App/Resources/Assets.xcassets/AccentColor. -->
+    <color name="soundsible_accent">#7C5CFF</color>
+    <color name="launch_background">#101014</color>
+</resources>

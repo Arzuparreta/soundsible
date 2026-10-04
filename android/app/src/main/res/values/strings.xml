@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Soundsible</string>
+    <string name="pairing_title">Pair with your Soundsible</string>
+    <string name="pairing_hint">On your Soundsible, open Settings → Pair a device and leave the QR sheet on screen (it turns on auto-confirm). Enter the server address and the pairing code below.</string>
+    <string name="server_url_hint">Server URL (http://192.168.1.40:5005)</string>
+    <string name="pairing_code_hint">Pairing code</string>
+    <string name="pair_button">Pair</string>
+    <string name="have_token_hint">Headless server? Paste a paired-device token instead.</string>
+    <string name="token_hint">Device token</string>
+    <string name="pair_token_button">Pair with token</string>
+    <string name="browse_title">Browse</string>
+    <string name="now_playing">Now playing</string>
+    <string name="unpair">Unpair this device</string>
+    <string name="offline_title">Offline</string>
+</resources>

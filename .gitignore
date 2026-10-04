@@ -109,3 +109,10 @@ ios/**/.swiftpm/
 
 # A machine's own systemd unit: docs/INSTALL.md writes it to /etc/systemd/system.
 /soundsible.service
+
+# Android: build outputs, the local throwaway signing key and SDK specifics.
+*.apk
+*.aab
+android/.gradle/
+android/keystores/
+android/local.properties

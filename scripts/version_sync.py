@@ -84,6 +84,12 @@ TARGETS: tuple[Target, ...] = (
         REPO_ROOT / "ios" / "project.yml",
         re.compile(r'^(        MARKETING_VERSION: ")([^"]+)(")', re.MULTILINE),
     ),
+    # The Android app's versionName. Gradle reads it from its own manifest at
+    # build time and cannot import Python either.
+    Target(
+        REPO_ROOT / "android" / "app" / "build.gradle",
+        re.compile(r'^(        versionName = ")([^"]+)(")', re.MULTILINE),
+    ),
 )
 
 
