@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2s stable-source library labels and sidecar artwork",
+  "source_revision_before_commit": "76099a2",
+  "dirty": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "passed": 1409,
+      "files": 161,
+      "log": "/tmp/soundsible-s2s-ui-final.log"
+    },
+    "python": {
+      "passed": 66,
+      "log": "/tmp/soundsible-s2s-backend-final.log"
+    },
+    "fixtures": {
+      "passed": 4,
+      "log": "/tmp/soundsible-s2s-fixtures.log"
+    },
+    "android_flac": {
+      "tests": 2,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2s-flac.log"
+    },
+    "android_wav": {
+      "tests": 2,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2s-wav.log"
+    },
+    "normal_apk_tests_lint": "passed after ephemeral CA removal",
+    "browser": "S2j latest full; repeat final PR head"
+  },
+  "limits": [
+    "Synthetic File does not validate OS picker.",
+    "Full main/restart regression pending this head.",
+    "No CI/live provider/physical phone/car accepted.",
+    "Full parity/signing/update gates required before alpha."
+  ]
+}

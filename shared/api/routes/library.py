@@ -456,6 +456,73 @@ def get_lyrics_by_metadata():
     return jsonify(_lyrics_payload(record, source_kind=source_kind))
 
 
+@library_bp.route("/api/library/track-labels/<track_id>/metadata", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_edit_labels", limit=60, window_sec=60)
+@serialized
+def update_track_labels(track_id):
+    """Edit library labels while keeping audio, storage identity and references."""
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    if not api["get_track_by_id"](lib, track_id):
+        return jsonify({"error": "Track not found"}), 404
+    data = request.get_json(silent=True)
+    allowed = {"title", "artist", "album", "album_artist"}
+    if not isinstance(data, dict) or not data or not set(data) <= allowed:
+        return jsonify({"error": "Invalid metadata fields"}), 400
+    if any(not (isinstance(value, str) and len(value) <= 4096)
+           and not (key == "album_artist" and value is None)
+           for key, value in data.items()):
+        return jsonify({"error": "Invalid metadata value"}), 400
+    if not api["_mark_track_metadata_updated"](lib, track_id, changes=data):
+        return jsonify({"error": "Track not found"}), 404
+    return jsonify({"status": "success", "storage": "library", "id": track_id})
+
+
+@library_bp.route("/api/library/track-labels/<track_id>/cover", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_edit_label_cover", limit=30, window_sec=60)
+@serialized
+def upload_track_label_cover(track_id):
+    """Persist a validated sidecar; never download/rewrite/re-key the audio."""
+    from shared.artwork import artwork_store, open_image, MAX_BYTES
+    from PIL import Image, UnidentifiedImageError
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    if not api["get_track_by_id"](lib, track_id):
+        return jsonify({"error": "Track not found"}), 404
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"error": "Image file required"}), 400
+    store = artwork_store()
+    data = file.stream.read(MAX_BYTES + 1)
+    try:
+        open_image(data)
+    except (ValueError, UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        return jsonify({"error": "Invalid artwork"}), 400
+    digest = store.put(data)
+    # Commit account metadata first; a failed save never publishes the new cover.
+    if not api["_mark_track_metadata_updated"](lib, track_id, cover_source="manual"):
+        return jsonify({"error": "Track not found"}), 404
+    store.bind(track_id, digest, "manual")
+    api["emit_to_user"]("library_updated", payload={"cover_changed": True})
+    return jsonify({"status": "success", "storage": "library", "id": track_id})
+
+
+@library_bp.route("/api/library/track-labels/<track_id>/cover/none", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_clear_label_cover", limit=30, window_sec=60)
+@serialized
+def clear_track_label_cover(track_id):
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    if not api["get_track_by_id"](lib, track_id):
+        return jsonify({"error": "Track not found"}), 404
+    if not api["_mark_track_metadata_updated"](lib, track_id, cover_source="none"):
+        return jsonify({"error": "Track not found"}), 404
+    return jsonify({"status": "success", "storage": "library", "id": track_id})
+
+
 @library_bp.route("/api/library/tracks/<track_id>/metadata", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_update_metadata", limit=60, window_sec=60)

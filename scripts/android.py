@@ -151,6 +151,10 @@ def integration(*, restart_only: bool = False) -> None:
                         "--run-id",
                         Path(temporary).name,
                     ]
+                    fixture_format = os.environ.get("SOUNDSIBLE_ANDROID_FIXTURE_AUDIO_FORMAT", "wav")
+                    if fixture_format not in ("wav", "flac"):
+                        raise RuntimeError("Unsupported synthetic fixture audio format")
+                    command.extend(("--audio-format", fixture_format))
                     if passwordless:
                         command.append("--passwordless")
                     if port == 5099:

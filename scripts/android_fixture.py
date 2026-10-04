@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("--run-id", default="manual-fixture")
     parser.add_argument("--tls-cert", type=Path)
     parser.add_argument("--tls-key", type=Path)
+    parser.add_argument("--audio-format", choices=("wav", "flac"), default="wav")
     args = parser.parse_args()
     root = args.root.resolve()
     # A new directory is mandatory. An accidental developer directory is refused.
@@ -78,6 +79,13 @@ def main() -> None:
                 b"".join(struct.pack("<h", int(3000 * math.sin(2 * math.pi * 440 * i / 16000))) for i in range(16000))
                 * 600
             )
+        if args.audio_format == "flac":
+            import subprocess
+            encoded = audio.with_suffix(".flac")
+            subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(audio),
+                            "-metadata", "title=" + name + " private song", str(encoded)], check=True)
+            audio.unlink()
+            audio = encoded
         with user_context(uid):
             # Deterministic playback tests explicitly opt out. Product default
             # remains on; autoplay acceptance enables the real preference.
@@ -92,10 +100,10 @@ def main() -> None:
                     album=f"{name} album",
                     duration=600,
                     file_hash=f"{name}-hash",
-                    original_filename="fixture.wav",
+                    original_filename=f"fixture.{args.audio_format}",
                     file_size=audio.stat().st_size,
                     bitrate=128,
-                    format="wav",
+                    format=args.audio_format,
                     cover_art_key=str(cover),
                     cover_source="local",
                 )

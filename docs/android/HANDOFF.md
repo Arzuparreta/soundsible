@@ -970,3 +970,18 @@ con las rutas históricas. Continuar con contrato de edición que preserve audio
 y pruebas de formatos con tags antes de cerrar esta fila. Última APK completa
 S2q31 + restart2; browser S2j. No PR/main/release hasta matriz completa; continuar
 sin terminar por checkpoint. Instrumentación dirty/HEAD anterior, desarrollo.
+
+
+## S2s: edición conservando audio/identidad
+
+[Contrato y evidencia](SLICE_2S.md). Nuevas rutas track-labels editan canonical y
+sidecar sin tags/rehash. Android exige storage=library e ID original; motores
+antiguos fallan explícitamente sin fallback destructivo. Resuelve el límite de
+formatos con tags señalado en S2r. UI 1.409/161; Python 66 + cuatro fixtures pasan;
+APK FLAC y WAV, HTTP/HTTPS, cuatro recorridos pasan con SHA-256 de audio conservado.
+Normal APK/lint sin CA pasan. Selector OS y aceptación APK extendida pendientes.
+
+Fuentes de instrumentación dirty respecto a S2r; regenerar desde commit limpio y
+repetir suite principal + restart. Últimas browser completas S2j; repetir cuatro
+perfiles antes del PR. Continúa paridad de biblioteca/entidades, DJ/Live/Auto,
+firma/actualización; no dar matriz por completa ni publicar alpha parcial.

@@ -7,8 +7,8 @@ import styles from './MetadataEditor.module.css';
 
 /**
  * Edit a track's tags (title/artist/album/album artist) and its cover (upload or
- * remove). Ports the legacy `metadata_editor.js`. The engine rewrites the file's
- * tags; fields the backend doesn't accept (year/genre) are intentionally omitted.
+ * remove). Persistence belongs to the adapter: web may rewrite file tags while
+ * native edits library labels and sidecar artwork. Year/genre remain omitted.
  */
 export interface MetadataEditorHandlers {
   update(values: { title: string; artist: string; album: string; album_artist: string | null }): Promise<boolean>;

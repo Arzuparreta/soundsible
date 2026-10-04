@@ -13,6 +13,14 @@ import java.util.concurrent.TimeUnit;
 /** Actual text, multipart and cover routes; stable occurrences and durable copy labels. */
 @RunWith(AndroidJUnit4.class)
 public class MetadataTest {
+    private byte[] audioDigest(EngineConnection connection,String origin) throws Exception {
+        var digest=java.security.MessageDigest.getInstance("SHA-256");
+        try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/static/stream/member-track").header("Cookie",connection.cookieHeader(connection.getGeneration())).build()).execute()){
+            assertEquals(200,response.code());
+            try(var input=response.body().byteStream()){byte[] buffer=new byte[8192];int count;while((count=input.read(buffer))!=-1)digest.update(buffer,0,count);}
+        }
+        return digest.digest();
+    }
     private void waitFor(StartupTest web,ActivityScenario<MainActivity> scenario,String condition) throws Exception {
         long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(45);
         while(System.nanoTime()<until){if("true".equals(web.evaluate(scenario,condition)))return;Thread.sleep(100);}
@@ -46,6 +54,7 @@ public class MetadataTest {
             waitFor(web,scenario,"!!document.querySelector('[data-testid=android-library]')");
             var tracks=library(connection,origin).getJSONArray("tracks");for(int i=0;i<tracks.length();i++)if(tracks.getJSONObject(i).getString("id").equals("member-track"))original=tracks.getJSONObject(i);
             assertNotNull(original);
+            byte[] audioBefore=audioDigest(connection,origin);
             try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/static/cover/member-track?size=thumb").header("Cookie",connection.cookieHeader(connection.getGeneration())).build()).execute()){assertEquals(200,response.code());originalCover=response.body().bytes();}
             web.evaluate(scenario,"window.__metadataTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__metadata=s),100)");
             waitFor(web,scenario,"window.__metadata?.ready");
@@ -75,13 +84,17 @@ public class MetadataTest {
             waitFor(web,scenario,"!Array.from(document.querySelectorAll('[data-track-metadata-editor] button')).some(b=>b.disabled)");
             assertEquals("null",web.evaluate(scenario,"document.querySelector('[data-track-metadata-editor] [role=alert]')"));
             assertEquals("false",web.evaluate(scenario,"!!document.querySelector('audio')"));
+            assertArrayEquals("Editing labels/cover must preserve encoded audio bytes",audioBefore,audioDigest(connection,origin));
+            var afterTracks=library(connection,origin).getJSONArray("tracks");
+            boolean found=false;for(int i=0;i<afterTracks.length();i++){var row=afterTracks.getJSONObject(i);if(row.getString("id").equals("member-track")){found=true;assertEquals("Offline title",row.getString("title"));assertEquals(original.getString("format"),row.getString("format"));}}
+            assertTrue("Edited source identity remains in the library",found);
         }finally{
             try{
                 String cookie=connection.cookieHeader(connection.getGeneration());
                 if(cookie!=null && original!=null){
                     var body=new JSONObject();for(String field:new String[]{"title","artist","album","album_artist"})body.put(field,original.opt(field));
-                    try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/library/tracks/member-track/metadata").header("Cookie",cookie).post(okhttp3.RequestBody.create(body.toString(),okhttp3.MediaType.get("application/json"))).build()).execute()){assertEquals(200,response.code());}
-                    if(originalCover!=null){var upload=new okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM).addFormDataPart("file","original.jpg",okhttp3.RequestBody.create(originalCover,okhttp3.MediaType.get("image/jpeg"))).build();try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/library/tracks/member-track/cover").header("Cookie",cookie).post(upload).build()).execute()){assertEquals(200,response.code());}}
+                    try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/library/track-labels/member-track/metadata").header("Cookie",cookie).post(okhttp3.RequestBody.create(body.toString(),okhttp3.MediaType.get("application/json"))).build()).execute()){assertEquals(200,response.code());}
+                    if(originalCover!=null){var upload=new okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM).addFormDataPart("file","original.jpg",okhttp3.RequestBody.create(originalCover,okhttp3.MediaType.get("image/jpeg"))).build();try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/library/track-labels/member-track/cover").header("Cookie",cookie).post(upload).build()).execute()){assertEquals(200,response.code());}}
                 }
             }finally{connection.clearSession(true);}
         }

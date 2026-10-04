@@ -161,3 +161,108 @@ def test_unsupported_embedded_tags_keep_confirmed_library_edits_and_artwork(mana
     assert audio.read_bytes() == original
     assert Path(artwork.path(track.id)).read_bytes() == image.getvalue()
     assert manager.db.public_source()['fingerprint'] == fingerprint(manager.metadata)
+
+
+@pytest.mark.parametrize('format_name', ['mp3', 'flac', 'ogg', 'opus', 'm4a', 'mp4', 'wav'])
+def test_stable_label_routes_never_rewrite_audio_or_membership(manager, tmp_path, monkeypatch, format_name):
+    import inspect
+    import io
+    from flask import Flask
+    from PIL import Image
+    import shared.api as api
+    from shared.api.routes import library as routes
+    from shared.artwork import ArtworkStore
+
+    track = manager.metadata.tracks[0]
+    track.format = format_name
+    track.album_artist = 'Original artist'
+    assert manager._save_metadata()
+    ids = [row.id for row in manager.metadata.tracks]
+    membership = deepcopy(manager.metadata.playlists)
+    artwork = ArtworkStore(tmp_path / 'artwork', tmp_path / 'variants')
+    monkeypatch.setattr('shared.artwork.artwork_store', lambda: artwork)
+    monkeypatch.setattr(api, '_mirror_track_into_pool', lambda *a, **k: None)
+    monkeypatch.setattr(api, 'emit_to_user', lambda *a, **k: None)
+    def forbidden(*args, **kwargs):
+        pytest.fail('Stable label editing must not rewrite or fetch audio')
+    monkeypatch.setattr(manager, 'update_track', forbidden)
+    monkeypatch.setattr(routes, 'resolve_local_track_path', forbidden)
+    monkeypatch.setattr(routes, '_get_api', lambda: {
+        'get_core': lambda: (manager, None, None),
+        'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
+        '_mark_track_metadata_updated': api._mark_track_metadata_updated,
+        'emit_to_user': api.emit_to_user,
+    })
+    app = Flask(__name__)
+    with app.test_request_context(json={'title': 'Stable title', 'album_artist': None}):
+        reply = inspect.unwrap(routes.update_track_labels)(track.id)
+    assert reply.json == {'status': 'success', 'storage': 'library', 'id': track.id}
+    assert manager.db.load_library_metadata().get_track_by_id(track.id).title == 'Stable title'
+    assert manager.db.load_library_metadata().get_track_by_id(track.id).album_artist is None
+    image = io.BytesIO()
+    Image.new('RGB', (16, 16), 'green').save(image, 'PNG')
+    with app.test_request_context(method='POST', data={'file': (io.BytesIO(image.getvalue()), 'cover.png')}):
+        reply = inspect.unwrap(routes.upload_track_label_cover)(track.id)
+    assert reply.json['storage'] == 'library'
+    assert Path(artwork.path(track.id)).read_bytes() == image.getvalue()
+    with app.test_request_context(method='POST'):
+        reply = inspect.unwrap(routes.clear_track_label_cover)(track.id)
+    assert reply.json['storage'] == 'library'
+    assert artwork.path(track.id) is None
+    assert [row.id for row in manager.metadata.tracks] == ids
+    assert manager.metadata.playlists == membership
+    assert manager.db.load_library_metadata().get_track_by_id(track.id).format == format_name
+
+
+@pytest.mark.parametrize('body', [None, [], {}, {'title': None}, {'title': 1}, {'cover_url': 'https://example.com'}, {'title': 'x' * 4097}, {'album_artist': []}])
+def test_stable_label_edit_rejects_invalid_payload_without_mutation(manager, monkeypatch, body):
+    import inspect
+    from flask import Flask
+    from shared.api.routes import library as routes
+    before = manager.db.load_library_metadata().tracks[0].title
+    monkeypatch.setattr(routes, '_get_api', lambda: {
+        'get_core': lambda: (manager, None, None),
+        'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
+    })
+    with Flask(__name__).test_request_context(json=body):
+        reply, status = inspect.unwrap(routes.update_track_labels)(manager.metadata.tracks[0].id)
+    assert status == 400
+    assert manager.db.load_library_metadata().tracks[0].title == before
+
+
+@pytest.mark.parametrize('fail_save', [False, True])
+def test_stable_cover_rejects_bad_image_or_failed_commit_before_publication(manager, tmp_path, monkeypatch, fail_save):
+    import inspect
+    import io
+    from flask import Flask
+    from PIL import Image
+    from shared.api.routes import library as routes
+    from shared.artwork import ArtworkStore
+    artwork = ArtworkStore(tmp_path / 'artwork', tmp_path / 'variants')
+    image = io.BytesIO()
+    Image.new('RGB', (16, 16), 'red').save(image, 'PNG')
+    track = manager.metadata.tracks[0]
+    artwork.bind(track.id, artwork.put(image.getvalue()), 'manual')
+    before = artwork.ref(track.id)
+    monkeypatch.setattr('shared.artwork.artwork_store', lambda: artwork)
+    def reject(*args, **kwargs):
+        raise LibraryPersistenceError('library_storage_unavailable')
+    monkeypatch.setattr(routes, '_get_api', lambda: {
+        'get_core': lambda: (manager, None, None),
+        'get_track_by_id': lambda lib, key: lib.metadata.get_track_by_id(key),
+        '_mark_track_metadata_updated': reject,
+    })
+    if fail_save:
+        image = io.BytesIO()
+        Image.new('RGB', (16, 16), 'green').save(image, 'PNG')
+        data = image.getvalue()
+    else:
+        data = b'not an image'
+    with Flask(__name__).test_request_context(method='POST', data={'file': (io.BytesIO(data), 'cover.png')}):
+        if fail_save:
+            with pytest.raises(LibraryPersistenceError):
+                inspect.unwrap(routes.upload_track_label_cover)(track.id)
+        else:
+            reply, status = inspect.unwrap(routes.upload_track_label_cover)(track.id)
+            assert status == 400
+    assert artwork.ref(track.id) == before
