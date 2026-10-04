@@ -111,6 +111,7 @@ class LibraryActivity : AppCompatActivity() {
         artwork: android.graphics.Bitmap?,
     ) {
         try {
+            WebPlaybackHold.setHeld(this, isPlaying && title.isNotEmpty())
             com.soundsible.player.widgets.SoundsibleWidgetProvider.updateAll(
                 this,
                 title = title,
@@ -141,6 +142,10 @@ class LibraryActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         WebAudio.detach(webView)
+        try {
+            WebPlaybackHold.setHeld(this, false)
+        } catch (_: Exception) {
+        }
         try {
             WebNowPlaying.cancel(this)
         } catch (_: Exception) {
