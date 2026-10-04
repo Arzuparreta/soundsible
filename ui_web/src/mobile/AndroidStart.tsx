@@ -4,6 +4,7 @@ import { musicLibraryRows } from '../lib/musicLibrary';
 import { buildIdentityIndex, trackKeys } from '../lib/playbackIdentity';
 import { songMarkAction } from './songMarks';
 import { openNativePlaylistPicker } from './PlaylistPicker';
+import { openNativeMetadataEditor } from './metadataEditor';
 import { nativePlaylistActions, nativePlaylistOccurrenceActions, createNativePlaylist } from './playlistActions';
 import { savedToTrack } from '../lib/saved';
 import type { SavedEntry, Track } from '../types/music';
@@ -281,6 +282,9 @@ export default function AndroidStart() {
             openContextMenu({ ...menu, actions: [...(menu.actions ?? []),
               songMarkAction(track, savedEntries, () => epoch, () => !current(), sync, () => { if (current()) setError(t('common.loadFailed')); }),
               { label: t('trackActions.addToPlaylist'), disabled: !current(), onSelect: () => { if (current()) openNativePlaylistPicker(track, () => snapshot()?.playlists ?? {}, current, sync, () => snapshot()?.settings?.playlist_order); } },
+              ...(track.source !== 'preview' ? [{ label: t('trackActions.editData'), disabled: !current(), onSelect: () => {
+                if (current()) openNativeMetadataEditor(track, current, sync, id => snapshot()?.tracks.find(row => row.id === id), saved => runtime.execute({ action: 'metadata', tracks: [{ id: saved.id, title: saved.title, artist: saved.artist, album: saved.album ?? '', album_artist: saved.album_artist ?? null, album_id: saved.album_id ?? null, artist_id: saved.artist_id ?? null }] }));
+              } }] : []),
               ...(context ? nativePlaylistOccurrenceActions(context.playlist, context.index, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []),
               ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event);
           }} />

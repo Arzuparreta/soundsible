@@ -16,6 +16,7 @@ export interface ProgramTrack { offline?: boolean; source: 'local' | 'preview' |
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
   | { action: 'radio'; enabled: boolean; profile: 'familiar' | 'balanced' | 'explore'; queueToken: string; key?: string }
+  | { action: 'metadata'; tracks: { id: string; title: string; artist: string; album: string; album_artist?: string | null; album_id?: string | null; artist_id?: string | null }[] }
   | { action: 'autoplay'; enabled: boolean; reload?: boolean }
   | { action: 'stop'; queueToken: string }
   | { action: 'seek'; positionMs: number }

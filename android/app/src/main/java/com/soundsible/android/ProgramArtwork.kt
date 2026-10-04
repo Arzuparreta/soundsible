@@ -21,8 +21,8 @@ class ProgramArtwork(private val connection: EngineConnection) : BitmapLoader, A
         const val MAX_BYTES = 2 * 1024 * 1024
         const val MAX_PIXELS = 16L * 1024 * 1024
         const val MAX_EDGE = 512
-        fun uri(epoch: Long, id: String): Uri = Uri.Builder().scheme("soundsible-artwork")
-            .authority(epoch.toString()).appendPath(id).build()
+        @JvmOverloads fun uri(epoch: Long, id: String, revision: String? = null): Uri = Uri.Builder().scheme("soundsible-artwork")
+            .authority(epoch.toString()).appendPath(id).apply { if (revision != null) { require(Regex("^[a-f0-9-]{36}$").matches(revision)); appendQueryParameter("revision", revision) } }.build()
     }
     private val lock = Any()
     private val executor = ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(16))
@@ -43,7 +43,8 @@ class ProgramArtwork(private val connection: EngineConnection) : BitmapLoader, A
         val epoch = uri.authority?.toLongOrNull() ?: -1
         val id = uri.pathSegments.singleOrNull() ?: ""
         val result = submit(epoch) { future ->
-            require(uri.scheme == "soundsible-artwork" && uri.query == null && uri.fragment == null && id.isNotBlank() && id.length <= 512)
+            val validRevision = uri.query == null || (uri.queryParameterNames == setOf("revision") && uri.getQueryParameters("revision").size == 1 && Regex("^[a-f0-9-]{36}$").matches(uri.getQueryParameter("revision") ?: ""))
+            require(uri.scheme == "soundsible-artwork" && validRevision && uri.fragment == null && id.isNotBlank() && id.length <= 512)
             val selected = connection.origin
             val cookie = connection.cookieHeader(epoch) ?: error("NO_SESSION")
             val client = connection.client.newBuilder().retryOnConnectionFailure(false).callTimeout(8, TimeUnit.SECONDS).build()

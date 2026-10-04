@@ -108,6 +108,23 @@ class OfflineStore private constructor(private val context: Context) {
         } finally { database.endTransaction() }
         prefs.edit().putString("playlists", playlists.toString()).apply()
     }
+    /** Refresh labels of existing copies without changing their bytes, digest or download ticket. */
+    @Synchronized fun updateMetadata(epoch: Long, rows: JSONArray) {
+        if (!canUse(epoch)) return
+        database.beginTransaction()
+        try {
+            for (i in 0 until rows.length()) {
+                val row = rows.getJSONObject(i); val id = row.getString("id")
+                database.rawQuery("SELECT metadata FROM copies WHERE id=?", arrayOf(id)).use { cursor ->
+                    if (!cursor.moveToFirst()) return@use
+                    val saved = JSONObject(cursor.getString(0))
+                    for (key in listOf("title", "artist", "album", "album_artist", "album_id", "artist_id")) if (row.has(key)) saved.put(key, row.get(key))
+                    database.update("copies", ContentValues().apply { put("metadata", saved.toString()) }, "id=?", arrayOf(id))
+                }
+            }
+            database.setTransactionSuccessful()
+        } finally { database.endTransaction() }
+    }
     @Synchronized fun limit(epoch: Long, bytes: Long) { requireProfile(epoch); require(bytes in setOf(512L * 1024 * 1024, 2L * 1024 * 1024 * 1024, 8L * 1024 * 1024 * 1024)); prefs.edit().putLong("limit", bytes).apply() }
     @Synchronized fun remove(epoch: Long, ids: JSONArray) {
         requireProfile(epoch)

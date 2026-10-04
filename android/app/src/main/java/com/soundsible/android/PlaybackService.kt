@@ -166,6 +166,8 @@ class PlaybackService : MediaLibraryService() {
                         autoplay.clear()
                         radio.clear()
                         player.setMediaItems(items, index, podcasts.position(items[index])); player.prepare(); player.play()
+                    } else if (args.getString("action") == "metadata") {
+                        ProgramMetadata.apply(player, connection, args, artwork::clear)
                     } else if (args.getString("action") == "autoplay") {
                         require(args.getLong("generation", -1) == connection.generation)
                         autoplay.settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))

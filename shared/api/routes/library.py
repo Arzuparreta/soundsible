@@ -499,7 +499,7 @@ def update_track_metadata(track_id):
             "title": str(new_meta.get("title", track.title) or ""),
             "artist": str(new_meta.get("artist", track.artist) or ""),
             "album": str(new_meta.get("album", track.album) or ""),
-            "album_artist": str(new_meta["album_artist"] or "") if new_meta.get("album_artist") is not None else track.album_artist,
+            "album_artist": str(new_meta["album_artist"] or "") if new_meta.get("album_artist") is not None else None,
             "metadata_modified_by_user": True,
         }
         api["_mark_track_metadata_updated"](lib, track_id, changes=changes)

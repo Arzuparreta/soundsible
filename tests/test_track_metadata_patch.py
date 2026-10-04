@@ -1,5 +1,6 @@
 """Explicit edits retain canonical references and existing read projections."""
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -124,3 +125,39 @@ def test_metadata_route_fallback_commits_declared_fields(manager, monkeypatch):
     saved = manager.db.load_library_metadata().tracks[0]
     assert saved.title == 'Route edit'
     assert saved.metadata_modified_by_user
+
+
+def test_unsupported_embedded_tags_keep_confirmed_library_edits_and_artwork(manager, tmp_path, monkeypatch):
+    import io
+    import wave
+    from PIL import Image
+    from shared.artwork import ArtworkStore
+
+    track = manager.metadata.tracks[0]
+    track.format = 'wav'
+    assert manager._save_metadata()
+    audio = tmp_path / 'source.wav'
+    with wave.open(str(audio), 'wb') as output:
+        output.setnchannels(1)
+        output.setsampwidth(2)
+        output.setframerate(16000)
+        output.writeframes(b'\0\0' * 1600)
+    original = audio.read_bytes()
+    image = io.BytesIO()
+    Image.new('RGB', (16, 16), 'green').save(image, 'PNG')
+    cover = tmp_path / 'cover.png'
+    cover.write_bytes(image.getvalue())
+    artwork = ArtworkStore(tmp_path / 'artwork', tmp_path / 'variants')
+    monkeypatch.setattr('shared.artwork.artwork_store', lambda: artwork)
+    monkeypatch.setattr('player.library.resolve_local_track_path', lambda _: str(audio))
+    manager._cache = None
+    manager._cache_unavailable = True
+    manager.provider = None
+
+    assert manager.update_track(track, {'title': 'Edited WAV', 'album_artist': None}, str(cover))
+    stored = manager.db.load_library_metadata().get_track_by_id(track.id)
+    assert stored.title == 'Edited WAV'
+    assert stored.album_artist is None
+    assert audio.read_bytes() == original
+    assert Path(artwork.path(track.id)).read_bytes() == image.getvalue()
+    assert manager.db.public_source()['fingerprint'] == fingerprint(manager.metadata)

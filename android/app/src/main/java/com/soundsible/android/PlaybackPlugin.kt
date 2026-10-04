@@ -77,8 +77,9 @@ class PlaybackPlugin : Plugin() {
             require((call.getInt("generation")?.toLong() ?: -1L) == connection.generation)
             val p = controller ?: error("NOT_READY")
             when (call.getString("action")) {
-                "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay" -> {
+                "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay", "metadata" -> {
                     val args = Bundle().apply {
+                        if (call.getString("action") == "metadata") putString("metadataRevision", java.util.UUID.randomUUID().toString())
                         putBoolean("reload", call.getBoolean("reload") ?: false); putBoolean("enabled", call.getBoolean("enabled") ?: false); putString("profile", call.getString("profile"))
                         putInt("seconds", call.getInt("seconds") ?: 0)
                         putLong("generation", connection.generation)
@@ -91,6 +92,7 @@ class PlaybackPlugin : Plugin() {
                         try {
                             require(alive && args.getLong("generation") == connection.generation && result.get().resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS)
                             if (args.getString("action") == "stop") awaitClosed(call, p, connection, args.getLong("generation"), android.os.SystemClock.elapsedRealtime() + 3000)
+                            else if (args.getString("action") == "metadata") awaitMetadata(call, p, connection, args, android.os.SystemClock.elapsedRealtime() + 3000)
                             else if (args.getString("action") == "queue") awaitQueue(call, p, connection, args, android.os.SystemClock.elapsedRealtime() + 3000)
                             else call.resolve(snapshot())
                         } catch (_: Exception) { call.reject("Queue changed or session unavailable", "PLAYBACK_COMMAND") }
@@ -116,6 +118,19 @@ class PlaybackPlugin : Plugin() {
             call.resolve(snapshot())
         } catch (_: Exception) { call.reject("Playback unavailable or session changed", "PLAYBACK_COMMAND") }
     } }
+    private fun awaitMetadata(call: PluginCall, player: androidx.media3.session.MediaController, connection: EngineConnection, args: Bundle, deadline: Long) {
+        if (!alive || connection.generation != args.getLong("generation")) { call.reject("Account changed", "PLAYBACK_COMMAND"); return }
+        val rows = org.json.JSONArray(args.getString("tracks"))
+        val updates = (0 until rows.length()).map { rows.getJSONObject(it) }.associateBy { it.getString("id") }
+        val observed = (0 until player.mediaItemCount).all { index ->
+            val item = player.getMediaItemAt(index); val row = updates[item.mediaId]
+            row == null || item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) != "local" ||
+                (item.mediaMetadata.extras?.getString("metadataRevision") == args.getString("metadataRevision") && item.mediaMetadata.title?.toString() == row.getString("title") && item.mediaMetadata.artist?.toString() == row.getString("artist") && item.mediaMetadata.albumTitle?.toString() == row.getString("album"))
+        }
+        if (observed) call.resolve(snapshot())
+        else if (android.os.SystemClock.elapsedRealtime() >= deadline) call.reject("Metadata not observed", "PLAYBACK_COMMAND")
+        else main.postDelayed({ awaitMetadata(call, player, connection, args, deadline) }, 25)
+    }
     private fun awaitQueue(call: PluginCall, player: MediaController, connection: EngineConnection, args: Bundle, deadline: Long) {
         if (!alive || controller !== player || connection.generation != args.getLong("generation")) { call.reject("Session changed", "PLAYBACK_COMMAND"); return }
         val rows = org.json.JSONArray(args.getString("tracks"))

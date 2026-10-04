@@ -954,3 +954,19 @@ adaptador Native REST, todavía sin conectar a programa/shell. Typecheck y tres
 tests de presentación pasan; Native metadata/artwork y recorrido APK pendientes.
 Estos archivos no pertenecen al APK de aceptación S2q ni al commit de autoplay.
 Mantener commits separados y continuar hasta paridad/PR/merge/release autorizados.
+
+
+## S2r: primer vertical de metadata/carátulas
+
+[Contrato/evidencia y pendientes](SLICE_2R.md). Editor visual compartido sin stores
+ni audio web, adaptador REST capturado por cuenta, actualización de metadata en
+Media3 preservando fuentes/ocurrencias y labels offline en SQLite. Dos tests APK
+HTTP/HTTPS pasan sobre WAV; UI 1.405/160 y Python 49 pasan. Multipart real y bitmap
+privado confirmado; File sintético no acepta selector OS. Fix WAV metadata/artwork
+sidecar y null album_artist fallback.
+
+**No es todavía edición completa**: formatos con tags pueden rehash/cambiar ID
+con las rutas históricas. Continuar con contrato de edición que preserve audio/ID
+y pruebas de formatos con tags antes de cerrar esta fila. Última APK completa
+S2q31 + restart2; browser S2j. No PR/main/release hasta matriz completa; continuar
+sin terminar por checkpoint. Instrumentación dirty/HEAD anterior, desarrollo.

@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2r metadata and private artwork first vertical",
+  "source_revision_before_commit": "43ff7d3",
+  "dirty": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "passed": 1405,
+      "files": 160,
+      "log": "/tmp/soundsible-s2r-ui-final.log"
+    },
+    "python": {
+      "passed": 49,
+      "log": "/tmp/soundsible-s2r-backend-final.log"
+    },
+    "android_scoped": {
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2r-native-final.log",
+      "scope": "HTTP/verified HTTPS; WAV labels, real multipart and private bitmap, removal, repeated queue occurrences, pause/position/keys/token and ready copy labels/bytes"
+    },
+    "normal_apk_tests_lint": "passed after ephemeral CA removal",
+    "browser": "latest full four profiles S2j; repeat final cumulative PR head"
+  },
+  "limits": [
+    "Tag rewrites can change track ID: pending stable-source edit contract and tagged-format acceptance.",
+    "Synthetic File does not validate OS picker.",
+    "No CI/live provider/acoustic phone/car acceptance.",
+    "Development; full parity and signing/update gates remain."
+  ]
+}

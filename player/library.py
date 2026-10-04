@@ -859,9 +859,20 @@ class LibraryManager:
                     changes_made = True
             
             if not changes_made:
-                self._log("No changes applied.")
                 os.remove(local_path)
-                return True # Note: Success but nothing to do
+                # Formats without embedded tag/art support still have editable
+                # library metadata and an account-scoped artwork reference.
+                if new_metadata:
+                    changes = {key: str(new_metadata[key] or "") for key in ("title", "artist", "album") if key in new_metadata}
+                    if "album_artist" in new_metadata:
+                        value = new_metadata["album_artist"]
+                        changes["album_artist"] = str(value) if value is not None else None
+                    if changes and not self.patch_track_metadata(track.id, changes):
+                        return False
+                if new_art:
+                    artwork.bind(track.id, new_art, "manual")
+                self._log("Applied library metadata/artwork without changing audio bytes.")
+                return True
                 
             # 3. Upload the edited file as a new track: its hash, and so its id, changed.
             self._log("Re-processing file...")
