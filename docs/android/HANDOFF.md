@@ -1032,3 +1032,21 @@ verde S2q31+restart2. Browser completos S2j todavía no equivalen al HEAD actual
 Pendientes entidades externas/listas de bookmarks/navegación Discover, selector
 OS real, biblioteca restante, DJ/Live/Auto y firma/actualización. No cerrar turno
 por checkpoint, ni publicar una alpha parcial. Instrumentación dirty/HEAD anterior.
+
+
+## Aislamiento auth de fixtures, continuación
+
+La principal S2t35 tuvo un fallo de LibraryActions HTTP: login owner recibió 429
+por presupuesto acumulado de casos anteriores. Repro Connection+EntityBookmarks+
+LibraryActions **8, un fallo**, auditoría status confirma429; repetición con
+FixtureIsolationListener **8, cero fallos/omitidos**, normal APK/lint sin CA pasa.
+[Detalle y comandos/evidencia](AUTH_FIXTURE_ISOLATION.md). Python real prueba que
+10 intentos fallidos→401, siguiente→429, reset no autorizado no altera límite,
+reset de fixture autorizado permite login. No cambia protección de producción.
+
+El helper integration instala listener para resetear sólo auth_login entre casos;
+no borra cuentas/cookies/colas/copias y deja restart offline con su protocolo.
+Volver a ejecutar principal/restart sobre HEAD final. [S2u](SLICE_2U.md) selector
+OS todavía es contrato/draft (draft reproducible en docs/android/drafts/CoverPickerTest.java),
+no aceptado; trasladarlo a androidTest y probar después de cerrar esta regresión.
+Continuar hasta paridad completa; PR/main/release siguen pendientes.

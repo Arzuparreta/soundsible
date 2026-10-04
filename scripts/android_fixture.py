@@ -142,6 +142,7 @@ def main() -> None:
     offline_body = {}
     connection_failure = {}
     artwork_mode = {}
+    auth_events = []
 
     @app.before_request
     def audio_failure():
@@ -170,6 +171,12 @@ def main() -> None:
 
     @app.after_request
     def record_range(response):
+        if request.path == "/api/auth/login":
+            import time
+            auth_events.append({"status": response.status_code, "time": time.time()})
+            del auth_events[:-100]
+            # Fixture status only: never log submitted credentials or cookies.
+            print(f"Android fixture {args.port}: auth_login status={response.status_code}", flush=True)
         if request.path.startswith("/api/static/cover/") and response.status_code == 200:
             name = request.path.rsplit("/", 1)[-1].split("-", 1)[0]
             mode = artwork_mode.get(name)
@@ -211,6 +218,12 @@ def main() -> None:
     def ready():
         return jsonify({"fixture": args.run_id})
 
+    @app.route("/__fixture/auth-stats")
+    def auth_stats():
+        if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
+            return jsonify({"error": "fixture only"}), 403
+        return jsonify({"events": auth_events})
+
     @app.route("/api/android-fixture/slow")
     def slow():
         from shared.hardening import current_user
@@ -227,6 +240,11 @@ def main() -> None:
     def control(action):
         if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
             return jsonify({"error": "fixture only"}), 403
+        if action == "reset-auth-limit":
+            from shared.hardening import _rate_limiter
+            with _rate_limiter._lock:
+                _rate_limiter._events.pop(f"auth_login:{request.remote_addr}", None)
+            return jsonify({"ok": True})
         name = (request.get_json(silent=True) or {}).get("account", "member")
         uid = accounts[name]
         if action == "artwork":

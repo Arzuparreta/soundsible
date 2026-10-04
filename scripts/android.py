@@ -193,6 +193,7 @@ def integration(*, restart_only: bool = False) -> None:
                         "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
                         "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
                         "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
+                        "-Pandroid.testInstrumentationRunnerArguments.listener=com.soundsible.android.FixtureIsolationListener",
                     )
                     test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class")
                     results = (

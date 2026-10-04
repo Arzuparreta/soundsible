@@ -105,6 +105,24 @@ def test_catalog_search_resolve_and_save_keep_real_account_isolation(tmp_path):
             stats = member.get(origin + "/api/android-fixture/catalog-stats", timeout=10).json()
             assert any(row["provider"] == "resolution" for row in stats["calls"])
             assert not any(row["path"] == "/api/catalog/save" for row in stats["requests"])
+            # Independent APK cases reset only their synthetic login budget.
+            # The real production policy remains active within each case.
+            controls = {"X-Android-Fixture": "isolated"}
+            reset = origin + "/__fixture/reset-auth-limit"
+            assert requests.post(reset, json={}, timeout=10).status_code == 403
+            assert requests.post(reset, headers=controls, json={}, timeout=10).status_code == 200
+            credentials = {"username": "member", "password": "wrong"}
+            for _ in range(10):
+                assert requests.post(origin + "/api/auth/login", json=credentials, timeout=10).status_code == 401
+            assert requests.post(origin + "/api/auth/login", json=credentials, timeout=10).status_code == 429
+            assert requests.post(reset, json={}, timeout=10).status_code == 403
+            assert requests.post(origin + "/api/auth/login", json=credentials, timeout=10).status_code == 429
+            assert requests.get(origin + "/__fixture/auth-stats", timeout=10).status_code == 403
+            audit = requests.get(origin + "/__fixture/auth-stats", headers=controls, timeout=10).json()["events"]
+            assert audit[-1]["status"] == 429
+            assert all(set(row) == {"status", "time"} for row in audit)
+            assert requests.post(reset, headers=controls, json={}, timeout=10).status_code == 200
+            assert requests.post(origin + "/api/auth/login", json={"username": "member", "password": "android-test"}, timeout=10).status_code == 200
         finally:
             process.terminate()
             process.wait(timeout=10)
