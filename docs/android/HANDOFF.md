@@ -39,13 +39,16 @@ bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrado
 en regresión (refresh Saved y presupuesto auth compartido) están corregidos.
 Última APK principal: **35 tests + dos fases offline persistentes pasan**, sources
 preparados desde commit limpio cf01599; APK/test/lint normales pasan sin CA temporal.
-Últimos browser completos S2j: repetir cuatro perfiles antes del PR final.
+Últimos browser completos tras S2z: Chromium 278/66 y WebKit 269/75, sin fallos,
+sobre reparación de carrusel 78669b6. Repetir cuatro perfiles antes del PR final.
 S2u selector OS y S2v prioridad de sidecar validados; S2w letras adquirido/preview
 usa panel compartido con runtime nativo y pasa HTTP/HTTPS. Faltan biblioteca/
 Discover/Settings completos, DJ, Live, Android Auto, firma y actualización.
 S2x adquisición y S2y importación compartida/selector DocumentsUI HTTP/HTTPS
 validados. S2z navegación Atrás validada con conservación de programa/sesión;
-continuar sin cerrar por slice.
+continuar sin cerrar por slice. La regresión principal de 45 casos y dos fases
+offline está en curso con assets limpios 502947d; no sustituir el resultado
+anterior hasta terminar. Próximo bloque: [eliminar adquirido](SLICE_2AA.md).
 No PR/main/release todavía; mantener gates de alpha completa y continuar.
 
 ## Entrega S0

@@ -52,5 +52,19 @@ restante es el settle de 80 ms antes de que corra el nuevo RAF de alineación.
 PlayerWorkspace conserva ahora el destino solicitado hasta alcanzarlo; un gesto
 real cancela ese destino y sigue teniendo prioridad. Dos pruebas controlan RAF
 y timers para cubrir ambas prioridades. UI completa: 1.440 tests/169 archivos.
-Las suites completas Chromium/WebKit y principal Android están en curso; no
-contar la reproducción aislada de Session como sustituto de esas regresiones.
+La prueba nueva contra el código anterior falla (Route vuelve a Stage); la otra
+prueba mantiene el gesto correcto. Log /tmp/soundsible-carousel-before.log.
+Cuatro perfiles completos pasan: Chromium 278/66 y WebKit 269/75 (pasados/omitidos),
+sin fallos. WebKit con un worker, montaje read-only y después de Chromium.
+Commit de la reparación: 78669b6; evidencia en s2z.json. Principal Android en
+curso sobre assets de 502947d limpio; no contar la reproducción aislada de
+Session como sustituto de esas regresiones. Continuar con SLICE_2AA.md.
+
+La primera principal completa sobre 502947d encontró un fallo real en
+AutoplayTest.tlsAutoplay, línea de stop: Radio cambia el token al añadir runway
+entre state() y command(). El cierre global no edita una ocurrencia ni un orden;
+debe conservar UID/generación, como pause, sin que un refill pueda impedirlo.
+Corrección preparada en PlaybackService y prueba HTTP/HTTPS reforzada con token
+anterior a cambiar autoplay por Radio; una generación antigua debe rechazarse y
+conservar el programa. Pendiente validar esta corrección y repetir principal.
+Las ediciones por índice/key conservan su guard de token; no relajar esos tests.
