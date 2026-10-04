@@ -16,7 +16,7 @@ android {
         // versionCode is a build counter, not the product version: bump it
         // whenever the installable artifact changes meaningfully so builds
         // are distinguishable on device.
-        versionCode = 8
+        versionCode = 9
         versionName = "0.19.1"
 
         ndk {
@@ -102,6 +102,12 @@ chaquopy {
             install("pillow>=10.0.0")
             install("cryptography>=41.0.0")
             install("yt-dlp==2026.8.19")
+            // yt-dlp optional runtime: AES-gated extractors (pycryptodome),
+            // compressed responses (brotli) and websocket transports.
+            // Dropped individually if Chaquopy ships no build for them.
+            install("pycryptodomex")
+            install("brotli")
+            install("websockets>=12.0")
         }
     }
     sourceSets {
