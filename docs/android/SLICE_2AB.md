@@ -1,6 +1,6 @@
 # S2ab: retirada durante una respuesta pendiente de Radio/autoplay
 
-Plan de continuación de S2aa; pendiente de implementación/aceptación. No cambia
+Continuación de S2aa implementada y validada en emulador API36. No cambia
 la decisión offline ni cierra paridad completa.
 
 Añadir a la fixture aislada un control autorizado sólo por loopback + header
@@ -37,6 +37,13 @@ Python WAV/FLAC: dos casos pasan en /tmp/soundsible-s2ab-planner-fixture.log.
 Verifican control no autorizado/valores inválidos, DELETE real, respuesta antigua
 con ID retirado, snapshot sin ID y plan nuevo sin ID. Ruff pasa.
 
-Draft instrumentado reproducible en [drafts/PlannerRetirementTest.java](drafts/PlannerRetirementTest.java);
-tras la principal clean dc29b73, trasladarlo a androidTest y ejecutar HTTP/HTTPS
-para ambos modos. No cuenta todavía como aceptación del runtime Android.
+Instrumentación trasladada a
+[PlannerRetirementTest.java](../../android/app/src/androidTest/java/com/soundsible/android/PlannerRetirementTest.java)
+tras principal clean dc29b73: ejecutar HTTP/HTTPS para ambos modos. Cuatro casos instrumentados HTTP/HTTPS Radio/autoplay pasan, cero fallos/errores/
+omisiones, dentro de targeted6 en /tmp/soundsible-s2ab-native.log. Assets desde
+4e04083 dirty=true. La eliminación se confirma mientras pending>0; plan viejo
+entregado, refill nuevo, ausencia del ID local, key/programToken/pausa20s y modos
+preservados, sin audio HTML. Cleanup restaura preferencia y regenera sólo música
+sintética después de drenar respuesta pendiente. APK/test APK/JVM17/lint normales
+pasan sin CA temporal. No aceptación acústica ni paridad completa. Próxima
+principal ampliada53 + restart2 desde commit limpio todavía pendiente.

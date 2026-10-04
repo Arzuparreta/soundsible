@@ -1287,3 +1287,17 @@ casos dentro de targeted6 pasan (/tmp/soundsible-s2ab-native.log), assets4e04083
 dirty=true. UI1465/172 y APK/test APK/JVM17/lint normales sin CA pasan. No equivale
 a nueva principal limpia. S2ab cuatro casos del mismo conjunto también pasan;
 registrar su entrega aparte y continuar paridad restante.
+
+
+## S2ab: respuesta real pendiente descartada
+
+[Contrato/evidencia](SLICE_2AB.md). Fixture retrasa una respuesta ya calculada,
+no altera cuerpo del planner; delay cooperativo gevent y control loopback/header,
+acotado5s/una llamada. Python WAV/FLAC2 pasa. Native4 HTTP/HTTPS Radio/autoplay
+pasan en /tmp/soundsible-s2ab-native.log (targeted6 con OfflineRemoval2), assets
+4e04083 dirty=true. DELETE confirmado durante pending; respuesta vieja entregada,
+refill nuevo sin ID retirado; conserva key/programToken/pausa20s y modos. Cleanup
+restaura preferencias y fuentes sintéticas, drena delay antes del próximo caso.
+APK/test APK/JVM17/lint normales sin CA pasan. Principal53+restart2 pendiente;
+última limpia dc29b73 49+2. Continuar Settings/Discover/biblioteca restantes,
+DJ/Live/Auto/firma/update y después PR/main/release; no finalizar por slice.

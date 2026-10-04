@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2ab production planner response retirement",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "4e04083f6e554e0379c530cbb91a299b59ba1635",
+  "dirty_at_asset_prepare": true,
+  "checks": {
+    "fixture": {
+      "tests": 2,
+      "failures": 0,
+      "formats": [
+        "wav",
+        "flac"
+      ],
+      "log": "/tmp/soundsible-s2ab-planner-fixture.log"
+    },
+    "android": {
+      "tests": 4,
+      "combined_targeted_tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2ab-native.log",
+      "scope": "HTTP/TLS Radio/autoplay; DELETE while computed response pending, old response delivery and new refill, no retired local source, preserved current key/programToken/pause20s/modes/account, no HTML audio"
+    },
+    "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal",
+    "jvm_tests": 17
+  },
+  "limits": [
+    "API36 emulator; no acoustic/hardware acceptance.",
+    "Full clean-source53 + persistent restart2 pending.",
+    "Remaining parity and release gates still required."
+  ]
+}
