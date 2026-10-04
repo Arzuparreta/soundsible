@@ -112,6 +112,11 @@ class EngineConnection(private val context: Context) {
         cookie?.takeIf { it.expiresAt > System.currentTimeMillis() && (!it.secure || origin.startsWith("https://")) }?.let { "${it.name}=${it.value}" }
     }
 
+    /** Native-only session identity: binds transient file grants even before a profile response arrives. */
+    fun sessionIdentity(epoch: Long): String? = cookieHeader(epoch)?.let {
+        Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(it.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+    }
+
     fun execute(path: String, method: String, body: RequestBody?, headers: Map<String, String>,
                 epoch: Long, id: String, timeout: Long): Response {
         require(path.startsWith("/api/") && !path.contains('\\')) { "API_PATH_ONLY" }

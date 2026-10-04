@@ -43,6 +43,8 @@ preparados desde commit limpio cf01599; APK/test/lint normales pasan sin CA temp
 S2u selector OS y S2v prioridad de sidecar validados; S2w letras adquirido/preview
 usa panel compartido con runtime nativo y pasa HTTP/HTTPS. Faltan biblioteca/
 Discover/Settings completos, DJ, Live, Android Auto, firma y actualización.
+S2x adquisición y S2y importación compartida/selector DocumentsUI HTTP/HTTPS
+validados. S2z navegación Atrás planificada; continuar sin cerrar por slice.
 No PR/main/release todavía; mantener gates de alpha completa y continuar.
 
 ## Entrega S0
@@ -1156,3 +1158,43 @@ Después resto biblioteca/Discover/Settings/share/multidispositivo, DJ/Live/Auto
 firma/update/release gates. Principal completa última35+restart2; ahora41 tests
 principales esperados más restart2 y browser4 a repetir sobre implementación final.
 No cerrar por slice; continuar hasta paridad completa y PR/main/release autorizados.
+
+
+## Entrega S2y: migración compartida y grant OS con streaming
+
+[Contrato](SLICE_2Y.md), [evidencia](evidence/s2y.json). MigrateView mantiene guía,
+selección, progreso, controles/revisión y restore web; Migrate es adaptador router.
+La superficie Android inyecta origen real /migrate, chooser y apertura Playlists.
+AbortSignal/lifetime irrevocable y revisión de job impiden respuestas antiguas de
+restore/poll sobrescribir una mutación confirmada. Unmount aborta queries/upload;
+una cancelación del selector conserva guía y no crea job. ToastOutlet compartido
+hace visibles errores/confirmaciones nativos.
+
+ACTION_OPEN_DOCUMENT sólo entrega a JS token opaco y metadatos; URI privada,
+perfil, generación y fingerprint de sesión quedan nativos. Token una vez/10min,
+request normal conserva errores HTTP/401, stream 64KiB y tope100MiB, sin base64.
+Metadatos de documentos usan workers/cola acotados, CancellationSignal y deadline;
+lectura de contenido y lease se cierran por cancelación/cambio/destroy/timeout.
+MIME application/* y text/* evita excluir exports por variantes del proveedor;
+parser valida contenido/extensión. No permisos amplios ni persistir grants.
+
+UI1.430/167 y backend migración30 pasan. APK2 HTTP/HTTPS sin fallos/omisiones:
+selector real, cancelación sin job, CSV/matcher member-track, restore al volver,
+start/completion, playlist exacta y Open library aterriza en Playlists, sin audio
+HTML. APK/test/unit/lint normal sin CA temporal pasa. Tests de stream cubren tamaño
+conocido/desconocido, límite, no replay, cierre y cuenta invalidada.
+
+Correcciones durante aceptación: generación JS puede ser Integer (getLong sólo
+no basta); aislar guía persistida por caso; navegar OS Recientes/Descargas;
+KeyEvent con fuente keyboard y MotionEvent con TOOL_TYPE_FINGER. Tool type UNKNOWN
+no acreditaba un tap de dedo en DocumentsUI. Nunca simular resultado de picker.
+
+Sources assets dirty desde4be3e2d; no artifact de alpha. Proveedores de documentos
+cloud/otros fabricantes, exports reales Spotify/Apple y casos complejos controls/
+review en APK siguen pendientes de aceptación extendida (contratos backend y UI
+compartidos probados). [S2z](SLICE_2Z.md) es el siguiente slice: Atrás real para
+menús/overlays, colecciones/podcasts/pestañas y raíz minimizada sin parar programa.
+Principal completa última35+restart2; ahora43 principales esperados+restart2;
+repetir completa y browser4 sobre implementación final. Después completar resto
+biblioteca/Discover/Settings/share/multidispositivo, DJ/Live/Auto, firma/update y
+PR/main/release autorizados. No finalizar por slice.

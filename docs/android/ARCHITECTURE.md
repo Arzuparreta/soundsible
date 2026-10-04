@@ -274,3 +274,18 @@ obsoletos. OfflineDataSource entrega el archivo verificado al mismo Media3 y
 preserva Range/seek. No hay un segundo motor ni file URI/cookie en JavaScript.
 La biblioteca local se deriva de esas copias; logout/cambio/401 observado eliminan
 perfil y trabajos. Ver [contrato, límites y aceptación S6a](SLICE_6.md).
+
+
+### Importación nativa S2y
+
+MigrateView comparte jobs/guía/controles con web sin stores de audio; el adaptador
+Android usa ACTION_OPEN_DOCUMENT y POST normal /api/migration/jobs. Se transporta
+un token opaco de un solo uso, nunca content URI ni bytes/base64. ImportFiles liga
+grant a generación, perfil y fingerprint de sesión, con TTL y lease cancelable;
+ImportStreamBody limita100MiB y chunks64KiB. Consulta de metadatos fuera de UI,
+workers/cola acotados y CancellationSignal/deadline120s; upload120s. El parser
+valida formato/bytes tras elegir documento de MIME application/* o text/*.
+Scope de vista abortable e irrevocable, poll coalescido y revisión de mutaciones
+protegen cuenta/progreso. La dirección para continuar en ordenador es el origen
+real del motor, nunca localhost del paquete. Ver SLICE_2Y y HANDOFF para evidencia
+local y límites: no afirmar exports reales/cloud ni paridad completa por CSV.

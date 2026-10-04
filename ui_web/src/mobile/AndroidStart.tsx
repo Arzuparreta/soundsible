@@ -17,6 +17,7 @@ import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
 import type { User } from '../lib/session';
 import { engine, useEngine, watchEngine } from './engine';
 import NativeDownloads from './Downloads';
+import NativeMigrate from './Migrate';
 import { createMusicAcquisition } from './acquisition';
 import { nativePlayingTrack } from './programIdentity';
 import type { DownloadQueueItem } from '../types/download';
@@ -29,6 +30,7 @@ import { createProgramRuntime, type ProgramState } from '../lib/program/runtime'
 import ProgramTransport from '../components/ProgramTransport';
 import { openContextMenu, ContextMenuOutlet } from '../lib/contextMenu';
 import { OverlayOutlet } from '../lib/overlay';
+import { ToastOutlet } from '../lib/toast';
 import { programLibraryMenu } from '../lib/program/libraryMenu';
 import ProgramQueue from '../components/ProgramQueue';
 import { offline, availableLibrary, availableProgram, type OfflineState, type OfflineCommand } from './offline';
@@ -81,7 +83,8 @@ export default function AndroidStart() {
     void createNativePlaylist(current, sync, () => { if (current()) setError(t('common.loadFailed')); });
   }
   const isFavourite = (track: Track) => { const keys = trackKeys(track); return savedEntries().some(entry => entry.favourite && entry.keys.some(key => keys.includes(key))); };
-  const [surface, setSurface] = createSignal<'library' | 'search' | 'podcasts' | 'downloads'>('library');
+  const [surface, setSurface] = createSignal<'library' | 'search' | 'podcasts' | 'downloads' | 'migrate'>('library');
+  const [libraryTab, setLibraryTab] = createSignal<'songs' | 'playlists'>('songs');
   const [revision, setRevision] = createSignal(0);
   const [offlineState, setOfflineState] = createSignal<OfflineState | null>(null);
   async function offlineCommand(command: OfflineCommand) {
@@ -294,9 +297,9 @@ export default function AndroidStart() {
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
-        {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => setSurface('library')}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={surface() === 'downloads'} onClick={() => setSurface('downloads')}>{t('downloads.title')}</button></nav>
-          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<CatalogSearch generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}>
-          <LibraryBrowser onEntityMenu={entityMenu} onPlaylistMenu={playlistMenu} onCreatePlaylist={newPlaylist} isFavourite={isFavourite} snapshot={data()} isActive={isActive} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
+        {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => { setLibraryTab('songs'); setSurface('library'); }}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={surface() === 'downloads'} onClick={() => setSurface('downloads')}>{t('downloads.title')}</button><button data-android-migrate aria-pressed={surface() === 'migrate'} onClick={() => setSurface('migrate')}>{t('migrate.title')}</button></nav>
+          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={<CatalogSearch generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}>
+          <LibraryBrowser initialTab={libraryTab()} onEntityMenu={entityMenu} onPlaylistMenu={playlistMenu} onCreatePlaylist={newPlaylist} isFavourite={isFavourite} snapshot={data()} isActive={isActive} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
           onManageOffline={() => { const captured = generation; openOfflineManager(offlineState, command => captured === generation ? offlineCommand(command) : Promise.resolve()); }}
           onCollectionMenu={(tracks, title, event, context) => {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
@@ -318,6 +321,6 @@ export default function AndroidStart() {
           </Show></>}
       </Show>
     </Show>
-    <OverlayOutlet /><ContextMenuOutlet />
+    <OverlayOutlet /><ContextMenuOutlet /><ToastOutlet />
   </main>;
 }

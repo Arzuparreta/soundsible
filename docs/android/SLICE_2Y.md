@@ -22,9 +22,15 @@ File a arrayBuffer/base64 sin límite propio: no usarlo para exports grandes.
 Implementar plugin de importación dedicado: selector ACTION_OPEN_DOCUMENT real,
 concesión content URI por archivo, RequestBody que lee el stream en chunks al
 POST /api/migration/jobs autenticado con generation capturada. No exponer URI a JS,
-no permisos amplios, no buffers base64 del archivo completo. JS recibe sólo
-cancelación o status/body del motor y usa ApiError/unauthorized handler existente.
-Mantener límite100MiB y timeout120s del contrato, cerrar stream/cancelar request
+no permisos amplios, no buffers base64 del archivo completo. JS recibe sólo cancelación o token opaco, nombre, MIME y tamaño. El token se
+consume una vez en el transporte multipart habitual para conservar ApiError y
+el unauthorized handler existente. URI y bytes nunca cruzan el bridge. El grant
+queda ligado a generación, perfil y fingerprint privado de sesión; caduca a los
+10 minutos y cada upload tiene límite de 120 segundos.
+Consultar metadatos del proveedor fuera del hilo UI, con CancellationSignal,
+timeout120s y workers/cola acotados. Aceptar MIME application/* y text/*, porque
+el nombre MIME de CSV/plist varía entre proveedores; el parser valida formato y
+contenido. Mantener límite100MiB y timeout120s del contrato, cerrar stream/cancelar request
 con cuenta/cancel/destroy/timeout; una URI de cuenta anterior no se sube a otra.
 
 Vista ofrece chooser nativo inyectado; web conserva input/drop de File y API

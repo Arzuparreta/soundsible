@@ -3,7 +3,7 @@ import { ApiError, request, setRequestTransport, setUnauthorizedHandler } from '
 import { setResourceOrigin } from '../lib/config';
 const native = vi.hoisted(() => ({ request: vi.fn(), cancel: vi.fn(), events: vi.fn(), stopEvents: vi.fn(), addListener: vi.fn() }));
 vi.mock('@capacitor/core', () => ({ registerPlugin: () => native }));
-import { useEngine, watchEngine } from './engine';
+import { nativeImportBody, useEngine, watchEngine } from './engine';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -53,6 +53,14 @@ describe('native account transport', () => {
     await request('/api/library/cover', { method: 'POST', body: form });
     expect(native.request.mock.calls[0][0].parts).toEqual([{ name: 'title', value: 'Cover' }]);
     expect(native.request.mock.calls[0][0].headers).not.toHaveProperty('content-type');
+  });
+  it('passes only the opaque OS grant through the normal authenticated multipart transport', async () => {
+    await request('/api/migration/jobs', { method: 'POST', body: nativeImportBody('private-grant'), timeoutMs: 120000 });
+    const sent = native.request.mock.calls[0][0];
+    expect(sent.parts).toEqual([{ name: 'file', importToken: 'private-grant' }]);
+    expect(sent.body).toBeUndefined();
+    expect(sent.headers).not.toHaveProperty('content-type');
+    expect(sent.timeoutMs).toBe(120000);
   });
   it('keeps binary multipart bytes, filename and MIME separate from JSON', async () => {
     const form = new FormData();

@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(EnginePlugin::class.java)
+        registerPlugin(ImportPlugin::class.java)
         registerPlugin(PlaybackPlugin::class.java)
         registerPlugin(OfflinePlugin::class.java)
         super.onCreate(savedInstanceState)

@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2y shared migration jobs and streamed OS export import",
+  "source_revision_at_asset_prepare": "4be3e2d",
+  "dirty_at_asset_prepare": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "tests": 1430,
+      "files": 167,
+      "log": "/tmp/soundsible-s2y-ui-final.log"
+    },
+    "backend": {
+      "tests": 30,
+      "log": "/tmp/soundsible-s2y-backend.log"
+    },
+    "android": {
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2y-native-final.log",
+      "scope": "HTTP/verified HTTPS real DocumentsUI cancel/select CSV, real matcher/job restore/start/completion/playlist and native Playlists navigation; no HTML audio"
+    },
+    "stream_unit": {
+      "tests": 5,
+      "scope": "64KiB streaming, known/unknown size and 100MiB bounds, one shot, close and invalidated account"
+    },
+    "normal_apk_test_unit_lint": "passed after ephemeral CA removal"
+  },
+  "limits": [
+    "Synthetic CSV and local API36 DocumentsUI; real Spotify/Apple/cloud/provider variants and extended controls/review APK acceptance remain pending.",
+    "Final main regression/browser, remaining parity and release gates pending."
+  ]
+}

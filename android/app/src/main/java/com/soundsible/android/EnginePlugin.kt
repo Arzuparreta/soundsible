@@ -35,7 +35,7 @@ class EnginePlugin : Plugin() {
         connection.clearSession(call.getBoolean("forget", false) == true)
         call.resolve(result())
     }
-    @PluginMethod fun cancel(call: PluginCall) { connection.cancel(namespace + ":" + (call.getString("id") ?: "")); call.resolve() }
+    @PluginMethod fun cancel(call: PluginCall) { val id = namespace + ":" + (call.getString("id") ?: ""); ImportFiles.cancel(id); connection.cancel(id); call.resolve() }
     @PluginMethod fun request(call: PluginCall) {
         val epoch = call.getInt("generation")?.toLong() ?: call.getLong("generation") ?: -1L
         val id = namespace + ":" + (call.getString("id") ?: "")
@@ -45,12 +45,17 @@ class EnginePlugin : Plugin() {
                 val method = call.getString("method") ?: "GET"
                 val headersObj = call.getObject("headers") ?: JSObject()
                 val headers = headersObj.keys().asSequence().associateWith { headersObj.getString(it) ?: "" }
+                val requestPath = call.getString("path") ?: ""
                 val parts = call.getArray("parts")
                 val body = if (parts != null) {
                     val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
                     for (i in 0 until parts.length()) {
                         val part = parts.getJSONObject(i)
-                        if (part.has("base64")) builder.addFormDataPart(part.getString("name"), part.getString("filename"),
+                        if (part.has("importToken")) {
+                            require(method == "POST" && requestPath == "/api/migration/jobs" && parts.length() == 1 && part.getString("name") == "file")
+                            val selected = ImportFiles.claim(connection, epoch, id, part.getString("importToken"))
+                            builder.addFormDataPart("file", selected.name, selected.body)
+                        } else if (part.has("base64")) builder.addFormDataPart(part.getString("name"), part.getString("filename"),
                             Base64.decode(part.getString("base64"), Base64.DEFAULT).toRequestBody(part.getString("type").toMediaType()))
                         else builder.addFormDataPart(part.getString("name"), part.getString("value"))
                     }
@@ -72,7 +77,7 @@ class EnginePlugin : Plugin() {
                     call.resolve(JSObject().put("status", response.code).put("headers", visibleHeaders).put("body", text))
                 }
             } catch (_: Exception) { call.reject("The server could not be reached or the session changed.", "NETWORK_OR_STALE") }
-            finally { ownedRequests.remove(id) }
+            finally { ImportFiles.finish(id); ownedRequests.remove(id) }
         }
     }
     @PluginMethod fun events(call: PluginCall) {
@@ -105,6 +110,6 @@ class EnginePlugin : Plugin() {
     @Synchronized private fun stopSocket() { socket?.off(); socket?.disconnect(); socket = null }
     override fun handleOnDestroy() {
         stopSocket(); connection.onReset = {}
-        ownedRequests.forEach { connection.cancel(it) }; ownedRequests.clear(); executor.shutdownNow()
+        ownedRequests.forEach { ImportFiles.cancel(it); connection.cancel(it); ImportFiles.finish(it) }; ownedRequests.clear(); executor.shutdownNow()
     }
 }

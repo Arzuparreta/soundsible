@@ -4,7 +4,7 @@ import { setResourceOrigin } from '../lib/config';
 
 export interface EngineState { origin: string; generation: number }
 interface NativeResponse { status: number; body: string; headers: Record<string, string> }
-interface Part { name: string; value?: string; filename?: string; type?: string; base64?: string }
+interface Part { name: string; value?: string; filename?: string; type?: string; base64?: string; importToken?: string }
 interface EnginePlugin {
   state(): Promise<EngineState>;
   configure(options: { origin: string }): Promise<EngineState>;
@@ -23,8 +23,15 @@ export function useEngine(next: EngineState): void {
   setResourceOrigin(`${window.location.origin}/__engine/${next.generation}`, next.origin);
   setRequestTransport(nativeFetch);
 }
+const importBodies = new WeakMap<FormData, string>();
+/** Only an OS-selected native token can bypass the ordinary File/base64 adapter. */
+export function nativeImportBody(token: string): FormData {
+  const body = new FormData(); importBodies.set(body, token); return body;
+}
 function aborted(): DOMException { return new DOMException('Request aborted', 'AbortError'); }
 async function multipart(form: FormData): Promise<Part[]> {
+  const token = importBodies.get(form);
+  if (token) return [{ name: 'file', importToken: token }];
   return Promise.all([...form.entries()].map(async ([name, value]) => {
     if (typeof value === 'string') return { name, value };
     const bytes = new Uint8Array(await value.arrayBuffer());

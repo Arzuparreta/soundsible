@@ -71,30 +71,31 @@ export interface MigrationJob {
 }
 
 export const migrationApi = {
-  upload: async (file: File) => {
+  upload: async (file: File, options: { signal?: AbortSignal } = {}) => {
     const body = new FormData();
     body.append('file', file);
     return request<{ job: MigrationJob; created: boolean }>('/api/migration/jobs', {
       method: 'POST',
       body,
-      timeoutMs: 120_000,
+      timeoutMs: 120_000, signal: options.signal,
     });
   },
-  list: () => request<{ jobs: MigrationJob[] }>('/api/migration/jobs'),
-  get: (id: string) => request<{ job: MigrationJob }>(`/api/migration/jobs/${id}`),
+  list: (options: { signal?: AbortSignal } = {}) => request<{ jobs: MigrationJob[] }>('/api/migration/jobs', options),
+  get: (id: string, options: { signal?: AbortSignal } = {}) => request<{ job: MigrationJob }>(`/api/migration/jobs/${id}`, options),
   start: (
     id: string,
     selection: { include_library: boolean; playlist_ids: string[] },
+    options: { signal?: AbortSignal } = {},
   ) =>
     request<{ job: MigrationJob }>(`/api/migration/jobs/${id}/start`, {
       method: 'POST',
       body: selection,
-      timeoutMs: 20_000,
+      timeoutMs: 20_000, signal: options.signal,
     }),
-  control: (id: string, action: 'pause' | 'resume' | 'cancel' | 'retry') =>
+  control: (id: string, action: 'pause' | 'resume' | 'cancel' | 'retry', options: { signal?: AbortSignal } = {}) =>
     request<{ job: MigrationJob }>(`/api/migration/jobs/${id}/control`, {
       method: 'POST',
-      body: { action },
+      body: { action }, signal: options.signal,
     }),
   decide: (
     id: string,
@@ -102,9 +103,10 @@ export const migrationApi = {
       | { source_key: string; decision: 'skip' }
       | { source_key: string; decision: 'use_library_track'; track_id: string }
       | { source_key: string; decision: 'use_candidate'; candidate: MigrationCandidate },
+    options: { signal?: AbortSignal } = {},
   ) =>
     request<{ job: MigrationJob }>(`/api/migration/jobs/${id}/decision`, {
       method: 'POST',
-      body: payload,
+      body: payload, signal: options.signal,
     }),
 };
