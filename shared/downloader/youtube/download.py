@@ -166,6 +166,11 @@ def _yt_dlp_args(output_template: str, *, convert_to: Optional[Dict[str, Any]]) 
     return [get_subprocess_python(), "-u", "-m", "yt_dlp", *_ytdlp_argv(output_template, convert_to=convert_to)]
 
 
+def args_exe_hint(args: List[str]) -> str:
+    """Interpreter used for a CLI argv, for empty-output diagnostics."""
+    return args[0] if args else "<empty argv>"
+
+
 def download_audio(
     url: str,
     temp_dir: Path,
@@ -240,6 +245,13 @@ def download_audio(
     if returncode == 0 and (path := downloaded()):
         return path
 
+    if not output.strip():
+        # A bare exit code with no output is undiagnosable from the queue;
+        # record how the CLI was invoked so the next report names the cause.
+        output = (
+            f"(no output captured; exe={args_exe_hint(native)!r} "
+            f"cwd={temp_dir} playback of {url!r} never started)"
+        )
     raise Exception(output or f"yt-dlp exited {returncode}")
 
 

@@ -11,6 +11,7 @@ keys stable; the UI and future engine stages read them.
 
 import platform
 import sqlite3
+import sys
 
 import json
 
@@ -24,6 +25,15 @@ def runtime_info():
     }
 
 
+def subprocess_python_info():
+    """How a download would be executed: CLI-capable interpreter or not."""
+    exe = sys.executable or ""
+    import os
+
+    usable = bool(exe) and os.path.isfile(exe) and os.access(exe, os.X_OK)
+    return {"sys_executable": exe, "cli_capable": usable}
+
+
 def runtime_info_json():
     """Same as :func:`runtime_info`, serialized to a string.
 
@@ -33,3 +43,8 @@ def runtime_info_json():
     exact. Keep the payload flat string values only.
     """
     return json.dumps(runtime_info())
+
+
+def subprocess_python_json():
+    """Same as :func:`subprocess_python_info`, serialized to a string."""
+    return json.dumps(subprocess_python_info())

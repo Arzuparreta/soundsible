@@ -12,7 +12,6 @@ are reported through :func:`status`.
 """
 
 import argparse
-import json
 import os
 import threading
 import traceback
@@ -56,7 +55,6 @@ def configure(config_dir, data_dir, cache_dir, log_dir, music_dir, ui_dist):
 
 def state_file_contents():
     """Runtime state JSON written on readiness, or None while booting."""
-    from shared.runtime import get_config_dir
     from shared.desktop_runtime import runtime_state_file, RuntimeConfig
 
     try:

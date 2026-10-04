@@ -34,6 +34,10 @@ object LocalEngine {
     @Volatile var startupError: String? = null
         private set
 
+    /** Raw subprocess-python probe JSON, for the boot trace. */
+    @Volatile var subprocessInfo: String? = null
+        private set
+
     /** True while a boot attempt is still running. */
     val isBooting: Boolean get() = _booting.get()
     private val _booting = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -201,16 +205,23 @@ object LocalEngine {
                 trace("python-start-return")
             }
             trace("import-soundsible_local")
-            // Read the probe as a JSON string, not a bridge dict: key lookup
-            // on the returned mapping read back null on device despite the
-            // keys being present. Strings round-trip exactly.
-            val raw = Python.getInstance().getModule("soundsible_local")
-                .callAttr("runtime_info_json").toString()
+            // Read the probes as JSON strings, not bridge dicts: key lookup
+            // on returned mappings read back null on device despite present
+            // keys. Strings round-trip exactly.
+            val probeMod = Python.getInstance().getModule("soundsible_local")
+            val raw = probeMod.callAttr("runtime_info_json").toString()
             trace("probe-return raw=$raw")
             val probe = parseJsonObject(raw)
             pythonVersion = probe.optString("python_version", "").ifEmpty { null }
             sqliteVersion = probe.optString("sqlite_version", "").ifEmpty { null }
             trace("probed python=$pythonVersion sqlite=$sqliteVersion")
+            try {
+                val subRaw = probeMod.callAttr("subprocess_python_json").toString()
+                trace("subprocess-probe raw=$subRaw")
+                subprocessInfo = subRaw
+            } catch (t: Throwable) {
+                trace("subprocess-probe failed: ${chainOf(t).take(200)}")
+            }
             if (pythonVersion == null) {
                 startupError = "probe returned no version: ${raw.take(200)}"
             } else {
@@ -246,5 +257,6 @@ object LocalEngine {
         pythonVersion = null
         sqliteVersion = null
         startupError = null
+        subprocessInfo = null
     }
 }
