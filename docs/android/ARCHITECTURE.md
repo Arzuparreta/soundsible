@@ -312,4 +312,17 @@ conservan fila/bytes retenidos para quota y muestran retirada fallida, con
 recuperación desde el gestor. Una copia cuyo archivo se retiró desde otro cliente
 no se purga automáticamente: metadata local del mismo perfil permite cleanup
 confirmado por GET incluso si DELETE devuelve 404. Ver SLICE_2AA para evidencia
-y límites; la respuesta de planner deliberadamente retrasada sigue pendiente.
+y límites; S2ab acepta respuesta real deliberadamente retrasada en Radio y autoplay HTTP/HTTPS.
+
+
+### Cuenta e historial compartidos (S2ac)
+
+AccountSettingsView recibe usuario/acciones sin runtime de audio; Android confirma
+receipt y auth/state no-store dentro de la misma identidad y scope abortable.
+Cambios de password conservan cookie en transporte nativo/Keystore. UI no publica
+cookies. Logout respeta busy del bootstrap y confirma antes de cerrar.
+
+SearchHistoryStorage comparte semántica con web e inyecta namespace Android por
+origen/cuenta. Sólo respuestas vigentes recuerdan consultas; desactivar elimina
+ambos dominios del perfil, sin afectar otras cuentas. Recientes se pueden ejecutar
+y retirar. Ver SLICE_2AC para aceptación HTTP/HTTPS y límites.

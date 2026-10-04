@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2ac shared account settings and scoped search history",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "06004af",
+  "dirty_at_asset_prepare": true,
+  "checks": {
+    "ui": {
+      "tests": 1484,
+      "files": 176,
+      "log": "/tmp/soundsible-s2ac-account-ui.log"
+    },
+    "android": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2ac-bootstrap-native.log",
+      "scope": "HTTP/TLS own name/username/password and rejected edits; rotated encrypted cookie reload; actual events reconnect; preserved key/program/pause20s/copy across edits and activity; confirmed logout and owner/member history isolation/new login; no HTML audio"
+    },
+    "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal",
+    "jvm_tests": 17,
+    "initial_locator_failure": {
+      "tests": 2,
+      "failures": 2,
+      "log": "/tmp/soundsible-s2ac-native.log",
+      "archive": "android/build/integration-failed/s2ac-action-row-locator"
+    },
+    "logout_revalidation_failure": {
+      "tests": 2,
+      "failures": 2,
+      "log": "/tmp/soundsible-s2ac-fixed-native.log",
+      "archive": "android/build/integration-failed/s2ac-logout-bootstrap"
+    },
+    "browser_four_profiles": {
+      "chromium": {
+        "passed": 278,
+        "skipped": 66,
+        "failures": 0,
+        "log": "/tmp/soundsible-s2ac-chromium.log"
+      },
+      "webkit": {
+        "passed": 269,
+        "skipped": 75,
+        "failures": 0,
+        "log": "/tmp/soundsible-s2ac-webkit.log"
+      },
+      "execution": "Chromium mobile/desktop then read-only Docker WebKit mobile/desktop workers1; shared closed-port dev engine"
+    }
+  },
+  "limits": [
+    "API36 emulator; no acoustic/device acceptance.",
+    "Settings remaining sections, full Discover and remaining platform parity pending.",
+    "Clean native55 + offline restart2 and final release gates pending."
+  ]
+}

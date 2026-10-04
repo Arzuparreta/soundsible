@@ -1313,3 +1313,25 @@ regresión sólo avanzaron fuentes UI de [Settings S2ac](SLICE_2AC.md), sin toca
 fuentes nativas ni assets del artifact limpio. UI1481/175 pasa; Settings aún
 requiere recorrido instrumentado HTTP/HTTPS y aceptación de sesión rotada.
 Continuar sin detenerse por slice hasta paridad completa y PR/main/release.
+
+
+## S2ac: Cuenta compartida e historial por perfil
+
+AccountSettingsView y SearchHistoryStorage reutilizados por web/Android sin stores
+de audio. Mutaciones confirman receipt y snapshot dentro de scope cancelable;
+logout respeta busy de revalidación. Native HTTP/HTTPS2 pasa: ediciones canceladas
+y rechazadas, perfil confirmado, password/cookie cifrada rotada y descifrada por
+nueva conexión, reconexiones reales de eventos, conservación de keys/programa/
+pausa20s/copia y Activity, logout confirmado y nuevo login con credenciales nuevas.
+Owner/member conservan preferencias de historial independientes.
+
+UI1484/176 y APK/test APK/JVM17/lint normales pasan. Assets06004af dirty=true;
+principal55+restart2 limpia pendiente, último artifact limpio03e3446 tiene53+2.
+Regresión completa de navegador aceptada: Chromium278/66 y WebKit269/75,
+sin fallos; consultar SLICE_2AC/evidence/s2ac.json.
+Fallos iniciales de localizador username y logout durante revalidación corregidos
+y archivados; no reutilizar sus resultados como verdes.
+
+Continuar Appearance/accesibilidad según SLICE_2AD, después Settings/Discover
+restantes, DJ/Live/Auto y firma/update. No PR/main/release todavía; no cerrar por
+slice. Gates de alpha completa vigentes.

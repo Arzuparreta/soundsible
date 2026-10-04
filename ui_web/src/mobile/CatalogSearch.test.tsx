@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, waitFor } from '@solidjs/testing-library';
 import { setLocale } from '../lib/i18n';
 import type { CatalogItem, CatalogSearchResponse, SavedEntry, Track } from '../types/music';
 import CatalogSearch from './CatalogSearch';
+import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
 const mocks = vi.hoisted(() => ({ search: vi.fn(), resolve: vi.fn(), save: vi.fn(), menu: vi.fn() }));
 vi.mock('../lib/api', async () => ({ ApiError: (await import('../lib/http')).ApiError, api: { searchCatalog: mocks.search, resolveCatalogItem: mocks.resolve, setSavedEntries: mocks.save } }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: mocks.menu }));
@@ -11,6 +12,19 @@ const row: CatalogItem = { id: 'deezer:track:1', title: 'Song', artist: 'Artist'
 const result = (items: CatalogItem[]): CatalogSearchResponse => ({ query: 'song', items, sections: [] });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 beforeEach(() => { cleanup(); setLocale('en'); vi.clearAllMocks(); mocks.search.mockResolvedValue(result([row])); mocks.resolve.mockResolvedValue({ video_id: 'A1111111111' }); mocks.save.mockResolvedValue(undefined); });
+it('executes an owned recent query and removes it reactively without creating playback', async () => {
+  localStorage.clear();
+  const history = createSearchHistoryStorage(key => `native-member:${key}`);
+  history.remember('music', 'previous');
+  const play = vi.fn();
+  const view = render(() => <CatalogSearch history={history} generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={play} onChanged={vi.fn()} />);
+  fireEvent.click(view.getByRole('button', { name: 'previous' }));
+  await waitFor(() => expect(mocks.search).toHaveBeenCalledWith('previous', expect.any(AbortSignal), 'track,library_track'));
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: '' } });
+  fireEvent.click(view.getByRole('button', { name: 'Remove “previous” from recent searches' }));
+  expect(view.queryByRole('button', { name: 'previous' })).toBeNull();
+  expect(play).not.toHaveBeenCalled();
+});
 it('discards stale queries even when a provider ignores abort', async () => {
   const old = deferred<CatalogSearchResponse>();
   mocks.search.mockImplementation((query: string) => query === 'old' ? old.promise : Promise.resolve(result([{ ...row, title: 'New song' }])));

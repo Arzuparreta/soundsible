@@ -1,3 +1,4 @@
+import { AccountSettingsView } from './AccountSettingsView';
 import { SettingsLoad } from './SettingsLoad';
 import { BottomNavigationSettings } from './BottomNavigationSettings';
 import { EXTRA_THEMES, type Theme } from '../boot/themes';
@@ -144,57 +145,9 @@ function AccountSection() {
     if (ok) await logout();
   };
 
-  return (
-    <Show when={user()}>
-      {(me) => (
-        <>
-          <div class={styles.identity}>
-            <span
-              class={styles.avatar}
-              style={{ background: me().avatar_color ?? 'var(--accent)' }}
-              aria-hidden="true"
-            >
-              {(me().display_name || me().username).trim().slice(0, 1)}
-            </span>
-            <span class={styles.identityText}>
-              <span class={styles.identityName}>{me().display_name}</span>
-              <span class={styles.identityHandle}>@{me().username}</span>
-            </span>
-          </div>
-
-          <SettingsGroup label={t('settings.group.profile')}>
-            <ActionRow anchor="change-name" label={t('account.changeName')} onClick={editName} />
-            <ActionRow
-              anchor="change-username"
-              label={t('account.changeUsername')}
-              hint={t('account.usernameHint')}
-              onClick={editUsername}
-            />
-            <ActionRow
-              anchor="change-password"
-              label={t('account.changePassword')}
-              hint={me().has_password ? undefined : t('settings.note.noPassword')}
-              onClick={updatePassword}
-            />
-          </SettingsGroup>
-
-          <SettingsGroup label={t('settings.group.searchHistory')}>
-            <SwitchRow
-              anchor="search-history"
-              label={t('settings.searchHistory')}
-              hint={t('settings.note.searchHistory')}
-              checked={searchHistoryEnabled()}
-              onChange={() => setSearchHistoryEnabled(!searchHistoryEnabled())}
-            />
-          </SettingsGroup>
-
-          <SettingsGroup>
-            <ActionRow anchor="sign-out" label={t('account.signOut')} onClick={signOut} danger />
-          </SettingsGroup>
-        </>
-      )}
-    </Show>
-  );
+  return <AccountSettingsView user={user()} historyEnabled={searchHistoryEnabled()}
+    onName={() => void editName()} onUsername={() => void editUsername()} onPassword={() => void updatePassword()}
+    onLogout={() => void signOut()} onHistoryChange={() => setSearchHistoryEnabled(!searchHistoryEnabled())} />;
 }
 
 /* ── Appearance ───────────────────────────────────────────────────────── */

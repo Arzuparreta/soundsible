@@ -11,11 +11,12 @@ import { SearchField } from '../components/SearchField';
 import { MusicListRowView } from '../components/MusicListRowView';
 import { EmptyState } from '../components/EmptyState';
 import type { CatalogItem, SavedEntry, Track } from '../types/music';
+import type { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
 import styles from './AndroidStart.module.css';
 
 /** Account-scoped catalog UI; resolution never imports the web audio runtime. */
 export default function CatalogSearch(props: {
-  generation: number; tracks: Track[]; saved: SavedEntry[]; disconnected: boolean;
+  generation: number; tracks: Track[]; saved: SavedEntry[]; disconnected: boolean; history?: ReturnType<typeof createSearchHistoryStorage>;
   activeId?: string; isActive?: (track: Track) => boolean; onAcquire?: (track: Track) => Promise<void>; onPlay: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
 }) {
   const [query, setQuery] = createSignal('');
@@ -52,6 +53,7 @@ export default function CatalogSearch(props: {
     const timer = term && !disconnected ? setTimeout(() => {
       void api.searchCatalog(term, controller.signal, 'track,library_track').then(result => {
         if (epoch !== searchEpoch || generation !== props.generation || controller.signal.aborted) return;
+        props.history?.remember('music', term);
         setRows(result.items.filter(item => item.type === 'track' || item.type === 'library_track'));
         setPartial(Boolean(result.partial_failures?.length));
       }).catch(failure => {
@@ -112,6 +114,15 @@ export default function CatalogSearch(props: {
   }
   return <section class={styles.library} data-testid="android-catalog-search">
     <SearchField value={query()} placeholder={t('search.placeholder')} onInput={setQuery} />
+    <Show when={!query().trim() && props.history?.load('music').length}>
+      <section aria-label={t('search.recentsSection')}>
+        <h2>{t('search.recentsSection')}</h2>
+        <For each={props.history?.load('music') ?? []}>{term => <div>
+          <button disabled={props.disconnected} onClick={() => setQuery(term)}>{term}</button>
+          <button aria-label={t('search.removeRecent', { query: term })} onClick={() => props.history?.forget('music', term)}>×</button>
+        </div>}</For>
+      </section>
+    </Show>
     <Show when={props.disconnected}><p role="status">{t('library.unreachable')}</p></Show>
     <Show when={error()}><p role="alert">{error()} <button onClick={() => setRetry(value => value + 1)}>{t('common.retry')}</button></p></Show>
     <Show when={loading()}><p role="status">{t('common.loading')}</p></Show>
