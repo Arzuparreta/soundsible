@@ -26,6 +26,7 @@ class SoundsibleApp : Application() {
         // engine. Remote pairing never depends on it. Off the main thread:
         // first-run asset extraction can take tens of seconds.
         val platform = com.chaquo.python.android.AndroidPlatform(this)
-        Thread({ LocalEngine.start(platform) }, "soundsible-python-boot").start()
+        val filesDir = this.filesDir
+        Thread({ LocalEngine.start(platform, filesDir) }, "soundsible-python-boot").start()
     }
 }

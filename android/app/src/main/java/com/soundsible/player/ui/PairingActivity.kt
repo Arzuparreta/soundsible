@@ -41,8 +41,9 @@ class PairingActivity : Activity() {
         // appears; tapping the line retries a failed boot.
         findViewById<TextView>(R.id.localEngineStatus).setOnClickListener {
             if (!LocalEngine.isAvailable && !LocalEngine.isBooting) {
+                val app = this@PairingActivity.application
                 Thread({
-                    LocalEngine.start(AndroidPlatform(this@PairingActivity.application))
+                    LocalEngine.start(AndroidPlatform(app), app.filesDir)
                 }, "soundsible-python-retry").start()
             }
             refreshEngineStatus()
@@ -159,7 +160,7 @@ class PairingActivity : Activity() {
             else ->
                 "On-device Python unavailable $build (${LocalEngine.deviceFacts(filesDir)})" +
                     (LocalEngine.startupError?.let { ": $it" } ?: "") +
-                    "; pairing with a server still works. Tap to retry."
+                    "; pairing with a server still works. Tap to retry.\nBoot trace:\n${LocalEngine.traceTail()}"
         }
     }
 

@@ -38,6 +38,25 @@ object LocalEngine {
     val isBooting: Boolean get() = _booting.get()
     private val _booting = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    private var traceFile: File? = null
+
+    private fun trace(msg: String) {
+        try {
+            traceFile?.appendText("${System.currentTimeMillis()} $msg\n")
+        } catch (_: Exception) {
+        }
+    }
+
+    /** Last lines of the boot trace, for the UI. Empty when boot never ran. */
+    fun traceTail(maxChars: Int = 1200): String {
+        return try {
+            val text = traceFile?.takeIf { it.exists() }?.readText() ?: ""
+            if (text.length <= maxChars) text else "…${text.takeLast(maxChars)}"
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     /**
      * One-line device facts for the unavailable message: CPU ABIs and free
      * internal storage, the two environmental causes of a dead interpreter.
@@ -111,28 +130,37 @@ object LocalEngine {
         }
     }
 
-    fun start(platform: AndroidPlatform) {
+    fun start(platform: AndroidPlatform, filesDir: File) {
         // One boot at a time: concurrent Python.start() calls from the app
         // boot thread and tap-to-retry pile up inside the native loader.
         if (!_booting.compareAndSet(false, true)) return
+        traceFile = File(filesDir, "python-boot-trace.log")
         try {
+            trace("boot-enter isStarted=${Python.isStarted()}")
             if (!Python.isStarted()) {
+                trace("python-start-begin")
                 Python.start(platform)
+                trace("python-start-return")
             }
+            trace("import-soundsible_local")
             val info = Python.getInstance().getModule("soundsible_local").callAttr("runtime_info")
+            trace("probe-return keys=${info.asMap().keys}")
             pythonVersion = info.get("python_version")?.toString()
             sqliteVersion = info.get("sqlite_version")?.toString()
+            trace("probed python=$pythonVersion sqlite=$sqliteVersion")
             startupError = null
         } catch (t: Throwable) {
             // Throwable, not Exception: native loader failures arrive as
             // UnsatisfiedLinkError and friends, which Exception misses and
             // which used to leave the UI blaming "unavailable" with no cause.
             Log.e("SoundsiblePython", "Embedded Python failed to start", t)
+            trace("FAILED ${chainOf(t).take(300)}")
             pythonVersion = null
             sqliteVersion = null
             startupError = chainOf(t).take(400)
         } finally {
             _booting.set(false)
+            trace("boot-exit available=$isAvailable")
         }
     }
 
