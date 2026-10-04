@@ -1,5 +1,6 @@
 package com.soundsible.player.playback
 
+import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
@@ -14,6 +15,7 @@ import androidx.media3.session.MediaSession
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.data.CarItem
 import com.soundsible.player.data.DeviceRegistration
@@ -47,6 +49,11 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        setMediaNotificationProvider(
+            androidx.media3.session.DefaultMediaNotificationProvider(this).apply {
+                setSmallIcon(R.mipmap.ic_launcher)
+            },
+        )
         // The Bearer token is read fresh for every connection, so re-pairing
         // mid-session applies to the next stream without rebuilding the player
         // -- the same header the iOS resource-loader delegate attaches to its
@@ -67,7 +74,15 @@ class PlaybackService : MediaLibraryService() {
             .build()
             .also { this.player = player }
         player.addListener(stateListener)
-        session = MediaLibrarySession.Builder(this, player, libraryCallback).build()
+        val sessionActivity = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, com.soundsible.player.ui.NowPlayingActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        session = MediaLibrarySession.Builder(this, player, libraryCallback)
+            .setSessionActivity(sessionActivity)
+            .build()
         scope.launch {
             try {
                 val identity = app().deviceIdentity

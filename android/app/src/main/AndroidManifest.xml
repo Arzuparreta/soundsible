@@ -29,6 +29,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+                <!-- Music-app designation: lists Soundsible with music players. -->
+                <category android:name="android.intent.category.APP_MUSIC" />
             </intent-filter>
         </activity>
 
