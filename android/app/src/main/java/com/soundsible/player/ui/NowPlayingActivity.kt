@@ -15,7 +15,7 @@ import com.soundsible.player.playback.QueueHolder
 
 /**
  * Now Playing screen bound to [PlaybackService] through a MediaController.
- * Queue state lives in [QueueHolder], shared with BrowseActivity.
+ * Queue state lives in [QueueHolder], fed by restores and widget commands.
  */
 class NowPlayingActivity : Activity() {
     private var controller: MediaController? = null

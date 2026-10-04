@@ -44,9 +44,6 @@
             android:name=".ui.PairingActivity"
             android:exported="false" />
         <activity
-            android:name=".ui.BrowseActivity"
-            android:exported="false" />
-        <activity
             android:name=".ui.NowPlayingActivity"
             android:exported="false" />
         <activity

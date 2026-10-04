@@ -7,10 +7,14 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.ImageButton
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
+import com.soundsible.player.playback.EngineService
+import com.soundsible.player.store.LastSongPin
 
 /**
  * Full library management through the engine's own web player.
@@ -51,6 +55,21 @@ class LibraryActivity : AppCompatActivity() {
         webView.addJavascriptInterface(SoundsibleNative(this), "SoundsibleNative")
         WebAudio.attach(webView)
         webSession = WebMediaSession(this, webView)
+        findViewById<ImageButton>(R.id.libraryOverflow).setOnClickListener { anchor ->
+            val items = arrayOf(
+                getString(R.string.menu_now_playing),
+                getString(R.string.menu_unpair),
+            )
+            MaterialAlertDialogBuilder(this)
+                .setItems(items) { _, which ->
+                    when (which) {
+                        0 -> startActivity(Intent(this, NowPlayingActivity::class.java))
+                        1 -> unpair()
+                    }
+                }
+                .show()
+            anchor.announceForAccessibility(getString(R.string.library_menu))
+        }
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
@@ -130,14 +149,29 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
+        // The library is the home screen now that native browse is gone;
+        // back with no web history leaves the app.
         if (::webView.isInitialized && webView.canGoBack()) {
             webView.goBack()
         } else {
-            // The library is the landing screen; back with no web history
-            // falls through to the native browser (playback entry point).
-            startActivity(Intent(this, BrowseActivity::class.java))
-            finish()
+            super.onBackPressed()
         }
+    }
+
+    private fun unpair() {
+        try {
+            stopService(Intent(this, EngineService::class.java))
+        } catch (_: Exception) {
+        }
+        try {
+            val app = application as SoundsibleApp
+            app.tokenStore.clear()
+            app.queueStore.clear()
+            LastSongPin.clear(this)
+        } catch (_: Exception) {
+        }
+        startActivity(Intent(this, PairingActivity::class.java))
+        finish()
     }
 
     override fun onDestroy() {
