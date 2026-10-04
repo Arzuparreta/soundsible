@@ -26,4 +26,3 @@ export function sameEntity(a: SavedEntity, b: SavedEntity): boolean {
   if (ak.length || bk.length) return ak.some((key) => bk.includes(key));
   return a.name === b.name && (a.artist ?? '') === (b.artist ?? '');
 }
-
