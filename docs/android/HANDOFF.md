@@ -31,6 +31,17 @@ historial del chat ni memoria privada. Ver [guía](../ANDROID.md),
 - La app iOS es Swift independiente, no Solid sincronizado. Su runtime sigue
   sin validación de dispositivo. Mantener las advertencias sobre iOS/PAL.
 
+## Estado actual de continuación
+
+Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
+para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
+bookmarks sobre entidades adquiridas y corrige refresh concurrente (190c5b4).
+Última APK scoped: cuatro recorridos HTTP/HTTPS pasan. Última principal S2s33
+tuvo un fallo Saved corregido: **repetir principal/restart antes de darla por verde**.
+Últimos browser completos S2j: repetir cuatro perfiles antes del PR final.
+Faltan biblioteca/Discover/Settings completos, DJ, Live, Android Auto, firma y
+actualización. No PR/main/release todavía; mantener gates de alpha completa.
+
 ## Entrega S0
 
 Rama: `feat/android-port-foundation`. Base inspeccionada:
@@ -985,3 +996,39 @@ Fuentes de instrumentación dirty respecto a S2r; regenerar desde commit limpio 
 repetir suite principal + restart. Últimas browser completas S2j; repetir cuatro
 perfiles antes del PR. Continúa paridad de biblioteca/entidades, DJ/Live/Auto,
 firma/actualización; no dar matriz por completa ni publicar alpha parcial.
+
+
+## Continuación S2t y regresión S2s
+
+Commit S2r `76099a2` y S2s `1cce3ca` subidos. La suite principal S2s sobre assets
+preparados desde HEAD limpio terminó **33 tests, un fallo, cero omitidos** en
+`/tmp/soundsible-s2s-main.log`; no alcanzó las fases restart ni el rebuild normal.
+El fallo HTTP CatalogSearch abrió un menú con Save después de confirmar Saved en
+servidor: refresh concurrente podía devolver sin esperar el snapshot que lo sustituyó.
+No debilitar la assertion. Última regresión completamente verde sigue S2q31+restart2.
+
+Corrección en desarrollo: createAccountRefresh coalesce por epoch y espera la
+observación encolada; cuenta anterior no reencola ni libera la actual. Dos tests
+de contrato pasan. [S2t](SLICE_2T.md) añade acciones bookmark album/artist adquiridos,
+identity helpers puros compartidos y snapshot saved-entities por cuenta; no guarda
+canciones ni archivos. UI **1.416/163**, Python saved-entities **15** pasan.
+Recorrido APK conjunto CatalogSearch + EntityBookmarks en curso; repetir principal
+y restart tras corregir todos sus fallos. No presentar S2t como validado todavía.
+Continúa autorizado hasta matriz completa, PR/merge/release; no finalizar por slice.
+
+
+## S2t: bookmarks adquiridos validados
+
+[Contrato y pendientes](SLICE_2T.md), [evidencia](evidence/s2t.json). Save/Remove en
+menús de álbum/artist y cabecera con identidad library. Snapshot privado por cuenta,
+misma identidad pura que web, sin guardar/adquirir canciones ni iniciar audio.
+UI **1.416/163**, Python **15**, APK **cuatro tests HTTP/HTTPS de EntityBookmarks y
+CatalogSearch pasan**; normal APK/test/lint sin CA pasa. Refresh corregido y subido
+aparte `190c5b4`; no se debilitó assertion Saved. Fallos iniciales de bookmarks
+eran espera unconfigured tras recreate y checkmark incluido en textContent.
+
+Repetir principal/restart ahora: última completa S2s33 tuvo un fallo Saved, última
+verde S2q31+restart2. Browser completos S2j todavía no equivalen al HEAD actual.
+Pendientes entidades externas/listas de bookmarks/navegación Discover, selector
+OS real, biblioteca restante, DJ/Live/Auto y firma/actualización. No cerrar turno
+por checkpoint, ni publicar una alpha parcial. Instrumentación dirty/HEAD anterior.

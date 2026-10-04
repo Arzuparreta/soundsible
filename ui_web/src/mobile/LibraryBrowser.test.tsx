@@ -30,3 +30,21 @@ it('derives offline album and artist navigation without REST or incomplete songs
   await waitFor(() => expect(view.getByText('Artist')).toBeTruthy());
   expect(request).not.toHaveBeenCalled();
 });
+it('album row and collection menus retain the catalog identity without acquiring songs', async () => {
+  const entityMenu = vi.fn(), collectionMenu = vi.fn();
+  request.mockImplementation((path: string) => Promise.resolve(path === '/api/library/albums'
+    ? { albums: [{ id: 'album-one', title: 'Album', album_artist: 'Artist', track_count: 2 }] }
+    : { track_ids: ['a', 'b'] }));
+  const view = render(() => <LibraryBrowser snapshot={{ tracks: [a, b] }} revision={0} onEntityMenu={entityMenu} onCollectionMenu={collectionMenu} />);
+  fireEvent.click(view.getByText('Albums'));
+  await waitFor(() => expect(view.getByText('Album')).toBeTruthy());
+  fireEvent.click(view.container.querySelector('[data-row-menu]')!);
+  expect(entityMenu.mock.calls[0][0]).toMatchObject({ kind: 'album', name: 'Album', artist: 'Artist' });
+  expect(new URLSearchParams(entityMenu.mock.calls[0][0].destination.split('?')[1]).get('album_id')).toBe('album-one');
+  fireEvent.click(view.getByText('Album'));
+  await waitFor(() => expect(view.getByRole('heading', { name: 'Album' })).toBeTruthy());
+  fireEvent.click(view.container.querySelector('[data-collection-menu]')!);
+  expect(collectionMenu.mock.calls[0][0]).toEqual([a, b]);
+  expect(collectionMenu.mock.calls[0][3].bookmark).toEqual(entityMenu.mock.calls[0][0]);
+  expect(request.mock.calls.every(([path]) => typeof path === 'string' && path.startsWith('/api/library/albums'))).toBe(true);
+});

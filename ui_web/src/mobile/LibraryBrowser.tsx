@@ -6,6 +6,8 @@ import { MusicListRowView } from '../components/MusicListRowView';
 import { EmptyState } from '../components/EmptyState';
 import { t } from '../lib/i18n';
 import { playlistNames } from '../lib/playlistOrder';
+import { albumBookmark, artistBookmark } from './entityMarks';
+import type { SavedEntity } from '../lib/savedEntityIdentity';
 import { trackCount } from '../lib/format';
 import type { CatalogAlbum, CatalogArtist, LibrarySettings, PlaylistMap, Track } from '../types/music';
 import { availableLibrary, type OfflineState } from './offline';
@@ -13,10 +15,10 @@ import { openContextMenu } from '../lib/contextMenu';
 import styles from './AndroidStart.module.css';
 
 export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap; settings?: LibrarySettings }
-/** Read-only account surface. Shares the existing row/artwork/tokens; imports no player runtime. */
-export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string; onMenu?: (track: Track, event?: MouseEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MouseEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string }) => void }) {
+/** Account browse surface; writes are delegated, sharing rows/artwork without the web player. */
+export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string; onMenu?: (track: Track, event?: MouseEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MouseEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onEntityMenu?: (entry: SavedEntity, event?: MouseEvent) => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity }) => void }) {
   const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists' | 'favourites'>('songs');
-  const [collection, setCollection] = createSignal<{ title: string; ids: string[]; kind: 'albums' | 'artists' | 'playlists'; id: string } | null>(null);
+  const [collection, setCollection] = createSignal<{ title: string; ids: string[]; kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity } | null>(null);
   const [onlyAvailable, setOnlyAvailable] = createSignal(false);
   const library = createMemo<BrowseSnapshot>(() => (props.disconnected || onlyAvailable()) && props.offline ? availableLibrary(props.offline) : props.snapshot);
   const localCollections = (kind: 'albums' | 'artists') => {
@@ -49,12 +51,12 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
   });
   let detailEpoch = 0;
   onCleanup(() => { detailEpoch++; });
-  async function open(kind: 'albums' | 'artists', id: string, title: string) {
+  async function open(kind: 'albums' | 'artists', id: string, title: string, bookmark?: SavedEntity) {
     const epoch = ++detailEpoch;
     setDetailError(false);
     try {
       const detail = props.disconnected || onlyAvailable() ? { track_ids: localCollections(kind).find(group => group.id === id)?.ids ?? [] } : await request<{ track_ids?: string[] }>(`/api/library/${kind}/${encodeURIComponent(id)}`);
-      if (epoch === detailEpoch) { setCollection({ title, ids: detail.track_ids ?? [], kind, id }); setQuery(''); }
+      if (epoch === detailEpoch) { setCollection({ title, ids: detail.track_ids ?? [], kind, id, bookmark }); setQuery(''); }
     } catch { if (epoch === detailEpoch) setDetailError(true); }
   }
   createEffect(on(() => props.revision, () => {
@@ -81,7 +83,7 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
         <button type="button" aria-pressed={tab() === item} onClick={() => selectTab(item)}>{item === 'playlists' ? t('playlists.title') : t(`library.${item}`)}</button>
       }</For>
     </nav>
-    <Show when={collection()}>{item => <div class={styles.collectionHeading}><button type="button" onClick={() => { detailEpoch++; setCollection(null); }}>{t('common.back')}</button><h2>{item().title}</h2><Show when={props.onCollectionMenu}><button class={styles.menuTrigger} data-collection-menu aria-label={t('songRow.ariaMore')} onClick={event => props.onCollectionMenu?.(collectionTracks(), item().title, event, { kind: item().kind, id: item().id })}>⋯</button></Show></div>}</Show>
+    <Show when={collection()}>{item => <div class={styles.collectionHeading}><button type="button" onClick={() => { detailEpoch++; setCollection(null); }}>{t('common.back')}</button><h2>{item().title}</h2><Show when={props.onCollectionMenu}><button class={styles.menuTrigger} data-collection-menu aria-label={t('songRow.ariaMore')} onClick={event => props.onCollectionMenu?.(collectionTracks(), item().title, event, { kind: item().kind, id: item().id, bookmark: props.disconnected || onlyAvailable() ? undefined : item().bookmark })}>⋯</button></Show></div>}</Show>
     <Show when={detailError()}><p role="alert">{t('common.loadFailed')}</p></Show>
     <Show when={collection() || tab() === 'songs' || tab() === 'favourites'} fallback={
       <Show when={tab() === 'playlists'} fallback={
@@ -90,12 +92,14 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
             <Show when={tab() === 'albums'} fallback={<For each={artists()?.artists ?? []} fallback={<EmptyState>{t('library.emptyArtists')}</EmptyState>}>{artist =>
               <MusicListRowView title={artist.name} subtitle={trackCount(artist.track_count)} seed={artist.id}
                 round cover={artist.cover_track_id ? coverUrl(artist.cover_track_id, 'thumb') : undefined}
-                onActivate={() => void open('artists', artist.id, artist.name)} />
+                onMenu={props.onEntityMenu && !props.disconnected && !onlyAvailable() ? event => props.onEntityMenu?.(artistBookmark(artist), event) : undefined}
+                onActivate={() => void open('artists', artist.id, artist.name, artistBookmark(artist))} />
             }</For>}>
               <For each={albums()?.albums ?? []} fallback={<EmptyState>{t('library.emptyAlbums')}</EmptyState>}>{album => <MusicListRowView title={album.title}
                 subtitle={`${album.album_artist} · ${trackCount(album.track_count)}`} seed={album.id}
                 cover={album.cover_track_id ? coverUrl(album.cover_track_id, 'thumb') : undefined}
-                onActivate={() => void open('albums', album.id, album.title)} />}</For>
+                onMenu={props.onEntityMenu && !props.disconnected && !onlyAvailable() ? event => props.onEntityMenu?.(albumBookmark(album), event) : undefined}
+                onActivate={() => void open('albums', album.id, album.title, albumBookmark(album))} />}</For>
             </Show>
           </Show>
         </Show>

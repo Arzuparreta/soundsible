@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2t acquired entity bookmarks and confirmed account refresh",
+  "source_revision_at_asset_prepare": "1cce3ca",
+  "refresh_commit": "190c5b4",
+  "dirty": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "passed": 1416,
+      "files": 163,
+      "log": "/tmp/soundsible-s2t-ui-final.log"
+    },
+    "python": {
+      "passed": 15,
+      "log": "/tmp/soundsible-s2t-backend.log"
+    },
+    "android_scoped": {
+      "tests": 4,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2t-native-confirmed.log",
+      "scope": "HTTP/verified HTTPS; explicit album/artist bookmark, activity/account persistence, profile isolation, no song acquisition or queue changes; CatalogSearch regression"
+    },
+    "normal_apk_tests_lint": "passed after ephemeral CA removal",
+    "main_regression": "S2s33 had one CatalogSearch failure; corrected refresh needs full rerun",
+    "browser": "latest full S2j; repeat final PR head"
+  },
+  "limits": [
+    "Acquired entity actions only; external bookmark lists and Discover navigation pending.",
+    "OS file picker still unaccepted.",
+    "No CI/live provider/physical phone/car acceptance.",
+    "Full parity/signing/update gates remain before alpha."
+  ]
+}
