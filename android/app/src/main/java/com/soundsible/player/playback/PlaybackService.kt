@@ -7,6 +7,10 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
@@ -28,6 +32,9 @@ import kotlinx.coroutines.launch
 
 private const val ROOT_ID = "soundsible-root"
 
+/** Cap for the Android-only playback cache (~10-20 songs at phone bitrates). */
+private const val PLAYBACK_CACHE_BYTES = 150L * 1024 * 1024
+
 /**
  * Foreground playback plus the browse tree Android Auto renders from.
  *
@@ -43,6 +50,7 @@ private const val ROOT_ID = "soundsible-root"
 class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private var player: ExoPlayer? = null
+    private var mediaCache: SimpleCache? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private fun app(): SoundsibleApp = application as SoundsibleApp
@@ -67,10 +75,23 @@ class PlaybackService : MediaLibraryService() {
                 }
                 .createDataSource()
         }
+        // Android-only playback cache: what sounded stays on disk (bounded
+        // LRU), so replaying the last songs needs no network. Stream URLs
+        // are stable engine paths, which makes them sound cache keys.
+        val cache = SimpleCache(
+            java.io.File(filesDir, "soundsible/playback-cache"),
+            LeastRecentlyUsedCacheEvictor(PLAYBACK_CACHE_BYTES),
+            StandaloneDatabaseProvider(this),
+        )
+        mediaCache = cache
+        val cacheFactory = CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(authFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         val player = ExoPlayer.Builder(this)
             .setAudioAttributes(AudioAttributes.DEFAULT, true)
             .setHandleAudioBecomingNoisy(true)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(authFactory))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .build()
             .also { this.player = player }
         player.addListener(stateListener)
@@ -101,6 +122,11 @@ class PlaybackService : MediaLibraryService() {
         scope.cancel()
         session?.release()
         player?.release()
+        try {
+            mediaCache?.release()
+        } catch (_: Exception) {
+        }
+        mediaCache = null
         session = null
         player = null
         super.onDestroy()
