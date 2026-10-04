@@ -45,6 +45,11 @@ class WidgetControlReceiver : BroadcastReceiver() {
 
     private fun dispatch(controller: MediaController, action: String?) {
         try {
+            // Widget commands are native playback: the page yields first.
+            try {
+                com.soundsible.player.ui.WebAudio.pause()
+            } catch (_: Exception) {
+            }
             when (action) {
                 ACTION_TOGGLE -> {
                     if (controller.isPlaying) {

@@ -20,6 +20,23 @@ declare global {
     SoundsibleNative?: {
       onTrackChanged?: (json: string) => void;
     };
+    SoundsibleNativeControl?: {
+      pause?: () => void;
+    };
+  }
+}
+
+/**
+ * Lets the hosting shell pause page audio (dual playback arbitration:
+ * starting the native player pauses the page first). Guarded and optional
+ * like everything else in this module.
+ */
+export function installNativeControl(control: { pause(): void }): void {
+  try {
+    if (typeof window === 'undefined') return;
+    window.SoundsibleNativeControl = control;
+  } catch {
+    /* the shell surface is best-effort; playback never depends on it */
   }
 }
 

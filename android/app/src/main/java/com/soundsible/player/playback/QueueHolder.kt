@@ -56,6 +56,11 @@ object QueueHolder {
     private fun playOn(controller: MediaController) {
         val items = queue.items.mapIndexed { index, item -> mediaItem(item, index) }
         if (items.isEmpty()) return
+        // One sounding player: the page yields to native playback.
+        try {
+            com.soundsible.player.ui.WebAudio.pause()
+        } catch (_: Exception) {
+        }
         val start = (queue.currentIndex ?: 0).coerceIn(0, items.size - 1)
         // setMediaItems is fire-and-forget through the session (which
         // resolves the stream URLs): prepare/play must wait for the first

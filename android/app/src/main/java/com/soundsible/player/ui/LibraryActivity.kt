@@ -48,6 +48,7 @@ class LibraryActivity : AppCompatActivity() {
         webView.settings.domStorageEnabled = true
         webView.settings.mediaPlaybackRequiresUserGesture = false
         webView.addJavascriptInterface(SoundsibleNative(this), "SoundsibleNative")
+        WebAudio.attach(webView)
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
@@ -89,6 +90,7 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        WebAudio.detach(webView)
         if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
     }

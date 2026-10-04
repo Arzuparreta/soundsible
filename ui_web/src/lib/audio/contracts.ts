@@ -82,7 +82,7 @@ export interface LiveTransitionPlan {
 }
 export type MixPhase = 'idle' | 'armed' | 'prerolling' | 'crossfading';
 export type MixCancelReason = 'superseded' | 'load' | 'seek' | 'stop' | 'exit' | 'failed' | 'transport_pause';
-export type ProgramTransportOrigin = 'ui' | 'media_session' | 'platform' | 'recovery';
+export type ProgramTransportOrigin = 'ui' | 'media_session' | 'platform' | 'recovery' | 'native_shell';
 export interface ProgramTransportEvent {
   kind: 'pause' | 'resume' | 'inactive_deck_play';
   origin: ProgramTransportOrigin;

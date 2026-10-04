@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import com.soundsible.player.LocalEngine
 import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
@@ -23,15 +25,25 @@ import kotlinx.coroutines.withContext
  * the foreground service and wait out the boot with a visible status --
  * reopening the app after Android killed it lands here, not on a dead page.
  */
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            scope.launch { route(findViewById(R.id.splashStatus)) }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        val status = findViewById<TextView>(R.id.splashStatus)
-        scope.launch {
-            route(status)
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            scope.launch {
+                route(findViewById(R.id.splashStatus))
+            }
         }
     }
 

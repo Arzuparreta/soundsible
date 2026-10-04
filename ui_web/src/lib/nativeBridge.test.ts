@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { reportNowPlaying } from './nativeBridge';
+import { reportNowPlaying, installNativeControl } from './nativeBridge';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -26,6 +26,14 @@ describe('nativeBridge', () => {
     vi.stubGlobal('window', { SoundsibleNative: { onTrackChanged } } as never);
     reportNowPlaying(null, false);
     expect(JSON.parse(onTrackChanged.mock.calls[0][0]).playing).toBe(false);
+  });
+
+  it('installs a pause hook the shell can call', () => {
+    const pause = vi.fn();
+    installNativeControl({ pause });
+    const w = window as unknown as { SoundsibleNativeControl?: { pause?: () => void } };
+    w.SoundsibleNativeControl?.pause?.();
+    expect(pause).toHaveBeenCalledTimes(1);
   });
 
   it('survives a throwing shell', () => {

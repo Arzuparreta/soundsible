@@ -5,6 +5,7 @@ import { createSocket, type AppSocket, dispatchDiscoverSeed } from "../lib/socke
 import { api, type RemotePlaybackState } from "../lib/api";
 import { audioService, onProgramEvent, setProgramOutputReporter, setProgramTransportReporter, type ProgramMediaEventName, type ProgramPlaybackSnapshot } from "../lib/audio";
 import { ProgramMediaSession, type MediaSessionSyncReason } from "../lib/mediaSession";
+import { installNativeControl } from "../lib/nativeBridge";
 import { recordPlaybackDiagnostic, startAutomaticPlaybackDiagnostics } from "../lib/playbackDiagnostics";
 import { bustCovers } from "../lib/media";
 import { isPodcastTrack } from "../lib/track";
@@ -448,6 +449,7 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       seekBackward: offset => ports.actions.seekBy(-(offset ?? ports.osSeekStep())),
       seekForward: offset => ports.actions.seekBy(offset ?? ports.osSeekStep())
     });
+    installNativeControl({ pause: () => ports.actions.pausePlayback('native_shell') });
     socket = createSocket();
     const ownedSocket = socket;
     lifetime.own(() => {
