@@ -35,12 +35,14 @@ historial del chat ni memoria privada. Ver [guía](../ANDROID.md),
 
 Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
-bookmarks sobre entidades adquiridas y corrige refresh concurrente (190c5b4).
-Última APK scoped: cuatro recorridos HTTP/HTTPS pasan. Última principal S2s33
-tuvo un fallo Saved corregido: **repetir principal/restart antes de darla por verde**.
+bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrados
+en regresión (refresh Saved y presupuesto auth compartido) están corregidos.
+Última APK principal: **35 tests + dos fases offline persistentes pasan**, sources
+preparados desde commit limpio cf01599; APK/test/lint normales pasan sin CA temporal.
 Últimos browser completos S2j: repetir cuatro perfiles antes del PR final.
-Faltan biblioteca/Discover/Settings completos, DJ, Live, Android Auto, firma y
-actualización. No PR/main/release todavía; mantener gates de alpha completa.
+S2u selector OS es contrato/draft siguiente, todavía sin ejecutar. Faltan biblioteca/
+Discover/Settings completos, DJ, Live, Android Auto, firma y actualización.
+No PR/main/release todavía; mantener gates de alpha completa y continuar.
 
 ## Entrega S0
 
@@ -1050,3 +1052,23 @@ Volver a ejecutar principal/restart sobre HEAD final. [S2u](SLICE_2U.md) selecto
 OS todavía es contrato/draft (draft reproducible en docs/android/drafts/CoverPickerTest.java),
 no aceptado; trasladarlo a androidTest y probar después de cerrar esta regresión.
 Continuar hasta paridad completa; PR/main/release siguen pendientes.
+
+
+## Regresión principal S2t final
+
+Sobre assets preparados desde HEAD limpio `cf01599`, la repetición final de
+`/tmp/soundsible-s2t-main-isolated.log` pasa **35 tests principales, cero fallos/
+omitidos**, más **dos fases offline persistentes** tras force-stop. Helper termina
+correctamente, retira CA y rebuild APK/test/unit/lint normal pasa. No confundir
+este resultado con las principales S2s33/S2t35 que fallaron antes de los fixes.
+
+Siguiente trabajo: mover draft S2u a androidTest y validar selector OS real (tap,
+Back, content URI/bitmap). Revisar también prioridad de artwork: BitmapLoader de
+Media3 instalado prefiere artworkData embebido sobre artworkUri, que puede ocultar
+un sidecar editado sin reescribir audio. Necesita test de metadata/cover con audio
+FLAC que lleve artwork embebido y verificación de sesión multimedia antes de dar
+ese caso por aceptado. No está corregido todavía; no llamar completa la paridad.
+
+Diff acumulado detectó blank line final en catalogTrack heredado de S2j; eliminado
+sin cambiar lógica. Browser completos siguen S2j hasta repetición previa al PR.
+Continuar hasta todos los gates de paridad, luego PR/main/release autorizados.

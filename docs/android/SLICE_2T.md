@@ -45,3 +45,11 @@ La APK scoped se preparó con HEAD previo dirty. No es build limpio de release.
 S2q31+restart2. Repetir principal/restart con estos avances; browser cuatro perfiles
 se repetirán antes del PR acumulado. Sin CI/proveedor vivo/teléfono/coche aceptados.
 Continuar hasta paridad completa y después PR/merge/release autorizados.
+
+
+Regresión final tras aislamiento de presupuesto auth del fixture: **35 principales
+y dos fases persistentes offline pasan**, cero fallos/omitidos, desde cf01599 limpio
+al preparar assets. Normal APK/test/unit/lint pasa sin CA temporal; helper exit0.
+Log `/tmp/soundsible-s2t-main-isolated.log`. Cierra los fallos de las dos principales
+anteriores; no borra su evidencia. Selector OS y artwork embebido siguen pendientes,
+así como entidades externas/Discover y resto de matriz.
