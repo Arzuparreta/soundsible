@@ -4,12 +4,14 @@ Native client for your own Soundsible server. Mirrors the iOS app's contract
 (`ios/SoundsibleKit`): pairing, `/api/car/*` browse, authenticated streaming,
 playback-state publishing, queue semantics and offline policy.
 
-> **Not yet installed or run on a device.** CI builds the APK and runs the
-> unit tests, but neither proves installation, pairing, playback, background
-> audio, offline listening, Android Auto or car controls. Like the iOS guide,
-> the feature descriptions below describe the intended behaviour of the code,
-> not a verified user experience. First installation and physical-device
-> validation are still required.
+> **Barely run on a device.** One sideload install reached `MainActivity` and
+> crashed on launch (`Application cannot be cast to SoundsibleApp` -- the
+> custom `Application` was missing from the manifest; fixed after that
+> report). Nothing past the crash has been seen on hardware: pairing,
+> playback, background audio, offline listening, Android Auto and car
+> controls are still unverified. Like the iOS guide, the feature
+> descriptions below describe the intended behaviour of the code, not a
+> verified user experience.
 
 ## Installing (sideload)
 
