@@ -35,8 +35,8 @@ object LocalEngine {
         private set
 
     /** True while a boot attempt is still running. */
-    @Volatile var isBooting: Boolean = false
-        private set
+    val isBooting: Boolean get() = _booting.get()
+    private val _booting = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
      * One-line device facts for the unavailable message: CPU ABIs and free
@@ -112,7 +112,9 @@ object LocalEngine {
     }
 
     fun start(platform: AndroidPlatform) {
-        isBooting = true
+        // One boot at a time: concurrent Python.start() calls from the app
+        // boot thread and tap-to-retry pile up inside the native loader.
+        if (!_booting.compareAndSet(false, true)) return
         try {
             if (!Python.isStarted()) {
                 Python.start(platform)
@@ -121,13 +123,16 @@ object LocalEngine {
             pythonVersion = info.get("python_version")?.toString()
             sqliteVersion = info.get("sqlite_version")?.toString()
             startupError = null
-        } catch (e: Exception) {
-            Log.e("SoundsiblePython", "Embedded Python failed to start", e)
+        } catch (t: Throwable) {
+            // Throwable, not Exception: native loader failures arrive as
+            // UnsatisfiedLinkError and friends, which Exception misses and
+            // which used to leave the UI blaming "unavailable" with no cause.
+            Log.e("SoundsiblePython", "Embedded Python failed to start", t)
             pythonVersion = null
             sqliteVersion = null
-            startupError = chainOf(e).take(400)
+            startupError = chainOf(t).take(400)
         } finally {
-            isBooting = false
+            _booting.set(false)
         }
     }
 
