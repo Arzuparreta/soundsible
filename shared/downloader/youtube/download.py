@@ -19,7 +19,9 @@ from .ytdlp import (
     Cookies,
     add_cli_network_args,
     download_resilience_args,
+    force_ipv4,
     should_retry_with_cookies,
+    yt_proxy,
 )
 
 logger = logging.getLogger(__name__)
@@ -164,19 +166,6 @@ def _yt_dlp_args(output_template: str, *, convert_to: Optional[Dict[str, Any]]) 
     return [get_subprocess_python(), "-u", "-m", "yt_dlp", *_ytdlp_argv(output_template, convert_to=convert_to)]
 
 
-def _ytdlp_argv_from_cli(args: List[str]) -> List[str]:
-    """Strip the interpreter prefix from a CLI argv for `_real_main`.
-
-    `run()` builds full forms (`python -u -m yt_dlp <opts> <url>`); the
-    in-process entry takes only `<opts> <url>`. Passing `-u -m yt_dlp` down
-    makes yt-dlp exit 1 on an unknown option, which is exactly the bare
-    failure hosts without a subprocess Python used to report.
-    """
-    if "-m" in args:
-        return args[args.index("-m") + 2:]
-    return [a for a in args if a not in ("-u",)]
-
-
 def download_audio(
     url: str,
     temp_dir: Path,
@@ -196,50 +185,12 @@ def download_audio(
     profile = QUALITY_PROFILES.get(quality, QUALITY_PROFILES[DEFAULT_QUALITY])
     cookie_args = cookies.cli_args()
 
-    def run_in_process(args: List[str]) -> tuple[int, str]:
-        """Run yt-dlp in this process, for hosts with no subprocess Python.
+    from shared.venv_utils import has_working_subprocess_python
 
-        Android embeds the interpreter but ships no python binary, so the CLI
-        cannot be shelled out to. Progress lines are replayed to the callback
-        from captured output once the call returns, so the queue shows
-        queued then done instead of live percent.
-        """
-        import contextlib
-        import io
-
-        from yt_dlp import _real_main
-
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-            try:
-                code = _real_main(_ytdlp_argv_from_cli(args))
-            except SystemExit as exc:
-                code = exc.code if isinstance(exc.code, int) else 1
-            except Exception:
-                # The queue surfaces `output` as the failure reason and the
-                # user has no adb: the traceback must BE the output, not a
-                # log line nobody will ever read.
-                import traceback
-
-                code = 1
-                buf.write("\n")
-                buf.write(traceback.format_exc())
-        output = buf.getvalue()
-        if progress_callback:
-            for line in output.splitlines():
-                try:
-                    parsed = parse_progress(line.rstrip())
-                    if parsed:
-                        progress_callback(parsed)
-                except Exception as ex:
-                    logger.debug("progress_callback error: %s", ex)
-        return code or 0, output
+    if not has_working_subprocess_python():
+        return download_audio_api(url, temp_dir, cookies, quality, progress_callback)
 
     def run(args: List[str]) -> tuple[int, str]:
-        from shared.venv_utils import has_working_subprocess_python
-
-        if not has_working_subprocess_python():
-            return run_in_process(args)
         output = []
         proc = subprocess.Popen(
             args,
@@ -290,3 +241,104 @@ def download_audio(
         return path
 
     raise Exception(output or f"yt-dlp exited {returncode}")
+
+
+def _api_progress_hook(progress_callback) -> Callable[..., None]:
+    """Translate a yt-dlp progress dict into the queue's update shape."""
+    def hook(d: Dict[str, Any]) -> None:
+        try:
+            if d.get("status") == "downloading":
+                total = d.get("total_bytes") or d.get("total_bytes_estimate")
+                downloaded = d.get("downloaded_bytes") or 0
+                percent = (downloaded / total * 100.0) if total else 0.0
+                progress_callback({
+                    "phase": "downloading",
+                    "percent": min(100.0, max(0.0, percent)),
+                    "speed": d.get("speed"),
+                    "eta": d.get("eta"),
+                    "total_bytes": total,
+                })
+            elif d.get("status") == "finished":
+                progress_callback({"phase": "processing"})
+        except Exception as ex:
+            logger.debug("progress_callback error: %s", ex)
+
+    return hook
+
+
+def download_audio_api(
+    url: str,
+    temp_dir: Path,
+    cookies: Cookies,
+    quality: str,
+    progress_callback: Optional[Callable[..., None]] = None,
+) -> Path:
+    """Download via the YoutubeDL API, YTDLnis-style: no CLI, no subprocess.
+
+    Hosts without a working subprocess Python (Android) cannot exec
+    `python -m yt_dlp`, and emulating the CLI through `_real_main` proved
+    fragile (silent exit codes, captured-output games). Driving the library
+    directly raises real errors and reports live progress through hooks --
+    the same pattern `streams.py` and `search.py` already use in-process.
+    Post-processors follow the ffmpeg gate: without a binary there is no
+    thumbnail/metadata embedding or conversion; downstream mutagen tagging
+    (`embed_metadata`) covers tags without it.
+    """
+    import yt_dlp
+
+    # Note: quality conversion profiles (-x) need ffmpeg, which hosts on this
+    # path do not have; the native stream is kept (same rule as _ytdlp_argv).
+    temp_filename = f"temp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex[:6]}"
+    outtmpl = str(temp_dir / f"{temp_filename}.%(ext)s")
+
+    def base_opts(with_cookies: bool) -> Dict[str, Any]:
+        opts: Dict[str, Any] = {
+            "format": YDL_FORMAT_AUDIO,
+            "outtmpl": outtmpl,
+            "extractor_args": {"youtube": {"player_client": ["default", "android", "ios"]}},
+            "retries": 10,
+            "socket_timeout": 30,
+            "quiet": True,
+            "no_warnings": True,
+        }
+        proxy = yt_proxy()
+        if proxy:
+            opts["proxy"] = proxy
+        elif force_ipv4():
+            opts["source_address"] = "0.0.0.0"
+        if with_cookies:
+            opts.update(cookies.ydl_options())
+        if _ffmpeg_available():
+            opts["postprocessors"] = [
+                {"key": "FFmpegMetadata", "add_metadata": True},
+                {"key": "EmbedThumbnail"},
+            ]
+        if progress_callback:
+            opts["progress_hooks"] = [_api_progress_hook(progress_callback)]
+        return opts
+
+    def downloaded() -> Optional[Path]:
+        for path in temp_dir.glob(f"{temp_filename}.*"):
+            return audio_only(path)
+        return None
+
+    def attempt(with_cookies: bool) -> None:
+        with yt_dlp.YoutubeDL(base_opts(with_cookies)) as ydl:
+            ydl.download([url])
+
+    try:
+        attempt(False)
+        if downloaded():
+            return downloaded()  # type: ignore[return-value]
+    except Exception as first:
+        cookie_opts = cookies.ydl_options()
+        if cookie_opts and should_retry_with_cookies(str(first)):
+            try:
+                attempt(True)
+                if downloaded():
+                    return downloaded()  # type: ignore[return-value]
+            except Exception as second:
+                raise Exception(str(second) or str(first))
+        raise Exception(str(first) or "yt-dlp download failed")
+
+    raise Exception("yt-dlp produced no file")
