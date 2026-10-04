@@ -37,8 +37,9 @@ Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
 bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrados
 en regresión (refresh Saved y presupuesto auth compartido) están corregidos.
-Última APK principal: **35 tests + dos fases offline persistentes pasan**, sources
-preparados desde commit limpio cf01599; APK/test/lint normales pasan sin CA temporal.
+Última APK principal: **49 tests + dos fases offline persistentes pasan**, sources
+preparados desde commit limpio dc29b73; APK/test APK/JVM17/lint normales pasan
+sin CA temporal. Log /tmp/soundsible-s2aa-main-clean.log.
 Últimos browser completos tras S2z: Chromium 278/66 y WebKit 269/75, sin fallos,
 sobre reparación de carrusel 78669b6. Repetir cuatro perfiles antes del PR final.
 S2u selector OS y S2v prioridad de sidecar validados; S2w letras adquirido/preview
@@ -1259,3 +1260,21 @@ explícita17 sí; el helper ahora añade testDebugUnitTest al cierre normal sin 
 Preparar commit limpio y repetir principal ampliada49 + dos fases offline;
 no sustituir el verde histórico35 por XML antiguo ni por targeted4. Continuar
 sin cerrar por slice hasta paridad completa y PR/main/release autorizados.
+
+
+## Principal limpia S2aa
+
+Assets desde dc29b73, dirty=false: principal49, cero fallos/errores/omisiones;
+prepare1 + force-stop/offline1 pasan en el protocolo persistente. APK normal,
+test APK, JVM17 y lint pasan tras retirar la CA temporal. Log
+/tmp/soundsible-s2aa-main-clean.log, XML actual android/build/integration-results.
+Este resultado sustituye el histórico35+2, no los fallidos45 de S2z.
+
+Durante esta ejecución se prepararon fixture/draft [S2ab](SLICE_2AB.md), sin
+cambiar código nativo ni assets de dc29b73. La corrección posterior de recuperación
+local (restoreOffline(false), conservar biblioteca online) está pendiente de
+instrumentación específica; no atribuirla al artifact limpio anterior. UI1465/172
+pasa en /tmp/soundsible-s2aa-online-recovery-ui.log. Próximo: incorporar draft
+PlannerRetirementTest y comprobar HTTP/HTTPS Radio/autoplay, junto a la nueva
+assertion de biblioteca conectada en OfflineRemovalTest. Continuar luego resto
+paridad; PR/main/release aún pendientes.
