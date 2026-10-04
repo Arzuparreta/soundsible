@@ -55,6 +55,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
   let carouselSettleTimer: number | undefined;
   let carouselAligned = false;
   let carouselHeld = false;
+  let carouselTarget: PanelId | null = null;
   let panelFromScroll = false;
   let previousSurfaceOpen = props.surfaceOpen;
   let draggedPanel: PanelId | null = null;
@@ -120,6 +121,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     // carousel back to Stage underneath the gesture.
     cancelAnimationFrame(carouselFrame);
     carouselFrame = 0;
+    carouselTarget = null;
     window.clearTimeout(carouselSettleTimer);
     carouselSettleTimer = undefined;
   };
@@ -139,6 +141,13 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     }
     const settled = carouselPosition();
     if (!settled) return;
+    if (carouselTarget !== null) {
+      const target = workspaceEl.querySelector<HTMLElement>(`[data-player-tile="${carouselTarget}"]`);
+      // A previous scroll can settle before the new alignment frame has run.
+      // Keep the explicit destination until it arrives or a real gesture takes over.
+      if (target && Math.abs(tileOffset(target) - workspaceEl.scrollLeft) > 2) return;
+      carouselTarget = null;
+    }
     props.onCarouselProgress?.(Math.round(settled.index), false);
     if (settled.panel !== props.activePanel) {
       panelFromScroll = true;
@@ -177,12 +186,16 @@ export function PlayerWorkspace<PanelId extends string>(props: {
       // A user's settled scroll supersedes a pending initial alignment. Under
       // WebKit load that frame can otherwise run late and return to the stage.
       cancelAnimationFrame(carouselFrame);
+      carouselTarget = null;
       panelFromScroll = false;
       carouselAligned = surfaceOpen;
       return;
     }
     const tile = workspaceEl.querySelector<HTMLElement>(`[data-player-tile="${panel}"]`);
     if (!tile) return;
+    window.clearTimeout(carouselSettleTimer);
+    carouselSettleTimer = undefined;
+    carouselTarget = panel;
     const focusedTile = document.activeElement instanceof Element
       ? document.activeElement.closest<HTMLElement>('[data-player-tile]')
       : null;
@@ -192,7 +205,7 @@ export function PlayerWorkspace<PanelId extends string>(props: {
     cancelAnimationFrame(carouselFrame);
     const alignImmediately = !surfaceOpen || opening || !carouselAligned;
     carouselAligned = surfaceOpen;
-    if (Math.abs(tileOffset(tile) - workspaceEl.scrollLeft) <= 2) return;
+    if (Math.abs(tileOffset(tile) - workspaceEl.scrollLeft) <= 2) { carouselTarget = null; return; }
     if (alignImmediately) jumpToTile(tile);
     carouselFrame = requestAnimationFrame(() => {
       if (!workspaceEl) return;

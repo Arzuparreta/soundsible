@@ -43,3 +43,14 @@ desde minimizar una app conectada. La prueba comprueba su estado conectado real.
 Emulador API36; no aceptación de gesto predictivo/fabricantes/hardware físico.
 Principal completa y cuatro browser se repetirán por el cambio de limpieza global;
 después seguir biblioteca/Discover/Settings y paridad DJ/Live/Auto, firma/release.
+
+La primera regresión completa Chromium dio 277 tests correctos, 66 omitidos y
+un timeout en Session DJ móvil inglés: después de seleccionar Route, un settle
+de scroll antiguo podía volver a Stage y dejar Route inert. La reparación
+anterior de cancelar el RAF al aceptar un gesto ya estaba presente. El conflicto
+restante es el settle de 80 ms antes de que corra el nuevo RAF de alineación.
+PlayerWorkspace conserva ahora el destino solicitado hasta alcanzarlo; un gesto
+real cancela ese destino y sigue teniendo prioridad. Dos pruebas controlan RAF
+y timers para cubrir ambas prioridades. UI completa: 1.440 tests/169 archivos.
+Las suites completas Chromium/WebKit y principal Android están en curso; no
+contar la reproducción aislada de Session como sustituto de esas regresiones.
