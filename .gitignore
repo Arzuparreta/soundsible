@@ -116,3 +116,4 @@ ios/**/.swiftpm/
 android/.gradle/
 android/keystores/
 android/local.properties
+android/app/engine-src/

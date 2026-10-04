@@ -1,6 +1,7 @@
 package com.soundsible.player
 
 import android.app.Application
+import com.chaquo.python.android.AndroidPlatform
 import com.soundsible.player.net.SoundsibleClient
 import com.soundsible.player.net.UrlConnectionTransport
 import com.soundsible.player.store.DeviceIdentity
@@ -21,5 +22,8 @@ class SoundsibleApp : Application() {
         tokenStore = SharedPrefsTokenStore(this)
         client = SoundsibleClient(UrlConnectionTransport(), tokenStore)
         deviceIdentity = DeviceIdentity(this)
+        // Best-effort: boot the embedded interpreter for the future local
+        // engine. Remote pairing never depends on it.
+        LocalEngine.start(AndroidPlatform(this))
     }
 }

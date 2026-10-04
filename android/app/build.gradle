@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.chaquo.python")
 }
 
 android {
@@ -14,6 +15,12 @@ android {
         // Kept in step with shared/version.py by scripts/version_sync.py.
         versionCode = 1
         versionName = "0.19.1"
+
+        ndk {
+            // The embedded Python interpreter is native code: one copy per
+            // ABI. arm64-v8a covers current phones; x86_64 covers emulators.
+            abiFilters "arm64-v8a", "x86_64"
+        }
     }
 
     signingConfigs {
@@ -55,6 +62,57 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+chaquopy {
+    defaultConfig {
+        // Must match the build machine's interpreter (see buildPython):
+        // Chaquopy embeds this exact major.minor on device.
+        version = "3.13"
+        buildPython "python3.13"
+        pip {
+            // Mirrors requirements.txt minus the gevent stack (no native
+            // core on Android; the server falls back to threading, see
+            // _socket_async_mode) and minus curl-cffi (optional in yt-dlp).
+            install("flask>=2.3.0")
+            install("flask-socketio>=5.3.0")
+            install("flask-cors>=4.0.0")
+            install("requests>=2.31.0")
+            install("platformdirs>=4.2.0")
+            install("mutagen>=1.46.0")
+            install("feedparser>=6.0.10")
+            install("python-dotenv>=1.0.0")
+            install("boto3>=1.28.0")
+            install("b2sdk>=1.19.0")
+            install("rich>=13.5.0")
+            install("numpy>=1.26.0")
+            install("pillow>=10.0.0")
+            install("cryptography>=41.0.0")
+            install("yt-dlp==2026.8.19")
+        }
+    }
+    sourceSets {
+        main {
+            // Staged copy of the engine (shared/, player/, setup_tool/)
+            // produced by :app:syncEngineSources. Kept out of git; the
+            // APK always bundles the working tree it was built from.
+            srcDir("engine-src")
+        }
+    }
+}
+
+// Stage the engine's Python packages next to src/main/python so Chaquopy
+// bundles `shared.*`, `player.*` and `setup_tool.*` with their repo layout.
+tasks.register("syncEngineSources", Copy) {
+    def repoRoot = projectDir.parentFile.parentFile
+    from(repoRoot) {
+        include("shared/**", "player/**", "setup_tool/**")
+        exclude("**/__pycache__/**", "**/*.pyc")
+    }
+    into(layout.projectDirectory.dir("engine-src"))
+}
+tasks.matching { it.name.contains("Python") }.configureEach {
+    dependsOn("syncEngineSources")
 }
 
 dependencies {

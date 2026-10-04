@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import com.soundsible.player.LocalEngine
 import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.net.PairingCoordinator
@@ -34,6 +35,11 @@ class PairingActivity : Activity() {
         val pairingCode = findViewById<EditText>(R.id.pairingCode)
         val deviceToken = findViewById<EditText>(R.id.deviceToken)
         val status = findViewById<TextView>(R.id.pairingStatus)
+        findViewById<TextView>(R.id.localEngineStatus).text = if (LocalEngine.isAvailable) {
+            "On-device Python ${LocalEngine.pythonVersion} ready (local engine in progress)."
+        } else {
+            "On-device Python unavailable; pairing with a server still works."
+        }
 
         findViewById<Button>(R.id.pairButton).setOnClickListener {
             val base = serverUrl.text.toString().trim()
@@ -68,6 +74,60 @@ class PairingActivity : Activity() {
                 } catch (e: Exception) {
                     status.text = messageOf(e)
                 }
+            }
+        }
+
+        findViewById<Button>(R.id.startLocalButton).setOnClickListener { button ->
+            button.isEnabled = false
+            status.text = "Starting the engine on this phone…"
+            scope.launch {
+                startLocalEngine(status)
+                withContext(Dispatchers.Main) { button.isEnabled = true }
+            }
+        }
+    }
+
+    private suspend fun startLocalEngine(status: TextView) {
+        if (!LocalEngine.isAvailable) {
+            withContext(Dispatchers.Main) {
+                status.text = "On-device Python is unavailable on this phone."
+            }
+            return
+        }
+        withContext(Dispatchers.IO) {
+            val started = LocalEngine.startLocalServer(filesDir)
+            if (!started) {
+                withContext(Dispatchers.Main) {
+                    status.text = "Could not start the local engine."
+                }
+                return@withContext
+            }
+            // The engine boots like a desktop sidecar: config, library,
+            // watcher, then the loopback server. Poll for readiness.
+            var lastPhase = ""
+            repeat(100) {
+                val connection = LocalEngine.localConnection()
+                if (connection != null) {
+                    (application as SoundsibleApp).tokenStore.save(connection)
+                    withContext(Dispatchers.Main) {
+                        startActivity(Intent(this@PairingActivity, BrowseActivity::class.java))
+                        finish()
+                    }
+                    return@withContext
+                }
+                val (phase, _) = LocalEngine.localStatus()
+                if (phase != lastPhase) {
+                    lastPhase = phase
+                    withContext(Dispatchers.Main) {
+                        status.text = "Local engine: $phase…"
+                    }
+                }
+                kotlinx.coroutines.delay(1_000)
+            }
+            val (phase, error) = LocalEngine.localStatus()
+            withContext(Dispatchers.Main) {
+                status.text = "The local engine did not become ready (phase: $phase)." +
+                    (if (!error.isNullOrEmpty()) "\n${error.take(500)}" else "")
             }
         }
     }

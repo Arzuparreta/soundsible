@@ -53,6 +53,51 @@ your own server.
 | QR-code scanning | Not in v1; manual entry is the whole flow |
 | Offline downloads in the UI | Policy + downloader exist; not yet wired to a downloads screen |
 
+## On-device backend (implemented, needs device verification)
+
+The app embeds CPython 3.13 via Chaquopy and boots the **real engine** on the
+phone: the same `run_desktop_engine` path the desktop sidecar uses (LOCAL
+consumer config, owner token, full API on loopback). The pairing screen's
+*Use this phone as the server* starts it on a background thread, reads the
+runtime state + owner token the engine writes, and stores a `This phone`
+connection -- no pairing screen needed. Proven in a gevent-less scratch env:
+`/api/health` 200, `/api/car/home` 200 with all 6 root collections.
+
+Server changes this required (both env-gated, desktop path unchanged):
+
+- SocketIO backend falls back to `threading` when gevent is absent (was a
+  hard import-time requirement).
+- Signal-handler registration skips off the main thread + the Werkzeug
+  `allow_unsafe_werkzeug` opt-out the threaded runner requires.
+
+Verified on-device so far: nothing past the build. The APK installs and the
+interpreter boots (previous build); the engine boot on hardware is still
+ahead -- install this build and report the pairing-screen status line.
+
+Known limits of the on-device engine:
+
+- **Library lives in app-private storage** (`files/soundsible/music`).
+  Scoped storage keeps the engine from scanning shared folders directly;
+  getting existing on-device music in is a future import step.
+- **No folder auto-scan**: `watchdog` has no on-device build, so the engine
+  logs a warning and skips the watcher. Rescan from the client instead.
+- **No FFmpeg binaries yet**: conversion, probing and downloads that need
+  ffmpeg degrade to whatever the engine does without one. Bundling
+  per-ABI binaries is the next backend step.
+- **Process-bound**: the engine lives as long as the app process. No
+  foreground service yet, so Android may stop it in the background.
+- **Size**: ~95 MB APK (interpreter + pip set for two ABIs).
+
+Staged work remaining, each with its own verification:
+
+1. ~~Interpreter boots, stdlib probe runs~~ -- done, on device.
+2. ~~Engine serves its contract on loopback~~ -- done in code, needs the
+   device report above.
+3. On-device acquisition (yt-dlp is bundled; needs storage + foreground
+   service + a real download attempt).
+4. FFmpeg binaries per ABI for conversion/probing and DJ analysis.
+5. Battery, storage-budget and overnight-background behaviour on a real phone.
+
 ## Building
 
 Prerequisites: JDK 17+, the Android SDK (`compileSdk 34`, build-tools 35),

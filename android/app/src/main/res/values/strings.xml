@@ -9,6 +9,8 @@
     <string name="have_token_hint">Headless server? Paste a paired-device token instead.</string>
     <string name="token_hint">Device token</string>
     <string name="pair_token_button">Pair with token</string>
+    <string name="local_engine_button">Use this phone as the server</string>
+    <string name="local_engine_hint">Starts the real Soundsible engine on this phone. No computer needed; your library lives in this app\'s private storage.</string>
     <string name="browse_title">Browse</string>
     <string name="now_playing">Now playing</string>
     <string name="unpair">Unpair this device</string>

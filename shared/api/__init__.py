@@ -171,10 +171,24 @@ def _int_env(name: str, default: int) -> int:
 SOCKET_PING_INTERVAL = _int_env("SOUNDSIBLE_SOCKET_PING_INTERVAL", 20)
 SOCKET_PING_TIMEOUT = _int_env("SOUNDSIBLE_SOCKET_PING_TIMEOUT", 25)
 
+
+def _socket_async_mode() -> str:
+    """SocketIO server backend: gevent where installed, threads elsewhere.
+
+    Desktops and containers ship gevent, so their path is unchanged. Hosts
+    without it (notably the Android embedded interpreter, which cannot build
+    gevent's native core) fall back to threading instead of failing at import.
+    """
+    try:
+        import gevent  # noqa: F401  # probe availability only
+    except ImportError:
+        return "threading"
+    return "gevent"
+
 socketio = SocketIO(
     app,
     cors_allowed_origins=_socket_cors_origins,
-    async_mode="gevent",
+    async_mode=_socket_async_mode(),
     ping_interval=SOCKET_PING_INTERVAL,
     ping_timeout=SOCKET_PING_TIMEOUT,
 )
@@ -1862,15 +1876,28 @@ def _stop_wsgi_from_signal(_signum: int, _frame: object) -> None:
 
 
 def _register_api_shutdown_handlers() -> None:
-    """Register SIGINT/SIGTERM handlers compatible with gevent's event loop."""
+    """Register SIGINT/SIGTERM handlers compatible with gevent's event loop.
+
+    Hosts that run the server off the main thread (notably the Android
+    embedded interpreter, where the engine lives on a background thread)
+    cannot register signal handlers at all; there is nothing to shut down
+    from here on those hosts, so skip quietly instead of killing the boot.
+    """
     try:
         from gevent import signal as gevent_signal
 
         gevent_signal.signal(signal.SIGINT, _stop_wsgi_from_signal)
         gevent_signal.signal(signal.SIGTERM, _stop_wsgi_from_signal)
+        return
+    except ImportError:
+        pass
     except Exception:
+        logger.debug("API: gevent signal registration failed; using stdlib", exc_info=True)
+    try:
         signal.signal(signal.SIGINT, _stop_wsgi_from_signal)
         signal.signal(signal.SIGTERM, _stop_wsgi_from_signal)
+    except ValueError:
+        logger.info("API: off the main thread; signal handlers not registered")
 
 
 def _initialize_admin_core() -> Optional[_UserCore]:
@@ -2111,7 +2138,12 @@ def start_api(
     sys.stderr.flush()
     _register_api_shutdown_handlers()
     try:
-        socketio.run(app, host=runtime.host, port=runtime.port, debug=debug)
+        # Werkzeug 3 refuses run() in threading mode without an explicit
+        # opt-out; gevent mode (desktops, containers) is unaffected.
+        _run_kwargs = (
+            {"allow_unsafe_werkzeug": True} if _socket_async_mode() == "threading" else {}
+        )
+        socketio.run(app, host=runtime.host, port=runtime.port, debug=debug, **_run_kwargs)
     finally:
         stop_api()
 
