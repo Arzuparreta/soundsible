@@ -1,19 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Mirrors ui_web/src/boot/startup.html: near-black wash, centered mark,
+     name, five-bar EQ waves in the signature orange, muted status line. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#0c0c0e"
     android:gravity="center"
     android:orientation="vertical"
     android:padding="24dp">
 
-    <ProgressBar
+    <ImageView
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="Soundsible"
+        android:src="@drawable/soundsible_logo" />
+
+    <TextView
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:letterSpacing="-0.02"
+        android:text="Soundsible"
+        android:textColor="#f2f2f5"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/splashWaves"
+        android:layout_width="wrap_content"
+        android:layout_height="28dp"
+        android:layout_marginTop="28dp"
+        android:layout_marginBottom="14dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <View
+            android:id="@+id/wave0"
+            android:layout_width="3dp"
+            android:layout_height="24dp"
+            android:layout_marginHorizontal="2dp"
+            android:background="@drawable/splash_wave_bar" />
+        <View
+            android:id="@+id/wave1"
+            android:layout_width="3dp"
+            android:layout_height="19dp"
+            android:layout_marginHorizontal="2dp"
+            android:background="@drawable/splash_wave_bar" />
+        <View
+            android:id="@+id/wave2"
+            android:layout_width="3dp"
+            android:layout_height="24dp"
+            android:layout_marginHorizontal="2dp"
+            android:background="@drawable/splash_wave_bar" />
+        <View
+            android:id="@+id/wave3"
+            android:layout_width="3dp"
+            android:layout_height="19dp"
+            android:layout_marginHorizontal="2dp"
+            android:background="@drawable/splash_wave_bar" />
+        <View
+            android:id="@+id/wave4"
+            android:layout_width="3dp"
+            android:layout_height="24dp"
+            android:layout_marginHorizontal="2dp"
+            android:background="@drawable/splash_wave_bar" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/splashStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="@string/splash_starting" />
+        android:text="@string/splash_starting"
+        android:textColor="#a0a0a8"
+        android:textSize="13sp" />
 </LinearLayout>

@@ -11,6 +11,7 @@ import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.playback.EngineService
 import com.soundsible.player.playback.QueueHolder
+import com.soundsible.player.store.LastSongPin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +28,7 @@ import kotlinx.coroutines.withContext
  */
 class MainActivity : AppCompatActivity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val waveAnimators = mutableListOf<android.animation.ObjectAnimator>()
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
             scope.launch { route(findViewById(R.id.splashStatus)) }
@@ -35,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        startWaves()
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
                 android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -48,8 +51,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        waveAnimators.forEach {
+            try {
+                it.cancel()
+            } catch (_: Exception) {
+            }
+        }
+        waveAnimators.clear()
         scope.cancel()
         super.onDestroy()
+    }
+
+    /** Five-bar EQ loop mirroring the web boot screen's startup-waves. */
+    private fun startWaves() {
+        val ids = listOf(R.id.wave0, R.id.wave1, R.id.wave2, R.id.wave3, R.id.wave4)
+        val delays = listOf(0L, 460L, 820L, 250L, 670L)
+        ids.forEachIndexed { i, id ->
+            val bar = findViewById<android.view.View>(id) ?: return@forEachIndexed
+            bar.scaleY = 0.3f
+            val animator = android.animation.ObjectAnimator.ofFloat(bar, "scaleY", 0.3f, 1f).apply {
+                duration = 1100L
+                startDelay = delays[i]
+                repeatCount = android.animation.ValueAnimator.INFINITE
+                repeatMode = android.animation.ValueAnimator.REVERSE
+            }
+            waveAnimators += animator
+            animator.start()
+        }
     }
 
     private suspend fun route(status: TextView) {
@@ -89,9 +117,30 @@ class MainActivity : AppCompatActivity() {
 
     private fun restoreQueue() {
         try {
-            val snapshot = (application as SoundsibleApp).queueStore.load() ?: return
-            QueueHolder.queue.restore(snapshot.items, snapshot.index)
-            QueueHolder.pendingSeekMs = snapshot.positionMs.coerceAtLeast(0L)
+            val app = application as SoundsibleApp
+            val snapshot = app.queueStore.load()
+            if (snapshot != null && snapshot.items.isNotEmpty()) {
+                // Prefer the pinned bytes for the current track: they survive
+                // eviction, updates and offline stretches alike.
+                val pin = LastSongPin.load(this)
+                val items = snapshot.items.map { item ->
+                    val id = item.effectiveTrackId() ?: item.id
+                    if (pin != null && id == pin.trackId) {
+                        item.copy(streamUrl = pin.file.toURI().toString())
+                    } else {
+                        item
+                    }
+                }
+                QueueHolder.queue.restore(items, snapshot.index)
+                QueueHolder.pendingSeekMs = snapshot.positionMs.coerceAtLeast(0L)
+                return
+            }
+            // No snapshot at all, but a pinned song: resume it alone.
+            val pin = LastSongPin.load(this)
+            if (pin != null) {
+                QueueHolder.queue.restore(listOf(pin.toItem()), 0)
+                QueueHolder.pendingSeekMs = 0L
+            }
         } catch (_: Exception) {
         }
     }

@@ -24,6 +24,7 @@ import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.data.CarItem
 import com.soundsible.player.data.DeviceRegistration
 import com.soundsible.player.data.RemotePlaybackState
+import com.soundsible.player.store.LastSongPin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -183,6 +184,29 @@ class PlaybackService : MediaLibraryService() {
                 p.currentPosition.coerceAtLeast(0L),
             )
         } catch (_: Exception) {
+        }
+        // Pin the sounding track's bytes for offline resume: skip when the
+        // pin already holds this track.
+        val mediaId = item?.mediaId
+        val streamUri = item?.localConfiguration?.uri?.toString()
+        val meta = item?.mediaMetadata
+        if (mediaId != null && streamUri != null && meta != null) {
+            val token = app().tokenStore.load()?.token
+            scope.launch {
+                try {
+                    LastSongPin.maybePin(
+                        this@PlaybackService,
+                        trackId = mediaId,
+                        title = meta.title?.toString() ?: "Unknown",
+                        artist = meta.artist?.toString() ?: "",
+                        album = meta.albumTitle?.toString() ?: "",
+                        artworkUrl = meta.artworkUri?.toString(),
+                        streamUrl = streamUri,
+                        token = token,
+                    )
+                } catch (_: Exception) {
+                }
+            }
         }
         scope.launch {
             try {

@@ -13,6 +13,7 @@ import com.soundsible.player.playback.EngineService
 import com.soundsible.player.data.CarItem
 import com.soundsible.player.net.SoundsibleError
 import com.soundsible.player.playback.QueueHolder
+import com.soundsible.player.store.LastSongPin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,6 +46,7 @@ class BrowseActivity : Activity() {
             stopService(Intent(this, EngineService::class.java))
             (application as SoundsibleApp).tokenStore.clear()
             (application as SoundsibleApp).queueStore.clear()
+            LastSongPin.clear(this)
             startActivity(Intent(this, PairingActivity::class.java))
             finish()
         }
