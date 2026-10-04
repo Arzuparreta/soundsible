@@ -53,6 +53,17 @@ your own server.
 | QR-code scanning | Not in v1; manual entry is the whole flow |
 | Offline downloads in the UI | Policy + downloader exist; not yet wired to a downloads screen |
 
+## Library management: attached web UI
+
+The browse screen's **Library (web)** button opens the engine's own web
+player in a WebView at `/player/desktop/`, the route where the server
+injects its owner token -- authenticated management with no token plumbing
+on the Android side. Search, playlists, favourites, downloads, uploads
+(system file picker) and settings all work there. Playback stays native.
+The APK carries the `ui_web/dist` bundle (built through the engine's own
+`ensure_ui_dist` sync, never by hand) as assets and installs it for the
+engine on first local start.
+
 ## On-device backend (implemented, needs device verification)
 
 The app embeds CPython 3.13 via Chaquopy and boots the **real engine** on the

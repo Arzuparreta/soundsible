@@ -103,6 +103,16 @@ class PairingActivity : Activity() {
             return
         }
         withContext(Dispatchers.IO) {
+            // The engine serves the bundled web player from SOUNDSIBLE_UI_DIST;
+            // install it before boot so first start already has management UI.
+            val uiDir = java.io.File(filesDir, "soundsible/ui")
+            val hasUi = LocalEngine.installWebUi(assets, uiDir)
+            if (!hasUi) {
+                withContext(Dispatchers.Main) {
+                    status.text = "This build carries no web player bundle; " +
+                        "the engine will still start for native browsing."
+                }
+            }
             val started = LocalEngine.startLocalServer(filesDir)
             if (!started) {
                 withContext(Dispatchers.Main) {

@@ -40,6 +40,9 @@
         <activity
             android:name=".ui.NowPlayingActivity"
             android:exported="false" />
+        <activity
+            android:name=".ui.LibraryActivity"
+            android:exported="false" />
 
         <service
             android:name=".playback.PlaybackService"

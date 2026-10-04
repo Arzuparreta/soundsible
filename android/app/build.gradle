@@ -16,7 +16,7 @@ android {
         // versionCode is a build counter, not the product version: bump it
         // whenever the installable artifact changes meaningfully so builds
         // are distinguishable on device.
-        versionCode = 3
+        versionCode = 4
         versionName = "0.19.1"
 
         ndk {
@@ -65,6 +65,15 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+
+    sourceSets {
+        main {
+            // Staged web player bundle (ui_web/dist) produced by
+            // :app:syncWebUi. Served by the on-device engine; kept out of
+            // git like engine-src.
+            assets.srcDir("web-ui-staging")
+        }
     }
 }
 
@@ -115,8 +124,39 @@ tasks.register("syncEngineSources", Copy) {
     }
     into(layout.projectDirectory.dir("engine-src"))
 }
-tasks.matching { it.name.contains("Python") }.configureEach {
+
+// Stage the built web player (ui_web/dist) as APK assets for the on-device
+// engine. The bundle is produced by the engine's own ensure_ui_dist sync,
+// never by this build: fail loudly when it is missing instead of shipping
+// an engine with no management UI.
+tasks.register("syncWebUi", Copy) {
+    def dist = projectDir.parentFile.parentFile.toPath()
+        .resolve("ui_web/dist").toFile()
+    doFirst {
+        if (!new File(dist, "index.html").isFile()) {
+            throw new GradleException(
+                "ui_web/dist/index.html is missing. Build it through the " +
+                "engine sync (python3 -c \"from shared.ensure_ui_dist " +
+                "import ensure_ui_dist; ensure_ui_dist()\") " +
+                "after `cd ui_web && npm ci`, then rebuild the APK.")
+        }
+    }
+    from(dist) {
+        // Vite emits .gz twins for static hosting; the engine serves the
+        // plain files on loopback, and AAPT rejects the twins as duplicates.
+        exclude("**/*.gz")
+    }
+    into(layout.projectDirectory.dir("web-ui-staging/ui-dist"))
+}
+tasks.matching {
+    it.name.contains("Python")
+}.configureEach {
     dependsOn("syncEngineSources")
+}
+tasks.matching {
+    it.name.contains("Assets") || it.name.startsWith("merge") || it.name.startsWith("lint")
+}.configureEach {
+    dependsOn("syncWebUi")
 }
 
 dependencies {

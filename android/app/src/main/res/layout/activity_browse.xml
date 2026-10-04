@@ -19,6 +19,12 @@
         android:layout_weight="1" />
 
     <Button
+        android:id="@+id/libraryButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/library_web" />
+
+    <Button
         android:id="@+id/unpairButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

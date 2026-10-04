@@ -45,6 +45,9 @@ class BrowseActivity : Activity() {
             startActivity(Intent(this, PairingActivity::class.java))
             finish()
         }
+        findViewById<Button>(R.id.libraryButton).setOnClickListener {
+            startActivity(Intent(this, LibraryActivity::class.java))
+        }
         load(null)
     }
 

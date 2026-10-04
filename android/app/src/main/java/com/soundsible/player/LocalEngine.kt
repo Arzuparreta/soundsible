@@ -71,6 +71,44 @@ object LocalEngine {
         return "ABI [$abis] free ${freeMb}MB"
     }
 
+    /**
+     * Copy the bundled web player (APK assets/ui-dist) into [uiDir] for the
+     * engine to serve. No-op once installed. Returns false when the APK
+     * carries no bundle (dist was missing at build time).
+     */
+    fun installWebUi(assetManager: android.content.res.AssetManager, uiDir: File): Boolean {
+        return try {
+            if (File(uiDir, "index.html").isFile) return true
+            val names = assetManager.list("ui-dist") ?: return false
+            if (names.isEmpty()) return false
+            copyAssetDir(assetManager, "ui-dist", uiDir)
+            File(uiDir, "index.html").isFile
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun copyAssetDir(
+        assetManager: android.content.res.AssetManager,
+        assetPath: String,
+        outDir: File,
+    ) {
+        val names = assetManager.list(assetPath) ?: return
+        outDir.mkdirs()
+        for (name in names) {
+            val childAsset = if (assetPath.isEmpty()) name else "$assetPath/$name"
+            val childOut = File(outDir, name)
+            val nested = assetManager.list(childAsset)
+            if (nested != null && nested.isNotEmpty()) {
+                copyAssetDir(assetManager, childAsset, childOut)
+            } else {
+                assetManager.open(childAsset).use { input ->
+                    childOut.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }
+    }
+
     /** Loopback engine state, once it has written its runtime file. */
     data class LocalState(val baseUrl: String, val ownerTokenFile: String)
 
