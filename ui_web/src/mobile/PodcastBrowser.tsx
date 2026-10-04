@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
+import { registerNativeBack } from './backNavigation';
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
 import { podcastEpisodeToTrack } from '../lib/track';
@@ -124,9 +125,11 @@ export default function PodcastBrowser(props: { generation: number; subscription
     const generation = props.generation; const url = item.rss_url; const remove = Boolean(followed()); const id = followed()?.id;
     openContextMenu({ title: item.title, actions: [{ label: t(remove ? 'podcastShow.unsubscribe' : 'podcasts.subscribe'), disabled: mutation() || props.disconnected, onSelect: () => { if (generation === props.generation && show()?.rss_url === url && !disposed && (remove ? followed()?.id === id : !followed())) void follow(remove); } }] }, event);
   }
+  const closeShow = () => { reset(); setShow(null); };
+  registerNativeBack(() => { if (!selected()) return false; closeShow(); return true; });
   return <section data-testid="android-podcasts">
     <Show when={selected()} fallback={<><PodcastDirectory generation={props.generation} disconnected={props.disconnected} onOpen={open} /><h2>{t('podcasts.yourShows')}</h2><For each={props.subscriptions} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}>{item => <MusicListRowView title={item.title} subtitle={item.author ?? ''} seed={item.id} disabled={props.disconnected} onActivate={() => open(item)} />}</For></>}>
-      {selected => <><button onClick={() => { reset(); setShow(null); }}>{t('common.back')}</button><h2>{selected().title}</h2><button data-podcast-show-menu aria-label={t('songRow.ariaMore')} disabled={mutation()} onClick={showMenu}>⋯</button>
+      {selected => <><button onClick={closeShow}>{t('common.back')}</button><h2>{selected().title}</h2><button data-podcast-show-menu aria-label={t('songRow.ariaMore')} disabled={mutation()} onClick={showMenu}>⋯</button>
         <button disabled={busy() || props.disconnected} onClick={() => void load(selected(), false, true)}>{t('podcastShow.refresh')}</button>
         <Show when={error()}><p role="alert">{t('common.loadFailed')}</p><button disabled={busy() || props.disconnected} onClick={() => void load(selected())}>{t('common.retry')}</button></Show>
         <Show when={queueError()}><p role="status">{t('common.loadFailed')} <button onClick={() => void loadQueue()}>{t('common.retry')}</button></p></Show>

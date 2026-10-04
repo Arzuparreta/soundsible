@@ -1,4 +1,5 @@
 import { createMemo, createResource, createSignal, createEffect, on, For, Show, onCleanup } from 'solid-js';
+import { registerNativeBack } from './backNavigation';
 import { request } from '../lib/http';
 import { coverUrl, registerArtworkMetadata } from '../lib/media';
 import { VirtualBrowseRows } from '../components/VirtualBrowseRows';
@@ -50,12 +51,15 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
     return filter ? rows.filter(track => `${track.title} ${track.artist} ${track.album ?? ''}`.toLocaleLowerCase().includes(filter)) : rows;
   });
   let detailEpoch = 0;
-  onCleanup(() => { detailEpoch++; });
+  let detailController: AbortController | undefined;
+  const cancelDetail = () => { detailEpoch++; detailController?.abort(); detailController = undefined; };
+  onCleanup(cancelDetail);
   async function open(kind: 'albums' | 'artists', id: string, title: string, bookmark?: SavedEntity) {
-    const epoch = ++detailEpoch;
+    cancelDetail(); const epoch = detailEpoch;
+    const controller = new AbortController(); detailController = controller;
     setDetailError(false);
     try {
-      const detail = props.disconnected || onlyAvailable() ? { track_ids: localCollections(kind).find(group => group.id === id)?.ids ?? [] } : await request<{ track_ids?: string[] }>(`/api/library/${kind}/${encodeURIComponent(id)}`);
+      const detail = props.disconnected || onlyAvailable() ? { track_ids: localCollections(kind).find(group => group.id === id)?.ids ?? [] } : await request<{ track_ids?: string[] }>(`/api/library/${kind}/${encodeURIComponent(id)}`, { signal: controller.signal });
       if (epoch === detailEpoch) { setCollection({ title, ids: detail.track_ids ?? [], kind, id, bookmark }); setQuery(''); }
     } catch { if (epoch === detailEpoch) setDetailError(true); }
   }
@@ -68,14 +72,22 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
       return;
     }
     if (props.disconnected || onlyAvailable()) { setCollection({ ...current, ids: localCollections(current.kind).find(group => group.id === current.id)?.ids ?? [] }); return; }
-    const epoch = ++detailEpoch;
-    void request<{ track_ids?: string[] }>(`/api/library/${current.kind}/${encodeURIComponent(current.id)}`)
+    cancelDetail(); const epoch = detailEpoch;
+    const controller = new AbortController(); detailController = controller;
+    void request<{ track_ids?: string[] }>(`/api/library/${current.kind}/${encodeURIComponent(current.id)}`, { signal: controller.signal })
       .then(detail => { if (epoch === detailEpoch) { setCollection({ ...current, ids: detail.track_ids ?? [] }); setDetailError(false); } })
       .catch(() => { if (epoch === detailEpoch) setDetailError(true); });
   }, { defer: true }));
   const selectTab = (next: typeof tab extends () => infer T ? T : never) => {
-    detailEpoch++; setCollection(null); setQuery(''); setDetailError(false); setTab(next);
+    cancelDetail(); setCollection(null); setQuery(''); setDetailError(false); setTab(next);
   };
+  const closeCollection = () => { cancelDetail(); setCollection(null); setDetailError(false); };
+  registerNativeBack(() => {
+    if (collection()) { closeCollection(); return true; }
+    if (query()) { setQuery(''); return true; }
+    if (tab() !== 'songs') { selectTab('songs'); return true; }
+    return false;
+  });
   return <section class={styles.library} data-testid="android-library">
     <p class={styles.notice}>{t('android.browseOnly')}</p>
     <nav aria-label={t('library.title')} class={styles.tabs}>
@@ -83,7 +95,7 @@ export default function LibraryBrowser(props: { initialTab?: 'songs' | 'playlist
         <button type="button" aria-pressed={tab() === item} onClick={() => selectTab(item)}>{item === 'playlists' ? t('playlists.title') : t(`library.${item}`)}</button>
       }</For>
     </nav>
-    <Show when={collection()}>{item => <div class={styles.collectionHeading}><button type="button" onClick={() => { detailEpoch++; setCollection(null); }}>{t('common.back')}</button><h2>{item().title}</h2><Show when={props.onCollectionMenu}><button class={styles.menuTrigger} data-collection-menu aria-label={t('songRow.ariaMore')} onClick={event => props.onCollectionMenu?.(collectionTracks(), item().title, event, { kind: item().kind, id: item().id, bookmark: props.disconnected || onlyAvailable() ? undefined : item().bookmark })}>⋯</button></Show></div>}</Show>
+    <Show when={collection()}>{item => <div class={styles.collectionHeading}><button type="button" onClick={closeCollection}>{t('common.back')}</button><h2>{item().title}</h2><Show when={props.onCollectionMenu}><button class={styles.menuTrigger} data-collection-menu aria-label={t('songRow.ariaMore')} onClick={event => props.onCollectionMenu?.(collectionTracks(), item().title, event, { kind: item().kind, id: item().id, bookmark: props.disconnected || onlyAvailable() ? undefined : item().bookmark })}>⋯</button></Show></div>}</Show>
     <Show when={detailError()}><p role="alert">{t('common.loadFailed')}</p></Show>
     <Show when={collection() || tab() === 'songs' || tab() === 'favourites'} fallback={
       <Show when={tab() === 'playlists'} fallback={

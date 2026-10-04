@@ -18,6 +18,8 @@ import type { User } from '../lib/session';
 import { engine, useEngine, watchEngine } from './engine';
 import NativeDownloads from './Downloads';
 import NativeMigrate from './Migrate';
+import { attachNativeBack } from './back';
+import { registerNativeBack } from './backNavigation';
 import { createMusicAcquisition } from './acquisition';
 import { nativePlayingTrack } from './programIdentity';
 import type { DownloadQueueItem } from '../types/download';
@@ -28,8 +30,8 @@ import CatalogSearch from './CatalogSearch';
 import { nativeProgramTransport, mixedProgram } from './playback';
 import { createProgramRuntime, type ProgramState } from '../lib/program/runtime';
 import ProgramTransport from '../components/ProgramTransport';
-import { openContextMenu, ContextMenuOutlet } from '../lib/contextMenu';
-import { OverlayOutlet } from '../lib/overlay';
+import { openContextMenu, ContextMenuOutlet, dismissContextMenu } from '../lib/contextMenu';
+import { OverlayOutlet, discardOverlays } from '../lib/overlay';
 import { ToastOutlet } from '../lib/toast';
 import { programLibraryMenu } from '../lib/program/libraryMenu';
 import ProgramQueue from '../components/ProgramQueue';
@@ -112,7 +114,7 @@ export default function AndroidStart() {
   let cancelEvents: (() => void) | undefined;
   let controller = new AbortController();
   function reset(stopPlayback = true) {
-    epoch++; syncEpoch++; controller.abort(); controller = new AbortController();
+    epoch++; syncEpoch++; discardOverlays(); dismissContextMenu(); controller.abort(); controller = new AbortController();
     cancelEvents?.(); cancelEvents = undefined;
     if (stopPlayback) {
       const active = program();
@@ -249,7 +251,13 @@ export default function AndroidStart() {
       setBusy(false);
     }
   }
+  registerNativeBack(() => {
+    if (surface() === 'library') return false;
+    setLibraryTab('songs'); setSurface('library'); return true;
+  });
   onMount(() => {
+    const removeBack = attachNativeBack(() => setError(t('common.loadFailed')));
+    onCleanup(removeBack);
     setUnauthorizedHandler(() => { void expireSession(); });
     void engine.state().then(state => {
       generation = state.generation; useEngine(state); void runtime.bind(generation); setOrigin(state.origin); setServer(state.origin);

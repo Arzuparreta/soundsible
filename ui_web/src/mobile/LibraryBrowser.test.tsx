@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { render, fireEvent, cleanup, waitFor } from '@solidjs/testing-library';
 import { setLocale } from '../lib/i18n';
 import LibraryBrowser from './LibraryBrowser';
+import { dispatchNavigationBack } from './backNavigation';
 import type { OfflineState } from './offline';
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('../lib/http', () => ({ request }));
@@ -47,4 +48,30 @@ it('album row and collection menus retain the catalog identity without acquiring
   expect(collectionMenu.mock.calls[0][0]).toEqual([a, b]);
   expect(collectionMenu.mock.calls[0][3].bookmark).toEqual(entityMenu.mock.calls[0][0]);
   expect(request.mock.calls.every(([path]) => typeof path === 'string' && path.startsWith('/api/library/albums'))).toBe(true);
+});
+
+it('system Back leaves a collection before its tab and unregisters on disposal', () => {
+  const view = render(() => <LibraryBrowser snapshot={{ tracks: [a], playlists: { Flight: ['a'] } }} revision={0} disconnected />);
+  fireEvent.click(view.getByText('Playlists')); fireEvent.click(view.getByText('Flight'));
+  expect(dispatchNavigationBack()).toBe(true);
+  expect(view.queryByRole('heading', { name: 'Flight' })).toBeNull();
+  expect(view.getByText('Playlists')).toHaveAttribute('aria-pressed', 'true');
+  expect(dispatchNavigationBack()).toBe(true);
+  expect(view.getByText('Songs')).toHaveAttribute('aria-pressed', 'true');
+  expect(dispatchNavigationBack()).toBe(false);
+  view.unmount(); expect(dispatchNavigationBack()).toBe(false);
+});
+it('system Back cancels an unfinished album and ignores its late detail', async () => {
+  let resolve!: (value: {track_ids: string[]}) => void;
+  request.mockImplementation((path: string) => path === '/api/library/albums'
+    ? Promise.resolve({ albums: [{ id: 'album-one', title: 'Album', album_artist: 'Artist', track_count: 1 }] })
+    : new Promise(done => { resolve = done; }));
+  const view = render(() => <LibraryBrowser snapshot={{ tracks: [a] }} revision={0} />);
+  fireEvent.click(view.getByText('Albums'));
+  await waitFor(() => expect(view.getByText('Album')).toBeTruthy()); fireEvent.click(view.getByText('Album'));
+  const signal = request.mock.calls.find(([path]) => path === '/api/library/albums/album-one')![1].signal as AbortSignal;
+  expect(dispatchNavigationBack()).toBe(true); expect(signal.aborted).toBe(true);
+  resolve({ track_ids: ['a'] }); await Promise.resolve();
+  expect(view.queryByRole('heading', { name: 'Album' })).toBeNull();
+  expect(view.getByText('Songs')).toHaveAttribute('aria-pressed', 'true');
 });

@@ -44,7 +44,8 @@ S2u selector OS y S2v prioridad de sidecar validados; S2w letras adquirido/previ
 usa panel compartido con runtime nativo y pasa HTTP/HTTPS. Faltan biblioteca/
 Discover/Settings completos, DJ, Live, Android Auto, firma y actualización.
 S2x adquisición y S2y importación compartida/selector DocumentsUI HTTP/HTTPS
-validados. S2z navegación Atrás planificada; continuar sin cerrar por slice.
+validados. S2z navegación Atrás validada con conservación de programa/sesión;
+continuar sin cerrar por slice.
 No PR/main/release todavía; mantener gates de alpha completa y continuar.
 
 ## Entrega S0
@@ -1198,3 +1199,32 @@ Principal completa última35+restart2; ahora43 principales esperados+restart2;
 repetir completa y browser4 sobre implementación final. Después completar resto
 biblioteca/Discover/Settings/share/multidispositivo, DJ/Live/Auto, firma/update y
 PR/main/release autorizados. No finalizar por slice.
+
+
+## Entrega S2z: Atrás del sistema y limpieza de navegación
+
+[Contrato](SLICE_2Z.md), [evidencia](evidence/s2z.json). App.backButton prioriza
+menú/modal superior y handlers con owner Solid para detalle/pestaña; en raíz
+minimiza sin tocar audio/sesión. Consulta de detalle Library y feed Podcast
+cancelados al volver; respuestas viejas no reabren vista. Listener tardío tras
+unmount se retira y no minimiza otra instancia. No simular Escape ni DOM buttons.
+
+UI1.438/168 y APK2 HTTP/HTTPS pasan. KeyEvent keyboard/FROM_SYSTEM: colección →
+Playlists → Songs; cerrar menú, editor y letras; show → directorio → Library;
+Downloads → Library; raíz minimiza y volver conserva keys/token/pausa20s/cookie.
+Revocación con menú abierto elimina ventana/datos personales y vacía programa.
+Cookie sólo se compara nativamente, nunca se imprime. APK/test/unit/lint normal
+sin CA temporal pasa. Assets dirty desde8cfd77c.
+
+Corregido registro de overlays huérfano tras desmontar Outlet: discardOverlays
+limpia scopes/listeners de historia sin navegar por debajo; reset de cuenta lo
+usa junto con cierre de popover. Modal protegido consume Back hasta terminar o
+hasta perder cuenta. El primer intento pasó navegación/minimizar, pero el helper
+esperaba app sin servidor al volver; test corregido para app conectada real.
+No aceptación de hardware/gesto predictivo/fabricantes.
+
+Ahora45 tests principales esperados +restart2; repetir principal completa y
+browser4 por limpieza global y extracciones compartidas recientes. Continuar
+acciones restantes de biblioteca (retirar archivo y referencias/programa/copia),
+entidades/Discover/Settings/share/multidispositivo, DJ/Live/Auto y firma/update.
+No cerrar turno por slice ni publicar antes de paridad; PR/main/release después.

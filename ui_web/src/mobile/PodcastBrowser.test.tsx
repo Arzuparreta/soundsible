@@ -3,6 +3,7 @@ import { createSignal } from 'solid-js';
 import { cleanup, fireEvent, render, waitFor } from '@solidjs/testing-library';
 import { setLocale } from '../lib/i18n';
 import PodcastBrowser from './PodcastBrowser';
+import { dispatchNavigationBack } from './backNavigation';
 import type { Track } from '../types/music';
 const mocks = vi.hoisted(() => ({ request: vi.fn(), menu: vi.fn() }));
 vi.mock('../lib/http', () => ({ request: mocks.request }));
@@ -90,4 +91,16 @@ it('refreshes acquired files when an accepted job disappears and reconnects its 
   setDisconnected(true); queue = []; setDisconnected(false);
   await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
   expect(view.queryByText('Downloaded')).toBeNull();
+});
+
+it('system Back cancels the show request before returning to the directory', async () => {
+  const pending = deferred<{episodes: typeof episode[]}>(); mocks.request.mockReturnValue(pending.promise);
+  const view = render(() => <PodcastBrowser generation={1} subscriptions={[show]} acquired={[]} onPlay={vi.fn()} />);
+  fireEvent.click(view.getByText(show.title));
+  const signal = mocks.request.mock.calls[0][1].signal as AbortSignal;
+  expect(dispatchNavigationBack()).toBe(true); expect(signal.aborted).toBe(true);
+  pending.resolve({ episodes: [episode] }); await Promise.resolve();
+  expect(view.queryByText(episode.title)).toBeNull();
+  expect(dispatchNavigationBack()).toBe(false);
+  view.unmount(); expect(dispatchNavigationBack()).toBe(false);
 });

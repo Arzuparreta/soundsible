@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2z native system Back and navigation scope cleanup",
+  "source_revision_at_asset_prepare": "8cfd77c",
+  "dirty_at_asset_prepare": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "tests": 1438,
+      "files": 168,
+      "log": "/tmp/soundsible-s2z-ui.log"
+    },
+    "android": {
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2z-native.log",
+      "scope": "HTTP/verified HTTPS real KeyEvent back: collections/tabs/menu/editor/lyrics/podcasts/Downloads/root minimize and foreground preserves paused20s keys/token/session; revocation clears open private modal and program"
+    },
+    "normal_apk_test_unit_lint": "passed after ephemeral CA removal"
+  },
+  "limits": [
+    "API36 emulator; predictive gesture, OEM and physical hardware acceptance pending.",
+    "Final native/browser regression, remaining parity and release gates pending."
+  ]
+}

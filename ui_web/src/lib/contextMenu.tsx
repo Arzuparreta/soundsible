@@ -14,6 +14,13 @@ function finePointer(): boolean {
 
 const [popover, setPopover] = createSignal<{ opts: ActionMenuOptions; x: number; y: number } | null>(null);
 
+/** Dismiss only the cursor menu; touch sheets belong to the overlay registry. */
+export function dismissContextMenu(): boolean {
+  if (!popover()) return false;
+  setPopover(null);
+  return true;
+}
+
 /**
  * Open a contextual action menu. With a mouse event on a fine pointer (desktop
  * right-click or a ⋯ button), anchors a popover at the cursor; on touch / coarse
@@ -31,6 +38,7 @@ export function openContextMenu(opts: ActionMenuOptions, ev?: MouseEvent): void 
 
 /** Mounted once by the app shell; renders the cursor-anchored popover. */
 export function ContextMenuOutlet() {
+  onCleanup(() => setPopover(null));
   return (
     <Show when={popover()}>
       {(p) => {
