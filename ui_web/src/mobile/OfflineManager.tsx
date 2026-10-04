@@ -31,9 +31,13 @@ export function openOfflineManager(state: () => OfflineState | null, execute: (c
     <Show when={state()?.items.length} fallback={<p>{t('android.offlineEmpty')}</p>}>
       <p>{state()?.items.filter(item => item.state === 'ready').length} / {state()?.items.length} · {t('android.offlineReady')}</p>
       <For each={state()?.items}>{item => <div class={styles.item}><p>{item.track.title} · {item.track.artist}</p>
-        <Show when={item.state === 'queued' || item.state === 'downloading'}><progress aria-label={t('android.offlinePreparing')} max={item.total || undefined} value={item.total ? item.bytes : undefined} /></Show>
+        <Show when={item.state === 'queued' || item.state === 'downloading'}>
+          <Show when={item.total > 0} fallback={<progress aria-label={t('android.offlinePreparing')} />}>
+            <progress aria-label={t('android.offlinePreparing')} max={item.total} value={item.bytes} />
+          </Show>
+        </Show>
         <Show when={item.state === 'ready'}><small>{t('android.offlineAvailable')}</small></Show>
-        <Show when={item.state === 'error'}><p role="status">{t(item.error === 'space' ? 'android.offlineNoSpace' : item.error === 'permission' ? 'android.permissionDenied' : item.error === 'integrity' ? 'android.offlineIntegrity' : 'android.offlineFailed')}</p><button onClick={() => void execute({ action: 'prepare', tracks: [item.track], playlists: state()?.playlists ?? {} })}>{t('common.retry')}</button></Show>
+        <Show when={item.state === 'error'}><p role="status">{t(item.error === 'storage' ? 'android.offlineRemovalFailed' : item.error === 'space' ? 'android.offlineNoSpace' : item.error === 'permission' ? 'android.permissionDenied' : item.error === 'integrity' ? 'android.offlineIntegrity' : 'android.offlineFailed')}</p><Show when={item.error !== 'storage'}><button onClick={() => void execute({ action: 'prepare', tracks: [item.track], playlists: state()?.playlists ?? {} })}>{t('common.retry')}</button></Show></Show>
         <button onClick={() => void execute({ action: 'remove', ids: [item.track.id] })}>{t(item.state === 'queued' || item.state === 'downloading' ? 'android.offlineCancel' : 'android.offlineRemove')}</button>
       </div>}</For>
     </Show>

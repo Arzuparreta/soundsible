@@ -9,7 +9,7 @@ export function createMusicAcquisition(identity: () => number, ready: () => bool
   library: () => Track[], jobs: () => DownloadQueueItem[], refresh: () => Promise<void>) {
   const pending = new Map<string, Promise<void>>();
   const acquired = (id: string) => library().some(row => row.source !== 'preview' && !isPodcastTrack(row) && (row.id === id || row.youtube_id === id));
-  const active = (id: string) => jobs().some(row => row.video_id === id && row.status !== 'failed' && row.status !== 'interrupted');
+  const active = (id: string) => jobs().some(row => row.video_id === id && (row.status === 'pending' || row.status === 'downloading'));
   function add(track: Track): Promise<void> {
     if (!ready() || track.source !== 'preview' || isPodcastTrack(track) || !/^[A-Za-z0-9_-]{11}$/.test(track.id)) return Promise.reject(new Error('Unsupported acquisition'));
     if (acquired(track.id) || active(track.id)) return Promise.resolve();

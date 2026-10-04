@@ -1,61 +1,61 @@
 # S2aa: eliminar un archivo adquirido desde Android
 
-Plan de continuación después de cerrar la regresión de S2z. Todavía no
-implementado ni validado; no cuenta como paridad ni como gate de publicación.
+Implementación conectada al menú de tres puntos, con confirmación y traducciones
+compartidas. Cancelar no escribe. El controlador coalesce por cuenta/ID y exige
+DELETE seguido de un snapshot privado no-store que pruebe ausencia. Un 404 sólo
+permite recuperar una retirada anterior tras comprobar de nuevo esa ausencia.
+Las respuestas de otra cuenta no modifican UI, programa ni copias.
 
-Añadir la acción existente «Eliminar archivo» sólo al menú de tres puntos de una
-canción adquirida. Compartir las traducciones y confirmación de la UI actual.
-Cancelar la confirmación no hace ninguna petición. Una cuenta desconectada o
-sin permiso no ofrece una escritura ejecutable. Capturar el scope de cuenta;
-ninguna respuesta antigua puede modificar la cuenta siguiente.
+`retireSource` valida UID/generación y retira todas las ocurrencias locales por
+ID, conservando previews, keys de supervivientes e identidad del programa.
+Media3 conserva posición/pausa cuando la actual sobrevive, selecciona sucesor
+cuando se retira la actual y cierra modos/programa cuando queda vacío. El bridge
+espera a observar la retirada efectiva. Radio/autoplay invalidan solicitudes
+pendientes y excluyen fuentes locales retiradas; la aceptación específica de una
+respuesta de planner deliberadamente retrasada sigue pendiente.
 
-Usar DELETE /api/library/tracks/<id> y comprobar un snapshot privado posterior
-que ya no contiene ese archivo. No borrar optimistamente la fila. El motor
-conserva sus reglas de ownership y referencias del pool compartido. Un fallo de
-API conserva biblioteca, programa y copia; no mostrar éxito antes de confirmar.
+La copia se retira después de confirmar el motor. El store marca el trabajo
+invalidado antes de borrar archivos, limpia todas las referencias de playlists y
+conserva errores de almacenamiento para recuperación. No se anuncia éxito si
+falla el filesystem. El gestor muestra el error de retirada y permite repetir
+«Eliminar de este dispositivo», sin ofrecer preparación sobre un residuo roto.
+Las copias borradas remotamente siguen conservándose y son elegibles para
+retirada desde el filtro local; no se añade eviction automático.
 
-Retirar todas las ocurrencias nativas cuyo source sea local y cuyo ID sea el
-archivo eliminado. No retirar previews aunque su identidad musical resuelva a
-la misma canción. Hacer la mutación en el looper del servicio, validando epoch y
-UID. La retirada por ID es global a la cuenta y no depende de un orden que pueda
-cambiar con un refill; las ediciones por ocurrencia mantienen token/key. No
-reconstruir toda la cola desde JavaScript. Conservar keys de
-las ocurrencias restantes, posición y intención de reproducción si no se borra
-la actual. Si se elimina la actual, comprobar la selección siguiente y la
-intención de pausa/play. Si no quedan filas, cerrar el programa y sus modos.
-Observar el estado efectivo del MediaController antes de resolver el bridge.
+La adquisición considera activos sólo pending/downloading: un recibo completado
+no bloquea volver a adquirir una canción retirada. Los guards de cuenta y
+confirmación durable siguen vigentes.
 
-Revisar las respuestas pendientes de Radio/autoplay para impedir que una
-planificación antigua reintroduzca el archivo retirado. La navegación y los
-previews restantes siguen disponibles. Retirar también la copia offline y sus
-referencias a playlists tras confirmar la eliminación privada; un fallo local
-debe quedar visible y ser recuperable, nunca ocultarse como éxito completo.
+[Registro de evidencia](evidence/s2aa.json).
 
-Aceptación: tests de control de cuenta, confirmación/cancelación, fallo HTTP y
-snapshot no confirmado; pruebas nativas HTTP y HTTPS con motor real, archivo
-adquirido por el pipeline y copia offline. Cola con preview actual pausado a
-20 s y varias referencias locales: eliminar el adquirido conserva preview,
-key, posición y pausa, elimina todas las referencias locales y la copia.
-Eliminar la actual prueba sucesor; eliminar la última prueba cierre. Comprobar
-que otra cuenta mantiene sus archivos y que no aparece audio HTML. Validar los
-modos pendientes afectados con pruebas específicas, sin afirmar aceptación de
-hardware. Preparar assets antes de instrumentación, retirar la CA temporal,
-validar APK/unit/lint normal y guardar evidencia del commit preparado.
+## Evidencia y límites
 
-Después: continuar Library/Discover/Settings completos, DJ, Live, Android Auto,
-firma y actualización. Sólo con todos los gates completos: PR, main y alpha.
+UI completa: 1.465 tests / 172 archivos pasan en
+`/tmp/soundsible-s2aa-final-ui.log`. Backend lifecycle: 12 pasan en
+`/tmp/soundsible-s2aa-lifecycle.log`. JVM nativo: 17 pasan en
+`/tmp/soundsible-s2aa-native-unit.log`, incluidos rangos de retirada y filesystem
+real con eliminación fallida/recuperación. El helper integration ahora ejecuta
+`:app:testDebugUnitTest` además de APK/test APK/lint tras retirar la CA temporal;
+ensamblar el APK de instrumentación no sustituye ejecutar los tests JVM.
 
-Primer controlador preparado (todavía sin acción de menú ni bridge de retirada):
-fileDeletion.ts confirma DELETE y GET privado no-store antes de limpiar programa
-y copia. Una respuesta 404 permite reintentar cleanup de una eliminación anterior
-sólo si el snapshot vuelve a probar ausencia. Coalescing por cuenta/ID; un fallo
-local refresca la eliminación del motor, pero no devuelve éxito. Diez pruebas
-cubren confirmación, rechazo, aislamiento y cambios de cuenta en cada fase.
-La acción de menú está preparada con confirmDialog/traducciones/toast compartidos:
-cancelar no escribe, cambio de cuenta invalida confirmación, sólo cleanup completo
-anuncia éxito. Sus cuatro pruebas pasan. Todavía no está conectada a AndroidStart
-porque falta retirar referencias en el servicio. UI completa pasa 1.454
-tests/171 archivos (/tmp/soundsible-s2aa-scaffold-ui.log).
-Lifecycle del motor: 12 pruebas pasan,
-incluido pool compartido, rollback y recuperación de borrado físico. No cuenta
-todavía como aceptación del slice; falta implementación/validación end to end.
+Cuatro casos instrumentados HTTP/HTTPS pasan en
+`/tmp/soundsible-s2aa-recovery-native.log`: pipeline real de adquisición, archivo
+compartido entre cuentas, playlist con referencias duplicadas, cancelación,
+preview pausado a 20 s conservado, sucesor, cierre de última canción, copia y
+filesystem fallido/recuperable. Assets preparados desde 5ddc166 con dirty=true.
+APK/test APK/lint normales pasan después de retirar la CA temporal.
+
+La extensión de copia borrada por otro cliente pasó HTTP/HTTPS en
+`/tmp/soundsible-s2aa-final-native.log`, pero el conjunto falló dos casos de
+apertura del gestor. El aislamiento posterior identifica TypeError de WebView:
+progress.value=undefined no es un double finito; HTTP falla y HTTPS pasa según
+el momento en que llega el tamaño. Log `/tmp/soundsible-s2aa-manager-diagnostic.log`.
+Ahora el tamaño desconocido renderiza progress sin value/max, y el conocido usa
+números. Una prueba con el setter estricto falla con la fuente anterior y pasa
+con la corrección (`/tmp/soundsible-s2aa-progress-before.log`). La repetición de
+los cuatro casos está en `/tmp/soundsible-s2aa-progress-native.log`, assets desde
+37d1669 dirty=true: cuatro casos pasan, cero fallos/errores/omisiones.
+APK normal, test APK, JVM17 y lint pasan después de retirar la CA temporal. Repetir principal completa
+más dos fases offline desde commit limpio. Ningún resultado acredita escucha
+física ni paridad completa. Después continuar Library/Discover/Settings, DJ,
+Live, Android Auto, firma y actualización; PR/main/alpha sólo al cerrar gates.

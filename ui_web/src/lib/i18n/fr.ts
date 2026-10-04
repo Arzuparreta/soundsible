@@ -15,6 +15,7 @@ export const fr: Dict = {
     offlineNoSpace: "Espace insuffisant. Retirez des copies ou augmentez la limite.",
     offlineIntegrity: "La copie est incomplète ou endommagée. Préparez-la à nouveau.",
     offlineFailed: "La préparation a échoué. Réessayez avec une connexion.",
+    offlineRemovalFailed: "Impossible de supprimer la copie. Réessayez.",
 
     previewPreparing: 'Préparation du morceau',
     previewRetry: 'En attente de réessayer le morceau',

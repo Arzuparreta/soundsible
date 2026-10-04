@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2aa confirmed acquired-source deletion and recoverable offline removal",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "37d166970110cb0de346e6faf8557737184a81c1",
+  "dirty_at_asset_prepare": true,
+  "checks": {
+    "ui": {
+      "tests": 1465,
+      "files": 172,
+      "log": "/tmp/soundsible-s2aa-final-ui.log"
+    },
+    "native_jvm": {
+      "tests": 17,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2aa-native-unit.log"
+    },
+    "engine_lifecycle": {
+      "tests": 12,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2aa-lifecycle.log"
+    },
+    "base_android": {
+      "tests": 4,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2aa-recovery-native.log",
+      "source_revision_at_asset_prepare": "5ddc166",
+      "dirty_at_asset_prepare": true
+    },
+    "extended_first_android": {
+      "tests": 4,
+      "failures": 2,
+      "log": "/tmp/soundsible-s2aa-final-native.log",
+      "scope": "HTTP/TLS remote-deleted device copies pass; manager rendering fails",
+      "archive": "android/build/integration-failed/s2aa-37d1669"
+    },
+    "isolated_manager_diagnostic": {
+      "tests": 2,
+      "failures": 1,
+      "log": "/tmp/soundsible-s2aa-manager-diagnostic.log",
+      "cause": "undefined progress value throws in Android WebView before size is known"
+    },
+    "previous_source_progress_regression": {
+      "failed": 1,
+      "log": "/tmp/soundsible-s2aa-progress-before.log"
+    },
+    "final_android": {
+      "status": "passed",
+      "log": "/tmp/soundsible-s2aa-progress-native.log",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "scope": "HTTP/TLS file deletion, remote deletion preserves removable device copy, duplicate playlist/source references, preview20s and surviving keys/program, successor and closure, filesystem failure/recovery, no HTML audio"
+    },
+    "normal_apk_test_apk_jvm_lint": {
+      "status": "passed after temporary CA removal",
+      "jvm_tests": 17,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2aa-progress-native.log"
+    }
+  },
+  "limits": [
+    "API36 emulator only; no acoustic or hardware acceptance.",
+    "Delayed real planner response acceptance pending.",
+    "Full clean-source main suite and persistent offline restart pending.",
+    "Phone, DJ, Live, Android Auto, signing/update/release parity incomplete."
+  ]
+}

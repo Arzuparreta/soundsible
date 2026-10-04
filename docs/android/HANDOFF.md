@@ -1239,3 +1239,23 @@ browser4 por limpieza global y extracciones compartidas recientes. Continuar
 acciones restantes de biblioteca (retirar archivo y referencias/programa/copia),
 entidades/Discover/Settings/share/multidispositivo, DJ/Live/Auto y firma/update.
 No cerrar turno por slice ni publicar antes de paridad; PR/main/release después.
+
+## Continuación S2aa: eliminación y filesystem recuperable
+
+Implementación conectada y aceptación base en [SLICE_2AA](SLICE_2AA.md).
+UI completa 1.465/172 pasa; JVM explícito17 y backend lifecycle12 pasan. Cuatro
+casos nativos HTTP/HTTPS base pasan: retirada duplicada local con preview/keys/
+pausa20s preservados, referencias de playlist, pool de otro owner, sucesor,
+cierre de última fuente y error filesystem con recuperación desde gestor.
+Extensión de copia borrada por otro cliente validada HTTP/HTTPS: conjunto final4
+pasa en /tmp/soundsible-s2aa-progress-native.log, APK/test APK/JVM17/lint pasan sin
+CA temporal. Assets37d1669 dirty=true. Corregido progress.value=undefined que
+abortaba render de gestor en WebView mientras no había tamaño conocido; prueba
+estricta reproduce fallo anterior. No purgar automáticamente copias por membership remoto.
+
+Corrección de evidencia: las ejecuciones antiguas que sólo ensamblaban APK de
+tests y generaban lint unit models no acreditan ejecución JVM. La ejecución
+explícita17 sí; el helper ahora añade testDebugUnitTest al cierre normal sin CA.
+Preparar commit limpio y repetir principal ampliada49 + dos fases offline;
+no sustituir el verde histórico35 por XML antiguo ni por targeted4. Continuar
+sin cerrar por slice hasta paridad completa y PR/main/release autorizados.

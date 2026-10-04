@@ -15,6 +15,7 @@ export const zh: Dict = {
     offlineNoSpace: "空间不足。请移除副本或提高上限。",
     offlineIntegrity: "副本不完整或已损坏。请重新准备。",
     offlineFailed: "准备失败。连接后重试。",
+    offlineRemovalFailed: "无法删除副本。请重试。",
 
     previewPreparing: '正在准备歌曲',
     previewRetry: '等待重试歌曲',

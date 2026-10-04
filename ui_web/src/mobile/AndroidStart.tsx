@@ -21,6 +21,9 @@ import NativeMigrate from './Migrate';
 import { attachNativeBack } from './back';
 import { registerNativeBack } from './backNavigation';
 import { createMusicAcquisition } from './acquisition';
+import { createNativeFileDeletion } from './fileDeletion';
+import { nativeFileDeletionAction } from './fileDeletionMenu';
+import { retireNativeSource } from './sourceRetirement';
 import { nativePlayingTrack } from './programIdentity';
 import type { DownloadQueueItem } from '../types/download';
 import LibraryBrowser, { type BrowseSnapshot } from './LibraryBrowser';
@@ -98,7 +101,12 @@ export default function AndroidStart() {
         if (JSON.stringify(result) !== JSON.stringify(offlineState())) setOfflineState(result);
         if (lostProfile) await expireSession();
       }
-    } catch { if (current === epoch) setError(t('android.offlineFailed')); }
+    } catch {
+      if (current === epoch) {
+        await restoreOffline().catch(() => {});
+        if (current === epoch) setError(t(command.action === 'remove' ? 'android.offlineRemovalFailed' : 'android.offlineFailed'));
+      }
+    }
   }
   async function restoreOffline() {
     const current = epoch;
@@ -138,6 +146,22 @@ export default function AndroidStart() {
   }
   const sync = createAccountRefresh(syncOnce, () => epoch, () => !!user());
   const acquisition = createMusicAcquisition(() => epoch, () => !!user() && !stale(), () => controller.signal, () => snapshot()?.tracks ?? [], downloadItems, sync);
+  const fileDeletion = createNativeFileDeletion(() => epoch, () => !!user() && !stale(), () => controller.signal,
+    () => [...(snapshot()?.tracks ?? []), ...(offlineState()?.user?.id === user()?.id ? offlineState()?.items.map(item => item.track) ?? [] : [])], async id => {
+      const owner = epoch;
+      await retireNativeSource(nativeProgramTransport, id, generation, () => epoch === owner && !!user());
+    }, async id => {
+      const owner = epoch, account = generation;
+      try {
+        const state = await offline.command({ action: 'remove', ids: [id], generation: account });
+        if (owner !== epoch) return;
+        setOfflineState(state);
+        if (state.items.some(item => item.track.id === id)) throw new Error('Offline copy retirement not confirmed');
+      } catch (failure) {
+        if (owner === epoch) await restoreOffline().catch(() => {});
+        throw failure;
+      }
+    }, sync);
   const isActive = (track: Track) => nativePlayingTrack(program(), snapshot()?.tracks ?? [], track);
   async function syncOnce() {
     if (!user()) return;
@@ -324,6 +348,7 @@ export default function AndroidStart() {
                 if (current()) openNativeMetadataEditor(track, current, sync, id => snapshot()?.tracks.find(row => row.id === id), saved => runtime.execute({ action: 'metadata', tracks: [{ id: saved.id, title: saved.title, artist: saved.artist, album: saved.album ?? '', album_artist: saved.album_artist ?? null, album_id: saved.album_id ?? null, artist_id: saved.artist_id ?? null }] }));
               } }] : []),
               ...(context ? nativePlaylistOccurrenceActions(context.playlist, context.index, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []),
+              ...(track.source !== 'preview' && !isPodcastTrack(track) ? [nativeFileDeletionAction(track, fileDeletion, current)] : []),
               ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event);
           }} />
           </Show></>}

@@ -71,6 +71,7 @@ class OfflineStore private constructor(private val context: Context) {
                 val complete = cursor.getString(2) == "ready" && local(id,epoch) != null
                 val status = if (complete) "ready" else if (cursor.getString(2) == "ready") "error" else cursor.getString(2)
                 if (status == "ready") used += cursor.getLong(4)
+                else if (cursor.getString(5) == "storage") used += OfflineFileRemoval.retainedBytes(file(id), part(id))
                 items.put(JSONObject().put("track", JSONObject(cursor.getString(1))).put("state", status).put("bytes", cursor.getLong(3)).put("total", cursor.getLong(4)).put("error", if (status == "error" && cursor.getString(2) == "ready") "integrity" else cursor.getString(5)))
             }
         }
@@ -128,10 +129,33 @@ class OfflineStore private constructor(private val context: Context) {
     @Synchronized fun limit(epoch: Long, bytes: Long) { requireProfile(epoch); require(bytes in setOf(512L * 1024 * 1024, 2L * 1024 * 1024 * 1024, 8L * 1024 * 1024 * 1024)); prefs.edit().putLong("limit", bytes).apply() }
     @Synchronized fun remove(epoch: Long, ids: JSONArray) {
         requireProfile(epoch)
-        for (i in 0 until ids.length()) {
-            val id = ids.getString(i); active?.takeIf { it.first == id }?.second?.cancel()
-            database.delete("copies", "id=?", arrayOf(id)); file(id).delete(); part(id).delete(); verified.remove(id)
+        require(ids.length() <= 1000)
+        val sources = (0 until ids.length()).map { ids.getString(it).also { id -> require(id.isNotBlank() && id.length <= 512) } }.toSet()
+        var failed = false
+        for (id in sources) {
+            active?.takeIf { it.first == id }?.second?.cancel()
+            verified.remove(id)
+            // Retire the download ticket and availability before touching files.
+            // If deletion fails, retain an error row so removal can be retried.
+            database.update("copies", ContentValues().apply {
+                put("state", "error"); put("error", "storage"); put("ticket", java.util.UUID.randomUUID().toString()); put("bytes", OfflineFileRemoval.retainedBytes(file(id), part(id)))
+            }, "id=?", arrayOf(id))
+            try {
+                OfflineFileRemoval.remove(file(id), part(id))
+                database.delete("copies", "id=?", arrayOf(id))
+            } catch (_: java.io.IOException) {
+                failed = true
+                database.update("copies", ContentValues().apply { put("bytes", OfflineFileRemoval.retainedBytes(file(id), part(id))) }, "id=?", arrayOf(id))
+            }
         }
+        val playlists = JSONObject(prefs.getString("playlists", "{}") ?: "{}")
+        for (name in playlists.keys().asSequence().toList()) {
+            val rows = playlists.getJSONArray(name); val retained = JSONArray()
+            for (index in 0 until rows.length()) if (rows.getString(index) !in sources) retained.put(rows.getString(index))
+            playlists.put(name, retained)
+        }
+        prefs.edit().putString("playlists", playlists.toString()).apply()
+        if (failed) throw java.io.IOException("storage")
     }
     @Synchronized fun interrupt() {
         revision++; active?.second?.cancel(); active = null
@@ -163,7 +187,10 @@ class OfflineStore private constructor(private val context: Context) {
                 val body = response.body ?: error("integrity"); val total = body.contentLength(); require(total > 0) { "integrity" }
                 synchronized(this) {
                     require(valid(id,ticket,epoch,rev))
-                    val used = database.rawQuery("SELECT COALESCE(SUM(total),0) FROM copies WHERE state='ready'", null).use { it.moveToFirst(); it.getLong(0) }
+                    var used = database.rawQuery("SELECT COALESCE(SUM(total),0) FROM copies WHERE state='ready'", null).use { it.moveToFirst(); it.getLong(0) }
+                    database.rawQuery("SELECT id FROM copies WHERE state='error' AND error='storage'", null).use { retained ->
+                        while (retained.moveToNext()) { val source = retained.getString(0); used += OfflineFileRemoval.retainedBytes(file(source), part(source)) }
+                    }
                     require(total <= prefs.getLong("limit", 2L * 1024 * 1024 * 1024) - used && total + 16L * 1024 * 1024 < directory.usableSpace) { "space" }
                     database.execSQL("UPDATE copies SET total=? WHERE id=? AND ticket=?", arrayOf<Any>(total,id,ticket))
                 }

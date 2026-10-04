@@ -266,7 +266,7 @@ def integration(*, restart_only: bool = False) -> None:
                 certificate_resource.unlink(missing_ok=True)
                 policy_resource.unlink(missing_ok=True)
     # The distributed development APK is rebuilt without temporary test trust.
-    gradle(":app:assembleDebug", ":app:assembleDebugAndroidTest", ":app:lintDebug")
+    gradle(":app:assembleDebug", ":app:assembleDebugAndroidTest", ":app:testDebugUnitTest", ":app:lintDebug")
 
 
 def main() -> int:

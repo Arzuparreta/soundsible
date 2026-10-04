@@ -59,6 +59,23 @@ class PlaybackService : MediaLibraryService() {
         // Media3 removes the notification/foreground when its timeline is empty.
         triggerNotificationUpdate()
     }
+    private fun retireSource(args: Bundle) {
+        require(args.getLong("generation", -1) == connection.generation)
+        val id = args.getString("id") ?: error("NO_SOURCE")
+        val rows = (0 until player.mediaItemCount).map { index ->
+            val item = player.getMediaItemAt(index)
+            SourceRetirement.Reference(item.mediaId, item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) ?: "")
+        }
+        val ranges = SourceRetirement.ranges(rows, id)
+        val keys = ranges.flatMap { range -> range.map { ProgramQueue.key(player, it) } }
+        savePodcast(); radio.retire(id); autoplay.retire(id)
+        if (ranges.sumOf { it.count() } == player.mediaItemCount) closeProgram()
+        else {
+            ranges.forEach { player.removeMediaItems(it.first, it.last + 1) }
+            keys.forEach(::cancelAudio)
+            previews.sync(); radio.sync(); autoplay.sync()
+        }
+    }
     override fun onCreate() {
         super.onCreate()
         connection = EngineConnection.shared(this)
@@ -168,6 +185,8 @@ class PlaybackService : MediaLibraryService() {
                         player.setMediaItems(items, index, podcasts.position(items[index])); player.prepare(); player.play()
                     } else if (args.getString("action") == "metadata") {
                         ProgramMetadata.apply(player, connection, args, artwork::clear)
+                    } else if (args.getString("action") == "retireSource") {
+                        retireSource(args)
                     } else if (args.getString("action") == "autoplay") {
                         require(args.getLong("generation", -1) == connection.generation)
                         autoplay.settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))

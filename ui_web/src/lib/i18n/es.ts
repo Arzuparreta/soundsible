@@ -15,6 +15,7 @@ export const es: Dict = {
     offlineNoSpace: "No hay espacio suficiente. Quita copias o aumenta el límite.",
     offlineIntegrity: "La copia está incompleta o dañada. Prepárala otra vez.",
     offlineFailed: "No se pudo preparar. Reintenta cuando haya conexión.",
+    offlineRemovalFailed: "No se pudo eliminar la copia. Inténtalo de nuevo.",
 
     previewPreparing: 'Preparando canción',
     previewRetry: 'Esperando para reintentar la canción',

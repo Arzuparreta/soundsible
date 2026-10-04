@@ -60,3 +60,9 @@ Separar lógica, empaquetado, integración y escucha. No reutilizar el verde de
 WebKit como evidencia Android ni el verde Android como aceptación acústica.
 Repetir sólo las capas afectadas al cambiar un contrato y mantener los gates
 completos exigidos por AGENTS para cambios compartidos.
+
+S2aa añade retirada confirmada de adquirido y referencias locales/copias; copia
+borrada por otro cliente permanece retirable. Cuatro casos HTTP/HTTPS y gestor
+filesystem recuperable validados. Ver [evidencia](evidence/s2aa.json). El planner
+deliberadamente retrasado, paridad restante y regresión principal ampliada siguen
+pendientes; no equivale a alpha.

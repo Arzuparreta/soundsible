@@ -298,3 +298,18 @@ Scope de vista abortable e irrevocable, poll coalescido y revisión de mutacione
 protegen cuenta/progreso. La dirección para continuar en ordenador es el origen
 real del motor, nunca localhost del paquete. Ver SLICE_2Y y HANDOFF para evidencia
 local y límites: no afirmar exports reales/cloud ni paridad completa por CSV.
+
+### Retirada confirmada y recuperación local (S2aa)
+
+DELETE + snapshot privado sin archivo preceden `retireSource` y retirada offline.
+El comando global por fuente exige UID/generación; no usa un orden efímero de
+cola. Rangos locales inversos preservan keys/identidad del programa y previews.
+Radio/autoplay cancelan plan pendiente y excluyen IDs locales retirados. El
+bridge resuelve sólo tras observar ausencia; vacío exige cierre del programa.
+
+Offline invalida ticket y marca error recuperable antes del filesystem. Fallos
+conservan fila/bytes retenidos para quota y muestran retirada fallida, con
+recuperación desde el gestor. Una copia cuyo archivo se retiró desde otro cliente
+no se purga automáticamente: metadata local del mismo perfil permite cleanup
+confirmado por GET incluso si DELETE devuelve 404. Ver SLICE_2AA para evidencia
+y límites; la respuesta de planner deliberadamente retrasada sigue pendiente.

@@ -78,6 +78,7 @@ class AutoplayProgram(private val connection: EngineConnection, private val play
         }
     }
     fun suspend() { if (runway.active()) runway.stop() }
+    fun retire(id: String) { runway.retire(id) }
     fun manualInsertion(): Int? = runway.manualInsertion()
     fun clear() {
         serial++; requestId?.let(connection::cancel); requestId = null

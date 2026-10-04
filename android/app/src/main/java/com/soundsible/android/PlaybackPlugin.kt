@@ -77,13 +77,14 @@ class PlaybackPlugin : Plugin() {
             require((call.getInt("generation")?.toLong() ?: -1L) == connection.generation)
             val p = controller ?: error("NOT_READY")
             when (call.getString("action")) {
-                "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay", "metadata" -> {
+                "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay", "metadata", "retireSource" -> {
                     val args = Bundle().apply {
                         if (call.getString("action") == "metadata") putString("metadataRevision", java.util.UUID.randomUUID().toString())
                         putBoolean("reload", call.getBoolean("reload") ?: false); putBoolean("enabled", call.getBoolean("enabled") ?: false); putString("profile", call.getString("profile"))
                         putInt("seconds", call.getInt("seconds") ?: 0)
                         putLong("generation", connection.generation)
                         putString("programToken", call.getString("programToken"))
+                        putString("id", call.getString("id"))
                         putString("action", call.getString("action")); putString("queueToken", if (call.getString("action") in listOf("play", "queue")) ProgramQueue.token(p) else call.getString("queueToken")); putString("key", if (call.getString("action") == "play" && p.mediaItemCount > 0) ProgramQueue.key(p, p.currentMediaItemIndex) else call.getString("key"))
                         putString("tracks", call.getArray("tracks")?.toString())
                         putInt("index", if (call.getString("action") == "play") p.currentMediaItemIndex else call.getInt("index") ?: if (call.getString("action") == "queue") 0 else -1); putInt("toIndex", call.getInt("toIndex") ?: -1)
@@ -93,6 +94,7 @@ class PlaybackPlugin : Plugin() {
                         try {
                             require(alive && args.getLong("generation") == connection.generation && result.get().resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS)
                             if (args.getString("action") == "stop") awaitClosed(call, p, connection, args.getLong("generation"), android.os.SystemClock.elapsedRealtime() + 3000)
+                            else if (args.getString("action") == "retireSource") awaitRetired(call, p, connection, args, android.os.SystemClock.elapsedRealtime() + 3000)
                             else if (args.getString("action") == "metadata") awaitMetadata(call, p, connection, args, android.os.SystemClock.elapsedRealtime() + 3000)
                             else if (args.getString("action") == "queue") awaitQueue(call, p, connection, args, android.os.SystemClock.elapsedRealtime() + 3000)
                             else call.resolve(snapshot())
@@ -131,6 +133,17 @@ class PlaybackPlugin : Plugin() {
         if (observed) call.resolve(snapshot())
         else if (android.os.SystemClock.elapsedRealtime() >= deadline) call.reject("Metadata not observed", "PLAYBACK_COMMAND")
         else main.postDelayed({ awaitMetadata(call, player, connection, args, deadline) }, 25)
+    }
+    private fun awaitRetired(call: PluginCall, player: MediaController, connection: EngineConnection, args: Bundle, deadline: Long) {
+        if (!alive || controller !== player || connection.generation != args.getLong("generation")) { call.reject("Session changed", "PLAYBACK_COMMAND"); return }
+        if (player.mediaItemCount == 0) { awaitClosed(call, player, connection, args.getLong("generation"), deadline); return }
+        val present = (0 until player.mediaItemCount).any { index ->
+            val item = player.getMediaItemAt(index)
+            item.mediaId == args.getString("id") && item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "local"
+        }
+        if (!present) call.resolve(snapshot())
+        else if (android.os.SystemClock.elapsedRealtime() >= deadline) call.reject("Source retirement was not observed", "PLAYBACK_COMMAND")
+        else main.postDelayed({ awaitRetired(call, player, connection, args, deadline) }, 20)
     }
     private fun awaitQueue(call: PluginCall, player: MediaController, connection: EngineConnection, args: Bundle, deadline: Long) {
         if (!alive || controller !== player || connection.generation != args.getLong("generation")) { call.reject("Session changed", "PLAYBACK_COMMAND"); return }

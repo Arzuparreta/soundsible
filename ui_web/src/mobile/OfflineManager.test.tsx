@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { render, fireEvent, cleanup, screen } from '@solidjs/testing-library';
-import { offlineActions } from './OfflineManager';
+import { offlineActions, openOfflineManager } from './OfflineManager';
 import { openContextMenu, ContextMenuOutlet } from '../lib/contextMenu';
 import { OverlayOutlet } from '../lib/overlay';
 import { ActionMenuList } from '../components/ActionMenu';
@@ -33,4 +33,35 @@ it('selection executes after the actual overlay closes', () => {
   openContextMenu({ title: 'Playlist', actions: offlineActions([track], () => state, execute, () => 1) });
   fireEvent.click(screen.getByText('Available offline'));
   expect(execute).toHaveBeenCalledTimes(1);
+});
+it('opens the manager from a library action sheet after disposing that sheet', async () => {
+  render(() => <><OverlayOutlet /><ContextMenuOutlet /></>);
+  openContextMenu({ title: 'Library', actions: [{ label: 'Manage offline music', onSelect: () => openOfflineManager(() => state, vi.fn()) }] });
+  fireEvent.click(screen.getByRole('button', { name: 'Manage offline music' }));
+  await Promise.resolve();
+  expect(screen.getByTestId('android-offline-manager')).toBeTruthy();
+});
+it('a failed removal keeps a removal action without retrying preparation of the retired source', () => {
+  const execute = vi.fn(async () => {});
+  const failed: OfflineState = { ...state, items: [{ track, state: 'error', bytes: 100, total: 100, error: 'storage' }] };
+  render(() => <OverlayOutlet />);
+  openOfflineManager(() => failed, execute);
+  expect(screen.getByText('Could not remove the copy. Try again.')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove from this device' }));
+  expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'remove', ids: ['one'] });
+});
+it('renders unknown-length preparation without assigning a non-finite native progress value', () => {
+  const setter = Object.getOwnPropertyDescriptor(HTMLProgressElement.prototype, 'value')!.set!;
+  const values: number[] = [];
+  const guard = vi.spyOn(HTMLProgressElement.prototype, 'value', 'set').mockImplementation(function (this: HTMLProgressElement, value: number) {
+    if (!Number.isFinite(Number(value))) throw new TypeError('Non-finite progress value');
+    values.push(value); setter.call(this, value);
+  });
+  try {
+    render(() => <OverlayOutlet />);
+    openOfflineManager(() => ({ ...state, items: [{ track, state: 'queued', bytes: 0, total: 0, error: '' }] }), vi.fn());
+    expect(screen.getByRole('progressbar').hasAttribute('value')).toBe(false);
+    expect(values).toEqual([]);
+  } finally { guard.mockRestore(); }
 });

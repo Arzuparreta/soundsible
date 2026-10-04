@@ -5,6 +5,16 @@ import type { Track } from '../types/music';
 vi.mock('../lib/http', () => ({ request: vi.fn() }));
 const track: Track = { id: 'B1111111111', title: 'Song', artist: 'Artist', source: 'preview', originKeys: ['deezer:12'] };
 beforeEach(() => vi.resetAllMocks());
+it('allows acquisition after file deletion even while its completed receipt is visible', async () => {
+  vi.mocked(request).mockResolvedValue({ status: 'queued', accepted: [{ index: 0, id: 'replacement' }], rejected: [] });
+  const refresh = vi.fn(async () => {});
+  const acquisition = createMusicAcquisition(() => 1, () => true, () => new AbortController().signal, () => [],
+    () => [{ id: 'completed', status: 'completed', video_id: track.id }], refresh);
+  expect(acquisition.busy(track.id)).toBe(false);
+  await acquisition.add(track);
+  expect(request).toHaveBeenCalledOnce();
+  expect(refresh).toHaveBeenCalledOnce();
+});
 it('coalesces acquisition intent and carries exact song aliases without creating playback', async () => {
   let reply!: (value: unknown) => void;
   vi.mocked(request).mockImplementation(() => new Promise(resolve => { reply = resolve; }));

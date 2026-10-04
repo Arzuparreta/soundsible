@@ -19,6 +19,7 @@ export type ProgramCommand =
   | { action: 'metadata'; tracks: { id: string; title: string; artist: string; album: string; album_artist?: string | null; album_id?: string | null; artist_id?: string | null }[] }
   | { action: 'autoplay'; enabled: boolean; reload?: boolean }
   | { action: 'stop'; queueToken: string; programToken?: string }
+  | { action: 'retireSource'; id: string }
   | { action: 'seek'; positionMs: number }
   | { action: 'skip'; seconds: -15 | 15; index: number; key: string; queueToken: string }
   | { action: 'shuffle'; enabled: boolean }

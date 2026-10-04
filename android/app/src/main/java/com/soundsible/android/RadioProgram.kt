@@ -28,6 +28,7 @@ class RadioProgram(private val connection: EngineConnection, private val player:
     private var errorStatus = 0
     private val heard = linkedSetOf<String>()
     private val generated = mutableSetOf<String>()
+    private val retired = mutableSetOf<String>()
     private var scheduled = false
     private val refill = Runnable { scheduled = false; plan() }
     fun active(): Boolean = seed != null
@@ -46,13 +47,27 @@ class RadioProgram(private val connection: EngineConnection, private val player:
         clear()
         future.forEach { player.removeMediaItem(it) }
     }
+    /** Invalidate an in-flight plan before removing a private acquired source. */
+    fun retire(id: String) {
+        if (seed == null || closed) return
+        retired.add(id); serial++; requestId?.let(connection::cancel); requestId = null
+        main.removeCallbacks(refill); scheduled = false; attempt = 0; errorStatus = 0; phase = "ready"
+        publish()
+    }
     fun clear() {
         serial++; requestId?.let(connection::cancel); requestId = null; main.removeCallbacks(refill)
-        scheduled = false; lastCurrent = ""; seed = null; generated.clear(); heard.clear(); attempt = 0; errorStatus = 0; phase = "idle"; publish()
+        scheduled = false; lastCurrent = ""; seed = null; generated.clear(); heard.clear(); retired.clear(); attempt = 0; errorStatus = 0; phase = "idle"; publish()
     }
     fun sync() {
         if (seed == null || closed) return
         if (generation != connection.generation || player.mediaItemCount == 0 || player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(ProgramQueue.PODCAST) == true) { clear(); return }
+        if (seed?.optString("track_id") in retired) {
+            val replacement = selectSeed()?.takeIf { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true &&
+                (it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) != "local" || it.mediaId !in retired) }
+            if (replacement == null) { clear(); return }
+            seed = JSONObject().put("id", replacement.mediaId).put("title", replacement.mediaMetadata.title?.toString() ?: "").put("artist", replacement.mediaMetadata.artist?.toString() ?: "").put("album", replacement.mediaMetadata.albumTitle?.toString() ?: "")
+                .put(if (replacement.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "preview") "youtube_id" else "track_id", replacement.mediaId)
+        }
         val current = ProgramQueue.key(player, player.currentMediaItemIndex)
         if (current != lastCurrent && phase == "exhausted") phase = "ready"
         lastCurrent = current
@@ -97,7 +112,12 @@ class RadioProgram(private val connection: EngineConnection, private val player:
                 try {
                     val nowExclude = heard + (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
                     val available = minOf(room, ProgramQueue.LIMIT - player.mediaItemCount)
-                    val rows = if (available > 0 && response != null) RadioPlan.rows(response, nowExclude, available) else JSONArray()
+                    val candidates = if (available > 0 && response != null) RadioPlan.rows(response, nowExclude, available) else JSONArray()
+                    val rows = JSONArray()
+                    for (index in 0 until candidates.length()) {
+                        val row = candidates.getJSONObject(index)
+                        if (row.optString("source") != "local" || row.optString("id") !in retired) rows.put(row)
+                    }
                     if (rows.length() > 0) {
                         val items = ProgramQueue.items(connection, rows, ProgramQueue.programToken(player)).map { item -> item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setExtras(android.os.Bundle(item.mediaMetadata.extras).apply { putBoolean("${intent}Generated", true) }).build()).build() }
                         generated.addAll(items.map { it.mediaMetadata.extras!!.getString(ProgramQueue.KEY)!! })

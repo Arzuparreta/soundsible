@@ -14,6 +14,7 @@ export const en = {
     offlineNoSpace: "Not enough space. Remove copies or increase the limit.",
     offlineIntegrity: "The copy is incomplete or damaged. Prepare it again.",
     offlineFailed: "Preparation failed. Retry when connected.",
+    offlineRemovalFailed: "Could not remove the copy. Try again.",
 
     previewPreparing: 'Preparing preview',
     previewRetry: 'Waiting to retry preview',
