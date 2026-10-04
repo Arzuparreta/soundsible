@@ -87,3 +87,13 @@ APK/test/unit/lint normal sin CA temporal pasa. Log
 incluye S2aa en curso: 1.462 tests/172 archivos; repetir principal completa tras
 commits limpios y cerrar S2aa end to end. Los XML de ejecuciones fallidas están
 en integration-failed; integration-results todavía conserva el último éxito.
+
+
+Regresión compartida durante S2ad: WebKit principal268/75 y un fallo de contexto.
+Diagnóstico repetido2 fallos/1 verde muestra contexto presente pero queue inert:
+`raw scroll` del helper compite con alineación explícita de apertura, sin gesto
+que retire ese owner. El caso de abrir contexto ahora usa botón real Cola y
+espera que queue salga de inert. Tres repeticiones WebKit móvil pasan en
+/tmp/soundsible-s2ad-webkit-context-fixed.log; cuatro perfiles completos se repiten
+antes de marcar aceptada la regresión. No cambiar guards del producto para un
+scroll sintético.
