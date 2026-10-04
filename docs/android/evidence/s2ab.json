@@ -24,11 +24,23 @@
       "scope": "HTTP/TLS Radio/autoplay; DELETE while computed response pending, old response delivery and new refill, no retired local source, preserved current key/programToken/pause20s/modes/account, no HTML audio"
     },
     "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal",
-    "jvm_tests": 17
+    "jvm_tests": 17,
+    "clean_main_regression": {
+      "source_revision_at_asset_prepare": "03e3446",
+      "dirty_at_asset_prepare": false,
+      "tests": 53,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "offline_restart_phases": 2,
+      "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal",
+      "jvm_tests": 17,
+      "log": "/tmp/soundsible-s2ab-main-clean.log",
+      "archive": "android/build/integration-results"
+    }
   },
   "limits": [
     "API36 emulator; no acoustic/hardware acceptance.",
-    "Full clean-source53 + persistent restart2 pending.",
     "Remaining parity and release gates still required."
   ]
 }

@@ -37,9 +37,9 @@ Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
 bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrados
 en regresión (refresh Saved y presupuesto auth compartido) están corregidos.
-Última APK principal: **49 tests + dos fases offline persistentes pasan**, sources
-preparados desde commit limpio dc29b73; APK/test APK/JVM17/lint normales pasan
-sin CA temporal. Log /tmp/soundsible-s2aa-main-clean.log.
+Última APK principal: **53 tests + dos fases offline persistentes pasan**, sources
+preparados desde commit limpio03e3446; APK/test APK/JVM17/lint normales pasan
+sin CA temporal. Log /tmp/soundsible-s2ab-main-clean.log.
 Últimos browser completos tras S2z: Chromium 278/66 y WebKit 269/75, sin fallos,
 sobre reparación de carrusel 78669b6. Repetir cuatro perfiles antes del PR final.
 S2u selector OS y S2v prioridad de sidecar validados; S2w letras adquirido/preview
@@ -1301,3 +1301,15 @@ restaura preferencias y fuentes sintéticas, drena delay antes del próximo caso
 APK/test APK/JVM17/lint normales sin CA pasan. Principal53+restart2 pendiente;
 última limpia dc29b73 49+2. Continuar Settings/Discover/biblioteca restantes,
 DJ/Live/Auto/firma/update y después PR/main/release; no finalizar por slice.
+
+
+## Principal limpia S2ab
+
+Assets03e3446 dirty=false: principal53, cero fallos/errores/omisiones, más dos
+fases persistentes offline prepare/force-stop/offline. APK normal/test APK/JVM17/
+lint sin CA pasan en /tmp/soundsible-s2ab-main-clean.log. Archive actual en
+android/build/integration-results. Sustituye principal49 de dc29b73. Durante la
+regresión sólo avanzaron fuentes UI de [Settings S2ac](SLICE_2AC.md), sin tocar
+fuentes nativas ni assets del artifact limpio. UI1481/175 pasa; Settings aún
+requiere recorrido instrumentado HTTP/HTTPS y aceptación de sesión rotada.
+Continuar sin detenerse por slice hasta paridad completa y PR/main/release.
