@@ -6,8 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.view.KeyEvent
-import androidx.media3.session.MediaButtonReceiver
 import com.soundsible.player.R
 import com.soundsible.player.playback.QueueHolder
 
@@ -53,16 +51,15 @@ class SoundsibleWidgetProvider : AppWidgetProvider() {
                     R.id.widgetPlayPause,
                     if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
                 )
-                setOnClickPendingIntent(R.id.widgetPrev, mediaKey(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS, 1))
-                setOnClickPendingIntent(R.id.widgetPlayPause, mediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, 2))
-                setOnClickPendingIntent(R.id.widgetNext, mediaKey(context, KeyEvent.KEYCODE_MEDIA_NEXT, 3))
+                setOnClickPendingIntent(R.id.widgetPrev, command(context, WidgetControlReceiver.ACTION_PREV, 1))
+                setOnClickPendingIntent(R.id.widgetPlayPause, command(context, WidgetControlReceiver.ACTION_TOGGLE, 2))
+                setOnClickPendingIntent(R.id.widgetNext, command(context, WidgetControlReceiver.ACTION_NEXT, 3))
             }
         }
 
-        private fun mediaKey(context: Context, keyCode: Int, requestCode: Int): PendingIntent {
-            val down = Intent(Intent.ACTION_MEDIA_BUTTON, null, context, MediaButtonReceiver::class.java)
-                .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-            return PendingIntent.getBroadcast(context, requestCode, down, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        private fun command(context: Context, action: String, requestCode: Int): PendingIntent {
+            val intent = Intent(context, WidgetControlReceiver::class.java).setAction(action)
+            return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
     }
 }

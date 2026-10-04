@@ -54,7 +54,12 @@ class EngineService : Service() {
                         File(root, "ui").absolutePath,
                     )
                     File(root, "ui").mkdirs()
-                    LocalEngine.installWebUi(assets, File(root, "ui"))
+                    val apkVersion = try {
+                        packageManager.getPackageInfo(packageName, 0).longVersionCode
+                    } catch (_: Exception) {
+                        0L
+                    }
+                    LocalEngine.installWebUi(assets, File(root, "ui"), apkVersion)
                     mod.callAttr("start")
                 }
             } catch (_: Exception) {

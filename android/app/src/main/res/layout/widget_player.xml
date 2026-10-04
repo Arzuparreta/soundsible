@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@android:drawable/dialog_holo_light_frame"
+    android:background="@drawable/widget_background"
     android:gravity="center_vertical"
     android:orientation="vertical"
     android:padding="12dp">
@@ -14,7 +14,9 @@
         android:ellipsize="marquee"
         android:singleLine="true"
         android:text="@string/app_name"
-        android:textSize="16sp" />
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="16sp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/widgetSubtitle"
@@ -23,6 +25,7 @@
         android:ellipsize="end"
         android:singleLine="true"
         android:text="@string/now_playing"
+        android:textColor="?android:attr/textColorSecondary"
         android:textSize="13sp" />
 
     <LinearLayout
@@ -37,7 +40,8 @@
             android:layout_height="48dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Previous"
-            android:src="@android:drawable/ic_media_previous" />
+            android:src="@android:drawable/ic_media_previous"
+            android:tint="?android:attr/textColorPrimary" />
 
         <ImageButton
             android:id="@+id/widgetPlayPause"
@@ -45,7 +49,8 @@
             android:layout_height="64dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Play or pause"
-            android:src="@android:drawable/ic_media_play" />
+            android:src="@android:drawable/ic_media_play"
+            android:tint="?android:attr/textColorPrimary" />
 
         <ImageButton
             android:id="@+id/widgetNext"
@@ -53,6 +58,7 @@
             android:layout_height="48dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Next"
-            android:src="@android:drawable/ic_media_next" />
+            android:src="@android:drawable/ic_media_next"
+            android:tint="?android:attr/textColorPrimary" />
     </LinearLayout>
 </LinearLayout>

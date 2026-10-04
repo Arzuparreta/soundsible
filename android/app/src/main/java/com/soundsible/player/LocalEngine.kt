@@ -77,16 +77,30 @@ object LocalEngine {
 
     /**
      * Copy the bundled web player (APK assets/ui-dist) into [uiDir] for the
-     * engine to serve. No-op once installed. Returns false when the APK
-     * carries no bundle (dist was missing at build time).
+     * engine to serve. Reinstalls when the APK version changes: otherwise an
+     * updated bundle (bridge calls, route fixes) never reaches an existing
+     * install, and the page silently lacks what the app expects. Returns
+     * false when the APK carries no bundle.
      */
-    fun installWebUi(assetManager: android.content.res.AssetManager, uiDir: File): Boolean {
+    fun installWebUi(
+        assetManager: android.content.res.AssetManager,
+        uiDir: File,
+        apkVersionCode: Long,
+    ): Boolean {
         return try {
-            if (File(uiDir, "index.html").isFile) return true
+            val sentinel = File(uiDir, ".apk-version")
+            val installed = sentinel.takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
+            if (File(uiDir, "index.html").isFile && installed == apkVersionCode) return true
+            uiDir.deleteRecursively()
             val names = assetManager.list("ui-dist") ?: return false
             if (names.isEmpty()) return false
             copyAssetDir(assetManager, "ui-dist", uiDir)
-            File(uiDir, "index.html").isFile
+            if (!File(uiDir, "index.html").isFile) return false
+            try {
+                sentinel.writeText(apkVersionCode.toString())
+            } catch (_: Exception) {
+            }
+            true
         } catch (_: Exception) {
             false
         }
