@@ -78,6 +78,46 @@ class LibraryActivity : AppCompatActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (!::webView.isInitialized) return
+        val js = when (intent.action) {
+            WebNowPlaying.ACTION_WEB_TOGGLE -> "toggle()"
+            WebNowPlaying.ACTION_WEB_NEXT -> "next()"
+            WebNowPlaying.ACTION_WEB_PREV -> "previous()"
+            else -> return
+        }
+        try {
+            webView.evaluateJavascript(
+                "(function(){var c=window.SoundsibleNativeControl;if(c&&c.$js){c.$js();}})()",
+                null,
+            )
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * Web playback state from the bridge: mirror it into the widget and the
+     * media notification, the surfaces Media3 never sees for page audio.
+     */
+    fun onWebNowPlaying(title: String, artist: String, isPlaying: Boolean, artwork: android.graphics.Bitmap?) {
+        try {
+            com.soundsible.player.widgets.SoundsibleWidgetProvider.updateAll(
+                this,
+                title = title,
+                subtitle = artist,
+                isPlaying = isPlaying,
+                artwork = artwork,
+            )
+            if (title.isEmpty()) {
+                WebNowPlaying.cancel(this)
+            } else {
+                WebNowPlaying.show(this, title, artist, isPlaying, artwork)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     override fun onBackPressed() {
         if (::webView.isInitialized && webView.canGoBack()) {
             webView.goBack()
@@ -91,6 +131,10 @@ class LibraryActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         WebAudio.detach(webView)
+        try {
+            WebNowPlaying.cancel(this)
+        } catch (_: Exception) {
+        }
         if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
     }

@@ -449,7 +449,14 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       seekBackward: offset => ports.actions.seekBy(-(offset ?? ports.osSeekStep())),
       seekForward: offset => ports.actions.seekBy(offset ?? ports.osSeekStep())
     });
-    installNativeControl({ pause: () => ports.actions.pausePlayback('native_shell') });
+    installNativeControl({
+      pause: () => ports.actions.pausePlayback('native_shell'),
+      toggle: () => ports.actions.togglePlay(),
+      next: () => {
+        if (state.autoMode.active) void ports.actions.autoSkip(); else ports.actions.next();
+      },
+      previous: () => ports.actions.prev(),
+    });
     socket = createSocket();
     const ownedSocket = socket;
     lifetime.own(() => {

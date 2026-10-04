@@ -48,7 +48,8 @@
             android:exported="false" />
         <activity
             android:name=".ui.LibraryActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:launchMode="singleTop" />
 
         <service
             android:name=".playback.PlaybackService"

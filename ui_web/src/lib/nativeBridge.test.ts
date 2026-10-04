@@ -28,12 +28,14 @@ describe('nativeBridge', () => {
     expect(JSON.parse(onTrackChanged.mock.calls[0][0]).playing).toBe(false);
   });
 
-  it('installs a pause hook the shell can call', () => {
-    const pause = vi.fn();
-    installNativeControl({ pause });
-    const w = window as unknown as { SoundsibleNativeControl?: { pause?: () => void } };
-    w.SoundsibleNativeControl?.pause?.();
-    expect(pause).toHaveBeenCalledTimes(1);
+  it('installs transport hooks the shell can call', () => {
+    const control = { pause: vi.fn(), toggle: vi.fn(), next: vi.fn(), previous: vi.fn() };
+    installNativeControl(control);
+    const w = window as unknown as { SoundsibleNativeControl?: typeof control };
+    w.SoundsibleNativeControl?.toggle?.();
+    w.SoundsibleNativeControl?.next?.();
+    expect(control.toggle).toHaveBeenCalledTimes(1);
+    expect(control.next).toHaveBeenCalledTimes(1);
   });
 
   it('survives a throwing shell', () => {

@@ -4,7 +4,6 @@ import android.webkit.JavascriptInterface
 import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.data.parseJsonObject
 import com.soundsible.player.playback.ArtworkLoader
-import com.soundsible.player.widgets.SoundsibleWidgetProvider
 
 /**
  * Receives what the embedded web player is sounding so surfaces outside
@@ -15,25 +14,34 @@ import com.soundsible.player.widgets.SoundsibleWidgetProvider
 class SoundsibleNative(private val activity: LibraryActivity) {
     @JavascriptInterface
     fun onTrackChanged(json: String) {
+        // Bridge calls arrive on a private thread: parsing and the artwork
+        // fetch both happen here; the activity posts UI-visible state.
+        var title = ""
+        var artist = ""
+        var playing = true
+        var cover: String? = null
         try {
             val payload = parseJsonObject(json)
-            val title = payload.optString("title", "")
-            val artist = payload.optString("artist", "")
-            if (title.isEmpty()) return
+            title = payload.optString("title", "")
+            artist = payload.optString("artist", "")
+            if (title.isEmpty()) {
+                activity.runOnUiThread { activity.onWebNowPlaying("", "", false, null) }
+                return
+            }
+            playing = payload.optBoolean("playing", true)
             val app = activity.application as SoundsibleApp
             val connection = app.tokenStore.load()
-            val cover = payload.optString("coverUrl", "").ifEmpty { null }
+            cover = payload.optString("coverUrl", "").ifEmpty { null }
                 ?.let { connection?.resolve(it) ?: it }
             val bitmap = cover?.let {
                 ArtworkLoader.fetch(it, connection?.token)
             }
-            SoundsibleWidgetProvider.updateAll(
-                activity,
-                title = title,
-                subtitle = artist,
-                isPlaying = payload.optBoolean("playing", true),
-                artwork = bitmap,
-            )
+            val t = title
+            val a = artist
+            val p = playing
+            activity.runOnUiThread {
+                activity.onWebNowPlaying(t, a, p, bitmap)
+            }
         } catch (_: Exception) {
         }
     }
