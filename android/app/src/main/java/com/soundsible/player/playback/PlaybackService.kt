@@ -115,11 +115,25 @@ class PlaybackService : MediaLibraryService() {
     private val stateListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             publishState()
+            pushWidget()
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             publishState()
+            pushWidget()
         }
+    }
+
+    /** Push current title/state to every home-screen widget, if placed. */
+    private fun pushWidget() {
+        val p = player ?: return
+        val meta = p.currentMediaItem?.mediaMetadata
+        com.soundsible.player.widgets.SoundsibleWidgetProvider.updateAll(
+            this,
+            title = meta?.title?.toString() ?: getString(R.string.app_name),
+            subtitle = meta?.artist?.toString() ?: "",
+            isPlaying = p.isPlaying,
+        )
     }
 
     private fun publishState() {

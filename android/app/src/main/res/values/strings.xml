@@ -19,4 +19,5 @@
     <string name="engine_service_title">Soundsible engine running</string>
     <string name="engine_service_text">Your library server is running on this phone.</string>
     <string name="splash_starting">Starting your library…</string>
+    <string name="widget_description">Soundsible playback controls</string>
 </resources>
