@@ -83,6 +83,11 @@ object QueueHolder {
             .setTitle(item.title)
             .setArtist(item.artist.ifEmpty { item.subtitle })
             .setAlbumTitle(item.album)
+            .apply {
+                item.artworkUrl?.ifEmpty { null }?.let {
+                    setArtworkUri(android.net.Uri.parse(it))
+                }
+            }
             .build()
         return MediaItem.Builder()
             .setMediaId(item.effectiveTrackId() ?: item.id)

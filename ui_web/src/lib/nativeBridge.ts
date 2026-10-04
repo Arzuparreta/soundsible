@@ -12,6 +12,7 @@ export interface NativeNowPlaying {
   artist: string;
   album: string;
   playing: boolean;
+  coverUrl: string;
 }
 
 declare global {
@@ -26,13 +27,13 @@ export function reportNowPlaying(track: {
   title: string;
   artist: string;
   album?: string;
-} | null, playing: boolean): void {
+} | null, playing: boolean, coverUrl = ''): void {
   try {
     const bridge = typeof window !== 'undefined' ? window.SoundsibleNative : undefined;
     if (!bridge || typeof bridge.onTrackChanged !== 'function') return;
     const payload: NativeNowPlaying = track
-      ? { title: track.title, artist: track.artist, album: track.album ?? '', playing }
-      : { title: '', artist: '', album: '', playing: false };
+      ? { title: track.title, artist: track.artist, album: track.album ?? '', playing, coverUrl }
+      : { title: '', artist: '', album: '', playing: false, coverUrl: '' };
     bridge.onTrackChanged(JSON.stringify(payload));
   } catch {
     /* the shell surface is best-effort; playback never depends on it */

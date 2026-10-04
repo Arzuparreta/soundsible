@@ -29,12 +29,18 @@ class SoundsibleWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        fun updateAll(context: Context, title: String, subtitle: String, isPlaying: Boolean) {
+        fun updateAll(
+            context: Context,
+            title: String,
+            subtitle: String,
+            isPlaying: Boolean,
+            artwork: android.graphics.Bitmap? = null,
+        ) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, SoundsibleWidgetProvider::class.java))
             if (ids.isEmpty()) return
             for (id in ids) {
-                manager.updateAppWidget(id, views(context, title, subtitle, isPlaying))
+                manager.updateAppWidget(id, views(context, title, subtitle, isPlaying, artwork))
             }
         }
 
@@ -43,10 +49,16 @@ class SoundsibleWidgetProvider : AppWidgetProvider() {
             title: String,
             subtitle: String,
             isPlaying: Boolean,
+            artwork: android.graphics.Bitmap?,
         ): android.widget.RemoteViews {
             return android.widget.RemoteViews(context.packageName, R.layout.widget_player).apply {
                 setTextViewText(R.id.widgetTitle, title)
                 setTextViewText(R.id.widgetSubtitle, subtitle.ifEmpty { context.getString(R.string.now_playing) })
+                if (artwork != null) {
+                    setImageViewBitmap(R.id.widgetArt, artwork)
+                } else {
+                    setImageViewResource(R.id.widgetArt, R.mipmap.ic_launcher)
+                }
                 setImageViewResource(
                     R.id.widgetPlayPause,
                     if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,

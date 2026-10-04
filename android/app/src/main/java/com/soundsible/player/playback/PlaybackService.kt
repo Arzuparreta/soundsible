@@ -124,16 +124,27 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    /** Push current title/state to every home-screen widget, if placed. */
+    /** Push current title/state/art to every home-screen widget, if placed. */
     private fun pushWidget() {
         val p = player ?: return
         val meta = p.currentMediaItem?.mediaMetadata
-        com.soundsible.player.widgets.SoundsibleWidgetProvider.updateAll(
-            this,
-            title = meta?.title?.toString() ?: getString(R.string.app_name),
-            subtitle = meta?.artist?.toString() ?: "",
-            isPlaying = p.isPlaying,
-        )
+        val title = meta?.title?.toString() ?: getString(R.string.app_name)
+        val subtitle = meta?.artist?.toString() ?: ""
+        val playing = p.isPlaying
+        val artworkPath = meta?.artworkUri?.toString()
+        scope.launch {
+            val connection = app().tokenStore.load()
+            val bitmap = artworkPath
+                ?.let { connection?.resolve(it) ?: it }
+                ?.let { ArtworkLoader.fetch(it, connection?.token) }
+            com.soundsible.player.widgets.SoundsibleWidgetProvider.updateAll(
+                this@PlaybackService,
+                title = title,
+                subtitle = subtitle,
+                isPlaying = playing,
+                artwork = bitmap,
+            )
+        }
     }
 
     private fun publishState() {

@@ -1,7 +1,9 @@
 package com.soundsible.player.ui
 
 import android.webkit.JavascriptInterface
+import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.data.parseJsonObject
+import com.soundsible.player.playback.ArtworkLoader
 import com.soundsible.player.widgets.SoundsibleWidgetProvider
 
 /**
@@ -18,11 +20,19 @@ class SoundsibleNative(private val activity: LibraryActivity) {
             val title = payload.optString("title", "")
             val artist = payload.optString("artist", "")
             if (title.isEmpty()) return
+            val app = activity.application as SoundsibleApp
+            val connection = app.tokenStore.load()
+            val cover = payload.optString("coverUrl", "").ifEmpty { null }
+                ?.let { connection?.resolve(it) ?: it }
+            val bitmap = cover?.let {
+                ArtworkLoader.fetch(it, connection?.token)
+            }
             SoundsibleWidgetProvider.updateAll(
                 activity,
                 title = title,
                 subtitle = artist,
                 isPlaying = payload.optBoolean("playing", true),
+                artwork = bitmap,
             )
         } catch (_: Exception) {
         }
