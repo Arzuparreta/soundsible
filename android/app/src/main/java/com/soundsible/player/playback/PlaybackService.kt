@@ -139,6 +139,14 @@ class PlaybackService : MediaLibraryService() {
     private fun publishState() {
         val p = player ?: return
         val item = p.currentMediaItem
+        try {
+            app().queueStore.save(
+                QueueHolder.queue.items.toList(),
+                QueueHolder.queue.currentIndex ?: 0,
+                p.currentPosition.coerceAtLeast(0L),
+            )
+        } catch (_: Exception) {
+        }
         scope.launch {
             try {
                 app().client.publishPlaybackState(

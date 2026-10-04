@@ -155,7 +155,10 @@ class YouTubeDownloader:
             )
             try:
                 # No cover URL: keep the artwork yt-dlp embedded; mqdefault would replace it.
-                AudioProcessor.embed_metadata(str(temp_file), meta, None)
+                # Without ffmpeg nothing was embedded, so fetch the video thumbnail
+                # for the mutagen path instead of keeping an empty header.
+                cover_url = None if download._ffmpeg_available() else download.youtube_thumbnail_url(url)
+                AudioProcessor.embed_metadata(str(temp_file), meta, cover_url)
             except Exception as e:
                 logger.warning("Could not re-embed metadata on downloaded file: %s", e)
             report({"phase": "processing", "percent": 97.0})

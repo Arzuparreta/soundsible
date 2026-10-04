@@ -8,6 +8,7 @@ import com.soundsible.player.LocalEngine
 import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.playback.EngineService
+import com.soundsible.player.playback.QueueHolder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,6 +49,7 @@ class MainActivity : Activity() {
             return
         }
         if (connection.label != "This phone") {
+            restoreQueue()
             openLibrary()
             return
         }
@@ -62,6 +64,7 @@ class MainActivity : Activity() {
             val fresh = withContext(Dispatchers.IO) { LocalEngine.localConnection() }
             if (fresh != null && withContext(Dispatchers.IO) { LocalEngine.isHealthy(fresh.baseUrl) }) {
                 app.tokenStore.save(fresh)
+                restoreQueue()
                 openLibrary()
                 return
             }
@@ -70,6 +73,15 @@ class MainActivity : Activity() {
             delay(1_000)
         }
         status.text = "The engine on this phone did not start. Reopen the app to retry."
+    }
+
+    private fun restoreQueue() {
+        try {
+            val snapshot = (application as SoundsibleApp).queueStore.load() ?: return
+            QueueHolder.queue.restore(snapshot.items, snapshot.index)
+            QueueHolder.pendingSeekMs = snapshot.positionMs.coerceAtLeast(0L)
+        } catch (_: Exception) {
+        }
     }
 
     private fun openLibrary() {

@@ -17,6 +17,9 @@ object QueueHolder {
     var authHeader: String? = null
         private set
 
+    /** Playback offset to apply on the next attach (restored sessions). */
+    @Volatile var pendingSeekMs: Long = 0L
+
     @Synchronized
     fun replace(items: List<CarItem>, startIndex: Int) {
         queue.apply {
@@ -31,7 +34,17 @@ object QueueHolder {
     @Synchronized
     fun attach(controller: MediaController?) {
         this.controller = controller
-        if (controller != null && queue.count > 0) playOn(controller)
+        if (controller != null && queue.count > 0) {
+            playOn(controller)
+            val seek = pendingSeekMs
+            if (seek > 0) {
+                pendingSeekMs = 0L
+                try {
+                    controller.seekTo(seek)
+                } catch (_: Exception) {
+                }
+            }
+        }
     }
 
     fun setAuth(token: String?) {

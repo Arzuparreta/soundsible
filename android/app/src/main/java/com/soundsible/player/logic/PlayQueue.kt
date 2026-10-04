@@ -77,6 +77,21 @@ class PlayQueue(
         if (to in items.indices) currentIndex = to
     }
 
+    /** Replace the whole queue, e.g. restoring a persisted session. */
+    fun restore(newItems: List<CarItem>, startIndex: Int) {
+        items.clear()
+        shuffleOrder = mutableListOf()
+        isShuffled = false
+        items.addAll(newItems.filter { it.isPlayable })
+        currentIndex = if (items.isEmpty()) {
+            null
+        } else if (startIndex in items.indices) {
+            startIndex
+        } else {
+            0
+        }
+    }
+
     fun append(contentsOf: List<CarItem>) {
         val playable = contentsOf.filter { it.isPlayable }
         if (playable.isEmpty()) return

@@ -171,6 +171,24 @@ def args_exe_hint(args: List[str]) -> str:
     return args[0] if args else "<empty argv>"
 
 
+def youtube_thumbnail_url(url: str) -> Optional[str]:
+    """Cover fallback for hosts without ffmpeg.
+
+    The CLI's `--embed-thumbnail` needs an ffmpeg binary; without one nothing
+    is embedded and `embed_metadata(..., None)` keeps that nothing. A direct
+    thumbnail URL lets the pure-Python mutagen path embed real artwork.
+    """
+    try:
+        from .ids import video_id_from_url
+
+        video_id = video_id_from_url(url)
+    except Exception:
+        return None
+    if not video_id:
+        return None
+    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+
 def download_audio(
     url: str,
     temp_dir: Path,

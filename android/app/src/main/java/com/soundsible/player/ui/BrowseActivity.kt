@@ -44,6 +44,7 @@ class BrowseActivity : Activity() {
         findViewById<Button>(R.id.unpairButton).setOnClickListener {
             stopService(Intent(this, EngineService::class.java))
             (application as SoundsibleApp).tokenStore.clear()
+            (application as SoundsibleApp).queueStore.clear()
             startActivity(Intent(this, PairingActivity::class.java))
             finish()
         }
@@ -72,6 +73,8 @@ class BrowseActivity : Activity() {
         } else if (item.isPlayable) {
             val start = visible.indexOf(item).coerceAtLeast(0)
             QueueHolder.replace(visible, start)
+            QueueHolder.pendingSeekMs = 0L
+            (application as SoundsibleApp).queueStore.save(visible, start, 0L)
             startActivity(Intent(this, NowPlayingActivity::class.java))
         }
     }

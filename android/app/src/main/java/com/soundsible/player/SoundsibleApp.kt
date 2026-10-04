@@ -5,12 +5,15 @@ import com.chaquo.python.android.AndroidPlatform
 import com.soundsible.player.net.SoundsibleClient
 import com.soundsible.player.net.UrlConnectionTransport
 import com.soundsible.player.store.DeviceIdentity
+import com.soundsible.player.store.QueueStore
 import com.soundsible.player.store.SharedPrefsTokenStore
 import com.soundsible.player.store.TokenStore
 
 /** Service locator for the app. No DI framework on purpose. */
 class SoundsibleApp : Application() {
     lateinit var tokenStore: TokenStore
+        private set
+    lateinit var queueStore: QueueStore
         private set
     lateinit var client: SoundsibleClient
         private set
@@ -20,6 +23,7 @@ class SoundsibleApp : Application() {
     override fun onCreate() {
         super.onCreate()
         tokenStore = SharedPrefsTokenStore(this)
+        queueStore = QueueStore(this)
         client = SoundsibleClient(UrlConnectionTransport(), tokenStore)
         deviceIdentity = DeviceIdentity(this)
         // Best-effort: boot the embedded interpreter for the future local

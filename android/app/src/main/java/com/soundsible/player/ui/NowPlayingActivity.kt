@@ -9,6 +9,7 @@ import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
 import com.google.common.util.concurrent.MoreExecutors
 import com.soundsible.player.R
+import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.playback.PlaybackService
 import com.soundsible.player.playback.QueueHolder
 
@@ -46,6 +47,16 @@ class NowPlayingActivity : Activity() {
     }
 
     override fun onStop() {
+        try {
+            val app = application as SoundsibleApp
+            val position = controller?.currentPosition?.coerceAtLeast(0L) ?: 0L
+            app.queueStore.save(
+                QueueHolder.queue.items.toList(),
+                QueueHolder.queue.currentIndex ?: 0,
+                position,
+            )
+        } catch (_: Exception) {
+        }
         playerView.player = null
         controller?.release()
         controller = null

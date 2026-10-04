@@ -67,4 +67,17 @@ class PlayQueueTest {
         queue.playNext(listOf(track("b")))
         assertEquals(listOf("a", "b", "c"), queue.items.map { it.id })
     }
+
+    @Test fun restoreReplacesQueueAndKeepsPosition() {
+        val queue = PlayQueue(listOf(track("a"), track("b")))
+        queue.restore(listOf(track("x"), track("y"), track("z")), 2)
+        assertEquals(listOf("x", "y", "z"), queue.items.map { it.id })
+        assertEquals("z", queue.current?.id)
+    }
+
+    @Test fun restoreWithBadIndexStartsAtZero() {
+        val queue = PlayQueue()
+        queue.restore(listOf(track("x")), 9)
+        assertEquals("x", queue.current?.id)
+    }
 }
