@@ -50,6 +50,20 @@ jobs:
       - name: Version drift check
         run: python3 scripts/version_sync.py --check
 
+      - name: Set up Node for the web player bundle
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ui_web/package-lock.json
+
+      - name: Build the web player bundle (engine sync)
+        run: |
+          set -euo pipefail
+          cd ui_web && npm ci && cd ..
+          python3 -c "from shared.ensure_ui_dist import ensure_ui_dist; assert ensure_ui_dist(), 'ui_web/dist was not produced'"
+          test -f ui_web/dist/index.html
+
       - name: Unit tests
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest
