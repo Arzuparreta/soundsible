@@ -86,6 +86,9 @@ def main() -> None:
                             "-metadata", "title=" + name + " private song", str(encoded)], check=True)
             audio.unlink()
             audio = encoded
+            from shared.audio_files import AudioProcessor
+            if not AudioProcessor.embed_artwork(str(audio), str(cover)):
+                raise RuntimeError("Could not embed synthetic FLAC cover")
         with user_context(uid):
             # Deterministic playback tests explicitly opt out. Product default
             # remains on; autoplay acceptance enables the real preference.

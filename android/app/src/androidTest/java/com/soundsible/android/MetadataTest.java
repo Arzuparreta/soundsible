@@ -11,8 +11,45 @@ import org.junit.runner.RunWith;
 import java.util.concurrent.TimeUnit;
 
 /** Actual text, multipart and cover routes; stable occurrences and durable copy labels. */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 @RunWith(AndroidJUnit4.class)
 public class MetadataTest {
+    private void platformCover(android.content.Context context,int expected) throws Exception {
+        var manager=(android.app.NotificationManager)context.getSystemService(android.content.Context.NOTIFICATION_SERVICE);
+        long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(15);
+        while(System.nanoTime()<until){
+            for(var notification:manager.getActiveNotifications()){
+                Object token=notification.getNotification().extras.getParcelable(android.app.Notification.EXTRA_MEDIA_SESSION);
+                if(!(token instanceof android.media.session.MediaSession.Token))continue;
+                var metadata=new android.media.session.MediaController(context,(android.media.session.MediaSession.Token)token).getMetadata();
+                var image=metadata==null?null:metadata.getBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART);
+                if(image==null)continue;int pixel=image.getPixel(image.getWidth()/2,image.getHeight()/2);boolean match=true;
+                for(int shift:new int[]{0,8,16})match &= Math.abs(((pixel>>shift)&255)-((expected>>shift)&255))<=3;
+                if(match)return;
+            }
+            Thread.sleep(100);
+        }
+        fail("Platform media session did not publish the edited library cover");
+    }
+    private void embeddedCover(android.content.Context context,EngineConnection connection,String origin) throws Exception {
+        // MediaController's merged metadata can omit source artwork when the
+        // application supplies a URI. Read the actual encoded FLAC separately.
+        var file=java.io.File.createTempFile("embedded-cover-",".flac",context.getCacheDir());
+        try{
+            try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/static/stream/member-track").header("Cookie",connection.cookieHeader(connection.getGeneration())).build()).execute()){
+                assertEquals(200,response.code());long total=0;
+                try(var input=response.body().byteStream();var output=new java.io.FileOutputStream(file)){
+                    byte[] buffer=new byte[8192];int count;while((count=input.read(buffer))!=-1){total+=count;assertTrue("Synthetic FLAC exceeded bounded fixture size",total<=40*1024*1024);output.write(buffer,0,count);}
+                }
+            }
+            try(var reader=new android.media.MediaMetadataRetriever()){
+                reader.setDataSource(file.getAbsolutePath());byte[] bytes=reader.getEmbeddedPicture();
+                assertNotNull("Encoded FLAC must retain its original embedded artwork",bytes);
+                var bitmap=android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.length);
+                assertNotNull(bitmap);try{ArtworkTest.assertColor(0xffc53030,bitmap.getPixel(bitmap.getWidth()/2,bitmap.getHeight()/2));}finally{bitmap.recycle();}
+            }
+        }finally{assertTrue("Remove only the synthetic FLAC inspection file",file.delete());}
+    }
     private byte[] audioDigest(EngineConnection connection,String origin) throws Exception {
         var digest=java.security.MessageDigest.getInstance("SHA-256");
         try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/static/stream/member-track").header("Cookie",connection.cookieHeader(connection.getGeneration())).build()).execute()){
@@ -45,7 +82,7 @@ public class MetadataTest {
     @Test public void httpMetadata() throws Exception {run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"));}
     @Test public void tlsMetadata() throws Exception {run(InstrumentationRegistry.getArguments().getString("tlsOrigin"));}
     private void run(String origin) throws Exception {
-        assumeNotNull(origin);var connection=EngineConnection.shared(InstrumentationRegistry.getInstrumentation().getTargetContext());connection.clearSession(true);StartupTest web=new StartupTest();
+        assumeNotNull(origin);var context=InstrumentationRegistry.getInstrumentation().getTargetContext();var connection=EngineConnection.shared(context);connection.clearSession(true);StartupTest web=new StartupTest();
         JSONObject original=null;byte[] originalCover=null;
         try(var scenario=ActivityScenario.launch(MainActivity.class)){
             web.awaitReady(scenario);web.evaluate(scenario,"localStorage.setItem('lang','en')");scenario.recreate();web.awaitReady(scenario);
@@ -61,6 +98,8 @@ public class MetadataTest {
             command(web,scenario,"action:'queue',tracks:[{source:'local',id:'member-track',title:'member private song',artist:'member artist'},{source:'local',id:'member-track',title:'member private song',artist:'member artist'}],index:0");
             waitFor(web,scenario,"window.__metadata?.playing");command(web,scenario,"action:'pause'");command(web,scenario,"action:'seek',positionMs:20000");
             waitFor(web,scenario,"!window.__metadata.playWhenReady && Math.abs(window.__metadata.positionMs-20000)<1000");
+            platformCover(context,0xffc53030);
+            if(original.getString("format").equals("flac"))embeddedCover(context,connection,origin);
             String keys=web.evaluate(scenario,"JSON.stringify(window.__metadata.items.map(i=>i.key))");String token=web.evaluate(scenario,"window.__metadata.queueToken");
             edit(web,scenario,"member private song");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-track-metadata-editor] input')).filter(i=>i.type!=='file').forEach((i,n)=>{i.value=['Edited private song','Edited artist','Edited album','Edited album artist'][n];i.dispatchEvent(new Event('input',{bubbles:true}))});document.querySelector('[data-track-metadata-editor]').requestSubmit()");
@@ -77,6 +116,7 @@ public class MetadataTest {
                 var bitmap=loader.loadBitmap(ProgramArtwork.Companion.uri(connection.getGeneration(),"member-track",java.util.UUID.randomUUID().toString())).get(10,TimeUnit.SECONDS);
                 ArtworkTest.assertColor(0xff008000,bitmap.getPixel(bitmap.getWidth()/2,bitmap.getHeight()/2));
             }
+            platformCover(context,0xff008000);
             web.evaluate(scenario,"document.querySelector('[data-track-metadata-editor] input:not([type=file])').value='Offline title';document.querySelector('[data-track-metadata-editor] input:not([type=file])').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-track-metadata-editor]').requestSubmit()");
             waitFor(web,scenario,"!document.querySelector('[data-track-metadata-editor]') && window.__copies.items[0].track.title==='Offline title' && window.__metadata.title==='Offline title'");
             assertEquals(bytes,web.evaluate(scenario,"window.__copies.items[0].total"));assertEquals("true",web.evaluate(scenario,"window.__copies.items[0].state==='ready' && !window.__metadata.playWhenReady && Math.abs(window.__metadata.positionMs-20000)<1000"));

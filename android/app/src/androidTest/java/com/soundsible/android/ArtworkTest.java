@@ -59,6 +59,17 @@ public class ArtworkTest {
             ListenableFuture<Bitmap> image = loader.loadBitmap(member);
             red(image.get(10, TimeUnit.SECONDS));
             assertSame("Duplicate requests share the last in-memory result", image, loader.loadBitmap(member));
+            var embeddedBitmap=Bitmap.createBitmap(16,16,Bitmap.Config.ARGB_8888);
+            embeddedBitmap.eraseColor(0xff0000ff);
+            var embedded=new java.io.ByteArrayOutputStream();
+            assertTrue(embeddedBitmap.compress(Bitmap.CompressFormat.PNG,100,embedded));embeddedBitmap.recycle();
+            var metadata=new androidx.media3.common.MediaMetadata.Builder().setArtworkUri(member)
+                .setArtworkData(embedded.toByteArray(),androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER).build();
+            red(loader.loadBitmapFromMetadata(metadata).get(10,TimeUnit.SECONDS));
+            var embeddedOnly=metadata.buildUpon().setArtworkUri(null).build();
+            Bitmap fallback=loader.loadBitmapFromMetadata(embeddedOnly).get(10,TimeUnit.SECONDS);
+            assertColor(0xff0000ff,fallback.getPixel(8,8));
+            assertNull(loader.loadBitmapFromMetadata(new androidx.media3.common.MediaMetadata.Builder().build()));
             privateUnavailable(loader.loadBitmap(ProgramArtwork.Companion.uri(connection.getGeneration(), "owner-track")), 0xff2845b4);
             fails(loader.loadBitmap(Uri.parse("https://example.invalid/private.png")));
             fails(loader.loadBitmap(Uri.parse("soundsible-artwork://" + connection.getGeneration() + "/member-track?cookie=forbidden")));
@@ -75,6 +86,7 @@ public class ArtworkTest {
             Thread.sleep(200); connection.clearSession(false);
             assertTrue("Logout cancels pending private artwork", pending.isCancelled());
             fails(loader.loadBitmap(member));
+            fails(loader.loadBitmapFromMetadata(metadata));
             mode(connection, origin, ""); login(connection, "owner");
             Bitmap owner = loader.loadBitmap(ProgramArtwork.Companion.uri(connection.getGeneration(), "owner-track")).get(10, TimeUnit.SECONDS);
             assertColor(0xff2845b4, owner.getPixel(owner.getWidth() / 2, owner.getHeight() / 2));

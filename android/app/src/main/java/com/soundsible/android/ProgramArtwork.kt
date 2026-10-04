@@ -38,6 +38,13 @@ class ProgramArtwork(private val connection: EngineConnection) : BitmapLoader, A
     init { connection.resetListeners.add(reset) }
     override fun supportsMimeType(mimeType: String): Boolean = mimeType in setOf("image/png", "image/jpeg", "image/webp")
     override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> = submit(connection.generation) { decode(data) }
+    override fun loadBitmapFromMetadata(metadata: androidx.media3.common.MediaMetadata): ListenableFuture<Bitmap>? {
+        // Sidecars override embedded art without rewriting the audio file.
+        // An expired private URI must fail rather than expose stale embedded art.
+        val uri = metadata.artworkUri
+        if (uri?.scheme == "soundsible-artwork") return loadBitmap(uri)
+        return metadata.artworkData?.let(::decodeBitmap) ?: uri?.let(::loadBitmap)
+    }
     override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> = synchronized(lock) {
         last?.takeIf { uri.authority == connection.generation.toString() && it.first == uri && !it.second.isCancelled }?.let { return@synchronized it.second }
         val epoch = uri.authority?.toLongOrNull() ?: -1

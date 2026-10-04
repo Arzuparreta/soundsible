@@ -40,8 +40,8 @@ def install(app, root, accounts):
                 original = next(row for row in library.metadata.tracks if row.id == f"{name}-track")
                 for index in range(10):
                     identity = f"{name}-radio-{index}"
-                    target = Path(root) / "music/tracks" / f"{identity}.wav"
-                    shutil.copyfile(Path(root) / "music/tracks" / f"{name}-track.wav", target)
+                    target = Path(root) / "music/tracks" / f"{identity}.{original.format}"
+                    shutil.copyfile(Path(root) / "music/tracks" / f"{name}-track.{original.format}", target)
                     library.metadata.add_track(
                         replace(original, id=identity, title=f"{name} radio song {index}", file_hash=identity)
                     )

@@ -1085,6 +1085,25 @@ No ampliar permisos ni simular callback/File. Lint posterior pidió @SdkSuppress
 en lugar de @RequiresApi; corregido. APK/test/unit/lint normales sin CA pasan
 en /tmp/soundsible-s2u-normal.log.
 
-Continuar prioridad de sidecar frente a artwork embebido (Media3 prefiere datos
-embebidos por defecto); aceptar también sesión multimedia con FLAC real antes de
-dar ese caso por cerrado. Matriz restante y publicación siguen pendientes.
+Prioridad de sidecar frente a artwork embebido cerrada después en S2v; ver último
+apartado. Matriz restante y publicación siguen pendientes.
+
+
+## S2v sidecar y portada embebida
+
+[Contrato/evidencia](SLICE_2V.md), [registro](evidence/s2v.json). ProgramArtwork da
+prioridad a URI privada sobre embedded; generation caducada falla sin fallback
+a imagen anterior. Sin URI mantiene embedded; sin ambas null. Cuatro tests reales
+HTTP/HTTPS FLAC pasan, incluido verde editado en sesión multimedia y SHA-256/ID/
+cola/posición/copias preservados. APK/test/unit/lint normal sin CA pasa.
+
+FLAC fixture ahora contiene portada embebida y Radio copia formato real; Python
+WAV/FLAC dos tests pasan. Primer intento asumió artworkData en metadata fusionada
+del MediaController: puede omitirse cuando la app aporta URI. Se verifica fuente
+FLAC con MediaMetadataRetriever y sesión del sistema por separado.
+
+Siguiente: letras temporizadas usando el mismo panel Solid con reproducción nativa
+injetada, sin importar stores/audio web. Después resto de acciones biblioteca,
+Discover/adquisición/importación/Settings, DJ/Live/Auto y release gates. Principal
+completa última S2t35+restart2; tras S2u/S2v hace falta regresión final ampliada.
+No cerrar por slice; continuar hasta PR/main/release de paridad completa.

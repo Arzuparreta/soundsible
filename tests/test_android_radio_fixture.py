@@ -8,9 +8,11 @@ import time
 from pathlib import Path
 
 import requests
+import pytest
 
 
-def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path):
+@pytest.mark.parametrize("audio_format", ["wav", "flac"])
+def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path, audio_format):
     root = Path(__file__).resolve().parents[1]
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -21,6 +23,8 @@ def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path):
             [
                 sys.executable,
                 str(root / "scripts/android_fixture.py"),
+                "--audio-format",
+                audio_format,
                 "--root",
                 str(tmp_path / "engine"),
                 "--port",
