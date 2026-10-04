@@ -29,13 +29,15 @@ describe('nativeBridge', () => {
   });
 
   it('installs transport hooks the shell can call', () => {
-    const control = { pause: vi.fn(), toggle: vi.fn(), next: vi.fn(), previous: vi.fn() };
+    const control = { pause: vi.fn(), play: vi.fn(), toggle: vi.fn(), next: vi.fn(), previous: vi.fn() };
     installNativeControl(control);
     const w = window as unknown as { SoundsibleNativeControl?: typeof control };
     w.SoundsibleNativeControl?.toggle?.();
     w.SoundsibleNativeControl?.next?.();
+    w.SoundsibleNativeControl?.play?.();
     expect(control.toggle).toHaveBeenCalledTimes(1);
     expect(control.next).toHaveBeenCalledTimes(1);
+    expect(control.play).toHaveBeenCalledTimes(1);
   });
 
   it('survives a throwing shell', () => {

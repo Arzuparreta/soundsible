@@ -451,6 +451,7 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     });
     installNativeControl({
       pause: () => ports.actions.pausePlayback('native_shell'),
+      play: () => ports.actions.resumePlayback('native_shell'),
       toggle: () => ports.actions.togglePlay(),
       next: () => {
         if (state.autoMode.active) void ports.actions.autoSkip(); else ports.actions.next();

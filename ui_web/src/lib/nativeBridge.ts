@@ -31,6 +31,7 @@ declare global {
  */
 export interface NativeControl {
   pause(): void;
+  play(): void;
   toggle(): void;
   next(): void;
   previous(): void;

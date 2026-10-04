@@ -24,6 +24,7 @@ import com.soundsible.player.SoundsibleApp
 class LibraryActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private var fileChooser: ValueCallback<Array<Uri>>? = null
+    private var webSession: WebMediaSession? = null
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val uris = if (result.resultCode == RESULT_OK) {
@@ -49,6 +50,7 @@ class LibraryActivity : AppCompatActivity() {
         webView.settings.mediaPlaybackRequiresUserGesture = false
         webView.addJavascriptInterface(SoundsibleNative(this), "SoundsibleNative")
         WebAudio.attach(webView)
+        webSession = WebMediaSession(this, webView)
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
@@ -97,10 +99,17 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     /**
-     * Web playback state from the bridge: mirror it into the widget and the
-     * media notification, the surfaces Media3 never sees for page audio.
+     * Web playback state from the bridge: mirror it into the widget, the
+     * media notification and the system media session -- the surfaces
+     * Media3 never sees for page audio.
      */
-    fun onWebNowPlaying(title: String, artist: String, isPlaying: Boolean, artwork: android.graphics.Bitmap?) {
+    fun onWebNowPlaying(
+        title: String,
+        artist: String,
+        album: String,
+        isPlaying: Boolean,
+        artwork: android.graphics.Bitmap?,
+    ) {
         try {
             com.soundsible.player.widgets.SoundsibleWidgetProvider.updateAll(
                 this,
@@ -109,6 +118,7 @@ class LibraryActivity : AppCompatActivity() {
                 isPlaying = isPlaying,
                 artwork = artwork,
             )
+            webSession?.publish(title, artist, album, isPlaying, artwork)
             if (title.isEmpty()) {
                 WebNowPlaying.cancel(this)
             } else {
@@ -135,6 +145,11 @@ class LibraryActivity : AppCompatActivity() {
             WebNowPlaying.cancel(this)
         } catch (_: Exception) {
         }
+        try {
+            webSession?.release()
+        } catch (_: Exception) {
+        }
+        webSession = null
         if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
     }

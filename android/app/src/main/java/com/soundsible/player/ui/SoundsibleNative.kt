@@ -18,14 +18,16 @@ class SoundsibleNative(private val activity: LibraryActivity) {
         // fetch both happen here; the activity posts UI-visible state.
         var title = ""
         var artist = ""
+        var album = ""
         var playing = true
         var cover: String? = null
         try {
             val payload = parseJsonObject(json)
             title = payload.optString("title", "")
             artist = payload.optString("artist", "")
+            album = payload.optString("album", "")
             if (title.isEmpty()) {
-                activity.runOnUiThread { activity.onWebNowPlaying("", "", false, null) }
+                activity.runOnUiThread { activity.onWebNowPlaying("", "", "", false, null) }
                 return
             }
             playing = payload.optBoolean("playing", true)
@@ -38,9 +40,10 @@ class SoundsibleNative(private val activity: LibraryActivity) {
             }
             val t = title
             val a = artist
+            val al = album
             val p = playing
             activity.runOnUiThread {
-                activity.onWebNowPlaying(t, a, p, bitmap)
+                activity.onWebNowPlaying(t, a, al, p, bitmap)
             }
         } catch (_: Exception) {
         }
