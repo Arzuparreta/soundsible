@@ -1,4 +1,5 @@
-import NativeSettingsAccount from './SettingsAccount';
+import NativeSettings from './Settings';
+import type { createNativeAppearance } from './appearance';
 import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { t } from '../lib/i18n';
@@ -45,7 +46,7 @@ import { offlineActions, openOfflineManager } from './OfflineManager';
 import logo from '../../../branding/logo-mark.svg';
 import styles from './AndroidStart.module.css';
 
-export default function AndroidStart() {
+export default function AndroidStart(props: { appearance: ReturnType<typeof createNativeAppearance> }) {
   const [program, setProgram] = createSignal<ProgramState | null>(null);
   const [programPending, setProgramPending] = createSignal(false);
   let generation = -1;
@@ -333,7 +334,7 @@ export default function AndroidStart() {
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
         {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => { setLibraryTab('songs'); setSurface('library'); }}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={surface() === 'downloads'} onClick={() => setSurface('downloads')}>{t('downloads.title')}</button><button data-android-migrate aria-pressed={surface() === 'migrate'} onClick={() => setSurface('migrate')}>{t('migrate.title')}</button><button data-android-settings aria-pressed={surface() === 'settings'} onClick={() => setSurface('settings')}>{t('nav.settings')}</button></nav>
-          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={<CatalogSearch history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettingsAccount busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
+          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={<CatalogSearch history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings appearance={props.appearance} busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
               const owner = epoch;
               if (updated.id !== user()?.id) throw new Error('Account changed');
               setUser(updated); await restoreOffline(false);

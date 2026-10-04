@@ -1335,3 +1335,30 @@ y archivados; no reutilizar sus resultados como verdes.
 Continuar Appearance/accesibilidad según SLICE_2AD, después Settings/Discover
 restantes, DJ/Live/Auto y firma/update. No PR/main/release todavía; no cerrar por
 slice. Gates de alpha completa vigentes.
+
+
+## S2ad: Apariencia validada en Android, regresión compartida pendiente
+
+Principal55 sobre aad83d4 dirty=false encontró un fallo OfflineTest TLS al
+reanudar después de la segunda recreación. Replay original HTTP/TLS2 pasa;
+el helper ahora espera botón habilitado y UI fuera de boot. No sustituir la
+principal limpia53+restart2 de03e3446 hasta repetir principal57+restart2.
+
+Apariencia implementada en fuentes: seis temas, SystemBars de Capacitor para
+contraste de iconos, puente limitado para fondo de ventana, cambios reales del
+modo noche del SO, idioma, tamaño y contraste. Native HTTP/TLS2 pasa, conserva
+programa/pausa20s/copia/sesión en Activity y offline503. APK/test APK/JVM17/lint
+normales sin CA pasan. UI1489/179 serial pasa. Evidencia en SLICE_2AD y
+ evidence/s2ad.json; no atribuir aceptación física al emulador.
+
+Regresión Chromium encontró título pulsable de cabecera menor de44px al medir
+todos los controles; corregido min-height44px. Test mide fila en un mismo frame.
+Enlaces Ctrl-click esperan geometría estable y nueva pestaña con fixture de
+contexto/foreground. Dirigido Chromium28 pasa/20 omitidos; cuatro perfiles
+completos pendientes. Último serial anterior268 pasa/66 omitidos/10 fallos;
+no considerar verdes ni ese run ni sus predecesores parciales.
+
+Continuar sin cierre de slice: terminar regresión cuatro perfiles, commit/push,
+preparar artifact limpio y principal57+restart2. S2ae Discover inventariado en
+SLICE_2AE; Settings restantes, DJ, Live, Auto y firma/update siguen pendientes.
+Gates de alpha completa vigentes; PR/main/release sólo al cumplirlos.

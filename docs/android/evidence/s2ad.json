@@ -1,0 +1,88 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2ad shared appearance and visual preferences",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "3cb261f",
+  "dirty_at_asset_prepare": true,
+  "checks": {
+    "ui": {
+      "tests": 1489,
+      "files": 179,
+      "log": "/tmp/soundsible-s2ad-ui-serial.log"
+    },
+    "android_appearance": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2ad-geometry-native.log",
+      "scope": "HTTP/TLS all six themes; real OS night flips; native icon contrast and window background; Spanish locale; large size/high contrast; 44px navigation and bounded width; Activity/offline 503; preserved key/program/pause20s/private copy/session; no HTML audio"
+    },
+    "related_account_offline": {
+      "passed": 4,
+      "log": "/tmp/soundsible-s2ad-system-bars-native.log",
+      "scope": "Four related cases passed in six-case run with two appearance geometry failures; before final layout fix, not a green six-case result"
+    },
+    "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal",
+    "jvm_tests": 17,
+    "browser_four_profiles": "pending serial full rerun"
+  },
+  "diagnostics": {
+    "native_bar_ownership": {
+      "tests": 6,
+      "failures": 2,
+      "log": "/tmp/soundsible-s2ad-native.log",
+      "archive": "android/build/integration-failed/s2ad-system-bar-ownership"
+    },
+    "native_geometry": {
+      "tests": 6,
+      "failures": 2,
+      "log": "/tmp/soundsible-s2ad-system-bars-native.log",
+      "archive": "android/build/integration-failed/s2ad-settings-geometry"
+    },
+    "main_s2ac": {
+      "tests": 55,
+      "failures": 1,
+      "log": "/tmp/soundsible-s2ac-main-clean.log",
+      "archive": "android/build/integration-failed/s2ac-main-offline-resume"
+    },
+    "offline_replay_original": {
+      "tests": 2,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2ac-offline-replay.log"
+    },
+    "webkit_context_repeats": {
+      "passed": 3,
+      "log": "/tmp/soundsible-s2ad-webkit-context-fixed.log"
+    },
+    "chromium_popup_repeats": {
+      "passed": 5,
+      "log": "/tmp/soundsible-s2ad-popup-visible.log"
+    },
+    "parallel_ui_timeout": {
+      "failures": 2,
+      "kind": "5000ms cold-import timeouts while Chromium and native checks ran concurrently",
+      "log": "/tmp/soundsible-s2ad-ui-final.log"
+    },
+    "chromium_atomic_geometry": {
+      "passed": 268,
+      "skipped": 66,
+      "failures": 10,
+      "log": "/tmp/soundsible-s2ad-chromium-serial.log",
+      "scope": "Nine title touch targets below44px; one modifier-click while link moved. Not accepted."
+    },
+    "header_links_directed": {
+      "passed": 28,
+      "skipped": 20,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2ad-header-links.log",
+      "scope": "After title min-height44px and stable-link geometry before Ctrl-click."
+    }
+  },
+  "limits": [
+    "API36 emulator; no acoustic/device acceptance.",
+    "Haptics and configurable navigation and remaining Settings pending.",
+    "Clean native57 plus offline restart2 pending; latest clean principal53+2 remains 03e3446.",
+    "No full platform parity or alpha release."
+  ]
+}

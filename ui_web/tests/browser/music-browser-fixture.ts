@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, type BrowserContext } from '@playwright/test';
 
 export const TRACKS = Array.from({ length: 320 }, (_, index) => ({
   id: `library-track-${index + 1}`,
@@ -8,7 +8,7 @@ export const TRACKS = Array.from({ length: 320 }, (_, index) => ({
   duration: 180,
 }));
 
-export async function mockMusicEngine(page: Page) {
+export async function mockMusicEngine(page: Page | BrowserContext) {
   await page.routeWebSocket('**/socket.io/**', (socket) => socket.close());
   await page.route('**/socket.io/**', (route) => route.abort());
   await page.route('**/api/**', async (route) => {
@@ -86,7 +86,7 @@ export const silentWav = (() => {
   return wav;
 })();
 
-export async function silentStream(page: Page): Promise<void> {
+export async function silentStream(page: Page | BrowserContext): Promise<void> {
   await page.route('**/api/static/stream/**', (route) => route.fulfill({ contentType: 'audio/wav', body: silentWav }));
 }
 

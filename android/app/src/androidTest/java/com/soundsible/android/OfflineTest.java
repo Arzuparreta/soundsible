@@ -18,7 +18,7 @@ public class OfflineTest {
     private void waitFor(StartupTest web, ActivityScenario<MainActivity> scenario, String condition) throws Exception {
         long deadline = System.nanoTime()+TimeUnit.SECONDS.toNanos(40);
         while(System.nanoTime()<deadline) { if("true".equals(web.evaluate(scenario,condition))) return; Thread.sleep(100); }
-        fail(condition+" body="+web.evaluate(scenario,"document.body.innerText")+" state="+web.evaluate(scenario,"JSON.stringify(window.__offline)")+" errors="+web.evaluate(scenario,"window.__offlineError"));
+        fail(condition+" body="+web.evaluate(scenario,"document.body.innerText")+" state="+web.evaluate(scenario,"JSON.stringify(window.__offline)")+" errors="+web.evaluate(scenario,"window.__offlineError")+" playback="+web.evaluate(scenario,"JSON.stringify(window.__play)")+" click="+web.evaluate(scenario,"JSON.stringify(window.__offlineClick)"));
     }
     private void control(EngineConnection connection,String origin,String action,String body) throws Exception {
         try(okhttp3.Response response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/__fixture/"+action).header("X-Android-Fixture","isolated").post(okhttp3.RequestBody.create(body,okhttp3.MediaType.get("application/json"))).build()).execute()) { assertEquals(200,response.code()); }
@@ -30,7 +30,9 @@ public class OfflineTest {
         web.evaluate(scenario,"window.addEventListener('error',e=>window.__offlineError=e.message);window.__offlineTimer && clearInterval(window.__offlineTimer);window.__offlineTimer=setInterval(()=>Capacitor.Plugins.SoundsibleOffline.command({action:'state',generation:"+EngineConnection.shared(InstrumentationRegistry.getInstrumentation().getTargetContext()).getGeneration()+"}).then(s=>window.__offline=s),200);window.__playTimer && clearInterval(window.__playTimer);window.__playTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__play=s),200)");
     }
     private void click(StartupTest web,ActivityScenario<MainActivity> scenario,String label) throws Exception {
-        web.evaluate(scenario,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent==="+JSONObject.quote(label)+").click()");
+        String button = "Array.from(document.querySelectorAll('button')).find(b=>!b.disabled&&b.textContent==="+JSONObject.quote(label)+")";
+        waitFor(web, scenario, "!!" + button + "&&!document.documentElement.hasAttribute('data-booting')");
+        web.evaluate(scenario,"(()=>{const button="+button+";window.__offlineClick={label:"+JSONObject.quote(label)+",disabled:button.disabled,programBusy:document.querySelector('[data-testid=android-program]')?.getAttribute('aria-busy')};button.click()})()");
     }
     private void prepare(StartupTest web,ActivityScenario<MainActivity> scenario,long gen) throws Exception {
         web.evaluate(scenario,"window.__prepared=false;Capacitor.Plugins.SoundsibleOffline.command({action:'prepare',generation:"+gen+",tracks:[{id:'member-track',title:'member private song',artist:'member artist',album:'member album',podcast_episode_guid:null}],playlists:{}}).then(s=>{window.__offline=s;window.__prepared=true})");
@@ -65,7 +67,7 @@ public class OfflineTest {
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song').click()");
             waitFor(web,scenario,"window.__play?.playing && window.__play.id==='member-track' && window.__play.items[0].offline===true");
             click(web,scenario,"Pause");waitFor(web,scenario,"window.__play?.playWhenReady===false");
-            web.evaluate(scenario,"let seek=document.querySelector('input[type=range]');seek.value=15000;seek.dispatchEvent(new Event('input',{bubbles:true}));seek.dispatchEvent(new Event('change',{bubbles:true}))");
+            web.evaluate(scenario,"(()=>{const seek=document.querySelector('input[type=range]');seek.value=15000;seek.dispatchEvent(new Event('input',{bubbles:true}));seek.dispatchEvent(new Event('change',{bubbles:true}))})()");
             waitFor(web,scenario,"window.__play?.positionMs>=14500 && !window.__play.playWhenReady");
             scenario.recreate();observe(web,scenario);waitFor(web,scenario,"window.__play?.id==='member-track' && !window.__play.playWhenReady");
             click(web,scenario,"Play");waitFor(web,scenario,"window.__play?.playing");

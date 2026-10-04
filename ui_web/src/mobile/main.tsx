@@ -2,13 +2,13 @@ import { render } from 'solid-js/web';
 import AndroidStart from './AndroidStart';
 import { nativeBuildInfo } from './platform';
 import { initLocale } from '../lib/i18n';
-import { applyVisualPreferences, loadVisualPreferences } from '../lib/visualPreferences';
+import { createNativeAppearance } from './appearance';
 import '../boot/fonts';
 import '../styles/tokens.css';
 import '../styles/app.css';
 
 // Evidence for the native instrumentation smoke; never includes account data.
-applyVisualPreferences(loadVisualPreferences());
+export const nativeAppearance = createNativeAppearance();
 async function start() {
   await Promise.all([initLocale(), window.__SOUNDSIBLE_BOOT__?.stylesReady]);
   const info = await nativeBuildInfo();
@@ -18,6 +18,6 @@ async function start() {
   root.dataset.nativeVersion = info.version;
   root.dataset.nativeBuild = info.build;
   root.dataset.nativeRevision = __ANDROID_SOURCE_REVISION__;
-  render(() => <AndroidStart />, root);
+  render(() => <AndroidStart appearance={nativeAppearance} />, root);
 }
 void start().catch(() => window.__SOUNDSIBLE_BOOT__?.fail());

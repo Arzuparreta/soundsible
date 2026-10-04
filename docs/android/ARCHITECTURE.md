@@ -326,3 +326,20 @@ SearchHistoryStorage comparte semántica con web e inyecta namespace Android por
 origen/cuenta. Sólo respuestas vigentes recuerdan consultas; desactivar elimina
 ambos dominios del perfil, sin afectar otras cuentas. Recientes se pueden ejecutar
 y retirar. Ver SLICE_2AC para aceptación HTTP/HTTPS y límites.
+
+
+### Apariencia y preferencias visuales compartidas (S2ad)
+
+AppearanceSettingsView y DisplayPreferencesView reciben valores/acciones, sin
+importar stores de audio. Adaptadores web conservan controladores existentes;
+Android usa createNativeAppearance con tabla de temas boot y persistencia visual
+compartida. Tema/tamaño/contraste pertenecen a la instalación, no al perfil del
+motor. Idioma usa los diccionarios compartidos.
+
+SystemBars integrado conserva estilo de iconos ante configuración del SO.
+SoundsibleAppearance sólo admite colores hex de la paleta para fondo decor/WebView
+y barras legacy; no transporta credenciales ni estado de reproducción. Reaplicar
+ante cambio de media query y foreground conserva incluso una paleta explícita
+cuando Capacitor restaura su ventana. NativeSettings ofrece Cuenta/Apariencia/
+Accesibilidad; Atrás consume primero la sección interna. Haptics/navegación
+configurable y restantes ajustes no forman parte de esta aceptación.

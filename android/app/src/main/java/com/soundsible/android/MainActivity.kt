@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit
 @androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        registerPlugin(AppearancePlugin::class.java)
         registerPlugin(EnginePlugin::class.java)
         registerPlugin(ImportPlugin::class.java)
         registerPlugin(PlaybackPlugin::class.java)

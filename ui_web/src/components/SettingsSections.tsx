@@ -1,11 +1,11 @@
 import { AccountSettingsView } from './AccountSettingsView';
 import { SettingsLoad } from './SettingsLoad';
 import { BottomNavigationSettings } from './BottomNavigationSettings';
-import { EXTRA_THEMES, type Theme } from '../boot/themes';
-import { createSignal, onMount, For, Show, type JSX } from 'solid-js';
+import { AppearanceSettingsView } from './AppearanceSettingsView';
+import { createSignal, onMount, Show, type JSX } from 'solid-js';
 import { state, actions } from '../stores';
 import { api } from '../lib/api';
-import { t, locale, setLocale, LOCALES, type Locale } from '../lib/i18n';
+import { t } from '../lib/i18n';
 import { linkReading, mbps, refreshLinkReading } from '../lib/linkQuality';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
@@ -29,11 +29,9 @@ import { UsersPanel } from './UsersPanel';
 import { SubsonicAccessPanel } from './SubsonicAccessPanel';
 import {
   ActionRow,
-  ChoiceGroup,
   InputRow,
   NavRow,
   SegmentedRow,
-  SelectRow,
   SettingRow,
   SettingsGroup,
   SwitchRow,
@@ -152,46 +150,8 @@ function AccountSection() {
 
 /* ── Appearance ───────────────────────────────────────────────────────── */
 
-/* Every palette, in the order the picker lists them. Keyed on the shared type,
-   so a theme added to the store does not compile until it has a label here. */
-const THEME_LABELS: Record<Theme, () => string> = {
-  system: () => t('settings.themeSystem'),
-  dark: () => t('settings.themeDark'),
-  light: () => t('settings.themeLight'),
-  slate: () => t('settings.themeSlate'),
-  'pure-black': () => t('settings.themePureBlack'),
-  'forest-green': () => t('settings.themeForestGreen'),
-};
-
-const THEME_ORDER: Theme[] = ['system', 'dark', 'light', ...EXTRA_THEMES];
-
 function AppearanceSection() {
-  return (
-    <>
-      <ChoiceGroup
-        anchor="theme"
-        label={t('settings.theme')}
-        options={THEME_ORDER.map((theme) => ({
-          value: theme,
-          label: THEME_LABELS[theme](),
-          hint: theme === 'system' ? t('settings.note.theme') : undefined,
-        }))}
-        value={state.theme}
-        onChange={(theme) => actions.setTheme(theme)}
-      />
-
-      <SettingsGroup>
-        <SelectRow
-          anchor="language"
-          label={t('settings.language')}
-          value={locale()}
-          onChange={(value) => setLocale(value as Locale)}
-        >
-          <For each={LOCALES}>{(l) => <option value={l.code}>{l.native}</option>}</For>
-        </SelectRow>
-      </SettingsGroup>
-    </>
-  );
+  return <AppearanceSettingsView theme={state.theme} onTheme={actions.setTheme} />;
 }
 
 /* ── Accessibility ────────────────────────────────────────────────────── */

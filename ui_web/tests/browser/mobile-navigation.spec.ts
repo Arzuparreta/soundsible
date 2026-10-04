@@ -130,12 +130,20 @@ for (const width of [320, 390, 430]) {
       // The bar re-renders for the new size; measure the buttons it settles on.
       await expect(buttons.first()).toBeVisible();
       await expect(buttons.last()).toBeVisible();
-      const first = await buttons.first().boundingBox();
-      const last = await buttons.last().boundingBox();
-      expect(Math.abs(first!.y + first!.height / 2 - last!.y - last!.height / 2)).toBeLessThan(2);
-      expect(first!.height).toBeGreaterThanOrEqual(43.9);
-      expect(last!.x + last!.width).toBeLessThanOrEqual(width);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+      // Resize can replace a control between two independent boundingBox reads.
+      // Measure the complete visible row in one frame and poll its final layout.
+      await expect.poll(() => header.evaluate((element, viewportWidth) => {
+        const boxes = Array.from(element.querySelectorAll('button')).map(button => button.getBoundingClientRect())
+          .filter(box => box.width > 0 && box.height > 0);
+        const centers = boxes.map(box => box.y + box.height / 2);
+        return {
+          controls: boxes.length >= 2,
+          aligned: Math.max(...centers) - Math.min(...centers) < 2,
+          touchTargets: boxes.every(box => box.height >= 43.9),
+          insideViewport: boxes.every(box => box.x >= 0 && box.right <= viewportWidth),
+          documentWidth: document.documentElement.scrollWidth,
+        };
+      }, width)).toEqual({ controls: true, aligned: true, touchTargets: true, insideViewport: true, documentWidth: width });
       await page.screenshot({ path: info.outputPath(`mobile-library-${width}-${size}.png`) });
     });
   }
