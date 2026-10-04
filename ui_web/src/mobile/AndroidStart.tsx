@@ -3,6 +3,7 @@ import { t } from '../lib/i18n';
 import { musicLibraryRows } from '../lib/musicLibrary';
 import { buildIdentityIndex, trackKeys } from '../lib/playbackIdentity';
 import { songMarkAction } from './songMarks';
+import { createAccountRefresh } from './accountRefresh';
 import { openNativePlaylistPicker } from './PlaylistPicker';
 import { openNativeMetadataEditor } from './metadataEditor';
 import { nativePlaylistActions, nativePlaylistOccurrenceActions, createNativePlaylist } from './playlistActions';
@@ -117,7 +118,8 @@ export default function AndroidStart() {
     })();
     return expiration;
   }
-  async function sync() {
+  const sync = createAccountRefresh(syncOnce, () => epoch, () => !!user());
+  async function syncOnce() {
     if (!user()) return;
     const current = epoch;
     const job = ++syncEpoch;
