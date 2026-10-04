@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -85,6 +86,51 @@ def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path, audio_fo
             )
             assert streamed.status_code == 206, streamed.text[:100]
             assert len(streamed.content) == 100
+            headers = {"X-Android-Fixture": "isolated"}
+            assert member.post(origin + "/__fixture/radio-delay", json={"seconds": 3}, timeout=10).status_code == 403
+            for invalid in [-1, 6, True, "3"]:
+                assert (
+                    member.post(
+                        origin + "/__fixture/radio-delay", headers=headers, json={"seconds": invalid}, timeout=10
+                    ).status_code
+                    == 400
+                )
+            assert (
+                member.post(
+                    origin + "/__fixture/radio-delay", headers=headers, json={"seconds": 3}, timeout=10
+                ).status_code
+                == 200
+            )
+            body = {
+                "intent": "radio",
+                "profile": "balanced",
+                "seed": {"track_id": "member-track", "title": "member private song", "artist": "member artist"},
+                "exclude": ["member-track"],
+                "limit": 8,
+            }
+            with ThreadPoolExecutor(max_workers=1) as worker:
+                pending = worker.submit(member.post, origin + "/api/discovery/music/plan", json=body, timeout=30)
+                deadline = time.monotonic() + 20
+                while True:
+                    stats = member.get(origin + "/__fixture/radio-stats", headers=headers, timeout=10).json()
+                    if stats["pending"]:
+                        break
+                    assert not pending.done(), pending.result().text
+                    assert time.monotonic() < deadline
+                    time.sleep(0.05)
+                retired = stats["delayed_ids"][0]
+                assert retired.startswith("member-radio-")
+                assert member.delete(origin + "/api/library/tracks/" + retired, timeout=10).status_code == 200
+                library = member.get(origin + "/api/library", timeout=10).json()["tracks"]
+                assert all(row["id"] != retired for row in library)
+                old = pending.result()
+                assert old.status_code == 200
+                assert any(row.get("track_id") == retired for row in old.json()["items"])
+            stats = member.get(origin + "/__fixture/radio-stats", headers=headers, timeout=10).json()
+            assert stats["pending"] == 0 and stats["delivered"] == 1 and stats["delay_next"] == 0
+            fresh = member.post(origin + "/api/discovery/music/plan", json=body, timeout=30)
+            assert fresh.status_code == 200
+            assert all(row.get("track_id") != retired for row in fresh.json()["items"])
         finally:
             process.terminate()
             process.wait(timeout=10)
