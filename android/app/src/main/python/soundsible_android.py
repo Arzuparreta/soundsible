@@ -44,6 +44,14 @@ def configure(config_dir, data_dir, cache_dir, log_dir, music_dir, ui_dist):
     os.environ["SOUNDSIBLE_UI_DIST"] = ui_dist
     # The native client uses /api only; never shell out to npm on the phone.
     os.environ["SOUNDSIBLE_SKIP_UI_BUILD"] = "1"
+    # yt-dlp runtime: its cache, temp files and file downloads all stay in
+    # app-private storage. HOME is already the app dir under Chaquopy; pin
+    # the XDG variables so no library ever reaches for shared storage.
+    os.makedirs(cache_dir, exist_ok=True)
+    os.environ["XDG_CACHE_HOME"] = cache_dir
+    for key in ("TMPDIR", "TEMP", "TMP"):
+        os.environ.setdefault(key, cache_dir + "/tmp")
+    os.makedirs(os.environ["TMPDIR"], exist_ok=True)
 
 
 def state_file_contents():
