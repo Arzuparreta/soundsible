@@ -37,6 +37,6 @@ Python WAV/FLAC: dos casos pasan en /tmp/soundsible-s2ab-planner-fixture.log.
 Verifican control no autorizado/valores inválidos, DELETE real, respuesta antigua
 con ID retirado, snapshot sin ID y plan nuevo sin ID. Ruff pasa.
 
-Draft instrumentado preparado fuera del repo en /tmp/PlannerRetirementTest.java;
+Draft instrumentado reproducible en [drafts/PlannerRetirementTest.java](drafts/PlannerRetirementTest.java);
 tras la principal clean dc29b73, trasladarlo a androidTest y ejecutar HTTP/HTTPS
 para ambos modos. No cuenta todavía como aceptación del runtime Android.
