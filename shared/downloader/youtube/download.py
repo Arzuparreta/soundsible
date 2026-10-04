@@ -216,8 +216,14 @@ def download_audio(
             except SystemExit as exc:
                 code = exc.code if isinstance(exc.code, int) else 1
             except Exception:
-                logger.exception("yt-dlp in-process run failed")
+                # The queue surfaces `output` as the failure reason and the
+                # user has no adb: the traceback must BE the output, not a
+                # log line nobody will ever read.
+                import traceback
+
                 code = 1
+                buf.write("\n")
+                buf.write(traceback.format_exc())
         output = buf.getvalue()
         if progress_callback:
             for line in output.splitlines():
