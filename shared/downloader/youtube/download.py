@@ -192,7 +192,13 @@ def download_audio(
 
     from shared.venv_utils import has_working_subprocess_python
 
-    if not has_working_subprocess_python():
+    # Android sets SOUNDSIBLE_YTDLP_IN_PROCESS: its CLI branch proved
+    # undebuggable there (bare exit codes, empty output), while the API
+    # path raises yt-dlp's own errors and downloads for real.
+    force_in_process = (os.getenv("SOUNDSIBLE_YTDLP_IN_PROCESS", "") or "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    if force_in_process or not has_working_subprocess_python():
         return download_audio_api(url, temp_dir, cookies, quality, progress_callback)
 
     def run(args: List[str]) -> tuple[int, str]:
