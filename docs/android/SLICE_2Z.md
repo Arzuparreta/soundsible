@@ -66,5 +66,7 @@ entre state() y command(). El cierre global no edita una ocurrencia ni un orden;
 debe conservar UID/generación, como pause, sin que un refill pueda impedirlo.
 Corrección preparada en PlaybackService y prueba HTTP/HTTPS reforzada con token
 anterior a cambiar autoplay por Radio; una generación antigua debe rechazarse y
-conservar el programa. Pendiente validar esta corrección y repetir principal.
+conservar el programa. Corrección validada: dos tests HTTP/HTTPS sin fallos ni
+omisiones y APK/test/unit/lint normal tras retirar CA temporal; log
+/tmp/soundsible-s2z-stop-targeted.log. Pendiente repetir principal completa.
 Las ediciones por índice/key conservan su guard de token; no relajar esos tests.

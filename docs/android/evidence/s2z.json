@@ -43,6 +43,29 @@
         "workers": 1,
         "mount": "read-only"
       }
+    },
+    "first_main_regression": {
+      "source_revision_at_asset_prepare": "502947d",
+      "dirty_at_asset_prepare": false,
+      "tests": 45,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2z-main-full.log",
+      "failed_case": "AutoplayTest.tlsAutoplay stop after Radio refill",
+      "archived_failure_xml": "android/build/integration-failed/s2z-main-502947d",
+      "offline_restart_phases": "not run after main failure"
+    },
+    "global_stop_regression_fix": {
+      "source_revision_at_asset_prepare": "3e86586",
+      "dirty_at_asset_prepare": true,
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2z-stop-targeted.log",
+      "scope": "Autoplay HTTP/HTTPS: obsolete pre-refill order token accepts global stop; obsolete account generation rejects without closing; row edit guards preserved",
+      "normal_apk_test_unit_lint": "passed after ephemeral CA removal",
+      "full_main_and_restart_regression": "pending"
     }
   },
   "limits": [

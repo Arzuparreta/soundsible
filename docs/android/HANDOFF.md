@@ -46,9 +46,13 @@ usa panel compartido con runtime nativo y pasa HTTP/HTTPS. Faltan biblioteca/
 Discover/Settings completos, DJ, Live, Android Auto, firma y actualización.
 S2x adquisición y S2y importación compartida/selector DocumentsUI HTTP/HTTPS
 validados. S2z navegación Atrás validada con conservación de programa/sesión;
-continuar sin cerrar por slice. La regresión principal de 45 casos y dos fases
-offline está en curso con assets limpios 502947d; no sustituir el resultado
-anterior hasta terminar. Próximo bloque: [eliminar adquirido](SLICE_2AA.md).
+continuar sin cerrar por slice. Primera principal sobre 502947d: 45 casos,
+un fallo en cerrar tras refill Radio. Corregido y validado AutoplayTest HTTP/HTTPS
+(2 casos) y APK/test/unit/lint normal sin CA temporal; repetir principal + dos
+fases offline antes de sustituir el resultado anterior. Los archivos en
+integration-results sólo se actualizan si pasa: no usar el antiguo XML de 35
+como resultado de esta ejecución fallida. Próximo bloque:
+[eliminar adquirido](SLICE_2AA.md).
 No PR/main/release todavía; mantener gates de alpha completa y continuar.
 
 ## Entrega S0

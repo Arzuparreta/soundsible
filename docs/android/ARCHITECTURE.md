@@ -256,8 +256,12 @@ el proxy ahora limita bytes y revalida generación antes de publicar. Ver
 
 ### Cierre de programa (S2h)
 
-`stop` lleva queueToken y pasa por el custom command del servicio, con guard de
-UID/generación/cola; funciona sin REST/cookie para cerrar el programa actual. El
+`stop` pasa por el custom command del servicio, con guard de UID/generación;
+funciona sin REST/cookie para cerrar el programa actual. Por compatibilidad la UI
+puede enviar queueToken, pero el cierre global no depende del orden: un refill
+de Radio/autoplay no puede vetarlo. Las ediciones de ocurrencias conservan su
+guard de token/key. S2z encontró y corrigió esa carrera; AutoplayTest HTTP/HTTPS
+prueba token anterior al refill aceptado y generación antigua rechazada. El
 servicio vacía fuentes, intención/modos/error y recursos de audio/artwork. El plugin
 espera el estado cerrado recibido por IPC antes de resolver. No cambia identidad;
 una cola nueva no hereda intención/modos ni claves. Media3 retira la notificación
