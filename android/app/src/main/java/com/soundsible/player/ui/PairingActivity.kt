@@ -160,19 +160,13 @@ class PairingActivity : Activity() {
     }
 
     private fun refreshEngineStatus() {
-        val build = try {
-            val info = packageManager.getPackageInfo(packageName, 0)
-            "build ${info.longVersionCode}"
-        } catch (_: Exception) {
-            ""
-        }
         findViewById<TextView>(R.id.localEngineStatus).text = when {
             LocalEngine.isAvailable ->
-                "On-device Python ${LocalEngine.pythonVersion} ready $build (tap to retry)."
+                "On-device Python ${LocalEngine.pythonVersion} ready (tap to retry)."
             LocalEngine.isBooting ->
-                "Starting on-device Python… $build"
+                "Starting on-device Python…"
             else ->
-                "On-device Python unavailable $build (${LocalEngine.deviceFacts(filesDir)})" +
+                "On-device Python unavailable (${LocalEngine.deviceFacts(filesDir)})" +
                     (LocalEngine.startupError?.let { ": $it" } ?: "") +
                     "; pairing with a server still works. Tap to retry.\nBoot trace:\n${LocalEngine.traceTail()}"
         }
