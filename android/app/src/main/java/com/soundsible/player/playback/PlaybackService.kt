@@ -36,6 +36,9 @@ private const val ROOT_ID = "soundsible-root"
 /** Cap for the Android-only playback cache (~10-20 songs at phone bitrates). */
 private const val PLAYBACK_CACHE_BYTES = 150L * 1024 * 1024
 
+/** Upcoming tracks prefetched into the playback cache per queue change. */
+private const val PREFETCH_AHEAD = 8
+
 /**
  * Foreground playback plus the browse tree Android Auto renders from.
  *
@@ -52,6 +55,8 @@ class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private var player: ExoPlayer? = null
     private var mediaCache: SimpleCache? = null
+    private var upstreamFactory: DataSource.Factory? = null
+    private var lastPrefetchKey: List<String>? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private fun app(): SoundsibleApp = application as SoundsibleApp
@@ -75,7 +80,7 @@ class PlaybackService : MediaLibraryService() {
                     if (token != null) setDefaultRequestProperties(mapOf("Authorization" to "Bearer $token"))
                 }
                 .createDataSource()
-        }
+        }.also { upstreamFactory = it }
         // Android-only playback cache: what sounded stays on disk (bounded
         // LRU), so replaying the last songs needs no network. Stream URLs
         // are stable engine paths, which makes them sound cache keys.
@@ -174,7 +179,48 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
+    /**
+     * Prefetch the upcoming queue through the playback cache, so the next
+     * songs survive offline stretches and updates like the pinned last song
+     * does. Same cache the player reads: a later play is a cache hit, never
+     * a second download. Skips file and remote URLs; bounded per call.
+     */
+    private fun prefetchUpcoming() {
+        val items = QueueHolder.queue.items.toList()
+        val index = QueueHolder.queue.currentIndex ?: 0
+        val upcoming = items.drop(index + 1).take(PREFETCH_AHEAD)
+        val key = upcoming.map { it.effectiveTrackId() ?: it.id }
+        if (key == lastPrefetchKey) return
+        lastPrefetchKey = key
+        scope.launch {
+            try {
+                val cache = mediaCache ?: return@launch
+                val factory = upstreamFactory ?: return@launch
+                val connection = app().tokenStore.load()
+                for (item in upcoming) {
+                    val raw = item.streamUrl ?: continue
+                    val url = connection?.resolve(raw) ?: raw
+                    if (!url.startsWith("http")) continue
+                    try {
+                        val upstream = factory.createDataSource()
+                        val cached = CacheDataSource(cache, upstream)
+                        val spec = androidx.media3.datasource.DataSpec(
+                            android.net.Uri.parse(url),
+                            0L,
+                            androidx.media3.common.C.LENGTH_UNSET.toLong(),
+                            url,
+                        )
+                        androidx.media3.datasource.cache.CacheWriter(cached, spec, null, null).cache()
+                    } catch (_: Exception) {
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun publishState() {
+        prefetchUpcoming()
         val p = player ?: return
         val item = p.currentMediaItem
         try {
