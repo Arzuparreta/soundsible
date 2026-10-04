@@ -32,7 +32,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
         },
       }] }, event);
     }}>⋯</button>
-    <button data-program-close aria-label={t('android.closeProgram')} title={t('android.closeProgram')} disabled={disabled()} onClick={() => void run({ action: 'stop', queueToken: props.state.queueToken })}>×</button></div>
+    <button data-program-close aria-label={t('android.closeProgram')} title={t('android.closeProgram')} disabled={disabled()} onClick={() => void run({ action: 'stop', queueToken: props.state.queueToken, programToken: props.state.programToken })}>×</button></div>
     <Show when={props.state.items[props.state.index]?.mediaKind === 'podcast_episode'}><button data-podcast-back aria-label={t('podcasts.skipBack')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: -15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>−15s</button><button data-podcast-forward aria-label={t('podcasts.skipForward')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: 15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>+15s</button></Show>
     <button disabled={disabled() || !props.state.hasPrevious} onClick={() => void run({ action: 'previous' })}>{t('common.prev')}</button>
     <button disabled={disabled()} onClick={() => void run({ action: props.state.playWhenReady ? 'pause' : 'play' })}>{props.state.playWhenReady ? t('common.pause') : t('common.play')}</button>

@@ -90,13 +90,15 @@ public class AutoplayTest {
             assertEquals("true",web.evaluate(scenario,"window.__radio.items.length===4 && !window.__radio.autoplay.active"));
             command(web,scenario,"action:'repeat',mode:0");waitFor(web,scenario,"window.__radio.autoplay.active && window.__radio.items.length>4");
             String beforeRadio=web.evaluate(scenario,"window.__radio.queueToken");
+            String programBeforeRadio=web.evaluate(scenario,"window.__radio.programToken");
             command(web,scenario,"action:'radio',enabled:true,profile:'balanced'");
             waitFor(web,scenario,"window.__radio.radio?.active && !window.__radio.autoplay.active && window.__radio.items.slice(4).every(i=>i.generatedSource!=='autoplay')");
             waitFor(web,scenario,"window.__radio.queueToken!=="+beforeRadio);
+            assertEquals(programBeforeRadio,web.evaluate(scenario,"window.__radio.programToken"));
             web.evaluate(scenario,"window.__oldCloseRejected=null;Capacitor.Plugins.SoundsiblePlayback.command({generation:"+(connection.getGeneration()-1)+",action:'stop',queueToken:"+beforeRadio+"}).then(()=>window.__oldCloseRejected=false,()=>window.__oldCloseRejected=true)");
             waitFor(web,scenario,"window.__oldCloseRejected===true");
             assertEquals("true",web.evaluate(scenario,"window.__radio.items.length>0 && window.__radio.radio.active"));
-            command(web,scenario,"action:'stop',queueToken:"+beforeRadio);waitFor(web,scenario,"window.__radio.items.length===0 && !window.__radio.autoplay.active && !window.__radio.radio.active");
+            command(web,scenario,"action:'stop',queueToken:"+beforeRadio+",programToken:"+programBeforeRadio);waitFor(web,scenario,"window.__radio.items.length===0 && !window.__radio.autoplay.active && !window.__radio.radio.active");
         }finally{
             try {
                 String cookie=connection.cookieHeader(connection.getGeneration());

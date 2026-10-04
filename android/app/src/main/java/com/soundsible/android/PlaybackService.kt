@@ -176,9 +176,12 @@ class PlaybackService : MediaLibraryService() {
                         args.getString("key")?.let { require(it == ProgramQueue.key(player, player.currentMediaItemIndex)) }
                         if (args.getBoolean("enabled")) { autoplay.suspend(); radio.start(args.getString("profile") ?: "balanced") } else { radio.stop(); autoplay.sync() }
                     } else if (args.getString("action") == "stop") {
-                        // Like pause, closing addresses this account's current program,
-                        // not an occurrence/order. A background refill must not veto it.
                         require(args.getLong("generation", -1) == connection.generation)
+                        // Refills retain the program identity; replacement starts another.
+                        // Keep the older order-based contract for callers without that identity.
+                        val owner = args.getString("programToken")
+                        if (owner != null) require(owner.isNotBlank() && owner == ProgramQueue.programToken(player))
+                        else require(args.getString("queueToken") == ProgramQueue.token(player))
                         closeProgram()
                     } else ProgramQueue.edit(player, connection, args, { previews.manualRetry() }, podcasts::position, (radio.manualInsertion() ?: autoplay.manualInsertion()))
                     SessionResult(SessionResult.RESULT_SUCCESS) } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })

@@ -118,7 +118,7 @@ export default function AndroidStart() {
     cancelEvents?.(); cancelEvents = undefined;
     if (stopPlayback) {
       const active = program();
-      if (active?.queue.length) void nativeProgramTransport.command({ generation, action: 'stop', queueToken: active.queueToken }).catch(() => {});
+      if (active?.queue.length) void nativeProgramTransport.command({ generation, action: 'stop', queueToken: active.queueToken, programToken: active.programToken }).catch(() => {});
       runtime.unbind();
     }
     setOfflineState(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setSavedEntries([]); setSavedEntities([]); setDownloadItems([]); setSurface('library'); setRevision(0); setEventsOnline(false); setStale(false);

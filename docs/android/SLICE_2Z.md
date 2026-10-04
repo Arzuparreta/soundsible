@@ -70,3 +70,20 @@ conservar el programa. Corrección validada: dos tests HTTP/HTTPS sin fallos ni
 omisiones y APK/test/unit/lint normal tras retirar CA temporal; log
 /tmp/soundsible-s2z-stop-targeted.log. Pendiente repetir principal completa.
 Las ediciones por índice/key conservan su guard de token; no relajar esos tests.
+
+La segunda principal sobre 5ddc166 da 45 casos, dos fallos en Closure HTTP/HTTPS:
+la corrección sólo por generación aceptaba un cierre atrasado de otro programa.
+Es una regresión real, no un test obsoleto. Contrato final: programToken UUID
+estable durante append/refill/edición y distinto al reemplazar la cola o insertar
+sobre una vacía. stop valida ese token más UID/generación; el caller antiguo sin
+programToken mantiene guard de queueToken. Closure conserva su rechazo de token
+de orden inválido y añade reemplazo real de cola seguido de cierre del programa
+anterior con el token de orden nuevo. Autoplay confirma identidad conservada tras
+pasar de autoplay a Radio/refill y acepta el cierre con el orden anterior.
+
+Los cuatro casos Closure/Autoplay HTTP/HTTPS pasan sin fallos/omisiones, y
+APK/test/unit/lint normal sin CA temporal pasa. Log
+/tmp/soundsible-s2z-program-identity-native.log. UI completa del working tree
+incluye S2aa en curso: 1.462 tests/172 archivos; repetir principal completa tras
+commits limpios y cerrar S2aa end to end. Los XML de ejecuciones fallidas están
+en integration-failed; integration-results todavía conserva el último éxito.

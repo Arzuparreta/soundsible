@@ -55,7 +55,7 @@ class PlaybackPlugin : Plugin() {
         val radio = if (extras?.getLong("radioGeneration") == EngineConnection.shared(context).generation) JSObject().put("active", extras.getBoolean("radioActive")).put("phase", extras.getString("radioPhase")).put("profile", extras.getString("radioProfile")) else null
         val autoplay = if (extras?.getLong("autoplayGeneration") == EngineConnection.shared(context).generation) JSObject().put("enabled", if (extras.getBoolean("autoplayKnown")) extras.getBoolean("autoplayEnabled") else null).put("settingsPhase", extras.getString("autoplaySettingsPhase")).put("active", extras.getBoolean("autoplayActive")).put("phase", extras.getString("autoplayPhase")) else null
         return JSObject().put("autoplay", autoplay).put("radio", radio).put("preview", preview).put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
-            .put("items", items).put("queueToken", if (p != null) ProgramQueue.token(p) else "")
+            .put("items", items).put("queueToken", if (p != null) ProgramQueue.token(p) else "").put("programToken", if (p != null) ProgramQueue.programToken(p) else "")
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
             .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", if (authFailure) "auth" else if (plannerError == 403) "permission" else PlaybackRecovery.kind(p?.playerError))
             .put("shuffle", p?.shuffleModeEnabled ?: false).put("repeat", p?.repeatMode ?: Player.REPEAT_MODE_OFF)
@@ -83,6 +83,7 @@ class PlaybackPlugin : Plugin() {
                         putBoolean("reload", call.getBoolean("reload") ?: false); putBoolean("enabled", call.getBoolean("enabled") ?: false); putString("profile", call.getString("profile"))
                         putInt("seconds", call.getInt("seconds") ?: 0)
                         putLong("generation", connection.generation)
+                        putString("programToken", call.getString("programToken"))
                         putString("action", call.getString("action")); putString("queueToken", if (call.getString("action") in listOf("play", "queue")) ProgramQueue.token(p) else call.getString("queueToken")); putString("key", if (call.getString("action") == "play" && p.mediaItemCount > 0) ProgramQueue.key(p, p.currentMediaItemIndex) else call.getString("key"))
                         putString("tracks", call.getArray("tracks")?.toString())
                         putInt("index", if (call.getString("action") == "play") p.currentMediaItemIndex else call.getInt("index") ?: if (call.getString("action") == "queue") 0 else -1); putInt("toIndex", call.getInt("toIndex") ?: -1)

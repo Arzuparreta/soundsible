@@ -4,7 +4,7 @@ export interface ProgramState {
   generation: number; sequence: number; ready: boolean; playing: boolean;
   playWhenReady: boolean; errorKind: '' | 'connection' | 'server' | 'auth' | 'permission' | 'source';
   state: number; index: number; id: string; title: string; artist: string;
-  items: ProgramOccurrence[]; queueToken: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
+  items: ProgramOccurrence[]; queueToken: string; programToken?: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
   radio?: { active: boolean; phase: string; profile: 'familiar' | 'balanced' | 'explore' } | null;
   autoplay?: { enabled: boolean | null; settingsPhase: string; active: boolean; phase: string } | null;
   seekable?: boolean;
@@ -18,7 +18,7 @@ export type ProgramCommand =
   | { action: 'radio'; enabled: boolean; profile: 'familiar' | 'balanced' | 'explore'; queueToken: string; key?: string }
   | { action: 'metadata'; tracks: { id: string; title: string; artist: string; album: string; album_artist?: string | null; album_id?: string | null; artist_id?: string | null }[] }
   | { action: 'autoplay'; enabled: boolean; reload?: boolean }
-  | { action: 'stop'; queueToken: string }
+  | { action: 'stop'; queueToken: string; programToken?: string }
   | { action: 'seek'; positionMs: number }
   | { action: 'skip'; seconds: -15 | 15; index: number; key: string; queueToken: string }
   | { action: 'shuffle'; enabled: boolean }

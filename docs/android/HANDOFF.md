@@ -47,9 +47,13 @@ Discover/Settings completos, DJ, Live, Android Auto, firma y actualización.
 S2x adquisición y S2y importación compartida/selector DocumentsUI HTTP/HTTPS
 validados. S2z navegación Atrás validada con conservación de programa/sesión;
 continuar sin cerrar por slice. Primera principal sobre 502947d: 45 casos,
-un fallo en cerrar tras refill Radio. Corregido y validado AutoplayTest HTTP/HTTPS
-(2 casos) y APK/test/unit/lint normal sin CA temporal; repetir principal + dos
-fases offline antes de sustituir el resultado anterior. Los archivos en
+un fallo en cerrar tras refill Radio. La primera corrección pasó Autoplay pero
+falló Closure en la segunda principal (45 casos, dos fallos). Contrato final:
+programToken estable durante refills, distinto al abrir una cola nueva; stop
+valida identidad de programa + UID/generación, con guard de orden para callers
+antiguos sin programToken. Closure y Autoplay HTTP/HTTPS (4 casos) y APK/test/unit/
+lint normal sin CA temporal pasan. Repetir principal + dos fases offline antes
+de sustituir el resultado anterior. Los archivos en
 integration-results sólo se actualizan si pasa: no usar el antiguo XML de 35
 como resultado de esta ejecución fallida. Próximo bloque:
 [eliminar adquirido](SLICE_2AA.md).

@@ -109,6 +109,15 @@ public class ClosureTest {
                     } else if (phase.equals("buffering")) {
                         waitFor(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__phase=s),window.__phase?.state===2 && !window.__phase?.playing");
                     } else waitFor(scenario, "!!document.querySelector('[data-program-retry]')");
+                    if (phase.equals("playing")) {
+                        waitFor(scenario, "!!window.__started?.programToken");
+                        String previousProgram = web.evaluate(scenario, "window.__started.programToken");
+                        queue(scenario, epoch);
+                        waitFor(scenario, "!!window.__started?.programToken && window.__started.programToken!==" + previousProgram);
+                        waitFor(scenario, "window.Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__phase=s),window.__phase?.playing===true");
+                        web.evaluate(scenario, "window.__oldProgramRejected=null;window.Capacitor.Plugins.SoundsiblePlayback.command({generation:" + epoch + ",action:'stop',programToken:" + previousProgram + ",queueToken:window.__started.queueToken}).then(()=>window.__oldProgramRejected=false,()=>window.__oldProgramRejected=true)");
+                        waitFor(scenario, "window.__oldProgramRejected===true"); nativeState(controller, false);
+                    }
                     InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { controller.setShuffleModeEnabled(true); controller.setRepeatMode(Player.REPEAT_MODE_ALL); if (phase.equals("paused")) controller.pause(); });
                     waitFor(scenario, "document.querySelector('[data-testid=android-program] select')?.value==='2'");
                     if (phase.equals("playing")) {

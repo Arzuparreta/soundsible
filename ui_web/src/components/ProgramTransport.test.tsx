@@ -18,6 +18,14 @@ it('uses native availability on the last occurrence and does not claim play befo
   setState({ ...initial, playing: true, playWhenReady: true, hasNext: false });
   expect(screen.getByText('common.pause')).toBeTruthy(); expect((screen.getByText('common.next') as HTMLButtonElement).disabled).toBe(true);
 });
+it('closes the observed program identity after its queue order changes', async () => {
+  const command = vi.fn(async () => {});
+  const [state, setState] = createSignal({ ...initial, programToken: 'program' });
+  render(() => <ProgramTransport state={state()} pending={false} command={command} />);
+  setState({ ...initial, programToken: 'program', queueToken: 'refilled-order' });
+  await fireEvent.click(screen.getByRole('button', { name: 'android.closeProgram' }));
+  expect(command).toHaveBeenCalledWith({ action: 'stop', queueToken: 'refilled-order', programToken: 'program' });
+});
 it('keeps a dragged seek across ticks but clears it on another occurrence of the same id', async () => {
   const [state, setState] = createSignal(initial);
   render(() => <ProgramTransport state={state()} pending={false} command={async () => {}} />);

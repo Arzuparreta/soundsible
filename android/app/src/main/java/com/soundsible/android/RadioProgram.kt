@@ -99,7 +99,7 @@ class RadioProgram(private val connection: EngineConnection, private val player:
                     val available = minOf(room, ProgramQueue.LIMIT - player.mediaItemCount)
                     val rows = if (available > 0 && response != null) RadioPlan.rows(response, nowExclude, available) else JSONArray()
                     if (rows.length() > 0) {
-                        val items = ProgramQueue.items(connection, rows).map { item -> item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setExtras(android.os.Bundle(item.mediaMetadata.extras).apply { putBoolean("${intent}Generated", true) }).build()).build() }
+                        val items = ProgramQueue.items(connection, rows, ProgramQueue.programToken(player)).map { item -> item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setExtras(android.os.Bundle(item.mediaMetadata.extras).apply { putBoolean("${intent}Generated", true) }).build()).build() }
                         generated.addAll(items.map { it.mediaMetadata.extras!!.getString(ProgramQueue.KEY)!! })
                         player.addMediaItems(items); attempt = 0
                         phase = if (response!!.optBoolean("degraded")) "degraded" else "ready"; publish(); sync(); return@post

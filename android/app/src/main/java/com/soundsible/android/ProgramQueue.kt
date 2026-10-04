@@ -20,16 +20,19 @@ object ProgramQueue {
     const val PROFILE = "soundsible_profile"
     const val SOURCE = "soundsible_source"
     const val KEY = "soundsible_occurrence"
+    const val PROGRAM = "soundsible_program"
     val command = SessionCommand("soundsible.queue.edit", Bundle.EMPTY)
     fun key(player: Player, index: Int): String = player.getMediaItemAt(index).mediaMetadata.extras?.getString(KEY) ?: ""
+    fun programToken(player: Player): String = if (player.mediaItemCount == 0) "" else player.getMediaItemAt(0).mediaMetadata.extras?.getString(PROGRAM) ?: ""
     fun token(player: Player): String {
         val keys = (0 until player.mediaItemCount).joinToString("|") { key(player, it) }
         return MessageDigest.getInstance("SHA-256").digest(keys.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     }
     const val LIMIT = 1000
     /** Metadata only crosses the bridge. Credentials and source addresses stay native. */
-    fun items(connection: EngineConnection, rows: JSONArray): List<MediaItem> {
+    fun items(connection: EngineConnection, rows: JSONArray, program: String = ""): List<MediaItem> {
         require(rows.length() in 1..LIMIT && rows.toString().toByteArray(Charsets.UTF_8).size <= 256 * 1024)
+        val owner = program.ifBlank { java.util.UUID.randomUUID().toString() }
         return (0 until rows.length()).map { i ->
             val row = rows.getJSONObject(i)
             val source = row.getString("source")
@@ -57,7 +60,7 @@ object ProgramQueue {
             MediaItem.Builder().setMediaId(id)
                 .setUri(connection.origin + path + android.net.Uri.encode(id) + "?android_generation=" + connection.generation + "&android_occurrence=" + key)
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).setArtworkUri(if (source == "local" && !offline) ProgramArtwork.uri(connection.generation, id) else null)
-                    .setExtras(Bundle().apply { putBoolean(PODCAST, podcast); if (podcast) { putString(ENCLOSURE, enclosure); putString(EPISODE, episode); putString(FEED, feed); putString(PROFILE, connection.offline.profileKey(connection.generation)) }; putString(KEY, key); putString(SOURCE, source); putBoolean("offline", offline) }).build()).build()
+                    .setExtras(Bundle().apply { putBoolean(PODCAST, podcast); if (podcast) { putString(ENCLOSURE, enclosure); putString(EPISODE, episode); putString(FEED, feed); putString(PROFILE, connection.offline.profileKey(connection.generation)) }; putString(KEY, key); putString(PROGRAM, owner); putString(SOURCE, source); putBoolean("offline", offline) }).build()).build()
         }
     }
     /** Called on the service's player looper: validate actual queue, then mutate it once. */
@@ -78,7 +81,7 @@ object ProgramQueue {
             }
             val rows = JSONArray(args.getString("tracks") ?: error("NO_TRACKS"))
             require(rows.length() in 1..(LIMIT - player.mediaItemCount))
-            val additions = items(connection, rows) // Validate the entire payload before changing the player.
+            val additions = items(connection, rows, programToken(player)) // Validate the entire payload before changing the player.
             if (empty) player.pause() // stop/clear can leave playWhenReady set; adding must never autoplay.
             player.addMediaItems(insertion, additions)
             if (empty) player.prepare()
