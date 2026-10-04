@@ -30,3 +30,14 @@ def get_subprocess_python() -> str:
     """
     venv_py = _venv_python()
     return str(venv_py) if venv_py else sys.executable
+
+
+def has_working_subprocess_python() -> bool:
+    """True when a subprocess Python exists and is executable.
+
+    Hosts that embed the interpreter (notably Android, where there is no
+    python binary on the device and sys.executable is unset) must run
+    yt-dlp in-process instead of shelling out.
+    """
+    exe = get_subprocess_python()
+    return bool(exe) and os.path.isfile(exe) and os.access(exe, os.X_OK)

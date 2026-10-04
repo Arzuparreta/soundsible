@@ -13,7 +13,7 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
         val app = application as SoundsibleApp
         if (app.tokenStore.load() != null) {
-            startActivity(Intent(this, BrowseActivity::class.java))
+            startActivity(Intent(this, LibraryActivity::class.java))
         } else {
             startActivity(Intent(this, PairingActivity::class.java))
         }

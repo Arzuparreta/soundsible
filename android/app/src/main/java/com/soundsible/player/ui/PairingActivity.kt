@@ -128,7 +128,7 @@ class PairingActivity : Activity() {
                 if (connection != null) {
                     (application as SoundsibleApp).tokenStore.save(connection)
                     withContext(Dispatchers.Main) {
-                        startActivity(Intent(this@PairingActivity, BrowseActivity::class.java))
+                        startActivity(Intent(this@PairingActivity, LibraryActivity::class.java))
                         finish()
                     }
                     return@withContext
@@ -189,7 +189,7 @@ class PairingActivity : Activity() {
     private suspend fun onOutcome(outcome: PairingOutcome, status: TextView) {
         when (outcome) {
             is PairingOutcome.Paired -> withContext(Dispatchers.Main) {
-                startActivity(Intent(this@PairingActivity, BrowseActivity::class.java))
+                startActivity(Intent(this@PairingActivity, LibraryActivity::class.java))
                 finish()
             }
             PairingOutcome.AwaitingOwnerConfirmation -> withContext(Dispatchers.Main) {

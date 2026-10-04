@@ -104,7 +104,27 @@ def audio_only(path: Path) -> Path:
         return path
 
 
+def _ffmpeg_available() -> bool:
+    """True when an ffmpeg binary resolves on this host.
+
+    Hosts without one (notably Android, until per-ABI binaries are bundled)
+    must skip conversion and post-processing: yt-dlp fails the whole
+    download when its --embed-thumbnail/--add-metadata/-x helpers cannot
+    exec ffmpeg.
+    """
+    try:
+        from shared.ffmpeg_runtime import resolve_ffmpeg
+
+        return resolve_ffmpeg() is not None
+    except Exception:
+        return False
+
+
 def _yt_dlp_args(output_template: str, *, convert_to: Optional[Dict[str, Any]]) -> List[str]:
+    postprocess = _ffmpeg_available()
+    if convert_to and not postprocess:
+        logger.info("yt-dlp: no ffmpeg on this host; keeping the native stream instead of converting")
+        convert_to = None
     args = [get_subprocess_python(), "-u", "-m", "yt_dlp", "-f", YDL_FORMAT_AUDIO]
     if convert_to:
         # `best` keeps the stream's own codec. Converting YouTube's Opus or AAC
@@ -121,9 +141,14 @@ def _yt_dlp_args(output_template: str, *, convert_to: Optional[Dict[str, Any]]) 
         # (no PO token), and web alone may offer only the 49k AAC
         # (itag 139), which `bestaudio[ext=m4a]` then happily picks.
         "--extractor-args", "youtube:player_client=default,android,ios",
-        "--add-metadata",
-        "--embed-thumbnail",
-        "--parse-metadata", "playlist_index:%(track_number)s",
+    ])
+    if postprocess:
+        args.extend([
+            "--add-metadata",
+            "--embed-thumbnail",
+            "--parse-metadata", "playlist_index:%(track_number)s",
+        ])
+    args.extend([
         "-o", output_template,
         "--retries", "10",
         "--no-warnings",
@@ -152,7 +177,44 @@ def download_audio(
     profile = QUALITY_PROFILES.get(quality, QUALITY_PROFILES[DEFAULT_QUALITY])
     cookie_args = cookies.cli_args()
 
+    def run_in_process(args: List[str]) -> tuple[int, str]:
+        """Run yt-dlp in this process, for hosts with no subprocess Python.
+
+        Android embeds the interpreter but ships no python binary, so the CLI
+        cannot be shelled out to. Progress lines are replayed to the callback
+        from captured output once the call returns, so the queue shows
+        queued then done instead of live percent.
+        """
+        import contextlib
+        import io
+
+        from yt_dlp import _real_main
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            try:
+                code = _real_main(args[1:])
+            except SystemExit as exc:
+                code = exc.code if isinstance(exc.code, int) else 1
+            except Exception:
+                logger.exception("yt-dlp in-process run failed")
+                code = 1
+        output = buf.getvalue()
+        if progress_callback:
+            for line in output.splitlines():
+                try:
+                    parsed = parse_progress(line.rstrip())
+                    if parsed:
+                        progress_callback(parsed)
+                except Exception as ex:
+                    logger.debug("progress_callback error: %s", ex)
+        return code or 0, output
+
     def run(args: List[str]) -> tuple[int, str]:
+        from shared.venv_utils import has_working_subprocess_python
+
+        if not has_working_subprocess_python():
+            return run_in_process(args)
         output = []
         proc = subprocess.Popen(
             args,

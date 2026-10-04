@@ -80,7 +80,10 @@ class LibraryActivity : AppCompatActivity() {
         if (::webView.isInitialized && webView.canGoBack()) {
             webView.goBack()
         } else {
-            super.onBackPressed()
+            // The library is the landing screen; back with no web history
+            // falls through to the native browser (playback entry point).
+            startActivity(Intent(this, BrowseActivity::class.java))
+            finish()
         }
     }
 
