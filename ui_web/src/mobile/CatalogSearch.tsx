@@ -16,7 +16,7 @@ import styles from './AndroidStart.module.css';
 /** Account-scoped catalog UI; resolution never imports the web audio runtime. */
 export default function CatalogSearch(props: {
   generation: number; tracks: Track[]; saved: SavedEntry[]; disconnected: boolean;
-  activeId?: string; onPlay: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
+  activeId?: string; isActive?: (track: Track) => boolean; onAcquire?: (track: Track) => Promise<void>; onPlay: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
 }) {
   const [query, setQuery] = createSignal('');
   const [rows, setRows] = createSignal<CatalogItem[]>([]);
@@ -61,7 +61,7 @@ export default function CatalogSearch(props: {
     onCleanup(() => { clearTimeout(timer); controller.abort(); });
   }));
   onCleanup(() => { disposed = true; searchEpoch++; actionEpoch++; actionAbort?.abort(); });
-  async function act(item: CatalogItem, purpose: 'play' | 'save' | 'remove') {
+  async function act(item: CatalogItem, purpose: 'play' | 'save' | 'remove' | 'acquire') {
     if (props.disconnected) return;
     const epoch = ++actionEpoch;
     const generation = props.generation;
@@ -86,6 +86,9 @@ export default function CatalogSearch(props: {
       if (purpose === 'play') {
         if (!track) throw new Error('No preview');
         await props.onPlay(track);
+      } else if (purpose === 'acquire') {
+        if (!track || !props.onAcquire) throw new Error('Acquisition unavailable');
+        await props.onAcquire(track);
       } else {
         if (purpose === 'save' && track) entry = { ...entry, keys: [...new Set([...entry.keys, ...savedFromTrack(track).keys])] };
         await api.setSavedEntries([entry], purpose === 'save');
@@ -100,10 +103,11 @@ export default function CatalogSearch(props: {
     const generation = props.generation;
     const search = searchEpoch;
     const saved = isSaved(item);
-    const run = (purpose: 'play' | 'save' | 'remove') => { if (generation === props.generation && search === searchEpoch && !disposed) void act(item, purpose); };
+    const run = (purpose: 'play' | 'save' | 'remove' | 'acquire') => { if (generation === props.generation && search === searchEpoch && !disposed) void act(item, purpose); };
     openContextMenu({ title: item.title, actions: [
       { label: t('common.play'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('play') },
       { label: t(saved ? 'collection.unsave' : 'collection.save'), selected: saved, disabled: props.disconnected || pending() === item.id, onSelect: () => run(saved ? 'remove' : 'save') },
+      ...(props.onAcquire && (!trackFor(item) || trackFor(item)?.source === 'preview') ? [{ label: t('collectionControl.download'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('acquire') }] : []),
     ] }, event);
   }
   return <section class={styles.library} data-testid="android-catalog-search">
@@ -117,7 +121,7 @@ export default function CatalogSearch(props: {
         const track = () => trackFor(item);
         return <MusicListRowView playback title={item.title} subtitle={itemArtist(item)} seed={item.id}
           cover={track()?.source !== 'preview' && track() ? coverUrl(track()!.id, 'thumb') : undefined}
-          active={Boolean(track() && props.activeId === track()!.id)} busy={pending() === item.id}
+          active={Boolean(track() && (props.isActive ? props.isActive(track()!) : props.activeId === track()!.id))} busy={pending() === item.id}
           disabled={props.disconnected} onActivate={() => void act(item, 'play')} onMenu={event => menu(item, event)} />;
       }}</For>
     </Show>

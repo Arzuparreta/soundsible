@@ -1123,8 +1123,36 @@ sourceKind verificado o unverified; unverified sólo texto sin tiempos. Fixture
 usa cache DB real, no mock del IPC. Logs /tmp/soundsible-s2w-ui-preview.log y
 /tmp/soundsible-s2w-native-preview.log. Assets dirty desde 9bc041d. APK/test/unit/lint normal sin CA pasa. Proveedor LRCLIB vivo/físico pendientes.
 
-Siguiente vertical: adquisición música desde previews, progreso/retry/cancel y
-archivo real en biblioteca. Mantener identidad en reproducción al promocionar
+Adquisición desde previews completada después en S2x; ver último apartado. Mantener identidad en reproducción al promocionar
 preview a adquirido; no sustituir ocurrencias ni arrancar otro output. Resto
 Discover/importación/Settings/compartir/multidispositivo, DJ/Live/Auto, firma/update
 y release gates siguen pendientes. No cerrar el turno por slice.
+
+
+## S2x adquisición y promoción sin cambiar ocurrencia
+
+[Contrato](SLICE_2X.md), [evidencia](evidence/s2x.json). Menús Download en Library/
+Search, cola real con filas web compartidas, progreso/retry/cancel/clear confirmados
+y privados por cuenta. Eventos downloader_update y polling mientras activo.
+Claves exactas mantienen marcador adquirido con hash aunque siga sonando preview;
+no reemplaza URI/keys/token/posición ni output durante adquisición.
+
+UI1.425/167, Pythonpipeline1 y APK2 HTTP/HTTPS pasan. Native pausa20s, fallar/retry,
+adquirido hash real con marcador, cancelSearch activo sin archivo, reproducción
+local explícita y stop. APK/test/unit/lint normal sin CA pasa. Primer intento salió
+de Search antes de resolver/aceptar job; se corrigió el test, no el guard de cuenta/
+unmount. Test restaura Saved/controles y elimina sólo archivos de su fixture.
+
+Fixture sustituye sólo _download_audio por bytes sintéticos; procesado/tags/hash/
+store/cola/pool/transacción personal siguen reales. Python demuestra Range/owner
+no ve ni retira jobs de member/cancel tardío no promueve archivo. No YouTube vivo
+ni escucha física aceptados. Sources assets dirty desde b364905.
+
+Continuar importación: baseline actual es Migrate.tsx y migrationApi jobs/upload/
+start/control/decision, no sólo APIs legacy preview/import-playlist. Reutilizar
+vista con navegación/cuenta/lifetime inyectados y selector OS real para exports.
+Inventariar límites multipart y formatos admitidos antes de modificar transporte.
+Después resto biblioteca/Discover/Settings/share/multidispositivo, DJ/Live/Auto,
+firma/update/release gates. Principal completa última35+restart2; ahora41 tests
+principales esperados más restart2 y browser4 a repetir sobre implementación final.
+No cerrar por slice; continuar hasta paridad completa y PR/main/release autorizados.

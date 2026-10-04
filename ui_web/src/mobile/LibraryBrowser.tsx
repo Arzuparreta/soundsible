@@ -16,7 +16,7 @@ import styles from './AndroidStart.module.css';
 
 export interface BrowseSnapshot { podcast_subscriptions?: import('../types/podcast').PodcastSubscription[]; podcast_tracks?: Track[]; tracks: Track[]; playlists?: PlaylistMap; settings?: LibrarySettings }
 /** Account browse surface; writes are delegated, sharing rows/artwork without the web player. */
-export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string; onMenu?: (track: Track, event?: MouseEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MouseEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onEntityMenu?: (entry: SavedEntity, event?: MouseEvent) => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity }) => void }) {
+export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revision: number; isFavourite?: (track: Track) => boolean; onPlay?: (tracks: Track[], selectedIndex: number) => void; activeId?: string; isActive?: (track: Track) => boolean; onMenu?: (track: Track, event?: MouseEvent, context?: { playlist: string; index: number }) => void; onPlaylistMenu?: (name: string, event?: MouseEvent) => void; onCreatePlaylist?: () => void; offline?: OfflineState | null; disconnected?: boolean; onManageOffline?: () => void; onEntityMenu?: (entry: SavedEntity, event?: MouseEvent) => void; onCollectionMenu?: (tracks: Track[], title: string, event?: MouseEvent, context?: { kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity }) => void }) {
   const [tab, setTab] = createSignal<'songs' | 'albums' | 'artists' | 'playlists' | 'favourites'>('songs');
   const [collection, setCollection] = createSignal<{ title: string; ids: string[]; kind: 'albums' | 'artists' | 'playlists'; id: string; bookmark?: SavedEntity } | null>(null);
   const [onlyAvailable, setOnlyAvailable] = createSignal(false);
@@ -121,7 +121,7 @@ export default function LibraryBrowser(props: { snapshot: BrowseSnapshot; revisi
   const occurrence = selected?.kind === 'playlists' && index !== undefined ? tracks().slice(0, index).filter(row => row.id === track.id).length : -1;
   const positions = selected?.ids.flatMap((id, position) => id === track.id ? [position] : []) ?? [];
   props.onMenu?.(track, event, selected?.kind === 'playlists' && positions[occurrence] !== undefined ? { playlist: selected.id, index: positions[occurrence] } : undefined);
-} : undefined} tracks={tracks()} activeId={props.activeId} onPlay={props.onPlay ? index => props.onPlay?.(tracks(), index) : undefined} />
+} : undefined} tracks={tracks()} activeId={props.activeId} isActive={props.isActive} onPlay={props.onPlay ? index => props.onPlay?.(tracks(), index) : undefined} />
       </Show>
     </Show>
   </section>;

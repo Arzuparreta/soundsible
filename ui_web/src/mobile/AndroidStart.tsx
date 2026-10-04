@@ -16,6 +16,10 @@ import { registerArtworkMetadata } from '../lib/media';
 import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
 import type { User } from '../lib/session';
 import { engine, useEngine, watchEngine } from './engine';
+import NativeDownloads from './Downloads';
+import { createMusicAcquisition } from './acquisition';
+import { nativePlayingTrack } from './programIdentity';
+import type { DownloadQueueItem } from '../types/download';
 import LibraryBrowser, { type BrowseSnapshot } from './LibraryBrowser';
 import PodcastBrowser from './PodcastBrowser';
 import { isPodcastTrack } from '../lib/track';
@@ -62,6 +66,7 @@ export default function AndroidStart() {
   const [eventsOnline, setEventsOnline] = createSignal(false);
   const [snapshot, setSnapshot] = createSignal<BrowseSnapshot | null>(null);
   const [savedEntries, setSavedEntries] = createSignal<SavedEntry[]>([]);
+  const [downloadItems, setDownloadItems] = createSignal<DownloadQueueItem[]>([]);
   const [savedEntities, setSavedEntities] = createSignal<SavedEntity[]>([]);
   function entityMenu(entry: SavedEntity, event?: MouseEvent) {
     const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
@@ -76,7 +81,7 @@ export default function AndroidStart() {
     void createNativePlaylist(current, sync, () => { if (current()) setError(t('common.loadFailed')); });
   }
   const isFavourite = (track: Track) => { const keys = trackKeys(track); return savedEntries().some(entry => entry.favourite && entry.keys.some(key => keys.includes(key))); };
-  const [surface, setSurface] = createSignal<'library' | 'search' | 'podcasts'>('library');
+  const [surface, setSurface] = createSignal<'library' | 'search' | 'podcasts' | 'downloads'>('library');
   const [revision, setRevision] = createSignal(0);
   const [offlineState, setOfflineState] = createSignal<OfflineState | null>(null);
   async function offlineCommand(command: OfflineCommand) {
@@ -111,7 +116,7 @@ export default function AndroidStart() {
       if (active?.queue.length) void nativeProgramTransport.command({ generation, action: 'stop', queueToken: active.queueToken }).catch(() => {});
       runtime.unbind();
     }
-    setOfflineState(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setSavedEntries([]); setSavedEntities([]); setSurface('library'); setRevision(0); setEventsOnline(false); setStale(false);
+    setOfflineState(null); setProgram(null); setUser(null); registerArtworkMetadata([]); setSnapshot(null); setSavedEntries([]); setSavedEntities([]); setDownloadItems([]); setSurface('library'); setRevision(0); setEventsOnline(false); setStale(false);
   }
   let expiration: Promise<void> | null = null;
   function expireSession(): Promise<void> {
@@ -127,6 +132,8 @@ export default function AndroidStart() {
     return expiration;
   }
   const sync = createAccountRefresh(syncOnce, () => epoch, () => !!user());
+  const acquisition = createMusicAcquisition(() => epoch, () => !!user() && !stale(), () => controller.signal, () => snapshot()?.tracks ?? [], downloadItems, sync);
+  const isActive = (track: Track) => nativePlayingTrack(program(), snapshot()?.tracks ?? [], track);
   async function syncOnce() {
     if (!user()) return;
     const current = epoch;
@@ -135,18 +142,20 @@ export default function AndroidStart() {
       const state = await request<{ requires_login: boolean; user: User | null }>('/api/auth/state', { signal: controller.signal });
       if (current !== epoch || job !== syncEpoch) return;
       if (!state.user || (user() && user()!.id !== state.user.id)) { await expireSession(); return; }
-      const [data, saved, entities] = await Promise.all([
+      const [data, saved, entities, downloads] = await Promise.all([
         request<BrowseSnapshot>('/api/library', { timeoutMs: 30000, signal: controller.signal, cache: 'no-store' }),
         request<{ saved: SavedEntry[] }>('/api/library/saved', { signal: controller.signal, cache: 'no-store' }),
         request<{ entities: SavedEntity[] }>('/api/library/saved-entities', { signal: controller.signal, cache: 'no-store' }),
+        request<{ queue: DownloadQueueItem[] }>('/api/downloader/queue/status', { signal: controller.signal, cache: 'no-store' }),
       ]);
       if (current !== epoch || job !== syncEpoch) return;
+      if (!Array.isArray(downloads.queue)) throw new Error('Invalid download snapshot');
       if (!Array.isArray(data.tracks)) throw new Error('Invalid library');
       if (!Array.isArray(entities.entities)) throw new Error('Invalid entity bookmark snapshot');
       if (!Array.isArray(saved.saved)) throw new Error('Invalid saved-song snapshot');
       const index = buildIdentityIndex(data.tracks);
       const resolved = saved.saved.map(entry => savedToTrack(entry, index)).filter((track): track is Track => !!track);
-      setSnapshot({ ...data, podcast_tracks: data.tracks.filter(isPodcastTrack), tracks: musicLibraryRows(data.tracks, resolved) }); setSavedEntries(saved.saved); setSavedEntities(entities.entities); setRevision(n => n + 1); setStale(false); setError('');
+      setSnapshot({ ...data, podcast_tracks: data.tracks.filter(isPodcastTrack), tracks: musicLibraryRows(data.tracks, resolved) }); setSavedEntries(saved.saved); setSavedEntities(entities.entities); setDownloadItems(downloads.queue); setRevision(n => n + 1); setStale(false); setError('');
     } catch (failure) {
       if (current !== epoch || job !== syncEpoch) return;
       if (failure instanceof ApiError && failure.status === 401) await expireSession();
@@ -243,8 +252,10 @@ export default function AndroidStart() {
       generation = state.generation; useEngine(state); void runtime.bind(generation); setOrigin(state.origin); setServer(state.origin);
       if (state.origin) void restoreOffline().catch(() => {}).then(() => revalidateIdentity());
     }).finally(() => window.__SOUNDSIBLE_BOOT__?.complete());
+    let lastDownloadPoll = 0;
     let lastOfflinePoll = 0;
     const offlineInterval = setInterval(() => {
+      if (user() && document.visibilityState === 'visible' && downloadItems().some(item => item.status === 'pending' || item.status === 'downloading') && Date.now() - lastDownloadPoll >= 1000) { lastDownloadPoll = Date.now(); void sync(); }
       const preparing = offlineState()?.items.some(item => item.state === 'queued' || item.state === 'downloading');
       if (generation >= 0 && document.visibilityState === 'visible' && Date.now() - lastOfflinePoll >= (preparing ? 1000 : 10000)) { lastOfflinePoll = Date.now(); void offlineCommand({ action: 'state' }); }
     }, 1000);
@@ -283,9 +294,9 @@ export default function AndroidStart() {
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
-        {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => setSurface('library')}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button></nav>
-          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'podcasts'} fallback={<CatalogSearch generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} />}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}>
-          <LibraryBrowser onEntityMenu={entityMenu} onPlaylistMenu={playlistMenu} onCreatePlaylist={newPlaylist} isFavourite={isFavourite} snapshot={data()} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
+        {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => setSurface('library')}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={surface() === 'downloads'} onClick={() => setSurface('downloads')}>{t('downloads.title')}</button></nav>
+          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<CatalogSearch generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}>
+          <LibraryBrowser onEntityMenu={entityMenu} onPlaylistMenu={playlistMenu} onCreatePlaylist={newPlaylist} isFavourite={isFavourite} snapshot={data()} isActive={isActive} revision={revision()} disconnected={stale()} offline={offlineState()} activeId={program()?.id} onPlay={play}
           onManageOffline={() => { const captured = generation; openOfflineManager(offlineState, command => captured === generation ? offlineCommand(command) : Promise.resolve()); }}
           onCollectionMenu={(tracks, title, event, context) => {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
@@ -295,6 +306,7 @@ export default function AndroidStart() {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
             const menu = programLibraryMenu(track, program, programPending, runtime.execute);
             openContextMenu({ ...menu, actions: [...(menu.actions ?? []),
+              ...(track.source === 'preview' ? [{ label: t('collectionControl.download'), disabled: !current() || acquisition.busy(track.id), onSelect: () => { if (current()) void acquisition.add(track).catch(() => { if (current()) setError(t('collectionControl.failed')); }); } }] : []),
               songMarkAction(track, savedEntries, () => epoch, () => !current(), sync, () => { if (current()) setError(t('common.loadFailed')); }),
               { label: t('trackActions.addToPlaylist'), disabled: !current(), onSelect: () => { if (current()) openNativePlaylistPicker(track, () => snapshot()?.playlists ?? {}, current, sync, () => snapshot()?.settings?.playlist_order); } },
               ...(track.source !== 'preview' ? [{ label: t('trackActions.editData'), disabled: !current(), onSelect: () => {

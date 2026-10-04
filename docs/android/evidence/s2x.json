@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2x native acquisition queue and source identity promotion",
+  "source_revision_at_asset_prepare": "b364905",
+  "dirty_at_asset_prepare": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "tests": 1425,
+      "files": 167,
+      "log": "/tmp/soundsible-s2x-ui-final.log"
+    },
+    "backend": {
+      "tests": 1,
+      "log": "/tmp/soundsible-s2x-backend.log",
+      "scope": "real queue/pipeline/tag/hash/personal commit/Range, ownership and active cancellation"
+    },
+    "android": {
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2x-native-local.log",
+      "scope": "HTTP/verified HTTPS pause20s preview occurrence preserved, failure/retry/acquired hash active marker, active Search cancellation, explicit acquired local playback and stop"
+    },
+    "normal_apk_test_unit_lint": "passed after ephemeral CA removal"
+  },
+  "limits": [
+    "Synthetic acquisition bytes replace remote _download_audio only; no live YouTube/physical listening acceptance.",
+    "Final main regression/browser, remaining parity and release gates pending."
+  ]
+}
