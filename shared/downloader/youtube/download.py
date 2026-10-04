@@ -120,12 +120,13 @@ def _ffmpeg_available() -> bool:
         return False
 
 
-def _yt_dlp_args(output_template: str, *, convert_to: Optional[Dict[str, Any]]) -> List[str]:
+def _ytdlp_argv(output_template: str, *, convert_to: Optional[Dict[str, Any]]) -> List[str]:
+    """yt-dlp arguments only (no interpreter prefix): the form `_real_main` takes."""
     postprocess = _ffmpeg_available()
     if convert_to and not postprocess:
         logger.info("yt-dlp: no ffmpeg on this host; keeping the native stream instead of converting")
         convert_to = None
-    args = [get_subprocess_python(), "-u", "-m", "yt_dlp", "-f", YDL_FORMAT_AUDIO]
+    args = ["-f", YDL_FORMAT_AUDIO]
     if convert_to:
         # `best` keeps the stream's own codec. Converting YouTube's Opus or AAC
         # to FLAC stores the same sound at up to twelve times the size.
@@ -156,6 +157,24 @@ def _yt_dlp_args(output_template: str, *, convert_to: Optional[Dict[str, Any]]) 
         "--progress",
     ])
     return args
+
+
+def _yt_dlp_args(output_template: str, *, convert_to: Optional[Dict[str, Any]]) -> List[str]:
+    """Full CLI form: interpreter prefix plus :func:`_ytdlp_argv`."""
+    return [get_subprocess_python(), "-u", "-m", "yt_dlp", *_ytdlp_argv(output_template, convert_to=convert_to)]
+
+
+def _ytdlp_argv_from_cli(args: List[str]) -> List[str]:
+    """Strip the interpreter prefix from a CLI argv for `_real_main`.
+
+    `run()` builds full forms (`python -u -m yt_dlp <opts> <url>`); the
+    in-process entry takes only `<opts> <url>`. Passing `-u -m yt_dlp` down
+    makes yt-dlp exit 1 on an unknown option, which is exactly the bare
+    failure hosts without a subprocess Python used to report.
+    """
+    if "-m" in args:
+        return args[args.index("-m") + 2:]
+    return [a for a in args if a not in ("-u",)]
 
 
 def download_audio(
@@ -193,7 +212,7 @@ def download_audio(
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
             try:
-                code = _real_main(args[1:])
+                code = _real_main(_ytdlp_argv_from_cli(args))
             except SystemExit as exc:
                 code = exc.code if isinstance(exc.code, int) else 1
             except Exception:
