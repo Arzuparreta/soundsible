@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2w shared timed lyrics with native output",
+  "source_revision_at_asset_prepare": "9bc041d",
+  "dirty_at_asset_prepare": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "tests": 1419,
+      "files": 164,
+      "log": "/tmp/soundsible-s2w-ui-preview.log"
+    },
+    "android": {
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2w-native-preview.log",
+      "scope": "HTTP/verified HTTPS acquired timed line seek/pause/queue preserved and saved preview metadata plain lyrics; close/logout"
+    },
+    "normal_apk_test_unit_lint": "passed after ephemeral CA removal"
+  },
+  "limits": [
+    "Real engine cache and native IPC, no live LRCLIB/physical listening acceptance.",
+    "Final main regression/browser, remaining parity and release gates pending."
+  ]
+}

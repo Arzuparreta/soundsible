@@ -8,7 +8,7 @@ import styles from './ProgramTransport.module.css';
 import { openContextMenu } from '../lib/contextMenu';
 
 /** Stateless ownership: presentation observes a program; commands never create audio here. */
-export default function ProgramTransport(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void> }) {
+export default function ProgramTransport(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onLyrics?: () => void }) {
   const [now, setNow] = createSignal(Date.now());
   const timer = setInterval(() => setNow(Date.now()), 500); onCleanup(() => clearInterval(timer));
   const retryBlocked = () => (props.state.preview?.retryNotBeforeMs ?? 0) > now();
@@ -24,7 +24,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
       const generation = props.state.generation;
       const enabled = props.state.autoplay?.enabled;
       const known = typeof enabled === 'boolean';
-      openContextMenu({ title: props.state.title, actions: [{
+      openContextMenu({ title: props.state.title, actions: [...(props.onLyrics && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' ? [{ label: t('nowPlaying.showLyrics'), onSelect: () => { if (props.state.generation === generation && !disabled()) props.onLyrics?.(); } }] : []), {
         label: known ? t('settings.autoplay') : t('common.retry'), selected: enabled === true,
         disabled: props.state.autoplay?.settingsPhase === 'loading', onSelect: () => {
           if (disabled() || props.state.generation !== generation) return;

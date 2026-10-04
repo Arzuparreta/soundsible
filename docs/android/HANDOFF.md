@@ -40,7 +40,8 @@ en regresión (refresh Saved y presupuesto auth compartido) están corregidos.
 Última APK principal: **35 tests + dos fases offline persistentes pasan**, sources
 preparados desde commit limpio cf01599; APK/test/lint normales pasan sin CA temporal.
 Últimos browser completos S2j: repetir cuatro perfiles antes del PR final.
-S2u selector OS tiene dos recorridos HTTP/HTTPS verdes en API 36; ver SLICE_2U. Faltan biblioteca/
+S2u selector OS y S2v prioridad de sidecar validados; S2w letras adquirido/preview
+usa panel compartido con runtime nativo y pasa HTTP/HTTPS. Faltan biblioteca/
 Discover/Settings completos, DJ, Live, Android Auto, firma y actualización.
 No PR/main/release todavía; mantener gates de alpha completa y continuar.
 
@@ -1102,8 +1103,28 @@ WAV/FLAC dos tests pasan. Primer intento asumió artworkData en metadata fusiona
 del MediaController: puede omitirse cuando la app aporta URI. Se verifica fuente
 FLAC con MediaMetadataRetriever y sesión del sistema por separado.
 
-Siguiente: letras temporizadas usando el mismo panel Solid con reproducción nativa
-injetada, sin importar stores/audio web. Después resto de acciones biblioteca,
+Letras temporizadas compartidas completadas después en S2w. Continuar acciones biblioteca,
 Discover/adquisición/importación/Settings, DJ/Live/Auto y release gates. Principal
 completa última S2t35+restart2; tras S2u/S2v hace falta regresión final ampliada.
 No cerrar por slice; continuar hasta PR/main/release de paridad completa.
+
+
+## S2w letras nativas compartidas
+
+[Detalle](SLICE_2W.md), [evidencia](evidence/s2w.json). LyricsPanel web adaptador
+con mismos stores; LyricsPanelView puro de audio con track/posición/seek inyectados
+y requests abortables. Android abre desde menú del programa, scroller propio,
+no podcasts, no acción sin conexión. Panel cierra al cambiar cuenta/programa.
+
+UI1.419/164 pasa; dos casos HTTP/HTTPS en API36 pasan adquirido y preview guardado:
+seek20s, highlight/aria-current, pausa/keys/token preservados, cierre/logout sin
+panel/programa anterior. Preview en Library no es adquirido: lookup metadata con
+sourceKind verificado o unverified; unverified sólo texto sin tiempos. Fixture
+usa cache DB real, no mock del IPC. Logs /tmp/soundsible-s2w-ui-preview.log y
+/tmp/soundsible-s2w-native-preview.log. Assets dirty desde 9bc041d. APK/test/unit/lint normal sin CA pasa. Proveedor LRCLIB vivo/físico pendientes.
+
+Siguiente vertical: adquisición música desde previews, progreso/retry/cancel y
+archivo real en biblioteca. Mantener identidad en reproducción al promocionar
+preview a adquirido; no sustituir ocurrencias ni arrancar otro output. Resto
+Discover/importación/Settings/compartir/multidispositivo, DJ/Live/Auto, firma/update
+y release gates siguen pendientes. No cerrar el turno por slice.

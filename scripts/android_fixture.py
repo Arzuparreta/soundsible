@@ -114,6 +114,10 @@ def main() -> None:
             library.metadata.create_playlist(f"{name} playlist")
             library.metadata.playlists[f"{name} playlist"] = [f"{name}-track", f"{name}-track"]
             library._save_metadata()
+            from shared.database import instance_db
+            instance_db().set_lyrics(f"{name}-track", synced="[00:00.00]" + name + " first line\n[00:20.00]" + name + " second line", source="synthetic-android-fixture")
+            from shared.lyrics import metadata_cache_key
+            instance_db().set_lyrics(metadata_cache_key(f"{name} artist", f"{name} saved song", None, 600), synced="[00:20.00]Unsafe preview timing", plain=f"{name} preview words", source="synthetic-android-fixture")
             store = artwork_store()
             store.bind(f"{name}-track", store.put(cover.read_bytes()), "manual")
             get_user_core(uid).favourites.toggle_saved(

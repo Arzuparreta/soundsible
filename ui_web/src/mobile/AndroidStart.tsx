@@ -7,6 +7,7 @@ import { nativeEntityMark } from './entityMarks';
 import { createAccountRefresh } from './accountRefresh';
 import type { SavedEntity } from '../lib/savedEntityIdentity';
 import { openNativePlaylistPicker } from './PlaylistPicker';
+import { openNativeLyrics } from './Lyrics';
 import { openNativeMetadataEditor } from './metadataEditor';
 import { nativePlaylistActions, nativePlaylistOccurrenceActions, createNativePlaylist } from './playlistActions';
 import { savedToTrack } from '../lib/saved';
@@ -274,7 +275,10 @@ export default function AndroidStart() {
     <Show when={busy()}><p role="status">{t('common.loading')}</p></Show>
     <Show when={stale() && !user()}><p role="status">{t('library.unreachable')} <button disabled={busy()} onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
     <Show when={!user() && server() && !needsLogin()}><button disabled={busy()} onClick={() => void refresh()}>{t('android.refresh')}</button><button disabled={busy()} onClick={() => void leave(false)}>{t('android.logout')}</button><button disabled={busy()} onClick={() => void leave(true)}>{t('android.changeServer')}</button></Show>
-    <Show when={program()?.queue.length ? program() : null}>{state => <><ProgramTransport state={state()} pending={programPending()} command={runtime.execute} /><ProgramQueue state={state()} pending={programPending()} command={runtime.execute} /></>}</Show>
+    <Show when={program()?.queue.length ? program() : null}>{state => <><ProgramTransport state={state()} pending={programPending()} command={runtime.execute} onLyrics={user() && !stale() ? () => {
+      const captured = epoch;
+      openNativeLyrics(program, () => snapshot()?.tracks ?? [], savedEntries, () => captured === epoch && !!user() && !stale(), runtime.execute);
+    } : undefined} /><ProgramQueue state={state()} pending={programPending()} command={runtime.execute} /></>}</Show>
     <Show when={user()}>
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
