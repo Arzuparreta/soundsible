@@ -29,21 +29,9 @@ class WidgetControlReceiver : BroadcastReceiver() {
                     .get(8, TimeUnit.SECONDS)
                 try {
                     if (controller.mediaItemCount == 0) {
-                        restoreQueue(app, controller)
-                    }
-                    if (controller.mediaItemCount > 0) {
-                        when (intent.action) {
-                            ACTION_TOGGLE -> {
-                                if (controller.isPlaying) {
-                                    controller.pause()
-                                } else {
-                                    controller.prepare()
-                                    controller.play()
-                                }
-                            }
-                            ACTION_NEXT -> controller.seekToNextMediaItem()
-                            ACTION_PREV -> controller.seekToPreviousMediaItem()
-                        }
+                        restoreAndDispatch(app, controller, intent.action)
+                    } else {
+                        dispatch(controller, intent.action)
                     }
                 } finally {
                     controller.release()
@@ -55,13 +43,71 @@ class WidgetControlReceiver : BroadcastReceiver() {
         }, "soundsible-widget-command").start()
     }
 
-    private fun restoreQueue(app: SoundsibleApp, controller: MediaController) {
+    private fun dispatch(controller: MediaController, action: String?) {
         try {
-            val snapshot = app.queueStore.load() ?: return
-            if (snapshot.items.isEmpty()) return
+            when (action) {
+                ACTION_TOGGLE -> {
+                    if (controller.isPlaying) {
+                        controller.pause()
+                    } else {
+                        ensurePlaying(controller)
+                    }
+                }
+                ACTION_NEXT -> {
+                    controller.seekToNextMediaItem()
+                    ensurePlaying(controller)
+                }
+                ACTION_PREV -> {
+                    controller.seekToPreviousMediaItem()
+                    ensurePlaying(controller)
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun ensurePlaying(controller: MediaController) {
+        try {
+            if (controller.mediaItemCount == 0) return
+            if (!controller.isPlaying) {
+                controller.prepare()
+                controller.play()
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun restoreAndDispatch(app: SoundsibleApp, controller: MediaController, action: String?) {
+        try {
+            val snapshot = app.queueStore.load()
+            if (snapshot == null || snapshot.items.isEmpty()) return
             QueueHolder.queue.restore(snapshot.items, snapshot.index)
             val items = snapshot.items.mapIndexed { index, item -> QueueHolder.mediaItem(item, index) }
-            controller.setMediaItems(items, 0, snapshot.positionMs.coerceAtLeast(0L))
+            // setMediaItems is fire-and-forget: wait for the first non-empty
+            // timeline before commanding, then wait for it so release()
+            // cannot cancel the command.
+            val done = java.util.concurrent.CountDownLatch(1)
+            val listener = object : androidx.media3.common.Player.Listener {
+                override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                    if (timeline.isEmpty) return
+                    try {
+                        controller.removeListener(this)
+                    } catch (_: Exception) {
+                    }
+                    try {
+                        dispatch(controller, action)
+                    } finally {
+                        done.countDown()
+                    }
+                }
+            }
+            controller.addListener(listener)
+            try {
+                controller.setMediaItems(items, 0, snapshot.positionMs.coerceAtLeast(0L))
+            } catch (_: Exception) {
+                done.countDown()
+            }
+            done.await(10, TimeUnit.SECONDS)
         } catch (_: Exception) {
         }
     }
