@@ -1,29 +1,28 @@
 # S2u: selector de carátula del sistema
 
-S2r/S2s prueban multipart real con un File sintético. Eso no acepta el selector OS,
-la lectura de un content URI concedido por el sistema ni la cancelación al volver.
+S2r/S2s prueban multipart real con un File sintético. S2u añade selección mediante
+el selector OS, lectura del content URI concedido por el sistema y cancelación.
 
-Siguiente aceptación: emulador API 36, motor real HTTP/HTTPS, pulsación física del
-botón Upload cover (no File/DataTransfer ni callback de Activity simulado). Abrir
-el selector del sistema; cancelar con Back y comprobar editor conservado y carátula
-sin cambios. Elegir PNG sintético sembrado mediante MediaStore, recibirlo por el
-callback normal Capacitor/WebView y confirmar bitmap privado verde en el motor.
-Retirar ese archivo de prueba y restaurar cover del fixture en teardown.
+Implementación de prueba: [CoverPickerTest.java](../../android/app/src/androidTest/java/com/soundsible/android/CoverPickerTest.java).
+Emulador API 36, motores reales HTTP/HTTPS, pulsación física de Upload cover,
+Back y comprobación de editor conservado/carátula sin cambios. El test siembra
+un PNG verde con borde magenta en MediaStore y pulsa su miniatura identificada
+por ese patrón. No usa File/DataTransfer ni simula ActivityResult.
 
-Sin añadir permisos amplios de almacenamiento/cámara: selección mediante el
-contrato existente del sistema y su concesión por archivo. Probar selector en
-emulador no equivale a validar todas las apps proveedoras ni fabricantes físicos.
-Actividad, cuenta y editor pendientes deben seguir sus guards, sin reanudar una
-escritura cancelada. No presentar scaffold o simulación de callback como prueba OS.
+Photo Picker no expone el nombre del archivo y oscurece/remuestrea miniaturas.
+La detección permite ese cambio de brillo, exige borde magenta en los cuatro
+lados y rechaza patrones ambiguos. La comprobación posterior del bitmap privado
+subido exige el color original, independientemente del aspecto de la miniatura.
+Teardown restaura la carátula original y elimina sólo el PNG sembrado.
 
-La regresión principal S2t35+restart sigue pendiente mientras se prepara esta
-aceptación. Mantener separadas sus fuentes/artifacts, guardar logs/evidencia y
-continuar resto de paridad antes de PR/main/release. No alpha parcial.
+Sin permisos amplios de almacenamiento/cámara: contrato existente del sistema
+con concesión por archivo. Emulador no equivale a todas las apps proveedoras,
+versiones Android o fabricantes físicos. Guards de cuenta/editor se mantienen.
 
-
-Draft portable: [CoverPickerTest.java](drafts/CoverPickerTest.java), fuera de la
-compilación APK hasta trasladarlo a androidTest. No se ha compilado ni ejecutado.
-Incluye eventos táctiles reales, espera del paquete del selector, Back, MediaStore,
-búsqueda por nombre de archivo y comprobación del bitmap HTTP/HTTPS. Si PhotoPicker
-no expone nombre en accesibilidad, inspeccionar árbol del selector y ajustar la
-selección del PNG sembrado; no elegir una foto arbitraria ni simular ActivityResult.
+Estado: **dos tests HTTP/HTTPS pasan**, cero fallos/omitidos en API 36,
+`/tmp/soundsible-s2u-native-stable.log`. El rebuild normal encontró exclusivamente
+UseSdkSuppress en el test; corregido a @SdkSuppress(minSdkVersion=29), APK/test/unit/lint normal sin CA pasa en `/tmp/soundsible-s2u-normal.log`. No se cambió lógica del caso aceptado.
+Sources UI preparados desde cf01599 limpio; instrumentación S2u durante desarrollo.
+Regresión principal previa: S2t35 más dos fases restart pasan desde cf01599 limpio.
+Paridad completa, browser final, DJ/Live/Auto y firma/actualización siguen pendientes.
+No publicar alpha parcial ni cerrar trabajo por slice.

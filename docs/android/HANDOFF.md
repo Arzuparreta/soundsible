@@ -40,7 +40,7 @@ en regresión (refresh Saved y presupuesto auth compartido) están corregidos.
 Última APK principal: **35 tests + dos fases offline persistentes pasan**, sources
 preparados desde commit limpio cf01599; APK/test/lint normales pasan sin CA temporal.
 Últimos browser completos S2j: repetir cuatro perfiles antes del PR final.
-S2u selector OS es contrato/draft siguiente, todavía sin ejecutar. Faltan biblioteca/
+S2u selector OS tiene dos recorridos HTTP/HTTPS verdes en API 36; ver SLICE_2U. Faltan biblioteca/
 Discover/Settings completos, DJ, Live, Android Auto, firma y actualización.
 No PR/main/release todavía; mantener gates de alpha completa y continuar.
 
@@ -1072,3 +1072,19 @@ ese caso por aceptado. No está corregido todavía; no llamar completa la parida
 Diff acumulado detectó blank line final en catalogTrack heredado de S2j; eliminado
 sin cambiar lógica. Browser completos siguen S2j hasta repetición previa al PR.
 Continuar hasta todos los gates de paridad, luego PR/main/release autorizados.
+
+
+## S2u selector OS real
+
+[Detalle](SLICE_2U.md). Instrumentación ahora en androidTest, draft retirado. Dos
+casos HTTP/HTTPS pasan: toque real, Back sin escritura, selección del PNG privado
+sembrado mediante MediaStore, content grant normal y bitmap recibido en motor.
+Photo Picker oscurece/remuestrea la miniatura y anima su hoja: identificar patrón
+verde/magenta por geometría, rechazar ambigüedad y exigir estabilidad antes del tap.
+No ampliar permisos ni simular callback/File. Lint posterior pidió @SdkSuppress
+en lugar de @RequiresApi; corregido. APK/test/unit/lint normales sin CA pasan
+en /tmp/soundsible-s2u-normal.log.
+
+Continuar prioridad de sidecar frente a artwork embebido (Media3 prefiere datos
+embebidos por defecto); aceptar también sesión multimedia con FLAC real antes de
+dar ese caso por cerrado. Matriz restante y publicación siguen pendientes.

@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2u real OS cover picker",
+  "source_revision_at_asset_prepare": "cf01599",
+  "dirty_at_asset_prepare": false,
+  "instrumentation_dirty": true,
+  "channel": "development",
+  "checks": {
+    "android": {
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2u-native-stable.log",
+      "scope": "API 36 HTTP/verified HTTPS, physical tap, Back, MediaStore image/content grant and real server bitmap"
+    },
+    "normal_apk_test_unit_lint": {
+      "log": "/tmp/soundsible-s2u-normal.log",
+      "status": "passed; ephemeral CA removed"
+    }
+  },
+  "limits": [
+    "API 36 emulator only; other system pickers/providers and physical devices not accepted.",
+    "Full parity, browser final, DJ/Live/Auto and release gates remain pending."
+  ]
+}
