@@ -11,6 +11,7 @@ import com.soundsible.player.LocalEngine
 import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.net.PairingCoordinator
+import com.soundsible.player.playback.EngineService
 import com.soundsible.player.net.PairingOutcome
 import com.soundsible.player.net.SoundsibleError
 import kotlinx.coroutines.CoroutineScope
@@ -127,6 +128,9 @@ class PairingActivity : Activity() {
                 val connection = LocalEngine.localConnection()
                 if (connection != null) {
                     (application as SoundsibleApp).tokenStore.save(connection)
+                    startForegroundService(
+                        Intent(this@PairingActivity, EngineService::class.java),
+                    )
                     withContext(Dispatchers.Main) {
                         startActivity(Intent(this@PairingActivity, LibraryActivity::class.java))
                         finish()

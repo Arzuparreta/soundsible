@@ -109,6 +109,26 @@ object LocalEngine {
         }
     }
 
+    /**
+     * Plain health check against a base URL. No auth: /api/health is public.
+     * Used by the splash router to decide whether the server needs a restart.
+     */
+    fun isHealthy(baseUrl: String): Boolean {
+        return try {
+            val conn = java.net.URL("$baseUrl/api/health").openConnection()
+                as java.net.HttpURLConnection
+            conn.connectTimeout = 2_000
+            conn.readTimeout = 2_000
+            try {
+                conn.responseCode in 200..299
+            } finally {
+                conn.disconnect()
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /** Loopback engine state, once it has written its runtime file. */
     data class LocalState(val baseUrl: String, val ownerTokenFile: String)
 

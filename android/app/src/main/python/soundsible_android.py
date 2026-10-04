@@ -137,3 +137,14 @@ def start():
     except Exception:
         _set_phase("error", traceback.format_exc())
         return False
+
+
+def stop():
+    """Stop the API server. Best-effort; never throws."""
+    try:
+        from shared.api import stop_api
+
+        stop_api()
+    except Exception:
+        pass
+    _set_phase("stopped")

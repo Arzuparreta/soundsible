@@ -15,4 +15,8 @@
     <string name="now_playing">Now playing</string>
     <string name="unpair">Unpair this device</string>
     <string name="offline_title">Offline</string>
+    <string name="engine_service_channel">Soundsible engine</string>
+    <string name="engine_service_title">Soundsible engine running</string>
+    <string name="engine_service_text">Your library server is running on this phone.</string>
+    <string name="splash_starting">Starting your library…</string>
 </resources>

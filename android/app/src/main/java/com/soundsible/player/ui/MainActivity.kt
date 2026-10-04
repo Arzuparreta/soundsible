@@ -3,20 +3,75 @@ package com.soundsible.player.ui
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import com.soundsible.player.SoundsibleApp
+import android.widget.TextView
+import com.soundsible.player.LocalEngine
 import com.soundsible.player.R
+import com.soundsible.player.SoundsibleApp
+import com.soundsible.player.playback.EngineService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/** Entry point: routes to pairing or browsing depending on stored credential. */
+/**
+ * Splash router: with a stored connection, make sure its server answers
+ * before showing the library. For the on-device engine that means (re)start
+ * the foreground service and wait out the boot with a visible status --
+ * reopening the app after Android killed it lands here, not on a dead page.
+ */
 class MainActivity : Activity() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        val app = application as SoundsibleApp
-        if (app.tokenStore.load() != null) {
-            startActivity(Intent(this, LibraryActivity::class.java))
-        } else {
-            startActivity(Intent(this, PairingActivity::class.java))
+        val status = findViewById<TextView>(R.id.splashStatus)
+        scope.launch {
+            route(status)
         }
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    private suspend fun route(status: TextView) {
+        val app = application as SoundsibleApp
+        val connection = app.tokenStore.load()
+        if (connection == null) {
+            startActivity(Intent(this, PairingActivity::class.java))
+            finish()
+            return
+        }
+        if (connection.label != "This phone") {
+            openLibrary()
+            return
+        }
+        // Local engine: make sure it is (still) up, restarting it if needed.
+        withContext(Dispatchers.IO) {
+            if (!LocalEngine.isHealthy(connection.baseUrl)) {
+                startForegroundService(Intent(this@MainActivity, EngineService::class.java))
+            }
+        }
+        repeat(100) {
+            val healthy = withContext(Dispatchers.IO) { LocalEngine.isHealthy(connection.baseUrl) }
+            if (healthy) {
+                openLibrary()
+                return
+            }
+            val (phase, _) = LocalEngine.localStatus()
+            status.text = "${getString(R.string.splash_starting)} ($phase…)"
+            delay(1_000)
+        }
+        status.text = "The engine on this phone did not start. Reopen the app to retry."
+    }
+
+    private fun openLibrary() {
+        startActivity(Intent(this, LibraryActivity::class.java))
         finish()
     }
 }

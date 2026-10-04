@@ -9,6 +9,7 @@ import android.widget.ListView
 import android.widget.TextView
 import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
+import com.soundsible.player.playback.EngineService
 import com.soundsible.player.data.CarItem
 import com.soundsible.player.net.SoundsibleError
 import com.soundsible.player.playback.QueueHolder
@@ -41,6 +42,7 @@ class BrowseActivity : Activity() {
             if (position in visible.indices) open(visible[position])
         }
         findViewById<Button>(R.id.unpairButton).setOnClickListener {
+            stopService(Intent(this, EngineService::class.java))
             (application as SoundsibleApp).tokenStore.clear()
             startActivity(Intent(this, PairingActivity::class.java))
             finish()
