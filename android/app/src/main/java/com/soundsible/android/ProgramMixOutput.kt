@@ -96,7 +96,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         val incoming = sources[1 - active]!!
         require(!incoming.released && incoming.playing && incoming.queued > 0) { "Incoming input not ready" }
         restoration = null
-        incoming.joinedAt = frames; technique = value
+        technique = value
         if (value == ProgramMixCurve.Technique.DIRECT) {
             window = ProgramMixWindow(frames, 0, active, 1 - active, outputEpoch)
             active = 1 - active; limiter?.blend(false)
@@ -117,6 +117,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         val played = positionUs() * (config?.sampleRate ?: 0) / 1000000
         restoration?.takeIf { played >= it.first }?.second ?: current?.dominant(played) ?: active
     }
+    fun inputPositionUs(index: Int): Long = synchronized(lock) { require(index in 0..1); sources[index]?.getPositionUs() ?: 0L }
     fun restoredAt(): Long? = synchronized(lock) { restoration?.first }
     fun epoch(): Long = outputEpoch
     fun positionUs(): Long = synchronized(deviceLock) { output?.positionUs ?: 0L }
@@ -125,10 +126,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         outputEpoch++
         synchronized(deviceLock) { output?.pause(); output?.flush() }
         frames = 0L; mixStart = Long.MAX_VALUE; window = null; restoration = null; recovery = null; limiter?.reset()
-        sources.forEachIndexed { index, source -> source?.let {
-            it.joinedAt = if (index == active) 0L else Long.MAX_VALUE
-            it.effects.reset()
-        } }
+        sources.forEach { source -> source?.let { it.clock.reset(); it.effects.reset() } }
     }
     /** Losing an incoming deck restores the retained outgoing PCM without flushing the programme. */
     private fun recoverIncoming(index: Int): Boolean {
@@ -136,7 +134,6 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         val outgoing = sources[transition.outgoing]?.takeIf { !it.released && it.playing && !(it.ended && it.queued == 0) } ?: return false
         val progress = if (transition.length == 0L) 1.0 else (frames - transition.start).toDouble() / transition.length
         val controls = ProgramMixCurve.at(technique, progress)
-        if (active != transition.outgoing) outgoing.joinedAt = frames - outgoing.supplied
         active = transition.outgoing; mixStart = Long.MAX_VALUE
         recovery = Recovery(frames, (config!!.sampleRate * 0.15).toLong(), controls)
         restoration = frames to active
@@ -146,8 +143,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private inner class Source(val index: Int, device: AudioOutput) : ForwardingAudioOutput(device) {
         val queue = ArrayDeque<ByteBuffer>()
         var queued = 0
-        var joinedAt = if (index == active) frames else Long.MAX_VALUE
-        var supplied = 0L
+        val clock = ProgramDeckClock()
         var playing = false
         var released = false
         var ended = false
@@ -174,16 +170,16 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                 val head = queue.first(); target[sample] = head.short
                 queued -= 2; if (!head.hasRemaining()) queue.removeFirst()
             }
-            supplied += count / Integer.bitCount(config!!.channelMask)
+            clock.reserve(frames, count / Integer.bitCount(config!!.channelMask))
         }
         override fun play() = synchronized(lock) { playing = true; if (index == active && !paused) synchronized(deviceLock) { output?.play() }; lock.notifyAll() }
         override fun pause() = synchronized(lock) { playing = false; if (index == active) synchronized(deviceLock) { output?.pause() }; lock.notifyAll() }
         override fun flush() = synchronized(lock) {
-            queue.clear(); queued = 0; supplied = 0; ended = false; effects.reset()
+            queue.clear(); queued = 0; clock.reset(); ended = false; effects.reset()
             if (index == active) {
                 invalidateDevice()
                 if (playing && !paused) synchronized(deviceLock) { output?.play() }
-            } else joinedAt = Long.MAX_VALUE
+            }
             lock.notifyAll()
         }
         override fun stop() = synchronized(lock) { ended = true; lock.notifyAll() }
@@ -197,10 +193,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             lock.notifyAll()
         }
         override fun getPositionUs(): Long = synchronized(lock) {
-            if (joinedAt == Long.MAX_VALUE) 0L else {
-                val played = (positionUs() * config!!.sampleRate / 1000000 - joinedAt).coerceIn(0, supplied)
-                played * 1000000 / config!!.sampleRate
-            }
+            clock.played(positionUs() * config!!.sampleRate / 1000000) * 1000000 / config!!.sampleRate
         }
         override fun setVolume(volume: Float) { /* Local volume belongs to the programme owner. */ }
         override fun setPlaybackParameters(playbackParams: PlaybackParameters) { require(playbackParams == PlaybackParameters.DEFAULT) }

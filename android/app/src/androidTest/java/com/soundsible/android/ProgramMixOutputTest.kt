@@ -82,7 +82,9 @@ class ProgramMixOutputTest {
     @Test fun tlsDirectCut() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.DIRECT)
     @Test fun httpIncomingFailure() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), recoverIncoming = true)
     @Test fun tlsIncomingFailure() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), recoverIncoming = true)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false) {
+    @Test fun httpLateIncomingFailure() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), recoverIncoming = true, lateFailure = true)
+    @Test fun tlsLateIncomingFailure() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), recoverIncoming = true, lateFailure = true)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -148,6 +150,7 @@ class ProgramMixOutputTest {
                 val transition = owner.transition() ?: error("Transition window absent")
                 val checkpoints = when {
                     technique == ProgramMixCurve.Technique.DIRECT -> listOf(1.0 to 1)
+                    lateFailure -> listOf(0.95 to 1)
                     recoverIncoming -> listOf(0.25 to 0)
                     else -> listOf(0.25 to 0, 0.75 to 1)
                 }
@@ -162,10 +165,14 @@ class ProgramMixOutputTest {
                     meter.await { it.first < 30 && it.marker in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
                 }
                 val stable: (Spectrum) -> Boolean = if (recoverIncoming) {
+                    val retainedPosition = owner.inputPositionUs(0)
                     instrumentation.runOnMainSync { decoders[1].release(); decoders.removeAt(1) }
                     val restored = owner.restoredAt() ?: error("Outgoing restoration was not scheduled")
                     val clockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                    while (owner.positionUs() * 48000 / 1000000 < restored + 9600 && System.nanoTime() < clockDeadline) Thread.sleep(10)
+                    while (owner.positionUs() * 48000 / 1000000 < restored + 9600 && System.nanoTime() < clockDeadline) {
+                        assertTrue("Retained source clock moved backwards before recovery playout", owner.inputPositionUs(0) + 20000 >= retainedPosition)
+                        Thread.sleep(10)
+                    }
                     assertEquals("Failed incoming kept metadata ownership", 0, owner.dominantInput())
                     val retained: (Spectrum) -> Boolean = { sample -> sample.first < 30 && sample.second < 30 && sample.marker in 2900.0..3050.0 }
                     retained

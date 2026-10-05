@@ -169,3 +169,12 @@ Recuperación entrante aceptada HTTP/TLS6/0 sobref001e95a limpio, log
 fade; tap confirma saliente restablecido y dominancia sobre playout; seek/pause/
 scope y normal APK/test APK/JVM38/lint pasan. No equivaler a red/proveedor vivo ni
 recuperación tardía después de hueco; siguiente clock mapping por tramos y Native8.
+
+Reloj por tramos en fuentes: ProgramDeckClock mapea reservas a frames realmente
+reproducidos de cada deck, congela posición durante huecos y no mueve el reloj
+anterior al reservar una vuelta futura. Spans contiguos se coalescen; historial
+máximo64, sólo se poda tras alcanzar el siguiente tramo físico; reset descarta
+el epoch previo. Source.getPositionUs usa ese mapping, no reajusta joinedAt al
+recuperar. Kotlin/test/JVM41/lint pasan en
+/tmp/soundsible-s3b-mix-clock-foundation.log. Native amplía a ocho casos con caída
+tardía95% y comprobación de no retroceder el clock del saliente; aceptación pendiente.
