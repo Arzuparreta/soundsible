@@ -49,3 +49,27 @@ paridad. Live escucha/emisión con listener independiente y Auto/DHU vienen
 después; firma/update y gates completos permanecen obligatorios para alpha.
 
 Este documento es contexto de continuación, no evidencia de DJ implementado.
+
+## Spike preparado durante la regresión S3a
+
+Se contrastaron las APIs del tag real de la dependencia:
+[AudioOutputProvider](https://github.com/androidx/media/blob/1.11.1/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/audio/AudioOutputProvider.java),
+[AudioOutput](https://github.com/androidx/media/blob/1.11.1/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/audio/AudioOutput.java)
+y sus forwarding públicos. DefaultAudioSink convierte/procesa antes de solicitar
+el output. Esto permite probar entradas sin AudioTrack propio y un dueño común;
+no demuestra aún dominancia dinámica ni integración con el servicio.
+
+Mientras corre principal limpia S3a, borradores separados en
+`/tmp/soundsible-s3b-staging/` (no assets ni fuentes de esa APK): ProgramMixCurve,
+ProgramDeckEffects, sus tests JVM, ProgramMixOutput y ProgramMixOutputTest.
+Todavía no compilados ni aceptados. Tras terminar build normal de la principal,
+integrarlos y resolver el spike HTTP/TLS de dos frecuencias, volumen local y
+liberación del saliente. El fixture debe admitir secondFrequency880 sólo para
+este caso; los tests S3a conservan su default440.
+
+No declarar funcional el grafo por curvas unitarias o un solo crossfade: faltan
+normalización de formatos distintos, filtros/echo/limiter dentro de esa salida,
+EOS/backpressure, scope, pausa/seek y dominancia sobre reloj de playout. El master
+puede tener buffers adelantados; cambiar metadata cuando se calcula un buffer
+futuro confundiría al oyente. Luego integrar controles/colas y planner DJ y
+revalidar los flujos NORMAL anteriores. Continuar hasta los gates completos.
