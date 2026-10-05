@@ -143,10 +143,12 @@ public class ProgramPcmTest {
                 waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-pcm-loud] [data-row-main]')");
                 waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");
                 waitFor(scenario, "window.__pcm.playing&&window.__pcm.programToken!==" + JSONObject.quote(programme)); probe.await(currentKey(state(scenario)), (int) Math.round(3000 * gain(first)), 0);
+                first = row(connection, origin, "member-pcm-soft");
+                String individualProgramme = state(scenario).getString("programToken");
                 click(scenario, "Albums");
-                String album = "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(e=>e.textContent.includes('member album'))"; waitFor(scenario, "!!" + album); web.evaluate(scenario, album + ".click()");
-                waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");
-                waitFor(scenario, "window.__pcm.playing&&window.__pcm.items.length===2");
+                String album = "Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(e=>e.textContent.includes('member PCM album'))"; waitFor(scenario, "!!" + album); web.evaluate(scenario, album + ".click()");
+                waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-pcm-soft] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-pcm-soft] [data-row-main]').click()");
+                waitFor(scenario, "window.__pcm.playing&&window.__pcm.id==='member-pcm-soft'&&window.__pcm.items.length===2&&window.__pcm.programToken!==" + JSONObject.quote(individualProgramme));
                 double energy = first.getDouble("duration") * Math.pow(10, (first.getDouble("loudness_lufs") + 0.691) / 10) + second.getDouble("duration") * Math.pow(10, (second.getDouble("loudness_lufs") + 0.691) / 10);
                 double reference = -0.691 + 10 * Math.log10(energy / (first.getDouble("duration") + second.getDouble("duration")));
                 JSONObject albumFacts = new JSONObject().put("loudness_lufs", reference).put("loudness_peak_dbtp", Math.max(first.getDouble("loudness_peak_dbtp"), second.getDouble("loudness_peak_dbtp")));
@@ -163,25 +165,25 @@ public class ProgramPcmTest {
                 web.evaluate(scenario, "window.__pcmCopied=false;Capacitor.Plugins.SoundsibleOffline.command({action:'prepare',generation:window.__pcm.generation,tracks:" + copied + ",playlists:{}}).then(()=>window.__pcmCopied=true)");
                 waitFor(scenario, "window.__pcmCopied");
                 long copyUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(45);
-                while (connection.getOffline().local("member-track", connection.getGeneration()) == null || connection.getOffline().local("member-pcm-loud", connection.getGeneration()) == null) {
+                while (connection.getOffline().local("member-pcm-soft", connection.getGeneration()) == null || connection.getOffline().local("member-pcm-loud", connection.getGeneration()) == null) {
                     assertTrue("Measured synthetic copies did not finish", System.nanoTime() < copyUntil); Thread.sleep(100);
                 }
                 var savedCopies = connection.getOffline().state(connection.getGeneration()).getJSONArray("items");
                 for (int i = 0; i < savedCopies.length(); i++) {
                     var copy = savedCopies.getJSONObject(i).getJSONObject("track");
-                    var measured = copy.getString("id").equals("member-track") ? first : second;
+                    var measured = copy.getString("id").equals("member-pcm-soft") ? first : second;
                     assertEquals(measured.getDouble("loudness_lufs"), copy.getDouble("loudness_lufs"), 0);
                     assertEquals(measured.getDouble("loudness_peak_dbtp"), copy.getDouble("loudness_peak_dbtp"), 0);
                 }
                 api(connection, origin, "/__fixture/connection-failure", "POST", new JSONObject().put("enabled", true).put("status", 503));
                 click(scenario, "Refresh"); waitFor(scenario, "document.querySelector('[data-testid=android-configured] [role=status]')?.textContent.includes(\"Couldn't reach your station\")");
                 click(scenario, "Library"); click(scenario, "Songs");
-                waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");
-                waitFor(scenario, "window.__pcm.playing&&window.__pcm.id==='member-track'&&window.__pcm.items.every(i=>i.offline===true)");
+                waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-pcm-soft] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-pcm-soft] [data-row-main]').click()");
+                waitFor(scenario, "window.__pcm.playing&&window.__pcm.id==='member-pcm-soft'&&window.__pcm.items.every(i=>i.offline===true)");
                 probe.await(currentKey(state(scenario)), (int) Math.round(3000 * gain(first)), 0);
                 String offlineSongsProgram = state(scenario).getString("programToken");
                 click(scenario, "Albums"); waitFor(scenario, "!!" + album); web.evaluate(scenario, album + ".click()");
-                waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");
+                waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-pcm-soft] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-pcm-soft] [data-row-main]').click()");
                 waitFor(scenario, "window.__pcm.playing&&window.__pcm.items.length===2&&window.__pcm.items.every(i=>i.offline===true)&&window.__pcm.programToken!==" + JSONObject.quote(offlineSongsProgram));
                 probe.await(currentKey(state(scenario)), (int) Math.round(3000 * albumGain), 0);
             }
@@ -190,11 +192,11 @@ public class ProgramPcmTest {
                 if (controller.get() != null) { InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { controller.get().setVolume(1f); controller.get().release(); }); }
                 if (connection.cookieHeader(connection.getGeneration()) != null) {
                     api(connection, origin, "/__fixture/connection-failure", "POST", new JSONObject().put("enabled", false));
-                    connection.getOffline().remove(connection.getGeneration(), new JSONArray().put("member-track").put("member-pcm-loud"));
+                    connection.getOffline().remove(connection.getGeneration(), new JSONArray().put("member-pcm-soft").put("member-pcm-loud"));
                     api(connection, origin, "/api/discovery/settings", "PATCH", new JSONObject().put("volume_leveling", original));
                     api(connection, origin, "/__fixture/loudness-facts", "POST", new JSONObject().put("measured", false));
                     var rows = api(connection, origin, "/api/library", "GET", null).getJSONArray("tracks");
-                    for (int i = 0; i < rows.length(); i++) if (rows.getJSONObject(i).getString("id").equals("member-pcm-loud")) api(connection, origin, "/api/library/tracks/member-pcm-loud", "DELETE", null);
+                    for (int i = 0; i < rows.length(); i++) if (rows.getJSONObject(i).getString("id").equals("member-pcm-loud") || rows.getJSONObject(i).getString("id").equals("member-pcm-soft")) api(connection, origin, "/api/library/tracks/" + rows.getJSONObject(i).getString("id"), "DELETE", null);
                 }
             } finally { connection.clearSession(true); }
         }

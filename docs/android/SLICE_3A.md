@@ -166,3 +166,17 @@ Radio HTTP/TLS mide la ganancia de una ocurrencia generada real. Radio/parser/
 Autoplay6 pasa en `/tmp/soundsible-s3a-radio-leveling-native.log`, seguido de
 APK/test APK/JVM27/lint normal. Repetir principal completa sobre commit limpio.
 Después continuar con [ejecución DJ](SLICE_3B.md), no cerrar el objetivo.
+
+Principal desde commit limpio4e5b981 preparada dirty=false:
+`/tmp/soundsible-s3a-main-clean-native.log`. ProgramPcmTest HTTP/TLS falla al
+esperar álbum de dos temas porque Radio de casos anteriores deja más adquiridos
+en `member album`. No es verde dirigido extrapolable a la principal. Corregir
+fixture con álbum PCM propio (dos grabaciones, sin retirar datos Radio/eventos),
+repetir pruebas afectadas y principal. Mantener fuentes congeladas hasta terminar
+el runner actual; el XML principal aceptado anterior sigue siendo73.
+
+Ejecución terminó78/2 y exit1. El fixture ya usa `member PCM album` con soft/loud
+propios; no cambia el álbum original ni borra Radio/eventos. Radio HTTP/TLS corre
+antes de PCM HTTP/TLS y los cuatro pasan con la biblioteca ampliada, seguido de
+APK/test APK/JVM27/lint normal, en
+`/tmp/soundsible-s3a-pcm-isolated-album-native.log`. Repetir principal limpia.

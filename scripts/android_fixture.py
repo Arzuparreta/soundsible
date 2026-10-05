@@ -290,6 +290,16 @@ def main() -> None:
                     raise RuntimeError("Synthetic tone must have measurable programme loudness")
                 store.put(f"{name}-hash", source_stamp(audio), measurement)
                 if data.get("album"):
+                    from dataclasses import replace
+                    import shutil
+                    soft = root / "music/tracks" / f"{name}-pcm-soft.{args.audio_format}"
+                    shutil.copyfile(audio, soft)
+                    with user_context(uid):
+                        library = get_user_core(uid).library
+                        original = next(track for track in library.metadata.tracks if track.id == f"{name}-track")
+                        library.metadata.add_track(replace(original, id=f"{name}-pcm-soft", title=f"{name} softer PCM song",
+                            album=f"{name} PCM album", file_hash=f"{name}-pcm-soft-hash"))
+                    store.put(f"{name}-pcm-soft-hash", source_stamp(soft), measurement)
                     second = root / "music/tracks" / f"{name}-pcm-loud.wav"
                     with wave.open(str(second), "wb") as output:
                         output.setnchannels(1)
@@ -299,7 +309,7 @@ def main() -> None:
                     with user_context(uid):
                         library = get_user_core(uid).library
                         library.metadata.add_track(Track(id=f"{name}-pcm-loud", title=f"{name} louder PCM song", artist=f"{name} artist",
-                            album=f"{name} album", duration=60, file_hash=f"{name}-pcm-loud-hash", original_filename="pcm-loud.wav",
+                            album=f"{name} PCM album", duration=60, file_hash=f"{name}-pcm-loud-hash", original_filename="pcm-loud.wav",
                             file_size=second.stat().st_size, bitrate=256, format="wav"))
                         library._save_metadata()
                     measured_second = measure_loudness(second, duration_hint=60)
@@ -310,7 +320,7 @@ def main() -> None:
                 # Explicitly remove fixture facts to exercise the unmeasured path.
                 # The root was created exclusively for this runner; no personal cache.
                 with sqlite3.connect(loudness_db_path()) as database:
-                    database.execute("DELETE FROM track_loudness WHERE identity IN (?, ?)", (f"{name}-hash", f"{name}-pcm-loud-hash"))
+                    database.execute("DELETE FROM track_loudness WHERE identity IN (?, ?, ?)", (f"{name}-hash", f"{name}-pcm-soft-hash", f"{name}-pcm-loud-hash"))
             emit_to_user("library_updated", user_id=uid)
             return jsonify({"ok": True, "measured": bool(data.get("measured", True))})
         elif action == "discovery-state":

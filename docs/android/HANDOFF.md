@@ -44,6 +44,11 @@ normal APK/test APK/JVM27/lint también pasa. Facts generados Radio/autoplay
 con hash de grabación pasan Python79 (planner real WAV/FLAC) y Radio/parser/
 Autoplay6 HTTP/TLS, con PCM de ocurrencia generada y build normal. Próximo:
 regresión completa sobre commit limpio y [mezcla DJ](SLICE_3B.md).
+Primera principal S3a sobre4e5b981 termina78/2: PCM esperaba sólo dos temas en
+álbum que Radio de casos previos amplía. Fixture corregido con álbum PCM propio;
+Radio2→PCM2 HTTP/TLS y build normal pasan, sin borrar datos de otros casos.
+Log /tmp/soundsible-s3a-pcm-isolated-album-native.log. Repetir principal antes de
+reemplazar la evidencia limpia73 anterior; DJ no está implementado todavía.
 DJ/Live/Auto/firma/update siguen pendientes; continuar hasta paridad y después
 PR/main/release autorizados, sin cerrar por slice. Browser4 final debe repetirse.
 

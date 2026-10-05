@@ -53,6 +53,14 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3a-radio-leveling-native.log",
       "scope": "Radio HTTP/TLS actual generated recording PCM gain; parser2; Autoplay HTTP/TLS regression; normal APK/test APK/JVM27/lint"
+    },
+    "pcm_album_radio_regression": {
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-pcm-isolated-album-native.log",
+      "scope": "Radio HTTP/TLS runs before PCM HTTP/TLS; separate two-recording PCM album preserves existing radio rows; normal APK/test APK/JVM27/lint pass"
     }
   },
   "scope": [
@@ -83,6 +91,12 @@
     {
       "log": "/tmp/soundsible-s3a-pcm-offline-context-native.log",
       "reason": "Test sampled old occurrence while replacement still pending"
+    },
+    {
+      "log": "/tmp/soundsible-s3a-main-clean-native.log",
+      "tests": 78,
+      "failures": 2,
+      "reason": "Earlier Radio cases add acquired tracks to member album; PCM test incorrectly assumed only two album tracks. Separate PCM fixture album fixes directed regression; repeat clean main required."
     }
   ]
 }
