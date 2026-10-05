@@ -138,3 +138,11 @@ Seek repetido aceptado HTTP/TLS2/0 sobre6d0626a0 limpio, log
 seek10s, reloj master reiniciado y blend posterior coherente. Pausa/revocación
 siguen pasando; APK/test APK/JVM36/lint normales sin CA pasan. No prueba acústica
 ni integración MediaSession; siguiente dominancia física y recuperación entrante.
+
+Ventana de playout en fuentes: ProgramMixWindow conserva start/length/decks/epoch
+para resolver dominancia con posición física, independiente de promoción anticipada
+del render. Invalidate elimina la ventana. DIRECT cambia input sin consumir frames
+entrantes durante un falso overlap; volumen/AudioTrack único se conservan. Test
+Native amplía a cuatro casos HTTP/TLS fade/direct: dominancia25%/75% y cue de
+entrada direct sin salto. Compilación Native/test/JVM38/lint pasan en
+/tmp/soundsible-s3b-mix-direct-foundation.log; prueba real ampliada pendiente.

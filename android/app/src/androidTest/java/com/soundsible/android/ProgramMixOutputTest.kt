@@ -78,7 +78,9 @@ class ProgramMixOutputTest {
     }
     @Test fun httpTwoPrivateDecoders() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"))
     @Test fun tlsTwoPrivateDecoders() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"))
-    private fun run(origin: String?) {
+    @Test fun httpDirectCut() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.DIRECT)
+    @Test fun tlsDirectCut() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.DIRECT)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -140,9 +142,25 @@ class ProgramMixOutputTest {
                 meter.await { it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
                 assertTrue("Physical output retained the old seek clock", owner.positionUs() < 5000000L)
                 owner.setVolume(0.1f)
-                owner.blend(2000, ProgramMixCurve.Technique.SAFE_FADE)
-                meter.await { it.first < 30 && it.marker in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
+                owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else 2000, technique)
+                val transition = owner.transition() ?: error("Transition window absent")
+                val checkpoints = if (technique == ProgramMixCurve.Technique.DIRECT) listOf(1.0 to 1) else listOf(0.25 to 0, 0.75 to 1)
+                for ((fraction, dominant) in checkpoints) {
+                    val target = transition.start + (transition.length * fraction).toLong()
+                    val clockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while (owner.positionUs() * 48000 / 1000000 < target && System.nanoTime() < clockDeadline) Thread.sleep(10)
+                    assertTrue("Physical transition did not advance", owner.positionUs() * 48000 / 1000000 >= target)
+                    assertEquals("Metadata dominance did not follow playout", dominant, owner.dominantInput())
+                }
+                if (technique != ProgramMixCurve.Technique.DIRECT) {
+                    meter.await { it.first < 30 && it.marker in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
+                }
                 meter.await { it.first < 30 && it.marker < 30 && it.second in 8950.0..9050.0 }
+                if (technique == ProgramMixCurve.Technique.DIRECT) {
+                    val incomingPosition = java.util.concurrent.atomic.AtomicLong()
+                    instrumentation.runOnMainSync { incomingPosition.set(decoders[1].currentPosition) }
+                    assertTrue("Direct cut consumed incoming cue ahead of playback", incomingPosition.get() < 1500)
+                }
                 assertNull("Decoder failed", playbackFailure.get()); assertNull("Output failed", owner.error())
                 instrumentation.runOnMainSync { decoders.first().release(); decoders.removeAt(0) }
                 meter.metrics.clear(); meter.await { it.first < 30 && it.marker < 30 && it.second in 8950.0..9050.0 }

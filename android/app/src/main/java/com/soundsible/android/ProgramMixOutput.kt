@@ -41,6 +41,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private var mixLength = 1L
     private var technique = ProgramMixCurve.Technique.SAFE_FADE
     private var active = 0
+    private var window: ProgramMixWindow? = null
     private var limiter: ProgramMixLimiter? = null
     private var paused = false
     private var failure: Throwable? = null
@@ -80,8 +81,16 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     fun blend(lengthMs: Long, value: ProgramMixCurve.Technique) = synchronized(lock) {
         require(lengthMs in 50..30000 && sources.all { it != null } && mixStart == Long.MAX_VALUE)
         val rate = config!!.sampleRate
-        mixStart = frames; mixLength = lengthMs * rate / 1000; technique = value
-        sources[1 - active]!!.joinedAt = frames
+        val incoming = sources[1 - active]!!
+        require(!incoming.released && incoming.playing && incoming.queued > 0) { "Incoming input not ready" }
+        incoming.joinedAt = frames
+        if (value == ProgramMixCurve.Technique.DIRECT) {
+            window = ProgramMixWindow(frames, 0, active, 1 - active, outputEpoch)
+            active = 1 - active; limiter?.blend(false)
+        } else {
+            mixStart = frames; mixLength = lengthMs * rate / 1000; technique = value
+            window = ProgramMixWindow(mixStart, mixLength, active, 1 - active, outputEpoch)
+        }
         lock.notifyAll()
     }
     fun pause(value: Boolean) = synchronized(lock) {
@@ -89,13 +98,18 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     }
     fun setVolume(value: Float) = synchronized(lock) { require(value.isFinite() && value in 0f..1f); synchronized(deviceLock) { output?.setVolume(value) } }
     fun error(): Throwable? = synchronized(lock) { failure }
+    fun transition(): ProgramMixWindow? = synchronized(lock) { window }
+    fun dominantInput(): Int = synchronized(lock) {
+        val current = window?.takeIf { it.epoch == outputEpoch }
+        current?.dominant(positionUs() * config!!.sampleRate / 1000000) ?: active
+    }
     fun epoch(): Long = outputEpoch
     fun positionUs(): Long = synchronized(deviceLock) { output?.positionUs ?: 0L }
     /** Called with the state lock; covers flush, release and input replacement on seek. */
     private fun invalidateDevice() {
         outputEpoch++
         synchronized(deviceLock) { output?.pause(); output?.flush() }
-        frames = 0L; mixStart = Long.MAX_VALUE; limiter?.reset()
+        frames = 0L; mixStart = Long.MAX_VALUE; window = null; limiter?.reset()
         sources.forEachIndexed { index, source -> source?.let {
             it.joinedAt = if (index == active) 0L else Long.MAX_VALUE
             it.effects.reset()
