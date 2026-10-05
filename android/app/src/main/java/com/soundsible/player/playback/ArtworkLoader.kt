@@ -12,6 +12,33 @@ import java.net.URL
  * size so bitmaps stay well under the RemoteViews binder budget.
  */
 object ArtworkLoader {
+    /** Approximate dominant color of [bitmap], darkened for a backdrop. */
+    fun dominantColor(bitmap: Bitmap): Int {
+        return try {
+            val thumb = Bitmap.createScaledBitmap(bitmap, 8, 8, true)
+            var r = 0
+            var g = 0
+            var b = 0
+            var n = 0
+            for (x in 0 until 8) {
+                for (y in 0 until 8) {
+                    val pixel = thumb.getPixel(x, y)
+                    if (android.graphics.Color.alpha(pixel) < 128) continue
+                    r += android.graphics.Color.red(pixel)
+                    g += android.graphics.Color.green(pixel)
+                    b += android.graphics.Color.blue(pixel)
+                    n++
+                }
+            }
+            thumb.recycle()
+            if (n == 0) return 0xFF000000.toInt()
+            // Darken toward black so white type always reads.
+            android.graphics.Color.rgb(r / n / 2, g / n / 2, b / n / 2)
+        } catch (_: Exception) {
+            0xFF000000.toInt()
+        }
+    }
+
     fun fetch(url: String, token: String?, maxPx: Int = 256): Bitmap? {
         return try {
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {

@@ -118,6 +118,7 @@ class LibraryActivity : AppCompatActivity() {
                 subtitle = artist,
                 isPlaying = isPlaying,
                 artwork = artwork,
+                background = artwork?.let { com.soundsible.player.playback.ArtworkLoader.dominantColor(it) },
             )
             webSession?.publish(title, artist, album, isPlaying, artwork)
             if (title.isEmpty()) {

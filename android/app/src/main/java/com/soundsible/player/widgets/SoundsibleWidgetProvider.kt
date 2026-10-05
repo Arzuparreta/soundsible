@@ -8,39 +8,49 @@ import android.content.Context
 import android.content.Intent
 import com.soundsible.player.R
 import com.soundsible.player.playback.QueueHolder
+import com.soundsible.player.ui.LibraryActivity
 
 /**
- * Home-screen player widget: title, play/pause, previous, next.
- *
- * Buttons send media keys straight to the playback session through
- * [MediaButtonReceiver], so the widget needs no controller connection and
- * no notification permission. [PlaybackService] pushes fresh title/state
- * on every playback change; [onUpdate] covers placement and reboot.
+ * Home-screen player widget: artwork, title/artist, previous/play/next.
+ * Album backdrop follows the cover's dominant color; transport runs into
+ * the page through [WidgetControlReceiver]. Needs no controller connection
+ * and no notification permission.
  */
 class SoundsibleWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         val current = QueueHolder.queue.current
-        updateAll(
-            context,
-            title = current?.title ?: context.getString(R.string.app_name),
-            subtitle = current?.subtitle?.ifEmpty { current?.artist } ?: "",
-            isPlaying = false,
-        )
+        for (id in ids) {
+            manager.updateAppWidget(
+                id,
+                views(
+                    context,
+                    current?.title ?: context.getString(R.string.app_name),
+                    current?.subtitle?.ifEmpty { current?.artist } ?: "",
+                    isPlaying = false,
+                    artwork = null,
+                    background = lastBackground,
+                ),
+            )
+        }
     }
 
     companion object {
+        @Volatile private var lastBackground: Int? = null
+
         fun updateAll(
             context: Context,
             title: String,
             subtitle: String,
             isPlaying: Boolean,
             artwork: android.graphics.Bitmap? = null,
+            background: Int? = null,
         ) {
+            if (background != null) lastBackground = background
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, SoundsibleWidgetProvider::class.java))
             if (ids.isEmpty()) return
             for (id in ids) {
-                manager.updateAppWidget(id, views(context, title, subtitle, isPlaying, artwork))
+                manager.updateAppWidget(id, views(context, title, subtitle, isPlaying, artwork, background ?: lastBackground))
             }
         }
 
@@ -50,21 +60,31 @@ class SoundsibleWidgetProvider : AppWidgetProvider() {
             subtitle: String,
             isPlaying: Boolean,
             artwork: android.graphics.Bitmap?,
+            background: Int?,
         ): android.widget.RemoteViews {
             return android.widget.RemoteViews(context.packageName, R.layout.widget_player).apply {
+                if (background != null) {
+                    setInt(R.id.widgetRoot, "setBackgroundColor", background)
+                }
                 setTextViewText(R.id.widgetTitle, title)
                 setTextViewText(R.id.widgetSubtitle, subtitle.ifEmpty { context.getString(R.string.now_playing) })
                 if (artwork != null) {
                     setViewVisibility(R.id.widgetArt, android.view.View.VISIBLE)
                     setImageViewBitmap(R.id.widgetArt, artwork)
                 } else {
-                    // No thumbnail: the black canvas shows through.
+                    // No thumbnail: the backdrop color shows through.
                     setViewVisibility(R.id.widgetArt, android.view.View.GONE)
                 }
                 setImageViewResource(
                     R.id.widgetPlayPause,
-                    if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+                    if (isPlaying) R.drawable.ic_pause_circle else R.drawable.ic_play_circle,
                 )
+                val open = PendingIntent.getActivity(
+                    context, 20,
+                    Intent(context, LibraryActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                setOnClickPendingIntent(R.id.widgetTitle, open)
                 setOnClickPendingIntent(R.id.widgetPrev, command(context, WidgetControlReceiver.ACTION_PREV, 1))
                 setOnClickPendingIntent(R.id.widgetPlayPause, command(context, WidgetControlReceiver.ACTION_TOGGLE, 2))
                 setOnClickPendingIntent(R.id.widgetNext, command(context, WidgetControlReceiver.ACTION_NEXT, 3))

@@ -175,6 +175,7 @@ class PlaybackService : MediaLibraryService() {
                 subtitle = subtitle,
                 isPlaying = playing,
                 artwork = bitmap,
+                background = bitmap?.let { ArtworkLoader.dominantColor(it) },
             )
         }
     }

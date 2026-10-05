@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Proven card structure (art-left, compact transport) on a black canvas.
-     No art: the ImageView hides and pure black shows, like the notification. -->
+<!-- YT Music pattern: rounded container, art left, title stack, transport.
+     Backdrop color is set per-track from the cover's dominant color. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/widget_background"
@@ -11,11 +12,14 @@
 
     <ImageView
         android:id="@+id/widgetArt"
-        android:layout_width="64dp"
-        android:layout_height="64dp"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
         android:layout_marginEnd="12dp"
+        android:background="@drawable/widget_art_background"
+        android:clipToOutline="true"
         android:contentDescription="Album art"
-        android:scaleType="centerCrop" />
+        android:scaleType="centerCrop"
+        android:src="@mipmap/ic_launcher" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -42,7 +46,7 @@
             android:singleLine="true"
             android:text="@string/now_playing"
             android:textColor="#B3FFFFFF"
-            android:textSize="12sp" />
+            android:textSize="13sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -52,31 +56,28 @@
 
             <ImageButton
                 android:id="@+id/widgetPrev"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Previous"
-                android:src="@android:drawable/ic_media_previous"
-                android:tint="#FFFFFF" />
+                android:src="@drawable/ic_skip_previous" />
 
             <ImageButton
                 android:id="@+id/widgetPlayPause"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:layout_marginHorizontal="4dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Play or pause"
-                android:src="@android:drawable/ic_media_play"
-                android:tint="#FFFFFF" />
+                android:src="@drawable/ic_play_circle" />
 
             <ImageButton
                 android:id="@+id/widgetNext"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Next"
-                android:src="@android:drawable/ic_media_next"
-                android:tint="#FFFFFF" />
+                android:src="@drawable/ic_skip_next" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>
