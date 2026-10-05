@@ -30,6 +30,12 @@ import okhttp3.OkHttpClient
 class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private lateinit var player: ProgramPlayerRouter
+    private lateinit var normalFactory: () -> ExoPlayer
+    private lateinit var djPlanner: ProgramDjPlanner
+    private var dj: ProgramDjSession? = null
+    private var djPhase = "idle"
+    private var djProfile = "adaptive"
+    private var djError = 0
     private lateinit var connection: EngineConnection
     private lateinit var leveling: ProgramLeveling
     private val pcmTap = ProgramPcmTap()
@@ -53,6 +59,9 @@ class PlaybackService : MediaLibraryService() {
     }
     /** On the player looper; does not touch account generation, cookie or library. */
     private fun closeProgram() {
+        djPlanner.clear()
+        restoreNormal()
+        publishDj("idle", djProfile, 0)
         savePodcast()
         autoplay.clear()
         leveling.clear()
@@ -67,6 +76,19 @@ class PlaybackService : MediaLibraryService() {
         transport?.second?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll() }; transport = null
         // Media3 removes the notification/foreground when its timeline is empty.
         triggerNotificationUpdate()
+    }
+    private fun publishDj(phase: String, profile: String, code: Int) {
+        djPhase = phase; djProfile = profile; djError = code
+        session?.let { owner -> owner.setSessionExtras(Bundle(owner.sessionExtras).apply {
+            putLong("djGeneration", connection.generation); putBoolean("djActive", dj != null)
+            putString("djPhase", phase); putString("djProfile", profile); putInt("djErrorStatus", code)
+        }) }
+    }
+    private fun restoreNormal() {
+        val previous = dj ?: return
+        player.pause(); player.stop()
+        player.replaceBackend(normalFactory())
+        previous.close(); dj = null
     }
     private fun retireSource(args: Bundle) {
         require(args.getLong("generation", -1) == connection.generation)
@@ -157,14 +179,26 @@ class PlaybackService : MediaLibraryService() {
                 }
             }
         }
-        val normal = ExoPlayer.Builder(this, renderers).setMediaSourceFactory(sources)
+        normalFactory = { ExoPlayer.Builder(this, renderers).setMediaSourceFactory(sources)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             .setSeekBackIncrementMs(15000).setSeekForwardIncrementMs(15000)
-            .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
-        player = ProgramPlayerRouter(normal)
+            .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build() }
+        player = ProgramPlayerRouter(normalFactory())
         previews = PreviewProgram(connection, player, main, { session }) { key -> cancelAudio(key) }
         radio = RadioProgram(connection, player, main, session = { session })
-        autoplay = AutoplayProgram(connection, player, main, { session }, radio::active)
+        autoplay = AutoplayProgram(connection, player, main, { session }, { radio.active() || dj != null })
+        djPlanner = ProgramDjPlanner(connection, player, main, ::publishDj) { rows, position ->
+            val epoch = connection.generation
+            val identity = connection.sessionIdentity(epoch)
+            val next = ProgramDjSession(this, epoch, { epoch == connection.generation && runCatching { connection.sessionIdentity(epoch) }.getOrNull() == identity },
+                sources, pcmTap, leveling::active, rows, position, changed = { publishDj(djPhase, djProfile, djError) })
+            autoplay.clear(); radio.clear()
+            val previousDj = dj; dj = next
+            player.pause(); player.stop()
+            val previous = player.replaceBackend(next.player)
+            if (previousDj != null) previousDj.close() else previous.release()
+            next.player.play(); publishDj(djPhase, djProfile, djError)
+        }
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
                 if (item?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) == "preview") artwork.clear()
@@ -202,10 +236,17 @@ class PlaybackService : MediaLibraryService() {
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
                 return Futures.immediateFuture(try {
-                    if (args.getString("action") == "queue") {
+                    if (args.getString("action") == "dj") {
+                        require(args.getLong("generation", -1) == connection.generation)
+                        if (args.getBoolean("fromCurrent", true)) require(args.getString("queueToken") == ProgramQueue.token(player) && args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
+                        djPlanner.start(args.getString("profile") ?: "adaptive",
+                            org.json.JSONObject(args.getString("direction") ?: "{\"energy\":0.5,\"familiarity\":0.5,\"prompt\":\"\",\"include\":[],\"exclude\":[]}"),
+                            org.json.JSONArray(args.getString("sources") ?: "[]"), args.getBoolean("fromCurrent", true))
+                    } else if (args.getString("action") == "queue") {
                         require(args.getLong("generation", -1) == connection.generation)
                         val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"))
                         val index = args.getInt("index", -1); require(index in items.indices)
+                        djPlanner.clear(); restoreNormal(); publishDj("idle", djProfile, 0)
                         autoplay.clear()
                         radio.clear()
                         player.shuffleModeEnabled = args.getBoolean("shuffle")
@@ -242,6 +283,8 @@ class PlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         savePodcast()
         connection.resetListeners.remove(reset)
+        djPlanner.close()
+        dj?.close(); dj = null
         autoplay.close()
         leveling.close()
         NativeProgramOutput.unbind(pcmTap)

@@ -50,12 +50,14 @@ class PlaybackPlugin : Plugin() {
         } else null
         val radioError = if (extras?.getLong("radioGeneration") == EngineConnection.shared(context).generation) extras.getInt("radioErrorStatus") else 0
         val autoplayError = if (extras?.getLong("autoplayGeneration") == EngineConnection.shared(context).generation) extras.getInt("autoplayErrorStatus") else 0
-        val plannerError = if (radioError != 0) radioError else autoplayError
+        val djError = if (extras?.getLong("djGeneration") == EngineConnection.shared(context).generation) extras.getInt("djErrorStatus") else 0
+        val plannerError = if (djError != 0) djError else if (radioError != 0) radioError else autoplayError
         val authFailure = (preview != null && extras?.getBoolean("previewAuthFailure") == true) || plannerError == 401
         val radio = if (extras?.getLong("radioGeneration") == EngineConnection.shared(context).generation) JSObject().put("active", extras.getBoolean("radioActive")).put("phase", extras.getString("radioPhase")).put("profile", extras.getString("radioProfile")) else null
         val autoplay = if (extras?.getLong("autoplayGeneration") == EngineConnection.shared(context).generation) JSObject().put("enabled", if (extras.getBoolean("autoplayKnown")) extras.getBoolean("autoplayEnabled") else null).put("settingsPhase", extras.getString("autoplaySettingsPhase")).put("active", extras.getBoolean("autoplayActive")).put("phase", extras.getString("autoplayPhase")) else null
         val leveling = if (extras?.getLong("levelingGeneration") == EngineConnection.shared(context).generation) JSObject().put("enabled", if (extras.getBoolean("levelingKnown")) extras.getBoolean("levelingEnabled") else null).put("settingsPhase", extras.getString("levelingSettingsPhase")) else null
-        return JSObject().put("leveling", leveling).put("autoplay", autoplay).put("radio", radio).put("preview", preview).put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
+        val dj = if (extras?.getLong("djGeneration") == EngineConnection.shared(context).generation) JSObject().put("active", extras.getBoolean("djActive")).put("phase", extras.getString("djPhase")).put("profile", extras.getString("djProfile")) else null
+        return JSObject().put("dj", dj).put("leveling", leveling).put("autoplay", autoplay).put("radio", radio).put("preview", preview).put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
             .put("items", items).put("queueToken", if (p != null) ProgramQueue.token(p) else "").put("programToken", if (p != null) ProgramQueue.programToken(p) else "")
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
             .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", if (authFailure) "auth" else if (plannerError == 403) "permission" else PlaybackRecovery.kind(p?.playerError))
@@ -78,9 +80,11 @@ class PlaybackPlugin : Plugin() {
             require((call.getInt("generation")?.toLong() ?: -1L) == connection.generation)
             val p = controller ?: error("NOT_READY")
             when (call.getString("action")) {
-                "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay", "leveling", "metadata", "retireSource" -> {
+                "dj", "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay", "leveling", "metadata", "retireSource" -> {
                     val args = Bundle().apply {
                         if (call.getString("action") == "metadata") putString("metadataRevision", java.util.UUID.randomUUID().toString())
+                        putBoolean("fromCurrent", call.getBoolean("fromCurrent") ?: true)
+                        putString("direction", call.getObject("direction")?.toString()); putString("sources", call.getArray("sources")?.toString())
                         putBoolean("shuffle", call.getBoolean("shuffle") ?: false)
                         putBoolean("reload", call.getBoolean("reload") ?: false); putBoolean("enabled", call.getBoolean("enabled") ?: false); putString("profile", call.getString("profile"))
                         putInt("seconds", call.getInt("seconds") ?: 0)

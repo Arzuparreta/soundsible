@@ -1,5 +1,17 @@
 # S3b: ejecución DJ nativa
 
+Integración end-to-end en fuentes: comando `dj` de SoundsiblePlayback solicita
+Core `/api/discovery/music/dj-plan` sin detener el programa durante la petición;
+retry temporal acotado a60s y scope por cuenta/ocurrencia. ProgramDjSession
+ejecuta ruta/cues sobre ProgramMixOutput, Player lógico conserva MediaSession,
+focus/noisy único y tap NativeProgramOutput post-DSP/pre-volumen. El menú ofrece
+From current. Native/test/JVM48/lint pasan en
+/tmp/soundsible-s3b-dj-e2e-foundation.log. DjProgramTest HTTP/TLS real todavía
+pendiente; no declarar DJ entregado. Dirección/refill/edición extendida,
+phase correction y contratos OS/recuperación de producción requieren continuar.
+From current reprepara la entrada con la posición actual; esta integración
+no demuestra continuidad acústica al pasar de NORMAL a DJ.
+
 ## Integración del servicio en curso
 
 PlaybackService utiliza ProgramPlayerRouter (ForwardingSimpleBasePlayer) sobre

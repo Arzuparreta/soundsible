@@ -7,6 +7,18 @@ import type { ProgramState } from '../lib/program/runtime';
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
+
+it('starts DJ from the captured song and rejects a menu after its occurrence changes', async () => {
+  const command = vi.fn(async () => {});
+  const [state, setState] = createSignal<ProgramState>(initial);
+  render(() => <ProgramTransport state={state()} pending={false} command={command} />);
+  await fireEvent.click(document.querySelector('[data-program-menu]')!);
+  const action = vi.mocked(openContextMenu).mock.calls[0][0].actions!.find(item => item.label === 'musicExplorer.startDjFromCurrent')!;
+  action.onSelect();
+  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'dj', profile: 'adaptive', fromCurrent: true, queueToken: 'token', key: 'second' });
+  setState({ ...initial, index: 0 }); action.onSelect();
+  expect(command).toHaveBeenCalledTimes(1);
+});
 const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 3, index: 1, id: 'a', title: 'Song', artist: '', items: [{ source: 'local', key: 'first', id: 'a', title: 'a', artist: '' }, { source: 'local', key: 'second', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a', 'a'], positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
 it('uses native availability on the last occurrence and does not claim play before observation', async () => {
   const command = vi.fn(async () => {});

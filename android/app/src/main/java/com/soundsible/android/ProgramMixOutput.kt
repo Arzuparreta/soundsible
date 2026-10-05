@@ -34,6 +34,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private var config: AudioOutputProvider.OutputConfig? = null
     private val sources = arrayOfNulls<Source>(2)
     private val levels = doubleArrayOf(1.0, 1.0)
+    private var localVolume = 1f
     @Volatile private var closed = false
     @Volatile private var outputEpoch = 0L
     // End of reserved output, including the batch currently being written.
@@ -72,6 +73,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                 if (current == null) {
                     this@ProgramMixOutput.config = config
                     output = provider.getAudioOutput(config).also { device ->
+                        device.setVolume(localVolume)
                         device.addListener(object : AudioOutput.Listener {
                             override fun onPositionAdvancing(playoutStartSystemTimeMs: Long) {}
                             override fun onOffloadDataRequest() {}
@@ -159,7 +161,11 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     fun pause(value: Boolean) = synchronized(lock) {
         paused = value; synchronized(deviceLock) { if (value) output?.pause() else output?.play() }; lock.notifyAll()
     }
-    fun setVolume(value: Float) = synchronized(lock) { require(value.isFinite() && value in 0f..1f); synchronized(deviceLock) { output?.setVolume(value) } }
+    fun setVolume(value: Float) = synchronized(lock) {
+        require(value.isFinite() && value in 0f..1f)
+        localVolume = value
+        synchronized(deviceLock) { output?.setVolume(value) }
+    }
     fun error(): Throwable? = synchronized(lock) { failure }
     fun transition(): ProgramMixWindow? = synchronized(lock) { window }
     fun dominantInput(): Int = synchronized(lock) {
@@ -171,6 +177,21 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     fun restoredAt(): Long? = synchronized(lock) { restoration?.first }
     fun epoch(): Long = outputEpoch
     fun positionUs(): Long = synchronized(deviceLock) { output?.positionUs ?: 0L }
+    fun reservedPositionUs(): Long = synchronized(lock) { frames * 1000000 / (config?.sampleRate ?: 48000) }
+    /** Explicit user navigation retires queued PCM from both inputs before loading another occurrence. */
+    fun resetTo(index: Int) = synchronized(lock) {
+        require(index in 0..1)
+        check(!closed && owns())
+        invalidateDevice()
+        sources.forEach { it?.let { source -> source.queue.clear(); source.queued = 0 } }
+        active = index
+        lock.notifyAll()
+    }
+    /** Capture tags follow rendered PCM; OS metadata instead follows hardware playout. */
+    fun renderedInput(frame: Long): Int = synchronized(lock) {
+        restoration?.takeIf { frame >= it.first }?.second
+            ?: window?.takeIf { it.epoch == outputEpoch }?.dominant(frame) ?: active
+    }
     /** Called with the state lock; covers flush, release and input replacement on seek. */
     private fun invalidateDevice() {
         outputEpoch++

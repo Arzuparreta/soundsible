@@ -83,12 +83,20 @@ limpio, log /tmp/soundsible-s3b-long-end-native.log; política fromKey7 JVM verd
 Pérdida de entrada/salida early/late HTTP/TLS8/0 y normal APK/test/JVM48/lint
 pasan sobreb210eeb3 limpio, log /tmp/soundsible-s3b-outgoing-loss-native.log.
 Fachada estable ProgramPlayerRouter conectada al PlaybackService sobre el backend
-NORMAL existente; Kotlin Native/test, JVM48 y lint pasan en
-/tmp/soundsible-s3b-router-tests-foundation.log. Aceptación APK de forwarding,
-aislamiento de eventos al sustituir backend y regresión NORMAL todavía pendiente.
+NORMAL existente; dirigido APK2/0 y normal APK/test/JVM48/lint pasan sobre71ab534b
+en /tmp/soundsible-s3b-router-fixed-native.log. Forwarding e aislamiento de eventos
+al sustituir backend aceptados; regresión NORMAL completa todavía pendiente.
 El cambio de backend exige anterior parado y siguiente sin play solicitado;
-la fachada conserva la identidad MediaSession. No integra todavía DJ.
-Próximo aceptar fachada, integrar Player DJ/focus único y planner; ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
+la fachada conserva la identidad MediaSession.
+Integración DJ en fuentes: ProgramDjPlanner/Core, ProgramDjSession/route,
+ProgramMixPlayer/focus único, tap mezclado y comando From current en menú.
+Kotlin Native/test, JVM48 y lint pasan en
+/tmp/soundsible-s3b-dj-e2e-foundation.log. Aceptación end-to-end HTTP/TLS pendiente:
+DjProgramTest ejecuta Core real, bridge/servicio, PCM mixto en background,
+dominancia, pausa, recreación Activity y retorno NORMAL. No declarar DJ aceptado.
+Faltan refill/dirección/edición completa y ampliar recuperación/phase/OS controls.
+Reservar suites completas para cierre del bloque, usar dirigidos durante integración.
+Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.
 No publicar release antes de revisión y merge; preparar información de alpha.

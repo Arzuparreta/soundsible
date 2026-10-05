@@ -1,10 +1,11 @@
-import type { PreviewPreparation } from '../api';
+import type { DjDirection, DjMusicSetSource, DjProfile, PreviewPreparation } from '../api';
 /** Single-output async contract. Independent of Solid, Capacitor and the Web Audio mixer. */
 export interface ProgramState {
   generation: number; sequence: number; ready: boolean; playing: boolean;
   playWhenReady: boolean; errorKind: '' | 'connection' | 'server' | 'auth' | 'permission' | 'source';
   state: number; index: number; id: string; title: string; artist: string;
   items: ProgramOccurrence[]; queueToken: string; programToken?: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
+  dj?: { active: boolean; phase: string; profile: DjProfile } | null;
   radio?: { active: boolean; phase: string; profile: 'familiar' | 'balanced' | 'explore' } | null;
   leveling?: { enabled: boolean | null; settingsPhase: string } | null;
   autoplay?: { enabled: boolean | null; settingsPhase: string; active: boolean; phase: string } | null;
@@ -17,6 +18,7 @@ export interface ProgramOccurrence extends ProgramTrack { key: string; generated
 export interface ProgramTrack { loudness_lufs?: number | null; loudness_peak_dbtp?: number | null; duration?: number; offline?: boolean; source: 'local' | 'preview' | 'podcast'; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
+  | { action: 'dj'; profile: DjProfile; fromCurrent: boolean; queueToken: string; key?: string; direction?: DjDirection; sources?: DjMusicSetSource[] }
   | { action: 'radio'; enabled: boolean; profile: 'familiar' | 'balanced' | 'explore'; queueToken: string; key?: string }
   | { action: 'metadata'; tracks: { id: string; title: string; artist: string; album: string; album_artist?: string | null; album_id?: string | null; artist_id?: string | null }[] }
   | { action: 'autoplay' | 'leveling'; enabled: boolean; reload?: boolean }
