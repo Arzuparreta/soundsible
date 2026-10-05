@@ -16,7 +16,8 @@ internal class ProgramMixPlayer(context: Context, private val output: ProgramMix
     private val decks: Array<ExoPlayer>, private val owns: () -> Boolean,
     private val onDecoderError: (Int, PlaybackException) -> Boolean = { _, _ -> false },
     private val snapshot: ((Int) -> View)? = null,
-    private val seekRoute: ((Int, Long) -> Unit)? = null) : SimpleBasePlayer(Looper.getMainLooper()) {
+    private val seekRoute: ((Int, Long) -> Unit)? = null,
+    private val editRoute: ((List<MediaItem>) -> Unit)? = null) : SimpleBasePlayer(Looper.getMainLooper()) {
     data class View(val items: List<MediaItem>, val current: Int)
     fun routeChanged() { invalidateState() }
     fun replaceInput(index: Int, next: ExoPlayer) {
@@ -100,7 +101,8 @@ internal class ProgramMixPlayer(context: Context, private val output: ProgramMix
         if (seekRoute != null && view.items.isNotEmpty()) commands.addAll(Player.COMMAND_SEEK_TO_MEDIA_ITEM,
             Player.COMMAND_SEEK_TO_DEFAULT_POSITION, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
             Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM, Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_PREVIOUS)
-        val state = if (slots.isEmpty() || failure != null) Player.STATE_IDLE
+        if (editRoute != null) commands.addAll(Player.COMMAND_CHANGE_MEDIA_ITEMS, Player.COMMAND_SET_MEDIA_ITEM)
+        val state = if (view.items.isEmpty() || slots.isEmpty() || failure != null) Player.STATE_IDLE
             else if (deck.playbackState == Player.STATE_ENDED && !output.drainedInput(slot)) Player.STATE_READY else deck.playbackState
         return State.Builder().setAvailableCommands(commands.build()).setPlaylist(playlist)
             .setCurrentMediaItemIndex(if (view.items.isEmpty()) C.INDEX_UNSET else view.current)
@@ -168,6 +170,27 @@ internal class ProgramMixPlayer(context: Context, private val output: ProgramMix
         require(mediaItemIndex in slots.indices && slots[mediaItemIndex] == slot)
         require(output.transition() == null || output.cancelArmed()) { "Seek requires the transition controller to retire the other input" }
         decks[slot].seekTo(positionMs)
+        return Futures.immediateVoidFuture()
+    }
+    private fun edited(change: (MutableList<MediaItem>) -> Unit): ListenableFuture<*> {
+        val rows = (0 until mediaItemCount).map { getMediaItemAt(it) }.toMutableList()
+        change(rows); requireNotNull(editRoute).invoke(rows)
+        return Futures.immediateVoidFuture()
+    }
+    override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> =
+        edited { it.addAll(index, mediaItems) }
+    override fun handleRemoveMediaItems(fromIndex: Int, toIndex: Int): ListenableFuture<*> =
+        edited { it.subList(fromIndex, toIndex).clear() }
+    override fun handleMoveMediaItems(fromIndex: Int, toIndex: Int, newIndex: Int): ListenableFuture<*> = edited {
+        val moved = it.subList(fromIndex, toIndex).toList()
+        it.subList(fromIndex, toIndex).clear(); it.addAll(newIndex.coerceAtMost(it.size), moved)
+    }
+    override fun handleReplaceMediaItems(fromIndex: Int, toIndex: Int, mediaItems: List<MediaItem>): ListenableFuture<*> = edited {
+        it.subList(fromIndex, toIndex).clear(); it.addAll(fromIndex, mediaItems)
+    }
+    override fun handleSetMediaItems(mediaItems: List<MediaItem>, startIndex: Int, startPositionMs: Long): ListenableFuture<*> {
+        requireNotNull(editRoute).invoke(mediaItems)
+        if (mediaItems.isNotEmpty()) requireNotNull(seekRoute).invoke(startIndex.coerceAtLeast(0), startPositionMs.takeIf { it >= 0 } ?: 0)
         return Futures.immediateVoidFuture()
     }
     override fun handleRelease(): ListenableFuture<*> {

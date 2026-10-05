@@ -55,7 +55,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         require(initial.isNotEmpty() && initial.size <= ProgramQueue.LIMIT && startPositionMs >= 0)
         require(initial.all { it.item.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true })
         player = ProgramMixPlayer(context, output, decks, ::owns, ::decoderFailed,
-            { slot -> ProgramMixPlayer.View(route.map { it.item }, indices[slot].takeIf { it in route.indices } ?: current) }, ::seek)
+            { slot -> ProgramMixPlayer.View(route.map { it.item }, indices[slot].takeIf { it in route.indices } ?: current) }, ::seek, ::editPlaylist)
         load(0, 0, startPositionMs, 1f)
         main.post(tick)
     }
@@ -180,6 +180,62 @@ internal class ProgramDjSession(private val context: Context, private val genera
         armed = false; recovering = false; plan = null; pendingSince = 0
         load(0, index, positionMs, 1f)
         output.pause(!resume); player.routeChanged(); changed()
+    }
+    fun items(): List<MediaItem> = route.map { it.item }
+    fun currentIndex(): Int = current
+    private fun itemKey(item: MediaItem) = item.mediaMetadata.extras?.getString(ProgramQueue.KEY) ?: ""
+    private fun editPlaylist(items: List<MediaItem>) { applyPlaylist(items, false) }
+    private fun applyPlaylist(items: List<MediaItem>, force: Boolean) {
+        check(Looper.myLooper() == main.looper && owns())
+        require(items.size <= ProgramQueue.LIMIT && items.map(::itemKey).distinct().size == items.size)
+        require(items.all { item -> itemKey(item).isNotBlank() &&
+            item.mediaMetadata.extras?.getLong(ProgramPcmProcessor.GENERATION, -1) == generation &&
+            item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) in listOf("local", "preview") })
+        val before = route.associateBy { itemKey(it.item) }
+        val oldCurrent = route.getOrNull(current)?.item?.let(::itemKey)
+        val slotKeys = indices.map { index -> route.getOrNull(index)?.item?.let(::itemKey) }
+        if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
+        val retained = items.map(::itemKey).toSet()
+        if (armed && !force) require(slotKeys.filterNotNull().all { it in retained }) { "A committed transition cannot be removed" }
+        route = items.map { Row(it, before[itemKey(it)]?.proposal) }
+        if (items.isEmpty()) {
+            player.stop(); decks.forEach { it.clearMediaItems() }; indices.fill(-1)
+            armed = false; recovering = false; plan = null; streams = arrayOfNulls(2)
+            tap.discardBuffered(); player.routeChanged(); changed(); return
+        }
+        val nextCurrent = items.indexOfFirst { itemKey(it) == oldCurrent }
+        if (nextCurrent < 0 || force && armed && slotKeys.filterNotNull().any { it !in retained }) {
+            seek(current.coerceAtMost(items.lastIndex), 0); return
+        }
+        current = nextCurrent
+        for (slot in 0..1) {
+            indices[slot] = items.indexOfFirst { itemKey(it) == slotKeys[slot] }
+            if (indices[slot] >= 0 && decks[slot].currentMediaItem != items[indices[slot]]) {
+                decks[slot].replaceMediaItem(0, items[indices[slot]])
+            }
+        }
+        if (!armed) {
+            val standby = 1 - output.dominantInput()
+            if (indices[standby] != current + 1) {
+                rateReturns[standby].close(); decks[standby].pause(); decks[standby].stop(); decks[standby].clearMediaItems()
+                indices[standby] = -1; streams = streams.copyOf().also { it[standby] = null }
+            }
+            plan = null; pendingSince = 0
+        }
+        player.routeChanged(); changed()
+    }
+    fun retire(id: String) { applyPlaylist(items().filter { it.mediaId != id || it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) != "local" }, true) }
+    /** A replan changes only uncommitted future; already rendered inputs keep their occurrence. */
+    fun replaceFuture(rows: List<Row>) {
+        check(owns())
+        if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
+        val protected = if (armed) maxOf(current, indices.maxOrNull() ?: current) else current
+        val prefix = route.take(protected + 1)
+        val committedIds = prefix.map { it.item.mediaId }.toSet()
+        val future = rows.drop(1).filter { it.item.mediaId !in committedIds }
+        val next = prefix + future
+        applyPlaylist(next.map { it.item }, false)
+        route = next; player.routeChanged()
     }
     /** Append/refill never replaces either committed occurrence. */
     fun append(rows: List<Row>) {

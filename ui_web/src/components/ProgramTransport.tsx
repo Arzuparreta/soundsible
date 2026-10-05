@@ -7,6 +7,7 @@ import type { ProgramState, ProgramCommand } from '../lib/program/runtime';
 import styles from './ProgramTransport.module.css';
 import { openContextMenu } from '../lib/contextMenu';
 import { vibrate } from '../lib/haptics';
+import type { DjProfile } from '../lib/api';
 
 /** Stateless ownership: presentation observes a program; commands never create audio here. */
 export default function ProgramTransport(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onLyrics?: () => void }) {
@@ -24,6 +25,13 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
     <button data-program-menu aria-label={t('songRow.ariaMore')} disabled={disabled()} onClick={event => {
       const generation = props.state.generation;
       const key = props.state.items[props.state.index]?.key;
+      const programToken = props.state.programToken;
+      const profiles: { profile: DjProfile; label: string }[] = [
+        { profile: 'adaptive', label: t('autoMode.dj.adaptive') },
+        { profile: 'long_blend', label: t('autoMode.dj.longBlend') },
+        { profile: 'cuts_drops', label: t('autoMode.dj.cutsDrops') },
+        { profile: 'open_format', label: t('autoMode.dj.openFormat') },
+      ];
       const enabled = props.state.autoplay?.enabled;
       const known = typeof enabled === 'boolean';
       openContextMenu({ title: props.state.title, actions: [...(props.onLyrics && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' ? [{ label: t('nowPlaying.showLyrics'), onSelect: () => { if (props.state.generation === generation && !disabled()) props.onLyrics?.(); } }] : []), {
@@ -39,7 +47,13 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
           if (disabled() || props.state.generation !== generation || props.state.items[props.state.index]?.key !== key) return;
           void run({ action: 'dj', profile: 'adaptive', fromCurrent: true, queueToken: props.state.queueToken, key });
         },
-      }] : [])] }, event);
+      }] : []), ...(props.state.dj?.active && programToken ? profiles.map(({ profile, label }) => ({
+        label, selected: props.state.dj?.profile === profile,
+        onSelect: () => {
+          if (disabled() || props.state.generation !== generation || props.state.programToken !== programToken || !props.state.dj?.active) return;
+          void run({ action: 'djSettings', programToken, profile });
+        },
+      })) : [])] }, event);
     }}>⋯</button>
     <button data-program-close aria-label={t('android.closeProgram')} title={t('android.closeProgram')} disabled={disabled()} onClick={() => void run({ action: 'stop', queueToken: props.state.queueToken, programToken: props.state.programToken })}>×</button></div>
     <Show when={props.state.items[props.state.index]?.mediaKind === 'podcast_episode'}><button data-podcast-back aria-label={t('podcasts.skipBack')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: -15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>−15s</button><button data-podcast-forward aria-label={t('podcasts.skipForward')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: 15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>+15s</button></Show>

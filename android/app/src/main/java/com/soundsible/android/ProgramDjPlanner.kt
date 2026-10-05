@@ -8,46 +8,66 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.concurrent.Executors
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /** Scoped Core planning; temporary failures retain the programme and have a total retry budget. */
 @UnstableApi
 internal class ProgramDjPlanner(private val connection: EngineConnection, private val player: Player,
     private val main: Handler, private val status: (String, String, Int) -> Unit,
-    private val ready: (List<ProgramDjSession.Row>, Long) -> Unit) : AutoCloseable {
-    private val worker = Executors.newSingleThreadExecutor()
-    private var serial = 0L
+    private val ready: (List<ProgramDjSession.Row>, Long, Kind) -> Unit) : AutoCloseable {
+    enum class Kind { START, REPLACE, APPEND }
+    var profile = "adaptive"; private set
+    var direction = JSONObject(); private set
+    var sources = JSONArray(); private set
+    private var sessionId = ""
+    private var segment = 0
+    private var revision = 0
+    fun busy() = requestId != null || retry != null
+    private val worker = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(1))
+    @Volatile private var serial = 0L
     private var requestId: String? = null
     private var retry: Runnable? = null
-    private var closed = false
-    fun start(profile: String, direction: JSONObject, sources: JSONArray, fromCurrent: Boolean) {
+    @Volatile private var closed = false
+    fun start(profile: String, direction: JSONObject, sources: JSONArray, fromCurrent: Boolean,
+        kind: Kind = Kind.START, anchor: MediaItem? = null) {
         require(profile in listOf("adaptive", "long_blend", "cuts_drops", "open_format"))
         require(direction.toString().length <= 16384 && sources.length() <= 64 && sources.toString().length <= 65536)
-        val seed = player.currentMediaItem.takeIf { fromCurrent }
+        val seed = anchor ?: player.currentMediaItem.takeIf { fromCurrent }
         require(!fromCurrent || seed != null && seed.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
         require(seed != null || sources.length() > 0)
         clear()
+        this.profile = profile; this.direction = JSONObject(direction.toString()); this.sources = JSONArray(sources.toString())
+        if (kind == Kind.START) { sessionId = java.util.UUID.randomUUID().toString(); segment = 0; revision = 0 }
+        else if (kind == Kind.REPLACE) revision++
+        else segment++
         val token = serial; val generation = connection.generation
         val identity = connection.sessionIdentity(generation)
         val owner = ProgramQueue.programToken(player)
+        val queue = ProgramQueue.token(player)
         val seedKey = seed?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
         val body = JSONObject().put("dj_profile", profile).put("direction", direction)
-            .put("limit", 8).put("session_id", java.util.UUID.randomUUID().toString())
-            .put("segment_index", 0).put("direction_revision", 0)
+            .put("limit", 8).put("session_id", sessionId)
+            .put("segment_index", segment).put("direction_revision", revision)
         if (sources.length() > 0) body.put("sources", sources).put("source_policy", "explicit")
-        if (seed != null) body.put("seed", reference(seed)).put("exclude", JSONArray().put(seed.mediaId))
+        if (seed != null) body.put("seed", reference(seed)).put("exclude", JSONArray(
+            if (kind == Kind.START) listOf(seed.mediaId) else (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }))
         val started = android.os.SystemClock.elapsedRealtime()
         var attempt = 0
         fun valid(): Boolean = !closed && token == serial && generation == connection.generation &&
             runCatching { connection.sessionIdentity(generation) }.getOrNull() == identity &&
             ProgramQueue.programToken(player) == owner && (seedKey == null ||
-                player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.KEY) == seedKey)
+                if (kind == Kind.APPEND) ProgramQueue.token(player) == queue && (0 until player.mediaItemCount).any { ProgramQueue.key(player, it) == seedKey }
+                else player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.KEY) == seedKey)
         lateinit var request: Runnable
         request = Runnable {
+            retry = null
             if (!valid()) { if (token == serial) status("cancelled", profile, 0); return@Runnable }
             val id = "dj-plan:" + java.util.UUID.randomUUID(); requestId = id
             status("planning", profile, 0)
             worker.execute {
+                if (closed || token != serial || generation != connection.generation) return@execute
                 var answer: JSONObject? = null; var code = 0
                 try {
                     connection.execute("/api/discovery/music/dj-plan", "POST",
@@ -66,10 +86,11 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
                     val response = answer
                     try {
                         if (response != null) {
-                            val parsed = rows(response, seed, generation)
+                            val actualSeed = seedKey?.let { key -> (0 until player.mediaItemCount).firstOrNull { ProgramQueue.key(player, it) == key }?.let(player::getMediaItemAt) }
+                            val parsed = rows(response, actualSeed, generation)
                             if (parsed.size > if (seed == null) 0 else 1) {
                                 status(if (response.optBoolean("degraded")) "degraded" else "ready", profile, 0)
-                                ready(parsed, if (seed == null) 0 else player.currentPosition)
+                                ready(parsed, if (seed == null) 0 else player.currentPosition, kind)
                                 return@result
                             }
                         }
@@ -88,7 +109,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
                 }
             }
         }
-        main.post(request)
+        retry = request; main.post(request)
     }
     private fun reference(item: MediaItem) = JSONObject().put("id", item.mediaId)
         .put(if (item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "preview") "youtube_id" else "track_id", item.mediaId)
@@ -127,6 +148,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
     fun clear() {
         serial++; requestId?.let(connection::cancel); requestId = null
         retry?.let(main::removeCallbacks); retry = null
+        worker.queue.clear()
     }
     override fun close() { closed = true; clear(); worker.shutdownNow() }
 }

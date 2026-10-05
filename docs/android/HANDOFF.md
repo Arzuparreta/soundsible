@@ -98,6 +98,17 @@ DjProgramTest ejecuta Core real, bridge/servicio, PCM mixto en background,
 dominancia, pausa, recreación Activity y retorno NORMAL. No declarar paridad DJ.
 Faltan refill/dirección/edición completa y ampliar recuperación/phase/OS controls.
 Reservar suites completas para cierre del bloque, usar dirigidos durante integración.
+
+Continuación DJ: route editable conservando las ocurrencias comprometidas, replan
+de futuro y refill sobre el mismo backend; settings nativos con perfil/dirección/
+fuentes y perfiles en menú de tres puntos. Dirigido DJ HTTP/TLS + NORMAL4/0,
+normal APK/test/JVM/lint pasan en /tmp/soundsible-s3b-dj-route-native.log sobre
+working tree (dirty=true), no evidencia de commit limpio. UI dirigido18/0 y
+TypeScript pasan en /tmp/soundsible-s3b-dj-settings-ui.log. La prueba verifica
+append/move/remove en pausa y cambio de perfil sin sustituir la ocurrencia actual
+ni avanzar su posición. No demuestra refill largo ni reemplazo efectivo de futuro:
+el source set de dos pistas puede agotarse. Faltan UI de dirección/fuentes,
+inicio sólo desde fuentes, refill real y recuperación de decoder en producción.
 El fallo real TLS al cerrar conexiones SSL en hilo principal está corregido:
 pool/dispatcher de audio propios, retiro en worker y shutdown de su executor.
 Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update

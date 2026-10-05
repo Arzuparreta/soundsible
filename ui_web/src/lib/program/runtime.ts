@@ -5,7 +5,7 @@ export interface ProgramState {
   playWhenReady: boolean; errorKind: '' | 'connection' | 'server' | 'auth' | 'permission' | 'source';
   state: number; index: number; id: string; title: string; artist: string;
   items: ProgramOccurrence[]; queueToken: string; programToken?: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
-  dj?: { active: boolean; phase: string; profile: DjProfile } | null;
+  dj?: { active: boolean; phase: string; profile: DjProfile; direction?: DjDirection; sources?: DjMusicSetSource[] } | null;
   radio?: { active: boolean; phase: string; profile: 'familiar' | 'balanced' | 'explore' } | null;
   leveling?: { enabled: boolean | null; settingsPhase: string } | null;
   autoplay?: { enabled: boolean | null; settingsPhase: string; active: boolean; phase: string } | null;
@@ -19,6 +19,7 @@ export interface ProgramTrack { loudness_lufs?: number | null; loudness_peak_dbt
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
   | { action: 'dj'; profile: DjProfile; fromCurrent: boolean; queueToken: string; key?: string; direction?: DjDirection; sources?: DjMusicSetSource[] }
+  | { action: 'djSettings'; programToken: string; profile?: DjProfile; direction?: DjDirection; sources?: DjMusicSetSource[] }
   | { action: 'radio'; enabled: boolean; profile: 'familiar' | 'balanced' | 'explore'; queueToken: string; key?: string }
   | { action: 'metadata'; tracks: { id: string; title: string; artist: string; album: string; album_artist?: string | null; album_id?: string | null; artist_id?: string | null }[] }
   | { action: 'autoplay' | 'leveling'; enabled: boolean; reload?: boolean }

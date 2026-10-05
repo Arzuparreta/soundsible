@@ -8,6 +8,18 @@ vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
+it('changes DJ profile within the captured programme and rejects a stale menu', async () => {
+  const command = vi.fn(async () => {});
+  const [state, setState] = createSignal<ProgramState>({ ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } });
+  render(() => <ProgramTransport state={state()} pending={false} command={command} />);
+  await fireEvent.click(document.querySelector('[data-program-menu]')!);
+  const action = vi.mocked(openContextMenu).mock.calls[0][0].actions!.find(item => item.label === 'autoMode.dj.longBlend')!;
+  setState({ ...state(), queueToken: 'refilled' }); action.onSelect();
+  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'djSettings', programToken: 'dj-owner', profile: 'long_blend' });
+  setState({ ...state(), programToken: 'another-programme' }); action.onSelect();
+  expect(command).toHaveBeenCalledTimes(1);
+});
+
 it('starts DJ from the captured song and rejects a menu after its occurrence changes', async () => {
   const command = vi.fn(async () => {});
   const [state, setState] = createSignal<ProgramState>(initial);
