@@ -169,7 +169,7 @@ class ProgramMixOutputTest {
                 if (endOfSource) {
                     val drainDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
                     while (!owner.drainedInput(0) && System.nanoTime() < drainDeadline) Thread.sleep(10)
-                    assertTrue("Current input did not drain its actual hardware PCM", owner.drainedInput(0))
+                    assertTrue("Current input did not drain its actual hardware PCM: ${owner.drainState(0)}", owner.drainedInput(0))
                     val ended = java.util.concurrent.atomic.AtomicBoolean()
                     val endedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                     do {

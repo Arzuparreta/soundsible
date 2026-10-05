@@ -103,6 +103,10 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         source.ended && source.queued == 0 && source.clock.supplied > 0 &&
             source.clock.played(positionUs() * format.sampleRate / 1000000) == source.clock.supplied
     }
+    internal fun drainState(index: Int): String = synchronized(lock) {
+        val source = sources[index] ?: return@synchronized "absent"
+        "ended=${source.ended}, queued=${source.queued}, supplied=${source.clock.supplied}, played=${source.clock.played(positionUs() * config!!.sampleRate / 1000000)}, playing=${source.playing}"
+    }
     fun blend(lengthMs: Long, value: ProgramMixCurve.Technique) = synchronized(lock) {
         require(lengthMs in 50..30000 && sources.all { it != null } && mixStart == Long.MAX_VALUE)
         val rate = config!!.sampleRate
