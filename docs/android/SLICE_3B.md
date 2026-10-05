@@ -146,3 +146,9 @@ entrantes durante un falso overlap; volumen/AudioTrack único se conservan. Test
 Native amplía a cuatro casos HTTP/TLS fade/direct: dominancia25%/75% y cue de
 entrada direct sin salto. Compilación Native/test/JVM38/lint pasan en
 /tmp/soundsible-s3b-mix-direct-foundation.log; prueba real ampliada pendiente.
+
+Dominancia/direct aceptados HTTP/TLS4/0 sobre5f762ba1 limpio, log
+/tmp/soundsible-s3b-mix-direct-native.log. Metadata sigue reloj físico25/75%,
+DIRECT no consume cue entrante como overlap, seek/pause/scope siguen pasando.
+APK/test APK/JVM38/lint normales después de retirar CA pasan. Siguiente caída
+entrante durante blend sin cortar saliente, EOS/técnicas, luego fachada/planner.

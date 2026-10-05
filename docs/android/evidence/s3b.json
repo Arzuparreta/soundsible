@@ -40,6 +40,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-mix-seek-replacement-native.log",
       "scope": "HTTP/TLS seeks to10s in real 440->1320Hz source; master epoch/clock reset, actual1320Hz PCM then coherent two-source blend; pause/scope and normal APK/test/JVM36/lint pass"
+    },
+    "dominance_direct_native": {
+      "source_revision_at_asset_prepare": "5f762ba1",
+      "dirty_at_asset_prepare": false,
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-direct-native.log",
+      "scope": "HTTP/TLS fade and direct; hardware25/75percent metadata dominance, direct keeps incoming cue, seek/pause/session invalidation, normal APK/test/JVM38/lint pass"
     }
   },
   "diagnostics": [
@@ -66,7 +76,7 @@
   ],
   "limitations": [
     "Isolated owner only; not connected to production service or DJ planner",
-    "No EOS/starvation/physical dominance or production service/planner proof yet",
+    "No incoming-failure/EOS/other-technique or production service/planner proof yet",
     "No exact compressor acoustic parity or physical listening acceptance",
     "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
   ]
