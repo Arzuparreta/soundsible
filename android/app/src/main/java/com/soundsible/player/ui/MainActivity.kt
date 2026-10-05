@@ -10,6 +10,7 @@ import com.soundsible.player.LocalEngine
 import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.playback.EngineService
+import com.soundsible.player.ui.WebCommand
 import com.soundsible.player.playback.QueueHolder
 import com.soundsible.player.store.LastSongPin
 import com.soundsible.player.store.WebPlaybackPin
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun route(status: TextView) {
         val app = application as SoundsibleApp
+        val pending = intent.action?.takeIf { WebCommand.isCommand(it) }
         val connection = app.tokenStore.load()
         if (connection == null) {
             startActivity(Intent(this, PairingActivity::class.java))
@@ -91,7 +93,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (connection.label != "This phone") {
             restoreQueue()
-            openLibrary()
+            openLibrary(pending)
             return
         }
         // Local engine: the stored port/token die with every engine restart
@@ -106,7 +108,7 @@ class MainActivity : AppCompatActivity() {
             if (fresh != null && withContext(Dispatchers.IO) { LocalEngine.isHealthy(fresh.baseUrl) }) {
                 app.tokenStore.save(fresh)
                 restoreQueue()
-                openLibrary()
+                openLibrary(pending)
                 return
             }
             val (phase, _) = LocalEngine.localStatus()
@@ -170,8 +172,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun openLibrary() {
-        startActivity(Intent(this, LibraryActivity::class.java))
+    private fun openLibrary(command: String? = null) {
+        val intent = Intent(this, LibraryActivity::class.java)
+        if (command != null) intent.action = command
+        startActivity(intent)
         finish()
     }
 }

@@ -69,7 +69,7 @@ object WebNowPlaying {
         )
         val open = PendingIntent.getActivity(
             context, 10,
-            Intent(context, LibraryActivity::class.java),
+            Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
@@ -112,7 +112,7 @@ object WebNowPlaying {
     }
 
     private fun action(context: Context, what: String, requestCode: Int): PendingIntent {
-        val intent = Intent(context, LibraryActivity::class.java)
+        val intent = Intent(context, MainActivity::class.java)
             .setAction(what)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         return PendingIntent.getActivity(

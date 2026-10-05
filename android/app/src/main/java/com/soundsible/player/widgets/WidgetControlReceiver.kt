@@ -3,7 +3,7 @@ package com.soundsible.player.widgets
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.soundsible.player.ui.LibraryActivity
+import com.soundsible.player.ui.MainActivity
 import com.soundsible.player.ui.WebAudio
 import com.soundsible.player.ui.WebCommand
 import com.soundsible.player.ui.WebNowPlaying
@@ -25,7 +25,7 @@ class WidgetControlReceiver : BroadcastReceiver() {
                 else -> return
             }
             context.startActivity(
-                Intent(context, LibraryActivity::class.java)
+                Intent(context, MainActivity::class.java)
                     .setAction(webAction)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )

@@ -8,7 +8,7 @@ import android.content.Context
 import android.content.Intent
 import com.soundsible.player.R
 import com.soundsible.player.playback.QueueHolder
-import com.soundsible.player.ui.LibraryActivity
+import com.soundsible.player.ui.MainActivity
 
 /**
  * Home-screen player widget: artwork, title/artist, previous/play/next.
@@ -82,7 +82,7 @@ class SoundsibleWidgetProvider : AppWidgetProvider() {
                 )
                 val open = PendingIntent.getActivity(
                     context, 20,
-                    Intent(context, LibraryActivity::class.java),
+                    Intent(context, MainActivity::class.java),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
                 setOnClickPendingIntent(R.id.widgetTitle, open)
