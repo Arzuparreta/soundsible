@@ -29,6 +29,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private val deviceReleased = CountDownLatch(1)
     private val provider = AudioTrackAudioOutputProvider.Builder(context).build()
     private val lock = Object()
+    private val deviceLock = Any()
     private var output: AudioOutput? = null
     private var config: AudioOutputProvider.OutputConfig? = null
     private val sources = arrayOfNulls<Source>(2)
@@ -80,10 +81,11 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         lock.notifyAll()
     }
     fun pause(value: Boolean) = synchronized(lock) {
-        paused = value; if (value) output?.pause() else output?.play(); lock.notifyAll()
+        paused = value; synchronized(deviceLock) { if (value) output?.pause() else output?.play() }; lock.notifyAll()
     }
-    fun setVolume(value: Float) = synchronized(lock) { require(value.isFinite() && value in 0f..1f); output?.setVolume(value) }
+    fun setVolume(value: Float) = synchronized(lock) { require(value.isFinite() && value in 0f..1f); synchronized(deviceLock) { output?.setVolume(value) } }
     fun error(): Throwable? = synchronized(lock) { failure }
+    fun positionUs(): Long = synchronized(deviceLock) { output?.positionUs ?: 0L }
     private inner class Source(val index: Int, device: AudioOutput) : ForwardingAudioOutput(device) {
         val queue = ArrayDeque<ByteBuffer>()
         var queued = 0
@@ -117,8 +119,8 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             }
             supplied += count / Integer.bitCount(config!!.channelMask)
         }
-        override fun play() = synchronized(lock) { playing = true; if (index == active && !paused) output?.play(); lock.notifyAll() }
-        override fun pause() = synchronized(lock) { playing = false; if (index == active) output?.pause(); lock.notifyAll() }
+        override fun play() = synchronized(lock) { playing = true; if (index == active && !paused) synchronized(deviceLock) { output?.play() }; lock.notifyAll() }
+        override fun pause() = synchronized(lock) { playing = false; if (index == active) synchronized(deviceLock) { output?.pause() }; lock.notifyAll() }
         override fun flush() = synchronized(lock) {
             queue.clear(); queued = 0; supplied = 0; ended = false; effects.reset()
             joinedAt = if (index == active) frames else Long.MAX_VALUE
@@ -129,7 +131,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         override fun release() = synchronized(lock) { released = true; queue.clear(); queued = 0; listeners.forEach { it.onReleased() }; lock.notifyAll() }
         override fun getPositionUs(): Long = synchronized(lock) {
             if (joinedAt == Long.MAX_VALUE) 0L else {
-                val played = ((output?.positionUs ?: 0) * config!!.sampleRate / 1000000 - joinedAt).coerceIn(0, supplied)
+                val played = (positionUs() * config!!.sampleRate / 1000000 - joinedAt).coerceIn(0, supplied)
                 played * 1000000 / config!!.sampleRate
             }
         }
@@ -192,7 +194,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                 val copy = ByteArray(batch.buffer.remaining()); batch.buffer.duplicate().get(copy)
                 val device = output ?: error("Output owner disappeared")
                 check(owns()) { "Programme ownership changed" }
-                while (!device.write(batch.buffer, 1, batch.start * 1000000 / batch.rate)) {
+                while (!synchronized(deviceLock) { device.write(batch.buffer, 1, batch.start * 1000000 / batch.rate) }) {
                     synchronized(lock) { if (closed) return; check(owns()) }
                     Thread.sleep(1)
                 }
@@ -206,18 +208,18 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             }
         } catch (_: InterruptedException) { /* Explicit owner close. */ }
         catch (problem: Throwable) {
-            synchronized(lock) { failure = problem; sources.forEach { it?.queue?.clear(); it?.queued = 0 }; output?.pause(); output?.flush(); lock.notifyAll() }
+            synchronized(lock) { failure = problem; sources.forEach { it?.queue?.clear(); it?.queued = 0 }; synchronized(deviceLock) { output?.pause(); output?.flush() }; lock.notifyAll() }
         }
     }
     override fun close() {
-        synchronized(lock) { if (closed) return; closed = true; output?.pause(); output?.flush(); sources.forEach { it?.queue?.clear(); it?.queued = 0 }; lock.notifyAll() }
+        synchronized(lock) { if (closed) return; closed = true; synchronized(deviceLock) { output?.pause(); output?.flush() }; sources.forEach { it?.queue?.clear(); it?.queued = 0 }; lock.notifyAll() }
         check(Looper.myLooper() != playbackLooper) { "Close the mix owner outside its decoder looper" }
         worker.interrupt(); worker.join(1000)
         val cleanup = CountDownLatch(1)
         decodingHandler.post {
             try {
                 val device = output
-                if (device == null) deviceReleased.countDown() else device.release()
+                if (device == null) deviceReleased.countDown() else synchronized(deviceLock) { device.release() }
                 provider.release()
             } finally { cleanup.countDown() }
         }

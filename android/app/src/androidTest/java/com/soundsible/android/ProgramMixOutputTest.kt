@@ -135,21 +135,43 @@ class ProgramMixOutputTest {
                 assertNull("Decoder failed", playbackFailure.get()); assertNull("Output failed", owner.error())
                 instrumentation.runOnMainSync { decoders.first().release(); decoders.removeAt(0) }
                 meter.metrics.clear(); meter.await { it.first < 30 && it.second in 8950.0..9050.0 }
+                owner.pause(true)
+                Thread.sleep(200)
+                val pausedPosition = owner.positionUs()
+                Thread.sleep(300)
+                assertTrue("Physical output clock moved while paused", abs(pausedPosition - owner.positionUs()) <= 2000L)
+                owner.pause(false)
+                meter.metrics.clear(); meter.await { it.first < 30 && it.second in 8950.0..9050.0 }
+                val resumeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (owner.positionUs() <= pausedPosition && System.nanoTime() < resumeDeadline) Thread.sleep(20)
+                assertTrue("Physical output did not resume", owner.positionUs() > pausedPosition)
+                cleanFixture(connection, origin)
+                connection.clearSession(true)
+                val cancelDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (owner.error() == null && System.nanoTime() < cancelDeadline) Thread.sleep(20)
+                assertNotNull("Output continued after scope invalidation", owner.error())
+                Thread.sleep(200); val revokedPosition = owner.positionUs()
+                Thread.sleep(300)
+                assertTrue("Revoked output clock moved", abs(revokedPosition - owner.positionUs()) <= 2000L)
                 assertEquals("false", web.evaluate(scenario, "!!document.querySelector('audio')"))
             }
         } finally {
             instrumentation.runOnMainSync { decoders.forEach { it.release() } }; mix?.close()
             audioClient?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll(); it.dispatcher.executorService.shutdown() }
             try {
-                if (connection.cookieHeader(connection.generation) != null) {
-                    val clean = connection.client.newBuilder().addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("Cookie", connection.cookieHeader(connection.generation) ?: "").build()) }.build()
-                    clean.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
-                        .post("{\"measured\":false}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
-                    for (id in listOf("member-pcm-soft", "member-pcm-loud")) {
-                        clean.newCall(okhttp3.Request.Builder().url(origin + "/api/library/tracks/" + id).delete().build()).execute().use { assertEquals(200, it.code) }
-                    }
-                }
+                cleanFixture(connection, origin)
             } finally { connection.clearSession(true) }
         }
     }
+    private fun cleanFixture(connection: EngineConnection, origin: String?) {
+    if (connection.cookieHeader(connection.generation) != null) {
+        val clean = connection.client.newBuilder().addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("Cookie", connection.cookieHeader(connection.generation) ?: "").build()) }.build()
+        clean.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
+            .post("{\"measured\":false}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+        for (id in listOf("member-pcm-soft", "member-pcm-loud")) {
+            clean.newCall(okhttp3.Request.Builder().url(origin + "/api/library/tracks/" + id).delete().build()).execute().use { assertEquals(200, it.code) }
+        }
+    }
+    }
+
 }

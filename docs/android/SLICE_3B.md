@@ -95,10 +95,18 @@ antes de cerrar el hilo. Kotlin/test/JVM36/lint pasan en
 aceptarlo. El rechazo inicial de JDK sistema se conserva como diagnóstico en
 /tmp/soundsible-s3b-mix-native.log, sin instrumentación ejecutada.
 
-Segunda ejecución real aceptada: HTTP/TLS2/0/0/0 sur prepare propre16ed5d83,
-log /tmp/soundsible-s3b-mix-looper-native.log. Les deux formats distincts sont
-normalisés; amplitudes 440/880 mesurées durant equal-power; volume local0.1 ne
-change pas le tap et libérer le sortant conserve l'entrant. APK/test APK/JVM36/lint
-normaux après retrait CA passent. Voir evidence/s3b.json. Ce résultat reste un
-spike isolé: continuer pause/seek/EOS/starvation/scope et techniques, puis façade
-Player/MediaSession et planner; ne pas décrire DJ de production comme livré.
+Segunda ejecución real aceptada: HTTP/TLS2/0/0/0 sobre prepare limpio16ed5d83,
+log /tmp/soundsible-s3b-mix-looper-native.log. Ambos formatos distintos se
+normalizan; amplitudes440/880 medidas durante equal-power; volumen local0.1 no
+cambia el tap y liberar el saliente conserva el entrante. APK/test APK/JVM36/lint
+normales después de retirar CA pasan. Ver evidence/s3b.json. Es todavía un spike
+isolado: continuar pausa/seek/EOS/starvation/scope y técnicas, después fachada
+Player/MediaSession y planner; no describir DJ de producción como entregado.
+
+Ampliación en fuentes: acceso al dispositivo serializado (write/control/clock/
+release), pausa/reanudación con reloj físico y revocación por clearSession real,
+no un flag de UI. Limpieza de fixture ocurre antes de borrar la sesión; ninguna
+petición de audio sigue autorizada después. Compilación Native/test, JVM36 y lint
+pasan en /tmp/soundsible-s3b-mix-pause-foundation-fixed.log. Primer compile de
+estas aserciones falló por usar Long con overload JUnit Double; corregido a
+comparación acotada de microsegundos. Aceptación HTTP/TLS ampliada pendiente.
