@@ -1,5 +1,7 @@
 package com.soundsible.android
 
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.audio.SonicAudioProcessor
@@ -105,7 +107,9 @@ class ProgramMixOutputTest {
     @Test fun tlsCuedPreroll() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), cued = true)
     @Test fun httpCancelPreroll() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), cued = true, cancelCue = true)
     @Test fun tlsCancelPreroll() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), cued = true, cancelCue = true)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f, cued: Boolean = false, cancelCue: Boolean = false) {
+    @Test fun httpTempoReturn() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), tempo = 1.05f, returnTempo = true)
+    @Test fun tlsTempoReturn() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), tempo = 1.05f, returnTempo = true)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f, cued: Boolean = false, cancelCue: Boolean = false, returnTempo: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -113,6 +117,7 @@ class ProgramMixOutputTest {
         connection.clearSession(true)
         val decoders = mutableListOf<ExoPlayer>()
         var mix: ProgramMixOutput? = null
+        var rateReturn: ProgramRateReturn? = null
         var audioClient: okhttp3.OkHttpClient? = null
         val playbackFailure = AtomicReference<PlaybackException?>()
         try {
@@ -290,6 +295,32 @@ class ProgramMixOutputTest {
                     assertTrue("Incoming media clock did not track software tempo", abs(mediaPosition.get() - expected) < 120)
                     assertTrue("Tempo clock unexpectedly remained at normal speed", mediaPosition.get() > owner.inputPositionUs(1) / 1000.0 + 50)
                 }
+                if (returnTempo) {
+                    val incoming = decoders.single()
+                    val epoch = owner.epoch()
+                    val currentRate = AtomicReference(tempo)
+                    instrumentation.runOnMainSync {
+                        rateReturn = ProgramRateReturn(Handler(Looper.getMainLooper()),
+                            { owns() && owner.epoch() == epoch && decoders.contains(incoming) }, owner::positionUs,
+                            { rate -> incoming.playbackParameters = PlaybackParameters(rate, 1f); currentRate.set(rate) })
+                        rateReturn!!.start(tempo)
+                    }
+                    Thread.sleep(1000)
+                    assertTrue("Tempo return did not begin", currentRate.get() < tempo && currentRate.get() > 1f)
+                    owner.pause(true)
+                    Thread.sleep(300)
+                    val heldRate = currentRate.get()
+                    Thread.sleep(500)
+                    assertEquals("Paused programme advanced its tempo ramp", heldRate.toDouble(), currentRate.get().toDouble(), 0.0002)
+                    owner.pause(false)
+                    val returnDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+                    while (currentRate.get() != 1f && System.nanoTime() < returnDeadline) Thread.sleep(50)
+                    assertEquals("Tempo did not return to normal", 1.0, currentRate.get().toDouble(), 0.0001)
+                    meter.metrics.clear(); meter.await(stable)
+                    instrumentation.runOnMainSync {
+                        assertEquals("Returned tempo changed pitch", 1.0, incoming.playbackParameters.pitch.toDouble(), 0.001)
+                    }
+                }
                 owner.pause(true)
                 Thread.sleep(200)
                 val pausedPosition = owner.positionUs()
@@ -311,7 +342,7 @@ class ProgramMixOutputTest {
                 assertEquals("false", web.evaluate(scenario, "!!document.querySelector('audio')"))
             }
         } finally {
-            instrumentation.runOnMainSync { decoders.forEach { it.release() } }; mix?.close()
+            instrumentation.runOnMainSync { rateReturn?.close(); decoders.forEach { it.release() } }; mix?.close()
             audioClient?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll(); it.dispatcher.executorService.shutdown() }
             try {
                 cleanFixture(connection, origin)
