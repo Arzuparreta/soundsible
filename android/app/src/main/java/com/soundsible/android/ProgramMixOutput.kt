@@ -243,11 +243,15 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                         val format = config
                         val channels = format?.let { Integer.bitCount(it.channelMask) } ?: 0
                         val fullCount = (format?.sampleRate ?: 0) / 100 * channels
-                        val count = if (source?.ended == true) minOf(fullCount, source.queued / 2) else fullCount
+                        // AudioTrack's latency-adjusted clock cannot reach the last source
+                        // frame on underrun. Drain with silence without ending the shared
+                        // device (AudioOutput.stop cannot subsequently resume PCM playback).
+                        val tail = source?.ended == true && source.queued == 0 && !drainedInput(active)
+                        val count = if (source?.ended == true && !tail) minOf(fullCount, source.queued / 2) else fullCount
                         val mixing = frames >= mixStart && frames < mixStart + mixLength
                         val incoming = sources[1 - active]
-                        if (!paused && source != null && (source.playing || source.ended) && count > 0 && source.queued >= count * 2 && (!mixing || incoming?.playing == true && incoming.queued >= count * 2)) {
-                            val first = ShortArray(count); source.read(first, count)
+                        if (!paused && source != null && (source.playing || source.ended) && count > 0 && (tail || source.queued >= count * 2) && (!mixing || incoming?.playing == true && incoming.queued >= count * 2)) {
+                            val first = ShortArray(count); if (!tail) source.read(first, count)
                             val second = if (mixing) ShortArray(count).also { incoming!!.read(it, count) } else null
                             val result = ByteBuffer.allocateDirect(count * 2).order(ByteOrder.LITTLE_ENDIAN)
                             val firstFrame = FloatArray(channels); val secondFrame = FloatArray(channels)

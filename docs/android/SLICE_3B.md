@@ -238,3 +238,20 @@ pausa deseada/fatal, para relevar un renderer que Media3 pausó al terminar.
 httpEndOfSource/tlsEndOfSource seek19.5s del archivo20s, esperan drain real y
 STATE_ENDED, y cortan a entrada ya preparada sin consumir su cue. Kotlin/test/
 JVM41/lint pasan en /tmp/soundsible-s3b-mix-eos-foundation.log; Native EOS2 pendiente.
+
+EOS inicial HTTP/TLS2 falla: último PCM no alcanza el reloj físico antes de la
+pausa del decoder. Diagnóstico dirigido HTTP1 sobre078e94fa: ended=true, queued=0,
+supplied=24000, played=19632, playing=false. Logs
+/tmp/soundsible-s3b-mix-eos-native.log y
+/tmp/soundsible-s3b-eos-diagnostic-native.log. No aceptar EOS todavía.
+El owner ignora la pausa de estado ended del decoder y permite vaciar su cola;
+la pausa explícita de programa sigue siendo efectiva. Kotlin Native/test,
+JVM41 y lint pasan en /tmp/soundsible-s3b-eos-tail-foundation.log. Repetición
+HTTP/TLS pendiente; no sustituye evidencia anterior de técnicas/FLAC.
+
+Repetición con pausa ended separada sigue fallando HTTP/TLS2: played19633 de
+24000 incluso playing=true, log /tmp/soundsible-s3b-eos-tail-native.log. El reloj
+AudioTrack descontado de latencia se congela al underrun sin nuevas escrituras.
+La siguiente corrección escribe silencio sólo hasta drenar los frames reales;
+no cuenta ese silencio en el reloj de medios del deck ni llama AudioOutput.stop
+(dicho output no reanuda PCM tras stop sin flush). EOS sigue pendiente de prueba.
