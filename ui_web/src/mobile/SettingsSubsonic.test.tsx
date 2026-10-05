@@ -1,0 +1,30 @@
+import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
+import { createSignal, Show } from 'solid-js';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import NativeSettingsSubsonic from './SettingsSubsonic';
+import { setLocale } from '../lib/i18n';
+const mocks = vi.hoisted(() => ({ request: vi.fn() }));
+vi.mock('../lib/http', () => ({ request: mocks.request }));
+beforeEach(() => { void setLocale('en'); });
+afterEach(() => { cleanup(); vi.resetAllMocks(); });
+const status = { username: 'member', configured: false, created_at: null, last_used_at: null, last_client: null };
+it('uses the engine URL and forgets the one-time credential when the panel closes', async () => {
+  mocks.request.mockResolvedValueOnce(status).mockResolvedValueOnce({ ...status, configured: true, created_at: 'new', password: 'synthetic-test-secret' }).mockResolvedValueOnce({ ...status, configured: true, created_at: 'new' }).mockResolvedValue(status);
+  const copy = vi.fn().mockResolvedValue(true), [opened, setOpened] = createSignal(true);
+  render(() => <Show when={opened()}><NativeSettingsSubsonic identity={() => 1} accountId={() => 'member-id'} username={() => 'member'} origin={() => 'https://engine.example'} available={() => true} copy={copy} /></Show>);
+  await screen.findByText('https://engine.example');
+  await fireEvent.click(screen.getByRole('button', { name: /copy the address/i }));
+  expect(copy).toHaveBeenCalledWith('https://engine.example', false);
+  await fireEvent.click(screen.getByRole('button', { name: /generate a password/i }));
+  await screen.findByText('synthetic-test-secret');
+  setOpened(false); expect(document.querySelector('[data-subsonic-secret]')).toBeNull();
+  setOpened(true); await screen.findByText('https://engine.example');
+  expect(screen.queryByText('synthetic-test-secret')).not.toBeInTheDocument();
+});
+it('requires a confirmed status read before offering credential mutations', async () => {
+  mocks.request.mockRejectedValueOnce(new Error('unreachable')).mockResolvedValue(status);
+  render(() => <NativeSettingsSubsonic identity={() => 1} accountId={() => 'member-id'} username={() => 'member'} origin={() => 'https://engine.example'} available={() => true} />);
+  await screen.findByRole('alert'); expect(screen.queryByRole('button', { name: /generate a password/i })).not.toBeInTheDocument();
+  await fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+  expect(await screen.findByRole('button', { name: /generate a password/i })).toBeEnabled();
+});

@@ -1,12 +1,11 @@
 import { SettingsLoad } from './SettingsLoad';
-import { createSignal, Show } from 'solid-js';
+import { createSignal } from 'solid-js';
 import { api, type SubsonicAccess } from '../lib/api';
 import { copyText } from '../lib/clipboard';
 import { confirmDialog } from '../lib/confirm';
 import { t } from '../lib/i18n';
 import { toast } from '../lib/toast';
-import { ActionRow, SettingRow, SettingsGroup, ValueRow } from './SettingsRows';
-import styles from './SettingsSections.module.css';
+import { SubsonicAccessView } from './SubsonicAccessView';
 
 /**
  * Connecting another app to this library.
@@ -79,66 +78,9 @@ export function SubsonicAccessPanel() {
 
   return (
     <SettingsLoad load={load}>
-      <SettingsGroup note={t('subsonic.note')}>
-        <ValueRow
-          anchor="subsonic-server"
-          label={t('subsonic.server')}
-          value={<span class={styles.mono}>{serverUrl()}</span>}
-        />
-        <ValueRow
-          anchor="subsonic-username"
-          label={t('subsonic.username')}
-          value={<span class={styles.mono}>{access()?.username ?? '—'}</span>}
-        />
-        <ActionRow
-          anchor="subsonic-copy-server"
-          label={t('subsonic.copyServer')}
-          onClick={() => void copy(serverUrl())}
-        />
-      </SettingsGroup>
-
-      <SettingsGroup
-        anchor="subsonic-password"
-        label={t('subsonic.password')}
-        note={t('subsonic.passwordNote')}
-      >
-        <Show when={password()}>
-          <SettingRow
-            label={t('subsonic.passwordShownOnce')}
-            hint={t('subsonic.passwordShownOnceHint')}
-          >
-            <span class={styles.secret}>{password()}</span>
-          </SettingRow>
-          <ActionRow label={t('subsonic.copyPassword')} onClick={() => void copy(password())} />
-        </Show>
-        <ActionRow
-          label={access()?.configured ? t('subsonic.regenerate') : t('subsonic.generate')}
-          hint={access()?.configured ? t('subsonic.regenerateHint') : t('subsonic.generateHint')}
-          onClick={() => void generate()}
-          disabled={busy()}
-        />
-        <Show when={access()?.configured}>
-          <ActionRow
-            label={t('subsonic.revoke')}
-            hint={t('subsonic.revokeHint')}
-            onClick={() => void revoke()}
-            disabled={busy()}
-            danger
-          />
-        </Show>
-      </SettingsGroup>
-
-      <Show when={access()?.configured}>
-        <SettingsGroup label={t('subsonic.usage')}>
-          <ValueRow
-            label={t('subsonic.lastUsed')}
-            value={access()?.last_used_at ?? t('subsonic.never')}
-          />
-          <Show when={access()?.last_client}>
-            <ValueRow label={t('subsonic.lastClient')} value={access()!.last_client!} />
-          </Show>
-        </SettingsGroup>
-      </Show>
+      <SubsonicAccessView access={access()} password={password()} busy={busy()} serverUrl={serverUrl()}
+        onGenerate={() => void generate()} onRevoke={() => void revoke()}
+        onCopyServer={() => void copy(serverUrl())} onCopyPassword={() => void copy(password())} />
     </SettingsLoad>
   );
 }

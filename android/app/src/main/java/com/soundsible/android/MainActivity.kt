@@ -18,6 +18,7 @@ class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(AppearancePlugin::class.java)
         registerPlugin(FeedbackPlugin::class.java)
+        registerPlugin(ClipboardPlugin::class.java)
         registerPlugin(EnginePlugin::class.java)
         registerPlugin(ImportPlugin::class.java)
         registerPlugin(PlaybackPlugin::class.java)

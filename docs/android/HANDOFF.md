@@ -1497,3 +1497,16 @@ sin CA temporal. Runner /tmp/soundsible-s2af-main-clean.log termina0. XML actual
 integration-results confirma73 y los dos result.json confirman1+1. Sustituye
 principal57; no atribuir Subsonic posterior a este artifact. Congelación Native
 levantada al terminar runner. Continuar S2ag end to end y DSP/DJ/Live/Auto.
+
+### Subsonic S2ag Native dirigido aceptado
+
+/tmp/soundsible-s2ag-account-fixed-native.log termina0 con4/0 HTTP/TLS:
+Subsonic2 ampliado y Account2, APK normal/test APK/JVM20/lint sin CA pasan.
+Mint/replacement/revoke cambian auth real formPOST/rest, copias OS con sensitivity,
+Activity sin contraseña, cambio member-owner confirmado sin estado ajeno ni
+secretos; programa/keys/pausa/sesión intactos antes del logout explícito. El
+primer dirigido2 también pasa; la primera ampliación4 falla2 por elegir Sign out
+de cabecera, se conserva diagnóstico y el locator de Cuenta se corrige.
+UI1547/195 pasa. Browser4 de vista compartida Subsonic siguiente/en curso; última
+principal limpia sigue73+restart2 sobre46a6c3d. Congelación Native levantada.
+Continuar DSP S3a y Settings restantes, DJ/Live/Auto/firma/update. No alpha aún.
