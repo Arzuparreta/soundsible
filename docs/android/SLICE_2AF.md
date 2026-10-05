@@ -83,3 +83,9 @@ cancelado/confirmado y owner intacto. UI completa1534/192 pasa
 y dos pruebas de futura sección Native aún sin conectar ni dentro de esa APK.
 Browser4 de extracciones nuevas pendiente. No confundir Settings aceptados con
 leveling/mixing/administración/servicios/sharing completos ni con paridad global.
+
+[Preparación S3a](SLICE_3A.md) fija la regla real de loudness, el tap PCM y los
+requisitos de salida única. CompositionPlayer se contrastó con documentación y
+source del tag usado; reconfigurar composición recrea holders. No asumir que eso
+resuelve una ruta DJ editada en marcha ni importar AudioGraph package-private.
+No DSP entregado todavía; Settings Autoplay Native se conecta en continuación.
