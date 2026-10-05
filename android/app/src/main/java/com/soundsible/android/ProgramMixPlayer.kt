@@ -121,7 +121,11 @@ internal class ProgramMixPlayer(context: Context, private val output: ProgramMix
         } else if (!requested) focus.abandon()
         output.setVolume(localVolume)
         output.pause(!requested)
+        syncInputs()
         invalidateState()
+    }
+    private fun syncInputs() {
+        decks.forEach { deck -> if (requested && !suppressed && deck.currentMediaItem != null) deck.play() else deck.pause() }
     }
     private fun focusChanged(change: Int) {
         when (change) {
@@ -132,6 +136,7 @@ internal class ProgramMixPlayer(context: Context, private val output: ProgramMix
         }
         output.setVolume(localVolume * duck)
         output.pause(!requested || suppressed)
+        syncInputs()
         invalidateState()
     }
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
@@ -141,7 +146,8 @@ internal class ProgramMixPlayer(context: Context, private val output: ProgramMix
     override fun handlePrepare(): ListenableFuture<*> {
         if (owns()) {
             failure = null
-            decks.filter { it.currentMediaItem != null }.forEach { it.prepare(); it.play() }
+            decks.filter { it.currentMediaItem != null }.forEach { it.prepare() }
+            syncInputs()
         }
         return Futures.immediateVoidFuture()
     }

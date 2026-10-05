@@ -240,7 +240,7 @@ class PlaybackService : MediaLibraryService() {
                         require(args.getLong("generation", -1) == connection.generation)
                         if (args.getBoolean("fromCurrent", true)) require(args.getString("queueToken") == ProgramQueue.token(player) && args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
                         djPlanner.start(args.getString("profile") ?: "adaptive",
-                            org.json.JSONObject(args.getString("direction") ?: "{\"energy\":0.5,\"familiarity\":0.5,\"prompt\":\"\",\"include\":[],\"exclude\":[]}"),
+                            org.json.JSONObject(args.getString("direction") ?: "{\"energy\":0,\"familiarity\":0,\"prompt\":\"\",\"include\":[],\"exclude\":[]}"),
                             org.json.JSONArray(args.getString("sources") ?: "[]"), args.getBoolean("fromCurrent", true))
                     } else if (args.getString("action") == "queue") {
                         require(args.getLong("generation", -1) == connection.generation)

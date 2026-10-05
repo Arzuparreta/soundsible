@@ -11,6 +11,13 @@ pendiente; no declarar DJ entregado. Dirección/refill/edición extendida,
 phase correction y contratos OS/recuperación de producción requieren continuar.
 From current reprepara la entrada con la posición actual; esta integración
 no demuestra continuidad acústica al pasar de NORMAL a DJ.
+Primer end-to-end HTTP/TLS2 falla en lectura del test de pausa: StartupTest
+devuelve JSON.stringify como string JSON codificado; JSONObject lo rechazaba.
+Ambos llegan a Core real, mezcla PCM en background y dominancia entrante antes
+del fallo. Log /tmp/soundsible-s3b-dj-e2e-native.log, prepare sobre71ab534b dirty
+(fuentes equivalentes al bloquef12f39fc). Se corrige lectura de posición en JS,
+cleanup en finally y dirección inicial neutral. Repetir recorrido completo sobre
+commit limpio; no aceptar esta primera ejecución parcial.
 
 ## Integración del servicio en curso
 

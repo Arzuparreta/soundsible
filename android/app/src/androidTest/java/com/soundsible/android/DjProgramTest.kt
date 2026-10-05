@@ -51,6 +51,7 @@ class DjProgramTest {
             waitFor("!!document.querySelector('[data-testid=android-library]')")
             connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
                 .post("{\"album\":true,\"firstFrequency\":440,\"firstDuration\":20,\"secondFrequency\":880,\"secondRate\":48000,\"secondChannels\":2}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+            try {
             web.evaluate(scenario, "window.__djTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__dj=s),100)")
             waitFor("window.__dj?.ready")
             command("action:'queue',index:0,tracks:[{source:'local',id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20}]")
@@ -86,9 +87,10 @@ class DjProgramTest {
                 waitFor("window.__dj.id==='member-pcm-loud' && window.__dj.index===1 && window.__dj.playing")
                 command("action:'pause'")
                 waitFor("!window.__dj.playWhenReady")
-                val paused = JSONObject(web.evaluate(scenario, "JSON.stringify(window.__dj)")).getLong("positionMs")
+                Thread.sleep(300)
+                web.evaluate(scenario, "window.__djPaused=window.__dj.positionMs")
                 Thread.sleep(500)
-                assertTrue("Programme advanced while paused", kotlin.math.abs(JSONObject(web.evaluate(scenario, "JSON.stringify(window.__dj)")).getLong("positionMs") - paused) < 100)
+                assertEquals("Programme advanced while paused", "true", web.evaluate(scenario, "Math.abs(window.__dj.positionMs-window.__djPaused)<100"))
                 scenario.recreate(); web.awaitReady(scenario)
                 web.evaluate(scenario, "window.__djTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__dj=s),100)")
                 waitFor("window.__dj.dj?.active && window.__dj.id==='member-pcm-loud'")
@@ -98,8 +100,10 @@ class DjProgramTest {
                 waitFor("window.__dj.playing && !window.__dj.dj?.active && window.__dj.id==='member-track'")
                 command("action:'stop'")
             }
-            for (id in listOf("member-pcm-soft", "member-pcm-loud")) connection.execute("/api/library/tracks/$id", "DELETE", null, emptyMap(), connection.generation, "dj-cleanup-$id", 15000).use { assertTrue(it.isSuccessful) }
-            connection.clearSession(true)
+            } finally {
+            try { for (id in listOf("member-pcm-soft", "member-pcm-loud")) connection.execute("/api/library/tracks/$id", "DELETE", null, emptyMap(), connection.generation, "dj-cleanup-$id", 15000).use { assertTrue(it.isSuccessful) }
+            } finally { connection.clearSession(true) }
+            }
         }
     }
 }

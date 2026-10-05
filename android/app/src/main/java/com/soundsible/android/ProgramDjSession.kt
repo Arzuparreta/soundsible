@@ -85,7 +85,8 @@ internal class ProgramDjSession(private val context: Context, private val genera
             item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) ?: "", positionMs * 1000) }
         decks[slot].setMediaItem(item, positionMs)
         decks[slot].playbackParameters = PlaybackParameters(rate, 1f)
-        decks[slot].prepare(); decks[slot].play()
+        decks[slot].prepare()
+        if (player.playWhenReady && player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE) decks[slot].play() else decks[slot].pause()
         level(slot)
     }
     private fun level(slot: Int) {
@@ -115,6 +116,10 @@ internal class ProgramDjSession(private val context: Context, private val genera
             if (output.positionUs() < restored * 1000000 / 48000 + 150000) return
             recovering = false
         }
+        if (!player.playWhenReady || player.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE) {
+            pendingSince = 0
+            return
+        }
         if (current + 1 >= route.size || armed) return
         val outgoing = decks[slot]
         val duration = outgoing.duration.takeIf { it > 0 } ?: return
@@ -131,13 +136,14 @@ internal class ProgramDjSession(private val context: Context, private val genera
             return
         }
         if (!output.readyInput(standby)) {
+            if (pendingSince == 0L) pendingSince = android.os.SystemClock.elapsedRealtime()
             if (pendingSince > 0 && android.os.SystemClock.elapsedRealtime() - pendingSince > 15000) {
                 // Never arm a missing decoder: the current input keeps its output clock.
                 player.replaceInput(standby, decoder(standby)); indices[standby] = -1; pendingSince = 0
             }
             return
         }
-        if (!mixing() || resolved.technique == ProgramMixCurve.Technique.DIRECT) {
+        if (!mixing() || resolved.technique == ProgramMixCurve.Technique.DIRECT || outgoing.playbackState == Player.STATE_ENDED) {
             if (output.drainedInput(slot)) { output.blend(50, ProgramMixCurve.Technique.DIRECT); armed = true }
             return
         }
@@ -166,7 +172,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
     fun seek(index: Int, positionMs: Long) {
         check(Looper.myLooper() == main.looper && owns())
         require(index in route.indices && positionMs >= 0)
-        val resume = player.playWhenReady
+        val resume = player.playWhenReady && player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE
         output.pause(true); rateReturns.forEach { it.close() }
         decks.forEach { it.pause(); it.stop(); it.clearMediaItems() }
         output.resetTo(0)
