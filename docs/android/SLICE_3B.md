@@ -273,3 +273,10 @@ buffers en fronteras de preroll/cue/fin; consume500ms entrantes en silencio,
 reloj común alinea entrada y metadata sigue playout durante overlap. PCM previo
 no contiene tono entrante. Normal APK/test APK/JVM41/lint pasa. No prueba todavía
 plan absoluto Core, corrección/cancelación ni servicio DJ; siguiente editar futuro.
+
+Cancelación en fuentes: sólo antes de reservar PCM del overlap; nunca confundir
+preroll audible todavía silencioso con mezcla no comprometida. Primera prueba
+HTTP/TLS2 falla por intentar cancelación con250ms antes del cue físico pero el
+render ya había reservado mezcla; el guard rechaza correctamente. Log
+/tmp/soundsible-s3b-cancel-native.log. Ajustar prueba a preroll2s/margen1.75s,
+mantener rechazo después de blend comprometido. La corrección no debilita el guard.

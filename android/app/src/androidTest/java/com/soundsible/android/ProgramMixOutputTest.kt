@@ -190,16 +190,16 @@ class ProgramMixOutputTest {
                 val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                 while (!owner.readyInput(1) && System.nanoTime() < readyDeadline) Thread.sleep(10)
                 assertTrue("Incoming decoder did not prepare actual PCM", owner.readyInput(1))
-                if (cued) owner.arm(2000, technique, 1500, 500)
+                if (cued) owner.arm(2000, technique, if (cancelCue) 3000 else 1500, if (cancelCue) 2000 else 500)
                 else owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else 2000, technique)
                 var transition = owner.transition() ?: error("Transition window absent")
                 if (cued) {
-                    val cueStart = transition.start - 24000
+                    val cueStart = transition.start - if (cancelCue) 96000 else 24000
                     meter.await { it.start in (cueStart + 2400)..(transition.start - 4800) && it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
                     val clockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                    while (owner.positionUs() * 48000 / 1000000 < transition.start - 12000 && System.nanoTime() < clockDeadline) Thread.sleep(5)
+                    while (owner.positionUs() * 48000 / 1000000 < cueStart + 12000 && System.nanoTime() < clockDeadline) Thread.sleep(5)
                     val played = owner.positionUs() * 48000 / 1000000
-                    assertTrue("Preroll cue was missed", played in (transition.start - 12000)..(transition.start - 4800))
+                    assertTrue("Preroll cue was missed", played in (cueStart + 12000)..(cueStart + 19200))
                     assertEquals("Silent preroll changed metadata", 0, owner.dominantInput())
                     val expected = (played - cueStart) * 1000000 / 48000
                     assertTrue("Silent incoming drifted from programme clock", abs(owner.inputPositionUs(1) - expected) < 20000)
