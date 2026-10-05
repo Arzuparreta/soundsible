@@ -293,3 +293,15 @@ de playout, no wall time; pausa mantiene rampa, progress monotónico y scope/epo
 cancela callback. PCM1600Hz conserva pitch; normal APK/test APK/JVM41/lint pasa.
 El helper sigue en spike aislado, no habilita DJ en producción. Próximo niveles
 por entrada y fachada Player/MediaSession/planner.
+
+Regresión completa spike aceptada32/0 sobref2e7a921 limpio: siete técnicas,
+WAV/FLAC/EOS, tempo/retorno, preroll/cancel/standby seek, pérdida early/late,
+pausa/scope y niveles por entrada. Source levels0.5/0.75 se observan en PCM y
+cambiar entrante a0.5 usa envelope10ms independiente de volumen local. Orden
+igual que graph.ts: EQ/filter→level→dry y echo→master/limiter. Log
+/tmp/soundsible-s3b-complete-spike-native.log, normal APK/test APK/JVM41/lint pasa.
+Principal S3a78 no se ha repetido con el spike; no integrar todavía DJ ni alpha.
+
+Diferencia encontrada con Core: shared/dj_engine.py permite overlap48s; spike
+aceptado hasta ahora limita30s. Ampliar a rango60s y probar LongBlend48s completo
+con fuente saliente90s, más política conservadora/fromKey antes de fachada Player.
