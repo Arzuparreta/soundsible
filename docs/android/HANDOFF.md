@@ -158,8 +158,14 @@ DJ HTTP/TLS2/0 con pérdida temporal de focus real y noisy simulado por UID sist
 en AVD rooteado aceptado; APK/test/JVM49/lint normal pasa, log
 /tmp/soundsible-s3b-dj-system-focus-native.log (dirty=true). No acredita auriculares
 físicos. Los scripts de integración exigen AVD; este caso además requiere su.
-Parche de recuperación saliente antes de armar mezcla aún sólo preparado en
-/tmp/soundsible-dj-ready-recovery.patch; no aplicado ni validado.
+Recuperación saliente sin ventana aplicada: si la entrada actual falla y la
+sucesora tiene PCM preparado, el controller la promueve por corte directo.
+ProgramDjRecoveryTest usa controller real, HTTP404 en decoder y PCM sucesor
+48k/estéreo no silencioso. HTTP/TLS2/0 y normal APK/test/JVM49/lint pasan en
+/tmp/soundsible-s3b-dj-outgoing-direct-pcm-native.log (dirty=true). El caso usa
+mixing=false para asegurar ausencia de ventana armada; no acredita aún caída
+de red durante mezcla comprometida ni su starvation. Es prueba del controller
+de producción aislado, no del flujo bridge/servicio completo.
 El fallo real TLS al cerrar conexiones SSL en hilo principal está corregido:
 pool/dispatcher de audio propios, retiro en worker y shutdown de su executor.
 Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update

@@ -164,6 +164,12 @@ internal class ProgramDjSession(private val context: Context, private val genera
             player.replaceInput(slot, decoder(slot)); indices[slot] = -1
             streams = streams.copyOf().also { it[slot] = null }
             armed = false; plan = null; pendingSince = 0; recovering = output.restoredAt() != null
+            // Before an overlap is armed, releasing the outgoing decoder cannot
+            // restore a transition window. Promote its already prepared successor.
+            if (!recovering && output.dominantInput() == slot && output.readyInput(other)) {
+                output.blend(50, ProgramMixCurve.Technique.DIRECT)
+                armed = true
+            }
             changed()
         }
         return true
