@@ -1452,3 +1452,22 @@ pasa; Browser4 siguiente. Settings Playback Autoplay Native tiene vista/pruebas
 preparadas, aún sin ruta ni aceptación APK. Última principal limpia sigue57+2;
 preparar limpia ampliada73+2 después de commits. DSP/otros Settings/DJ/Live/Auto/
 firma/update siguen pendientes. Continuar hasta PR/main/release autorizado.
+
+### Autoplay Settings confirmado y regresión compartida cerrada
+
+/tmp/soundsible-s2af-autoplay-native.log termina0:10 casos HTTP/TLS, Autoplay2
+ampliado con Settings, Closure2 y Learning/Feedback/Appearance6. APK normal/test
+APK/JVM20/lint pasan, CA temporal retirada. Programa y preferencias sobreviven
+Activity; toggle cambia refill/retirada real. UI1536/192 pasa. Browser4 completo
+Chromium278/66 y WebKit269/75 sin fallos, secuencial1worker y readonlyWebKit.
+Fuentes web de esos recorridos permanecieron iguales durante ambos runs;
+Autoplay Native posterior y test de loudness no cambian la entrada web.
+
+ProgramLoudness y shared/contracts/loudness_gain.tsv son base de regla S3a;
+TS38 y JVM3 pasan. Sin AudioSink/tap PCM ni leveling/mixing entregados aún. Ver
+SLICE_3A. Próximo paso inmediato: commit/push, preparar commit limpio y principal
+73+restart2 con Native/tests/fixtures/assets congelados hasta normal build.
+No reemplazar todavía el último principal limpio57+2. Durante esa regresión
+puede avanzar UI futura no preparada de Subsonic/otros Settings, pero no fuentes
+nativas ni fixture ni recursos de pruebas del artifact. Después S3/DJ/Live/Auto/
+firma/update y PR/main/release autorizado. No cierre por slice.

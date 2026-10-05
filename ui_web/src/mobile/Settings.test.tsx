@@ -6,6 +6,8 @@ import { createNativeFeedback } from './feedback';
 import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
 import { dispatchNavigationBack } from './backNavigation';
 import { setLocale } from '../lib/i18n';
+import { createSignal } from 'solid-js';
+import type { ProgramState } from '../lib/program/runtime';
 vi.mock('./SettingsAccount', () => ({ default: () => <div data-testid="account">Account</div> }));
 let preference: ReturnType<typeof createNativeAppearance>;
 let feedback: ReturnType<typeof createNativeFeedback>;
@@ -14,7 +16,7 @@ afterEach(() => { cleanup(); preference.dispose(); feedback.dispose(); });
 it('returns from appearance/accessibility to account before leaving Settings', async () => {
   render(() => <NativeSettings user={{ id: 'member', username: 'member', display_name: 'Member', role: 'member', has_password: true }}
     identity={() => 1} available={() => false} signal={new AbortController().signal} history={createSearchHistoryStorage(key => key)}
-    appearance={preference} feedback={feedback} onUser={vi.fn()} onLogout={vi.fn()} />);
+    appearance={preference} feedback={feedback} playback={{ state: null, pending: false, available: false, command: vi.fn() }} onUser={vi.fn()} onLogout={vi.fn()} />);
   await fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
   await fireEvent.click(screen.getByRole('radio', { name: 'Pure black' }));
   expect(document.documentElement.dataset.theme).toBe('pure-black');
@@ -25,5 +27,23 @@ it('returns from appearance/accessibility to account before leaving Settings', a
   await fireEvent.click(screen.getByRole('switch', { name: /haptics/i }));
   expect(feedback.enabled()).toBe(false);
   expect(localStorage.getItem('haptics')).toBe('off');
+  expect(dispatchNavigationBack()).toBe(true);
+  await fireEvent.click(screen.getByRole('button', { name: 'Playback' }));
+  expect(screen.getByTestId('android-playback-settings')).toBeVisible();
   expect(dispatchNavigationBack()).toBe(true); expect(dispatchNavigationBack()).toBe(false);
+});
+it('passes the latest native preference through Settings without an optimistic audio state', async () => {
+  const [state, setState] = createSignal<Pick<ProgramState, 'ready' | 'autoplay'>>({ ready: true,
+    autoplay: { enabled: false, settingsPhase: 'ready', active: false, phase: 'idle' } });
+  const command = vi.fn().mockResolvedValue(undefined);
+  render(() => <NativeSettings user={{ id: 'member', username: 'member', display_name: 'Member', role: 'member', has_password: true }}
+    identity={() => 1} available={() => true} signal={new AbortController().signal} history={createSearchHistoryStorage(key => key)}
+    appearance={preference} feedback={feedback} playback={{ state: state(), pending: false, available: true, command }} onUser={vi.fn()} onLogout={vi.fn()} />);
+  await fireEvent.click(screen.getByRole('button', { name: 'Playback' }));
+  expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+  setState({ ready: true, autoplay: { enabled: true, settingsPhase: 'ready', active: false, phase: 'idle' } });
+  expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+  await fireEvent.click(screen.getByRole('switch'));
+  expect(command).toHaveBeenCalledWith({ action: 'autoplay', enabled: false, reload: false });
+  expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
 });

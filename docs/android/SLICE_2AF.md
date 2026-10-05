@@ -89,3 +89,34 @@ requisitos de salida única. CompositionPlayer se contrastó con documentación 
 source del tag usado; reconfigurar composición recrea holders. No asumir que eso
 resuelve una ruta DJ editada en marcha ni importar AudioGraph package-private.
 No DSP entregado todavía; Settings Autoplay Native se conecta en continuación.
+
+Chromium completo278/66 pasa sin fallos en /tmp/soundsible-s2af-settings-chromium.log,
+1worker. WebKit siguiente secuencial readonly/1worker en
+/tmp/soundsible-s2af-settings-webkit.log. Entradas web congeladas durante los runs;
+Autoplay Native posterior sólo cambia módulos mobile y su instrumentación.
+Native Settings Playback ya conectado en fuentes a runtime.execute/autoplay state,
+sin otro controlador ni audio. Cuatro UI dirigidos prueban no defaults editables,
+receipts reactivos a través de Settings y espera de confirmación. AutoplayTest
+HTTP/TLS ampliado conserva menú original, desactiva/activa desde Settings, verifica
+refill/retirada real y Activity/programToken; APK dirigida aún pendiente después
+de completar browser4 y UI completa. Principal limpia ampliada pendiente73+2.
+
+Browser4 completos aceptados: Chromium278/66 y WebKit269/75, cero fallos, mismo
+server cerrado4173, sequential1worker y WebKit readonly. Logs citados arriba;
+Vite propio detenido. Extracciones compartidas Haptics/Recommendations/Link/
+Autoplay conservan UX web. Cambios de ruta Autoplay Native posteriores aún
+requieren su nueva APK; no estaban dentro de Settings6 anterior.
+
+UI completa Autoplay/gain1536/192 pasa en
+/tmp/soundsible-s2af-autoplay-gain-full-ui.log. Nuevos assets e4700ed dirty=true
+se preparan para dirigido10: Autoplay2/Closure2/Learning2/Feedback2/Appearance2.
+Normal build debe ejecutar20 JVM con los tres vectores/regla nativa S3a nuevos.
+No preparar ni tocar Native/tests/fixtures/assets durante ese runner; sus cambios
+UI/Root están congelados para aceptar el comportamiento exacto de la nueva ruta.
+
+Autoplay10 aceptado: /tmp/soundsible-s2af-autoplay-native.log termina0, cero
+fallos/errores/omisiones. Incluye controles previos+Settings con refill/retirada,
+Repeat/Radio/background/Activity/programToken, Closure2 y Settings6. APK/test APK/
+JVM20/lint normales pasan sin CA temporal. Los tres JVM de ganancia S3a pasan;
+no DSP conectado. UI1536/192 y browser4 278/66+269/75 aceptados. Guardar commits,
+preparar limpio y principal73+restart2 antes de cambiar runtime/DSP nativo.

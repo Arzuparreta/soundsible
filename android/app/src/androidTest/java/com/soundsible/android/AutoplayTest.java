@@ -26,6 +26,14 @@ public class AutoplayTest {
         waitFor(web,scenario,"window.__done===true || !!window.__error");
         assertEquals(web.evaluate(scenario,"window.__error+' '+JSON.stringify(window.__radio)"),"true",web.evaluate(scenario,"window.__done===true"));
     }
+    private void settingsToggle(StartupTest web,ActivityScenario<MainActivity> scenario,boolean enabled) throws Exception {
+        waitFor(web,scenario,"!!document.querySelector('[data-android-settings]')");
+        web.evaluate(scenario,"document.querySelector('[data-android-settings]').click();document.querySelector('[data-android-settings-playback]').click()");
+        waitFor(web,scenario,"!!document.querySelector('[data-setting=autoplay] [role=switch]')&&!document.querySelector('[data-setting=autoplay] [role=switch]').disabled");
+        assertEquals(JSONObject.quote(Boolean.toString(!enabled)),web.evaluate(scenario,"document.querySelector('[data-setting=autoplay] [role=switch]').getAttribute('aria-checked')"));
+        web.evaluate(scenario,"document.querySelector('[data-setting=autoplay] [role=switch]').click()");
+        waitFor(web,scenario,"window.__radio.autoplay?.enabled==="+enabled+"&&window.__radio.autoplay.settingsPhase==='ready'&&document.querySelector('[data-setting=autoplay] [role=switch]')?.getAttribute('aria-checked')==="+JSONObject.quote(Boolean.toString(enabled)));
+    }
     @Test public void httpAutoplay() throws Exception {run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"));}
     @Test public void tlsAutoplay() throws Exception {run(InstrumentationRegistry.getArguments().getString("tlsOrigin"));}
     private void run(String origin) throws Exception {
@@ -79,12 +87,18 @@ public class AutoplayTest {
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
             waitFor(web,scenario,"window.__radio.items.length>"+initialCount);
             command(web,scenario,"action:'select',index:0,key:window.__radio.items[0].key");command(web,scenario,"action:'pause'");
-            command(web,scenario,"action:'autoplay',enabled:false");
+            String beforeSettings=web.evaluate(scenario,"window.__radio.programToken");
+            settingsToggle(web,scenario,false);
             waitFor(web,scenario,"window.__radio.autoplay?.enabled===false && !window.__radio.autoplay.active && window.__radio.items.length===4");
             try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/discovery/settings").header("Cookie",connection.cookieHeader(connection.getGeneration())).build()).execute()){
                 assertEquals(200,response.code());assertFalse(new JSONObject(response.body().string()).getBoolean("autoplay_enabled"));
             }
-            command(web,scenario,"action:'repeat',mode:1");command(web,scenario,"action:'autoplay',enabled:true");
+            assertEquals(beforeSettings,web.evaluate(scenario,"window.__radio.programToken"));
+            assertEquals(key,web.evaluate(scenario,"window.__radio.items[0].key"));
+            scenario.recreate();waitFor(web,scenario,"!!document.querySelector('[data-testid=android-configured]')&&!document.documentElement.hasAttribute('data-booting')");observe(web,scenario);
+            waitFor(web,scenario,"window.__radio?.autoplay?.enabled===false&&window.__radio.autoplay.settingsPhase==='ready'");
+            assertEquals(beforeSettings,web.evaluate(scenario,"window.__radio.programToken"));
+            command(web,scenario,"action:'repeat',mode:1");settingsToggle(web,scenario,true);
             waitFor(web,scenario,"window.__radio.autoplay?.enabled===true && window.__radio.autoplay.settingsPhase==='ready'");
             command(web,scenario,"action:'select',index:1,key:window.__radio.items[1].key");
             assertEquals("true",web.evaluate(scenario,"window.__radio.items.length===4 && !window.__radio.autoplay.active"));
@@ -99,6 +113,7 @@ public class AutoplayTest {
             waitFor(web,scenario,"window.__oldCloseRejected===true");
             assertEquals("true",web.evaluate(scenario,"window.__radio.items.length>0 && window.__radio.radio.active"));
             command(web,scenario,"action:'stop',queueToken:"+beforeRadio+",programToken:"+programBeforeRadio);waitFor(web,scenario,"window.__radio.items.length===0 && !window.__radio.autoplay.active && !window.__radio.radio.active");
+            assertEquals("false",web.evaluate(scenario,"!!document.querySelector('audio')"));
         }finally{
             try {
                 String cookie=connection.cookieHeader(connection.getGeneration());
