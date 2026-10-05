@@ -2,7 +2,9 @@ package com.soundsible.player.ui
 
 import android.app.Activity
 import android.content.ComponentName
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Button
 import android.widget.TextView
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -10,8 +12,10 @@ import androidx.media3.ui.PlayerView
 import com.google.common.util.concurrent.MoreExecutors
 import com.soundsible.player.R
 import com.soundsible.player.SoundsibleApp
+import com.soundsible.player.playback.EngineService
 import com.soundsible.player.playback.PlaybackService
 import com.soundsible.player.playback.QueueHolder
+import com.soundsible.player.store.LastSongPin
 
 /**
  * Now Playing screen bound to [PlaybackService] through a MediaController.
@@ -30,6 +34,21 @@ class NowPlayingActivity : Activity() {
         titleView = findViewById(R.id.trackTitle)
         subtitleView = findViewById(R.id.trackSubtitle)
         refreshLabels()
+        findViewById<Button>(R.id.unpairButton).setOnClickListener {
+            try {
+                stopService(Intent(this, EngineService::class.java))
+            } catch (_: Exception) {
+            }
+            try {
+                val app = application as SoundsibleApp
+                app.tokenStore.clear()
+                app.queueStore.clear()
+                LastSongPin.clear(this)
+            } catch (_: Exception) {
+            }
+            startActivity(Intent(this, PairingActivity::class.java))
+            finish()
+        }
     }
 
     override fun onStart() {

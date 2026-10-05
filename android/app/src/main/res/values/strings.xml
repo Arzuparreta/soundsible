@@ -12,9 +12,6 @@
     <string name="local_engine_button">Use this phone as the server</string>
     <string name="local_engine_hint">Starts the real Soundsible engine on this phone. No computer needed; your library lives in this app\'s private storage.</string>
     <string name="browse_title">Browse</string>
-    <string name="library_menu">Library menu</string>
-    <string name="menu_now_playing">Now playing (native)</string>
-    <string name="menu_unpair">Unpair this device</string>
     <string name="now_playing">Now playing</string>
     <string name="unpair">Unpair this device</string>
     <string name="offline_title">Offline</string>

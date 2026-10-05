@@ -1,22 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<WebView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/libraryWebView"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
-
-    <WebView
-        android:id="@+id/libraryWebView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-    <ImageButton
-        android:id="@+id/libraryOverflow"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="48dp"
-        android:layout_marginEnd="8dp"
-        android:alpha="0.5"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
-        android:contentDescription="@string/library_menu"
-        android:src="@android:drawable/ic_menu_more" />
-</FrameLayout>
+    android:layout_height="match_parent" />
