@@ -116,3 +116,11 @@ Ampliación pausa/scope aceptada HTTP/TLS2/0 en
 al pausar, reanudación, clearSession real invalida/pausa/flush; build normal sin CA
 APK/test APK/JVM36/lint pasa. Siguiente seek con marcador audible sintético1320Hz
 tras4s para distinguir muestras anteriores del salto; aún sin aceptación.
+
+Seek en fuentes: epoch invalida buffers reservados y flush de AudioTrack al
+resetear el deck activo; el standby mantiene prebuffer y reloj congelado. Escritura
+serializada revalida epoch dentro del lock del dispositivo. El fixture opcional
+firstMarker genera440Hz antes de4s y1320Hz después; facts R128 se miden sobre el
+archivo real. Test seek10s exige nuevo epoch y marcador1320 en PCM, reloj físico
+reiniciado, y conserva el posterior blend. Compilación/test/JVM36/lint y Ruff
+pasan en /tmp/soundsible-s3b-mix-seek-foundation.log; Native ampliado pendiente.

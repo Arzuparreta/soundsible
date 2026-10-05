@@ -42,24 +42,27 @@ class ProgramMixOutputTest {
         }
         fail("Mix spike condition not reached")
     }
-    private data class Spectrum(val start: Long, val first: Double, val second: Double)
+    private data class Spectrum(val start: Long, val first: Double, val second: Double, val marker: Double)
     private class Meter {
         val metrics = ArrayBlockingQueue<Spectrum>(32)
         var start = 0L; var count = 0
-        val real = DoubleArray(2); val imaginary = DoubleArray(2)
+        val real = DoubleArray(3); val imaginary = DoubleArray(3)
         fun accept(bytes: ByteArray, rate: Int, channels: Int, frame: Long) {
             val input = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
             var offset = 0
             while (input.hasRemaining()) {
                 val value = input.short.toDouble(); repeat(channels - 1) { input.short }
+                if (count > 0 && frame + offset != start + count) {
+                    count = 0; real.fill(0.0); imaginary.fill(0.0)
+                }
                 if (count == 0) start = frame + offset
-                for (index in 0..1) {
-                    val phase = 2 * Math.PI * (if (index == 0) 440 else 880) * (frame + offset) / rate
+                for (index in 0..2) {
+                    val phase = 2 * Math.PI * (when (index) { 0 -> 440; 1 -> 880; else -> 1320 }) * (frame + offset) / rate
                     real[index] += value * cos(phase); imaginary[index] -= value * sin(phase)
                 }
                 count++; offset++
                 if (count == rate / 10) {
-                    metrics.offer(Spectrum(start, hypot(real[0], imaginary[0]) * 2 / count, hypot(real[1], imaginary[1]) * 2 / count))
+                    metrics.offer(Spectrum(start, hypot(real[0], imaginary[0]) * 2 / count, hypot(real[1], imaginary[1]) * 2 / count, hypot(real[2], imaginary[2]) * 2 / count))
                     count = 0; real.fill(0.0); imaginary.fill(0.0)
                 }
             }
@@ -102,12 +105,12 @@ class ProgramMixOutputTest {
                     response
                 }.build()
                 client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
-                    .post("{\"album\":true,\"secondFrequency\":880,\"secondRate\":48000,\"secondChannels\":2}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+                    .post("{\"album\":true,\"firstMarker\":true,\"secondFrequency\":880,\"secondRate\":48000,\"secondChannels\":2}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
                 audioClient = client
                 val meter = Meter()
                 val owner = ProgramMixOutput(context, owns, meter::accept); mix = owner
                 instrumentation.runOnMainSync {
-                    for ((index, id) in listOf("member-track", "member-pcm-loud").withIndex()) {
+                    for ((index, id) in listOf("member-pcm-soft", "member-pcm-loud").withIndex()) {
                         val renderer = object : DefaultRenderersFactory(context) {
                             override fun buildAudioSink(context: android.content.Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
                                 val channels = ChannelMixingAudioProcessor().apply {
@@ -128,20 +131,28 @@ class ProgramMixOutputTest {
                     }
                 }
                 meter.await { it.first in 2950.0..3050.0 && it.second < 30 }
+                val beforeSeek = owner.epoch()
+                instrumentation.runOnMainSync { decoders.first().seekTo(10000) }
+                val seekDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+                while (owner.epoch() == beforeSeek && System.nanoTime() < seekDeadline) Thread.sleep(20)
+                assertTrue("Master output was not invalidated by seek", owner.epoch() > beforeSeek)
+                meter.metrics.clear()
+                meter.await { it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
+                assertTrue("Physical output retained the old seek clock", owner.positionUs() < 5000000L)
                 owner.setVolume(0.1f)
                 owner.blend(2000, ProgramMixCurve.Technique.SAFE_FADE)
-                meter.await { it.first in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
-                meter.await { it.first < 30 && it.second in 8950.0..9050.0 }
+                meter.await { it.first < 30 && it.marker in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
+                meter.await { it.first < 30 && it.marker < 30 && it.second in 8950.0..9050.0 }
                 assertNull("Decoder failed", playbackFailure.get()); assertNull("Output failed", owner.error())
                 instrumentation.runOnMainSync { decoders.first().release(); decoders.removeAt(0) }
-                meter.metrics.clear(); meter.await { it.first < 30 && it.second in 8950.0..9050.0 }
+                meter.metrics.clear(); meter.await { it.first < 30 && it.marker < 30 && it.second in 8950.0..9050.0 }
                 owner.pause(true)
                 Thread.sleep(200)
                 val pausedPosition = owner.positionUs()
                 Thread.sleep(300)
                 assertTrue("Physical output clock moved while paused", abs(pausedPosition - owner.positionUs()) <= 2000L)
                 owner.pause(false)
-                meter.metrics.clear(); meter.await { it.first < 30 && it.second in 8950.0..9050.0 }
+                meter.metrics.clear(); meter.await { it.first < 30 && it.marker < 30 && it.second in 8950.0..9050.0 }
                 val resumeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                 while (owner.positionUs() <= pausedPosition && System.nanoTime() < resumeDeadline) Thread.sleep(20)
                 assertTrue("Physical output did not resume", owner.positionUs() > pausedPosition)

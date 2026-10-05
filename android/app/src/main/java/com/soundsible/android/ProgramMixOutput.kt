@@ -33,7 +33,8 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private var output: AudioOutput? = null
     private var config: AudioOutputProvider.OutputConfig? = null
     private val sources = arrayOfNulls<Source>(2)
-    private var closed = false
+    @Volatile private var closed = false
+    @Volatile private var outputEpoch = 0L
     // End of reserved output, including the batch currently being written.
     private var frames = 0L
     private var mixStart = Long.MAX_VALUE
@@ -85,6 +86,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     }
     fun setVolume(value: Float) = synchronized(lock) { require(value.isFinite() && value in 0f..1f); synchronized(deviceLock) { output?.setVolume(value) } }
     fun error(): Throwable? = synchronized(lock) { failure }
+    fun epoch(): Long = outputEpoch
     fun positionUs(): Long = synchronized(deviceLock) { output?.positionUs ?: 0L }
     private inner class Source(val index: Int, device: AudioOutput) : ForwardingAudioOutput(device) {
         val queue = ArrayDeque<ByteBuffer>()
@@ -123,8 +125,15 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         override fun pause() = synchronized(lock) { playing = false; if (index == active) synchronized(deviceLock) { output?.pause() }; lock.notifyAll() }
         override fun flush() = synchronized(lock) {
             queue.clear(); queued = 0; supplied = 0; ended = false; effects.reset()
-            joinedAt = if (index == active) frames else Long.MAX_VALUE
-            // Deck flush does not discard the other decoder's queued output.
+            if (index == active) {
+                // A seek invalidates both the hardware queue and any reserved old batch.
+                outputEpoch++
+                synchronized(deviceLock) { output?.pause(); output?.flush() }
+                frames = 0L; mixStart = Long.MAX_VALUE; limiter?.reset()
+                sources[1 - active]?.let { it.joinedAt = Long.MAX_VALUE; it.effects.reset() }
+                joinedAt = 0L
+                if (playing && !paused) synchronized(deviceLock) { output?.play() }
+            } else joinedAt = Long.MAX_VALUE
             lock.notifyAll()
         }
         override fun stop() = synchronized(lock) { ended = true; lock.notifyAll() }
@@ -143,7 +152,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         override fun isStalled() = false
         override fun isOffloadedPlayback() = false
     }
-    private data class Batch(val buffer: ByteBuffer, val rate: Int, val channels: Int, val start: Long)
+    private data class Batch(val buffer: ByteBuffer, val rate: Int, val channels: Int, val start: Long, val epoch: Long)
     private fun render() {
         try {
             while (true) {
@@ -185,7 +194,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                             result.flip()
                             val start = frames
                             frames += count / channels
-                            return@synchronized Batch(result, format!!.sampleRate, channels, start)
+                            return@synchronized Batch(result, format!!.sampleRate, channels, start, outputEpoch)
                         }
                         lock.wait(10)
                     }
@@ -194,13 +203,19 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                 val copy = ByteArray(batch.buffer.remaining()); batch.buffer.duplicate().get(copy)
                 val device = output ?: error("Output owner disappeared")
                 check(owns()) { "Programme ownership changed" }
-                while (!synchronized(deviceLock) { device.write(batch.buffer, 1, batch.start * 1000000 / batch.rate) }) {
+                while (!closed && batch.epoch == outputEpoch) {
+                    val accepted = synchronized(deviceLock) {
+                        if (closed || batch.epoch != outputEpoch) false
+                        else device.write(batch.buffer, 1, batch.start * 1000000 / batch.rate)
+                    }
+                    if (accepted) break
                     synchronized(lock) { if (closed) return; check(owns()) }
                     Thread.sleep(1)
                 }
+                if (closed || batch.epoch != outputEpoch) continue
                 if (owns()) observe(copy, batch.rate, batch.channels, batch.start)
                 synchronized(lock) {
-                    if (mixStart != Long.MAX_VALUE && frames >= mixStart + mixLength) {
+                    if (batch.epoch == outputEpoch && mixStart != Long.MAX_VALUE && frames >= mixStart + mixLength) {
                         active = 1 - active; mixStart = Long.MAX_VALUE
                     }
                     lock.notifyAll()

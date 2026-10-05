@@ -292,14 +292,32 @@ def main() -> None:
                 if data.get("album"):
                     from dataclasses import replace
                     import shutil
-                    soft = root / "music/tracks" / f"{name}-pcm-soft.{args.audio_format}"
-                    shutil.copyfile(audio, soft)
+                    marker = data.get("firstMarker", False)
+                    if type(marker) is not bool:
+                        raise ValueError("Unsupported isolated PCM marker")
+                    soft = root / "music/tracks" / f"{name}-pcm-soft.{'wav' if marker else args.audio_format}"
+                    if marker:
+                        with wave.open(str(soft), "wb") as output:
+                            output.setnchannels(1)
+                            output.setsampwidth(2)
+                            output.setframerate(16000)
+                            for frequency, seconds in ((440, 4), (1320, 16)):
+                                tone = b"".join(struct.pack("<h", int(3000 * math.sin(2 * math.pi * frequency * i / 16000))) for i in range(16000))
+                                output.writeframes(tone * seconds)
+                    else:
+                        shutil.copyfile(audio, soft)
                     with user_context(uid):
                         library = get_user_core(uid).library
                         original = next(track for track in library.metadata.tracks if track.id == f"{name}-track")
                         library.metadata.add_track(replace(original, id=f"{name}-pcm-soft", title=f"{name} softer PCM song",
-                            album=f"{name} PCM album", file_hash=f"{name}-pcm-soft-hash"))
-                    store.put(f"{name}-pcm-soft-hash", source_stamp(soft), measurement)
+                            album=f"{name} PCM album", file_hash=f"{name}-pcm-soft-hash",
+                            duration=20 if marker else original.duration, format="wav" if marker else original.format,
+                            file_size=soft.stat().st_size, bitrate=256 if marker else original.bitrate,
+                            original_filename=soft.name if marker else original.original_filename))
+                    soft_measurement = measure_loudness(soft, duration_hint=20) if marker else measurement
+                    if soft_measurement is None:
+                        raise RuntimeError("Marker synthetic tone must be measurable")
+                    store.put(f"{name}-pcm-soft-hash", source_stamp(soft), soft_measurement)
                     second = root / "music/tracks" / f"{name}-pcm-loud.wav"
                     frequency = data.get("secondFrequency", 440)
                     rate = data.get("secondRate", 16000)
