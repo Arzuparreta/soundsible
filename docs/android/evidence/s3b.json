@@ -375,5 +375,23 @@
       "network-stalled service flow",
       "complete DJ parity"
     ]
+  },
+  "dj_measured_refinement": {
+    "source_base_revision": "d7167176",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "log": "/tmp/soundsible-s3b-measured-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "proves": [
+      "real Core measured analysis of synthetic audio",
+      "native refiner applies matching outCue and occurrence fromKey before playback",
+      "programme plays after refinement"
+    ],
+    "does_not_prove": [
+      "all endpoint negative responses",
+      "network-stalled service recovery",
+      "complete parity"
+    ]
   }
 }

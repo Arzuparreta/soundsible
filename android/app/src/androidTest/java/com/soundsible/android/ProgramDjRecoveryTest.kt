@@ -28,7 +28,9 @@ class ProgramDjRecoveryTest {
     @Test fun tlsStarvedOutgoing() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), 0)
     @Test fun httpHistoryPrune() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), history = true)
     @Test fun tlsHistoryPrune() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), history = true)
-    private fun run(origin: String?, starved: Int? = null, history: Boolean = false) {
+    @Test fun httpMeasuredRefinement() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), measured = true)
+    @Test fun tlsMeasuredRefinement() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), measured = true)
+    private fun run(origin: String?, starved: Int? = null, history: Boolean = false, measured: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val connection = EngineConnection.shared(instrumentation.targetContext)
@@ -36,6 +38,8 @@ class ProgramDjRecoveryTest {
         val generation = connection.configure(origin!!)
         val json = "application/json".toMediaType()
         var session: ProgramDjSession? = null
+        var refiner: ProgramDjRefiner? = null
+        var planner: ProgramDjPlanner? = null
         val tap = ProgramPcmTap()
         val successorKey = AtomicReference<String>()
         val successorPcm = AtomicBoolean()
@@ -82,7 +86,41 @@ class ProgramDjRecoveryTest {
                     assertTrue("Uncommitted refinement rejected", session!!.applyRefinement(snapshot, proposal))
                     assertFalse("Obsolete refinement accepted", session!!.applyRefinement(snapshot, proposal))
                 }
-                session!!.player.play()
+                if (!measured) session!!.player.play()
+            }
+            if (measured) {
+                lateinit var body: JSONObject
+                instrumentation.runOnMainSync {
+                    planner = ProgramDjPlanner(connection, session!!.player, android.os.Handler(android.os.Looper.getMainLooper()), { emptySet() }, { _, _, _ -> }, { _, _, _ -> })
+                    body = JSONObject().put("dj_profile", "adaptive").put("from", planner!!.reference(session!!.items()[0])).put("to", planner!!.reference(session!!.items()[1]))
+                }
+                var answer: JSONObject? = null
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
+                while (System.nanoTime() < deadline) {
+                    connection.execute("/api/discovery/music/dj-transition", "POST", body.toString().toRequestBody(json), emptyMap(), generation, "measured-probe", 8000).use {
+                        assertTrue(it.isSuccessful)
+                        answer = JSONObject(it.body!!.string())
+                    }
+                    if (answer!!.optBoolean("measured")) break
+                    Thread.sleep(200)
+                }
+                assertTrue("Real Core analysis did not become measured", answer!!.optBoolean("measured"))
+                var revision = 0L
+                instrumentation.runOnMainSync {
+                    revision = session!!.routeSnapshot().revision
+                    refiner = ProgramDjRefiner(connection, android.os.Handler(android.os.Looper.getMainLooper()), { session }, planner!!)
+                    refiner!!.refine(session!!)
+                }
+                await { session!!.routeSnapshot().revision > revision }
+                instrumentation.runOnMainSync {
+                    val proposal = session!!.routeSnapshot().rows[1].proposal!!
+                    assertEquals(answer!!.getJSONObject("transition").getDouble("out_cue"), proposal.outCue, 0.000001)
+                    assertEquals(session!!.items()[0].mediaMetadata.extras!!.getString(ProgramQueue.KEY), proposal.fromKey)
+                    assertFalse(session!!.player.playWhenReady)
+                    session!!.player.play()
+                }
+                await { session!!.player.isPlaying }
+                return
             }
             if (history) {
                 await { session!!.player.isPlaying && session!!.items().size == 4 && session!!.currentIndex() == 0 && successorPcm.get() }
@@ -156,7 +194,7 @@ class ProgramDjRecoveryTest {
                 assertTrue(session!!.player.playWhenReady)
             }
         } finally {
-            instrumentation.runOnMainSync { session?.close() }
+            instrumentation.runOnMainSync { refiner?.close(); planner?.close(); session?.close() }
             tap.close()
             try {
                 for (id in listOf("member-pcm-soft", "member-pcm-loud")) connection.execute("/api/library/tracks/$id", "DELETE", null, emptyMap(), generation, "recovery-cleanup-$id", 15000).use { assertTrue(it.isSuccessful || it.code == 404) }

@@ -95,8 +95,10 @@ append reteniendo KEY/posición/pausa/epoch, exclusión acotada de80 escuchadas.
 Log `/tmp/soundsible-s3b-history-native.log`. Refinamiento conectado al Core antes de preparar decoder: Recovery8 + DJ2,
 10/0 HTTP/TLS, APK/test/JVM52/lint normal pasan sobre `9bed92e6` dirty.
 Log `/tmp/soundsible-s3b-refine-native.log`. Guards nativos aceptan proposal
-no comprometida y rechazan snapshot obsoleto/cue preparada. No prueba una
-respuesta measured específica ni todos los negativos de ese endpoint.
+no comprometida y rechazan snapshot obsoleto/cue preparada. Prueba adicional measured Core real2/0 HTTP/TLS, normal build pasa,
+`/tmp/soundsible-s3b-measured-native.log` sobre `d7167176` dirty.
+Consulta análisis real de archivos sintéticos; transición measured aplicada
+con fromKey y outCue exactos antes de playback. Negativos restantes pendientes.
 Continuar recuperación de red en servicio y restantes de paridad. Fixture DJ acota fallos/delays alrededor
 del Core real; no sustituye sus respuestas válidas por un planner falso.
 En futuros runs, **congelar fuentes/tests Native, fixtures, assets y recursos
