@@ -20,7 +20,21 @@
     },
     "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal",
     "jvm_tests": 20,
-    "browser_four_profiles": "pending"
+    "browser_four_profiles": {
+      "chromium": {
+        "passed": 278,
+        "skipped": 66,
+        "failures": 0,
+        "log": "/tmp/soundsible-s2ag-chromium.log"
+      },
+      "webkit": {
+        "passed": 269,
+        "skipped": 75,
+        "failures": 0,
+        "log": "/tmp/soundsible-s2ag-webkit.log"
+      },
+      "scope": "Full sequential suite, one worker; WebKit readonly. Web entry unchanged throughout; later Native DSP source excluded."
+    }
   },
   "diagnostics": [
     {

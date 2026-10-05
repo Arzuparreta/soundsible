@@ -1510,3 +1510,14 @@ de cabecera, se conserva diagnóstico y el locator de Cuenta se corrige.
 UI1547/195 pasa. Browser4 de vista compartida Subsonic siguiente/en curso; última
 principal limpia sigue73+restart2 sobre46a6c3d. Congelación Native levantada.
 Continuar DSP S3a y Settings restantes, DJ/Live/Auto/firma/update. No alpha aún.
+
+### Regresión browser4 S2ag aceptada y DSP en fuentes
+
+Chromium278/66 + WebKit269/75, cero fallos, suites completas secuenciales1worker,
+readonlyWebKit; logs /tmp/soundsible-s2ag-{chromium,webkit}.log. Vite propio
+detenido. UI web no cambió durante los runs. Cambios DSP sólo Native y docs,
+aún sin compilar/probar; ver SLICE_3A. No preparar ni ejecutar Gradle pesado
+durante browsers. Ahora compilar processor/kernel/tap y worker Core confirmado;
+conectar Native Track/contexto/Settings y demostrar PCM real antes de aceptar.
+No cerrar por S2ag: Settings restantes, DJ/Live/Auto/firma/update/PR/main/release
+continúan autorizados, alpha de paridad completa únicamente.

@@ -60,3 +60,7 @@ credenciales de cada cuenta siguen independientes. Account2 regresión pasa.
 APK normal/test APK/JVM20/lint sin CA pasan, XML propio integration-targeted.
 Runner anterior account4 falló2 sólo por localizador de cabecera; conservado
 como diagnóstico. Principal limpia73+restart2 no sobrescrita. Browser4 en curso.
+
+Browser4 final pasa: Chromium278/66 + WebKit269/75, cero fallos,1worker
+secuencial y WebKit readonly. Logs /tmp/soundsible-s2ag-{chromium,webkit}.log.
+Entrada web congelada durante ambos runs; DSP Native posterior excluido.
