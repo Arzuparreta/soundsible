@@ -112,6 +112,11 @@ class DjProgramTest {
                 command("action:'queue',index:0,tracks:[{source:'local',id:'member-track',title:'NORMAL restored',artist:'member artist'}]")
                 waitFor("window.__dj.playing && !window.__dj.dj?.active && window.__dj.id==='member-track'")
                 command("action:'stop'")
+                waitFor("window.__dj.items.length===0 && !window.__dj.dj?.active")
+                command("action:'dj',profile:'open_format',fromCurrent:false,sources:[{id:'pcm-only',label:'PCM collection',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
+                waitFor("window.__dj.dj?.active && window.__dj.playing && window.__dj.items.length>=2")
+                assertEquals("true", web.evaluate(scenario, "window.__dj.dj.profile==='open_format' && window.__dj.dj.sources[0].id==='pcm-only' && window.__dj.programToken!==window.__retainedProgram"))
+                command("action:'stop'")
             }
             } finally {
             try { for (id in listOf("member-pcm-soft", "member-pcm-loud")) connection.execute("/api/library/tracks/$id", "DELETE", null, emptyMap(), connection.generation, "dj-cleanup-$id", 15000).use { assertTrue(it.isSuccessful) }

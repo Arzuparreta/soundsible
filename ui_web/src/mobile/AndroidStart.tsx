@@ -40,6 +40,7 @@ import CatalogSearch from './CatalogSearch';
 import { nativeProgramTransport, mixedProgram } from './playback';
 import { createProgramRuntime, type ProgramState, type ProgramContext } from '../lib/program/runtime';
 import ProgramTransport from '../components/ProgramTransport';
+import { nativeDjSourceActions } from './djSources';
 import { openContextMenu, ContextMenuOutlet, dismissContextMenu } from '../lib/contextMenu';
 import { OverlayOutlet, discardOverlays } from '../lib/overlay';
 import { ToastOutlet } from '../lib/toast';
@@ -366,7 +367,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
           onManageOffline={() => { const captured = generation; openOfflineManager(offlineState, command => captured === generation ? offlineCommand(command) : Promise.resolve()); }}
           onCollectionMenu={(tracks, title, event, context) => {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
-            openContextMenu({ title, actions: [...(context?.bookmark ? [nativeEntityMark(context.bookmark, savedEntities, current, sync, () => { if (current()) setError(t('savedEntities.failed')); })] : []), ...(context?.kind === 'playlists' ? nativePlaylistActions(context.id, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []), ...offlineActions(tracks, offlineState, offlineCommand, () => generation)] }, event);
+            openContextMenu({ title, actions: [...nativeDjSourceActions(`${context?.kind ?? 'collection'}:${context?.id ?? title}`, title, tracks, program, current, programPending, runtime.execute), ...(context?.bookmark ? [nativeEntityMark(context.bookmark, savedEntities, current, sync, () => { if (current()) setError(t('savedEntities.failed')); })] : []), ...(context?.kind === 'playlists' ? nativePlaylistActions(context.id, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []), ...offlineActions(tracks, offlineState, offlineCommand, () => generation)] }, event);
           }}
           onMenu={songMenu} />
           </Show></>}

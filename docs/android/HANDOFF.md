@@ -115,6 +115,13 @@ con include/exclude retenidos. Editor ligado a la identidad del programa; error
 reintentable y cierre al cambiar owner. Dirigido20/0 y TypeScript pasan en
 /tmp/soundsible-s3b-dj-direction-ui.log. Aún falta probar que Core aplica un
 prompt real al futuro y completar selección de fuentes e inicio sin canción.
+
+Menús de colecciones permiten iniciar DJ sin seed, añadir o quitar una colección
+como fuente con guards de cuenta/programa y límites de payload. Dirigido UI22/0
+y TypeScript en /tmp/soundsible-s3b-dj-sources-ui.log. DJ HTTP/TLS2/0 y normal
+APK/test/JVM/lint pasan en /tmp/soundsible-s3b-dj-sources-native.log (dirty=true):
+Core elige opening real desde source set y crea una nueva identidad de programa.
+Pendiente refill efectivo con más de ocho candidatos y cambio efectivo de fuentes.
 El fallo real TLS al cerrar conexiones SSL en hilo principal está corregido:
 pool/dispatcher de audio propios, retiro en worker y shutdown de su executor.
 Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
