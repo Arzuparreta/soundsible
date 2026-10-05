@@ -109,7 +109,9 @@ class ProgramMixOutputTest {
     @Test fun tlsCancelPreroll() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), cued = true, cancelCue = true)
     @Test fun httpTempoReturn() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), tempo = 1.05f, returnTempo = true)
     @Test fun tlsTempoReturn() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), tempo = 1.05f, returnTempo = true)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f, cued: Boolean = false, cancelCue: Boolean = false, returnTempo: Boolean = false) {
+    @Test fun httpInputLevels() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), levelInputs = true)
+    @Test fun tlsInputLevels() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), levelInputs = true)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f, cued: Boolean = false, cancelCue: Boolean = false, returnTempo: Boolean = false, levelInputs: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -146,6 +148,9 @@ class ProgramMixOutputTest {
                 audioClient = client
                 val meter = Meter(intArrayOf(firstFrequency, secondFrequency, 1320))
                 val owner = ProgramMixOutput(context, owns, meter::accept); mix = owner
+                val outgoingLevel = if (levelInputs) 0.5 else 1.0
+                var incomingLevel = if (levelInputs) 0.75 else 1.0
+                if (levelInputs) { owner.setInputLevel(0, outgoingLevel); owner.setInputLevel(1, incomingLevel) }
                 instrumentation.runOnMainSync {
                     for ((index, id) in listOf("member-pcm-soft", "member-pcm-loud").withIndex()) {
                         val renderer = object : DefaultRenderersFactory(context) {
@@ -168,7 +173,7 @@ class ProgramMixOutputTest {
                         decoder.prepare(); decoder.play(); decoders.add(decoder)
                     }
                 }
-                meter.await { it.first in 2950.0..3050.0 && it.second < 30 }
+                meter.await { it.first in (2950.0 * outgoingLevel)..(3050.0 * outgoingLevel) && it.second < 30 }
                 if (!effects) {
                     val beforeSeek = owner.epoch()
                     instrumentation.runOnMainSync { decoders.first().seekTo(if (endOfSource) 19500 else 10000) }
@@ -176,7 +181,7 @@ class ProgramMixOutputTest {
                     while (owner.epoch() == beforeSeek && System.nanoTime() < seekDeadline) Thread.sleep(20)
                     assertTrue("Master output was not invalidated by seek", owner.epoch() > beforeSeek)
                     meter.metrics.clear()
-                    meter.await { it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
+                    meter.await { it.first < 30 && it.second < 30 && it.marker in (2900.0 * outgoingLevel)..(3050.0 * outgoingLevel) }
                     assertTrue("Physical output retained the old seek clock", owner.positionUs() < 5000000L)
                 }
                 if (endOfSource) {
@@ -200,7 +205,7 @@ class ProgramMixOutputTest {
                 var transition = owner.transition() ?: error("Transition window absent")
                 if (cued) {
                     val cueStart = transition.start - if (cancelCue) 96000 else 24000
-                    meter.await { it.start in (cueStart + 2400)..(transition.start - 4800) && it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
+                    meter.await { it.start in (cueStart + 2400)..(transition.start - 4800) && it.first < 30 && it.second < 30 && it.marker in (2900.0 * outgoingLevel)..(3050.0 * outgoingLevel) }
                     val clockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                     while (owner.positionUs() * 48000 / 1000000 < cueStart + 12000 && System.nanoTime() < clockDeadline) Thread.sleep(5)
                     val played = owner.positionUs() * 48000 / 1000000
@@ -219,7 +224,7 @@ class ProgramMixOutputTest {
                     assertTrue("Cancelling future cue stalled current audio", owner.positionUs() >= until)
                     assertEquals("Cancelled cue promoted incoming metadata", 0, owner.dominantInput())
                     meter.metrics.clear()
-                    meter.await { it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
+                    meter.await { it.first < 30 && it.second < 30 && it.marker in (2900.0 * outgoingLevel)..(3050.0 * outgoingLevel) }
                     instrumentation.runOnMainSync { decoders[1].seekTo(1000) }
                     val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                     while ((!owner.readyInput(1) || owner.inputPositionUs(1) >= 20000) && System.nanoTime() < readyDeadline) Thread.sleep(10)
@@ -255,7 +260,7 @@ class ProgramMixOutputTest {
                         else -> meter.await { it.first in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
                     }
                 } else if (technique != ProgramMixCurve.Technique.DIRECT) {
-                    meter.await { it.first < 30 && it.marker in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
+                    meter.await { it.first < 30 && it.marker in (1800.0 * outgoingLevel)..(2400.0 * outgoingLevel) && it.second in (5500.0 * incomingLevel)..(7000.0 * incomingLevel) }
                 }
                 val stable: (Spectrum) -> Boolean = if (recoverIncoming) {
                     val retainedPosition = owner.inputPositionUs(0)
@@ -268,10 +273,10 @@ class ProgramMixOutputTest {
                     }
                     assertTrue("Physical recovery output stalled", owner.positionUs() * 48000 / 1000000 >= restored + 9600)
                     assertEquals("Failed incoming kept metadata ownership", 0, owner.dominantInput())
-                    val retained: (Spectrum) -> Boolean = { sample -> sample.first < 30 && sample.second < 30 && sample.marker in 2900.0..3050.0 }
+                    val retained: (Spectrum) -> Boolean = { sample -> sample.first < 30 && sample.second < 30 && sample.marker in (2900.0 * outgoingLevel)..(3050.0 * outgoingLevel) }
                     retained
                 } else {
-                    { sample -> sample.first < 30 && sample.marker < 30 && sample.second in (if (tempo == 1f) 8950.0..9050.0 else 8700.0..9300.0) }
+                    { sample -> sample.first < 30 && sample.marker < 30 && sample.second in (if (tempo == 1f) (8950.0 * incomingLevel)..(9050.0 * incomingLevel) else 8700.0..9300.0) }
                 }
                 meter.await(stable)
                 if (technique == ProgramMixCurve.Technique.DIRECT) {
@@ -294,6 +299,11 @@ class ProgramMixOutputTest {
                     val expected = owner.inputPositionUs(1) / 1000.0 * tempo
                     assertTrue("Incoming media clock did not track software tempo", abs(mediaPosition.get() - expected) < 120)
                     assertTrue("Tempo clock unexpectedly remained at normal speed", mediaPosition.get() > owner.inputPositionUs(1) / 1000.0 + 50)
+                }
+                if (levelInputs) {
+                    incomingLevel = 0.5
+                    owner.setInputLevel(1, incomingLevel)
+                    meter.metrics.clear(); meter.await(stable)
                 }
                 if (returnTempo) {
                     val incoming = decoders.single()

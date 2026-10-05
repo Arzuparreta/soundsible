@@ -33,6 +33,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private var output: AudioOutput? = null
     private var config: AudioOutputProvider.OutputConfig? = null
     private val sources = arrayOfNulls<Source>(2)
+    private val levels = doubleArrayOf(1.0, 1.0)
     @Volatile private var closed = false
     @Volatile private var outputEpoch = 0L
     // End of reserved output, including the batch currently being written.
@@ -89,6 +90,13 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             }
             override fun release() { /* The shared owner, not a deck, releases the device. */ }
         }
+    }
+    /** Per-deck programme level; never the device/local listening volume. */
+    fun setInputLevel(index: Int, value: Double) = synchronized(lock) {
+        require(index in 0..1 && value.isFinite() && value in 0.05..4.0)
+        check(!closed && owns() && failure == null)
+        levels[index] = value
+        sources[index]?.setLevel(value)
     }
     fun readyInput(index: Int): Boolean = synchronized(lock) {
         require(index in 0..1)
@@ -193,7 +201,22 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         var released = false
         var ended = false
         val effects = ProgramDeckEffects(config!!.sampleRate, Integer.bitCount(config!!.channelMask))
-        var level = 1.0
+        private var level = levels[index]
+        private var appliedLevel = level
+        private var levelFrames = 0
+        private var levelStep = 0.0
+        fun setLevel(value: Double) {
+            level = value
+            if (clock.supplied == 0L) { appliedLevel = value; levelFrames = 0 }
+            else {
+                levelFrames = (config!!.sampleRate / 100).coerceAtLeast(1)
+                levelStep = (value - appliedLevel) / levelFrames
+            }
+        }
+        fun nextLevel(): Double {
+            if (levelFrames > 0) { appliedLevel += levelStep; if (--levelFrames == 0) appliedLevel = level }
+            return appliedLevel
+        }
         private val listeners = mutableSetOf<AudioOutput.Listener>()
         override fun write(buffer: ByteBuffer, encodedAccessUnitCount: Int, presentationTimeUs: Long): Boolean = synchronized(lock) {
             check(!closed && !released && failure == null && owns())
@@ -297,8 +320,8 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                                     firstFrame[channel] = first[index] / 32768f
                                     secondFrame[channel] = (second?.get(index)?.toInt() ?: 0) / 32768f
                                 }
-                                source.effects.frame(firstFrame, 0, firstEffect, 0, source.level, gains?.outgoing ?: 1.0, gains?.echoWet ?: 0.0)
-                                if (mixing) incoming!!.effects.frame(secondFrame, 0, secondEffect, 0, incoming.level, gains!!.incoming, 0.0)
+                                source.effects.frame(firstFrame, 0, firstEffect, 0, source.nextLevel(), gains?.outgoing ?: 1.0, gains?.echoWet ?: 0.0)
+                                if (mixing) incoming!!.effects.frame(secondFrame, 0, secondEffect, 0, incoming.nextLevel(), gains!!.incoming, 0.0)
                                 repeat(channels) { channel -> mixed[channel] = firstEffect[channel].toDouble() + if (mixing) secondEffect[channel] else 0f }
                                 limiter!!.frame(mixed, channels)
                                 repeat(channels) { channel -> result.putShort((mixed[channel] * 32768).roundToInt().coerceIn(-32768, 32767).toShort()) }
