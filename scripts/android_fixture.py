@@ -274,6 +274,45 @@ def main() -> None:
         elif action == "connection-failure":
             connection_failure["enabled"] = bool((request.get_json() or {}).get("enabled"))
             connection_failure["status"] = int((request.get_json() or {}).get("status", 503))
+        elif action == "loudness-facts":
+            # Measure only synthetic fixture audio with the production R128 meter
+            # and store. Native acceptance receives facts through real /api/library.
+            from shared.loudness.measure import measure_loudness
+            from shared.loudness.store import LoudnessStore, loudness_db_path, source_stamp
+            import sqlite3
+            data = request.get_json() or {}
+            audio = root / "music/tracks" / f"{name}-track.{args.audio_format}"
+            store = LoudnessStore()
+            store.get(f"{name}-hash")
+            if data.get("measured", True):
+                measurement = measure_loudness(audio, duration_hint=600)
+                if measurement is None:
+                    raise RuntimeError("Synthetic tone must have measurable programme loudness")
+                store.put(f"{name}-hash", source_stamp(audio), measurement)
+                if data.get("album"):
+                    second = root / "music/tracks" / f"{name}-pcm-loud.wav"
+                    with wave.open(str(second), "wb") as output:
+                        output.setnchannels(1)
+                        output.setsampwidth(2)
+                        output.setframerate(16000)
+                        output.writeframes(b"".join(struct.pack("<h", int(9000 * math.sin(2 * math.pi * 440 * i / 16000))) for i in range(16000)) * 60)
+                    with user_context(uid):
+                        library = get_user_core(uid).library
+                        library.metadata.add_track(Track(id=f"{name}-pcm-loud", title=f"{name} louder PCM song", artist=f"{name} artist",
+                            album=f"{name} album", duration=60, file_hash=f"{name}-pcm-loud-hash", original_filename="pcm-loud.wav",
+                            file_size=second.stat().st_size, bitrate=256, format="wav"))
+                        library._save_metadata()
+                    measured_second = measure_loudness(second, duration_hint=60)
+                    if measured_second is None:
+                        raise RuntimeError("Second synthetic tone must be measurable")
+                    store.put(f"{name}-pcm-loud-hash", source_stamp(second), measured_second)
+            else:
+                # Explicitly remove fixture facts to exercise the unmeasured path.
+                # The root was created exclusively for this runner; no personal cache.
+                with sqlite3.connect(loudness_db_path()) as database:
+                    database.execute("DELETE FROM track_loudness WHERE identity IN (?, ?)", (f"{name}-hash", f"{name}-pcm-loud-hash"))
+            emit_to_user("library_updated", user_id=uid)
+            return jsonify({"ok": True, "measured": bool(data.get("measured", True))})
         elif action == "discovery-state":
             from shared.database import user_db
             from shared.discovery_intelligence import load_discovery_settings

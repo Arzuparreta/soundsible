@@ -1,10 +1,11 @@
-import { createSignal, onCleanup, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
+import NativeSettingsLeveling from './SettingsLeveling';
 import { AutoplaySettingsView } from '../components/AutoplaySettingsView';
 import type { ProgramCommand, ProgramState } from '../lib/program/runtime';
 import { t } from '../lib/i18n';
 
 /** The existing service confirms preference and updates the actual native runway. */
-export default function NativeSettingsPlayback(props: { state: Pick<ProgramState, 'ready' | 'autoplay'> | null; pending: boolean; available: boolean;
+export default function NativeSettingsPlayback(props: { state: Pick<ProgramState, 'ready' | 'autoplay' | 'leveling'> | null; pending: boolean; available: boolean;
   command: (command: ProgramCommand) => Promise<void> }) {
   const [busy, setBusy] = createSignal(false), [error, setError] = createSignal('');
   let disposed = false; onCleanup(() => { disposed = true; });
@@ -17,6 +18,8 @@ export default function NativeSettingsPlayback(props: { state: Pick<ProgramState
     catch { if (!disposed) setError(t('settings.toast.notSaved')); }
     finally { if (!disposed) setBusy(false); }
   }
+  const connected = createMemo(() => props.available && props.state?.ready === true && !props.pending);
+  createEffect(on(connected, ready => { if (ready && (!props.state?.autoplay || props.state.autoplay.settingsPhase === 'idle')) void change(true); }));
   return <section data-testid="android-playback-settings" aria-busy={busy() || props.pending || props.state?.autoplay?.settingsPhase === 'loading'}>
     <Show when={known()} fallback={<Show when={props.available} fallback={<p role="status">{t('library.unreachable')}</p>}>
       <Show when={props.state?.autoplay?.settingsPhase === 'unavailable'} fallback={<p role="status">{t('common.loading')}</p>}>
@@ -25,6 +28,7 @@ export default function NativeSettingsPlayback(props: { state: Pick<ProgramState
     </Show>}>
       <AutoplaySettingsView enabled={props.state!.autoplay!.enabled === true} disabled={disabled()} onChange={() => void change()} />
     </Show>
+    <NativeSettingsLeveling {...props} />
     <Show when={error()}><p role="alert">{error()} <button disabled={disabled()} onClick={() => void change(true)}>{t('common.retry')}</button></p></Show>
   </section>;
 }

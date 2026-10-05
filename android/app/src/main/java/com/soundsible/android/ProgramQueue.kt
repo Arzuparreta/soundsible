@@ -30,8 +30,14 @@ object ProgramQueue {
     }
     const val LIMIT = 1000
     /** Metadata only crosses the bridge. Credentials and source addresses stay native. */
-    fun items(connection: EngineConnection, rows: JSONArray, program: String = ""): List<MediaItem> {
+    fun items(connection: EngineConnection, rows: JSONArray, program: String = "", contextKind: String? = null, contextId: String? = null): List<MediaItem> {
         require(rows.length() in 1..LIMIT && rows.toString().toByteArray(Charsets.UTF_8).size <= 256 * 1024)
+        require(contextKind == null || contextKind in listOf("album", "artist", "playlist"))
+        require(contextId == null || (contextId.isNotBlank() && contextId.length <= 512))
+        fun number(row: org.json.JSONObject, name: String) = row.optDouble(name, Double.NaN).takeIf { it.isFinite() }
+        val reference = if (contextKind == "album" && !contextId.isNullOrEmpty()) ProgramLoudness.albumReference(
+            (0 until rows.length()).map { i -> val row = rows.getJSONObject(i); ProgramLoudness.Facts(number(row, "loudness_lufs"), number(row, "loudness_peak_dbtp"), number(row, "duration")) }
+        ) else null
         val owner = program.ifBlank { java.util.UUID.randomUUID().toString() }
         return (0 until rows.length()).map { i ->
             val row = rows.getJSONObject(i)
@@ -60,7 +66,16 @@ object ProgramQueue {
             MediaItem.Builder().setMediaId(id)
                 .setUri(connection.origin + path + android.net.Uri.encode(id) + "?android_generation=" + connection.generation + "&android_occurrence=" + key)
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).setArtworkUri(if (source == "local" && !offline) ProgramArtwork.uri(connection.generation, id) else null)
-                    .setExtras(Bundle().apply { putBoolean(PODCAST, podcast); if (podcast) { putString(ENCLOSURE, enclosure); putString(EPISODE, episode); putString(FEED, feed); putString(PROFILE, connection.offline.profileKey(connection.generation)) }; putString(KEY, key); putString(PROGRAM, owner); putString(SOURCE, source); putBoolean("offline", offline) }).build()).build()
+                    .setExtras(Bundle().apply {
+                        putLong(ProgramPcmProcessor.GENERATION, connection.generation)
+                        number(row, "loudness_lufs")?.let { putDouble(ProgramPcmProcessor.LUFS, it) }
+                        number(row, "loudness_peak_dbtp")?.let { putDouble(ProgramPcmProcessor.PEAK, it) }
+                        number(row, "duration")?.let { putDouble(ProgramPcmProcessor.DURATION, it) }
+                        if (contextKind != null && contextId != null) {
+                            putString(ProgramPcmProcessor.CONTEXT_KIND, contextKind); putString(ProgramPcmProcessor.CONTEXT_ID, contextId)
+                            reference?.let { putDouble(ProgramPcmProcessor.ALBUM_LUFS, it.lufs); putDouble(ProgramPcmProcessor.ALBUM_PEAK, it.peakDbtp) }
+                        }
+                        putBoolean(PODCAST, podcast); if (podcast) { putString(ENCLOSURE, enclosure); putString(EPISODE, episode); putString(FEED, feed); putString(PROFILE, connection.offline.profileKey(connection.generation)) }; putString(KEY, key); putString(PROGRAM, owner); putString(SOURCE, source); putBoolean("offline", offline) }).build()).build()
         }
     }
     /** Called on the service's player looper: validate actual queue, then mutate it once. */

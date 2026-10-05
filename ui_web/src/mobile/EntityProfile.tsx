@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import { request } from '../lib/http';
 import { t } from '../lib/i18n';
 import { artistPath, resolveViewMode } from '../lib/artistRoute';
-import { shuffled } from '../lib/shuffle';
 import { itemArtist } from '../lib/catalogTrack';
 import { coverUrl } from '../lib/media';
 import { ArtistDiscoveryView, formatFans } from '../components/ArtistDiscoveryView';
@@ -36,6 +35,7 @@ export default function NativeEntityProfile(props: {
   const profile = createNativeEntityProfile({ subject: () => props.subject, generation: () => props.generation, disconnected: () => props.disconnected });
   const artist = () => props.subject.kind === 'artist' ? profile.profile() as ArtistProfile | null : null;
   const album = () => props.subject.kind === 'album' ? profile.profile() as AlbumProfile | null : null;
+  const context = () => { const id = props.subject.localId || props.subject.deezerId || profile.profile()?.deezer_id; return id ? { kind: props.subject.kind, id: String(id) } : undefined; };
   const [override, setOverride] = createSignal<'discover' | 'library' | null>(null);
   const [candidatesOpen, setCandidatesOpen] = createSignal(false);
   const [ids, setIds] = createSignal<string[]>([]), [libraryLoading, setLibraryLoading] = createSignal(false), [libraryError, setLibraryError] = createSignal(false);
@@ -102,7 +102,7 @@ export default function NativeEntityProfile(props: {
     return <MusicListRowView playback title={item.title} subtitle={itemArtist(item)} seed={item.id}
       cover={track() && track()?.source !== 'preview' ? coverUrl(track()!.id, 'thumb') : item.cover}
       active={!!track() && !!props.isActive?.(track()!)} busy={props.catalog.pending() === item.id}
-      disabled={props.disconnected} onActivate={() => void props.catalog.playCollection(queue, index - 1)} onMenu={event => props.onTrackMenu(item, event)} />;
+      disabled={props.disconnected} onActivate={() => void props.catalog.playCollection(queue, index - 1, context())} onMenu={event => props.onTrackMenu(item, event)} />;
   };
   return <section class={styles.library} data-testid="android-entity-profile">
     <button type="button" onClick={props.onBack}>{t('artist.ariaBack')}</button>
@@ -112,8 +112,8 @@ export default function NativeEntityProfile(props: {
       <Show when={props.subject.artist}><p>{props.subject.artist}</p></Show>
       <Show when={artist()?.metadata?.nb_fans}><p>{formatFans(artist()!.metadata!.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}</p></Show>
       <button type="button" aria-label={`${t('savedEntities.options')}: ${props.subject.name}`} disabled={props.disconnected || collection.busy()} onClick={collectionMenu}>⋮</button>
-      <button type="button" disabled={props.disconnected || !songs().length || !!props.catalog.pending()} onClick={() => void props.catalog.playCollection(songs(), 0)}>{t('artist.play')}</button>
-      <button type="button" disabled={props.disconnected || !songs().length || !!props.catalog.pending()} onClick={() => void props.catalog.playCollection(shuffled(songs()), 0)}>{t('artist.shuffle')}</button>
+      <button type="button" disabled={props.disconnected || !songs().length || !!props.catalog.pending()} onClick={() => void props.catalog.playCollection(songs(), 0, context())}>{t('artist.play')}</button>
+      <button type="button" disabled={props.disconnected || !songs().length || !!props.catalog.pending()} onClick={() => void props.catalog.playCollection(songs(), 0, context(), true)}>{t('artist.shuffle')}</button>
       <Show when={artist()?.candidates.length}>
         <button type="button" aria-expanded={candidatesOpen()} onClick={() => setCandidatesOpen(value => !value)}>{t('artist.notThisArtist')}</button>
         <Show when={candidatesOpen()}><For each={artist()?.candidates ?? []}>{candidate => <button disabled={props.disconnected} onClick={() => props.onOpen(artistPath(props.subject.name, { view: 'discover', deezerId: candidate.deezer_id }))}>

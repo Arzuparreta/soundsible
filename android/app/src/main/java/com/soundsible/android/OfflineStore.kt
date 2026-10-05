@@ -91,6 +91,11 @@ class OfflineStore private constructor(private val context: Context) {
                 val value = if(row.isNull(key)) "" else row.optString(key, ""); require(value.length <= 4096); result.put(key, value)
             }
             result.put("duration", row.optDouble("duration", 0.0).takeIf { it.isFinite() && it >= 0 } ?: 0.0)
+            // Keep facts with the copied recording; later metadata refreshes may describe different bytes.
+            for (key in listOf("loudness_lufs", "loudness_peak_dbtp")) {
+                if (!row.isNull(key)) row.optDouble(key).takeIf { it.isFinite() }?.let { result.put(key, it) }
+            }
+            result
         }.distinctBy { it.getString("id") }
         val existing = mutableSetOf<String>(); database.rawQuery("SELECT id FROM copies", null).use { while(it.moveToNext()) existing.add(it.getString(0)) }
         require((existing + tracks.map { it.getString("id") }).size <= 1000) { "COPY_LIMIT" }

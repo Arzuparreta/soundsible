@@ -16,7 +16,7 @@ export function createNativeCatalogActions(props: {
   generation: () => number; tracks: () => Track[]; saved: () => SavedEntry[];
   disconnected: () => boolean; onPlay: (track: Track) => Promise<void>;
   onAcquire?: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
-  onPlayCollection?: (tracks: Track[], index: number) => Promise<void>;
+  onPlayCollection?: (tracks: Track[], index: number, context?: import('../lib/program/runtime').ProgramContext, shuffle?: boolean) => Promise<void>;
 }) {
   const [pending, setPending] = createSignal<string | null>(null);
   const [error, setError] = createSignal('');
@@ -124,7 +124,7 @@ export function createNativeCatalogActions(props: {
       if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : purpose === 'play' ? 'search.noPreview' : 'common.loadFailed'));
     } finally { if (current()) setPending(null); }
   }
-  async function playCollection(items: readonly CatalogItem[], selectedIndex: number) {
+  async function playCollection(items: readonly CatalogItem[], selectedIndex: number, context?: import('../lib/program/runtime').ProgramContext, shuffle = false) {
     if (disposed || props.disconnected()) return;
     const operation = ++epoch, generation = props.generation();
     controller?.abort(); const request = new AbortController(); controller = request;
@@ -136,7 +136,8 @@ export function createNativeCatalogActions(props: {
         trackFor(item) ?? (await resolveRecording(item, request.signal, current)).track, current);
       if (!current()) return;
       setPartial(program.unavailable > 0);
-      await props.onPlayCollection(program.tracks, program.index);
+      if (context || shuffle) await props.onPlayCollection(program.tracks, program.index, context, shuffle);
+      else await props.onPlayCollection(program.tracks, program.index);
     } catch (failure) {
       if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : 'search.noPreview'));
     } finally { if (current()) setPending(null); }

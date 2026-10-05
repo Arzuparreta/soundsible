@@ -85,3 +85,72 @@ Recurso común cargado desde classpath real, incluida referencia ponderada
 0.5727297072924131 y cobertura/contexto. UI completa1536/192 pasa; test TS de
 regla38 pasa. Base lista para integrarla después de principal limpia73+restart2;
 no afirmar que ya afecta a muestras o captura del programa.
+
+## Frontera real de stream en Media3 actual
+
+Revisión del source oficial de la dependencia actual, no prueba de runtime:
+[DefaultAudioSink](https://github.com/androidx/media/blob/1.11.1/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/audio/DefaultAudioSink.java)
+configura el pipeline pendiente, drena el anterior y hace flush con
+AudioProcessor.StreamMetadata (timeline, periodUid, positionOffsetUs).
+[MediaCodecAudioRenderer](https://github.com/androidx/media/blob/1.11.1/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/audio/MediaCodecAudioRenderer.java)
+entrega timeline y MediaPeriodId al AudioSinkConfig.
+[BaseAudioProcessor](https://github.com/androidx/media/blob/1.11.1/libraries/common/src/main/java/androidx/media3/common/audio/BaseAudioProcessor.java)
+permite onFlush(StreamMetadata). Usar ese periodo para localizar el MediaItem
+exacto y sus facts/contexto: evita aplicar la ganancia de la cabecera actual a
+buffers decodificados anticipadamente del siguiente tema. No hace falta inventar
+un dueño de audio ni envolver SampleStreams sólo para transportar identidad.
+
+El processor debe permanecer activo incluso en unity para conservar tap y recibir
+cambios de stream. Core confirma volume_leveling/dj_mixing en discovery/settings.
+Prefs pueden cambiar durante un stream; identidad del stream se fija en flush,
+preferencia vigente se lee por bloque dentro del scope nativo. Pasar al siguiente
+stream no puede cambiar muestras pendientes del anterior antes de drenarlas.
+Pruebas de boundary, seek, fuente cambiada y rechazo de cuenta/generación son
+requisito: los sources documentados por sí solos no prueban integración funcional.
+
+## DSP en fuentes durante browser4 S2ag (sin aceptación todavía)
+
+ProgramPcmGain incorpora saturación PCM16 y rampa10ms por frame; ProgramPcmTap
+mantiene8 bloques de máximo64KiB, consumidor fuera del hilo de audio, scope por
+generación y exclusión de input Live. ProgramPcmProcessor usa onFlush(StreamMetadata)
+para resolver facts/contexto exactos del periodo y copiar salida post-ganancia al
+tap opcional. No almacena audio cuando no hay consumidor. NativeProgramOutput
+permite attachment sólo dentro del proceso; no hay IPC/export ni lectura JS/mic.
+
+PlaybackService instala el processor en su AudioSink existente y fuerza PCM sin
+float bypass/passthrough/offload. ProgramLeveling confirma PATCH y GET del Core,
+con worker/cola acotados, descarte de receipt por sesión/generación y estado visible
+mediante SessionExtras. ProgramQueue copia facts de la fuente y referencia de
+álbum sólo ante contexto explícito, sin adivinarlo por títulos.
+
+Código pendiente de compilar/probar: no ejecutar Gradle/JVM/integration a la vez
+que browser4. Native Track/contexto y Settings UI todavía sin conectar al acabar
+estos cambios. Siete tests JVM nuevos preparados (kernel4/tap3), aún no ejecutados.
+Sigue siendo gate la salida PCM real HTTP/TLS/WAV/FLAC, volume local independiente,
+fronteras/seek/Activity/scopes y álbum/shuffle. No anunciar leveling ni captura
+funcionales hasta evidencia; esto no entrega mezcla DJ ni emisión Live.
+
+## Continuación: compilación y prueba de muestras
+
+La base DSP compila y pasa27 tests JVM (20 anteriores + kernel4 + tap3), además
+de lint: `/tmp/soundsible-s3a-native-foundation.log`. La conexión Solid de Settings,
+facts y contexto explícito pasa la suite completa1550/196 en
+`/tmp/soundsible-s3a-connected-full-ui.log`; browser4 S2ag precede estos cambios y
+debe repetirse antes del PR final. Ningún resultado JVM sustituye la salida PCM.
+
+ProgramPcmTest prepara dos casos HTTP/TLS sobre el AudioSink real del único
+servicio. El fixture mide sus tonos con el R128 de producción y entrega facts
+por `/api/library`; comprueba unity/no medido/medido, álbum ponderado/shuffle,
+volumen local independiente, seek, Activity y background. WAV HTTP/TLS2 pasa en
+`/tmp/soundsible-s3a-pcm-offline-program-native.log`, seguido de APK/test APK/JVM27/
+lint normales sin CA temporal. Incluye copias medidas y reproducción offline
+desde Songs y álbum con Core503. Los diagnósticos anteriores se conservan: nodos
+durante resume, Refresh sin esperar biblioteca nueva e identidad anterior al
+reemplazo. Se corrigieron las esperas sin relajar amplitudes ni deadlines.
+FLAC HTTP/TLS2 también pasa, seguido de APK/test APK/JVM27/lint normales en
+`/tmp/soundsible-s3a-pcm-flac-native.log`. Ver [evidencia](evidence/s3a.json).
+OfflineStore conserva facts finitos al preparar la copia, junto con sus bytes;
+no los sustituye al refrescar etiquetas porque podrían describir otra grabación.
+Copias anteriores sin facts mantienen la política de no medidos. La preferencia
+confirmada se cachea por perfil nativo; PCM offline con servicio vivo está probado,
+pero su efecto tras muerte de proceso todavía requiere aceptación independiente.

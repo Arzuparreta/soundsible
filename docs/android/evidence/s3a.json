@@ -1,0 +1,67 @@
+{
+  "date": "2026-10-05",
+  "slice": "S3a native leveling and bounded program PCM output",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "990d3163dcfba5aae2417f83b471fd7b14c0cbb7",
+  "dirty_at_asset_prepare": true,
+  "checks": {
+    "ui": {
+      "tests": 1550,
+      "files": 196,
+      "log": "/tmp/soundsible-s3a-connected-full-ui.log"
+    },
+    "pcm_wav": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-pcm-offline-program-native.log"
+    },
+    "pcm_flac": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-pcm-flac-native.log"
+    },
+    "jvm": {
+      "tests": 27,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "normal_apk_test_apk_lint": "passed after temporary CA removal"
+  },
+  "scope": [
+    "Actual sole-service AudioSink samples; unity, unmeasured and actual production R128 facts",
+    "Explicit weighted album context, shuffle, next occurrence; local output volume independent",
+    "Seek, Activity recreation, background, preserved programme/session",
+    "Explicit measured offline copies; Core503 playback from Songs and album"
+  ],
+  "limitations": [
+    "Not a release; main clean73 and offline restart2 predate DSP",
+    "PCM offline tested with service alive; process death gain cache still pending",
+    "No physical acoustic acceptance",
+    "No DJ mixing or Live broadcast; tap is an internal bounded attachment",
+    "Browser four profiles must repeat before final UI PR",
+    "Radio/autoplay generated source facts still require integration"
+  ],
+  "diagnostics": [
+    {
+      "log": "/tmp/soundsible-s3a-pcm-native.log",
+      "reason": "Resume Settings locator required current nodes in separate steps"
+    },
+    {
+      "log": "/tmp/soundsible-s3a-pcm-settings-native.log",
+      "reason": "Refresh needed observed new library row before replacing programme"
+    },
+    {
+      "log": "/tmp/soundsible-s3a-pcm-offline-native.log",
+      "reason": "Offline album context retained; test incorrectly expected individual gain"
+    },
+    {
+      "log": "/tmp/soundsible-s3a-pcm-offline-context-native.log",
+      "reason": "Test sampled old occurrence while replacement still pending"
+    }
+  ]
+}

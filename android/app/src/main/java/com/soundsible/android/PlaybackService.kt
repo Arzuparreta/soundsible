@@ -2,6 +2,12 @@ package com.soundsible.android
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.Context
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.ForwardingAudioSink
+import androidx.media3.exoplayer.audio.AudioOffloadSupport
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.*
@@ -25,6 +31,8 @@ class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private lateinit var player: ExoPlayer
     private lateinit var connection: EngineConnection
+    private lateinit var leveling: ProgramLeveling
+    private val pcmTap = ProgramPcmTap()
     private lateinit var previews: PreviewProgram
     private lateinit var radio: RadioProgram
     private lateinit var autoplay: AutoplayProgram
@@ -47,6 +55,7 @@ class PlaybackService : MediaLibraryService() {
     private fun closeProgram() {
         savePodcast()
         autoplay.clear()
+        leveling.clear()
         radio.clear()
         previews.clear()
         player.pause(); player.stop(); player.clearMediaItems()
@@ -133,7 +142,22 @@ class PlaybackService : MediaLibraryService() {
                 else localFactory.createMediaSource(item)
             }
         }
-        player = ExoPlayer.Builder(this).setMediaSourceFactory(sources)
+        NativeProgramOutput.bind(pcmTap) { connection.generation }
+        leveling = ProgramLeveling(this, connection, main) { session }
+        val processor = ProgramPcmProcessor({ connection.generation }, leveling::active, { leveling.shuffle }, pcmTap)
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
+                val sink = DefaultAudioSink.Builder(context).setEnableFloatOutput(false)
+                    .setEnableAudioOutputPlaybackParameters(false).setAudioProcessors(arrayOf(processor)).build()
+                return object : ForwardingAudioSink(sink) {
+                    override fun supportsFormat(format: Format) = format.sampleMimeType == MimeTypes.AUDIO_RAW && super.supportsFormat(format)
+                    override fun getFormatSupport(format: Format): Int = if (format.sampleMimeType == MimeTypes.AUDIO_RAW) super.getFormatSupport(format) else AudioSink.SINK_FORMAT_UNSUPPORTED
+                    override fun getFormatOffloadSupport(format: Format) = AudioOffloadSupport.DEFAULT_UNSUPPORTED
+                    override fun setOffloadMode(offloadMode: Int) { super.setOffloadMode(AudioSink.OFFLOAD_MODE_DISABLED) }
+                }
+            }
+        }
+        player = ExoPlayer.Builder(this, renderers).setMediaSourceFactory(sources)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             .setSeekBackIncrementMs(15000).setSeekForwardIncrementMs(15000)
             .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
@@ -151,7 +175,8 @@ class PlaybackService : MediaLibraryService() {
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
                 podcasts.save(oldPosition.mediaItem, oldPosition.positionMs, if (oldPosition.mediaItem == player.currentMediaItem) player.duration else -1, reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
             }
-            override fun onEvents(player: Player, events: Player.Events) { previews.sync(); radio.sync(); autoplay.sync(); savePodcast()
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { leveling.shuffle = shuffleModeEnabled }
+            override fun onEvents(player: Player, events: Player.Events) { previews.sync(); radio.sync(); autoplay.sync(); leveling.sync(player.mediaItemCount > 0); savePodcast()
                 val keys = (0 until player.mediaItemCount).map { ProgramQueue.key(player, it) }.toSet()
                 podcastSources.entries.filter { it.value !in keys }.forEach { it.key.cancel() }
             }
@@ -178,10 +203,11 @@ class PlaybackService : MediaLibraryService() {
                 return Futures.immediateFuture(try {
                     if (args.getString("action") == "queue") {
                         require(args.getLong("generation", -1) == connection.generation)
-                        val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")))
+                        val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"))
                         val index = args.getInt("index", -1); require(index in items.indices)
                         autoplay.clear()
                         radio.clear()
+                        player.shuffleModeEnabled = args.getBoolean("shuffle")
                         player.setMediaItems(items, index, podcasts.position(items[index])); player.prepare(); player.play()
                     } else if (args.getString("action") == "metadata") {
                         ProgramMetadata.apply(player, connection, args, artwork::clear)
@@ -190,6 +216,9 @@ class PlaybackService : MediaLibraryService() {
                     } else if (args.getString("action") == "autoplay") {
                         require(args.getLong("generation", -1) == connection.generation)
                         autoplay.settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))
+                    } else if (args.getString("action") == "leveling") {
+                        require(args.getLong("generation", -1) == connection.generation)
+                        leveling.settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))
                     } else if (args.getString("action") == "radio") {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
                         args.getString("key")?.let { require(it == ProgramQueue.key(player, player.currentMediaItemIndex)) }
@@ -213,6 +242,8 @@ class PlaybackService : MediaLibraryService() {
         savePodcast()
         connection.resetListeners.remove(reset)
         autoplay.close()
+        leveling.close()
+        NativeProgramOutput.unbind(pcmTap)
         radio.close()
         previews.close()
         artwork.close()

@@ -38,7 +38,7 @@ import PodcastBrowser from './PodcastBrowser';
 import { isPodcastTrack } from '../lib/track';
 import CatalogSearch from './CatalogSearch';
 import { nativeProgramTransport, mixedProgram } from './playback';
-import { createProgramRuntime, type ProgramState } from '../lib/program/runtime';
+import { createProgramRuntime, type ProgramState, type ProgramContext } from '../lib/program/runtime';
 import ProgramTransport from '../components/ProgramTransport';
 import { openContextMenu, ContextMenuOutlet, dismissContextMenu } from '../lib/contextMenu';
 import { OverlayOutlet, discardOverlays } from '../lib/overlay';
@@ -63,13 +63,13 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     pending: setProgramPending,
     error: () => setError(t('common.loadFailed')),
   });
-  async function play(tracks: Track[], selectedIndex: number) {
+  async function play(tracks: Track[], selectedIndex: number, context?: ProgramContext, shuffle = false) {
     authFailureHandled = false;
     const available = stale() && offlineState() ? availableProgram(tracks, selectedIndex, offlineState()!) : { tracks, index: selectedIndex };
     const queue = mixedProgram(available.tracks, available.index);
     if (queue.index < 0) return;
     vibrate();
-    await runtime.execute({ action: 'queue', index: queue.index, tracks: queue.tracks }).catch(() => {});
+    await runtime.execute({ action: 'queue', index: queue.index, tracks: queue.tracks, ...(context ? { context } : {}), ...(shuffle ? { shuffle: true } : {}) }).catch(() => {});
   }
   const [origin, setOrigin] = createSignal('');
   const [server, setServer] = createSignal('');

@@ -6,18 +6,20 @@ export interface ProgramState {
   state: number; index: number; id: string; title: string; artist: string;
   items: ProgramOccurrence[]; queueToken: string; programToken?: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
   radio?: { active: boolean; phase: string; profile: 'familiar' | 'balanced' | 'explore' } | null;
+  leveling?: { enabled: boolean | null; settingsPhase: string } | null;
   autoplay?: { enabled: boolean | null; settingsPhase: string; active: boolean; phase: string } | null;
   seekable?: boolean;
   preview?: { key: string; preparation: PreviewPreparation | null; retryAttempt: number; retryPending: boolean; retryNotBeforeMs: number } | null;
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
 }
+export interface ProgramContext { kind: 'album' | 'artist' | 'playlist'; id: string }
 export interface ProgramOccurrence extends ProgramTrack { key: string; generated?: boolean; generatedSource?: 'radio' | 'autoplay' | null }
-export interface ProgramTrack { offline?: boolean; source: 'local' | 'preview' | 'podcast'; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
+export interface ProgramTrack { loudness_lufs?: number | null; loudness_peak_dbtp?: number | null; duration?: number; offline?: boolean; source: 'local' | 'preview' | 'podcast'; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
   | { action: 'radio'; enabled: boolean; profile: 'familiar' | 'balanced' | 'explore'; queueToken: string; key?: string }
   | { action: 'metadata'; tracks: { id: string; title: string; artist: string; album: string; album_artist?: string | null; album_id?: string | null; artist_id?: string | null }[] }
-  | { action: 'autoplay'; enabled: boolean; reload?: boolean }
+  | { action: 'autoplay' | 'leveling'; enabled: boolean; reload?: boolean }
   | { action: 'stop'; queueToken: string; programToken?: string }
   | { action: 'retireSource'; id: string }
   | { action: 'seek'; positionMs: number }
@@ -28,7 +30,7 @@ export type ProgramCommand =
   | { action: 'move'; index: number; toIndex: number; key: string; queueToken: string }
   | { action: 'append'; tracks: ProgramTrack[]; queueToken: string }
   | { action: 'insertAfter'; tracks: ProgramTrack[]; queueToken: string; index: number; key: string }
-  | { action: 'queue'; tracks: ProgramTrack[]; index: number };
+  | { action: 'queue'; tracks: ProgramTrack[]; index: number; context?: ProgramContext; shuffle?: boolean };
 export interface ProgramTransport {
   state(): Promise<ProgramState>;
   command(command: ProgramCommand & { generation: number }): Promise<ProgramState>;

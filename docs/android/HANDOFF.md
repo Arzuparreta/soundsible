@@ -33,6 +33,16 @@ historial del chat ni memoria privada. Ver [guía](../ANDROID.md),
 
 ## Estado actual de continuación
 
+S3a conecta nivelación nativa y tap PCM interno acotado del único servicio,
+después de DSP y antes de volumen local. WAV HTTP/TLS2 y FLAC HTTP/TLS2 pasan,
+incluidos medición R128 real, álbum/shuffle, seek, Activity/background y copias
+offline medidas con Core503. UI1550/196, JVM27 y APK/test APK/lint normales pasan.
+Ver [S3a](SLICE_3A.md) y [evidencia](evidence/s3a.json). Esta prueba dirigida no
+sustituye principal limpia73+restart2 anterior al DSP. Próximo: facts generados
+Radio/autoplay, PCM tras muerte de proceso, regresión completa y mezcla DJ.
+DJ/Live/Auto/firma/update siguen pendientes; continuar hasta paridad y después
+PR/main/release autorizados, sin cerrar por slice. Browser4 final debe repetirse.
+
 Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
 bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrados
