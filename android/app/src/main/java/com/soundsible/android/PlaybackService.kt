@@ -47,6 +47,17 @@ class PlaybackService : MediaLibraryService() {
     private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
     private lateinit var artwork: ProgramArtwork
     @Volatile private var transport: Pair<Long, OkHttpClient>? = null
+    private val networkCleanup = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+        Thread(task, "soundsible-programme-net-close").apply { isDaemon = true }
+    }
+    /** TLS close_notify can write to the socket; never evict a pool on the player looper. */
+    private fun retireTransport() {
+        val client = synchronized(this) { transport?.second.also { transport = null } } ?: return
+        networkCleanup.execute {
+            try { client.dispatcher.cancelAll(); client.connectionPool.evictAll() }
+            finally { client.dispatcher.executorService.shutdown() }
+        }
+    }
     private val audioCalls = java.util.concurrent.ConcurrentHashMap<okhttp3.Call, String>()
     private val podcastSources = java.util.concurrent.ConcurrentHashMap<PodcastDataSource, String>()
     private val connectedCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
@@ -54,7 +65,7 @@ class PlaybackService : MediaLibraryService() {
     private val main = Handler(Looper.getMainLooper())
     private val reset: () -> Unit = {
         cancelAudio()
-        transport?.second?.dispatcher?.cancelAll(); transport = null
+        retireTransport()
         main.post { if (session != null) closeProgram() }
     }
     /** On the player looper; does not touch account generation, cookie or library. */
@@ -73,7 +84,7 @@ class PlaybackService : MediaLibraryService() {
         player.shuffleModeEnabled = false; player.repeatMode = Player.REPEAT_MODE_OFF
         artwork.clear()
         cancelAudio()
-        transport?.second?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll() }; transport = null
+        retireTransport()
         // Media3 removes the notification/foreground when its timeline is empty.
         triggerNotificationUpdate()
     }
@@ -116,7 +127,9 @@ class PlaybackService : MediaLibraryService() {
             // Each source pins the selected account; every HTTP request revalidates it.
             val epoch = connection.generation
             val selected = connection.origin
-            val client = synchronized(this) { transport?.takeIf { it.first == epoch }?.second ?: connection.client.newBuilder().retryOnConnectionFailure(false).eventListener(object : okhttp3.EventListener() {
+            val client = synchronized(this) { transport?.takeIf { it.first == epoch }?.second ?: connection.client.newBuilder()
+                .dispatcher(okhttp3.Dispatcher()).connectionPool(okhttp3.ConnectionPool())
+                .retryOnConnectionFailure(false).eventListener(object : okhttp3.EventListener() {
                 override fun callStart(call: okhttp3.Call) { audioCalls[call] = call.request().url.queryParameter("android_occurrence") ?: "" }
                 override fun connectStart(call: okhttp3.Call, address: java.net.InetSocketAddress, proxy: java.net.Proxy) { connectedCalls.add(call) }
                 override fun callEnd(call: okhttp3.Call) { audioCalls.remove(call); connectedCalls.remove(call) }
@@ -295,8 +308,8 @@ class PlaybackService : MediaLibraryService() {
         previews.close()
         artwork.close()
         cancelAudio()
-        transport?.second?.dispatcher?.cancelAll(); transport = null
         session?.release(); session = null; player.release(); main.removeCallbacksAndMessages(null)
+        retireTransport(); networkCleanup.shutdown()
         super.onDestroy()
     }
 }

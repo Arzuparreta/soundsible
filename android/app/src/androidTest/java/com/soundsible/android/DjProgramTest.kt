@@ -39,7 +39,7 @@ class DjProgramTest {
             }
             fun command(fields: String) {
                 web.evaluate(scenario, "window.__done=false;window.__failure=null;Capacitor.Plugins.SoundsiblePlayback.state().then(s=>Capacitor.Plugins.SoundsiblePlayback.command({...s,$fields})).then(()=>window.__done=true).catch(e=>window.__failure=e.code+':'+e.message)")
-                waitFor("window.__done || window.__failure")
+                waitFor("!!(window.__done || window.__failure)")
                 assertEquals("Command rejected: " + web.evaluate(scenario, "window.__failure"), "true", web.evaluate(scenario, "window.__done===true"))
             }
             web.awaitReady(scenario)
@@ -104,6 +104,8 @@ class DjProgramTest {
             }
             } finally {
             try { for (id in listOf("member-pcm-soft", "member-pcm-loud")) connection.execute("/api/library/tracks/$id", "DELETE", null, emptyMap(), connection.generation, "dj-cleanup-$id", 15000).use { assertTrue(it.isSuccessful) }
+            connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
+                .post("{\"measured\":false}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
             } finally { connection.clearSession(true) }
             }
         }

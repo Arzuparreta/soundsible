@@ -23,6 +23,14 @@ al usar awaitReady de StartupTest tras recrear una Activity ya autenticada. Ese
 helper exige pantalla de conexión sin configurar; la app mostraba biblioteca y
 programa DJ conservado. Log /tmp/soundsible-s3b-dj-clean-native.log. Se espera
 biblioteca sin data-booting al recrear. Volver a ejecutar retorno NORMAL completo.
+Tercero sobre19c1e216: HTTP completa el recorrido, TLS falla en stop. Diagnóstico
+TLS dirigido sobre1399be65 confirma NetworkOnMainThreadException en
+PlaybackService.closeProgram: evictAll cerraba SSL en hilo principal. Logs
+/tmp/soundsible-s3b-dj-recreation-native.log y
+/tmp/soundsible-s3b-dj-close-diagnostic-native.log. Transporte de audio recibe
+pool/dispatcher propios y limpieza TLS en worker; shutdown libera su executor.
+El test limpia también facts R128 originales y transforma rechazo en boolean
+para evitar esperar45s cuando ya hay error. Repetir DJ y regresión NORMAL.
 
 ## Integración del servicio en curso
 
