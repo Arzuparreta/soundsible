@@ -231,3 +231,10 @@ Siguiente EOS con entrante preparado, tempo/phase, fachada Player y planner.
 API instalada ForwardingSimpleBasePlayer permite setPlayer protegido: candidata
 para router de MediaSession que preserve comportamiento NORMAL; contrastar y
 probar antes de integrar, no reconstruir controles previos por suposición.
+
+EOS en fuentes/test: drainedInput exige ended, queue vacía y todos los frames
+reservados alcanzados por hardware. DIRECT reanuda el master propio si no hay
+pausa deseada/fatal, para relevar un renderer que Media3 pausó al terminar.
+httpEndOfSource/tlsEndOfSource seek19.5s del archivo20s, esperan drain real y
+STATE_ENDED, y cortan a entrada ya preparada sin consumir su cue. Kotlin/test/
+JVM41/lint pasan en /tmp/soundsible-s3b-mix-eos-foundation.log; Native EOS2 pendiente.

@@ -96,7 +96,9 @@ class ProgramMixOutputTest {
     @Test fun tlsStructuralFade() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.STRUCTURAL_FADE, effects = true)
     @Test fun httpFlacMix() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), secondFormat = "flac")
     @Test fun tlsFlacMix() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), secondFormat = "flac")
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav") {
+    @Test fun httpEndOfSource() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.DIRECT, endOfSource = true)
+    @Test fun tlsEndOfSource() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.DIRECT, endOfSource = true)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -156,13 +158,25 @@ class ProgramMixOutputTest {
                 meter.await { it.first in 2950.0..3050.0 && it.second < 30 }
                 if (!effects) {
                     val beforeSeek = owner.epoch()
-                    instrumentation.runOnMainSync { decoders.first().seekTo(10000) }
+                    instrumentation.runOnMainSync { decoders.first().seekTo(if (endOfSource) 19500 else 10000) }
                     val seekDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
                     while (owner.epoch() == beforeSeek && System.nanoTime() < seekDeadline) Thread.sleep(20)
                     assertTrue("Master output was not invalidated by seek", owner.epoch() > beforeSeek)
                     meter.metrics.clear()
                     meter.await { it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
                     assertTrue("Physical output retained the old seek clock", owner.positionUs() < 5000000L)
+                }
+                if (endOfSource) {
+                    val drainDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+                    while (!owner.drainedInput(0) && System.nanoTime() < drainDeadline) Thread.sleep(10)
+                    assertTrue("Current input did not drain its actual hardware PCM", owner.drainedInput(0))
+                    val ended = java.util.concurrent.atomic.AtomicBoolean()
+                    val endedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    do {
+                        instrumentation.runOnMainSync { ended.set(decoders[0].playbackState == Player.STATE_ENDED) }
+                        if (!ended.get()) Thread.sleep(20)
+                    } while (!ended.get() && System.nanoTime() < endedDeadline)
+                    assertTrue("Decoder did not confirm actual source end", ended.get())
                 }
                 owner.setVolume(0.1f)
                 val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)

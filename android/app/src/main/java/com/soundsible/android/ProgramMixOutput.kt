@@ -96,6 +96,13 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         !closed && owns() && failure == null && !source.released && source.playing &&
             source.queued >= format.sampleRate / 20 * Integer.bitCount(format.channelMask) * 2
     }
+    fun drainedInput(index: Int): Boolean = synchronized(lock) {
+        require(index in 0..1)
+        val source = sources[index] ?: return@synchronized false
+        val format = config ?: return@synchronized false
+        source.ended && source.queued == 0 && source.clock.supplied > 0 &&
+            source.clock.played(positionUs() * format.sampleRate / 1000000) == source.clock.supplied
+    }
     fun blend(lengthMs: Long, value: ProgramMixCurve.Technique) = synchronized(lock) {
         require(lengthMs in 50..30000 && sources.all { it != null } && mixStart == Long.MAX_VALUE)
         val rate = config!!.sampleRate
@@ -107,6 +114,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         if (value == ProgramMixCurve.Technique.DIRECT) {
             window = ProgramMixWindow(frames, 0, active, 1 - active, outputEpoch)
             active = 1 - active; limiter?.blend(false)
+            if (!paused) synchronized(deviceLock) { if (owns() && failure == null) output?.play() }
         } else {
             mixStart = frames; mixLength = lengthMs * rate / 1000; technique = value
             window = ProgramMixWindow(mixStart, mixLength, active, 1 - active, outputEpoch)
