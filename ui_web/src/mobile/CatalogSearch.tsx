@@ -1,9 +1,7 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
+import { createEffect, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { api, ApiError } from '../lib/api';
-import { catalogTrack, itemArtist } from '../lib/catalogTrack';
-import { buildIdentityIndex, catalogItemKeys } from '../lib/playbackIdentity';
-import { savedFromCatalogItem, savedFromTrack, savedToTrack } from '../lib/saved';
-import { programTrack } from '../lib/program/tracks';
+import { itemArtist } from '../lib/catalogTrack';
+import { createNativeCatalogActions } from './catalogActions';
 import { openContextMenu } from '../lib/contextMenu';
 import { t } from '../lib/i18n';
 import { coverUrl } from '../lib/media';
@@ -24,30 +22,17 @@ export default function CatalogSearch(props: {
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
   const [partial, setPartial] = createSignal(false);
-  const [pending, setPending] = createSignal<string | null>(null);
   const [retry, setRetry] = createSignal(0);
-  const [resolvedTracks, setResolvedTracks] = createSignal(new Map<string, Track>());
-  const libraryIndex = createMemo(() => buildIdentityIndex(props.tracks));
-  const trackFor = (item: CatalogItem): Track | null => {
-    const immediate = catalogTrack(item, props.tracks);
-    if (immediate) return immediate;
-    for (const key of catalogItemKeys(item)) {
-      const track = libraryIndex().get(key);
-      if (track && programTrack(track)) return track;
-    }
-    return resolvedTracks().get(item.id) ?? null;
-  };
+  const catalog = createNativeCatalogActions({ generation: () => props.generation, tracks: () => props.tracks,
+    saved: () => props.saved, disconnected: () => props.disconnected, onPlay: props.onPlay,
+    onAcquire: props.onAcquire, onChanged: props.onChanged });
+  const { pending, trackFor, isSaved, act } = catalog;
   let searchEpoch = 0;
-  let actionEpoch = 0;
-  let actionAbort: AbortController | undefined;
   let disposed = false;
   let account = props.generation;
-  const savedKeys = createMemo(() => new Set(props.saved.flatMap(entry => entry.keys)));
-  const isSaved = (item: CatalogItem) => catalogItemKeys(item).some(key => savedKeys().has(key));
   createEffect(on(() => [query().trim(), props.generation, props.disconnected, retry()] as const, ([term, generation, disconnected]) => {
     const epoch = ++searchEpoch;
-    if (account !== generation) { account = generation; setResolvedTracks(new Map()); }
-    actionEpoch++; actionAbort?.abort(); setPending(null);
+    catalog.reset(account !== generation); account = generation;
     const controller = new AbortController();
     setRows([]); setError(''); setPartial(false); setLoading(Boolean(term && !disconnected));
     const timer = term && !disconnected ? setTimeout(() => {
@@ -62,45 +47,7 @@ export default function CatalogSearch(props: {
     }, 300) : undefined;
     onCleanup(() => { clearTimeout(timer); controller.abort(); });
   }));
-  onCleanup(() => { disposed = true; searchEpoch++; actionEpoch++; actionAbort?.abort(); });
-  async function act(item: CatalogItem, purpose: 'play' | 'save' | 'remove' | 'acquire') {
-    if (props.disconnected) return;
-    const epoch = ++actionEpoch;
-    const generation = props.generation;
-    actionAbort?.abort(); const controller = new AbortController(); actionAbort = controller;
-    const current = () => !disposed && epoch === actionEpoch && generation === props.generation && !controller.signal.aborted && !props.disconnected;
-    setPending(item.id); setError('');
-    try {
-      let track = trackFor(item);
-      let entry = savedFromCatalogItem(item);
-      if (purpose !== 'remove' && !track) {
-        const artist = itemArtist(item);
-        if (!artist || !item.title) throw new Error('Missing recording');
-        const result = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration }, controller.signal);
-        if (!current()) return;
-        if (!result.video_id || !/^[A-Za-z0-9_-]{11}$/.test(result.video_id)) throw new Error('No preview');
-        entry = { ...entry, keys: [...new Set([...entry.keys, `yt:${result.video_id}`])] };
-        track = savedToTrack(entry, libraryIndex());
-        if (track) { const linked = new Map(resolvedTracks()); linked.set(item.id, track); setResolvedTracks(linked); }
-      }
-      if (!current()) return;
-      if (purpose !== 'remove' && track && !programTrack(track)) throw new Error('Unsupported recording');
-      if (purpose === 'play') {
-        if (!track) throw new Error('No preview');
-        await props.onPlay(track);
-      } else if (purpose === 'acquire') {
-        if (!track || !props.onAcquire) throw new Error('Acquisition unavailable');
-        await props.onAcquire(track);
-      } else {
-        if (purpose === 'save' && track) entry = { ...entry, keys: [...new Set([...entry.keys, ...savedFromTrack(track).keys])] };
-        await api.setSavedEntries([entry], purpose === 'save');
-        // A submitted mutation belongs to that account even if its query changed.
-        if (!disposed && generation === props.generation) await props.onChanged();
-      }
-    } catch (failure) {
-      if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : purpose === 'play' ? 'search.noPreview' : 'common.loadFailed'));
-    } finally { if (current()) setPending(null); }
-  }
+  onCleanup(() => { disposed = true; searchEpoch++; });
   function menu(item: CatalogItem, event?: MouseEvent) {
     const generation = props.generation;
     const search = searchEpoch;
@@ -124,7 +71,7 @@ export default function CatalogSearch(props: {
       </section>
     </Show>
     <Show when={props.disconnected}><p role="status">{t('library.unreachable')}</p></Show>
-    <Show when={error()}><p role="alert">{error()} <button onClick={() => setRetry(value => value + 1)}>{t('common.retry')}</button></p></Show>
+    <Show when={error() || catalog.error()}><p role="alert">{error() || catalog.error()} <button onClick={() => setRetry(value => value + 1)}>{t('common.retry')}</button></p></Show>
     <Show when={loading()}><p role="status">{t('common.loading')}</p></Show>
     <Show when={partial()}><p role="status">{t('musicExplorer.partial')}</p></Show>
     <Show when={!loading() && query().trim() && !props.disconnected}>
