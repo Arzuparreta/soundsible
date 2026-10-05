@@ -222,3 +222,12 @@ Defaults intactos. Tests httpFlacMix/tlsFlacMix usan mismo grafo con WAV mono16k
 FLAC estéreo48k, mid/final PCM, seek/clock/pause/scope. Kotlin/test/JVM41/lint y
 Ruff pasan en /tmp/soundsible-s3b-mix-codec-foundation.log. Codec Native dirigido2
 pendiente; clase ampliada20 no sustituye18 hasta repetirla si se requiere.
+
+Codec dirigido2/0 aceptado sobref5178e54 limpio, log
+/tmp/soundsible-s3b-mix-codec-native.log: WAV mono16k + FLAC estéreo48k por HTTP/
+TLS, dos decoders normalizados, PCM mix/seek/clock/pause/scope y normal APK/test/
+JVM41/lint pasan sin CA. Resultado dirigido separado del18 de clase previa.
+Siguiente EOS con entrante preparado, tempo/phase, fachada Player y planner.
+API instalada ForwardingSimpleBasePlayer permite setPlayer protegido: candidata
+para router de MediaSession que preserve comportamiento NORMAL; contrastar y
+probar antes de integrar, no reconstruir controles previos por suposición.

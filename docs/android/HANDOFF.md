@@ -64,8 +64,8 @@ pasa. Log /tmp/soundsible-s3b-mix-recovery-native.log. Clock por tramos y caída
 normal APK/test/JVM41/lint pasa. Log /tmp/soundsible-s3b-mix-clock-resume-native.log.
 Siete técnicas/FX pasan HTTP/TLS18 sobree0499c4e limpio: bass/filter/long/echo
 con espectros reales, structural/direct y regresiones; normal APK/test/JVM41/lint
-pasa. Log /tmp/soundsible-s3b-mix-fx-ready-native.log. Próximo decoder FLAC,
-EOS/tempo/phase,
+pasa. Log /tmp/soundsible-s3b-mix-fx-ready-native.log. WAV+FLAC real pasa HTTP/TLS2 sobref5178e54 limpio, normal APK/test/JVM41/lint
+pasa, log /tmp/soundsible-s3b-mix-codec-native.log. Próximo EOS/tempo/phase,
 luego fachada Player y planner; ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.
