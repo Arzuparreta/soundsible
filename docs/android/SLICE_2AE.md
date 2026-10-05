@@ -52,3 +52,11 @@ Dirigido19/5 pasa en /tmp/soundsible-s2ae-extraction-ui.log. No aceptación Nati
 S2ae ni feed/fichas end to end todavía. Pendientes conectar vistas, navegación
 reversible, artistas/álbumes/candidates, acciones/jobs y fixtures/instrumentación
 HTTP/HTTPS. Native57+restart2 de Apariencia sigue pendiente.
+
+
+Base de fichas: nativeEntitySubject sólo acepta rutas locales de artista/álbum,
+conserva provider/local ID y crédito; nativeProfileBookmark usa ID resuelto sin
+reemplazar uno explícito. createNativeEntityProfile cancela edición/cuenta/offline
+y ofrece retry. ArtistDiscoveryView comparte layout discografía con links/rows
+inyectados; aún no conectado al adaptador web ni a Native. Cuatro casos pasan en
+/tmp/soundsible-s2ae-profile-view-ui.log. No equivale a recorridos de ficha reales.
