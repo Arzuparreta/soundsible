@@ -103,7 +103,9 @@ class ProgramMixOutputTest {
     @Test fun tlsTempoMix() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), tempo = 1.05f)
     @Test fun httpCuedPreroll() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), cued = true)
     @Test fun tlsCuedPreroll() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), cued = true)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f, cued: Boolean = false) {
+    @Test fun httpCancelPreroll() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), cued = true, cancelCue = true)
+    @Test fun tlsCancelPreroll() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), cued = true, cancelCue = true)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f, cued: Boolean = false, cancelCue: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -190,7 +192,7 @@ class ProgramMixOutputTest {
                 assertTrue("Incoming decoder did not prepare actual PCM", owner.readyInput(1))
                 if (cued) owner.arm(2000, technique, 1500, 500)
                 else owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else 2000, technique)
-                val transition = owner.transition() ?: error("Transition window absent")
+                var transition = owner.transition() ?: error("Transition window absent")
                 if (cued) {
                     val cueStart = transition.start - 24000
                     meter.await { it.start in (cueStart + 2400)..(transition.start - 4800) && it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
@@ -201,6 +203,26 @@ class ProgramMixOutputTest {
                     assertEquals("Silent preroll changed metadata", 0, owner.dominantInput())
                     val expected = (played - cueStart) * 1000000 / 48000
                     assertTrue("Silent incoming drifted from programme clock", abs(owner.inputPositionUs(1) - expected) < 20000)
+                }
+                if (cancelCue) {
+                    val epoch = owner.epoch()
+                    assertTrue("Uncommitted preroll could not be cancelled", owner.cancelArmed())
+                    assertNull("Cancelled cue retained its dominance window", owner.transition())
+                    val until = owner.positionUs() + 700000
+                    val continueDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while (owner.positionUs() < until && System.nanoTime() < continueDeadline) Thread.sleep(10)
+                    assertTrue("Cancelling future cue stalled current audio", owner.positionUs() >= until)
+                    assertEquals("Cancelled cue promoted incoming metadata", 0, owner.dominantInput())
+                    meter.metrics.clear()
+                    meter.await { it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
+                    instrumentation.runOnMainSync { decoders[1].seekTo(1000) }
+                    val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while ((!owner.readyInput(1) || owner.inputPositionUs(1) >= 20000) && System.nanoTime() < readyDeadline) Thread.sleep(10)
+                    assertTrue("Corrected standby cue did not rebuffer", owner.readyInput(1))
+                    assertEquals("Standby phase correction reset master audio", epoch, owner.epoch())
+                    assertTrue("Standby source advanced while silent and unarmed", owner.inputPositionUs(1) < 20000)
+                    owner.arm(2000, technique, 300, 200)
+                    transition = owner.transition() ?: error("Rearmed transition absent")
                 }
                 val checkpoints = when {
                     technique == ProgramMixCurve.Technique.DIRECT -> listOf(1.0 to 1)
@@ -215,6 +237,7 @@ class ProgramMixOutputTest {
                     assertTrue("Physical transition did not advance", owner.positionUs() * 48000 / 1000000 >= target)
                     assertEquals("Metadata dominance did not follow playout", dominant, owner.dominantInput())
                 }
+                if (cancelCue) assertFalse("Already committed blend accepted future cancellation", owner.cancelArmed())
                 if (effects) {
                     when (technique) {
                         ProgramMixCurve.Technique.BASS_SWAP -> meter.await { it.first in 700.0..1150.0 && it.second in 5500.0..7000.0 }

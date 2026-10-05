@@ -141,6 +141,13 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         window = ProgramMixWindow(mixStart, mixLength, active, 1 - active, outputEpoch)
         lock.notifyAll()
     }
+    /** Future route edits may cancel only PCM that has not entered the audible blend. */
+    fun cancelArmed(): Boolean = synchronized(lock) {
+        if (mixStart == Long.MAX_VALUE || frames > mixStart || closed || !owns()) return@synchronized false
+        mixStart = Long.MAX_VALUE; prerollStart = Long.MAX_VALUE; window = null
+        lock.notifyAll()
+        true
+    }
     fun pause(value: Boolean) = synchronized(lock) {
         paused = value; synchronized(deviceLock) { if (value) output?.pause() else output?.play() }; lock.notifyAll()
     }
