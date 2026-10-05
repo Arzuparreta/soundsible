@@ -256,5 +256,30 @@
       "refill, direction, source editing, extended route repair",
       "Live or Android Auto"
     ]
+  },
+  "production_dj_starvation": {
+    "asset_prepare_revision": "0f26f348",
+    "asset_prepare_dirty": true,
+    "source_base_revision": "1ab49ea6",
+    "source_dirty": true,
+    "tests": 6,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "log": "/tmp/soundsible-s3b-starvation-ramp-fixed-native.log",
+    "normal_build": "APK/test APK/JVM49/lint pass without temporary CA",
+    "proves": [
+      "production controller recovery before overlap and on either stalled PCM input during committed blend over HTTP/TLS",
+      "pause excludes starvation timeout",
+      "retained nonzero stereo 48k PCM after recovery ramp",
+      "retained output epoch and monotonic clock"
+    ],
+    "does_not_prove": [
+      "stalled network response through bridge/service",
+      "both inputs unavailable",
+      "full native regression or complete DJ parity",
+      "physical acoustic acceptance"
+    ],
+    "diagnostic": "/tmp/soundsible-s3b-starvation-post-recovery-pcm-native.log exposed rearming before rendered recovery ended; corrected with render and playout guards"
   }
 }

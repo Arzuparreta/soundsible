@@ -195,6 +195,19 @@ y TypeScript pasan en /tmp/soundsible-s3b-dj-phase-{ui,typecheck}.log. Esta UI
 se añadió después de preparar el artifact starvation; no atribuirle aceptación
 APK de ese run. Regresión browser4 permanece pendiente antes de PR.
 
+Recuperación acotada durante mezcla aceptada: ProgramDjRecoveryTest6/0 HTTP/TLS,
+APK/test/JVM49/lint normal sin CA en /tmp/soundsible-s3b-starvation-ramp-fixed-native.log.
+Retira una entrada que deja de suministrar PCM durante2s si la otra tiene audio;
+pausa no consume el timeout. Conserva epoch/reloj y prueba PCM48k estéreo no
+silencioso DESPUÉS de la rampa. Caso del controller real aislado, sin demostrar
+todavía una descarga de red detenida en el flujo bridge/servicio. Asset prepare
+sobre0f26f348 dirty=true; fuentes finales dirty sobre1ab49ea6. No afirmar principal
+completa verde ni paridad DJ. /tmp/soundsible-s3b-starvation-post-recovery-pcm-native.log
+conserva una carrera real encontrada: el controller rearmaba antes de acabar
+la rampa. Ahora exige fin de rampa renderizada y reloj físico, y retirar el decoder
+no inicia otra restauración. Si faltan AMBAS entradas no hay audio sano que
+recuperar; este caso no está cubierto por este watchdog.
+
 Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
 bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrados

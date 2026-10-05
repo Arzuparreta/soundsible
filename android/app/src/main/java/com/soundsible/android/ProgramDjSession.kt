@@ -95,6 +95,14 @@ internal class ProgramDjSession(private val context: Context, private val genera
             fact(ProgramPcmProcessor.LUFS), fact(ProgramPcmProcessor.PEAK), fact(ProgramPcmProcessor.DURATION)), leveling()))
     }
     private fun advance() {
+        output.takeStarvedInput()?.let { failed ->
+            // Output has already ramped toward the retained input, without flushing
+            // its clock. Retire the stalled decoder before planning another overlap.
+            player.replaceInput(failed, decoder(failed)); indices[failed] = -1
+            streams = streams.copyOf().also { it[failed] = null }
+            armed = false; plan = null; pendingSince = 0; recovering = true
+            changed()
+        }
         val slot = output.dominantInput()
         val selected = indices[slot]
         if (selected in route.indices && selected != current) {
@@ -112,7 +120,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         }
         if (recovering) {
             val restored = output.restoredAt() ?: return
-            if (output.positionUs() < restored * 1000000 / 48000 + 150000) return
+            if (output.recoveryPending() || output.positionUs() < restored * 1000000 / 48000 + 150000) return
             recovering = false
         }
         if (!player.playWhenReady || player.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE) {

@@ -19,7 +19,7 @@ import java.nio.ByteOrder
 import java.util.ArrayDeque
 import kotlin.math.roundToInt
 
-/** Spike: two bounded decoded inputs and exactly one device output. Not wired to the service yet. */
+/** Two bounded decoded inputs and exactly one programme device output. */
 @UnstableApi
 internal class ProgramMixOutput(context: Context, private val owns: () -> Boolean,
     private val observe: (ByteArray, Int, Int, Long) -> Unit) : AutoCloseable {
@@ -47,6 +47,12 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private var window: ProgramMixWindow? = null
     private var restoration: Pair<Long, Int>? = null
     private var recovery: Recovery? = null
+    private var starvedSince = 0L
+    private var starvedInput: Int? = null
+    /** Consumed by the controller so it can retire the stalled decoder on its looper. */
+    fun takeStarvedInput(): Int? = synchronized(lock) {
+        starvedInput.also { starvedInput = null }
+    }
     private data class Recovery(val start: Long, val length: Long, val controls: ProgramMixCurve.Controls) {
         fun at(frame: Long): ProgramMixCurve.Controls {
             val progress = ((frame - start).toDouble() / length).coerceIn(0.0, 1.0)
@@ -159,7 +165,8 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         true
     }
     fun pause(value: Boolean) = synchronized(lock) {
-        paused = value; synchronized(deviceLock) { if (value) output?.pause() else output?.play() }; lock.notifyAll()
+        paused = value; starvedSince = 0L
+        synchronized(deviceLock) { if (value) output?.pause() else output?.play() }; lock.notifyAll()
     }
     fun setVolume(value: Float) = synchronized(lock) {
         require(value.isFinite() && value in 0f..1f)
@@ -175,6 +182,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     }
     fun inputPositionUs(index: Int): Long = synchronized(lock) { require(index in 0..1); sources[index]?.getPositionUs() ?: 0L }
     fun restoredAt(): Long? = synchronized(lock) { restoration?.first }
+    fun recoveryPending(): Boolean = synchronized(lock) { recovery != null }
     fun epoch(): Long = outputEpoch
     fun positionUs(): Long = synchronized(deviceLock) { output?.positionUs ?: 0L }
     fun reservedPositionUs(): Long = synchronized(lock) { frames * 1000000 / (config?.sampleRate ?: 48000) }
@@ -197,11 +205,12 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         outputEpoch++
         synchronized(deviceLock) { output?.pause(); output?.flush() }
         frames = 0L; mixStart = Long.MAX_VALUE; prerollStart = Long.MAX_VALUE; window = null; restoration = null; recovery = null; limiter?.reset()
+        starvedSince = 0L; starvedInput = null
         sources.forEach { source -> source?.let { it.clock.reset(); it.effects.reset() } }
     }
     /** Losing an incoming deck restores the retained outgoing PCM without flushing the programme. */
     private fun recoverIncoming(index: Int): Boolean {
-        if (!owns() || failure != null) return false
+        if (!owns() || failure != null || restoration != null) return false
         val transition = window?.takeIf { it.epoch == outputEpoch && it.incoming == index } ?: return false
         val outgoing = sources[transition.outgoing]?.takeIf { !it.released && it.playing && !(it.ended && it.queued == 0) } ?: return false
         val progress = if (transition.length == 0L) 1.0 else (frames - transition.start).toDouble() / transition.length
@@ -210,7 +219,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     }
     /** A failed outgoing decoder must not strand a healthy already-playing incoming input. */
     private fun recoverOutgoing(index: Int): Boolean {
-        if (!owns() || failure != null || index != active) return false
+        if (!owns() || failure != null || restoration != null || index != active) return false
         val transition = window?.takeIf { it.epoch == outputEpoch && it.outgoing == index } ?: return false
         val incoming = sources[transition.incoming]?.takeIf { !it.released && it.playing && !(it.ended && it.queued == 0) } ?: return false
         val progress = if (transition.length == 0L) 1.0 else (frames - transition.start).toDouble() / transition.length
@@ -335,7 +344,24 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                         val mixing = frames >= mixStart && frames < mixStart + mixLength
                         val incoming = sources[1 - active]
                         val preroll = frames >= prerollStart && frames < mixStart
+                        // A decoder can stop supplying PCM without reporting an error.
+                        // Only abandon a missing input while its counterpart has a full
+                        // batch ready; pause and successful batches reset the grace period.
+                        val firstReady = source != null && (source.playing || source.ended) && (tail || source.queued >= fullCount * 2)
+                        val secondReady = incoming?.playing == true && incoming.queued >= fullCount * 2
+                        if (!paused && fullCount > 0 && (mixing || preroll) && firstReady != secondReady) {
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (starvedSince == 0L) starvedSince = now
+                            if (now - starvedSince >= 2000) {
+                                val missing = if (firstReady) 1 - active else active
+                                if (recoverIncoming(missing) || recoverOutgoing(missing)) {
+                                    starvedInput = missing; starvedSince = 0L
+                                    continue
+                                }
+                            }
+                        } else starvedSince = 0L
                         if (!paused && source != null && (source.playing || source.ended) && count > 0 && (tail || source.queued >= count * 2) && (!(mixing || preroll) || incoming?.playing == true && incoming.queued >= count * 2)) {
+                            starvedSince = 0L
                             val first = ShortArray(count); if (!tail) source.read(first, count)
                             val second = if (mixing || preroll) ShortArray(count).also { incoming!!.read(it, count) } else null
                             val result = ByteBuffer.allocateDirect(count * 2).order(ByteOrder.LITTLE_ENDIAN)
