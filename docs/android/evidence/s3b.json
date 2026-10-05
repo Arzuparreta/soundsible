@@ -355,5 +355,25 @@
       "physical acoustic acceptance",
       "complete DJ parity"
     ]
+  },
+  "dj_transition_refinement": {
+    "source_base_revision": "9bed92e6",
+    "dirty": true,
+    "tests": 10,
+    "failures": 0,
+    "log": "/tmp/soundsible-s3b-refine-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "proves": [
+      "uncommitted proposal accepted",
+      "obsolete snapshot rejected",
+      "prepared decoder cue not changed",
+      "existing Core DJ and recovery flows remain green"
+    ],
+    "does_not_prove": [
+      "specific measured Core response applied end to end",
+      "all endpoint negatives",
+      "network-stalled service flow",
+      "complete DJ parity"
+    ]
   }
 }

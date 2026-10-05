@@ -75,7 +75,13 @@ class ProgramDjRecoveryTest {
                 output = ProgramDjSession::class.java.getDeclaredField("output").apply { isAccessible = true }.get(session) as ProgramMixOutput
                 @Suppress("UNCHECKED_CAST")
                 decks = ProgramDjSession::class.java.getDeclaredField("decks").apply { isAccessible = true }.get(session) as Array<ExoPlayer>
-                if (history) session!!.seek(996, 6000)
+                if (history) {
+                    session!!.seek(996, 6000)
+                    val snapshot = session!!.routeSnapshot()
+                    val proposal = ProgramDjPlan.Proposal(successorKey.get(), ProgramMixCurve.Technique.SAFE_FADE, 14.0, 0.0, 4.0, 1.0, 0.5)
+                    assertTrue("Uncommitted refinement rejected", session!!.applyRefinement(snapshot, proposal))
+                    assertFalse("Obsolete refinement accepted", session!!.applyRefinement(snapshot, proposal))
+                }
                 session!!.player.play()
             }
             if (history) {
@@ -106,6 +112,12 @@ class ProgramDjRecoveryTest {
                 return
             }
             await { session!!.player.isPlaying && output.readyInput(1) }
+            instrumentation.runOnMainSync {
+                val snapshot = session!!.routeSnapshot()
+                val key = session!!.player.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY)!!
+                assertFalse("Prepared cue changed by late refinement", session!!.applyRefinement(snapshot,
+                    ProgramDjPlan.Proposal(key, ProgramMixCurve.Technique.SAFE_FADE, 10.0, 0.0, 4.0, 1.0, 0.5)))
+            }
             if (starved != null) {
                 await { output.transition()?.let { output.positionUs() * 48000 / 1000000 >= it.start + 4800 } == true }
                 val epoch = output.epoch()

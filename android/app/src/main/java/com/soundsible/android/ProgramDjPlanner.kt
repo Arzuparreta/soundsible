@@ -115,6 +115,8 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         .put(if (item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "preview") "youtube_id" else "track_id", item.mediaId)
         .put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "")
         .put("album", item.mediaMetadata.albumTitle?.toString() ?: "")
+        .put("source", item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) ?: "")
+        .put("duration", item.mediaMetadata.extras?.getDouble(ProgramPcmProcessor.DURATION, 0.0) ?: 0.0)
     private fun rows(response: JSONObject, seed: MediaItem?, generation: Long): List<ProgramDjSession.Row> {
         require(generation == connection.generation)
         val owner = seed?.mediaMetadata?.extras?.getString(ProgramQueue.PROGRAM) ?: java.util.UUID.randomUUID().toString()

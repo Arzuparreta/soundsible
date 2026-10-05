@@ -37,6 +37,7 @@ class PlaybackService : MediaLibraryService() {
     private var djPhase = "idle"
     private var djProfile = "adaptive"
     private var djError = 0
+    private var djRefiner: ProgramDjRefiner? = null
     private var refillAnchor = ""
     private lateinit var connection: EngineConnection
     private lateinit var leveling: ProgramAudioPreference
@@ -73,6 +74,7 @@ class PlaybackService : MediaLibraryService() {
     }
     /** On the player looper; does not touch account generation, cookie or library. */
     private fun closeProgram() {
+        djRefiner?.clear()
         djRouteEditor?.clear()
         djPlanner.clear(); refillAnchor = ""
         restoreNormal()
@@ -116,6 +118,7 @@ class PlaybackService : MediaLibraryService() {
         djPlanner.start(djPlanner.profile, djPlanner.direction, djPlanner.sources, true, ProgramDjPlanner.Kind.APPEND, anchor)
     }
     private fun restoreNormal() {
+        djRefiner?.clear()
         val previous = dj ?: return
         player.pause(); player.stop()
         val normal = normalFactory().apply { volume = player.volume }
@@ -233,7 +236,7 @@ class PlaybackService : MediaLibraryService() {
             val epoch = connection.generation
             val identity = connection.sessionIdentity(epoch)
             val next = ProgramDjSession(this, epoch, { epoch == connection.generation && runCatching { connection.sessionIdentity(epoch) }.getOrNull() == identity },
-                sources, pcmTap, leveling::active, rows, position, mixing = mixing::active, changed = { publishDj(djPhase, djProfile, djError) })
+                sources, pcmTap, leveling::active, rows, position, mixing = mixing::active, refine = { djRefiner?.refine(it) }, changed = { publishDj(djPhase, djProfile, djError) })
             autoplay.clear(); radio.clear()
             val previousDj = dj; dj = next
             player.pause(); player.stop()
@@ -244,6 +247,7 @@ class PlaybackService : MediaLibraryService() {
             next.player.play(); publishDj(djPhase, djProfile, djError); refillAnchor = ""
             }
         }
+        djRefiner = ProgramDjRefiner(connection, main, { dj }, djPlanner)
         djRouteEditor = ProgramDjRouteEditor(connection, main, { dj }, djPlanner) { phase, code -> publishDj(phase, djPlanner.profile, code) }
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
@@ -368,6 +372,7 @@ class PlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         savePodcast()
         connection.resetListeners.remove(reset)
+        djRefiner?.close()
         djPlanner.close()
         djRouteEditor?.close()
         dj?.close(); dj = null

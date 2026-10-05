@@ -20,7 +20,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
     private val ownsAccount: () -> Boolean, private val sources: MediaSource.Factory,
     private val tap: ProgramPcmTap, private val leveling: () -> Boolean,
     initial: List<Row>, startPositionMs: Long = 0, private val mixing: () -> Boolean = { true },
-    private val changed: () -> Unit = {}) : AutoCloseable {
+    private val refine: (ProgramDjSession) -> Unit = {}, private val changed: () -> Unit = {}) : AutoCloseable {
     data class Row(val item: MediaItem, val proposal: ProgramDjPlan.Proposal? = null, val kind: String = "user")
     data class RouteSnapshot(val epoch: Long, val revision: Long, val floor: Int, val rows: List<Row>)
     private val main = Handler(Looper.getMainLooper())
@@ -142,6 +142,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val duration = outgoing.duration.takeIf { it > 0 } ?: return
         val resolved = plan ?: ProgramDjPlan.resolve(key(current), duration * 1000, route[current + 1].proposal, mixing()) ?: return
         val remainingUs = resolved.outCueUs - outgoing.currentPosition * 1000
+        if (plan == null && mixing() && remainingUs <= 65000000) refine(this)
         if (remainingUs > 45000000) return
         val standby = 1 - slot
         if (indices[standby] != current + 1) {
@@ -214,6 +215,13 @@ internal class ProgramDjSession(private val context: Context, private val genera
         current -= retainFrom
         for (slot in indices.indices) if (indices[slot] >= 0) indices[slot] -= retainFrom
         routeRevision++; player.routeChanged(); changed()
+    }
+    fun applyRefinement(snapshot: RouteSnapshot, proposal: ProgramDjPlan.Proposal): Boolean {
+        if (!snapshotCurrent(snapshot) || plan != null || armed || recovering || snapshot.floor != current) return false
+        if (proposal.fromKey != key(current) || current + 1 >= route.size) return false
+        route = route.toMutableList().also { it[current + 1] = it[current + 1].copy(proposal = proposal) }
+        routeRevision++; changed()
+        return true
     }
     fun heardIds(): Set<String> = heard.toSet()
     fun items(): List<MediaItem> = route.map { it.item }

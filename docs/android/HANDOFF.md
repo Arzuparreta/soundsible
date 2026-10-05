@@ -36,8 +36,8 @@ No hay paridad completa ni PR final todavía.
   controles MediaSession/focus/noisy en AVD, retorno NORMAL y mezcla off confirmada.
   Recuperación de decoder previo a mezcla y de una entrada sin PCM durante mezcla
   aceptadas con controller real aislado. Reparación Core, pins al replanear y estado
-  «Preparada» y placement musical aceptados. Refinamiento y recuperación de red
-  completa en servicio siguen pendientes. No declarar paridad DJ.
+  «Preparada» y placement musical aceptados. Refinamiento previo a preparación conectado; recuperación de red
+  completa en servicio sigue pendiente. No declarar paridad DJ.
 - Live y Android Auto: pendientes. Firma permanente/update público: pendientes.
 
 ## Evidencia que importa al continuar
@@ -92,7 +92,12 @@ No hay paridad completa ni PR final todavía.
 Placement (`3c832ce9`) subido. Historial largo: Recovery8/0 HTTP/TLS y build
 normal pasan sobre `3c832ce9` dirty; cola1000 recortada sin reset de audio,
 append reteniendo KEY/posición/pausa/epoch, exclusión acotada de80 escuchadas.
-Log `/tmp/soundsible-s3b-history-native.log`. Continuar refinamiento de transiciones. Fixture DJ acota fallos/delays alrededor
+Log `/tmp/soundsible-s3b-history-native.log`. Refinamiento conectado al Core antes de preparar decoder: Recovery8 + DJ2,
+10/0 HTTP/TLS, APK/test/JVM52/lint normal pasan sobre `9bed92e6` dirty.
+Log `/tmp/soundsible-s3b-refine-native.log`. Guards nativos aceptan proposal
+no comprometida y rechazan snapshot obsoleto/cue preparada. No prueba una
+respuesta measured específica ni todos los negativos de ese endpoint.
+Continuar recuperación de red en servicio y restantes de paridad. Fixture DJ acota fallos/delays alrededor
 del Core real; no sustituye sus respuestas válidas por un planner falso.
 En futuros runs, **congelar fuentes/tests Native, fixtures, assets y recursos
 hasta final del runner, incluido build normal sin CA**. No atribuir un run a
