@@ -195,7 +195,13 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             clock.reserve(frames, count / Integer.bitCount(config!!.channelMask))
         }
         override fun play() = synchronized(lock) { playing = true; if (index == active && !paused && !released && owns() && failure == null) synchronized(deviceLock) { output?.play() }; lock.notifyAll() }
-        override fun pause() = synchronized(lock) { playing = false; if (index == active && !released && sources[index] === this) synchronized(deviceLock) { output?.pause() }; lock.notifyAll() }
+        override fun pause() = synchronized(lock) {
+            playing = false
+            // A decoder's ended-state pause must not truncate the shared hardware tail.
+            // Programme pause remains controlled explicitly by the owner.
+            if (!ended && index == active && !released && sources[index] === this) synchronized(deviceLock) { output?.pause() }
+            lock.notifyAll()
+        }
         override fun flush() = synchronized(lock) {
             if (released || sources[index] !== this) return@synchronized
             queue.clear(); queued = 0; clock.reset(); ended = false; effects.reset()
@@ -240,7 +246,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                         val count = if (source?.ended == true) minOf(fullCount, source.queued / 2) else fullCount
                         val mixing = frames >= mixStart && frames < mixStart + mixLength
                         val incoming = sources[1 - active]
-                        if (!paused && source?.playing == true && count > 0 && source.queued >= count * 2 && (!mixing || incoming?.playing == true && incoming.queued >= count * 2)) {
+                        if (!paused && source != null && (source.playing || source.ended) && count > 0 && source.queued >= count * 2 && (!mixing || incoming?.playing == true && incoming.queued >= count * 2)) {
                             val first = ShortArray(count); source.read(first, count)
                             val second = if (mixing) ShortArray(count).also { incoming!!.read(it, count) } else null
                             val result = ByteBuffer.allocateDirect(count * 2).order(ByteOrder.LITTLE_ENDIAN)
