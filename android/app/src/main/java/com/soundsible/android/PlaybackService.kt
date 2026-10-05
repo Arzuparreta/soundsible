@@ -29,7 +29,7 @@ import okhttp3.OkHttpClient
 @UnstableApi
 class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
-    private lateinit var player: ExoPlayer
+    private lateinit var player: ProgramPlayerRouter
     private lateinit var connection: EngineConnection
     private lateinit var leveling: ProgramLeveling
     private val pcmTap = ProgramPcmTap()
@@ -157,10 +157,11 @@ class PlaybackService : MediaLibraryService() {
                 }
             }
         }
-        player = ExoPlayer.Builder(this, renderers).setMediaSourceFactory(sources)
+        val normal = ExoPlayer.Builder(this, renderers).setMediaSourceFactory(sources)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             .setSeekBackIncrementMs(15000).setSeekForwardIncrementMs(15000)
             .setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
+        player = ProgramPlayerRouter(normal)
         previews = PreviewProgram(connection, player, main, { session }) { key -> cancelAudio(key) }
         radio = RadioProgram(connection, player, main, session = { session })
         autoplay = AutoplayProgram(connection, player, main, { session }, radio::active)

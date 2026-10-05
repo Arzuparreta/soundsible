@@ -1,5 +1,15 @@
 # S3b: ejecución DJ nativa
 
+## Integración del servicio en curso
+
+PlaybackService utiliza ProgramPlayerRouter (ForwardingSimpleBasePlayer) sobre
+el ExoPlayer NORMAL existente. La sesión, listeners de programa y helpers reciben
+la misma fachada. Sustituir backend requiere anterior parado/idle y siguiente
+sin play solicitado; el caller conserva responsabilidad de liberar el retirado.
+El backend DJ todavía no está conectado. Compilación Native/test, JVM48 y lint
+pasan en /tmp/soundsible-s3b-router-tests-foundation.log; pruebas APK dirigidas y
+regresión completa de servicio pendientes. No sustituir la evidencia S3a78.
+
 ## Punto de partida
 
 S3a entrega nivelación y salida PCM de un stream Media3: ver evidencia/s3a.json.
