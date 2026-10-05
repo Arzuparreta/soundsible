@@ -9,6 +9,11 @@ sin play solicitado; el caller conserva responsabilidad de liberar el retirado.
 El backend DJ todavía no está conectado. Compilación Native/test, JVM48 y lint
 pasan en /tmp/soundsible-s3b-router-tests-foundation.log; pruebas APK dirigidas y
 regresión completa de servicio pendientes. No sustituir la evidencia S3a78.
+Primer dirigido APK: 2 tests/1 fallo en
+/tmp/soundsible-s3b-router-native.log. El fixture de forwarding creaba MediaItem
+sin URI, que DefaultMediaSourceFactory rechaza incluso sin prepare. Se añade URI
+de asset sintético, sin prepare ni lectura, manteniendo el test de eventos y
+controles; repetir antes de aceptar. Primer intento sin emulador no ejecutó tests.
 
 ## Punto de partida
 

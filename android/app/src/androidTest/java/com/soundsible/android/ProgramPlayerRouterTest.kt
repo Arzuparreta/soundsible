@@ -28,14 +28,14 @@ class ProgramPlayerRouterTest {
                 router.addListener(object : Player.Listener {
                     override fun onEvents(player: Player, changes: Player.Events) { events++ }
                 })
-                router.setMediaItem(MediaItem.Builder().setMediaId("normal-occurrence").build())
+                router.setMediaItem(MediaItem.Builder().setMediaId("normal-occurrence").setUri("asset:///router-test.wav").build())
                 router.volume = 0.4f
             }
             main {
                 assertEquals("normal-occurrence", router.currentMediaItem!!.mediaId)
                 assertEquals(0.4, first.volume.toDouble(), 0.001)
                 assertTrue(events > 0)
-                second.setMediaItem(MediaItem.Builder().setMediaId("dj-occurrence").build())
+                second.setMediaItem(MediaItem.Builder().setMediaId("dj-occurrence").setUri("asset:///router-test.wav").build())
                 second.volume = 0.7f
                 assertSame(first, router.replaceBackend(second))
             }
@@ -45,7 +45,7 @@ class ProgramPlayerRouterTest {
             }
             val switchedEvents = events
             main {
-                first.setMediaItem(MediaItem.Builder().setMediaId("retired-occurrence").build())
+                first.setMediaItem(MediaItem.Builder().setMediaId("retired-occurrence").setUri("asset:///router-test.wav").build())
                 first.volume = 0.2f
             }
             main {
