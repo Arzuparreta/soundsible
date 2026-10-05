@@ -124,3 +124,11 @@ firstMarker genera440Hz antes de4s y1320Hz después; facts R128 se miden sobre e
 archivo real. Test seek10s exige nuevo epoch y marcador1320 en PCM, reloj físico
 reiniciado, y conserva el posterior blend. Compilación/test/JVM36/lint y Ruff
 pasan en /tmp/soundsible-s3b-mix-seek-foundation.log; Native ampliado pendiente.
+
+Primer seek Native HTTP/TLS2 falla porque Media3 sustituye/libera la entrada,
+sin llamar flush del wrapper. Log /tmp/soundsible-s3b-mix-seek-native.log; no
+aceptar seek ni reemplazar resultado anterior de pausa. Corrección invalida el
+buffer físico y el epoch también al liberar/sustituir entrada activa, de forma
+idempotente; liberar el saliente ya inactivo sigue conservando el master.
+Kotlin/test/JVM36/lint pasan en
+/tmp/soundsible-s3b-mix-seek-replacement-foundation.log. Repetir marcador real.

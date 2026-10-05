@@ -68,7 +68,10 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                     }
                     limiter = ProgramMixLimiter(config.sampleRate)
                 } else require(current.sampleRate == config.sampleRate && current.channelMask == config.channelMask && current.encoding == config.encoding)
-                sources[index]?.released = true
+                sources[index]?.let { previous ->
+                    if (index == active && !previous.released) invalidateDevice()
+                    previous.released = true; previous.queue.clear(); previous.queued = 0
+                }
                 Source(index, output!!).also { sources[index] = it; lock.notifyAll() }
             }
             override fun release() { /* The shared owner, not a deck, releases the device. */ }
@@ -88,6 +91,16 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     fun error(): Throwable? = synchronized(lock) { failure }
     fun epoch(): Long = outputEpoch
     fun positionUs(): Long = synchronized(deviceLock) { output?.positionUs ?: 0L }
+    /** Called with the state lock; covers flush, release and input replacement on seek. */
+    private fun invalidateDevice() {
+        outputEpoch++
+        synchronized(deviceLock) { output?.pause(); output?.flush() }
+        frames = 0L; mixStart = Long.MAX_VALUE; limiter?.reset()
+        sources.forEachIndexed { index, source -> source?.let {
+            it.joinedAt = if (index == active) 0L else Long.MAX_VALUE
+            it.effects.reset()
+        } }
+    }
     private inner class Source(val index: Int, device: AudioOutput) : ForwardingAudioOutput(device) {
         val queue = ArrayDeque<ByteBuffer>()
         var queued = 0
@@ -126,18 +139,20 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         override fun flush() = synchronized(lock) {
             queue.clear(); queued = 0; supplied = 0; ended = false; effects.reset()
             if (index == active) {
-                // A seek invalidates both the hardware queue and any reserved old batch.
-                outputEpoch++
-                synchronized(deviceLock) { output?.pause(); output?.flush() }
-                frames = 0L; mixStart = Long.MAX_VALUE; limiter?.reset()
-                sources[1 - active]?.let { it.joinedAt = Long.MAX_VALUE; it.effects.reset() }
-                joinedAt = 0L
+                invalidateDevice()
                 if (playing && !paused) synchronized(deviceLock) { output?.play() }
             } else joinedAt = Long.MAX_VALUE
             lock.notifyAll()
         }
         override fun stop() = synchronized(lock) { ended = true; lock.notifyAll() }
-        override fun release() = synchronized(lock) { released = true; queue.clear(); queued = 0; listeners.forEach { it.onReleased() }; lock.notifyAll() }
+        override fun release() = synchronized(lock) {
+            if (!released) {
+                released = true; queue.clear(); queued = 0
+                if (index == active && !closed) invalidateDevice()
+                listeners.forEach { it.onReleased() }
+            }
+            lock.notifyAll()
+        }
         override fun getPositionUs(): Long = synchronized(lock) {
             if (joinedAt == Long.MAX_VALUE) 0L else {
                 val played = (positionUs() * config!!.sampleRate / 1000000 - joinedAt).coerceIn(0, supplied)
