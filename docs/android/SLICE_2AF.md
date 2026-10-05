@@ -35,3 +35,51 @@ y [feedback de eventos](https://developer.android.com/develop/ui/views/haptics/h
 El emulador puede probar scope/configuración/peticiones y falta de permiso extra;
 no demuestra la sensación física. No importar stores para leer esa preferencia:
 lib/haptics.ts ya la lee de almacenamiento y admite una adaptación pequeña.
+
+## Continuación Settings en fuentes
+
+FeedbackPlugin usa performHapticFeedback sin flags ni permiso VIBRATE; main
+instala el transporte exclusivo nativo y la preferencia compartida. Play manual,
+controles de programa y favourite confirmado solicitan feedback; el cambio de
+cuenta no reinicia una preferencia de instalación. FeedbackSettingsTest HTTP/TLS
+está en el run dirigido16 de /tmp/soundsible-s2ae-review-links-native.log; todavía
+no aceptar hasta resultado final. UI1526/189 pasa antes del bloque Learning.
+
+Después de preparar ese artifact (fuentes Native/assets congeladas), se añadieron
+fuentes UI de Learning: controller sin valores editables inventados, PATCH y GET
+confirmados, reset DELETE después de confirmación cancelable, respuesta vieja
+abortada al cambiar cuenta/desconectar/desmontar, vista compartida y ruta Android.
+Cuatro pruebas de controller y Settings/Rows dirigidas10 pasan. Este Learning
+NO está dentro de la APK de revisión/feedback: requiere nuevo prepare e integración
+Core HTTP/TLS. Falta diagnóstico, autoplay en Settings y el efecto DSP de leveling
+/mixing; admin/services/devices/sharing/navegación y los gates globales continúan.
+
+UI completa posterior1532/191 pasa /tmp/soundsible-s2af-learning-diagnostics-full-ui.log.
+Diagnóstico extraído a LinkStatusView compartido; Android lee /api/playback/link
+al abrir dentro de scope cancelable, sin inventar muestras ni conservar la lectura
+de otra cuenta. Dos pruebas prueban respuesta antigua, desconexión y payload
+inválido. APK nueva preparada sobre f4cf550 dirty=true; dirigido Settings6 en
+/tmp/soundsible-s2af-settings-native.log: Learning2, Feedback2, Appearance2.
+Congelar Native/tests/fixtures/assets durante main y build normal. Native Learning
+comprueba efecto real de learning off sobre events, Cancel sin DELETE, reset de
+señales/eventos del miembro sin borrar propietario, persistencia Activity, 503 con
+retry y programa/sesión intactos. No aceptar hasta terminar; después browser4,
+commit/push y principal limpia ampliada con restart2 antes de avanzar DSP/S3.
+
+Primer Settings6 falla2 únicamente al esperar un alert local ante503: la conexión
+real marca la app offline y el controller descarta su scope antiguo. Ambos casos
+pasan antes learning off, Cancel sin DELETE, reset de member con owner intacto y
+Activity. Feedback2/Appearance2 pasan. No aceptar ese run fallido. Expectativa
+corregida a estado unreachable de Recommendations y Retry general, conservando
+las comprobaciones de preferencia/cookie/programa. Repetición6 en
+/tmp/soundsible-s2af-settings-recovery-native.log con mismos assets; sólo cambió
+la expectativa Native. Mantener congelación hasta normal build/retirada de CA.
+
+Settings6 repetido termina0: /tmp/soundsible-s2af-settings-recovery-native.log,
+cero fallos/errores/omisiones. APK normal/test APK/JVM17/lint pasan y CA temporal
+retirada. Confirma recovery global503, preferencia off real/persistente, reset
+cancelado/confirmado y owner intacto. UI completa1534/192 pasa
+/tmp/soundsible-s2af-settings-final-ui.log; incluye vista Autoplay compartida web
+y dos pruebas de futura sección Native aún sin conectar ni dentro de esa APK.
+Browser4 de extracciones nuevas pendiente. No confundir Settings aceptados con
+leveling/mixing/administración/servicios/sharing completos ni con paridad global.

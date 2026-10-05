@@ -153,6 +153,7 @@ def main() -> None:
     connection_failure = {}
     artwork_mode = {}
     auth_events = []
+    discovery_requests = []
 
     @app.before_request
     def audio_failure():
@@ -181,6 +182,9 @@ def main() -> None:
 
     @app.after_request
     def record_range(response):
+        if request.path in ("/api/discovery/settings", "/api/discovery/profile"):
+            discovery_requests.append({"path": request.path, "method": request.method, "status": response.status_code})
+            del discovery_requests[:-100]
         if request.path == "/api/auth/login":
             import time
             auth_events.append({"status": response.status_code, "time": time.time()})
@@ -270,6 +274,20 @@ def main() -> None:
         elif action == "connection-failure":
             connection_failure["enabled"] = bool((request.get_json() or {}).get("enabled"))
             connection_failure["status"] = int((request.get_json() or {}).get("status", 503))
+        elif action == "discovery-state":
+            from shared.database import user_db
+            from shared.discovery_intelligence import load_discovery_settings
+            with user_context(uid):
+                return jsonify({"settings": load_discovery_settings(),
+                                "signals": len(user_db().get_discovery_signals()),
+                                "events": len(user_db().get_discovery_events()),
+                                "requests": discovery_requests})
+        elif action == "discovery-seed":
+            from shared.discovery_intelligence import record_not_interested
+            with user_context(uid):
+                return jsonify({"recorded": bool(record_not_interested({"id": "fixture-learning-song", "type": "track",
+                    "source": "youtube", "title": "fixture learning song", "artist": "fixture learning artist",
+                    "external_ids": {"youtube_id": "F1111111111"}}))})
         elif action == "revoke":
             revoke_user_sessions(uid)
         elif action == "event":

@@ -1443,3 +1443,12 @@ preparar nuevo artifact y probar Core HTTP/TLS. Falta regresión browser4 de nue
 vistas antes del PR y principal limpia ampliada con restart2. Última principal
 limpia sigue8329de5 57+2. Continuar Settings pendientes, DJ/Live/Auto/firma/update,
 commit/push y finalmente PR/main/release con paridad completa. No cerrar por slice.
+
+Settings6 aceptados en /tmp/soundsible-s2af-settings-recovery-native.log; normal
+APK/test APK/JVM17/lint y retiradaCA pasan. Learning off impide eventos, Cancel
+no envía DELETE, reset real borra member y conserva owner, Activity mantiene
+preferencia y503 usa offline/Retry general sin defaults inventados. UI1534/192
+pasa; Browser4 siguiente. Settings Playback Autoplay Native tiene vista/pruebas
+preparadas, aún sin ruta ni aceptación APK. Última principal limpia sigue57+2;
+preparar limpia ampliada73+2 después de commits. DSP/otros Settings/DJ/Live/Auto/
+firma/update siguen pendientes. Continuar hasta PR/main/release autorizado.

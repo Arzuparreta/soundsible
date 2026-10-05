@@ -1,6 +1,7 @@
 import { request } from '../lib/http';
 import { savedFromTrack } from '../lib/saved';
 import { t } from '../lib/i18n';
+import { vibrate } from '../lib/haptics';
 import type { SavedEntry, Track } from '../types/music';
 import type { MenuAction } from '../components/ActionMenu';
 
@@ -14,6 +15,7 @@ export function songMarkAction(track: Track, entries: () => SavedEntry[], genera
     void request<{ is_favourite: boolean }>('/api/library/favourites', { method: 'PUT', body: { entry, marked: !marked }, timeoutMs: 15000 }).then(async result => {
       if (generation() !== account) return;
       if (result.is_favourite !== !marked) throw new Error('Missing favourite confirmation');
+      vibrate();
       await refresh();
     }).catch(() => { if (generation() === account) failed(); });
   } };

@@ -2,11 +2,15 @@ import { AccountSettingsView } from './AccountSettingsView';
 import { SettingsLoad } from './SettingsLoad';
 import { BottomNavigationSettings } from './BottomNavigationSettings';
 import { AppearanceSettingsView } from './AppearanceSettingsView';
+import { HapticSettingsView } from './HapticSettingsView';
+import { RecommendationSettingsView } from './RecommendationSettingsView';
+import { LinkStatusView } from './LinkStatusView';
+import { AutoplaySettingsView } from './AutoplaySettingsView';
 import { createSignal, onMount, Show, type JSX } from 'solid-js';
 import { state, actions } from '../stores';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
-import { linkReading, mbps, refreshLinkReading } from '../lib/linkQuality';
+import { linkReading, refreshLinkReading } from '../lib/linkQuality';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/confirm';
 import { passwordDialog } from '../lib/passwordDialog';
@@ -160,13 +164,7 @@ function AccessibilitySection() {
   return (
     <SettingsGroup>
       <DisplayPreferences />
-      <SwitchRow
-        anchor="haptics"
-        label={t('settings.haptics')}
-        hint={t('settings.note.haptics')}
-        checked={state.haptics}
-        onChange={() => actions.setHaptics(!state.haptics)}
-      />
+      <HapticSettingsView enabled={state.haptics} onChange={actions.setHaptics} />
       <BottomNavigationSettings />
     </SettingsGroup>
   );
@@ -179,13 +177,6 @@ function PlaybackSection() {
   // Read on open rather than polled: it is a diagnostic, not a dashboard, and
   // the number that matters is the one from the last time music actually moved.
   onMount(() => void refreshLinkReading(true));
-  /** What the engine has measured, in the words a listener can act on. */
-  const connection = () => {
-    const reading = linkReading();
-    const where = reading?.scope ? t(`settings.link.scope.${reading.scope}`) : t('settings.link.scopeUnknown');
-    if (!reading?.kbps) return t('settings.link.notMeasured', { where });
-    return t('settings.link.measured', { where, mbps: mbps(reading.kbps) });
-  };
   const [autoplay, setAutoplay] = createSignal(state.playback.autoplayEnabled);
   const [leveling, setLeveling] = createSignal(state.playback.volumeLeveling);
   const [mixing, setMixing] = createSignal(state.playback.djMixing);
@@ -253,13 +244,7 @@ function PlaybackSection() {
           checked={leveling()}
           onChange={toggleLeveling}
         />
-        <SwitchRow
-          anchor="autoplay"
-          label={t('settings.autoplay')}
-          hint={t('settings.note.autoplay')}
-          checked={autoplay()}
-          onChange={toggleAutoplay}
-        />
+        <AutoplaySettingsView enabled={autoplay()} onChange={toggleAutoplay} />
         <SwitchRow
           anchor="dj-mixing"
           label={t('settings.djMixing')}
@@ -269,26 +254,10 @@ function PlaybackSection() {
         />
       </SettingsGroup>
 
-      <SettingsGroup label={t('settings.group.recommendations')}>
-        <SwitchRow
-          anchor="learn-activity"
-          label={t('settings.learnActivity')}
-          hint={t('settings.learnActivityNote')}
-          checked={learning()}
-          onChange={toggleLearning}
-        />
-        <ActionRow anchor="reset-learning" label={t('settings.resetLearning')} onClick={resetLearning} />
-      </SettingsGroup>
+      <RecommendationSettingsView learning={learning()} onToggle={toggleLearning} onReset={resetLearning} />
 
       {/* A diagnostic, not a preference: after everything that can be changed. */}
-      <SettingsGroup label={t('settings.group.connection')}>
-        <ValueRow
-          anchor="delivery"
-          label={t('settings.link.label')}
-          hint={t('settings.note.connection')}
-          value={connection()}
-        />
-      </SettingsGroup>
+      <LinkStatusView reading={linkReading()} />
     </SettingsLoad>
   );
 }

@@ -6,6 +6,7 @@ import { t } from '../lib/i18n';
 import type { ProgramState, ProgramCommand } from '../lib/program/runtime';
 import styles from './ProgramTransport.module.css';
 import { openContextMenu } from '../lib/contextMenu';
+import { vibrate } from '../lib/haptics';
 
 /** Stateless ownership: presentation observes a program; commands never create audio here. */
 export default function ProgramTransport(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onLyrics?: () => void }) {
@@ -15,7 +16,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
   const [seeking, setSeeking] = createSignal<number | null>(null);
   const occurrence = createMemo(() => `${props.state.generation}:${props.state.items[props.state.index]?.key ?? ""}`);
   createEffect(() => { occurrence(); setSeeking(null); });
-  const run = (command: ProgramCommand) => props.command(command).catch(() => {});
+  const run = (command: ProgramCommand) => { vibrate(); return props.command(command).catch(() => {}); };
   const disabled = () => !props.state.ready || props.pending;
   return <section class={styles.program} data-testid="android-program" aria-label={t('nowPlaying.nowPlayingSection')} aria-busy={props.pending}>
     <div class={styles.heading}><span class={styles.artwork} data-program-artwork aria-hidden="true" style={coverStyle(props.state.id, programCover(props.state.items[props.state.index]))} />
