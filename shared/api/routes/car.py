@@ -78,6 +78,8 @@ def _track_item(track) -> dict:
     return {
         "id": track_id,
         "kind": data.get("media_kind") or "track",
+        "podcast_feed_id": data.get("podcast_feed_id"),
+        "podcast_episode_guid": data.get("podcast_episode_guid"),
         "track_id": track_id,
         "title": title,
         "subtitle": " - ".join(part for part in (artist, album) if part),

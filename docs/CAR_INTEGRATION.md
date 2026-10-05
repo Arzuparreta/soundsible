@@ -56,6 +56,11 @@ Every returned item uses this stable shape:
 }
 ```
 
+Acquired podcast items also include `podcast_feed_id` and
+`podcast_episode_guid` when present in library metadata. Native clients use
+that identity for episode progress; `stream_url` still addresses the acquired
+file. Local filesystem paths are never part of the car response.
+
 Root collections:
 
 - `recently-played`
