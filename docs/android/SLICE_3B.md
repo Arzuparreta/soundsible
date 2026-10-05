@@ -178,3 +178,11 @@ el epoch previo. Source.getPositionUs usa ese mapping, no reajusta joinedAt al
 recuperar. Kotlin/test/JVM41/lint pasan en
 /tmp/soundsible-s3b-mix-clock-foundation.log. Native amplía a ocho casos con caída
 tardía95% y comprobación de no retroceder el clock del saliente; aceptación pendiente.
+
+Primera clock Native8 falla2 sólo en caída tardía: liberar el deck que ya controla
+render pausa AudioTrack; recuperar old Source no reanudaba el dispositivo. Log
+/tmp/soundsible-s3b-mix-clock-native.log; principal aceptada del spike sigue6.
+Corrección reanuda master retenido si no hay pausa deseada, sesión sigue propia
+y no hay error fatal; callback de entrada liberada no pausa ni flushea reemplazo.
+Kotlin/test/JVM41/lint pasan en /tmp/soundsible-s3b-mix-clock-resume-foundation.log.
+Repeat Native8 pendiente; no afirmar aceptación tardía ni clockmapping real todavía.

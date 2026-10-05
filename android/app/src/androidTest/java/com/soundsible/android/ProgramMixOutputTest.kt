@@ -173,6 +173,7 @@ class ProgramMixOutputTest {
                         assertTrue("Retained source clock moved backwards before recovery playout", owner.inputPositionUs(0) + 20000 >= retainedPosition)
                         Thread.sleep(10)
                     }
+                    assertTrue("Physical recovery output stalled", owner.positionUs() * 48000 / 1000000 >= restored + 9600)
                     assertEquals("Failed incoming kept metadata ownership", 0, owner.dominantInput())
                     val retained: (Spectrum) -> Boolean = { sample -> sample.first < 30 && sample.second < 30 && sample.marker in 2900.0..3050.0 }
                     retained

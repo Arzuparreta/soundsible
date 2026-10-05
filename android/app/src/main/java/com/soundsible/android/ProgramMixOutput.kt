@@ -130,6 +130,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     }
     /** Losing an incoming deck restores the retained outgoing PCM without flushing the programme. */
     private fun recoverIncoming(index: Int): Boolean {
+        if (!owns() || failure != null) return false
         val transition = window?.takeIf { it.epoch == outputEpoch && it.incoming == index } ?: return false
         val outgoing = sources[transition.outgoing]?.takeIf { !it.released && it.playing && !(it.ended && it.queued == 0) } ?: return false
         val progress = if (transition.length == 0L) 1.0 else (frames - transition.start).toDouble() / transition.length
@@ -137,7 +138,9 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         active = transition.outgoing; mixStart = Long.MAX_VALUE
         recovery = Recovery(frames, (config!!.sampleRate * 0.15).toLong(), controls)
         restoration = frames to active
-        limiter?.blend(false); lock.notifyAll()
+        limiter?.blend(false)
+        if (!paused && outgoing.playing) synchronized(deviceLock) { if (owns() && failure == null) output?.play() }
+        lock.notifyAll()
         return true
     }
     private inner class Source(val index: Int, device: AudioOutput) : ForwardingAudioOutput(device) {
@@ -172,9 +175,10 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             }
             clock.reserve(frames, count / Integer.bitCount(config!!.channelMask))
         }
-        override fun play() = synchronized(lock) { playing = true; if (index == active && !paused) synchronized(deviceLock) { output?.play() }; lock.notifyAll() }
-        override fun pause() = synchronized(lock) { playing = false; if (index == active) synchronized(deviceLock) { output?.pause() }; lock.notifyAll() }
+        override fun play() = synchronized(lock) { playing = true; if (index == active && !paused && !released && owns() && failure == null) synchronized(deviceLock) { output?.play() }; lock.notifyAll() }
+        override fun pause() = synchronized(lock) { playing = false; if (index == active && !released && sources[index] === this) synchronized(deviceLock) { output?.pause() }; lock.notifyAll() }
         override fun flush() = synchronized(lock) {
+            if (released || sources[index] !== this) return@synchronized
             queue.clear(); queued = 0; clock.reset(); ended = false; effects.reset()
             if (index == active) {
                 invalidateDevice()
