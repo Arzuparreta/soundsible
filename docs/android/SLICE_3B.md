@@ -192,3 +192,12 @@ Clock/recovery tardía aceptados HTTP/TLS8/0 sobreca242c26 limpio, log
 clock saliente no retrocede, master reanuda y PCM/dominancia vuelven al retenido.
 Normal APK/test APK/JVM41/lint sin CA pasa. No afirmar aún integración servicio,
 planner, restantes técnicas ni EOS. Continuar Native FX y luego fachada/planner.
+
+FX Native en pruebas (pendiente): fixture firstFrequency80/100 opcional genera
+archivo real20s con facts R128 medidos; defaults anteriores intactos. Bass swap
+mide atenuación80Hz con4400Hz entrante; filter/long comprueban entrada filtrada
+antes del midpoint y long combina bass swap; echo usa100Hz (28 ciclos/280ms) y
+retorno distinguible al final; structural_fade usa equal-power. Clase amplía a18
+casos HTTP/TLS de siete técnicas y recuperación. Kotlin/test/JVM41/lint y Ruff
+pasan en /tmp/soundsible-s3b-mix-fx-foundation.log. No tempo/phase correction,
+EOS ni integración planner/MediaSession aceptados; no equiparar nombres a paridad.

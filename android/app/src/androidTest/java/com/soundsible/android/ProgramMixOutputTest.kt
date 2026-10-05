@@ -43,7 +43,7 @@ class ProgramMixOutputTest {
         fail("Mix spike condition not reached")
     }
     private data class Spectrum(val start: Long, val first: Double, val second: Double, val marker: Double)
-    private class Meter {
+    private class Meter(private val frequencies: IntArray = intArrayOf(440, 880, 1320)) {
         val metrics = ArrayBlockingQueue<Spectrum>(32)
         var start = 0L; var count = 0
         val real = DoubleArray(3); val imaginary = DoubleArray(3)
@@ -57,7 +57,7 @@ class ProgramMixOutputTest {
                 }
                 if (count == 0) start = frame + offset
                 for (index in 0..2) {
-                    val phase = 2 * Math.PI * (when (index) { 0 -> 440; 1 -> 880; else -> 1320 }) * (frame + offset) / rate
+                    val phase = 2 * Math.PI * frequencies[index] * (frame + offset) / rate
                     real[index] += value * cos(phase); imaginary[index] -= value * sin(phase)
                 }
                 count++; offset++
@@ -84,7 +84,17 @@ class ProgramMixOutputTest {
     @Test fun tlsIncomingFailure() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), recoverIncoming = true)
     @Test fun httpLateIncomingFailure() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), recoverIncoming = true, lateFailure = true)
     @Test fun tlsLateIncomingFailure() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), recoverIncoming = true, lateFailure = true)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false) {
+    @Test fun httpBassSwap() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.BASS_SWAP, effects = true)
+    @Test fun tlsBassSwap() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.BASS_SWAP, effects = true)
+    @Test fun httpFilterBlend() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.FILTER_BLEND, effects = true)
+    @Test fun tlsFilterBlend() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.FILTER_BLEND, effects = true)
+    @Test fun httpLongBlend() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.LONG_BLEND, effects = true)
+    @Test fun tlsLongBlend() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.LONG_BLEND, effects = true)
+    @Test fun httpEchoCut() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.ECHO_CUT, effects = true)
+    @Test fun tlsEchoCut() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.ECHO_CUT, effects = true)
+    @Test fun httpStructuralFade() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.STRUCTURAL_FADE, effects = true)
+    @Test fun tlsStructuralFade() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.STRUCTURAL_FADE, effects = true)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -110,10 +120,15 @@ class ProgramMixOutputTest {
                     if (!owns()) { response.close(); error("Session changed") }
                     response
                 }.build()
+                val firstFrequency = if (effects) if (technique == ProgramMixCurve.Technique.ECHO_CUT) 100 else 80 else 440
+                val secondFrequency = if (effects) 4400 else 880
+                val tones = JSONObject().put("album", true).put("firstMarker", !effects)
+                    .put("secondFrequency", secondFrequency).put("secondRate", 48000).put("secondChannels", 2)
+                if (effects) tones.put("firstFrequency", firstFrequency)
                 client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
-                    .post("{\"album\":true,\"firstMarker\":true,\"secondFrequency\":880,\"secondRate\":48000,\"secondChannels\":2}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+                    .post(tones.toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
                 audioClient = client
-                val meter = Meter()
+                val meter = Meter(intArrayOf(firstFrequency, secondFrequency, 1320))
                 val owner = ProgramMixOutput(context, owns, meter::accept); mix = owner
                 instrumentation.runOnMainSync {
                     for ((index, id) in listOf("member-pcm-soft", "member-pcm-loud").withIndex()) {
@@ -137,14 +152,16 @@ class ProgramMixOutputTest {
                     }
                 }
                 meter.await { it.first in 2950.0..3050.0 && it.second < 30 }
-                val beforeSeek = owner.epoch()
-                instrumentation.runOnMainSync { decoders.first().seekTo(10000) }
-                val seekDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-                while (owner.epoch() == beforeSeek && System.nanoTime() < seekDeadline) Thread.sleep(20)
-                assertTrue("Master output was not invalidated by seek", owner.epoch() > beforeSeek)
-                meter.metrics.clear()
-                meter.await { it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
-                assertTrue("Physical output retained the old seek clock", owner.positionUs() < 5000000L)
+                if (!effects) {
+                    val beforeSeek = owner.epoch()
+                    instrumentation.runOnMainSync { decoders.first().seekTo(10000) }
+                    val seekDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+                    while (owner.epoch() == beforeSeek && System.nanoTime() < seekDeadline) Thread.sleep(20)
+                    assertTrue("Master output was not invalidated by seek", owner.epoch() > beforeSeek)
+                    meter.metrics.clear()
+                    meter.await { it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
+                    assertTrue("Physical output retained the old seek clock", owner.positionUs() < 5000000L)
+                }
                 owner.setVolume(0.1f)
                 owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else 2000, technique)
                 val transition = owner.transition() ?: error("Transition window absent")
@@ -161,7 +178,18 @@ class ProgramMixOutputTest {
                     assertTrue("Physical transition did not advance", owner.positionUs() * 48000 / 1000000 >= target)
                     assertEquals("Metadata dominance did not follow playout", dominant, owner.dominantInput())
                 }
-                if (technique != ProgramMixCurve.Technique.DIRECT) {
+                if (effects) {
+                    when (technique) {
+                        ProgramMixCurve.Technique.BASS_SWAP -> meter.await { it.first in 700.0..1150.0 && it.second in 5500.0..7000.0 }
+                        ProgramMixCurve.Technique.FILTER_BLEND, ProgramMixCurve.Technique.LONG_BLEND -> {
+                            meter.await { it.start in (transition.start + 2400)..(transition.start + 9600) && it.first in 2800.0..3010.0 && it.second in 10.0..250.0 }
+                            if (technique == ProgramMixCurve.Technique.LONG_BLEND) meter.await { it.first in 700.0..1150.0 && it.second in 6000.0..8500.0 }
+                            else meter.await { it.first in 1800.0..2400.0 && it.second in 6000.0..8500.0 }
+                        }
+                        ProgramMixCurve.Technique.ECHO_CUT -> meter.await { it.start >= transition.start + 86400 && it.first > 700 && it.second > 8750 }
+                        else -> meter.await { it.first in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
+                    }
+                } else if (technique != ProgramMixCurve.Technique.DIRECT) {
                     meter.await { it.first < 30 && it.marker in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
                 }
                 val stable: (Spectrum) -> Boolean = if (recoverIncoming) {

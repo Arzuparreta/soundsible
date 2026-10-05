@@ -295,13 +295,18 @@ def main() -> None:
                     marker = data.get("firstMarker", False)
                     if type(marker) is not bool:
                         raise ValueError("Unsupported isolated PCM marker")
-                    soft = root / "music/tracks" / f"{name}-pcm-soft.{'wav' if marker else args.audio_format}"
-                    if marker:
+                    first_frequency = data.get("firstFrequency", 440)
+                    if type(first_frequency) is not int or first_frequency not in (80, 100, 440):
+                        raise ValueError("Unsupported isolated PCM tone")
+                    custom = marker or "firstFrequency" in data
+                    soft = root / "music/tracks" / f"{name}-pcm-soft.{'wav' if custom else args.audio_format}"
+                    if custom:
                         with wave.open(str(soft), "wb") as output:
                             output.setnchannels(1)
                             output.setsampwidth(2)
                             output.setframerate(16000)
-                            for frequency, seconds in ((440, 4), (1320, 16)):
+                            tones = ((first_frequency, 4), (1320, 16)) if marker else ((first_frequency, 20),)
+                            for frequency, seconds in tones:
                                 tone = b"".join(struct.pack("<h", int(3000 * math.sin(2 * math.pi * frequency * i / 16000))) for i in range(16000))
                                 output.writeframes(tone * seconds)
                     else:
@@ -311,10 +316,10 @@ def main() -> None:
                         original = next(track for track in library.metadata.tracks if track.id == f"{name}-track")
                         library.metadata.add_track(replace(original, id=f"{name}-pcm-soft", title=f"{name} softer PCM song",
                             album=f"{name} PCM album", file_hash=f"{name}-pcm-soft-hash",
-                            duration=20 if marker else original.duration, format="wav" if marker else original.format,
-                            file_size=soft.stat().st_size, bitrate=256 if marker else original.bitrate,
-                            original_filename=soft.name if marker else original.original_filename))
-                    soft_measurement = measure_loudness(soft, duration_hint=20) if marker else measurement
+                            duration=20 if custom else original.duration, format="wav" if custom else original.format,
+                            file_size=soft.stat().st_size, bitrate=256 if custom else original.bitrate,
+                            original_filename=soft.name if custom else original.original_filename))
+                    soft_measurement = measure_loudness(soft, duration_hint=20) if custom else measurement
                     if soft_measurement is None:
                         raise RuntimeError("Marker synthetic tone must be measurable")
                     store.put(f"{name}-pcm-soft-hash", source_stamp(soft), soft_measurement)
@@ -322,7 +327,7 @@ def main() -> None:
                     frequency = data.get("secondFrequency", 440)
                     rate = data.get("secondRate", 16000)
                     channels = data.get("secondChannels", 1)
-                    if (type(frequency) is not int or frequency not in (440, 880)
+                    if (type(frequency) is not int or frequency not in (440, 880, 4400)
                             or type(rate) is not int or rate not in (16000, 48000)
                             or type(channels) is not int or channels not in (1, 2)):
                         raise ValueError("Unsupported isolated PCM fixture format")
