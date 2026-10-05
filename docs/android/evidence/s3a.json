@@ -39,6 +39,20 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3a-pcm-restart-native.log",
       "scope": "Force-stop after confirmed leveling; new service loads profile preference and copied audio; actual PCM peak1893 during Core503"
+    },
+    "generated_plan_python": {
+      "tests": 79,
+      "failures": 0,
+      "log": "/tmp/soundsible-s3a-plan-measured-python.log",
+      "scope": "Actual WAV/FLAC planner receives content-bound measurements; lookup failure retains selection"
+    },
+    "radio_autoplay_native": {
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-radio-leveling-native.log",
+      "scope": "Radio HTTP/TLS actual generated recording PCM gain; parser2; Autoplay HTTP/TLS regression; normal APK/test APK/JVM27/lint"
     }
   },
   "scope": [
@@ -51,8 +65,7 @@
     "Not a release; main clean73 and offline restart2 predate DSP",
     "No physical acoustic acceptance",
     "No DJ mixing or Live broadcast; tap is an internal bounded attachment",
-    "Browser four profiles must repeat before final UI PR",
-    "Radio/autoplay generated source facts still require integration"
+    "Browser four profiles must repeat before final UI PR"
   ],
   "diagnostics": [
     {

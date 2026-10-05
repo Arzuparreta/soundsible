@@ -22,7 +22,11 @@ object RadioPlan {
             if (!seen.add(id)) continue
             val title = item.optString("title"); val artist = item.optString("artist"); val album = item.optString("album")
             if (listOf(title, artist, album).any { it.length > 4096 }) continue
-            result.put(JSONObject().put("source", if (local) "local" else "preview").put("id", id).put("title", title).put("artist", artist).put("album", album))
+            val row = JSONObject().put("source", if (local) "local" else "preview").put("id", id).put("title", title).put("artist", artist).put("album", album)
+            for (field in listOf("duration", "loudness_lufs", "loudness_peak_dbtp")) {
+                if (!item.isNull(field)) item.optDouble(field, Double.NaN).takeIf { it.isFinite() && (field != "duration" || it >= 0) }?.let { row.put(field, it) }
+            }
+            result.put(row)
             if (result.length() == limit) break
         }
         return result

@@ -71,6 +71,7 @@ def install(app, root, accounts):
     def radio_seed():
         if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
             return jsonify(error="fixture only"), 403
+        data = request.get_json(silent=True) or {}
         with lock:
             control["fail_next"] = min(5, max(0, int((request.get_json(silent=True) or {}).get("failNext", 0))))
             control["calls"] = 0
@@ -78,6 +79,12 @@ def install(app, root, accounts):
             with user_context(uid):
                 library = get_user_core(uid).library
                 original = next(row for row in library.metadata.tracks if row.id == f"{name}-track")
+                measurement = None
+                if data.get("measured"):
+                    from shared.loudness.measure import measure_loudness
+                    measurement = measure_loudness(Path(root) / "music/tracks" / f"{name}-track.{original.format}", duration_hint=original.duration)
+                    if measurement is None:
+                        raise RuntimeError("Synthetic radio source must be measurable")
                 for index in range(10):
                     identity = f"{name}-radio-{index}"
                     target = Path(root) / "music/tracks" / f"{identity}.{original.format}"
@@ -85,5 +92,8 @@ def install(app, root, accounts):
                     library.metadata.add_track(
                         replace(original, id=identity, title=f"{name} radio song {index}", file_hash=identity)
                     )
+                    if measurement is not None:
+                        from shared.loudness.store import LoudnessStore, source_stamp
+                        LoudnessStore().put(identity, source_stamp(target), measurement)
                 library._save_metadata()
         return jsonify(ok=True)

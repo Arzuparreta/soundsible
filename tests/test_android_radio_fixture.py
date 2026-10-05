@@ -58,7 +58,7 @@ def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path, audio_fo
                 == 200
             )
             seeded = member.post(
-                origin + "/__fixture/radio-seed", headers={"X-Android-Fixture": "isolated"}, json={}, timeout=10
+                origin + "/__fixture/radio-seed", headers={"X-Android-Fixture": "isolated"}, json={"measured": True}, timeout=30
             )
             assert seeded.status_code == 200, seeded.text
             answer = member.post(
@@ -75,6 +75,13 @@ def test_radio_planner_uses_real_acquired_rows_and_exclusions(tmp_path, audio_fo
             assert answer.status_code == 200, answer.text
             rows = answer.json()["items"]
             assert rows, answer.text
+            acquired = {row["id"]: row for row in member.get(origin + "/api/library", timeout=10).json()["tracks"]}
+            for row in rows:
+                recording = acquired[row["track_id"]]
+                assert row["loudness_lufs"] == recording["loudness_lufs"]
+                assert row["loudness_peak_dbtp"] == recording["loudness_peak_dbtp"]
+                assert row["duration"] == recording["duration"]
+                assert "file_hash" not in row
             assert all(
                 row["source"] == "library"
                 and row["track_id"].startswith("member-radio-")

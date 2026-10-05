@@ -40,8 +40,10 @@ offline medidas con Core503. UI1550/196, JVM27 y APK/test APK/lint normales pasa
 Ver [S3a](SLICE_3A.md) y [evidencia](evidence/s3a.json). Esta prueba dirigida no
 sustituye principal limpia73 anterior al DSP. Protocolo posterior force-stop
 prepare1/offline1 pasa con PCM1893, preferencia recuperada por perfil y Core503;
-normal APK/test APK/JVM27/lint también pasa. Próximo: facts generados
-Radio/autoplay, regresión completa y mezcla DJ.
+normal APK/test APK/JVM27/lint también pasa. Facts generados Radio/autoplay
+con hash de grabación pasan Python79 (planner real WAV/FLAC) y Radio/parser/
+Autoplay6 HTTP/TLS, con PCM de ocurrencia generada y build normal. Próximo:
+regresión completa sobre commit limpio y [mezcla DJ](SLICE_3B.md).
 DJ/Live/Auto/firma/update siguen pendientes; continuar hasta paridad y después
 PR/main/release autorizados, sin cerrar por slice. Browser4 final debe repetirse.
 

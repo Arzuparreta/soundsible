@@ -156,3 +156,13 @@ confirmada se cachea por perfil nativo. El protocolo force-stop posterior pasa
 prepare1/offline1 en `/tmp/soundsible-s3a-pcm-restart-native.log`: servicio nuevo,
 Core503 y pico PCM1893 sobre copia sin facts; APK/test APK/JVM27/lint normales
 pasan. El test restaura la preferencia original del motor aislado al terminar.
+
+Planes generados: Core adjunta facts de la grabación adquirida usando su hash,
+consulta sólo items aceptados de la biblioteca de esa cuenta y no publica hashes.
+Un fallo de caché conserva selección/orden y devuelve no medido. RadioPlan nativo
+preserva facts finitos/duración sin inventar contexto de álbum. Python79 pasa
+con planner real WAV/FLAC en `/tmp/soundsible-s3a-plan-measured-python.log`;
+Radio HTTP/TLS mide la ganancia de una ocurrencia generada real. Radio/parser/
+Autoplay6 pasa en `/tmp/soundsible-s3a-radio-leveling-native.log`, seguido de
+APK/test APK/JVM27/lint normal. Repetir principal completa sobre commit limpio.
+Después continuar con [ejecución DJ](SLICE_3B.md), no cerrar el objetivo.

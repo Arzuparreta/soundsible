@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Actual planner and acquired files, with native queue state as authority. */
 @RunWith(AndroidJUnit4.class)
+@androidx.media3.common.util.UnstableApi
 public class RadioTest {
     private void waitFor(StartupTest web, ActivityScenario<MainActivity> scenario, String condition) throws Exception {
         long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(60);
@@ -40,9 +41,11 @@ public class RadioTest {
             waitFor(web,scenario,"!!document.querySelector('input[type=password]')");
             web.evaluate(scenario,"document.querySelector('input[autocomplete=username]').value='member';document.querySelector('input[type=password]').value='android-test';document.querySelector('input[type=password]').form.requestSubmit()");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')");
-        try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/__fixture/radio-seed").header("X-Android-Fixture","isolated").post(okhttp3.RequestBody.create("{\"failNext\":1}",okhttp3.MediaType.get("application/json"))).build()).execute()){assertEquals(200,response.code());}
+        try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/__fixture/radio-seed").header("X-Android-Fixture","isolated").post(okhttp3.RequestBody.create("{\"failNext\":1,\"measured\":true}",okhttp3.MediaType.get("application/json"))).build()).execute()){assertEquals(200,response.code());}
             observe(web,scenario);
             waitFor(web,scenario,"window.__radio?.ready===true");
+            command(web,scenario,"action:'leveling',reload:true,enabled:true");
+            waitFor(web,scenario,"window.__radio.leveling?.settingsPhase==='ready'&&window.__radio.leveling.enabled===true");
             command(web,scenario,"action:'queue',tracks:[{source:'local',id:'member-track',title:'member private song',artist:'member artist'},{source:'local',id:'member-radio-0',title:'Manual',artist:'member artist'}],index:0");
             waitFor(web,scenario,"window.__radio?.playing && window.__radio.items.length===2");
             command(web,scenario,"action:'pause'");command(web,scenario,"action:'seek',positionMs:60000");
@@ -69,6 +72,18 @@ public class RadioTest {
             // in the service even while the Activity is stopped.
             int initialCount=Integer.parseInt(web.evaluate(scenario,"window.__radio.items.length"));
             command(web,scenario,"action:'select',index:5,key:window.__radio.items[5].key");
+            waitFor(web,scenario,"window.__radio.playing&&window.__radio.index===5&&window.__radio.items[5].generated");
+            String generatedId=new org.json.JSONArray("["+web.evaluate(scenario,"window.__radio.id")+"]").getString(0);
+            JSONObject measured=null;
+            try(var response=connection.getClient().newCall(new okhttp3.Request.Builder().url(origin+"/api/library").header("Cookie",connection.cookieHeader(connection.getGeneration())).build()).execute()){
+                assertEquals(200,response.code());var tracks=new JSONObject(response.body().string()).getJSONArray("tracks");
+                for(int i=0;i<tracks.length();i++)if(tracks.getJSONObject(i).getString("id").equals(generatedId))measured=tracks.getJSONObject(i);
+            }
+            assertNotNull("Generated recording must belong to the actual library",measured);
+            double desired=Math.max(-20,Math.min(6,-18-measured.getDouble("loudness_lufs")));
+            double gain=Math.pow(10,Math.max(-20,Math.min(6,Math.min(desired,-1-measured.getDouble("loudness_peak_dbtp"))))/20);
+            String generatedKey=new org.json.JSONArray("["+web.evaluate(scenario,"window.__radio.items[5].key")+"]").getString(0);
+            try(var probe=new ProgramPcmTest.Probe(connection.getGeneration())){probe.await(generatedKey,(int)Math.round(3000*gain),0);}
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
             long refillDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(20);
             while(true){
