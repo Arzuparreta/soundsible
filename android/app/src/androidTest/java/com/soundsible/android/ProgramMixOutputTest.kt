@@ -94,7 +94,9 @@ class ProgramMixOutputTest {
     @Test fun tlsEchoCut() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.ECHO_CUT, effects = true)
     @Test fun httpStructuralFade() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.STRUCTURAL_FADE, effects = true)
     @Test fun tlsStructuralFade() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.STRUCTURAL_FADE, effects = true)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false) {
+    @Test fun httpFlacMix() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), secondFormat = "flac")
+    @Test fun tlsFlacMix() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), secondFormat = "flac")
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav") {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -123,7 +125,7 @@ class ProgramMixOutputTest {
                 val firstFrequency = if (effects) if (technique == ProgramMixCurve.Technique.ECHO_CUT) 100 else 80 else 440
                 val secondFrequency = if (effects) 4400 else 880
                 val tones = JSONObject().put("album", true).put("firstMarker", !effects)
-                    .put("secondFrequency", secondFrequency).put("secondRate", 48000).put("secondChannels", 2)
+                    .put("secondFrequency", secondFrequency).put("secondRate", 48000).put("secondChannels", 2).put("secondFormat", secondFormat)
                 if (effects) tones.put("firstFrequency", firstFrequency)
                 client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
                     .post(tones.toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }

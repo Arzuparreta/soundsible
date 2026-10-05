@@ -337,11 +337,20 @@ def main() -> None:
                         output.setframerate(rate)
                         tone = b"".join(struct.pack("<h", int(9000 * math.sin(2 * math.pi * frequency * i / rate))) * channels for i in range(rate))
                         output.writeframes(tone * 60)
+                    second_format = data.get("secondFormat", "wav")
+                    if second_format not in ("wav", "flac"):
+                        raise ValueError("Unsupported isolated PCM encoding")
+                    if second_format == "flac":
+                        import subprocess
+                        encoded = second.with_suffix(".flac")
+                        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(second), str(encoded)], check=True)
+                        second.unlink()
+                        second = encoded
                     with user_context(uid):
                         library = get_user_core(uid).library
                         library.metadata.add_track(Track(id=f"{name}-pcm-loud", title=f"{name} louder PCM song", artist=f"{name} artist",
-                            album=f"{name} PCM album", duration=60, file_hash=f"{name}-pcm-loud-hash", original_filename="pcm-loud.wav",
-                            file_size=second.stat().st_size, bitrate=rate * channels * 16 // 1000, format="wav"))
+                            album=f"{name} PCM album", duration=60, file_hash=f"{name}-pcm-loud-hash", original_filename=f"pcm-loud.{second_format}",
+                            file_size=second.stat().st_size, bitrate=rate * channels * 16 // 1000, format=second_format))
                         library._save_metadata()
                     measured_second = measure_loudness(second, duration_hint=60)
                     if measured_second is None:

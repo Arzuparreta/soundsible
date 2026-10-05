@@ -215,3 +215,10 @@ Clase Native18 aceptada sobree0499c4e limpio, log
 reales, readiness y clock/seek/recovery/pause/scope. Normal APK/test APK/JVM41/lint
 sin CA pasa. No confundir structural_fade equal-power con tempo/cues/phase del
 planner aún no conectado. Siguiente WAV+FLAC real, EOS y ejecución temporal nativa.
+
+FLAC en fixture/test: secondFormat opcional wav/flac codifica el tono sintético
+con ffmpeg, retira WAV y registra formato/tamaño/facts del archivo comprimido real.
+Defaults intactos. Tests httpFlacMix/tlsFlacMix usan mismo grafo con WAV mono16k y
+FLAC estéreo48k, mid/final PCM, seek/clock/pause/scope. Kotlin/test/JVM41/lint y
+Ruff pasan en /tmp/soundsible-s3b-mix-codec-foundation.log. Codec Native dirigido2
+pendiente; clase ampliada20 no sustituye18 hasta repetirla si se requiere.
