@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 /** Scoped Core planning; temporary failures retain the programme and have a total retry budget. */
 @UnstableApi
 internal class ProgramDjPlanner(private val connection: EngineConnection, private val player: Player,
-    private val main: Handler, private val status: (String, String, Int) -> Unit,
+    private val main: Handler, private val heardIds: () -> Set<String>, private val status: (String, String, Int) -> Unit,
     private val ready: (List<ProgramDjSession.Row>, Long, Kind) -> Unit) : AutoCloseable {
     enum class Kind { START, REPLACE, APPEND }
     var profile = "adaptive"; private set
@@ -52,7 +52,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
             .put("segment_index", segment).put("direction_revision", revision)
         if (sources.length() > 0) body.put("sources", sources).put("source_policy", "explicit")
         if (seed != null) body.put("seed", reference(seed)).put("exclude", JSONArray(
-            if (kind == Kind.START) listOf(seed.mediaId) else (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }))
+            if (kind == Kind.START) listOf(seed.mediaId) else ((0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId } + heardIds()).distinct()))
         val started = android.os.SystemClock.elapsedRealtime()
         var attempt = 0
         fun valid(): Boolean = !closed && token == serial && generation == connection.generation &&

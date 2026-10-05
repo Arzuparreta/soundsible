@@ -337,5 +337,23 @@
       "long session pruning",
       "full native/browser regression or complete parity"
     ]
+  },
+  "dj_history_pruning": {
+    "source_base_revision": "3c832ce9",
+    "dirty": true,
+    "tests": 8,
+    "failures": 0,
+    "log": "/tmp/soundsible-s3b-history-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "proves": [
+      "production controller prunes consumed history at queue limit",
+      "append retains current occurrence, paused position and output epoch",
+      "fresh nonzero stereo48k PCM after resume"
+    ],
+    "does_not_prove": [
+      "full service long-session refill",
+      "physical acoustic acceptance",
+      "complete DJ parity"
+    ]
   }
 }

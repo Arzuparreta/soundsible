@@ -27,6 +27,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
     @Volatile private var closed = false
     private var route = initial.toList()
     private var routeRevision = 0L
+    private val heard = linkedSetOf<String>()
     private val indices = intArrayOf(0, -1)
     private var current = 0
     private var armed = false
@@ -110,6 +111,13 @@ internal class ProgramDjSession(private val context: Context, private val genera
         if (selected in route.indices && selected != current) {
             current = selected; player.routeChanged(); changed()
         }
+        if (player.isPlaying) {
+            route.getOrNull(current)?.item?.mediaId?.let { id ->
+                heard.remove(id); heard.add(id)
+                if (heard.size > 80) heard.remove(heard.first())
+            }
+        }
+        trimHistory()
         level(slot); if (indices[1 - slot] >= 0) level(1 - slot)
         val window = output.transition()
         if (armed && window != null) {
@@ -197,6 +205,17 @@ internal class ProgramDjSession(private val context: Context, private val genera
         load(0, index, positionMs, 1f)
         output.pause(!resume); player.routeChanged(); changed()
     }
+    /** Retain every active deck; pruning metadata never touches the output clock. */
+    private fun trimHistory() {
+        if (route.size < ProgramQueue.LIMIT - 10 || current <= 0) return
+        val retainFrom = if (armed || recovering) minOf(current, indices.filter { it >= 0 }.minOrNull() ?: current) else current
+        if (retainFrom <= 0) return
+        route = route.drop(retainFrom)
+        current -= retainFrom
+        for (slot in indices.indices) if (indices[slot] >= 0) indices[slot] -= retainFrom
+        routeRevision++; player.routeChanged(); changed()
+    }
+    fun heardIds(): Set<String> = heard.toSet()
     fun items(): List<MediaItem> = route.map { it.item }
     fun currentIndex(): Int = current
     fun editableFrom() = protectedIndex() + 1

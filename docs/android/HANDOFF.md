@@ -89,9 +89,10 @@ No hay paridad completa ni PR final todavía.
 
 ## Trabajo activo y siguiente paso
 
-Modo (`68e4e76b`), harness (`be2894fc`) y repair (`cebf7246`) subidos. Placement2
-termina exit0; congelación levantada. Cerrar commit/push del bloque y continuar
-historial de sesiones largas y refinamiento. Fixture DJ acota fallos/delays alrededor
+Placement (`3c832ce9`) subido. Historial largo: Recovery8/0 HTTP/TLS y build
+normal pasan sobre `3c832ce9` dirty; cola1000 recortada sin reset de audio,
+append reteniendo KEY/posición/pausa/epoch, exclusión acotada de80 escuchadas.
+Log `/tmp/soundsible-s3b-history-native.log`. Continuar refinamiento de transiciones. Fixture DJ acota fallos/delays alrededor
 del Core real; no sustituye sus respuestas válidas por un planner falso.
 En futuros runs, **congelar fuentes/tests Native, fixtures, assets y recursos
 hasta final del runner, incluido build normal sin CA**. No atribuir un run a

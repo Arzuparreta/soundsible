@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeNotNull
 import org.junit.Test
@@ -25,7 +26,9 @@ class ProgramDjRecoveryTest {
     @Test fun tlsStarvedIncoming() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), 1)
     @Test fun httpStarvedOutgoing() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), 0)
     @Test fun tlsStarvedOutgoing() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), 0)
-    private fun run(origin: String?, starved: Int? = null) {
+    @Test fun httpHistoryPrune() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), history = true)
+    @Test fun tlsHistoryPrune() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), history = true)
+    private fun run(origin: String?, starved: Int? = null, history: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val connection = EngineConnection.shared(instrumentation.targetContext)
@@ -64,12 +67,43 @@ class ProgramDjRecoveryTest {
             lateinit var decks: Array<ExoPlayer>
             instrumentation.runOnMainSync {
                 val items = ProgramQueue.items(connection, JSONArray("[{\"source\":\"local\",\"id\":\"member-pcm-soft\",\"title\":\"Outgoing\",\"artist\":\"member\",\"duration\":20},{\"source\":\"local\",\"id\":\"member-pcm-loud\",\"title\":\"Incoming\",\"artist\":\"member\",\"duration\":60}]"))
-                successorKey.set(items[if (starved == 1) 0 else 1].mediaMetadata.extras!!.getString(ProgramQueue.KEY))
-                session = ProgramDjSession(instrumentation.targetContext, generation, owns, DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)), tap, { false }, items.map { ProgramDjSession.Row(it) }, mixing = { starved != null })
+                val routeItems = if (history) ProgramQueue.items(connection, JSONArray().apply {
+                    repeat(1000) { put(JSONObject().put("source", "local").put("id", "member-pcm-soft").put("title", "History $it").put("duration", 20)) }
+                }) else items
+                successorKey.set(routeItems[if (history) 996 else if (starved == 1) 0 else 1].mediaMetadata.extras!!.getString(ProgramQueue.KEY))
+                session = ProgramDjSession(instrumentation.targetContext, generation, owns, DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)), tap, { false }, routeItems.map { ProgramDjSession.Row(it) }, mixing = { starved != null })
                 output = ProgramDjSession::class.java.getDeclaredField("output").apply { isAccessible = true }.get(session) as ProgramMixOutput
                 @Suppress("UNCHECKED_CAST")
                 decks = ProgramDjSession::class.java.getDeclaredField("decks").apply { isAccessible = true }.get(session) as Array<ExoPlayer>
+                if (history) session!!.seek(996, 6000)
                 session!!.player.play()
+            }
+            if (history) {
+                await { session!!.player.isPlaying && session!!.items().size == 4 && session!!.currentIndex() == 0 && successorPcm.get() }
+                instrumentation.runOnMainSync { session!!.player.pause() }
+                Thread.sleep(300)
+                instrumentation.runOnMainSync {
+                    val owner = session!!
+                    val epoch = output.epoch()
+                    val position = owner.player.currentPosition
+                    val key = owner.player.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY)
+                    assertEquals(successorKey.get(), key)
+                    assertTrue(owner.heardIds().contains("member-pcm-soft"))
+                    val program = owner.items().first().mediaMetadata.extras!!.getString(ProgramQueue.PROGRAM)!!
+                    val appended = ProgramQueue.items(connection, JSONArray("[{\"source\":\"local\",\"id\":\"member-pcm-loud\",\"title\":\"Refill\"}]"), program)
+                    owner.append(appended.map { ProgramDjSession.Row(it) })
+                    assertEquals(5, owner.items().size)
+                    assertEquals(key, owner.player.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY))
+                    assertEquals(position, owner.player.currentPosition)
+                    assertEquals(epoch, output.epoch())
+                    assertFalse(owner.player.playWhenReady)
+                    minimumFrame.set(output.reservedPositionUs() * 48000 / 1000000 + 4800)
+                    successorPcm.set(false)
+                    owner.player.play()
+                }
+                await { successorPcm.get() }
+                assertFalse(capture.failed.get())
+                return
             }
             await { session!!.player.isPlaying && output.readyInput(1) }
             if (starved != null) {

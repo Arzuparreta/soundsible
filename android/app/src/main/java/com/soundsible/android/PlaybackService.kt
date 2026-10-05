@@ -110,8 +110,9 @@ class PlaybackService : MediaLibraryService() {
         if (djPlanner.busy() || djRouteEditor?.busy() == true || !player.playWhenReady || owner.items().size - owner.currentIndex() - 1 > 3) return
         val anchor = owner.items().lastOrNull() ?: return
         val key = anchor.mediaMetadata.extras?.getString(ProgramQueue.KEY) ?: return
-        if (refillAnchor == key) return
-        refillAnchor = key
+        val marker = key + ":" + ProgramQueue.token(player)
+        if (refillAnchor == marker) return
+        refillAnchor = marker
         djPlanner.start(djPlanner.profile, djPlanner.direction, djPlanner.sources, true, ProgramDjPlanner.Kind.APPEND, anchor)
     }
     private fun restoreNormal() {
@@ -222,7 +223,7 @@ class PlaybackService : MediaLibraryService() {
         previews = PreviewProgram(connection, player, main, { session }) { key -> cancelAudio(key) }
         radio = RadioProgram(connection, player, main, session = { session })
         autoplay = AutoplayProgram(connection, player, main, { session }, { radio.active() || dj != null })
-        djPlanner = ProgramDjPlanner(connection, player, main, ::publishDj) { rows, position, kind ->
+        djPlanner = ProgramDjPlanner(connection, player, main, { dj?.heardIds() ?: emptySet() }, ::publishDj) { rows, position, kind ->
             if (kind != ProgramDjPlanner.Kind.START) {
                 dj?.let { owner ->
                     if (kind == ProgramDjPlanner.Kind.APPEND) owner.append(rows.drop(1)) else { owner.replaceFuture(rows); refillAnchor = "" }
