@@ -134,7 +134,7 @@ class LibraryActivity : AppCompatActivity() {
             if (title.isEmpty()) {
                 WebNowPlaying.cancel(this)
             } else {
-                WebNowPlaying.show(this, title, artist, isPlaying, artwork)
+                WebNowPlaying.show(this, title, artist, isPlaying, artwork, null, webSession?.token)
             }
         } catch (_: Exception) {
         }

@@ -32,6 +32,8 @@ object WebNowPlaying {
         artist: String,
         isPlaying: Boolean,
         artwork: Bitmap?,
+        background: Int? = null,
+        mediaSession: android.support.v4.media.session.MediaSessionCompat.Token? = null,
     ) {
         val manager = context.getSystemService(NotificationManager::class.java)
         if (!manager.areNotificationsEnabled()) {
@@ -70,6 +72,11 @@ object WebNowPlaying {
             Intent(context, LibraryActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
+        mediaStyle.setShowActionsInCompactView(0, 1, 2)
+        if (mediaSession != null) {
+            mediaStyle.setMediaSession(mediaSession)
+        }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
@@ -80,6 +87,10 @@ object WebNowPlaying {
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
+            .apply {
+                // The media template owns the background; the accent is ours.
+                if (background != null) setColor(background)
+            }
             .addAction(android.R.drawable.ic_media_previous, "Previous", action(context, ACTION_WEB_PREV, 11))
             .addAction(
                 if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
@@ -87,14 +98,7 @@ object WebNowPlaying {
                 action(context, ACTION_WEB_TOGGLE, 12),
             )
             .addAction(android.R.drawable.ic_media_next, "Next", action(context, ACTION_WEB_NEXT, 13))
-            .setStyle(
-                // Plain media template: the custom black views proved
-                // unloadable on-device (widget and notification died together
-                // in the same build), while this template demonstrably shows,
-                // including on the lock screen.
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2),
-            )
+            .setStyle(mediaStyle)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
         manager.notify(NOTIFICATION_ID, notification)

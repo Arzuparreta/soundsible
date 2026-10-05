@@ -39,6 +39,9 @@ class WebMediaSession(
         isActive = false
     }
 
+    /** Compat token for linking media-template notifications to this session. */
+    val token get() = session.sessionToken
+
     /** Publish the sounding track (or clear with an empty title). */
     fun publish(title: String, artist: String, album: String, isPlaying: Boolean, artwork: Bitmap?) {
         if (title.isEmpty()) {
