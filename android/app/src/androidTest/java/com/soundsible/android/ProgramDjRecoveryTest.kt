@@ -117,6 +117,16 @@ class ProgramDjRecoveryTest {
                     assertEquals(answer!!.getJSONObject("transition").getDouble("out_cue"), proposal.outCue, 0.000001)
                     assertEquals(session!!.items()[0].mediaMetadata.extras!!.getString(ProgramQueue.KEY), proposal.fromKey)
                     assertFalse(session!!.player.playWhenReady)
+                    val snapshot = session!!.routeSnapshot()
+                    assertTrue(session!!.editFuture(snapshot, snapshot.rows.drop(snapshot.floor + 1).map { it.copy(proposal = null) }))
+                    planner!!.start("long_blend", JSONObject(), JSONArray(), true, ProgramDjPlanner.Kind.REPLACE)
+                    planner!!.clear()
+                    revision = session!!.routeSnapshot().revision
+                    refiner!!.refine(session!!)
+                }
+                await { session!!.routeSnapshot().revision > revision }
+                instrumentation.runOnMainSync {
+                    assertNotNull("Settings change did not refine the retained pair", session!!.routeSnapshot().rows[1].proposal)
                     session!!.player.play()
                 }
                 await { session!!.player.isPlaying }

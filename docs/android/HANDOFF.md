@@ -42,10 +42,11 @@ No hay paridad completa ni PR final todavía.
 
 ## Evidencia que importa al continuar
 
-- Regresión nativa completa más reciente: **120 casos/3 fallos** sobre `255d07b8`,
-  `/tmp/soundsible-s3b-full-native.log`. Dos assertions de PlannerRetirement y una
-  búsqueda de fila virtualizada PCM fueron corregidas; dirigidos pasan. Todavía
-  no existe principal completa actual verde; repetir al cerrar bloque DJ.
+- Regresión completa **130/0** sobre `d7e95c44` preparado limpio,
+  `/tmp/soundsible-s3b-regression-native.log`; restart prepare1/offline1 y normal
+  APK/test/JVM52/lint pasan. Runtime instrumentado1835.188s. Es anterior al bloque
+  network/settings descrito abajo; no equivale a paridad completa.
+  Histórica120/3 en `soundsible-s3b-full-native.log`; correcciones incluidas en130.
 - Recuperación DJ6/0 HTTP/TLS + APK/test/JVM49/lint normal sin CA:
   `/tmp/soundsible-s3b-starvation-ramp-fixed-native.log`. PCM no silencioso después
   de rampa, pausa excluida del timeout, epoch y reloj retenidos. Asset prepare
@@ -104,24 +105,33 @@ del Core real; no sustituye sus respuestas válidas por un planner falso.
 Regresión principal actual **130/0 + restart prepare1/offline1 + build normal**
 pasa sobre `d7e95c44` preparado limpio:
 `/tmp/soundsible-s3b-regression-native.log`, sesión exec78409 terminó exit0. Runtime instrumentado1835.188s.
-Congelación principal levantada. Trabajo pendiente se encuentra en checkout
-independiente `/tmp/soundsible-android-next` (clonado de ese mismo commit):
-- ProgramDjPlanner/Refiner: memo y guards ligados a settingsRevision.
-- ProgramDjRecoveryTest: measured reconsulta el mismo par tras cambio de perfil.
-- DjNetworkTest nuevo + android_dj_fixture: incoming body stall22s tras64000bytes,
-  recuperación por servicio/Core y retry503 desde MediaController;
-  **todavía sin validar ni commit**. Dirigido en clone sesión78214 no: usar
-  `/tmp/soundsible-s3b-network-native.log` y comprobar proceso activo.
-- `/tmp/ProgramCarLibrary.kt`: borrador de browse, no integrado ni completo.
-Clone ya publicó `c3d392d`: car API conserva podcast_feed_id/episode_guid;
-`tests/test_car_routes.py`5/0 en `/tmp/soundsible-auto-car-contract.log`.
-Principal sigue en `d7e95c44` congelado; remote avanzó a ese commit nuevo.
-Actualizar principal al terminar runner preservando esta edición de HANDOFF.
-Worktree fue rechazado por ref nueva en `.git` read-only; clone independiente
-funcionó. No hace falta acción del usuario; commit/push actuales sí funcionan.
-Tras principal, preparar y validar dirigidos del clone (no Gradle paralelo),
-trasladar sólo sus cambios de task al principal, actualizar evidencia y commit/push.
-El HANDOFF principal puede tener esta edición de contexto sin commit; conservarla.
+Congelación principal levantada. Bloque network/settings validado en checkout `/tmp/soundsible-android-next`
+sobre `c3d392d6` dirty y trasladado al principal sin cambiar sus fuentes:
+- planner/refiner ligan memo y guards a settingsRevision; mismo par reconsultado
+  tras cambiar perfil. Measured2 y NORMAL2 pasan en range-native (suite6/2 falla
+  por fixture insuficiente; no reemplaza evidencia principal).
+- Incoming stream entrega600000bytes (~3.125s), se detiene22s a través de Range,
+  contador confirma body pendiente durante recuperación. Network2/0 HTTP/TLS y
+  normal APK/test/JVM52/lint en `/tmp/soundsible-s3b-network-buffered-native.log`.
+- MediaController.play tras503 prepara error temporal conservando KEY y PCM;
+  sin reauth automática de401/403. No modifica UI ni datos del usuario real.
+Diagnósticos: primer network-native6/1 falla callback WebView5s tras recreate en
+NORMAL HTTP; repetición pasa NORMAL pero stall one-shot no es estable con Range.
+Range-native6/2 muestra que64000bytes no arrancan decoder antes del bloqueo;
+600000bytes y contador pendiente corrigen el fixture. No declarar éxitos de esos
+runs fallidos ni recuperación si el bloqueo ya había terminado.
+
+Principal/remote `12c7e537` combinan contrato car podcast y evidencia130.
+ProgramCarLibrary.kt nuevo está en desarrollo en principal; no integrado/validado
+ni committed. Root HANDOFF/evidence se actualizan al cerrar network. Clone tiene
+los mismos cambios network, no volver a copiarlos después de editar el principal.
+Worktree falló ref nueva read-only; clone independiente funcionó. Commit/push sí
+funcionan; no pedir acción al usuario. Mantener suites pesadas en serie; futuros
+runs completos pueden usar checkout aislado para seguir editando otra copia.
+Siguiente DJ: menú desde canción/usar como fuente, respetando canción actual y
+requests como web changeAutoSession; negativos restantes y límite largo en servicio.
+Android Auto: browse draft en ProgramCarLibrary, requiere integración, selección,
+Radio, covers/offline y aceptación de host. Live y firma siguen pendientes.
 
 En futuros runs, **congelar fuentes/tests Native, fixtures, assets y recursos
 hasta final del runner, incluido build normal sin CA**. No atribuir un run a

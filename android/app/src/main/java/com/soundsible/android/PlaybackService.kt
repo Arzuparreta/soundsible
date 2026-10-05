@@ -281,6 +281,11 @@ class PlaybackService : MediaLibraryService() {
                 val recovers = command == Player.COMMAND_PREPARE || command == Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM || command == Player.COMMAND_SEEK_TO_DEFAULT_POSITION || command == Player.COMMAND_SEEK_TO_MEDIA_ITEM || (command == Player.COMMAND_PLAY_PAUSE && !player.playWhenReady)
                 if (recovers && player.playerError != null && !previews.canPrepare()) return SessionError.ERROR_BAD_VALUE
                 if (command == Player.COMMAND_PREPARE && player.playerError != null) previews.manualRetry()
+                if (command == Player.COMMAND_PLAY_PAUSE && !player.playWhenReady &&
+                    PlaybackRecovery.kind(player.playerError) in listOf("connection", "server")) {
+                    previews.manualRetry()
+                    player.prepare()
+                }
                 return SessionResult.RESULT_SUCCESS
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {

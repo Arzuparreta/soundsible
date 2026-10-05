@@ -18,6 +18,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
     private val main: Handler, private val heardIds: () -> Set<String>, private val status: (String, String, Int) -> Unit,
     private val ready: (List<ProgramDjSession.Row>, Long, Kind) -> Unit) : AutoCloseable {
     enum class Kind { START, REPLACE, APPEND }
+    var settingsRevision = 0L; private set
     var profile = "adaptive"; private set
     var direction = JSONObject(); private set
     var sources = JSONArray(); private set
@@ -38,6 +39,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         require(!fromCurrent || seed != null && seed.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
         require(seed != null || sources.length() > 0)
         clear()
+        if (this.profile != profile || this.direction.toString() != direction.toString() || this.sources.toString() != sources.toString()) settingsRevision++
         this.profile = profile; this.direction = JSONObject(direction.toString()); this.sources = JSONArray(sources.toString())
         if (kind == Kind.START) { sessionId = java.util.UUID.randomUUID().toString(); segment = 0; revision = 0 }
         else if (kind == Kind.REPLACE) revision++
