@@ -133,6 +133,12 @@ regresión JVM dedicada pasa (/tmp/soundsible-s3b-resampler-unit.log).
 Se conservan diagnósticos fallidos en /tmp/soundsible-s3b-dj-refill-native.log y
 /tmp/soundsible-s3b-dj-refill-fixed-native.log. Siguiente bloque: recuperación
 en producción, controles/focus de sesión DJ y regresión completa del servicio/UI.
+
+Regresión UI completa pasa198 archivos/1556 tests + TypeScript, log
+/tmp/soundsible-s3b-dj-direction-parity-full-ui.log. Editor usa parseDjDirection
+compartido (sin mixer web): texto reconocido se traduce a controles/include/exclude;
+sliders conservan valores fraccionarios. Prueba de «más suave» y retry conserva
+exclusiones, dirigido2/0 en /tmp/soundsible-s3b-dj-direction-intent-ui.log.
 El fallo real TLS al cerrar conexiones SSL en hilo principal está corregido:
 pool/dispatcher de audio propios, retiro en worker y shutdown de su executor.
 Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update

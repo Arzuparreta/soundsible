@@ -2,6 +2,7 @@ import { createEffect, createSignal, Show } from 'solid-js';
 import type { DjDirection } from '../lib/api';
 import { openOverlay } from '../lib/overlay';
 import { t } from '../lib/i18n';
+import { parseDjDirection } from '../lib/djDirection';
 import styles from '../components/MetadataEditor.module.css';
 
 /** Edits future planning only; the native programme continues to own playback. */
@@ -20,7 +21,8 @@ export function openNativeDjDirection(initial: DjDirection | undefined, current:
       if (!current() || busy()) return;
       setBusy(true); setFailed(false);
       try {
-        await submit({ energy: energy(), familiarity: familiarity(), prompt: prompt().trim(), include: [...(initial?.include ?? [])], exclude: [...(initial?.exclude ?? [])] });
+        const controls = { energy: energy(), familiarity: familiarity(), prompt: prompt().trim(), include: [...(initial?.include ?? [])], exclude: [...(initial?.exclude ?? [])] };
+        await submit(prompt().trim() !== (initial?.prompt ?? '').trim() ? parseDjDirection(prompt(), controls) : controls);
         if (current()) close();
       } catch { if (current()) setFailed(true); }
       finally { setBusy(false); }
@@ -28,14 +30,10 @@ export function openNativeDjDirection(initial: DjDirection | undefined, current:
       <h2>{t('autoMode.dj.direction')}</h2>
       <p>{t('autoMode.dj.directionHint')}</p>
       <label class={styles.field}>{t('autoMode.booth.energy')}
-        <select value={energy()} disabled={busy()} onChange={event => setEnergy(Number(event.currentTarget.value))}>
-          <option value="-1">{t('autoMode.booth.energyDown')}</option><option value="0">{t('autoMode.booth.hold')}</option><option value="1">{t('autoMode.booth.energyUp')}</option>
-        </select>
+        <input type="range" min="-1" max="1" step="0.05" value={energy()} disabled={busy()} onInput={event => setEnergy(Number(event.currentTarget.value))} />
       </label>
       <label class={styles.field}>{t('autoMode.booth.crate')}
-        <select value={familiarity()} disabled={busy()} onChange={event => setFamiliarity(Number(event.currentTarget.value))}>
-          <option value="-1">{t('autoMode.booth.crateDeep')}</option><option value="0">{t('autoMode.booth.hold')}</option><option value="1">{t('autoMode.booth.crateKnown')}</option>
-        </select>
+        <input type="range" min="-1" max="1" step="0.05" value={familiarity()} disabled={busy()} onInput={event => setFamiliarity(Number(event.currentTarget.value))} />
       </label>
       <label class={styles.field}>{t('autoMode.dj.tellDj')}<textarea maxLength={2000} value={prompt()} disabled={busy()} onInput={event => setPrompt(event.currentTarget.value)} /></label>
       <Show when={failed()}><p role="alert">{t('common.loadFailed')}</p></Show>

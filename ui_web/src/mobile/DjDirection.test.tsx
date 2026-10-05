@@ -10,11 +10,11 @@ it('retains exclusions and leaves a failed direction edit available for retry', 
   const submit = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce(undefined);
   render(() => <OverlayOutlet />);
   openNativeDjDirection({ energy: 0, familiarity: 0, prompt: '', include: ['artist'], exclude: ['genre'] }, () => true, submit);
-  await fireEvent.change(screen.getByLabelText('autoMode.booth.energy'), { target: { value: '1' } });
-  await fireEvent.input(screen.getByLabelText('autoMode.dj.tellDj'), { target: { value: ' darker ' } });
+  await fireEvent.input(screen.getByLabelText('autoMode.booth.energy'), { target: { value: '1' } });
+  await fireEvent.input(screen.getByLabelText('autoMode.dj.tellDj'), { target: { value: ' más suave ' } });
   await fireEvent.submit(screen.getByRole('button', { name: 'autoMode.dj.send' }).closest('form')!);
   expect(await screen.findByRole('alert')).toBeTruthy();
-  expect(submit).toHaveBeenCalledWith({ energy: 1, familiarity: 0, prompt: 'darker', include: ['artist'], exclude: ['genre'] });
+  expect(submit).toHaveBeenCalledWith({ energy: 0.65, familiarity: 0, prompt: 'más suave', include: ['artist'], exclude: ['genre'] });
   await fireEvent.submit(screen.getByRole('button', { name: 'autoMode.dj.send' }).closest('form')!);
   expect(submit).toHaveBeenCalledTimes(2);
 });
