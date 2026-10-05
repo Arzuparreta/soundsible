@@ -305,3 +305,11 @@ Principal S3a78 no se ha repetido con el spike; no integrar todavía DJ ni alpha
 Diferencia encontrada con Core: shared/dj_engine.py permite overlap48s; spike
 aceptado hasta ahora limita30s. Ampliar a rango60s y probar LongBlend48s completo
 con fuente saliente90s, más política conservadora/fromKey antes de fachada Player.
+
+Ampliación Core48s y ProgramDjPlan compilan; siete pruebas de política fromKey,
+fallback, cue, límites tempo/phase y mezcla desactivada pasan (JVM48 total),
+Ruff/lint pasan. Primer LongBlend48s HTTP/TLS2 falla después de la mezcla medida:
+prueba libera saliente al observar PCM casi silencioso antes del fin completo,
+porque low-shelf atenua su80Hz. Stack run:297 en
+/tmp/soundsible-s3b-full-long-native.log. Esperar fin físico de ventana48s antes
+de liberar el saliente; mantener los umbrales PCM y repetir. No aceptar48s aún.

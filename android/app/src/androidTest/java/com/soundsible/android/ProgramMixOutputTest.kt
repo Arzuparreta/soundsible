@@ -256,6 +256,13 @@ class ProgramMixOutputTest {
                     }
                 }
                 if (cancelCue) assertFalse("Already committed blend accepted future cancellation", owner.cancelArmed())
+                if (longRun) {
+                    val end = transition.start + transition.length
+                    val endDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
+                    while (owner.positionUs() * 48000 / 1000000 < end && System.nanoTime() < endDeadline) Thread.sleep(10)
+                    assertTrue("Full Core overlap did not finish on hardware clock", owner.positionUs() * 48000 / 1000000 >= end)
+                    meter.metrics.clear()
+                }
                 if (effects && !longRun) {
                     when (technique) {
                         ProgramMixCurve.Technique.BASS_SWAP -> meter.await { it.first in 700.0..1150.0 && it.second in 5500.0..7000.0 }
