@@ -21,7 +21,8 @@ object WebNowPlaying {
     const val ACTION_WEB_NEXT = "com.soundsible.player.ui.WEB_NEXT"
     const val ACTION_WEB_PREV = "com.soundsible.player.ui.WEB_PREV"
 
-    private const val CHANNEL_ID = "soundsible-web-playing"
+    private const val CHANNEL_ID = "soundsible-playing"
+    private const val LEGACY_CHANNEL_ID = "soundsible-web-playing"
     private const val NOTIFICATION_ID = 42
 
     fun show(
@@ -32,8 +33,14 @@ object WebNowPlaying {
         artwork: Bitmap?,
     ) {
         val manager = context.getSystemService(NotificationManager::class.java)
+        try {
+            // Fresh channel: importance upgrades never apply to an existing
+            // channel, and lockscreen presence wants DEFAULT, not LOW.
+            manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
+        } catch (_: Exception) {
+        }
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Now playing", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL_ID, "Now playing", NotificationManager.IMPORTANCE_DEFAULT),
         )
         val open = PendingIntent.getActivity(
             context, 10,
@@ -44,10 +51,12 @@ object WebNowPlaying {
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(artist.ifEmpty { null })
+            .setSubText(context.getString(R.string.app_name))
             .setLargeIcon(artwork)
             .setContentIntent(open)
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
+            .setShowWhen(false)
             .addAction(android.R.drawable.ic_media_previous, "Previous", action(context, ACTION_WEB_PREV, 11))
             .addAction(
                 if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
