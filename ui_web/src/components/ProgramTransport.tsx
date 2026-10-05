@@ -75,7 +75,11 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
     </select></label></Show>
     <input aria-label={t('android.seek')} disabled={disabled() || props.state.durationMs <= 0 || props.state.seekable === false} type="range" min="0" max={props.state.durationMs || 0} value={seeking() ?? props.state.positionMs} step="1000" aria-valuetext={clockTime((seeking() ?? props.state.positionMs) / 1000)} onInput={event => setSeeking(Number(event.currentTarget.value))} onChange={event => { const target = Number(event.currentTarget.value); void run({ action: 'seek', positionMs: target }).finally(() => setSeeking(null)); }} />
     <small>{clockTime(props.state.positionMs / 1000)} / {clockTime(props.state.durationMs / 1000)}</small>
-    <Show when={['planning', 'warming'].includes(props.state.dj?.phase ?? '')}><p role="status">{t('common.loading')}</p></Show>
+    <Show when={props.state.dj?.phase === 'planning'}><p role="status">{t('autoMode.route.preparing')}</p></Show>
+    <Show when={props.state.dj?.phase === 'warming'}><p role="status">{t('autoMode.route.retryingHint')}</p></Show>
+    <Show when={props.state.dj?.phase === 'degraded'}><p role="status">{t('autoMode.route.mixPending')}</p></Show>
+    <Show when={props.state.dj?.phase === 'exhausted'}><p role="status">{t('autoMode.route.exhausted')}</p></Show>
+    <Show when={['invalid', 'unavailable', 'blocked'].includes(props.state.dj?.phase ?? '')}><p role="alert">{t(props.state.dj?.phase === 'blocked' ? 'android.permissionDenied' : 'common.loadFailed')}</p></Show>
     <Show when={props.state.autoplay?.settingsPhase === 'unavailable'}><p role="alert">{t('common.loadFailed')}</p></Show>
     <Show when={!props.state.error && props.state.state === 2}><p role="status">{t('common.loading')}</p></Show>
     <Show when={props.state.preview?.retryPending}><p role="status">{t('android.previewRetry')}</p></Show>

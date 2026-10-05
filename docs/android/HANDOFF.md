@@ -188,6 +188,13 @@ limpio pasa prepare1 + force-stop/offline1, con build normal posterior en
 regresión completa actual y browser4 siguen pendientes. Siguiente: recuperación
 acotada de PCM ausente durante transición comprometida; no declarar paridad DJ.
 
+ProgramTransport muestra estados observados del planner: planning/warming,
+degraded (transiciones pendientes), exhausted y errores terminales. Los controles
+siguen ligados al programa actual; ready limpia feedback anterior. Dirigido14/0
+y TypeScript pasan en /tmp/soundsible-s3b-dj-phase-{ui,typecheck}.log. Esta UI
+se añadió después de preparar el artifact starvation; no atribuirle aceptación
+APK de ese run. Regresión browser4 permanece pendiente antes de PR.
+
 Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
 bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrados

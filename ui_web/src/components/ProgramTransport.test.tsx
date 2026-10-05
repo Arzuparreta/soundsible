@@ -8,6 +8,32 @@ vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
+it('reports DJ planning, bounded retries and exhaustion while preserving playback controls', async () => {
+  const command = vi.fn(async () => {});
+  const [state, setState] = createSignal<ProgramState>({ ...initial, playWhenReady: true, dj: { active: true, phase: 'planning', profile: 'adaptive' } });
+  render(() => <ProgramTransport state={state()} pending={false} command={command} />);
+  for (const [phase, message] of [['planning', 'autoMode.route.preparing'], ['warming', 'autoMode.route.retryingHint'], ['degraded', 'autoMode.route.mixPending'], ['exhausted', 'autoMode.route.exhausted']]) {
+    setState({ ...state(), dj: { ...state().dj!, phase } });
+    expect(screen.getByRole('status').textContent).toBe(message);
+    expect(screen.getByText('common.pause')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  }
+  await fireEvent.click(screen.getByText('common.pause'));
+  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'pause' });
+});
+
+it('surfaces terminal DJ planning failure and clears it after confirmed recovery', () => {
+  const [state, setState] = createSignal<ProgramState>({ ...initial, dj: { active: true, phase: 'unavailable', profile: 'adaptive' } });
+  render(() => <ProgramTransport state={state()} pending={false} command={async () => {}} />);
+  for (const phase of ['unavailable', 'invalid', 'blocked']) {
+    setState({ ...state(), dj: { ...state().dj!, phase } });
+    expect(screen.getByRole('alert').textContent).toBe(phase === 'blocked' ? 'android.permissionDenied' : 'common.loadFailed');
+  }
+  setState({ ...state(), dj: { ...state().dj!, phase: 'ready' } });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
 it('changes DJ profile within the captured programme and rejects a stale menu', async () => {
   const command = vi.fn(async () => {});
   const [state, setState] = createSignal<ProgramState>({ ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } });
