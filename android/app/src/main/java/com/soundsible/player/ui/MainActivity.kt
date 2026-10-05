@@ -12,6 +12,7 @@ import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.playback.EngineService
 import com.soundsible.player.playback.QueueHolder
 import com.soundsible.player.store.LastSongPin
+import com.soundsible.player.store.WebPlaybackPin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -135,11 +136,35 @@ class MainActivity : AppCompatActivity() {
                 QueueHolder.pendingSeekMs = snapshot.positionMs.coerceAtLeast(0L)
                 return
             }
-            // No snapshot at all, but a pinned song: resume it alone.
+            // No native snapshot, but the web player left a pin: resume it
+            // alone through the native queue, stream re-derived from the
+            // track id against this boot's engine.
             val pin = LastSongPin.load(this)
             if (pin != null) {
                 QueueHolder.queue.restore(listOf(pin.toItem()), 0)
                 QueueHolder.pendingSeekMs = 0L
+                return
+            }
+            val web = WebPlaybackPin.load(this)
+            val base = (application as SoundsibleApp).tokenStore.load()?.baseUrl?.trimEnd('/')
+            if (web != null && base != null) {
+                QueueHolder.queue.restore(
+                    listOf(
+                        com.soundsible.player.data.CarItem(
+                            id = web.trackId,
+                            kind = "track",
+                            trackId = web.trackId,
+                            title = web.title,
+                            artist = web.artist,
+                            album = web.album,
+                            artworkUrl = web.coverUrl,
+                            streamUrl = "$base/api/static/stream/${web.trackId}",
+                            isPlayable = true,
+                        ),
+                    ),
+                    0,
+                )
+                QueueHolder.pendingSeekMs = web.positionMs.coerceAtLeast(0L)
             }
         } catch (_: Exception) {
         }

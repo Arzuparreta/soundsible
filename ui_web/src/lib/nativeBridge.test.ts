@@ -14,10 +14,11 @@ describe('nativeBridge', () => {
   it('reports the sounding track as JSON', () => {
     const onTrackChanged = vi.fn();
     vi.stubGlobal('window', { SoundsibleNative: { onTrackChanged } } as never);
-    reportNowPlaying({ title: 'Song', artist: 'Band', album: 'Record' }, true, 'https://x/cover.jpg');
+    reportNowPlaying({ title: 'Song', artist: 'Band', album: 'Record', id: 't1' }, true, 'https://x/cover.jpg', 42, 180);
     expect(onTrackChanged).toHaveBeenCalledTimes(1);
     expect(JSON.parse(onTrackChanged.mock.calls[0][0])).toEqual({
       title: 'Song', artist: 'Band', album: 'Record', playing: true, coverUrl: 'https://x/cover.jpg',
+      trackId: 't1', positionSec: 42, durationSec: 180,
     });
   });
 

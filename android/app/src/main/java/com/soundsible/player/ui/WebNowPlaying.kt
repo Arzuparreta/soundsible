@@ -70,49 +70,16 @@ object WebNowPlaying {
             Intent(context, LibraryActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val collapsed = android.widget.RemoteViews(context.packageName, R.layout.notification_player).apply {
-            if (artwork != null) {
-                setViewVisibility(R.id.notifArtSmall, android.view.View.VISIBLE)
-                setImageViewBitmap(R.id.notifArtSmall, artwork)
-            } else {
-                setViewVisibility(R.id.notifArtSmall, android.view.View.GONE)
-            }
-            setTextViewText(R.id.notifTitleSmall, title)
-            setTextViewText(R.id.notifArtistSmall, artist)
-            setImageViewResource(
-                R.id.notifToggleSmall,
-                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
-            )
-            setOnClickPendingIntent(R.id.notifToggleSmall, action(context, ACTION_WEB_TOGGLE, 12))
-        }
-        val expanded = android.widget.RemoteViews(context.packageName, R.layout.notification_player_big).apply {
-            if (artwork != null) {
-                setViewVisibility(R.id.notifArtBig, android.view.View.VISIBLE)
-                setImageViewBitmap(R.id.notifArtBig, artwork)
-            } else {
-                setViewVisibility(R.id.notifArtBig, android.view.View.GONE)
-            }
-            setTextViewText(R.id.notifTitleBig, title)
-            setTextViewText(R.id.notifArtistBig, artist)
-            val toggleIcon =
-                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
-            setImageViewResource(R.id.notifToggle, toggleIcon)
-            setImageViewResource(R.id.notifPrev, android.R.drawable.ic_media_previous)
-            setImageViewResource(R.id.notifNext, android.R.drawable.ic_media_next)
-            setOnClickPendingIntent(R.id.notifPrev, action(context, ACTION_WEB_PREV, 11))
-            setOnClickPendingIntent(R.id.notifToggle, action(context, ACTION_WEB_TOGGLE, 12))
-            setOnClickPendingIntent(R.id.notifNext, action(context, ACTION_WEB_NEXT, 13))
-        }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(artist.ifEmpty { null })
+            .setSubText(context.getString(R.string.app_name))
+            .setLargeIcon(artwork)
             .setContentIntent(open)
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
-            .setCustomContentView(collapsed)
-            .setCustomBigContentView(expanded)
             .addAction(android.R.drawable.ic_media_previous, "Previous", action(context, ACTION_WEB_PREV, 11))
             .addAction(
                 if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
@@ -121,11 +88,11 @@ object WebNowPlaying {
             )
             .addAction(android.R.drawable.ic_media_next, "Next", action(context, ACTION_WEB_NEXT, 13))
             .setStyle(
-                // The media-decorated variant (not the plain decorated style):
-                // custom black views with the platform media treatment.
-                // System integration (lockscreen/car/BT) rides the separate
-                // compat session, which publishes regardless of this view.
-                androidx.media.app.NotificationCompat.DecoratedMediaCustomViewStyle()
+                // Plain media template: the custom black views proved
+                // unloadable on-device (widget and notification died together
+                // in the same build), while this template demonstrably shows,
+                // including on the lock screen.
+                androidx.media.app.NotificationCompat.MediaStyle()
                     .setShowActionsInCompactView(0, 1, 2),
             )
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

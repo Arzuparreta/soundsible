@@ -81,7 +81,8 @@ export class ProgramMediaSession {
   ): void {
     // The native shell gets the same projection even where the platform
     // session does not exist: the report is guarded and free elsewhere.
-    reportNowPlaying(track, snapshot.playing, track ? trackCoverUrl(track) ?? '' : '');
+    // Position rides along so the shell can persist resume state.
+    reportNowPlaying(track, snapshot.playing, track ? trackCoverUrl(track) ?? '' : '', snapshot.position, snapshot.duration);
     if (!hasMediaSession()) return;
     recordPlaybackDiagnostic('media_session.before_sync', { reason });
     const session = navigator.mediaSession;

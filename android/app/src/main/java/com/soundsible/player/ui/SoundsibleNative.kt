@@ -4,6 +4,7 @@ import android.webkit.JavascriptInterface
 import com.soundsible.player.SoundsibleApp
 import com.soundsible.player.data.parseJsonObject
 import com.soundsible.player.playback.ArtworkLoader
+import com.soundsible.player.store.WebPlaybackPin
 
 /**
  * Receives what the embedded web player is sounding so surfaces outside
@@ -31,7 +32,17 @@ class SoundsibleNative(private val activity: LibraryActivity) {
                 return
             }
             playing = payload.optBoolean("playing", true)
+            val trackId = payload.optString("trackId", "")
+            val positionMs = ((payload.optDouble("positionSec") ?: 0.0) * 1000).toLong().coerceAtLeast(0L)
+            val durationMs = ((payload.optDouble("durationSec") ?: 0.0) * 1000).toLong().coerceAtLeast(0L)
             val app = activity.application as SoundsibleApp
+            // Persist for resume-across-update before doing anything else:
+            // an update can kill us mid-playback with no lifecycle callback.
+            WebPlaybackPin.save(
+                activity, trackId, title, artist, album,
+                payload.optString("coverUrl", "").ifEmpty { null },
+                positionMs, durationMs, playing,
+            )
             val connection = app.tokenStore.load()
             cover = payload.optString("coverUrl", "").ifEmpty { null }
                 ?.let { connection?.resolve(it) ?: it }

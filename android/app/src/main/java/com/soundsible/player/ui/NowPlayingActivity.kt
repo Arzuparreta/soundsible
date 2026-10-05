@@ -16,6 +16,7 @@ import com.soundsible.player.playback.EngineService
 import com.soundsible.player.playback.PlaybackService
 import com.soundsible.player.playback.QueueHolder
 import com.soundsible.player.store.LastSongPin
+import com.soundsible.player.store.WebPlaybackPin
 
 /**
  * Now Playing screen bound to [PlaybackService] through a MediaController.
@@ -44,6 +45,7 @@ class NowPlayingActivity : Activity() {
                 app.tokenStore.clear()
                 app.queueStore.clear()
                 LastSongPin.clear(this)
+                WebPlaybackPin.clear(this)
             } catch (_: Exception) {
             }
             startActivity(Intent(this, PairingActivity::class.java))
