@@ -90,6 +90,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-mix-codec-native.log",
       "scope": "HTTP/TLS real WAV mono16k plus FLAC stereo48k through two decoders; actual mixedPCM, seek/dominance/pause/scope; normal APK/test APK/JVM41/lint pass"
+    },
+    "end_of_source_native": {
+      "source_revision_at_asset_prepare": "f180e8ea",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-eos-silence-native.log",
+      "scope": "HTTP/TLS physical PCM drain, decoder STATE_ENDED and prepared incoming direct cue; pause/scope and normal APK/test APK/JVM41/lint pass"
     }
   },
   "diagnostics": [
@@ -124,11 +134,23 @@
       "tests": 18,
       "failures": 1,
       "reason": "tlsStructuralFade input existed but had not delivered PCM. Buffered readiness plus bounded wait fixes full18 repeat."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-eos-diagnostic-native.log",
+      "tests": 1,
+      "failures": 1,
+      "reason": "EOS physical PCM clock retained 19632 of 24000 frames; isolated diagnostic records queue/clock only."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-eos-tail-native.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Keeping ended decoder from pausing does not overcome latency-adjusted AudioTrack underrun clock. Bounded silence drain without device stop passes repeat2."
     }
   ],
   "limitations": [
     "Isolated owner only; not connected to production service or DJ planner",
-    "No EOS/tempo/phase or production service/planner proof yet",
+    "No tempo/phase or production service/planner proof yet",
     "No exact compressor acoustic parity or physical listening acceptance",
     "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
   ]

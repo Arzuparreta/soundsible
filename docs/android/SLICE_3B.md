@@ -255,3 +255,8 @@ AudioTrack descontado de latencia se congela al underrun sin nuevas escrituras.
 La siguiente corrección escribe silencio sólo hasta drenar los frames reales;
 no cuenta ese silencio en el reloj de medios del deck ni llama AudioOutput.stop
 (dicho output no reanuda PCM tras stop sin flush). EOS sigue pendiente de prueba.
+
+EOS aceptado HTTP/TLS2/0 sobref180e8ea limpio, log
+/tmp/soundsible-s3b-eos-silence-native.log: PCM real24000 frames drenado antes
+de STATE_ENDED, relevo DIRECT a cue preparado, pausa/scope conservados. Normal
+APK/test APK/JVM41/lint sin CA pasa. Próximo tempo/phase y después servicio/planner.
