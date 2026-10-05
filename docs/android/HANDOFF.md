@@ -91,11 +91,15 @@ la fachada conserva la identidad MediaSession.
 Integración DJ en fuentes: ProgramDjPlanner/Core, ProgramDjSession/route,
 ProgramMixPlayer/focus único, tap mezclado y comando From current en menú.
 Kotlin Native/test, JVM48 y lint pasan en
-/tmp/soundsible-s3b-dj-e2e-foundation.log. Aceptación end-to-end HTTP/TLS pendiente:
+/tmp/soundsible-s3b-dj-e2e-foundation.log. Primer flujo end-to-end aceptado sobre
+9d64d5a3 limpio: DJ HTTP/TLS2 + NORMAL PlaybackTest HTTP/TLS2, todos verdes;
+normal APK/test/JVM48/lint pasa. Log /tmp/soundsible-s3b-dj-normal-native.log.
 DjProgramTest ejecuta Core real, bridge/servicio, PCM mixto en background,
-dominancia, pausa, recreación Activity y retorno NORMAL. No declarar DJ aceptado.
+dominancia, pausa, recreación Activity y retorno NORMAL. No declarar paridad DJ.
 Faltan refill/dirección/edición completa y ampliar recuperación/phase/OS controls.
 Reservar suites completas para cierre del bloque, usar dirigidos durante integración.
+El fallo real TLS al cerrar conexiones SSL en hilo principal está corregido:
+pool/dispatcher de audio propios, retiro en worker y shutdown de su executor.
 Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.

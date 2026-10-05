@@ -235,5 +235,26 @@
     "No absolute Core cue/phase controller or production service/planner proof yet",
     "No exact compressor acoustic parity or physical listening acceptance",
     "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
-  ]
+  ],
+  "production_dj_first_flow": {
+    "source_revision": "9d64d5a3",
+    "dirty": false,
+    "scope": "DjProgramTest HTTP/TLS2 and PlaybackTest NORMAL HTTP/TLS2",
+    "tests": 4,
+    "failures": 0,
+    "log": "/tmp/soundsible-s3b-dj-normal-native.log",
+    "normal_build": "APK/test APK/JVM48/lint pass without temporary CA",
+    "proves": [
+      "real Core DJ plan through bridge and service",
+      "mixed PCM while Activity is stopped",
+      "physical incoming dominance in programme metadata",
+      "pause, Activity recreation, resume, DJ stop, NORMAL restoration"
+    ],
+    "does_not_prove": [
+      "complete DJ parity",
+      "acoustic continuity when switching NORMAL to DJ",
+      "refill, direction, source editing, extended route repair",
+      "Live or Android Auto"
+    ]
+  }
 }
