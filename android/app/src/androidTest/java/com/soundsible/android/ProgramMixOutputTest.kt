@@ -163,6 +163,9 @@ class ProgramMixOutputTest {
                     assertTrue("Physical output retained the old seek clock", owner.positionUs() < 5000000L)
                 }
                 owner.setVolume(0.1f)
+                val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                while (!owner.readyInput(1) && System.nanoTime() < readyDeadline) Thread.sleep(10)
+                assertTrue("Incoming decoder did not prepare actual PCM", owner.readyInput(1))
                 owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else 2000, technique)
                 val transition = owner.transition() ?: error("Transition window absent")
                 val checkpoints = when {

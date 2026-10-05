@@ -89,12 +89,19 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             override fun release() { /* The shared owner, not a deck, releases the device. */ }
         }
     }
+    fun readyInput(index: Int): Boolean = synchronized(lock) {
+        require(index in 0..1)
+        val format = config ?: return@synchronized false
+        val source = sources[index] ?: return@synchronized false
+        !closed && owns() && failure == null && !source.released && source.playing &&
+            source.queued >= format.sampleRate / 20 * Integer.bitCount(format.channelMask) * 2
+    }
     fun blend(lengthMs: Long, value: ProgramMixCurve.Technique) = synchronized(lock) {
         require(lengthMs in 50..30000 && sources.all { it != null } && mixStart == Long.MAX_VALUE)
         val rate = config!!.sampleRate
         require(recovery == null) { "Current input is recovering" }
         val incoming = sources[1 - active]!!
-        require(!incoming.released && incoming.playing && incoming.queued > 0) { "Incoming input not ready" }
+        require(readyInput(1 - active)) { "Incoming input not ready" }
         restoration = null
         technique = value
         if (value == ProgramMixCurve.Technique.DIRECT) {

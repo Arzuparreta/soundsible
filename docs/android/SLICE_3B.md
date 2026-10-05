@@ -201,3 +201,11 @@ retorno distinguible al final; structural_fade usa equal-power. Clase amplía a1
 casos HTTP/TLS de siete técnicas y recuperación. Kotlin/test/JVM41/lint y Ruff
 pasan en /tmp/soundsible-s3b-mix-fx-foundation.log. No tempo/phase correction,
 EOS ni integración planner/MediaSession aceptados; no equiparar nombres a paridad.
+
+Primer Native18 falla1 (tlsStructuralFade): el primer bloque saliente llega antes
+del PCM entrante, blend rechazó input no listo. Resto17 sin fallos, pero clase
+no aceptada; log /tmp/soundsible-s3b-mix-fx-native.log. API readyInput comprueba
+propiedad/generación, ausencia de fatal, playing y50ms de PCM. El cruce exige esa
+condición; test usa espera acotada5s sobre datos reales mientras saliente continúa.
+Kotlin/test/JVM41/lint pasan en /tmp/soundsible-s3b-mix-fx-ready-foundation.log;
+repetir clase18 antes de aceptar técnicas.
