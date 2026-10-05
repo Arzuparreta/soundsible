@@ -266,3 +266,10 @@ speed1.05, reloj Exo de medios corresponde a frames de salida ajustados por
 velocidad. Se conserva seek/blend/pausa/scope; normal APK/test APK/JVM41/lint
 pasa. Log /tmp/soundsible-s3b-tempo-native.log. No prueba todavía cues/phase ni
 retorno progresivo de rate después del blend; producción DJ sigue pendiente.
+
+Cue/preroll aceptado HTTP/TLS2/0 sobree7e36547 limpio, log
+/tmp/soundsible-s3b-cue-native.log. Arm se agenda contra output reservado, divide
+buffers en fronteras de preroll/cue/fin; consume500ms entrantes en silencio,
+reloj común alinea entrada y metadata sigue playout durante overlap. PCM previo
+no contiene tono entrante. Normal APK/test APK/JVM41/lint pasa. No prueba todavía
+plan absoluto Core, corrección/cancelación ni servicio DJ; siguiente editar futuro.
