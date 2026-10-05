@@ -9,6 +9,7 @@ if (!metadataFile.exists()) throw new GradleException('Run python scripts/androi
 def metadata = new JsonSlurper().parse(metadataFile)
 
 android {
+    sourceSets { test.resources.srcDir('../../shared/contracts') }
     namespace = "com.soundsible.android"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {

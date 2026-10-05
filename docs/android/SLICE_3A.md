@@ -66,3 +66,22 @@ salida de programa y metadata dominante coherentes en MediaSession.
 Después: S3 completo planner/rutas/dirección/requests/transiciones, S4 Live con
 listener independiente, S5 Auto con browse/control confiables, firma/update y
 release gates. No cerrar el objetivo ni publicar alpha por acabar S3a.
+
+## Base de regla en fuentes (todavía sin AudioSink)
+
+ProgramLoudness.kt traduce la política existente, incluidos no medidos, off1
+exacto, techo de peak, cobertura90% y contexto explícito de álbum sin shuffle.
+`shared/contracts/loudness_gain.tsv` contiene vectores consumidos por ambos
+clientes: el test TS pasa38 en /tmp/soundsible-s3a-gain-contract-native-url-ui.log.
+Los tres tests JVM nativos nuevos también comprueban referencia ponderada,
+missing context y cobertura. Pendientes de ejecución en build normal del
+siguiente runner; no afirmar que pasan antes de ver resultados. El recurso TSV
+es sólo recurso de test JVM, no un archivo de datos de usuario ni asset de APK.
+No DSP/audio nuevo conectado todavía; la prueba de PCM y scope sigue siendo gate.
+
+Regla JVM aceptada: normal build de /tmp/soundsible-s2af-autoplay-native.log
+termina0 con20 tests JVM (17 anteriores+3 de regla), cero fallos/errores/omisiones.
+Recurso común cargado desde classpath real, incluida referencia ponderada
+0.5727297072924131 y cobertura/contexto. UI completa1536/192 pasa; test TS de
+regla38 pasa. Base lista para integrarla después de principal limpia73+restart2;
+no afirmar que ya afecta a muestras o captura del programa.
