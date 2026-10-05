@@ -36,6 +36,18 @@ def install(app):
             sleep(2)
         if "fixture" not in query.lower():
             return []
+        if "collection" in query.lower():
+            return [
+                catalog._catalog_item(item_id="deezer:artist:910001", item_type="artist", source="deezer",
+                    title="fixture collection artist", artist="fixture collection artist",
+                    external_ids={"deezer_artist_id": "910001"}),
+                catalog._catalog_item(item_id="deezer:album:920001", item_type="album", source="deezer",
+                    title="fixture collection album", artist="fixture collection artist",
+                    external_ids={"deezer_album_id": "920001"}),
+                *[catalog._catalog_item(item_id=f"deezer:track:{900100 + index}", item_type="track", source="deezer",
+                    title=f"fixture navigation song {index}", artist="fixture collection artist",
+                    external_ids={"deezer_id": str(900100 + index)}) for index in range(15)],
+            ]
         return [
             catalog._catalog_item(
                 item_id="deezer:track:900001",
@@ -59,6 +71,34 @@ def install(app):
             return []
         return [{"id": "C1111111111", "title": title, "artist": artist, "channel": artist + " - Topic", "duration": 60}]
 
+    # Only the external provider is synthetic: profile/discography routes,
+    # identity normalization, saved mutations and durable job ownership stay real.
+    real_deezer_get = catalog._deezer_get
+
+    def provider(path, params=None, timeout=8):
+        if "910001" not in path and "920001" not in path:
+            return real_deezer_get(path, params, timeout)
+        calls.append({"provider": "deezer-profile", "path": path})
+        artist = {"id": 910001, "name": "fixture collection artist", "nb_fan": 123}
+        album = {"id": 920001, "title": "fixture collection album", "artist": artist,
+                 "record_type": "album", "release_date": "2020-01-01"}
+        track = {"id": 900001, "title": "fixture resolved song", "artist": artist,
+                 "album": album, "duration": 60, "track_position": 1, "disk_number": 1}
+        if path == "artist/910001":
+            return artist
+        if path == "artist/910001/top":
+            return {"data": [track], "total": 1}
+        if path == "artist/910001/albums":
+            return {"data": [album], "total": 1}
+        if path == "artist/910001/related":
+            return {"data": []}
+        if path == "album/920001":
+            return {**album, "tracks": {"data": [track]}, "nb_tracks": 1}
+        if path == "album/920001/tracks":
+            return {"data": [track], "total": 1}
+        raise RuntimeError("Unexpected synthetic provider path")
+
+    catalog._deezer_get = provider
     catalog._youtube_search = direct
     catalog._deezer_search = recording
     catalog._musicbrainz_search = musicbrainz

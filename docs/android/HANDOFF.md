@@ -1398,3 +1398,29 @@ de menú. UI dirigida26/7 pasa /tmp/soundsible-s2ae-connected-ui.log. Estado dir
 en rama: descargas/review de colección aún en implementación, nuevos layouts
 requieren suite UI/cuatro perfiles y Android HTTP/HTTPS propios. No paridad S2ae
 ni release aún. Congelación Native anterior levantada al acabar runner0.
+
+### Continuación S2ae: pantallas y colecciones conectadas, validación pendiente
+
+Ver SLICE_2AE: vistas Discover/Artist conectadas en web y Android; navegación
+reversible, búsqueda de cuatro tipos, cola nativa y controller de jobs confirmado.
+UI1516/187 y fixture Core1 pasan. Nuevas seis pruebas de controller pasan.
+Chromium en curso (/tmp/soundsible-s2ae-chromium.log), luego WebKit. Integración
+HTTP/TLS dirigida en curso (/tmp/soundsible-s2ae-profile-native.log), artifact
+preparado dirty de desarrollo. No aceptar Native S2ae ni reemplazar principal57
+hasta resultados. Fuentes nativas/fixtures/assets congeladas durante ese run.
+Adquisición/revisión de colección end to end todavía pendiente; no PR/release.
+
+S2ae update: Chromium278/66 pasa. Primera Native dirigida4fallos: fixture-ID y
+regresión de save/remove en previews; ambos corregidos, pytest1 y dirigido18/2
+pasan. Nueva Native dirigida /tmp/soundsible-s2ae-profile-native-fixed.log en
+curso; no aceptar hasta resultados. WebKit /tmp/soundsible-s2ae-webkit.log sigue
+en curso. SLICE_2AF inventaría siguientes Settings y exige efecto real del DSP,
+no switches cosméticos. Mantener continuidad hasta todos los gates autorizados.
+
+S2ae aceptación dirigida final:6/0 HTTP/TLS en
+/tmp/soundsible-s2ae-final-directed-native.log; XML integration-targeted propio,
+principal57/restart2 conservado. APK normal/test/JVM17/lint pasan sin CA temporal.
+UI1522/188, fixture Core1 y browser4 278/66+269/75 pasan. Core adquiere archivo
+con metadata y reproduce fuente local al nuevo Play; Atrás restaura consulta y
+scroll real. Review/cancel/retry Core y adquisición sin preview anterior siguen
+pendientes. Ver último apartado SLICE_2AE; seguir sin cierre de turno por slice.

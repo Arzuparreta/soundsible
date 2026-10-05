@@ -60,3 +60,83 @@ reemplazar uno explícito. createNativeEntityProfile cancela edición/cuenta/off
 y ofrece retry. ArtistDiscoveryView comparte layout discografía con links/rows
 inyectados; aún no conectado al adaptador web ni a Native. Cuatro casos pasan en
 /tmp/soundsible-s2ae-profile-view-ui.log. No equivale a recorridos de ficha reales.
+
+## Pantallas conectadas; validación ampliada en curso
+
+Discover comparte SearchDiscoveryView con la web: feed, secciones, artistas y
+álbumes, status discreto y canciones. La búsqueda Android incluye explícitamente
+track/library_track/artist/album; no se ha implementado todo el catálogo externo
+(playlist incluida), por lo que no declarar búsqueda `all` ni paridad completa.
+Artist/Album tienen navegación reversible, candidatos, discografía, cola de
+contexto nativa y menús de canciones compartidos con Library. Las acciones de
+bookmark, guardar canciones, adquisición y copia offline permanecen separadas.
+CollectionDownloadView y collectionState se comparten con web, sin sus stores
+de reproducción. El controlador Android usa jobs Core confirmados, scope
+abortable, revisión/resume y cancel/retry; rechaza otro proveedor/trabajo y
+respuestas viejas de polling. La confirmación pendiente se cierra al perder su
+cuenta; guardar canciones no adquiere archivos ni marca la entidad.
+
+UI completa:1516/187 pasan (/tmp/soundsible-s2ae-full-ui.log). Seis casos nuevos
+cubren recibos incorrectos, cancel de artista, cambio de cuenta al confirmar,
+poll tardío, resume ajeno y recuperación de error temporal. La fixture Core
+actual valida perfiles/discografía reales contra proveedor sintético: pytest1
+pasa (/tmp/soundsible-s2ae-provider-fixture.log). No demuestra proveedor vivo.
+
+En ejecución: Chromium completo; después WebKit completo secuencial. APK
+preparada dirty de desarrollo, integración dirigida CollectionProfileTest y
+CatalogSearchTest HTTP/TLS en /tmp/soundsible-s2ae-profile-native.log. No aceptar
+esos recorridos hasta inspeccionar resultados, ni sustituir aún principal57.
+Sigue pendiente adquisición/revisión end to end de colecciones y aceptación
+ampliada; Settings/DJ/Live/Auto/firma/update no están completos. Continuar.
+
+Primera integración dirigida:4 fallos; no aceptación. Dos perfiles fallaron por
+fixture con ID genérico en lugar de deezer_artist_id/deezer_album_id. Dos casos
+CatalogSearch encontraron regresión real: el menú compartido omitía save/remove
+al resolver un preview. Fixture corregida y comprobada por pytest1; menú añade
+intenciones de catálogo a las acciones compartidas, con scope de consulta/ruta.
+Prueba de regresión pasa; dirigido18/2 pasa. UI1516/187 vuelve a pasar antes de
+sumar esa prueba. CollectionDownloadView tiene2 casos de decisiones/busy/cancel.
+Chromium completo278/66 pasa; WebKit en curso. Nueva integración dirigida en
+/tmp/soundsible-s2ae-profile-native-fixed.log; fuentes/assets congeladas durante
+su ejecución. No atribuir la primera fallida al producto como validación.
+
+Regresión de adquisición encontrada: el preview cacheado de una resolución no
+consultaba su identidad YouTube contra el nuevo snapshot adquirido. Core sí
+produjo archivo/álbum/posición reales; Play desde la ficha seguía enviando el
+preview. Prueba nueva reproduce el fallo y pasa tras promover por trackKeys,
+sin inferir propiedad por título. Holdings de ficha usan ese mismo resolver y
+no muestran «0 not found» cuando el trabajo no describe faltantes.
+UI completa1520/188 pasa (/tmp/soundsible-s2ae-promotion-full-ui.log).
+APK preparada actualizada y6casos HTTP/TLS en curso en
+/tmp/soundsible-s2ae-promotion-native.log. Las ejecuciones anteriores de6casos
+fallaron; no presentarlas como aceptación. Limpieza de fixture restaura guardados
+nuevos incluso si la adquisición añadió una identidad lib, conservando los
+existentes. Browser4 final compartido: Chromium278/66, WebKit269/75 pasan;
+correcciones posteriores sólo afectan módulos de la entrada Android/tests.
+Pendiente adicional: revisión Core end to end y holdings de adquisición sin
+resolución previa deben tener aceptación propia, no asumir el camino cacheado.
+
+## Aceptación dirigida de fichas/guardar/adquirir/navegar
+
+Resultado final:6 tests HTTP/TLS pasan,0fallos/errores/omitidos, en
+/tmp/soundsible-s2ae-final-directed-native.log. XML dedicado en
+android/build/integration-targeted/com.soundsible.android.CollectionProfileTest_com.soundsible.android.CatalogSearchTest/;
+no reemplaza integración principal57/restart2. APK normal/testAPK, JVM17 y lint
+pasan después de retirar CA temporal. Artifact de desarrollo preparado dirty;
+no release ni aceptación acústica.
+
+Cuatro recorridos de colección prueban artista → discografía real → álbum,
+play nativo, guardar explícito sin adquirir, adquisición Core/pipeline/archivo
+con álbum y posición correctos, conservación de programa durante adquisición,
+nueva orden Play sobre fuente local, volver por fichas y consulta/scroll del
+contenedor Android. Dos recorridos CatalogSearch prueban save/remove, provider
+failure/retry y cuentas después de esos casos. Menús de resultados resueltos
+conservan intenciones propias junto con acciones compartidas; holdings usan
+identidades confirmadas y caché promovida. Lista sintética larga permite scroll
+real; los tests seleccionan controles visibles, no la búsqueda oculta.
+
+UI completa1522/188 pasa; pytest fixture1 pasa. Browser4 compartido pasa278/66 y
+269/75. S2ae continúa pendiente de revisión/cancel/retry Core end to end y
+adquisición sin resolución previa en APK, además del resto del catálogo externo.
+No tratar seis casos dirigidos como matriz completa. Settings siguientes tienen
+plan S2AF; adaptador haptic preparado separado, todavía no conectado al APK.

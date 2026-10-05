@@ -1,14 +1,13 @@
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, onMount, Show, Switch, untrack } from 'solid-js';
 import {
   collectionStep, discographyOf, jobMissingCount, jobReviewCount, jobRunning, saveCollection,
 } from '../lib/collection';
 import { api } from '../lib/api';
 import { confirmDialog } from '../lib/confirm';
-import { formatBytes, formatDuration } from '../lib/format';
+import { formatBytes } from '../lib/format';
 import { t } from '../lib/i18n';
 import { migrationApi, type MigrationCandidate, type MigrationJob, type MigrationTrack } from '../lib/migrationApi';
 import { openOverlay } from '../lib/overlay';
-import { createResponsiveTap } from '../lib/responsiveTap';
 import { entitiesBusy, fillEntityCover, isEntitySaved, setEntitySaved, syncSavedEntities, type SavedEntity } from '../lib/savedEntities';
 import { toast } from '../lib/toast';
 import { ownedTrackForItem } from '../stores';
@@ -18,15 +17,13 @@ import { Spinner } from './Spinner';
 import { openActionMenu } from './ActionMenu';
 import saveStyles from './SavedEntities.module.css';
 import styles from './CollectionControl.module.css';
+import { collectionArrivedCount as arrivedOf } from '../lib/collectionState';
+import { CollectionDownloadView } from './CollectionDownloadView';
 
 /** How often a running download is looked at again. */
 const WATCH_MS = 3000;
 /** What the engine assumes per second of audio when it sizes a download. */
 const BYTES_PER_SECOND = 192_000 / 8;
-
-/** Songs of the download already in the library, fetched now or held before. */
-const arrivedOf = (job: MigrationJob | null) =>
-  (job?.selected_counts.completed ?? 0) + (job?.selected_counts.existing ?? 0);
 
 const downloads = {
   album: { get: api.getAlbumDownload, start: api.startAlbumDownload },
@@ -225,10 +222,6 @@ function CollectionDownloadSheet(props: {
   onJob: (job: MigrationJob) => void;
   close: () => void;
 }) {
-  const tracks = () => props.job()?.tracks ?? [];
-  const review = () => tracks().filter((row) => row.state === 'needs_review');
-  const unfound = () => tracks().filter((row) => row.state === 'unavailable');
-  const failed = () => tracks().filter((row) => row.state === 'failed');
   const [busy, setBusy] = createSignal(false);
 
   const act = async (work: (id: string) => Promise<{ job: MigrationJob }>) => {
@@ -253,77 +246,6 @@ function CollectionDownloadSheet(props: {
     return migrationApi.control(id, 'resume').catch(() => decided);
   });
 
-  return (
-    <div class={styles.sheet}>
-      <header class={styles.head}>
-        <span class={styles.title}>{props.title}</span>
-        <span class={styles.status} role="status">
-          {t(jobRunning(props.job()) ? 'collectionControl.downloading' : 'collectionControl.summary', {
-            done: arrivedOf(props.job()), total: props.job()?.selected_track_count ?? 0,
-          })}
-        </span>
-      </header>
-
-      <Show when={review().length > 0}>
-        <section class={styles.section} aria-label={t('collectionControl.chooseTitle')}>
-          <h3 class={styles.sectionTitle}>{t('collectionControl.chooseTitle')}</h3>
-          <p class={styles.hint}>{t('collectionControl.chooseHint')}</p>
-          <For each={review()}>
-            {(row) => (
-              <div class={styles.song}>
-                <span class={styles.songTitle}>{row.source?.title}</span>
-                <For each={row.candidates.filter((candidate) => candidate.video_id).slice(0, 3)}>
-                  {(candidate) => {
-                    const tap = createResponsiveTap({ onTap: () => decide(row, candidate) });
-                    return (
-                      <button type="button" class={styles.candidate} data-pressable disabled={busy()} {...tap}>
-                        <span class={styles.candidateTitle}>{candidate.title}</span>
-                        <span class={styles.candidateMeta}>
-                          {[candidate.artist, candidate.duration ? formatDuration(candidate.duration) : ''].filter(Boolean).join(' · ')}
-                        </span>
-                      </button>
-                    );
-                  }}
-                </For>
-                <button type="button" class={styles.skip} disabled={busy()} onClick={() => decide(row)}>
-                  {t('collectionControl.skip')}
-                </button>
-              </div>
-            )}
-          </For>
-        </section>
-      </Show>
-
-      <Show when={failed().length > 0 || unfound().length > 0}>
-        <section class={styles.section} aria-label={t('collectionControl.missingTitle')}>
-          <h3 class={styles.sectionTitle}>{t('collectionControl.missingTitle')}</h3>
-          <ul class={styles.missingList}>
-            <For each={[...failed(), ...unfound()]}>
-              {(row) => (
-                <li>
-                  <span class={styles.songTitle}>{row.source?.title}</span>
-                  <span class={styles.candidateMeta}>
-                    {row.state === 'failed' ? t('collectionControl.failedSong') : t('collectionControl.unfoundSong')}
-                  </span>
-                </li>
-              )}
-            </For>
-          </ul>
-          <Show when={failed().length > 0 && !jobRunning(props.job())}>
-            <button type="button" class={styles.action} disabled={busy()}
-              onClick={() => void act((id) => migrationApi.control(id, 'retry'))}>
-              {t('collectionControl.retry')}
-            </button>
-          </Show>
-        </section>
-      </Show>
-
-      <Show when={jobRunning(props.job())}>
-        <button type="button" class={styles.stop} disabled={busy()}
-          onClick={() => void act((id) => migrationApi.control(id, 'cancel'))}>
-          {t('collectionControl.stop')}
-        </button>
-      </Show>
-    </div>
-  );
+  return <CollectionDownloadView title={props.title} job={props.job()} busy={busy()}
+    onControl={action => void act(id => migrationApi.control(id, action))} onDecide={decide} />;
 }

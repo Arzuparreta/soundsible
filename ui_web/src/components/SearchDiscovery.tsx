@@ -1,22 +1,19 @@
 import { prioritizeDiscoveries } from '../lib/catalogCollection';
 import { CatalogCollectionStatus } from './CatalogCollectionStatus';
 import { openCatalogEntityMenu } from './savedEntityActions';
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { useNavigate } from '@solidjs/router';
-import { api, type DiscoveryBrowseItem, type DiscoveryMusicFeed } from '../lib/api';
-import { t } from '../lib/i18n';
+import { api, type DiscoveryMusicFeed } from '../lib/api';
 import { userKey } from '../lib/session';
 import { readSearchCache, writeSearchCache } from '../lib/searchCache';
 import { discoveryCatalogItem } from '../lib/searchDiscovery';
 import { catalogDestination } from '../lib/musicNavigation';
 import { navigateBackOr } from '../lib/scrollHistory';
 import { MusicLink } from './MusicLinks';
-import { CoverImage } from './CoverImage';
 import { CatalogResultRow } from './CatalogResultRow';
-import { SkeletonCards, SkeletonRows } from './Skeleton';
+import { SearchDiscoveryView } from './SearchDiscoveryView';
 import { isPlayingItem } from '../stores';
 import type { CatalogItem } from '../types/music';
-import styles from './SearchDiscovery.module.css';
 
 const CACHE = 'search-discovery';
 
@@ -41,9 +38,6 @@ export function SearchDiscovery(props: {
   const songs = createMemo(() => prioritizeDiscoveries((feed().items ?? []).map(discoveryCatalogItem)).slice(0, 10));
   const hasContent = () => sections().some((section) => section.items.length) || songs().length > 0;
   const expanded = () => ['artists', 'albums', 'songs'].includes(props.section ?? '') ? props.section : undefined;
-  const title = (id: string, popular = false) => id === 'artists'
-    ? t(popular ? 'searchHome.popularArtists' : 'searchHome.artists')
-    : id === 'albums' ? t(popular ? 'searchHome.popularAlbums' : 'searchHome.albums') : t('searchHome.songs');
 
   async function load(refresh = false) {
     clearTimeout(timer);
@@ -71,74 +65,13 @@ export function SearchDiscovery(props: {
   createEffect(() => props.onReady(!loading() || !!hasContent()));
   onCleanup(() => { disposed = true; controller?.abort(); clearTimeout(timer); });
 
-  return <div class={styles.home} data-testid="search-discovery">
-    <Show when={expanded()}>
-      <button class={styles.back} type="button" onClick={() => navigateBackOr(navigate, '/search')}>← {t('searchHome.back')}</button>
-    </Show>
-    <Show when={loading() && !hasContent()}>
-      <SkeletonCards count={3} shape="round" /><SkeletonCards count={3} /><SkeletonRows count={5} compact />
-    </Show>
-    <For each={sections().filter((section) => !expanded() || expanded() === section.id)}>{(section) =>
-      <section aria-label={title(section.id, section.popular)}>
-        <SectionHeader title={title(section.id, section.popular)} id={section.id} more={!expanded() && section.items.length > 2} />
-        <EntityRail items={section.items} round={section.id === 'artists'} expanded={!!expanded()} label={title(section.id, section.popular)} />
-      </section>
-    }</For>
-    <Show when={songs().length > 0 && (!expanded() || expanded() === 'songs')}>
-      <section aria-label={title('songs')}>
-        <SectionHeader title={title('songs')} id="songs" more={!expanded() && songs().length > 5} />
-        <div class={styles.songs}><For each={expanded() ? songs() : songs().slice(0, 5)}>{(item) =>
-          <CatalogResultRow showLibraryStatus item={item} active={isPlayingItem(item)} saving={props.saving.has(item.id)}
-            onPlay={() => props.onPlay(item)} onDownload={() => props.onSave(item)} />
-        }</For></div>
-      </section>
-    </Show>
-    <Show when={!loading() && !hasContent() && !error()}>
-      <p class={styles.notice}>{t(feed().revalidating ? 'searchHome.preparing' : 'searchHome.empty')}</p>
-    </Show>
-    <Show when={error()}>
-      <div class={styles.notice} role="status">{t('searchHome.error')}{' '}
-        <button type="button" class={styles.retry} onClick={() => { attempts = 0; setLoading(true); setError(false); void load(true); }}>{t('common.retry')}</button>
-      </div>
-    </Show>
-  </div>;
-}
-
-function SectionHeader(props: { title: string; id: string; more: boolean }) {
-  return <div class={styles.heading}><h2>{props.title}</h2><Show when={props.more}>
-    <MusicLink path={`/search?browse=${props.id}`} label={`${t('searchHome.seeAll')}: ${props.title}`} class={styles.more}>{t('searchHome.seeAll')}</MusicLink>
-  </Show></div>;
-}
-
-function EntityRail(props: { items: DiscoveryBrowseItem[]; round: boolean; expanded: boolean; label: string }) {
-  let rail: HTMLDivElement | undefined;
-  const [left, setLeft] = createSignal(false);
-  const [right, setRight] = createSignal(false);
-  const update = () => {
-    if (!rail) return;
-    setLeft(rail.scrollLeft > 1);
-    setRight(rail.scrollLeft + rail.clientWidth < rail.scrollWidth - 1);
-  };
-  onMount(() => {
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : undefined;
-    if (rail) observer?.observe(rail);
-    update();
-    onCleanup(() => observer?.disconnect());
-  });
-  return <>
-    <Show when={!props.expanded}><div class={styles.controls}>
-      <button type="button" disabled={!left()} aria-label={`${t('searchHome.previous')}: ${props.label}`} onClick={() => rail?.scrollBy({ left: -rail.clientWidth * .8 })}>←</button>
-      <button type="button" disabled={!right()} aria-label={`${t('searchHome.next')}: ${props.label}`} onClick={() => rail?.scrollBy({ left: rail.clientWidth * .8 })}>→</button>
-    </div></Show>
-    <div ref={rail} onScroll={update} classList={{ [styles.rail]: !props.expanded, [styles.grid]: props.expanded && !props.round,
-      [styles.artistList]: props.expanded && props.round }}>
-      <For each={props.items}>{(item) => <MusicLink path={catalogDestination(item)!} class={styles.entity} label={item.title} onMenu={(event) => openCatalogEntityMenu(item, event)}>
-        <span classList={{ [styles.cover]: true, [styles.round]: props.round }}><CoverImage src={item.cover} /></span>
-        <span class={styles.meta}><span class={styles.name}>{item.title}</span>
-          <Show when={!props.round}><span class={styles.subtitle}>{item.artist}</span></Show>
-          <CatalogCollectionStatus item={item} />
-        </span>
-      </MusicLink>}</For>
-    </div>
-  </>;
+  return <SearchDiscoveryView sections={sections()} songs={songs()} expanded={expanded()}
+    loading={loading()} error={error()} preparing={!!feed().revalidating}
+    onBack={() => navigateBackOr(navigate, '/search')}
+    onRetry={() => { attempts = 0; setLoading(true); setError(false); void load(true); }}
+    renderMore={(section, link) => <MusicLink path={`/search?browse=${section}`} label={link.label} class={link.class}>{link.children}</MusicLink>}
+    renderEntity={(item, link) => <MusicLink path={catalogDestination(item)!} class={link.class} label={link.label} onMenu={event => openCatalogEntityMenu(item, event)}>{link.children}</MusicLink>}
+    renderStatus={item => <CatalogCollectionStatus item={item} />}
+    renderSong={item => <CatalogResultRow showLibraryStatus item={item} active={isPlayingItem(item)} saving={props.saving.has(item.id)}
+      onPlay={() => props.onPlay(item)} onDownload={() => props.onSave(item)} />} />;
 }

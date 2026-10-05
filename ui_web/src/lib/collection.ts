@@ -3,7 +3,6 @@ import type { CatalogItem, SavedEntry } from '../types/music';
 import { api } from './api';
 import { confirmDialog } from './confirm';
 import { t } from './i18n';
-import type { MigrationJob } from './migrationApi';
 import { savedFromCatalogItem } from './saved';
 import type { SavedEntity } from './savedEntities';
 
@@ -14,28 +13,7 @@ export function songEntries(tracklist: CatalogItem[]): SavedEntry[] {
   return tracklist.map(savedFromCatalogItem);
 }
 
-/** The current download state, independent of the navigation bookmark. */
-export type CollectionStep = 'download' | 'downloading' | 'review' | 'missing' | 'owned';
-
-const RUNNING = new Set(['analyzed', 'queued', 'running']);
-
-export const jobRunning = (job: MigrationJob | null | undefined): boolean => !!job && RUNNING.has(job.state);
-
-export const jobReviewCount = (job: MigrationJob | null | undefined): number => job?.selected_counts?.needs_review ?? 0;
-
-/** Songs the last pass could not get: no match was found, or the download failed. */
-export const jobMissingCount = (job: MigrationJob | null | undefined): number =>
-  (job?.selected_counts?.unavailable ?? 0) + (job?.selected_counts?.failed ?? 0);
-
-export function collectionStep(opts: { total: number; owned: number; job: MigrationJob | null | undefined }): CollectionStep {
-  if (opts.total > 0 && opts.owned >= opts.total) return 'owned';
-  if (jobRunning(opts.job)) return 'downloading';
-  if (jobReviewCount(opts.job) > 0) return 'review';
-  // A song that failed is fetched again by ⬇; one never found is not.
-  const unfound = opts.job?.selected_counts?.unavailable ?? 0;
-  if (unfound > 0 && opts.total - opts.owned <= unfound) return 'missing';
-  return 'download';
-}
+export { collectionStep, jobRunning, jobReviewCount, jobMissingCount, type CollectionStep } from './collectionState';
 
 /** Adding a collection affects Songs only, never its navigation bookmark. */
 export async function saveCollection(entity: SavedEntity, tracklist: CatalogItem[]): Promise<void> {

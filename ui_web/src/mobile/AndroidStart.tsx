@@ -1,3 +1,4 @@
+import type { MenuAction } from '../components/ActionMenu';
 import NativeSettings from './Settings';
 import type { createNativeAppearance } from './appearance';
 import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
@@ -279,6 +280,20 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       setBusy(false);
     }
   }
+  function songMenu(track: Track, event?: MouseEvent, context?: { playlist: string; index: number }, catalogActions: MenuAction[] = []) {
+            const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
+            const menu = programLibraryMenu(track, program, programPending, runtime.execute);
+            openContextMenu({ ...menu, actions: [...catalogActions, ...(menu.actions ?? []),
+              ...(track.source === 'preview' ? [{ label: t('collectionControl.download'), disabled: !current() || acquisition.busy(track.id), onSelect: () => { if (current()) void acquisition.add(track).catch(() => { if (current()) setError(t('collectionControl.failed')); }); } }] : []),
+              songMarkAction(track, savedEntries, () => epoch, () => !current(), sync, () => { if (current()) setError(t('common.loadFailed')); }),
+              { label: t('trackActions.addToPlaylist'), disabled: !current(), onSelect: () => { if (current()) openNativePlaylistPicker(track, () => snapshot()?.playlists ?? {}, current, sync, () => snapshot()?.settings?.playlist_order); } },
+              ...(track.source !== 'preview' ? [{ label: t('trackActions.editData'), disabled: !current(), onSelect: () => {
+                if (current()) openNativeMetadataEditor(track, current, sync, id => snapshot()?.tracks.find(row => row.id === id), saved => runtime.execute({ action: 'metadata', tracks: [{ id: saved.id, title: saved.title, artist: saved.artist, album: saved.album ?? '', album_artist: saved.album_artist ?? null, album_id: saved.album_id ?? null, artist_id: saved.artist_id ?? null }] }));
+              } }] : []),
+              ...(context ? nativePlaylistOccurrenceActions(context.playlist, context.index, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []),
+              ...(track.source !== 'preview' && !isPodcastTrack(track) ? [nativeFileDeletionAction(track, fileDeletion, current)] : []),
+              ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event);
+  }
   registerNativeBack(() => {
     if (surface() === 'library') return false;
     setLibraryTab('songs'); setSurface('library'); return true;
@@ -303,7 +318,8 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     document.addEventListener('visibilitychange', resume);
     onCleanup(() => { clearInterval(interval); clearInterval(offlineInterval); document.removeEventListener('visibilitychange', resume); reset(false); runtime.unbind(); setUnauthorizedHandler(null); });
   });
-  return <main class={user() || program()?.queue.length ? styles.connected : styles.start} data-testid={server() ? 'android-configured' : 'android-unconfigured'}>
+  let scrollContainer: HTMLElement | undefined;
+  return <main ref={scrollContainer} class={user() || program()?.queue.length ? styles.connected : styles.start} data-testid={server() ? 'android-configured' : 'android-unconfigured'}>
     <Show when={user()} fallback={<><img src={logo} alt="" width="64" height="64" /><h1>{t('android.title')}</h1></>}>
       {account => <header><h1>{t('library.title')}</h1><p>{account().display_name} · {server()}</p>
         <button type="button" disabled={busy()} onClick={() => void refresh()}>{t('android.refresh')}</button>
@@ -334,7 +350,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
         {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => { setLibraryTab('songs'); setSurface('library'); }}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={surface() === 'downloads'} onClick={() => setSurface('downloads')}>{t('downloads.title')}</button><button data-android-migrate aria-pressed={surface() === 'migrate'} onClick={() => setSurface('migrate')}>{t('migrate.title')}</button><button data-android-settings aria-pressed={surface() === 'settings'} onClick={() => setSurface('settings')}>{t('nav.settings')}</button></nav>
-          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={<CatalogSearch history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings appearance={props.appearance} busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
+          <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={<CatalogSearch scrollTarget={() => scrollContainer} offlineMenuActions={tracks => offlineActions(tracks, offlineState, offlineCommand, () => generation)} onResolvedMenu={(track, event, actions) => songMenu(track, event, undefined, actions)} savedEntities={savedEntities()} onEntityMenu={entityMenu} onPlayCollection={play} history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings appearance={props.appearance} busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
               const owner = epoch;
               if (updated.id !== user()?.id) throw new Error('Account changed');
               setUser(updated); await restoreOffline(false);
@@ -348,20 +364,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
             openContextMenu({ title, actions: [...(context?.bookmark ? [nativeEntityMark(context.bookmark, savedEntities, current, sync, () => { if (current()) setError(t('savedEntities.failed')); })] : []), ...(context?.kind === 'playlists' ? nativePlaylistActions(context.id, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []), ...offlineActions(tracks, offlineState, offlineCommand, () => generation)] }, event);
           }}
-          onMenu={(track, event, context) => {
-            const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
-            const menu = programLibraryMenu(track, program, programPending, runtime.execute);
-            openContextMenu({ ...menu, actions: [...(menu.actions ?? []),
-              ...(track.source === 'preview' ? [{ label: t('collectionControl.download'), disabled: !current() || acquisition.busy(track.id), onSelect: () => { if (current()) void acquisition.add(track).catch(() => { if (current()) setError(t('collectionControl.failed')); }); } }] : []),
-              songMarkAction(track, savedEntries, () => epoch, () => !current(), sync, () => { if (current()) setError(t('common.loadFailed')); }),
-              { label: t('trackActions.addToPlaylist'), disabled: !current(), onSelect: () => { if (current()) openNativePlaylistPicker(track, () => snapshot()?.playlists ?? {}, current, sync, () => snapshot()?.settings?.playlist_order); } },
-              ...(track.source !== 'preview' ? [{ label: t('trackActions.editData'), disabled: !current(), onSelect: () => {
-                if (current()) openNativeMetadataEditor(track, current, sync, id => snapshot()?.tracks.find(row => row.id === id), saved => runtime.execute({ action: 'metadata', tracks: [{ id: saved.id, title: saved.title, artist: saved.artist, album: saved.album ?? '', album_artist: saved.album_artist ?? null, album_id: saved.album_id ?? null, artist_id: saved.artist_id ?? null }] }));
-              } }] : []),
-              ...(context ? nativePlaylistOccurrenceActions(context.playlist, context.index, () => snapshot() ?? { tracks: [] }, current, sync, () => { if (current()) setError(t('common.loadFailed')); }) : []),
-              ...(track.source !== 'preview' && !isPodcastTrack(track) ? [nativeFileDeletionAction(track, fileDeletion, current)] : []),
-              ...offlineActions([track], offlineState, offlineCommand, () => generation)] }, event);
-          }} />
+          onMenu={songMenu} />
           </Show></>}
       </Show>
     </Show>

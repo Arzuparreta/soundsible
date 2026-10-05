@@ -4,14 +4,15 @@ import { cleanup, fireEvent, render, waitFor } from '@solidjs/testing-library';
 import { setLocale } from '../lib/i18n';
 import type { CatalogItem, CatalogSearchResponse, SavedEntry, Track } from '../types/music';
 import CatalogSearch from './CatalogSearch';
+import { dispatchNavigationBack } from './backNavigation';
 import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
-const mocks = vi.hoisted(() => ({ search: vi.fn(), resolve: vi.fn(), save: vi.fn(), menu: vi.fn() }));
-vi.mock('../lib/api', async () => ({ ApiError: (await import('../lib/http')).ApiError, api: { searchCatalog: mocks.search, resolveCatalogItem: mocks.resolve, setSavedEntries: mocks.save } }));
+const mocks = vi.hoisted(() => ({ search: vi.fn(), resolve: vi.fn(), save: vi.fn(), menu: vi.fn(), feed: vi.fn(), artist: vi.fn(), album: vi.fn(), albumJob: vi.fn(), artistJob: vi.fn() }));
+vi.mock('../lib/api', async () => ({ ApiError: (await import('../lib/http')).ApiError, api: { searchCatalog: mocks.search, resolveCatalogItem: mocks.resolve, setSavedEntries: mocks.save, getDiscoveryMusicFeed: mocks.feed, getArtistProfile: mocks.artist, getAlbumProfile: mocks.album, getAlbumDownload: mocks.albumJob, getArtistDownload: mocks.artistJob } }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: mocks.menu }));
 const row: CatalogItem = { id: 'deezer:track:1', title: 'Song', artist: 'Artist', source: 'deezer', type: 'track', duration: 120, external_ids: { deezer_id: '1' } };
 const result = (items: CatalogItem[]): CatalogSearchResponse => ({ query: 'song', items, sections: [] });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
-beforeEach(() => { cleanup(); setLocale('en'); vi.clearAllMocks(); mocks.search.mockResolvedValue(result([row])); mocks.resolve.mockResolvedValue({ video_id: 'A1111111111' }); mocks.save.mockResolvedValue(undefined); });
+beforeEach(() => { cleanup(); vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); setLocale('en'); vi.clearAllMocks(); mocks.search.mockResolvedValue(result([row])); mocks.resolve.mockResolvedValue({ video_id: 'A1111111111' }); mocks.save.mockResolvedValue(undefined); mocks.feed.mockResolvedValue({}); mocks.albumJob.mockResolvedValue({ job: null }); mocks.artistJob.mockResolvedValue({ job: null }); mocks.artist.mockResolvedValue({ name: 'Artist', resolved: true, candidates: [], top_tracks: [], albums: [], singles_eps: [], related_artists: [], in_library: false, cached: false }); mocks.album.mockResolvedValue({ title: 'Album', artist: 'Artist', cover: '', tracklist: [], resolved: true, in_library: false, cached: false }); });
 it('executes an owned recent query and removes it reactively without creating playback', async () => {
   localStorage.clear();
   const history = createSearchHistoryStorage(key => `native-member:${key}`);
@@ -19,7 +20,7 @@ it('executes an owned recent query and removes it reactively without creating pl
   const play = vi.fn();
   const view = render(() => <CatalogSearch history={history} generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={play} onChanged={vi.fn()} />);
   fireEvent.click(view.getByRole('button', { name: 'previous' }));
-  await waitFor(() => expect(mocks.search).toHaveBeenCalledWith('previous', expect.any(AbortSignal), 'track,library_track'));
+  await waitFor(() => expect(mocks.search).toHaveBeenCalledWith('previous', expect.any(AbortSignal), 'track,library_track,artist,album'));
   fireEvent.input(view.getByRole('searchbox'), { target: { value: '' } });
   fireEvent.click(view.getByRole('button', { name: 'Remove “previous” from recent searches' }));
   expect(view.queryByRole('button', { name: 'previous' })).toBeNull();
@@ -104,4 +105,63 @@ it('reports an invalid provider identity instead of acknowledging nonexistent pl
   fireEvent.click(view.container.querySelector('[data-row-main]')!);
   await waitFor(() => expect(view.getByRole('alert')).toBeTruthy());
   expect(play).not.toHaveBeenCalled();
+});
+
+it('opens feed entities and nested discography without playing, and returns to the same feed', async () => {
+  const scrollContainer = document.createElement('main'); scrollContainer.scrollTop = 321;
+  const play = vi.fn(), entityMenu = vi.fn();
+  mocks.feed.mockResolvedValue({ browse_sections: [{ id: 'artists', popular: false, items: [{ id: 'artist:11', type: 'artist', source: 'deezer', title: 'Artist', external_ids: { deezer_artist_id: '11' } }] }] });
+  mocks.artist.mockResolvedValue({ name: 'Artist', deezer_id: '11', resolved: true, candidates: [], top_tracks: [], albums: [{ deezer_id: '21', title: 'Record', cover: '', year: 2001 }], singles_eps: [], related_artists: [], in_library: false, cached: false });
+  const view = render(() => <CatalogSearch scrollTarget={() => scrollContainer} generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={play} onChanged={vi.fn()} onEntityMenu={entityMenu} />);
+  await waitFor(() => expect(view.getByRole('button', { name: 'Artist' })).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'Artist' }));
+  await waitFor(() => expect(mocks.artist).toHaveBeenCalledWith('Artist', '11', expect.any(AbortSignal)));
+  await waitFor(() => expect(view.getByRole('button', { name: /Record/ })).toBeTruthy());
+  expect(play).not.toHaveBeenCalled();
+  await waitFor(() => expect(scrollContainer.scrollTop).toBe(0)); scrollContainer.scrollTop = 87;
+  fireEvent.click(view.getByRole('button', { name: /Record/ }));
+  await waitFor(() => expect(mocks.album).toHaveBeenCalledWith('Record', 'Artist', '21', expect.any(AbortSignal)));
+  await waitFor(() => expect(scrollContainer.scrollTop).toBe(0));
+  expect(dispatchNavigationBack()).toBe(true);
+  await waitFor(() => expect(view.getByRole('heading', { name: 'Artist' })).toBeTruthy());
+  await waitFor(() => expect(scrollContainer.scrollTop).toBe(87));
+  expect(dispatchNavigationBack()).toBe(true);
+  await waitFor(() => expect(view.getByRole('button', { name: 'Artist' })).toBeTruthy());
+  await waitFor(() => expect(scrollContainer.scrollTop).toBe(321));
+  expect(mocks.feed).toHaveBeenCalledTimes(1); expect(mocks.save).not.toHaveBeenCalled(); expect(entityMenu).not.toHaveBeenCalled();
+});
+it('searches songs, artists and albums while preserving the query after an entity visit', async () => {
+  mocks.search.mockResolvedValue(result([{ id: 'album:21', type: 'album', source: 'deezer', title: 'Record', artist: 'Artist', external_ids: { deezer_album_id: '21' } }, row]));
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'record' } });
+  await waitFor(() => expect(view.getByText('Record')).toBeTruthy());
+  fireEvent.click(view.getByText('Record'));
+  await waitFor(() => expect(mocks.album).toHaveBeenCalledWith('Record', 'Artist', '21', expect.any(AbortSignal)));
+  expect(dispatchNavigationBack()).toBe(true);
+  expect(view.getByRole('searchbox')).toHaveValue('record'); expect(view.getByText('Song')).toBeTruthy();
+});
+it('uses the shared native song menu for held results so offline and library actions stay available', async () => {
+  const track: Track = { id: 'held', title: 'Held', artist: 'Artist' }, menu = vi.fn();
+  mocks.search.mockResolvedValue(result([{ ...row, title: 'Held', type: 'library_track', source: 'library', track_id: 'held' }]));
+  const view = render(() => <CatalogSearch generation={1} tracks={[track]} saved={[]} disconnected={false} onResolvedMenu={menu} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'held' } });
+  await waitFor(() => expect(view.getByText('Held')).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'More options: Held' }));
+  expect(menu.mock.calls[0][0]).toBe(track); expect(mocks.menu).not.toHaveBeenCalled(); expect(mocks.resolve).not.toHaveBeenCalled();
+});
+it('keeps explicit catalog save actions when a resolved preview uses the shared song menu', async () => {
+  const menu = vi.fn(), changed = vi.fn().mockResolvedValue(undefined);
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false}
+    onResolvedMenu={menu} onPlay={vi.fn().mockResolvedValue(undefined)} onChanged={changed} />);
+  fireEvent.input(view.getByRole('searchbox'), { target: { value: 'song' } });
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  fireEvent.click(view.container.querySelector('[data-row-main]')!);
+  await waitFor(() => expect(mocks.resolve).toHaveBeenCalledOnce());
+  await waitFor(() => expect(view.getByRole('button', { name: 'More options: Song' })).not.toBeDisabled());
+  fireEvent.click(view.getByRole('button', { name: 'More options: Song' }));
+  const actions = menu.mock.calls[0][2];
+  expect(actions.map((action: { label: string }) => action.label)).toEqual(['Play', 'Save to your library']);
+  await actions[1].onSelect();
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
+  expect(mocks.save.mock.calls[0][0][0].keys).toContain('deezer:1');
 });

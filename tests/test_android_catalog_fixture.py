@@ -81,6 +81,28 @@ def test_catalog_search_resolve_and_save_keep_real_account_isolation(tmp_path):
             entries = member.get(origin + "/api/library/saved", timeout=10).json()["saved"]
             assert any("yt:C1111111111" in row["keys"] for row in entries)
             assert member.get(origin + "/api/library", timeout=10).json()["tracks"] == before
+            entities = member.get(origin + "/api/catalog/search", params={
+                "q": "fixture collection", "type": "artist,album"}, timeout=15)
+            assert entities.status_code == 200, entities.text
+            identities = {item["type"]: item["external_ids"] for item in entities.json()["items"]}
+            assert identities["artist"]["deezer_artist_id"] == "910001"
+            assert identities["album"]["deezer_album_id"] == "920001"
+            # Real Core profiles consume synthetic provider pages, including
+            # complete album order and full artist discography.
+            artist = member.get(origin + "/api/catalog/artist", params={
+                "name": "fixture collection artist", "deezer_id": "910001"}, timeout=15)
+            assert artist.status_code == 200, artist.text
+            assert artist.json()["deezer_id"] == "910001"
+            assert artist.json()["albums"][0]["deezer_id"] == "920001"
+            album = member.get(origin + "/api/catalog/album", params={
+                "name": "fixture collection album", "artist": "fixture collection artist",
+                "deezer_id": "920001"}, timeout=15)
+            assert album.status_code == 200, album.text
+            assert album.json()["tracklist"][0]["external_ids"]["deezer_id"] == "900001"
+            discography = member.get(origin + "/api/catalog/artist/discography",
+                params={"deezer_id": "910001"}, timeout=15)
+            assert discography.status_code == 200, discography.text
+            assert len(discography.json()["tracklist"]) == 1
             owner = requests.Session()
             assert (
                 owner.post(

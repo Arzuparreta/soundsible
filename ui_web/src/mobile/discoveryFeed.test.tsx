@@ -44,3 +44,11 @@ it('bounds revalidation and surfaces exhaustion instead of polling indefinitely'
   await vi.advanceTimersByTimeAsync(60000);
   expect(fetchFeed).toHaveBeenCalledTimes(13);
 });
+it('pauses hidden browsing and restores the same valid feed without reordering on return', async () => {
+  const [paused, setPaused] = createSignal(false), fetchFeed = vi.fn().mockResolvedValue(song('stable'));
+  let state!: ReturnType<typeof createNativeDiscoveryFeed>;
+  render(() => { state = createNativeDiscoveryFeed({ generation: () => 1, disconnected: () => false, paused, expanded: () => undefined, known: () => false }, fetchFeed); return null; });
+  await waitFor(() => expect(state.songs()[0]?.title).toBe('stable'));
+  setPaused(true); setPaused(false);
+  expect(state.songs()[0].title).toBe('stable'); expect(fetchFeed).toHaveBeenCalledTimes(1);
+});

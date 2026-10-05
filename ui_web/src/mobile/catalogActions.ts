@@ -1,9 +1,10 @@
 import { createMemo, createSignal, onCleanup } from 'solid-js';
 import { api, ApiError } from '../lib/api';
 import { catalogTrack, itemArtist } from '../lib/catalogTrack';
-import { buildIdentityIndex, catalogItemKeys } from '../lib/playbackIdentity';
+import { buildIdentityIndex, catalogItemKeys, trackKeys } from '../lib/playbackIdentity';
 import { savedFromCatalogItem, savedFromTrack, savedToTrack } from '../lib/saved';
 import { programTrack } from '../lib/program/tracks';
+import { resolveNativeCatalogProgram } from './catalogProgram';
 import { t } from '../lib/i18n';
 import type { CatalogItem, SavedEntry, Track } from '../types/music';
 
@@ -14,46 +15,72 @@ export function createNativeCatalogActions(props: {
   generation: () => number; tracks: () => Track[]; saved: () => SavedEntry[];
   disconnected: () => boolean; onPlay: (track: Track) => Promise<void>;
   onAcquire?: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
+  onPlayCollection?: (tracks: Track[], index: number) => Promise<void>;
 }) {
   const [pending, setPending] = createSignal<string | null>(null);
   const [error, setError] = createSignal('');
+  const [partial, setPartial] = createSignal(false);
   const [resolvedTracks, setResolvedTracks] = createSignal(new Map<string, Track>());
   const libraryIndex = createMemo(() => buildIdentityIndex(props.tracks()));
   const savedKeys = createMemo(() => new Set(props.saved().flatMap(entry => entry.keys)));
+  const savedIndex = createMemo(() => {
+    const index = new Map<string, Track>();
+    for (const entry of props.saved()) {
+      const track = savedToTrack(entry, libraryIndex());
+      if (track && programTrack(track)) for (const key of entry.keys) if (!index.has(key)) index.set(key, track);
+    }
+    return index;
+  });
   let epoch = 0;
   let controller: AbortController | undefined;
   let disposed = false;
   const trackFor = (item: CatalogItem): Track | null => {
     const immediate = catalogTrack(item, props.tracks());
-    if (immediate) return immediate;
+    if (immediate && immediate.source !== 'preview') return immediate;
     for (const key of catalogItemKeys(item)) {
       const track = libraryIndex().get(key);
       if (track && programTrack(track)) return track;
     }
-    return resolvedTracks().get(item.id) ?? null;
+    for (const key of catalogItemKeys(item)) {
+      const held = savedIndex().get(key);
+      if (held) return held;
+    }
+    const resolved = resolvedTracks().get(item.id);
+    if (resolved) for (const key of trackKeys(resolved)) {
+      const owned = libraryIndex().get(key);
+      if (owned && owned.source !== 'preview' && programTrack(owned)) return owned;
+    }
+    return resolved ?? immediate;
   };
   function reset(clearResolved = false) {
-    epoch++; controller?.abort(); setPending(null); setError('');
+    epoch++; controller?.abort(); setPending(null); setError(''); setPartial(false);
     if (clearResolved) setResolvedTracks(new Map());
   }
   onCleanup(() => { disposed = true; reset(true); });
+  async function resolveRecording(item: CatalogItem, signal: AbortSignal, current: () => boolean) {
+    const artist = itemArtist(item);
+    if (!artist || !item.title) throw new Error('Missing recording');
+    const result = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration }, signal);
+    if (!current()) throw new DOMException('Obsolete recording', 'AbortError');
+    if (!result.video_id || !/^[A-Za-z0-9_-]{11}$/.test(result.video_id)) throw new Error('No preview');
+    const original = savedFromCatalogItem(item);
+    const entry = { ...original, keys: [...new Set([...original.keys, `yt:${result.video_id}`])] };
+    const track = savedToTrack(entry, libraryIndex());
+    if (track) { const linked = new Map(resolvedTracks()); linked.set(item.id, track); setResolvedTracks(linked); }
+    return { entry, track };
+  }
   async function act(item: CatalogItem, purpose: CatalogPurpose) {
     if (disposed || props.disconnected()) return;
     const operation = ++epoch, generation = props.generation();
     controller?.abort(); const request = new AbortController(); controller = request;
     const current = () => !disposed && epoch === operation && generation === props.generation() && !request.signal.aborted && !props.disconnected();
-    setPending(item.id); setError('');
+    setPending(item.id); setError(''); setPartial(false);
     try {
       let track = trackFor(item), entry = savedFromCatalogItem(item);
       if (purpose !== 'remove' && !track) {
-        const artist = itemArtist(item);
-        if (!artist || !item.title) throw new Error('Missing recording');
-        const result = await api.resolveCatalogItem({ artist, title: item.title, duration: item.duration }, request.signal);
-        if (!current()) return;
-        if (!result.video_id || !/^[A-Za-z0-9_-]{11}$/.test(result.video_id)) throw new Error('No preview');
-        entry = { ...entry, keys: [...new Set([...entry.keys, `yt:${result.video_id}`])] };
-        track = savedToTrack(entry, libraryIndex());
-        if (track) { const linked = new Map(resolvedTracks()); linked.set(item.id, track); setResolvedTracks(linked); }
+        const resolved = await resolveRecording(item, request.signal, current);
+        entry = resolved.entry; track = resolved.track;
+
       }
       if (!current()) return;
       if (purpose !== 'remove' && track && !programTrack(track)) throw new Error('Unsupported recording');
@@ -73,6 +100,23 @@ export function createNativeCatalogActions(props: {
       if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : purpose === 'play' ? 'search.noPreview' : 'common.loadFailed'));
     } finally { if (current()) setPending(null); }
   }
-  return { trackFor, pending, error, reset, act,
+  async function playCollection(items: readonly CatalogItem[], selectedIndex: number) {
+    if (disposed || props.disconnected()) return;
+    const operation = ++epoch, generation = props.generation();
+    controller?.abort(); const request = new AbortController(); controller = request;
+    const current = () => !disposed && operation === epoch && generation === props.generation() && !request.signal.aborted && !props.disconnected();
+    setPending(items[selectedIndex]?.id ?? null); setError(''); setPartial(false);
+    try {
+      if (!props.onPlayCollection) throw new Error('Collection playback unavailable');
+      const program = await resolveNativeCatalogProgram(items, selectedIndex, async item =>
+        trackFor(item) ?? (await resolveRecording(item, request.signal, current)).track, current);
+      if (!current()) return;
+      setPartial(program.unavailable > 0);
+      await props.onPlayCollection(program.tracks, program.index);
+    } catch (failure) {
+      if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : 'search.noPreview'));
+    } finally { if (current()) setPending(null); }
+  }
+  return { trackFor, pending, error, partial, reset, act, playCollection,
     isSaved: (item: CatalogItem) => catalogItemKeys(item).some(key => savedKeys().has(key)) };
 }

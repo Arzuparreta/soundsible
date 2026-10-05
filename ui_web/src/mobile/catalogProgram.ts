@@ -7,14 +7,19 @@ export async function resolveNativeCatalogProgram(items: readonly CatalogItem[],
   if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= items.length) throw new Error('Missing selected recording');
   const resolved: (Track | null)[] = Array(items.length).fill(null);
   let cursor = 0;
+  let selectedFailed = false;
   const cancelled = () => { if (!current()) throw new DOMException('Obsolete collection', 'AbortError'); };
   async function worker() {
-    while (cursor < items.length) {
+    while (cursor < items.length && !selectedFailed) {
       cancelled(); const index = cursor++;
       try {
         const track = await resolve(items[index]); cancelled();
         if (track && programTrack(track)) resolved[index] = track;
-      } catch (failure) { cancelled(); if (index === selectedIndex) throw failure; }
+        if (index === selectedIndex && !resolved[index]) throw new Error('Selected recording unavailable');
+      } catch (failure) {
+        cancelled();
+        if (index === selectedIndex) { selectedFailed = true; throw failure; }
+      }
     }
   }
   // Settle workers before returning so a failed selection leaves no late work.

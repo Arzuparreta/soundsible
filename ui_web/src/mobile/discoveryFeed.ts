@@ -8,6 +8,7 @@ import type { CatalogItem } from '../types/music';
 export function createNativeDiscoveryFeed(props: {
   generation: () => number; disconnected: () => boolean; expanded: () => string | undefined;
   known: (item: CatalogItem) => boolean;
+  paused?: () => boolean;
 }, fetchFeed = api.getDiscoveryMusicFeed) {
   const [feed, setFeed] = createSignal<DiscoveryMusicFeed>({});
   const [loading, setLoading] = createSignal(false), [error, setError] = createSignal(false);
@@ -19,10 +20,10 @@ export function createNativeDiscoveryFeed(props: {
   function cancel() { epoch++; request?.abort(); clearTimeout(timer); }
   async function load(refresh = false) {
     cancel();
-    if (disposed || props.disconnected()) { setLoading(false); return; }
+    if (disposed || props.disconnected() || props.paused?.()) { setLoading(false); return; }
     const operation = epoch, generation = props.generation();
     const controller = new AbortController(); request = controller;
-    const current = () => !disposed && operation === epoch && generation === props.generation() && !controller.signal.aborted && !props.disconnected();
+    const current = () => !disposed && operation === epoch && generation === props.generation() && !controller.signal.aborted && !props.disconnected() && !props.paused?.();
     setLoading(true);
     try {
       const next = await fetchFeed(controller.signal, refresh);
@@ -37,11 +38,12 @@ export function createNativeDiscoveryFeed(props: {
     } catch { if (current()) setError(true); }
     finally { if (current()) setLoading(false); }
   }
-  createEffect(on(() => [props.generation(), props.disconnected()] as const, ([generation, disconnected], previous) => {
+  createEffect(on(() => [props.generation(), props.disconnected(), !!props.paused?.()] as const, ([generation, disconnected, paused], previous) => {
     cancel(); attempts = 0;
-    if (!previous || generation !== previous[0]) setFeed({});
+    const newAccount = !previous || generation !== previous[0];
+    if (newAccount) setFeed({});
     setError(false); setLoading(false);
-    if (!disconnected) void load();
+    if (!disconnected && !paused && (newAccount || previous?.[1] || !hasContent() || feed().revalidating || feed().browse_error)) void load();
   }));
   onCleanup(() => { disposed = true; cancel(); });
   return { feed, sections, songs, loading, error, retry: () => { attempts = 0; setError(false); void load(true); } };
