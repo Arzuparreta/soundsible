@@ -1,6 +1,9 @@
 package com.soundsible.android
 
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import android.content.ComponentName
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.Lifecycle
@@ -14,6 +17,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.hypot
@@ -51,11 +55,20 @@ class DjProgramTest {
             waitFor("!!document.querySelector('[data-testid=android-library]')")
             connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
                 .post("{\"album\":true,\"firstFrequency\":440,\"firstDuration\":20,\"secondFrequency\":880,\"secondRate\":48000,\"secondChannels\":2}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+            var mediaController: MediaController? = null
             try {
             web.evaluate(scenario, "window.__djTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__dj=s),100)")
             waitFor("window.__dj?.ready")
             command("action:'queue',index:0,tracks:[{source:'local',id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20}]")
             waitFor("window.__dj.playing && window.__dj.id==='member-pcm-soft'")
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val controllerFuture = AtomicReference<com.google.common.util.concurrent.ListenableFuture<MediaController>>()
+            instrumentation.runOnMainSync {
+                controllerFuture.set(MediaController.Builder(instrumentation.targetContext,
+                    SessionToken(instrumentation.targetContext, ComponentName(instrumentation.targetContext, PlaybackService::class.java))).buildAsync())
+            }
+            val controller = controllerFuture.get().get(10, TimeUnit.SECONDS)
+            mediaController = controller
             val key = web.evaluate(scenario, "window.__dj.items[0].key")
             val mixed = AtomicBoolean()
             NativeProgramOutput.subscribe(connection.generation) { block ->
@@ -85,7 +98,11 @@ class DjProgramTest {
                 assertFalse("Native capture failed", capture.failed.get())
                 scenario.moveToState(Lifecycle.State.RESUMED)
                 waitFor("window.__dj.id==='member-pcm-loud' && window.__dj.index===1 && window.__dj.playing")
-                command("action:'pause'")
+                instrumentation.runOnMainSync {
+                    assertEquals("member-pcm-loud", controller.currentMediaItem?.mediaId)
+                    assertEquals(1, controller.currentMediaItemIndex)
+                    controller.pause()
+                }
                 waitFor("!window.__dj.playWhenReady")
                 Thread.sleep(300)
                 web.evaluate(scenario, "window.__djPaused=window.__dj.positionMs")
@@ -107,10 +124,11 @@ class DjProgramTest {
                 waitFor("!!document.querySelector('[data-testid=android-library]') && !document.documentElement.hasAttribute('data-booting')")
                 web.evaluate(scenario, "window.__djTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__dj=s),100)")
                 waitFor("window.__dj.dj?.active && window.__dj.id==='member-pcm-loud'")
-                command("action:'play'"); waitFor("window.__dj.playing")
+                instrumentation.runOnMainSync { controller.play() }; waitFor("window.__dj.playing")
                 command("action:'stop'"); waitFor("window.__dj.items.length===0")
                 command("action:'queue',index:0,tracks:[{source:'local',id:'member-track',title:'NORMAL restored',artist:'member artist'}]")
                 waitFor("window.__dj.playing && !window.__dj.dj?.active && window.__dj.id==='member-track'")
+                instrumentation.runOnMainSync { assertEquals("member-track", controller.currentMediaItem?.mediaId) }
                 command("action:'stop'")
                 waitFor("window.__dj.items.length===0 && !window.__dj.dj?.active")
                 command("action:'dj',profile:'open_format',fromCurrent:false,sources:[{id:'pcm-only',label:'PCM collection',activation:0,tracks:[{id:'member-pcm-soft',title:'DJ outgoing',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'DJ incoming',artist:'member artist',duration:60}]}]")
@@ -133,6 +151,7 @@ class DjProgramTest {
                 command("action:'stop'")
             }
             } finally {
+            mediaController?.let { controller -> InstrumentationRegistry.getInstrumentation().runOnMainSync { controller.release() } }
             try { for (id in listOf("member-pcm-soft", "member-pcm-loud") + (0 until 10).map { "member-radio-$it" }) connection.execute("/api/library/tracks/$id", "DELETE", null, emptyMap(), connection.generation, "dj-cleanup-$id", 15000).use { assertTrue(it.isSuccessful || it.code == 404) }
             connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
                 .post("{\"measured\":false}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }

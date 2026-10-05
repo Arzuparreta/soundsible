@@ -139,6 +139,12 @@ Regresión UI completa pasa198 archivos/1556 tests + TypeScript, log
 compartido (sin mixer web): texto reconocido se traduce a controles/include/exclude;
 sliders conservan valores fraccionarios. Prueba de «más suave» y retry conserva
 exclusiones, dirigido2/0 en /tmp/soundsible-s3b-dj-direction-intent-ui.log.
+
+Controlador Media3 conservado NORMAL→DJ→NORMAL aceptado sobre working tree:
+DJ HTTP/TLS2 + NORMAL2, todos verdes; normal APK/test/JVM49/lint pasan en
+/tmp/soundsible-s3b-dj-session-controls-native.log. El mismo MediaController
+observa metadata dominante y pausa/reanuda DJ antes/después de recrear Activity.
+No prueba todavía focus/noisy de DJ, dispositivo/coche ni recuperación completa.
 El fallo real TLS al cerrar conexiones SSL en hilo principal está corregido:
 pool/dispatcher de audio propios, retiro en worker y shutdown de su executor.
 Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
