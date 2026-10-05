@@ -185,11 +185,24 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         val outgoing = sources[transition.outgoing]?.takeIf { !it.released && it.playing && !(it.ended && it.queued == 0) } ?: return false
         val progress = if (transition.length == 0L) 1.0 else (frames - transition.start).toDouble() / transition.length
         val controls = ProgramMixCurve.at(technique, progress)
-        active = transition.outgoing; mixStart = Long.MAX_VALUE; prerollStart = Long.MAX_VALUE
+        return restoreInput(outgoing, controls)
+    }
+    /** A failed outgoing decoder must not strand a healthy already-playing incoming input. */
+    private fun recoverOutgoing(index: Int): Boolean {
+        if (!owns() || failure != null || index != active) return false
+        val transition = window?.takeIf { it.epoch == outputEpoch && it.outgoing == index } ?: return false
+        val incoming = sources[transition.incoming]?.takeIf { !it.released && it.playing && !(it.ended && it.queued == 0) } ?: return false
+        val progress = if (transition.length == 0L) 1.0 else (frames - transition.start).toDouble() / transition.length
+        val controls = ProgramMixCurve.at(technique, progress)
+        return restoreInput(incoming, ProgramMixCurve.Controls(controls.incoming, 0.0,
+            controls.incomingLowDb, 0.0, controls.incomingCutoff, 22000.0, 0.0))
+    }
+    private fun restoreInput(source: Source, controls: ProgramMixCurve.Controls): Boolean {
+        active = source.index; mixStart = Long.MAX_VALUE; prerollStart = Long.MAX_VALUE
         recovery = Recovery(frames, (config!!.sampleRate * 0.15).toLong(), controls)
         restoration = frames to active
         limiter?.blend(false)
-        if (!paused && outgoing.playing) synchronized(deviceLock) { if (owns() && failure == null) output?.play() }
+        if (!paused && source.playing) synchronized(deviceLock) { if (owns() && failure == null) output?.play() }
         lock.notifyAll()
         return true
     }
@@ -261,7 +274,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         override fun release() = synchronized(lock) {
             if (!released) {
                 released = true; queue.clear(); queued = 0
-                val recovered = !closed && recoverIncoming(index)
+                val recovered = !closed && (recoverIncoming(index) || recoverOutgoing(index))
                 if (index == active && !closed && !recovered) invalidateDevice()
                 listeners.forEach { it.onReleased() }
             }

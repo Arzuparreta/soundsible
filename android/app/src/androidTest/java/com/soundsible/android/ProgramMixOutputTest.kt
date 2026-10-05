@@ -113,7 +113,11 @@ class ProgramMixOutputTest {
     @Test fun tlsInputLevels() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), levelInputs = true)
     @Test fun httpFullLongBlend() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.LONG_BLEND, effects = true, longRun = true)
     @Test fun tlsFullLongBlend() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.LONG_BLEND, effects = true, longRun = true)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f, cued: Boolean = false, cancelCue: Boolean = false, returnTempo: Boolean = false, levelInputs: Boolean = false, longRun: Boolean = false) {
+    @Test fun httpOutgoingFailure() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), recoverIncoming = true, outgoingLoss = true)
+    @Test fun tlsOutgoingFailure() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), recoverIncoming = true, outgoingLoss = true)
+    @Test fun httpLateOutgoingFailure() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), recoverIncoming = true, outgoingLoss = true, lateFailure = true)
+    @Test fun tlsLateOutgoingFailure() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), recoverIncoming = true, outgoingLoss = true, lateFailure = true)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f, cued: Boolean = false, cancelCue: Boolean = false, returnTempo: Boolean = false, levelInputs: Boolean = false, longRun: Boolean = false, outgoingLoss: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -278,17 +282,26 @@ class ProgramMixOutputTest {
                     meter.await { it.first < 30 && it.marker in (1800.0 * outgoingLevel)..(2400.0 * outgoingLevel) && it.second in (5500.0 * incomingLevel)..(7000.0 * incomingLevel) }
                 }
                 val stable: (Spectrum) -> Boolean = if (recoverIncoming) {
-                    val retainedPosition = owner.inputPositionUs(0)
-                    instrumentation.runOnMainSync { decoders[1].release(); decoders.removeAt(1) }
-                    val restored = owner.restoredAt() ?: error("Outgoing restoration was not scheduled")
+                    val retainedIndex = if (outgoingLoss) 1 else 0
+                    val removedIndex = 1 - retainedIndex
+                    val retainedPosition = owner.inputPositionUs(retainedIndex)
+                    val epoch = owner.epoch()
+                    instrumentation.runOnMainSync { decoders[removedIndex].release(); decoders.removeAt(removedIndex) }
+                    assertEquals("Single-input loss reset valid programme PCM", epoch, owner.epoch())
+                    // A late loss may occur after render promotion: the normal handoff then remains valid.
+                    val restored = owner.restoredAt() ?: if (outgoingLoss) transition.start + transition.length else error("Outgoing restoration was not scheduled")
                     val clockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                     while (owner.positionUs() * 48000 / 1000000 < restored + 9600 && System.nanoTime() < clockDeadline) {
-                        assertTrue("Retained source clock moved backwards before recovery playout", owner.inputPositionUs(0) + 20000 >= retainedPosition)
+                        assertTrue("Retained source clock moved backwards before recovery playout", owner.inputPositionUs(retainedIndex) + 20000 >= retainedPosition)
                         Thread.sleep(10)
                     }
                     assertTrue("Physical recovery output stalled", owner.positionUs() * 48000 / 1000000 >= restored + 9600)
-                    assertEquals("Failed incoming kept metadata ownership", 0, owner.dominantInput())
-                    val retained: (Spectrum) -> Boolean = { sample -> sample.first < 30 && sample.second < 30 && sample.marker in (2900.0 * outgoingLevel)..(3050.0 * outgoingLevel) }
+                    assertEquals("Failed decoder kept metadata ownership", retainedIndex, owner.dominantInput())
+                    val retained: (Spectrum) -> Boolean = if (outgoingLoss) {
+                        { sample -> sample.first < 30 && sample.marker < 30 && sample.second in 8950.0..9050.0 }
+                    } else {
+                        { sample -> sample.first < 30 && sample.second < 30 && sample.marker in (2900.0 * outgoingLevel)..(3050.0 * outgoingLevel) }
+                    }
                     retained
                 } else {
                     { sample -> sample.first < 30 && sample.marker < 30 && sample.second in (if (tempo == 1f) (8950.0 * incomingLevel)..(9050.0 * incomingLevel) else 8700.0..9300.0) }
