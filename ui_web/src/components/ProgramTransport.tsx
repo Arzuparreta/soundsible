@@ -53,7 +53,16 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
           if (disabled() || props.state.generation !== generation || props.state.programToken !== programToken || !props.state.dj?.active) return;
           void run({ action: 'djSettings', programToken, profile });
         },
-      })) : [])] }, event);
+      })).concat([{
+        label: t('autoMode.dj.direction'), selected: false,
+        onSelect: () => {
+          const current = () => props.state.generation === generation && props.state.programToken === programToken && props.state.dj?.active === true;
+          if (disabled() || !current()) return;
+          void import('../mobile/DjDirection').then(({ openNativeDjDirection }) => {
+            openNativeDjDirection(props.state.dj?.direction, current, direction => props.command({ action: 'djSettings', programToken, direction }));
+          });
+        },
+      }]) : [])] }, event);
     }}>⋯</button>
     <button data-program-close aria-label={t('android.closeProgram')} title={t('android.closeProgram')} disabled={disabled()} onClick={() => void run({ action: 'stop', queueToken: props.state.queueToken, programToken: props.state.programToken })}>×</button></div>
     <Show when={props.state.items[props.state.index]?.mediaKind === 'podcast_episode'}><button data-podcast-back aria-label={t('podcasts.skipBack')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: -15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>−15s</button><button data-podcast-forward aria-label={t('podcasts.skipForward')} disabled={disabled() || props.state.seekable === false} onClick={() => void run({ action: 'skip', seconds: 15, index: props.state.index, key: props.state.items[props.state.index]?.key ?? '', queueToken: props.state.queueToken })}>+15s</button></Show>

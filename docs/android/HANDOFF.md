@@ -109,6 +109,12 @@ append/move/remove en pausa y cambio de perfil sin sustituir la ocurrencia actua
 ni avanzar su posición. No demuestra refill largo ni reemplazo efectivo de futuro:
 el source set de dos pistas puede agotarse. Faltan UI de dirección/fuentes,
 inicio sólo desde fuentes, refill real y recuperación de decoder en producción.
+
+UI de dirección añadida al menú de tres puntos: energía, familiaridad y prompt,
+con include/exclude retenidos. Editor ligado a la identidad del programa; error
+reintentable y cierre al cambiar owner. Dirigido20/0 y TypeScript pasan en
+/tmp/soundsible-s3b-dj-direction-ui.log. Aún falta probar que Core aplica un
+prompt real al futuro y completar selección de fuentes e inicio sin canción.
 El fallo real TLS al cerrar conexiones SSL en hilo principal está corregido:
 pool/dispatcher de audio propios, retiro en worker y shutdown de su executor.
 Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
