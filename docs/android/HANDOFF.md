@@ -54,7 +54,9 @@ normalizados, volumen local independiente y continuidad tras liberar saliente;
 APK/test/JVM36/lint normal pasa, log /tmp/soundsible-s3b-mix-looper-native.log.
 No conectado al servicio ni DJ aceptado. Pausa/reanudación y clearSession real también pasan HTTP/TLS2 y build normal
 sobre4b6489ee limpio, log /tmp/soundsible-s3b-mix-pause-native.log.
-Próximo seek/EOS/técnicas/fallo entrante,
+Seek con marcador440→1320 real también pasa HTTP/TLS2 y build normal
+sobre6d0626a0 limpio, log /tmp/soundsible-s3b-mix-seek-replacement-native.log.
+Próximo dominancia física/EOS/técnicas/fallo entrante,
 luego fachada Player y planner; ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.

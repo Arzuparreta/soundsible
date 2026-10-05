@@ -132,3 +132,9 @@ buffer físico y el epoch también al liberar/sustituir entrada activa, de forma
 idempotente; liberar el saliente ya inactivo sigue conservando el master.
 Kotlin/test/JVM36/lint pasan en
 /tmp/soundsible-s3b-mix-seek-replacement-foundation.log. Repetir marcador real.
+
+Seek repetido aceptado HTTP/TLS2/0 sobre6d0626a0 limpio, log
+/tmp/soundsible-s3b-mix-seek-replacement-native.log; epoch nuevo, PCM1320 tras
+seek10s, reloj master reiniciado y blend posterior coherente. Pausa/revocación
+siguen pasando; APK/test APK/JVM36/lint normales sin CA pasan. No prueba acústica
+ni integración MediaSession; siguiente dominancia física y recuperación entrante.

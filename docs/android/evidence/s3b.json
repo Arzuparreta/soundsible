@@ -30,6 +30,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-mix-pause-native.log",
       "scope": "HTTP/TLS physical clock stops/resumes; actual clearSession invalidates output and flushes pending audio; normal APK/test APK/JVM36/lint passes"
+    },
+    "seek_marker_native": {
+      "source_revision_at_asset_prepare": "6d0626a0",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-seek-replacement-native.log",
+      "scope": "HTTP/TLS seeks to10s in real 440->1320Hz source; master epoch/clock reset, actual1320Hz PCM then coherent two-source blend; pause/scope and normal APK/test/JVM36/lint pass"
     }
   },
   "diagnostics": [
@@ -46,11 +56,17 @@
       "tests": 2,
       "failures": 2,
       "reason": "Shared AudioOutputProvider requires one playback looper; cleanup requires Looper; common owned decoder thread and onReleased await fix tested"
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-seek-native.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Media3 replaces/releases active input on seek; wrapper invalidated flush only. Idempotent release/replacement master invalidation fixes both transports."
     }
   ],
   "limitations": [
     "Isolated owner only; not connected to production service or DJ planner",
-    "No seek/EOS/starvation or production service/planner proof yet",
+    "No EOS/starvation/physical dominance or production service/planner proof yet",
     "No exact compressor acoustic parity or physical listening acceptance",
     "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
   ]
