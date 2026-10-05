@@ -48,8 +48,9 @@ y el fixture de álbum PCM propio corrige el problema sin borrar otras filas.
 
 Siguiente: integrar y compilar [mezcla DJ](SLICE_3B.md), probar dos decodificadores
 privados mono16k/estéreo48k normalizados a estéreo48k, con un único AudioTrack,
-FX/limiter y salida post-DSP/pre-volumen. Borradores en /tmp/soundsible-s3b-staging
-no están compilados ni aceptados. DJ/Live/Auto/Settings restantes/firma/update
+FX/limiter y salida post-DSP/pre-volumen. Spike integrado en fuentes y tests: compilación Kotlin Native/test, JVM36/0
+y lint pasan (/tmp/soundsible-s3b-mix-foundation-fixed.log). Aún sin prueba
+AudioTrack HTTP/TLS; no conectado al servicio ni DJ aceptado. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.
 No publicar release antes de revisión y merge; preparar información de alpha.

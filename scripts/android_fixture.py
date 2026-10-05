@@ -301,16 +301,24 @@ def main() -> None:
                             album=f"{name} PCM album", file_hash=f"{name}-pcm-soft-hash"))
                     store.put(f"{name}-pcm-soft-hash", source_stamp(soft), measurement)
                     second = root / "music/tracks" / f"{name}-pcm-loud.wav"
+                    frequency = data.get("secondFrequency", 440)
+                    rate = data.get("secondRate", 16000)
+                    channels = data.get("secondChannels", 1)
+                    if (type(frequency) is not int or frequency not in (440, 880)
+                            or type(rate) is not int or rate not in (16000, 48000)
+                            or type(channels) is not int or channels not in (1, 2)):
+                        raise ValueError("Unsupported isolated PCM fixture format")
                     with wave.open(str(second), "wb") as output:
-                        output.setnchannels(1)
+                        output.setnchannels(channels)
                         output.setsampwidth(2)
-                        output.setframerate(16000)
-                        output.writeframes(b"".join(struct.pack("<h", int(9000 * math.sin(2 * math.pi * 440 * i / 16000))) for i in range(16000)) * 60)
+                        output.setframerate(rate)
+                        tone = b"".join(struct.pack("<h", int(9000 * math.sin(2 * math.pi * frequency * i / rate))) * channels for i in range(rate))
+                        output.writeframes(tone * 60)
                     with user_context(uid):
                         library = get_user_core(uid).library
                         library.metadata.add_track(Track(id=f"{name}-pcm-loud", title=f"{name} louder PCM song", artist=f"{name} artist",
                             album=f"{name} PCM album", duration=60, file_hash=f"{name}-pcm-loud-hash", original_filename="pcm-loud.wav",
-                            file_size=second.stat().st_size, bitrate=256, format="wav"))
+                            file_size=second.stat().st_size, bitrate=rate * channels * 16 // 1000, format="wav"))
                         library._save_metadata()
                     measured_second = measure_loudness(second, duration_hint=60)
                     if measured_second is None:

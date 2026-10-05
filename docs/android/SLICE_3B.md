@@ -59,17 +59,28 @@ y sus forwarding públicos. DefaultAudioSink convierte/procesa antes de solicita
 el output. Esto permite probar entradas sin AudioTrack propio y un dueño común;
 no demuestra aún dominancia dinámica ni integración con el servicio.
 
-Mientras corre principal limpia S3a, borradores separados en
-`/tmp/soundsible-s3b-staging/` (no assets ni fuentes de esa APK): ProgramMixCurve,
-ProgramDeckEffects, sus tests JVM, ProgramMixOutput y ProgramMixOutputTest.
-Todavía no compilados ni aceptados. Tras terminar build normal de la principal,
-integrarlos y resolver el spike HTTP/TLS de dos frecuencias, volumen local y
-liberación del saliente. El fixture debe admitir secondFrequency880 sólo para
-este caso; los tests S3a conservan su default440.
+Principal S3a limpia78+restart2 está aceptada; fuentes del spike ya integradas:
+ProgramMixCurve, ProgramDeckEffects, ProgramMixLimiter y ProgramMixOutput, con
+sus tests JVM y ProgramMixOutputTest instrumentado aislado. Compilan Native/test
+Kotlin; JVM36/0 y lint pasan en /tmp/soundsible-s3b-mix-foundation-fixed.log.
+El primer compilado falló sólo por llamadas Java antiguas OkHttp en Kotlin;
+corregido usando las extensiones instaladas. No se ha probado aún AudioTrack real.
+
+Cada decoder normaliza canales mono/estéreo con matriz constant-gain y Sonic48k
+antes de entrar en el output común. El fixture admite secondFrequency880,
+secondRate48000 y secondChannels2 con valores estrictos; los tests S3a conservan
+440/16000/mono. La prueba mide amplitudes 440/880 en PCM y comprueba volumen local
+independiente y liberar el decoder saliente sin recrear el dueño audible.
+
+Filtros usan coeficientes normativos [Web Audio](https://www.w3.org/TR/webaudio-1.0/#filters-characteristics):
+Q=0.7 del lowpass está en dB, no es calidad lineal. La prueba de resonancia en
+cutoff distingue ambas fórmulas. EQ/lowpass/eco/limiter están en el spike, todavía
+sin aceptación acústica ni equivalencia exacta del DynamicsCompressor de navegador.
 
 No declarar funcional el grafo por curvas unitarias o un solo crossfade: faltan
-normalización de formatos distintos, filtros/echo/limiter dentro de esa salida,
-EOS/backpressure, scope, pausa/seek y dominancia sobre reloj de playout. El master
-puede tener buffers adelantados; cambiar metadata cuando se calcula un buffer
-futuro confundiría al oyente. Luego integrar controles/colas y planner DJ y
-revalidar los flujos NORMAL anteriores. Continuar hasta los gates completos.
+prueba HTTP/TLS real, EOS/backpressure, scope, pausa/seek y dominancia sobre reloj
+de playout. El master reserva los frames del buffer en curso antes de permitir
+nuevo blend; no programar sobre muestras ya comprometidas. Cambiar metadata cuando
+se calcula un buffer futuro confundiría al oyente. Luego integrar controles/colas
+y planner DJ y revalidar los flujos NORMAL anteriores. Continuar hasta los gates
+completos; dejar PR abierta con checks pasando para review manual, sin automerge.
