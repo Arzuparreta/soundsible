@@ -18,6 +18,11 @@ del fallo. Log /tmp/soundsible-s3b-dj-e2e-native.log, prepare sobre71ab534b dirt
 (fuentes equivalentes al bloquef12f39fc). Se corrige lectura de posición en JS,
 cleanup en finally y dirección inicial neutral. Repetir recorrido completo sobre
 commit limpio; no aceptar esta primera ejecución parcial.
+Segundo end-to-end sobre869b9018 limpio: HTTP/TLS2 falla después de validar pausa,
+al usar awaitReady de StartupTest tras recrear una Activity ya autenticada. Ese
+helper exige pantalla de conexión sin configurar; la app mostraba biblioteca y
+programa DJ conservado. Log /tmp/soundsible-s3b-dj-clean-native.log. Se espera
+biblioteca sin data-booting al recrear. Volver a ejecutar retorno NORMAL completo.
 
 ## Integración del servicio en curso
 
