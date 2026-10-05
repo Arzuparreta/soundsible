@@ -286,3 +286,10 @@ Cancelación/seek standby aceptados HTTP/TLS2/0 sobre53717d2f limpio, log
 PCM1320 y epoch, seek del standby reinicia sólo su clock, nuevo arm mezcla y
 rechazo de cancelación comprometida pasa. Normal APK/test APK/JVM41/lint pasa.
 No integra aún controller/planner; próximo retorno de rate y fachada Player.
+
+Retorno rate aceptado HTTP/TLS2/0 sobre5b5dbed8 limpio, log
+/tmp/soundsible-s3b-rate-return-native.log. ProgramRateReturn vuelve1.05→1 en8s
+de playout, no wall time; pausa mantiene rampa, progress monotónico y scope/epoch
+cancela callback. PCM1600Hz conserva pitch; normal APK/test APK/JVM41/lint pasa.
+El helper sigue en spike aislado, no habilita DJ en producción. Próximo niveles
+por entrada y fachada Player/MediaSession/planner.

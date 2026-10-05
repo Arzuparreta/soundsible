@@ -73,7 +73,9 @@ APK/test/JVM41/lint pasan sobreb2e208b8 limpio, log
 APK/test/JVM41/lint pasan sobree7e36547 limpio, log
 /tmp/soundsible-s3b-cue-native.log. Cancelación y seek standby HTTP/TLS2/0
 y normal APK/test/JVM41/lint pasan sobre53717d2f limpio, log
-/tmp/soundsible-s3b-cancel-reservation-native.log. Próximo rate return,
+/tmp/soundsible-s3b-cancel-reservation-native.log. Retorno rate HTTP/TLS2/0
+y normal APK/test/JVM41/lint pasan sobre5b5dbed8 limpio, log
+/tmp/soundsible-s3b-rate-return-native.log. Próximo niveles por entrada,
 luego fachada Player y planner; ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.
@@ -1023,7 +1025,7 @@ activar autoplay con tres peticiones manuales futuras: el guard era correcto.
 El caso repeat avanza primero para aislar esa política del umbral manual. Quedan
 podcast/cancelación/cuenta con planner pendiente y recuperación extendida antes
 de llamar autoplay completo. [S2r metadatos](SLICE_2R.md) es contrato siguiente,
-no implementación. Continuar sin finalizar por checkpoint hasta paridad/release.
+no implementación. Continuar sin finalizar por checkpoint hasta paridad y PR abierta para review manual.
 
 Continuación activa S2r: formulario de metadata extraído sin stores/audio web y
 adaptador Native REST, todavía sin conectar a programa/shell. Typecheck y tres
