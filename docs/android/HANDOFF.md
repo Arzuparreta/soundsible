@@ -1362,3 +1362,22 @@ Continuar sin cierre de slice: terminar regresión cuatro perfiles, commit/push,
 preparar artifact limpio y principal57+restart2. S2ae Discover inventariado en
 SLICE_2AE; Settings restantes, DJ, Live, Auto y firma/update siguen pendientes.
 Gates de alpha completa vigentes; PR/main/release sólo al cumplirlos.
+
+
+## Regresión completa S2ad aceptada
+
+Chromium278/66 y WebKit269/75, cero fallos, los cuatro perfiles completos
+secuenciales con1worker como CI. Logs /tmp/soundsible-s2ad-{chromium,webkit}-ci-worker.log.
+Popup real mantiene Ctrl-click/foreground, espera DOMContentLoaded y ficha
+completa; ocho repeticiones con trace pasan. Con8workers un caso queda esperando
+URL incluso tras readiness DOM; no declarar esa ejecución verde. S2ae durante
+los runs sólo cambió Native y añadió vistas compartidas aún sin conectar; las
+entradas web medidas permanecieron iguales. UI completa con bases S2ae se repite
+antes de preparar artifact limpio/principal57+restart2. No paridad ni alpha.
+
+UI completa1504/185 pasa en /tmp/soundsible-s2ae-foundation-full-ui.log sobre
+dc841c9 (docs de evidencia pendientes sólo). Todo entregado se mantiene en
+feat/android-port-foundation; S2ae aún sin pantallas all/feed/fichas reales.
+Preparar artifact limpio después de guardar esta evidencia; congelar Native y
+assets durante principal57+restart2. Se puede avanzar UI S2ae después de prepare,
+pero no volver a preparar ni tocar fuentes/tests nativos durante el runner.

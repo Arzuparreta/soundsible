@@ -25,7 +25,31 @@
     },
     "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal",
     "jvm_tests": 17,
-    "browser_four_profiles": "pending serial full rerun"
+    "browser_four_profiles": {
+      "chromium": {
+        "passed": 278,
+        "skipped": 66,
+        "failures": 0,
+        "workers": 1,
+        "log": "/tmp/soundsible-s2ad-chromium-ci-worker.log"
+      },
+      "webkit": {
+        "passed": 269,
+        "skipped": 75,
+        "failures": 0,
+        "workers": 1,
+        "readonly_mount": true,
+        "log": "/tmp/soundsible-s2ad-webkit-ci-worker.log"
+      },
+      "scope": "Full suite sequential; web entry sources unchanged during runs. S2ae new views not wired yet."
+    },
+    "ui_with_s2ae_foundations": {
+      "tests": 1504,
+      "files": 185,
+      "log": "/tmp/soundsible-s2ae-foundation-full-ui.log",
+      "source_revision": "dc841c9",
+      "scope": "Includes appearance, shared native catalog action extraction, and unwired Discover/profile foundations."
+    }
   },
   "diagnostics": {
     "native_bar_ownership": {
@@ -77,6 +101,18 @@
       "failures": 0,
       "log": "/tmp/soundsible-s2ad-header-links.log",
       "scope": "After title min-height44px and stable-link geometry before Ctrl-click."
+    },
+    "chromium_popup_dom_ready_parallel": {
+      "passed": 277,
+      "skipped": 66,
+      "failures": 1,
+      "log": "/tmp/soundsible-s2ad-chromium-dom-ready.log"
+    },
+    "chromium_popup_dom_ready_trace": {
+      "passed": 8,
+      "failures": 0,
+      "workers": 1,
+      "log": "/tmp/soundsible-s2ad-popup-dom-trace.log"
     }
   },
   "limits": [

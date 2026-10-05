@@ -83,3 +83,15 @@ min-height44px en el componente compartido. Serial previo268/66 con10 fallos no
 aceptado:9 títulos pequeños y1 popup mientras el enlace se movía. Ctrl-click ahora
 espera settledBox, conserva interacción real y comprobación de nueva ficha.
 Dirigido Chromium28/20 sin fallos; repetir suite completa y después WebKit.
+
+
+## Regresión completa S2ad aceptada
+
+Chromium278/66 y WebKit269/75, cero fallos, los cuatro perfiles completos
+secuenciales con1worker como CI. Logs /tmp/soundsible-s2ad-{chromium,webkit}-ci-worker.log.
+Popup real mantiene Ctrl-click/foreground, espera DOMContentLoaded y ficha
+completa; ocho repeticiones con trace pasan. Con8workers un caso queda esperando
+URL incluso tras readiness DOM; no declarar esa ejecución verde. S2ae durante
+los runs sólo cambió Native y añadió vistas compartidas aún sin conectar; las
+entradas web medidas permanecieron iguales. UI completa con bases S2ae se repite
+antes de preparar artifact limpio/principal57+restart2. No paridad ni alpha.
