@@ -174,3 +174,25 @@ def test_a_head_unit_browses_the_newest_songs_first(tmp_path, monkeypatch):
     response = _make_app().test_client().get("/api/car/items/all-tracks")
 
     assert [item["track_id"] for item in response.get_json()["items"]] == ["t2", "t1"]
+
+
+def test_car_acquired_podcast_retains_progress_identity(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    episode = _track("episode-file", "Downloaded episode")
+    episode.media_kind = "podcast_episode"
+    episode.podcast_feed_id = "private-feed"
+    episode.podcast_episode_guid = "episode-guid"
+    episode.local_path = "/private/music/episode.mp3"
+    metadata = LibraryMetadata(version=1, tracks=[episode], playlists={}, settings={})
+    _patch_api(monkeypatch, metadata)
+
+    response = _make_app().test_client().get("/api/car/items/podcasts")
+
+    assert response.status_code == 200
+    item = response.get_json()["items"][0]
+    assert item["kind"] == "podcast_episode"
+    assert item["podcast_feed_id"] == "private-feed"
+    assert item["podcast_episode_guid"] == "episode-guid"
+    assert item["stream_url"] == "/api/static/stream/episode-file"
+    assert "local_path" not in item
