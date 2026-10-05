@@ -327,7 +327,7 @@ def main() -> None:
                     frequency = data.get("secondFrequency", 440)
                     rate = data.get("secondRate", 16000)
                     channels = data.get("secondChannels", 1)
-                    if (type(frequency) is not int or frequency not in (440, 880, 4400)
+                    if (type(frequency) is not int or frequency not in (440, 880, 1600, 4400)
                             or type(rate) is not int or rate not in (16000, 48000)
                             or type(channels) is not int or channels not in (1, 2)):
                         raise ValueError("Unsupported isolated PCM fixture format")

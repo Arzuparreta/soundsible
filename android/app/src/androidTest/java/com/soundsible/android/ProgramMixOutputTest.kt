@@ -3,6 +3,7 @@ package com.soundsible.android
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.audio.SonicAudioProcessor
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
@@ -98,7 +99,9 @@ class ProgramMixOutputTest {
     @Test fun tlsFlacMix() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), secondFormat = "flac")
     @Test fun httpEndOfSource() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.DIRECT, endOfSource = true)
     @Test fun tlsEndOfSource() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.DIRECT, endOfSource = true)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false) {
+    @Test fun httpTempoMix() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), tempo = 1.05f)
+    @Test fun tlsTempoMix() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), tempo = 1.05f)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -125,7 +128,7 @@ class ProgramMixOutputTest {
                     response
                 }.build()
                 val firstFrequency = if (effects) if (technique == ProgramMixCurve.Technique.ECHO_CUT) 100 else 80 else 440
-                val secondFrequency = if (effects) 4400 else 880
+                val secondFrequency = if (effects) 4400 else if (tempo != 1f) 1600 else 880
                 val tones = JSONObject().put("album", true).put("firstMarker", !effects)
                     .put("secondFrequency", secondFrequency).put("secondRate", 48000).put("secondChannels", 2).put("secondFormat", secondFormat)
                 if (effects) tones.put("firstFrequency", firstFrequency)
@@ -152,6 +155,7 @@ class ProgramMixOutputTest {
                         val decoder = ExoPlayer.Builder(context, renderer).setPlaybackLooper(owner.playbackLooper).setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(client))).build()
                         decoder.addListener(object : Player.Listener { override fun onPlayerError(problem: PlaybackException) { playbackFailure.set(problem) } })
                         decoder.setMediaItem(androidx.media3.common.MediaItem.fromUri(origin + "/api/static/stream/" + id))
+                        if (index == 1) decoder.playbackParameters = PlaybackParameters(tempo, 1f)
                         decoder.prepare(); decoder.play(); decoders.add(decoder)
                     }
                 }
@@ -225,7 +229,7 @@ class ProgramMixOutputTest {
                     val retained: (Spectrum) -> Boolean = { sample -> sample.first < 30 && sample.second < 30 && sample.marker in 2900.0..3050.0 }
                     retained
                 } else {
-                    { sample -> sample.first < 30 && sample.marker < 30 && sample.second in 8950.0..9050.0 }
+                    { sample -> sample.first < 30 && sample.marker < 30 && sample.second in (if (tempo == 1f) 8950.0..9050.0 else 8700.0..9300.0) }
                 }
                 meter.await(stable)
                 if (technique == ProgramMixCurve.Technique.DIRECT) {
@@ -236,6 +240,19 @@ class ProgramMixOutputTest {
                 assertNull("Decoder failed", playbackFailure.get()); assertNull("Output failed", owner.error())
                 if (!recoverIncoming) instrumentation.runOnMainSync { decoders.first().release(); decoders.removeAt(0) }
                 meter.metrics.clear(); meter.await(stable)
+                if (tempo != 1f) {
+                    val mediaPosition = java.util.concurrent.atomic.AtomicLong()
+                    val actualRate = AtomicReference<PlaybackParameters>()
+                    instrumentation.runOnMainSync {
+                        mediaPosition.set(decoders.single().currentPosition)
+                        actualRate.set(decoders.single().playbackParameters)
+                    }
+                    assertEquals("Incoming tempo was not retained", tempo.toDouble(), actualRate.get().speed.toDouble(), 0.001)
+                    assertEquals("Tempo changed pitch", 1.0, actualRate.get().pitch.toDouble(), 0.001)
+                    val expected = owner.inputPositionUs(1) / 1000.0 * tempo
+                    assertTrue("Incoming media clock did not track software tempo", abs(mediaPosition.get() - expected) < 120)
+                    assertTrue("Tempo clock unexpectedly remained at normal speed", mediaPosition.get() > owner.inputPositionUs(1) / 1000.0 + 50)
+                }
                 owner.pause(true)
                 Thread.sleep(200)
                 val pausedPosition = owner.positionUs()
