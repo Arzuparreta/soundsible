@@ -274,7 +274,10 @@ class PlaybackService : MediaLibraryService() {
                         else require(args.getString("queueToken") == ProgramQueue.token(player))
                         closeProgram()
                     } else ProgramQueue.edit(player, connection, args, { previews.manualRetry() }, podcasts::position, (radio.manualInsertion() ?: autoplay.manualInsertion()))
-                    SessionResult(SessionResult.RESULT_SUCCESS) } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })
+                    SessionResult(SessionResult.RESULT_SUCCESS) } catch (failure: Exception) {
+                        if (BuildConfig.DEBUG) android.util.Log.w("ProgrammeCommand", "${args.getString("action")}:${failure.javaClass.simpleName}:${failure.stackTrace.firstOrNull { it.className.startsWith("com.soundsible.android") }}")
+                        SessionResult(SessionError.ERROR_BAD_VALUE)
+                    })
             }
         }).setBitmapLoader(artwork).setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
         main.post(progressTicker)

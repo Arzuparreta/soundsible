@@ -38,9 +38,9 @@ class DjProgramTest {
                 fail("DJ condition failed: $condition; state=" + web.evaluate(scenario, "JSON.stringify(window.__dj)"))
             }
             fun command(fields: String) {
-                web.evaluate(scenario, "window.__done=false;window.__failure=null;Capacitor.Plugins.SoundsiblePlayback.state().then(s=>Capacitor.Plugins.SoundsiblePlayback.command({...s,$fields})).then(()=>window.__done=true).catch(()=>window.__failure=true)")
+                web.evaluate(scenario, "window.__done=false;window.__failure=null;Capacitor.Plugins.SoundsiblePlayback.state().then(s=>Capacitor.Plugins.SoundsiblePlayback.command({...s,$fields})).then(()=>window.__done=true).catch(e=>window.__failure=e.code+':'+e.message)")
                 waitFor("window.__done || window.__failure")
-                assertEquals("Command rejected", "true", web.evaluate(scenario, "window.__done===true"))
+                assertEquals("Command rejected: " + web.evaluate(scenario, "window.__failure"), "true", web.evaluate(scenario, "window.__done===true"))
             }
             web.awaitReady(scenario)
             web.evaluate(scenario, "localStorage.setItem('lang','en')")
@@ -91,6 +91,7 @@ class DjProgramTest {
                 web.evaluate(scenario, "window.__djPaused=window.__dj.positionMs")
                 Thread.sleep(500)
                 assertEquals("Programme advanced while paused", "true", web.evaluate(scenario, "Math.abs(window.__dj.positionMs-window.__djPaused)<100"))
+                web.evaluate(scenario, "clearInterval(window.__djTimer)")
                 scenario.recreate()
                 waitFor("!!document.querySelector('[data-testid=android-library]') && !document.documentElement.hasAttribute('data-booting')")
                 web.evaluate(scenario, "window.__djTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__dj=s),100)")
