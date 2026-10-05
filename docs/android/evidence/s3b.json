@@ -20,7 +20,17 @@
       "log": "/tmp/soundsible-s3b-mix-looper-native.log",
       "scope": "HTTP/TLS actual mono16k and stereo48k decoders normalize to stereo48k; 440/880 spectrum during equal-power, local volume independent, outgoing release leaves incoming continuous"
     },
-    "normal_apk_test_apk_lint": "passed after temporary CA removal"
+    "normal_apk_test_apk_lint": "passed after temporary CA removal",
+    "pause_scope_native": {
+      "source_revision_at_asset_prepare": "4b6489ee",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-pause-native.log",
+      "scope": "HTTP/TLS physical clock stops/resumes; actual clearSession invalidates output and flushes pending audio; normal APK/test APK/JVM36/lint passes"
+    }
   },
   "diagnostics": [
     {
@@ -40,7 +50,7 @@
   ],
   "limitations": [
     "Isolated owner only; not connected to production service or DJ planner",
-    "No pause/seek/EOS/starvation/scope proof yet",
+    "No seek/EOS/starvation or production service/planner proof yet",
     "No exact compressor acoustic parity or physical listening acceptance",
     "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
   ]

@@ -110,3 +110,9 @@ petición de audio sigue autorizada después. Compilación Native/test, JVM36 y 
 pasan en /tmp/soundsible-s3b-mix-pause-foundation-fixed.log. Primer compile de
 estas aserciones falló por usar Long con overload JUnit Double; corregido a
 comparación acotada de microsegundos. Aceptación HTTP/TLS ampliada pendiente.
+
+Ampliación pausa/scope aceptada HTTP/TLS2/0 en
+/tmp/soundsible-s3b-mix-pause-native.log sobre4b6489ee limpio: reloj físico parado
+al pausar, reanudación, clearSession real invalida/pausa/flush; build normal sin CA
+APK/test APK/JVM36/lint pasa. Siguiente seek con marcador audible sintético1320Hz
+tras4s para distinguir muestras anteriores del salto; aún sin aceptación.

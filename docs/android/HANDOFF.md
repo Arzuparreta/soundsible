@@ -52,7 +52,9 @@ FX/limiter y salida post-DSP/pre-volumen. Spike integrado en fuentes y tests: co
 y lint pasan (/tmp/soundsible-s3b-mix-foundation-fixed.log). AudioTrack HTTP/TLS2/0 pasa sobre16ed5d83 limpio: espectro440/880, formatos
 normalizados, volumen local independiente y continuidad tras liberar saliente;
 APK/test/JVM36/lint normal pasa, log /tmp/soundsible-s3b-mix-looper-native.log.
-No conectado al servicio ni DJ aceptado. Próximo pausa/seek/EOS/scope/técnicas,
+No conectado al servicio ni DJ aceptado. Pausa/reanudación y clearSession real también pasan HTTP/TLS2 y build normal
+sobre4b6489ee limpio, log /tmp/soundsible-s3b-mix-pause-native.log.
+Próximo seek/EOS/técnicas/fallo entrante,
 luego fachada Player y planner; ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.
