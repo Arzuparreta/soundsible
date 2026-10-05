@@ -100,6 +100,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-eos-silence-native.log",
       "scope": "HTTP/TLS physical PCM drain, decoder STATE_ENDED and prepared incoming direct cue; pause/scope and normal APK/test APK/JVM41/lint pass"
+    },
+    "tempo_native": {
+      "source_revision_at_asset_prepare": "b2e208b8",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-tempo-native.log",
+      "scope": "HTTP/TLS softwareSonic speed1.05 pitch1; actual1600Hz PCM retained, incoming media clock follows tempo; seek/blend/pause/scope and normal APK/test APK/JVM41/lint pass"
     }
   },
   "diagnostics": [
@@ -150,7 +160,7 @@
   ],
   "limitations": [
     "Isolated owner only; not connected to production service or DJ planner",
-    "No tempo/phase or production service/planner proof yet",
+    "No cue/preroll/phase or production service/planner proof yet",
     "No exact compressor acoustic parity or physical listening acceptance",
     "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
   ]

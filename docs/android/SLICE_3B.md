@@ -260,3 +260,9 @@ EOS aceptado HTTP/TLS2/0 sobref180e8ea limpio, log
 /tmp/soundsible-s3b-eos-silence-native.log: PCM real24000 frames drenado antes
 de STATE_ENDED, relevo DIRECT a cue preparado, pausa/scope conservados. Normal
 APK/test APK/JVM41/lint sin CA pasa. Próximo tempo/phase y después servicio/planner.
+
+Tempo aceptado HTTP/TLS2/0 sobreb2e208b8 limpio: PCM1600Hz conserva pitch con
+speed1.05, reloj Exo de medios corresponde a frames de salida ajustados por
+velocidad. Se conserva seek/blend/pausa/scope; normal APK/test APK/JVM41/lint
+pasa. Log /tmp/soundsible-s3b-tempo-native.log. No prueba todavía cues/phase ni
+retorno progresivo de rate después del blend; producción DJ sigue pendiente.
