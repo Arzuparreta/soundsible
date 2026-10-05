@@ -35,8 +35,9 @@ No hay paridad completa ni PR final todavía.
   desde fuentes, perfiles/dirección, edición, refill efectivo y replan de futuro,
   controles MediaSession/focus/noisy en AVD, retorno NORMAL y mezcla off confirmada.
   Recuperación de decoder previo a mezcla y de una entrada sin PCM durante mezcla
-  aceptadas con controller real aislado. Requests/repair/refinamiento y recuperación
-  de red completa en servicio siguen pendientes. No declarar paridad DJ.
+  aceptadas con controller real aislado. Reparación Core, pins al replanear y estado
+  «Preparada» aceptados. Placement musical/refinamiento y recuperación de red
+  completa en servicio siguen pendientes. No declarar paridad DJ.
 - Live y Android Auto: pendientes. Firma permanente/update público: pendientes.
 
 ## Evidencia que importa al continuar
@@ -62,8 +63,16 @@ No hay paridad completa ni PR final todavía.
   NORMAL → DJ → NORMAL/Radio; KEY, posición y pausa retenidos al salir de DJ.
   Artifact sobre `0b070887` dirty; fuentes finales dirty sobre `ba697dc4`.
   Incluye feedback UI del planner. Runtime completo158.6s, sin baseline comparable.
+- Repair/pins/cued: DJ2 + Recovery6, **8/0 HTTP/TLS**, APK/test/JVM52/lint normal
+  sin CA en `/tmp/soundsible-s3b-repair-native.log`, sobre `be2894fc` dirty.
+  Core repara futuro de16; conserva requests por KEY y profundidad, incluido
+  cambio efectivo de fuentes. Snapshot/epoch/revision/floor rechazan resultados
+  obsoletos; inputs comprometidos no pueden retirarse/reordenarse. Insert after
+  respeta floor. UI198/1561 + TS en `/tmp/soundsible-s3b-repair-full-ui.log`.
+  No acredita todavía placement musical, refinamiento, todos los negativos de
+  respuestas Core ni larga sesión hasta el límite de1000 ocurrencias.
 - UI completa: **198 archivos/1559 tests + TypeScript**, último log
-  `/tmp/soundsible-s3b-dj-phase-full-ui.log`.
+  `/tmp/soundsible-s3b-repair-full-ui.log` (1561 tras repair/cued).
 - Browser4 último verde es anterior a S3: Chromium278/66 skips + WebKit269/75 skips,
   `/tmp/soundsible-s2ag-{chromium,webkit}.log`. Repetir los cuatro antes de PR.
 - Evidencia durable: [S3a](evidence/s3a.json), [S3b](evidence/s3b.json).
@@ -72,14 +81,14 @@ No hay paridad completa ni PR final todavía.
 
 ## Trabajo activo y siguiente paso
 
-No runner activo; congelación levantada tras exit0 de DJ → Radio. Harness también
-validado en ese run: `scripts/android.py` arranca los tres fixtures independientes
-antes de esperar readiness, comprueba todos y conserva cleanup. Cerrar commit/push
-enfocado de modo y harness, después continuar DJ pendiente. En futuros runs,
-**congelar fuentes/tests Native, fixtures, assets y recursos hasta final del runner,
-incluido build normal sin CA**. No atribuir un run a fuentes cambiadas después.
+Modo (`68e4e76b`) y harness (`be2894fc`) subidos. Repair8 termina exit0, congelación
+levantada; cerrar commit/push del bloque. Siguiente: placement `dj-place` con
+fallback que retenga siempre la petición explícita, sin tocar inputs comprometidos.
+En futuros runs, **congelar fuentes/tests Native, fixtures, assets y recursos
+hasta final del runner, incluido build normal sin CA**. No atribuir un run a
+fuentes cambiadas después de su prepare.
 
-Después: cerrar cambios de modo y requests/placement/repair/refinamiento DJ,
+Después: cerrar placement/refinamiento DJ, negativos y larga sesión,
 recuperación de red en producción y regresión completa; continuar Live receptor/
 emisor, Android Auto, restantes de matriz de teléfono y firma/update. Gate final:
 paridad + checks + PR abierta para review manual; nunca merge automático.

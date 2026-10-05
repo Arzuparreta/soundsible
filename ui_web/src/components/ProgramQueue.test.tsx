@@ -47,3 +47,20 @@ it('removes a stale rendered row without retaining the previous occurrence', asy
   expect(container.querySelector('[data-queue-key=first]')).toBeNull();
   expect(container.querySelectorAll('[data-row-main]')).toHaveLength(1);
 });
+
+it('marks the cued DJ occurrence and keeps edits outside the committed pair', async () => {
+  const command = vi.fn(async () => {});
+  const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0,
+    items: [...initial.items, { ...initial.items[0], key: 'third' }], dj: { active: true, phase: 'ready', profile: 'adaptive', editableFrom: 2 } });
+  const { container } = render(() => <ProgramQueue state={state()} pending={false} command={command} />);
+  expect(screen.getByText('autoMode.dj.cued')).toBeTruthy();
+  await fireEvent.click(screen.getByText('musicExplorer.edit'));
+  const disabled = (key: string, action: string) => (container.querySelector(`[data-queue-key=${key}] [data-queue-action=${action}]`) as HTMLButtonElement).disabled;
+  expect(disabled('first', 'remove')).toBe(true);
+  expect(disabled('second', 'remove')).toBe(true);
+  expect(disabled('third', 'up')).toBe(true);
+  expect(disabled('third', 'remove')).toBe(false);
+  setState({ ...state(), index: 1 });
+  expect(screen.queryByText('autoMode.dj.cued')).toBeNull();
+  expect(disabled('first', 'remove')).toBe(false);
+});

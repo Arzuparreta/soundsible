@@ -45,13 +45,15 @@ export default function ProgramQueue(props: { state: ProgramState; pending: bool
         <For each={[...positions().keys()]}>{key => {
           const row = () => entries().get(key)!;
           const target = () => ({ index: row().index, key, queueToken: props.state.queueToken });
+          const protectedRow = (index: number) => props.state.dj?.active === true && index >= props.state.index && index < (props.state.dj.editableFrom ?? props.state.index + 1);
+          const canMove = (target: number) => !protectedRow(row().index) && !protectedRow(target);
           return <Show when={entries().has(key)}><div class={styles.row} data-queue-key={key} data-index={row().index} ref={element => queueMicrotask(() => { if (element.isConnected) rows.measureElement(element); })} style={{ transform: `translateY(${positions().get(key) ?? 0}px)` }}>
-            <MusicListRowView title={row().entry.title || row().entry.id} subtitle={row().entry.artist} annotation={row().entry.generated ? t(row().entry.generatedSource === 'autoplay' ? 'nowPlaying.autoplayQueue' : 'nowPlaying.radioQueue') : undefined} seed={row().entry.id} cover={programCover(row().entry)} actionLabel={`${row().index + 1} · ${row().entry.title || row().entry.id} — ${row().entry.artist}`} index={row().index + 1} playback active={props.state.index === row().index}
+            <MusicListRowView title={row().entry.title || row().entry.id} subtitle={row().entry.artist} annotation={protectedRow(row().index) && row().index > props.state.index ? t('autoMode.dj.cued') : row().entry.generated ? t(row().entry.generatedSource === 'autoplay' ? 'nowPlaying.autoplayQueue' : 'nowPlaying.radioQueue') : undefined} seed={row().entry.id} cover={programCover(row().entry)} actionLabel={`${row().index + 1} · ${row().entry.title || row().entry.id} — ${row().entry.artist}`} index={row().index + 1} playback active={props.state.index === row().index}
               disabled={disabled()} playbackTrack={props.state.items[props.state.index]?.key} onActivate={() => run({ action: 'select', ...target() })} />
               <Show when={editing()}><div class={styles.edit}>
-                <button type="button" data-queue-action="up" aria-label={`${t('musicList.moveUp')}: ${row().index + 1} · ${row().entry.title}`} disabled={disabled() || row().index === 0} onClick={() => run({ action: 'move', ...target(), toIndex: row().index - 1 })}>↑</button>
-                <button type="button" data-queue-action="down" aria-label={`${t('musicList.moveDown')}: ${row().index + 1} · ${row().entry.title}`} disabled={disabled() || row().index === props.state.items.length - 1} onClick={() => run({ action: 'move', ...target(), toIndex: row().index + 1 })}>↓</button>
-                <button type="button" data-queue-action="remove" aria-label={`${t('nowPlaying.removeFromQueue')}: ${row().index + 1} · ${row().entry.title}`} disabled={disabled()} onClick={() => run({ action: 'remove', ...target() })}>×</button>
+                <button type="button" data-queue-action="up" aria-label={`${t('musicList.moveUp')}: ${row().index + 1} · ${row().entry.title}`} disabled={disabled() || row().index === 0 || !canMove(row().index - 1)} onClick={() => run({ action: 'move', ...target(), toIndex: row().index - 1 })}>↑</button>
+                <button type="button" data-queue-action="down" aria-label={`${t('musicList.moveDown')}: ${row().index + 1} · ${row().entry.title}`} disabled={disabled() || row().index === props.state.items.length - 1 || !canMove(row().index + 1)} onClick={() => run({ action: 'move', ...target(), toIndex: row().index + 1 })}>↓</button>
+                <button type="button" data-queue-action="remove" aria-label={`${t('nowPlaying.removeFromQueue')}: ${row().index + 1} · ${row().entry.title}`} disabled={disabled() || protectedRow(row().index)} onClick={() => run({ action: 'remove', ...target() })}>×</button>
               </div></Show>
           </div></Show>;
         }}</For>

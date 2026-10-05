@@ -21,10 +21,12 @@ internal class ProgramDjSession(private val context: Context, private val genera
     private val tap: ProgramPcmTap, private val leveling: () -> Boolean,
     initial: List<Row>, startPositionMs: Long = 0, private val mixing: () -> Boolean = { true },
     private val changed: () -> Unit = {}) : AutoCloseable {
-    data class Row(val item: MediaItem, val proposal: ProgramDjPlan.Proposal? = null)
+    data class Row(val item: MediaItem, val proposal: ProgramDjPlan.Proposal? = null, val kind: String = "user")
+    data class RouteSnapshot(val epoch: Long, val revision: Long, val floor: Int, val rows: List<Row>)
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var closed = false
     private var route = initial.toList()
+    private var routeRevision = 0L
     private val indices = intArrayOf(0, -1)
     private var current = 0
     private var armed = false
@@ -151,7 +153,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             return
         }
         if (resolved.technique == ProgramMixCurve.Technique.DIRECT || outgoing.playbackState == Player.STATE_ENDED) {
-            if (output.drainedInput(slot)) { output.blend(50, ProgramMixCurve.Technique.DIRECT); armed = true }
+            if (output.drainedInput(slot)) { output.blend(50, ProgramMixCurve.Technique.DIRECT); armed = true; changed() }
             return
         }
         val queuedUs = output.reservedPositionUs() - output.positionUs()
@@ -162,6 +164,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             output.arm(resolved.overlapUs / 1000, resolved.technique, leadMs.coerceAtMost(60000), prerollMs)
         } else output.blend(minOf(resolved.overlapUs / 1000, 1500), ProgramMixCurve.Technique.SAFE_FADE)
         armed = true
+        changed()
     }
     private fun key(index: Int) = route[index].item.mediaMetadata.extras?.getString(ProgramQueue.KEY) ?: ""
     private fun decoderFailed(slot: Int, error: PlaybackException): Boolean {
@@ -196,6 +199,29 @@ internal class ProgramDjSession(private val context: Context, private val genera
     }
     fun items(): List<MediaItem> = route.map { it.item }
     fun currentIndex(): Int = current
+    fun editableFrom() = protectedIndex() + 1
+    private fun protectedIndex() = if (armed || recovering) maxOf(current, indices.maxOrNull() ?: current) else current
+    fun routeSnapshot(): RouteSnapshot {
+        check(Looper.myLooper() == main.looper && owns())
+        return RouteSnapshot(output.epoch(), routeRevision, protectedIndex(), route.toList())
+    }
+    fun snapshotCurrent(snapshot: RouteSnapshot): Boolean = owns() && snapshot.epoch == output.epoch() &&
+        snapshot.revision == routeRevision && snapshot.floor == protectedIndex()
+    /** A repair may replace only the captured future, never a committed input. */
+    fun repair(snapshot: RouteSnapshot, repaired: List<Row>): Boolean {
+        if (!snapshotCurrent(snapshot)) return false
+        val next = route.take(snapshot.floor + 1) + repaired + route.drop(snapshot.floor + 17)
+        applyPlaylist(next.map { it.item }, false)
+        route = next; player.routeChanged(); changed()
+        return true
+    }
+    fun pin(key: String) {
+        check(owns())
+        val index = route.indexOfFirst { itemKey(it.item) == key }
+        if (index < 0 || route[index].kind == "user") return
+        route = route.toMutableList().also { it[index] = it[index].copy(kind = "user") }
+        routeRevision++; changed()
+    }
     private fun itemKey(item: MediaItem) = item.mediaMetadata.extras?.getString(ProgramQueue.KEY) ?: ""
     private fun editPlaylist(items: List<MediaItem>) { applyPlaylist(items, false) }
     private fun applyPlaylist(items: List<MediaItem>, force: Boolean) {
@@ -209,8 +235,14 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val slotKeys = indices.map { index -> route.getOrNull(index)?.item?.let(::itemKey) }
         if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
         val retained = items.map(::itemKey).toSet()
-        if (armed && !force) require(slotKeys.filterNotNull().all { it in retained }) { "A committed transition cannot be removed" }
-        route = items.map { Row(it, before[itemKey(it)]?.proposal) }
+        if ((armed || recovering) && !force) require(slotKeys.filterNotNull().all { it in retained }) { "A committed transition cannot be removed" }
+        if ((armed || recovering) && !force) {
+            val committed = indices.filter { it >= 0 }.sorted().map { itemKey(route[it].item) }
+            val positions = committed.map { key -> items.indexOfFirst { itemKey(it) == key } }
+            require(positions.zipWithNext().all { (before, after) -> after == before + 1 }) { "A committed transition cannot be reordered" }
+        }
+        route = items.map { item -> before[itemKey(item)]?.copy(item = item) ?: Row(item) }
+        routeRevision++
         if (items.isEmpty()) {
             player.stop(); decks.forEach { it.clearMediaItems() }; indices.fill(-1)
             armed = false; recovering = false; plan = null; streams = arrayOfNulls(2)
@@ -242,10 +274,12 @@ internal class ProgramDjSession(private val context: Context, private val genera
     fun replaceFuture(rows: List<Row>) {
         check(owns())
         if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
-        val protected = if (armed) maxOf(current, indices.maxOrNull() ?: current) else current
+        val protected = protectedIndex()
         val prefix = route.take(protected + 1)
         val committedIds = prefix.map { it.item.mediaId }.toSet()
-        val future = rows.drop(1).filter { it.item.mediaId !in committedIds }
+        val candidates = rows.drop(1).filter { it.item.mediaId !in committedIds }
+        val future = ProgramDjRoutePolicy.retainPins(route.drop(protected + 1), candidates,
+            { it.kind == "user" }, { it.item.mediaId })
         val next = prefix + future
         applyPlaylist(next.map { it.item }, false)
         route = next; player.routeChanged()
@@ -253,7 +287,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
     /** Append/refill never replaces either committed occurrence. */
     fun append(rows: List<Row>) {
         require(owns() && route.size + rows.size <= ProgramQueue.LIMIT)
-        route = route + rows; player.routeChanged(); changed()
+        route = route + rows; routeRevision++; player.routeChanged(); changed()
     }
     override fun close() {
         check(Looper.myLooper() == main.looper)

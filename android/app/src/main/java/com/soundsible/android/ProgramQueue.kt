@@ -79,7 +79,7 @@ object ProgramQueue {
         }
     }
     /** Called on the service's player looper: validate actual queue, then mutate it once. */
-    fun edit(player: Player, connection: EngineConnection, args: Bundle, beforeRetry: () -> Unit = {}, resume: (MediaItem) -> Long = { 0 }, manualInsertion: Int? = null) {
+    fun edit(player: Player, connection: EngineConnection, args: Bundle, beforeRetry: () -> Unit = {}, resume: (MediaItem) -> Long = { 0 }, manualInsertion: Int? = null, protectedThrough: Int? = null) {
         require(args.getLong("generation", -1) == connection.generation && (connection.cookieHeader(connection.generation) != null || connection.offline.canUse(connection.generation)))
         require(args.getString("queueToken") == token(player))
         val action = args.getString("action")
@@ -91,7 +91,7 @@ object ProgramQueue {
                 else {
                     require(anchor == player.currentMediaItemIndex && anchor in 0 until player.mediaItemCount)
                     require(args.getString("key") == key(player, anchor) && key(player, anchor).isNotBlank())
-                    anchor + 1
+                    maxOf(anchor + 1, (protectedThrough ?: anchor) + 1).also { require(it <= player.mediaItemCount) }
                 }
             }
             val rows = JSONArray(args.getString("tracks") ?: error("NO_TRACKS"))

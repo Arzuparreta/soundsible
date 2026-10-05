@@ -58,6 +58,22 @@ it('starts DJ from the captured song and rejects a menu after its occurrence cha
   expect(command).toHaveBeenCalledTimes(1);
 });
 const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhenReady: false, errorKind: '', playing: false, state: 3, index: 1, id: 'a', title: 'Song', artist: '', items: [{ source: 'local', key: 'first', id: 'a', title: 'a', artist: '' }, { source: 'local', key: 'second', id: 'a', title: 'a', artist: '' }], queueToken: 'token', queue: ['a', 'a'], positionMs: 1000, durationMs: 30000, error: 0, errorStatus: 0, shuffle: false, repeat: 2, hasNext: true, hasPrevious: true };
+it('repairs the captured DJ future from the overflow menu and rejects a changed route', async () => {
+  const command = vi.fn(async () => {});
+  const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0, items: [...initial.items, { ...initial.items[0], key: 'third' }], programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } });
+  render(() => <ProgramTransport state={state()} pending={false} command={command} />);
+  await fireEvent.click(document.querySelector('[data-program-menu]')!);
+  const action = vi.mocked(openContextMenu).mock.calls[0][0].actions!.find(item => item.label === 'autoMode.route.fix')!;
+  expect(action.disabled).toBe(false);
+  action.onSelect();
+  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'djRepair', programToken: 'dj-owner', queueToken: 'token' });
+  setState({ ...state(), queueToken: 'edited-route' }); action.onSelect();
+  expect(command).toHaveBeenCalledTimes(1);
+  setState({ ...state(), dj: { ...state().dj!, phase: 'repairing' } });
+  expect(screen.getByRole('status').textContent).toBe('autoMode.route.fixing');
+  await fireEvent.click(document.querySelector('[data-program-menu]')!);
+  expect(vi.mocked(openContextMenu).mock.calls[1][0].actions!.find(item => item.label === 'autoMode.route.fix')!.disabled).toBe(true);
+});
 it('uses native availability on the last occurrence and does not claim play before observation', async () => {
   const command = vi.fn(async () => {});
   const [state, setState] = createSignal(initial);

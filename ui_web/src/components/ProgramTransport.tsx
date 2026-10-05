@@ -8,6 +8,7 @@ import styles from './ProgramTransport.module.css';
 import { openContextMenu } from '../lib/contextMenu';
 import { vibrate } from '../lib/haptics';
 import type { DjProfile } from '../lib/api';
+import type { MenuAction } from './ActionMenu';
 
 /** Stateless ownership: presentation observes a program; commands never create audio here. */
 export default function ProgramTransport(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onLyrics?: () => void }) {
@@ -26,6 +27,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
       const generation = props.state.generation;
       const key = props.state.items[props.state.index]?.key;
       const programToken = props.state.programToken;
+      const queueToken = props.state.queueToken;
       const profiles: { profile: DjProfile; label: string }[] = [
         { profile: 'adaptive', label: t('autoMode.dj.adaptive') },
         { profile: 'long_blend', label: t('autoMode.dj.longBlend') },
@@ -47,7 +49,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
           if (disabled() || props.state.generation !== generation || props.state.items[props.state.index]?.key !== key) return;
           void run({ action: 'dj', profile: 'adaptive', fromCurrent: true, queueToken: props.state.queueToken, key });
         },
-      }] : []), ...(props.state.dj?.active && programToken ? profiles.map(({ profile, label }) => ({
+      }] : []), ...(props.state.dj?.active && programToken ? profiles.map<MenuAction>(({ profile, label }) => ({
         label, selected: props.state.dj?.profile === profile,
         onSelect: () => {
           if (disabled() || props.state.generation !== generation || props.state.programToken !== programToken || !props.state.dj?.active) return;
@@ -61,6 +63,13 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
           void import('../mobile/DjDirection').then(({ openNativeDjDirection }) => {
             openNativeDjDirection(props.state.dj?.direction, current, direction => props.command({ action: 'djSettings', programToken, direction }));
           });
+        },
+      }, {
+        label: t('autoMode.route.fix'), selected: false,
+        disabled: props.state.items.length - (props.state.dj?.editableFrom ?? props.state.index + 1) < 2 || props.state.dj?.phase === 'repairing',
+        onSelect: () => {
+          if (disabled() || props.state.generation !== generation || props.state.programToken !== programToken || props.state.queueToken !== queueToken || !props.state.dj?.active || props.state.dj.phase === 'repairing') return;
+          void run({ action: 'djRepair', programToken, queueToken });
         },
       }]) : [])] }, event);
     }}>⋯</button>
@@ -76,6 +85,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
     <input aria-label={t('android.seek')} disabled={disabled() || props.state.durationMs <= 0 || props.state.seekable === false} type="range" min="0" max={props.state.durationMs || 0} value={seeking() ?? props.state.positionMs} step="1000" aria-valuetext={clockTime((seeking() ?? props.state.positionMs) / 1000)} onInput={event => setSeeking(Number(event.currentTarget.value))} onChange={event => { const target = Number(event.currentTarget.value); void run({ action: 'seek', positionMs: target }).finally(() => setSeeking(null)); }} />
     <small>{clockTime(props.state.positionMs / 1000)} / {clockTime(props.state.durationMs / 1000)}</small>
     <Show when={props.state.dj?.phase === 'planning'}><p role="status">{t('autoMode.route.preparing')}</p></Show>
+    <Show when={props.state.dj?.phase === 'repairing'}><p role="status">{t('autoMode.route.fixing')}</p></Show>
     <Show when={props.state.dj?.phase === 'warming'}><p role="status">{t('autoMode.route.retryingHint')}</p></Show>
     <Show when={props.state.dj?.phase === 'degraded'}><p role="status">{t('autoMode.route.mixPending')}</p></Show>
     <Show when={props.state.dj?.phase === 'exhausted'}><p role="status">{t('autoMode.route.exhausted')}</p></Show>

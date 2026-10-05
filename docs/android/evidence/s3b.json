@@ -281,5 +281,33 @@
       "physical acoustic acceptance"
     ],
     "diagnostic": "/tmp/soundsible-s3b-starvation-post-recovery-pcm-native.log exposed rearming before rendered recovery ended; corrected with render and playout guards"
+  },
+  "production_dj_route_repair": {
+    "source_base_revision": "be2894fc",
+    "dirty": true,
+    "tests": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "log": "/tmp/soundsible-s3b-repair-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "ui_log": "/tmp/soundsible-s3b-repair-full-ui.log",
+    "ui_files": 198,
+    "ui_tests": 1561,
+    "proves": [
+      "real Core dj-repair on native future",
+      "retained requested occurrence KEY and chosen depth",
+      "source replacement retains explicit request",
+      "retained current KEY, paused clock and programme",
+      "observed cued state in APK UI",
+      "DJ recovery regression remains green"
+    ],
+    "does_not_prove": [
+      "musical request placement",
+      "transition refinement",
+      "all stale/malformed Core response negatives",
+      "long session history pruning",
+      "full native/browser regression or complete parity"
+    ]
   }
 }

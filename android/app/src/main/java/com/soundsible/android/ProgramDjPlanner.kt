@@ -111,7 +111,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         }
         retry = request; main.post(request)
     }
-    private fun reference(item: MediaItem) = JSONObject().put("id", item.mediaId)
+    fun reference(item: MediaItem) = JSONObject().put("id", item.mediaId)
         .put(if (item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "preview") "youtube_id" else "track_id", item.mediaId)
         .put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "")
         .put("album", item.mediaMetadata.albumTitle?.toString() ?: "")
@@ -132,18 +132,20 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
             if (decoded.length() == 0) continue
             val item = ProgramQueue.items(connection, decoded, owner).single()
             seen.add(item.mediaId)
-            val transition = candidate.optJSONObject("transition")
             val previous = route.lastOrNull()?.item?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
-            val proposal = if (transition != null && previous != null) {
-                val technique = runCatching { ProgramMixCurve.Technique.valueOf(transition.optString("technique").uppercase(java.util.Locale.ROOT)) }.getOrDefault(ProgramMixCurve.Technique.SAFE_FADE)
-                ProgramDjPlan.Proposal(previous, technique, transition.optDouble("out_cue", Double.NaN),
-                    transition.optDouble("in_cue", Double.NaN), transition.optDouble("overlap_seconds", Double.NaN),
-                    transition.optDouble("playback_rate", Double.NaN), transition.optDouble("confidence", 0.0),
-                    transition.optJSONObject("sync")?.optDouble("phase_tolerance_ms", 5.0) ?: 5.0)
-            } else null
-            route.add(ProgramDjSession.Row(item, proposal))
+            route.add(ProgramDjSession.Row(item, proposal(candidate, previous), "generated"))
         }
         return route
+    }
+    fun proposal(candidate: JSONObject, previous: String?): ProgramDjPlan.Proposal? {
+        val transition = candidate.optJSONObject("transition")
+        return if (transition != null && previous != null) {
+            val technique = runCatching { ProgramMixCurve.Technique.valueOf(transition.optString("technique").uppercase(java.util.Locale.ROOT)) }.getOrDefault(ProgramMixCurve.Technique.SAFE_FADE)
+            ProgramDjPlan.Proposal(previous, technique, transition.optDouble("out_cue", Double.NaN),
+                transition.optDouble("in_cue", Double.NaN), transition.optDouble("overlap_seconds", Double.NaN),
+                transition.optDouble("playback_rate", Double.NaN), transition.optDouble("confidence", 0.0),
+                transition.optJSONObject("sync")?.optDouble("phase_tolerance_ms", 5.0) ?: 5.0)
+        } else null
     }
     fun clear() {
         serial++; requestId?.let(connection::cancel); requestId = null
