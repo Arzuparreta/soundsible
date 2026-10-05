@@ -6,7 +6,6 @@ import android.os.Looper
 import androidx.media3.common.*
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
-import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -66,7 +65,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
                     putChannelMixingMatrix(ChannelMixingMatrix.createForConstantGain(1, 2))
                     putChannelMixingMatrix(ChannelMixingMatrix.createForConstantGain(2, 2))
                 }
-                val resampler = SonicAudioProcessor().apply { setOutputSampleRateHz(48000) }
+                val resampler = ProgramResampler()
                 return DefaultAudioSink.Builder(context).setEnableFloatOutput(false)
                     .setEnableAudioOutputPlaybackParameters(false).setAudioProcessors(arrayOf(channels, resampler))
                     .setAudioOutputProvider(output.input(index)).build()

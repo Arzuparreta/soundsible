@@ -122,6 +122,17 @@ y TypeScript en /tmp/soundsible-s3b-dj-sources-ui.log. DJ HTTP/TLS2/0 y normal
 APK/test/JVM/lint pasan en /tmp/soundsible-s3b-dj-sources-native.log (dirty=true):
 Core elige opening real desde source set y crea una nueva identidad de programa.
 Pendiente refill efectivo con más de ocho candidatos y cambio efectivo de fuentes.
+
+Refill y reemplazo efectivo de fuentes aceptados: DJ HTTP/TLS2/0, normal
+APK/test/JVM49/lint en /tmp/soundsible-s3b-dj-refill-resampler-native.log
+(dirty=true). La prueba salta dentro de un set de diez pistas adquiridas, fuerza
+refill9→10, cambia a fuentes PCM y conserva KEY/pausa/posición del input actual.
+Encontró un fallo real: Sonic.reset borra el target48k al parar/reusar decoder.
+ProgramResampler configura48k en cada stream y delega ambos flush explícitamente;
+regresión JVM dedicada pasa (/tmp/soundsible-s3b-resampler-unit.log).
+Se conservan diagnósticos fallidos en /tmp/soundsible-s3b-dj-refill-native.log y
+/tmp/soundsible-s3b-dj-refill-fixed-native.log. Siguiente bloque: recuperación
+en producción, controles/focus de sesión DJ y regresión completa del servicio/UI.
 El fallo real TLS al cerrar conexiones SSL en hilo principal está corregido:
 pool/dispatcher de audio propios, retiro en worker y shutdown de su executor.
 Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update

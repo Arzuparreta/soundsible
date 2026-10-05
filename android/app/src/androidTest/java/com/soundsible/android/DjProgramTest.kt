@@ -117,9 +117,23 @@ class DjProgramTest {
                 waitFor("window.__dj.dj?.active && window.__dj.playing && window.__dj.items.length>=2")
                 assertEquals("true", web.evaluate(scenario, "window.__dj.dj.profile==='open_format' && window.__dj.dj.sources[0].id==='pcm-only' && window.__dj.programToken!==window.__retainedProgram"))
                 command("action:'stop'")
+                connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/radio-seed").header("X-Android-Fixture", "isolated")
+                    .post("{}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+                command("action:'dj',profile:'adaptive',fromCurrent:false,sources:[{id:'refill',label:'Refill collection',activation:0,tracks:Array.from({length:10},(_,i)=>({id:'member-radio-'+i,title:'Radio '+i,artist:'member artist',duration:600}))}]")
+                waitFor("window.__dj.dj?.active && window.__dj.playing && window.__dj.items.length>=8")
+                web.evaluate(scenario, "window.__beforeRefill=window.__dj.items.length")
+                command("action:'select',index:window.__dj.items.length-3,key:window.__dj.items[window.__dj.items.length-3].key")
+                waitFor("window.__dj.items.length>window.__beforeRefill")
+                command("action:'pause'"); waitFor("!window.__dj.playWhenReady")
+                Thread.sleep(300)
+                web.evaluate(scenario, "window.__refillKey=window.__dj.items[window.__dj.index].key;window.__refillPosition=window.__dj.positionMs")
+                command("action:'djSettings',sources:[{id:'new-pcm',label:'New source',activation:0,tracks:[{id:'member-pcm-soft',title:'New soft',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'New loud',artist:'member artist',duration:60}]}]")
+                waitFor("window.__dj.dj?.sources[0].id==='new-pcm' && window.__dj.items.slice(window.__dj.index+1).some(item=>item.id==='member-pcm-soft')")
+                assertEquals("Replan replaced or resumed the current input", "true", web.evaluate(scenario, "window.__dj.items[window.__dj.index].key===window.__refillKey && !window.__dj.playWhenReady && Math.abs(window.__dj.positionMs-window.__refillPosition)<100"))
+                command("action:'stop'")
             }
             } finally {
-            try { for (id in listOf("member-pcm-soft", "member-pcm-loud")) connection.execute("/api/library/tracks/$id", "DELETE", null, emptyMap(), connection.generation, "dj-cleanup-$id", 15000).use { assertTrue(it.isSuccessful) }
+            try { for (id in listOf("member-pcm-soft", "member-pcm-loud") + (0 until 10).map { "member-radio-$it" }) connection.execute("/api/library/tracks/$id", "DELETE", null, emptyMap(), connection.generation, "dj-cleanup-$id", 15000).use { assertTrue(it.isSuccessful || it.code == 404) }
             connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
                 .post("{\"measured\":false}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
             } finally { connection.clearSession(true) }
