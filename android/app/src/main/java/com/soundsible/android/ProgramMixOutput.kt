@@ -1,6 +1,11 @@
 package com.soundsible.android
 
 import android.content.Context
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Looper
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
@@ -18,6 +23,10 @@ import kotlin.math.roundToInt
 @UnstableApi
 internal class ProgramMixOutput(context: Context, private val owns: () -> Boolean,
     private val observe: (ByteArray, Int, Int, Long) -> Unit) : AutoCloseable {
+    private val decodingThread = HandlerThread("soundsible-mix-decoders").apply { isDaemon = true; start() }
+    val playbackLooper: Looper = decodingThread.looper
+    private val decodingHandler = Handler(playbackLooper)
+    private val deviceReleased = CountDownLatch(1)
     private val provider = AudioTrackAudioOutputProvider.Builder(context).build()
     private val lock = Object()
     private var output: AudioOutput? = null
@@ -46,7 +55,15 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                 val current = this@ProgramMixOutput.config
                 if (current == null) {
                     this@ProgramMixOutput.config = config
-                    output = provider.getAudioOutput(config)
+                    output = provider.getAudioOutput(config).also { device ->
+                        device.addListener(object : AudioOutput.Listener {
+                            override fun onPositionAdvancing(playoutStartSystemTimeMs: Long) {}
+                            override fun onOffloadDataRequest() {}
+                            override fun onOffloadPresentationEnded() {}
+                            override fun onUnderrun() {}
+                            override fun onReleased() { deviceReleased.countDown() }
+                        })
+                    }
                     limiter = ProgramMixLimiter(config.sampleRate)
                 } else require(current.sampleRate == config.sampleRate && current.channelMask == config.channelMask && current.encoding == config.encoding)
                 sources[index]?.released = true
@@ -194,6 +211,18 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     }
     override fun close() {
         synchronized(lock) { if (closed) return; closed = true; output?.pause(); output?.flush(); sources.forEach { it?.queue?.clear(); it?.queued = 0 }; lock.notifyAll() }
-        worker.interrupt(); worker.join(1000); output?.release(); provider.release()
+        check(Looper.myLooper() != playbackLooper) { "Close the mix owner outside its decoder looper" }
+        worker.interrupt(); worker.join(1000)
+        val cleanup = CountDownLatch(1)
+        decodingHandler.post {
+            try {
+                val device = output
+                if (device == null) deviceReleased.countDown() else device.release()
+                provider.release()
+            } finally { cleanup.countDown() }
+        }
+        check(cleanup.await(3, TimeUnit.SECONDS)) { "Mix resources did not release" }
+        check(deviceReleased.await(3, TimeUnit.SECONDS)) { "Mix device did not release" }
+        decodingThread.quitSafely(); decodingThread.join(1000)
     }
 }

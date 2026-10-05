@@ -84,3 +84,13 @@ nuevo blend; no programar sobre muestras ya comprometidas. Cambiar metadata cuan
 se calcula un buffer futuro confundiría al oyente. Luego integrar controles/colas
 y planner DJ y revalidar los flujos NORMAL anteriores. Continuar hasta los gates
 completos; dejar PR abierta con checks pasando para review manual, sin automerge.
+
+Primer AudioTrack HTTP/TLS falla2: proveedor compartido accedido desde dos loopers
+ExoPlayer y cleanup desde instrumentation sin Looper. Log
+/tmp/soundsible-s3b-mix-native-jdk21.log. No sustituye principal S3a78 verde.
+Owner ahora proporciona un HandlerThread común de decoding, ambos ExoPlayer lo
+usan y la liberación de AudioTrack/proveedor se agenda allí, esperando onReleased
+antes de cerrar el hilo. Kotlin/test/JVM36/lint pasan en
+/tmp/soundsible-s3b-mix-looper-foundation.log; repetir AudioTrack real antes de
+aceptarlo. El rechazo inicial de JDK sistema se conserva como diagnóstico en
+/tmp/soundsible-s3b-mix-native.log, sin instrumentación ejecutada.

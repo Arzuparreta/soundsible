@@ -121,7 +121,7 @@ class ProgramMixOutputTest {
                                     .setAudioOutputProvider(owner.input(index)).build()
                             }
                         }
-                        val decoder = ExoPlayer.Builder(context, renderer).setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(client))).build()
+                        val decoder = ExoPlayer.Builder(context, renderer).setPlaybackLooper(owner.playbackLooper).setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(client))).build()
                         decoder.addListener(object : Player.Listener { override fun onPlayerError(problem: PlaybackException) { playbackFailure.set(problem) } })
                         decoder.setMediaItem(androidx.media3.common.MediaItem.fromUri(origin + "/api/static/stream/" + id))
                         decoder.prepare(); decoder.play(); decoders.add(decoder)
