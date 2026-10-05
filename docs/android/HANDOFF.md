@@ -145,6 +145,21 @@ DJ HTTP/TLS2 + NORMAL2, todos verdes; normal APK/test/JVM49/lint pasan en
 /tmp/soundsible-s3b-dj-session-controls-native.log. El mismo MediaController
 observa metadata dominante y pausa/reanuda DJ antes/después de recrear Activity.
 No prueba todavía focus/noisy de DJ, dispositivo/coche ni recuperación completa.
+
+Regresión nativa completa sobre255d07b8 limpio: principal120/3, log
+/tmp/soundsible-s3b-full-native.log. Fallan PlannerRetirement HTTP Radio/Autoplay
+por asumir que primer candidato es member-radio-* y ProgramPcm HTTP por buscar
+member-track fuera de filas virtualizadas. Fixes: seleccionar candidato propio
+dentro del plan real y buscar canción por UI. Dirigido retiro4+PCM2 pasan en
+/tmp/soundsible-s3b-focus-retirement-pcm-fixed-native.log; ese mismo run DJ2 falla
+porque broadcast noisy enviado por shell no alcanza receiver NOT_EXPORTED.
+No presentar120/0 ni restart actualizado: el fallo principal impide fases restart.
+DJ HTTP/TLS2/0 con pérdida temporal de focus real y noisy simulado por UID sistema
+en AVD rooteado aceptado; APK/test/JVM49/lint normal pasa, log
+/tmp/soundsible-s3b-dj-system-focus-native.log (dirty=true). No acredita auriculares
+físicos. Los scripts de integración exigen AVD; este caso además requiere su.
+Parche de recuperación saliente antes de armar mezcla aún sólo preparado en
+/tmp/soundsible-dj-ready-recovery.patch; no aplicado ni validado.
 El fallo real TLS al cerrar conexiones SSL en hilo principal está corregido:
 pool/dispatcher de audio propios, retiro en worker y shutdown de su executor.
 Ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update

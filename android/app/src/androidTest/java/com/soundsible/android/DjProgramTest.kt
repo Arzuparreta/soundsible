@@ -4,6 +4,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import android.content.ComponentName
+import android.media.AudioManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.Lifecycle
@@ -124,6 +127,25 @@ class DjProgramTest {
                 waitFor("!!document.querySelector('[data-testid=android-library]') && !document.documentElement.hasAttribute('data-booting')")
                 web.evaluate(scenario, "window.__djTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__dj=s),100)")
                 waitFor("window.__dj.dj?.active && window.__dj.id==='member-pcm-loud'")
+                instrumentation.runOnMainSync { controller.play() }; waitFor("window.__dj.playing")
+                val audioManager = instrumentation.targetContext.getSystemService(AudioManager::class.java)
+                val competingFocus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                    .setOnAudioFocusChangeListener { }.build()
+                try {
+                    instrumentation.runOnMainSync { assertEquals(AudioManager.AUDIOFOCUS_REQUEST_GRANTED, audioManager.requestAudioFocus(competingFocus)) }
+                    waitFor("window.__dj.playWhenReady && !window.__dj.playing")
+                    Thread.sleep(300)
+                    web.evaluate(scenario, "window.__focusPosition=window.__dj.positionMs")
+                    Thread.sleep(500)
+                    assertEquals("Transient focus advanced DJ", "true", web.evaluate(scenario, "Math.abs(window.__dj.positionMs-window.__focusPosition)<100"))
+                } finally { instrumentation.runOnMainSync { audioManager.abandonAudioFocusRequest(competingFocus) } }
+                waitFor("window.__dj.playing")
+                // Private receiver accepts real system events, never an ordinary app or shell sender.
+                instrumentation.uiAutomation.executeShellCommand("su 1000 am broadcast -a android.media.AUDIO_BECOMING_NOISY -p ${instrumentation.targetContext.packageName}").use { descriptor ->
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
+                }
+                waitFor("!window.__dj.playWhenReady && !window.__dj.playing")
                 instrumentation.runOnMainSync { controller.play() }; waitFor("window.__dj.playing")
                 command("action:'stop'"); waitFor("window.__dj.items.length===0")
                 command("action:'queue',index:0,tracks:[{source:'local',id:'member-track',title:'NORMAL restored',artist:'member artist'}]")

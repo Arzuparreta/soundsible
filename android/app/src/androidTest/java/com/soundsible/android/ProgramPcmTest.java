@@ -141,6 +141,7 @@ public class ProgramPcmTest {
                 JSONObject first = row(connection, origin, "member-track"), second = row(connection, origin, "member-pcm-loud");
                 click(scenario, "Refresh"); waitFor(scenario, "!!document.querySelector('[data-testid=android-configured]')&&!document.querySelector('[data-testid=android-configured] header button').disabled"); click(scenario, "Library");
                 waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-pcm-loud] [data-row-main]')");
+                web.evaluate(scenario, "document.querySelector('[data-testid=android-library] input[type=search]').value='member private song';document.querySelector('[data-testid=android-library] input[type=search]').dispatchEvent(new Event('input',{bubbles:true}))");
                 waitFor(scenario, "!!document.querySelector('[data-browse-track-id=member-track] [data-row-main]')"); web.evaluate(scenario, "document.querySelector('[data-browse-track-id=member-track] [data-row-main]').click()");
                 waitFor(scenario, "window.__pcm.playing&&window.__pcm.programToken!==" + JSONObject.quote(programme)); probe.await(currentKey(state(scenario)), (int) Math.round(3000 * gain(first)), 0);
                 first = row(connection, origin, "member-pcm-soft");

@@ -73,7 +73,13 @@ public class PlannerRetirementTest {
                 if (stats.getInt("pending") > 0) break;
                 assertTrue("Planner must compute a delayed production response", System.nanoTime() < until); Thread.sleep(50);
             } while (true);
-            String retired = stats.getJSONArray("delayed_ids").getString(0); assertTrue(retired.startsWith("member-radio-"));
+            String retired = null;
+            var planned = stats.getJSONArray("delayed_ids");
+            for (int index = 0; index < planned.length(); index++) {
+                String id = planned.getString(index);
+                if (id.startsWith("member-radio-")) { retired = id; break; }
+            }
+            assertNotNull("Computed plan must contain a recording owned by this retirement fixture: " + planned, retired);
             String selector = "[data-browse-track-id=" + JSONObject.quote(retired) + "] [data-row-menu]";
             waitFor(scenario, "!!document.querySelector(" + JSONObject.quote(selector) + ")");
             web.evaluate(scenario, "document.querySelector(" + JSONObject.quote(selector) + ").click()");
