@@ -72,8 +72,9 @@ class SoundsibleWidgetProvider : AppWidgetProvider() {
                     setViewVisibility(R.id.widgetArt, android.view.View.VISIBLE)
                     setImageViewBitmap(R.id.widgetArt, artwork)
                 } else {
-                    // No thumbnail: the backdrop color shows through.
-                    setViewVisibility(R.id.widgetArt, android.view.View.GONE)
+                    // No thumbnail: the app mark stands in over the backdrop.
+                    setViewVisibility(R.id.widgetArt, android.view.View.VISIBLE)
+                    setImageViewResource(R.id.widgetArt, R.drawable.soundsible_logo)
                 }
                 setImageViewResource(
                     R.id.widgetPlayPause,
