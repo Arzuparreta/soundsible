@@ -38,6 +38,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     // End of reserved output, including the batch currently being written.
     private var frames = 0L
     private var mixStart = Long.MAX_VALUE
+    private var prerollStart = Long.MAX_VALUE
     private var mixLength = 1L
     private var technique = ProgramMixCurve.Technique.SAFE_FADE
     private var active = 0
@@ -125,6 +126,21 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         }
         lock.notifyAll()
     }
+    /** Schedule against reserved output, consuming incoming preroll silently on the same clock. */
+    fun arm(lengthMs: Long, value: ProgramMixCurve.Technique, leadMs: Long, prerollMs: Long) = synchronized(lock) {
+        require(value != ProgramMixCurve.Technique.DIRECT && lengthMs in 50..30000)
+        require(leadMs in 1..30000 && prerollMs in 0..4000 && prerollMs <= leadMs)
+        require(!closed && owns() && failure == null && recovery == null && mixStart == Long.MAX_VALUE)
+        require(readyInput(1 - active)) { "Incoming input not ready" }
+        val rate = config!!.sampleRate
+        restoration = null
+        technique = value
+        mixStart = frames + leadMs * rate / 1000
+        prerollStart = mixStart - prerollMs * rate / 1000
+        mixLength = lengthMs * rate / 1000
+        window = ProgramMixWindow(mixStart, mixLength, active, 1 - active, outputEpoch)
+        lock.notifyAll()
+    }
     fun pause(value: Boolean) = synchronized(lock) {
         paused = value; synchronized(deviceLock) { if (value) output?.pause() else output?.play() }; lock.notifyAll()
     }
@@ -144,7 +160,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private fun invalidateDevice() {
         outputEpoch++
         synchronized(deviceLock) { output?.pause(); output?.flush() }
-        frames = 0L; mixStart = Long.MAX_VALUE; window = null; restoration = null; recovery = null; limiter?.reset()
+        frames = 0L; mixStart = Long.MAX_VALUE; prerollStart = Long.MAX_VALUE; window = null; restoration = null; recovery = null; limiter?.reset()
         sources.forEach { source -> source?.let { it.clock.reset(); it.effects.reset() } }
     }
     /** Losing an incoming deck restores the retained outgoing PCM without flushing the programme. */
@@ -154,7 +170,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         val outgoing = sources[transition.outgoing]?.takeIf { !it.released && it.playing && !(it.ended && it.queued == 0) } ?: return false
         val progress = if (transition.length == 0L) 1.0 else (frames - transition.start).toDouble() / transition.length
         val controls = ProgramMixCurve.at(technique, progress)
-        active = transition.outgoing; mixStart = Long.MAX_VALUE
+        active = transition.outgoing; mixStart = Long.MAX_VALUE; prerollStart = Long.MAX_VALUE
         recovery = Recovery(frames, (config!!.sampleRate * 0.15).toLong(), controls)
         restoration = frames to active
         limiter?.blend(false)
@@ -242,7 +258,11 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                         val source = sources[active]
                         val format = config
                         val channels = format?.let { Integer.bitCount(it.channelMask) } ?: 0
-                        val fullCount = (format?.sampleRate ?: 0) / 100 * channels
+                        var fullCount = (format?.sampleRate ?: 0) / 100 * channels
+                        // No chunk crosses a cue or the end of an overlap.
+                        for (boundary in longArrayOf(prerollStart, mixStart, if (mixStart == Long.MAX_VALUE) Long.MAX_VALUE else mixStart + mixLength)) {
+                            if (boundary > frames && boundary - frames < fullCount / channels.coerceAtLeast(1)) fullCount = (boundary - frames).toInt() * channels
+                        }
                         // AudioTrack's latency-adjusted clock cannot reach the last source
                         // frame on underrun. Drain with silence without ending the shared
                         // device (AudioOutput.stop cannot subsequently resume PCM playback).
@@ -250,9 +270,10 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                         val count = if (source?.ended == true && !tail) minOf(fullCount, source.queued / 2) else fullCount
                         val mixing = frames >= mixStart && frames < mixStart + mixLength
                         val incoming = sources[1 - active]
-                        if (!paused && source != null && (source.playing || source.ended) && count > 0 && (tail || source.queued >= count * 2) && (!mixing || incoming?.playing == true && incoming.queued >= count * 2)) {
+                        val preroll = frames >= prerollStart && frames < mixStart
+                        if (!paused && source != null && (source.playing || source.ended) && count > 0 && (tail || source.queued >= count * 2) && (!(mixing || preroll) || incoming?.playing == true && incoming.queued >= count * 2)) {
                             val first = ShortArray(count); if (!tail) source.read(first, count)
-                            val second = if (mixing) ShortArray(count).also { incoming!!.read(it, count) } else null
+                            val second = if (mixing || preroll) ShortArray(count).also { incoming!!.read(it, count) } else null
                             val result = ByteBuffer.allocateDirect(count * 2).order(ByteOrder.LITTLE_ENDIAN)
                             val firstFrame = FloatArray(channels); val secondFrame = FloatArray(channels)
                             val firstEffect = FloatArray(channels); val secondEffect = FloatArray(channels)
@@ -300,7 +321,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                 if (owns()) observe(copy, batch.rate, batch.channels, batch.start)
                 synchronized(lock) {
                     if (batch.epoch == outputEpoch && mixStart != Long.MAX_VALUE && frames >= mixStart + mixLength) {
-                        active = 1 - active; mixStart = Long.MAX_VALUE
+                        active = 1 - active; mixStart = Long.MAX_VALUE; prerollStart = Long.MAX_VALUE
                     }
                     recovery?.takeIf { batch.epoch == outputEpoch && frames >= it.start + it.length }?.let { recovery = null }
                     lock.notifyAll()

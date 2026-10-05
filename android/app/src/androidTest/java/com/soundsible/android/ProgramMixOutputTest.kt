@@ -101,7 +101,9 @@ class ProgramMixOutputTest {
     @Test fun tlsEndOfSource() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.DIRECT, endOfSource = true)
     @Test fun httpTempoMix() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), tempo = 1.05f)
     @Test fun tlsTempoMix() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), tempo = 1.05f)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f) {
+    @Test fun httpCuedPreroll() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), cued = true)
+    @Test fun tlsCuedPreroll() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), cued = true)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false, lateFailure: Boolean = false, effects: Boolean = false, secondFormat: String = "wav", endOfSource: Boolean = false, tempo: Float = 1f, cued: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -186,8 +188,20 @@ class ProgramMixOutputTest {
                 val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                 while (!owner.readyInput(1) && System.nanoTime() < readyDeadline) Thread.sleep(10)
                 assertTrue("Incoming decoder did not prepare actual PCM", owner.readyInput(1))
-                owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else 2000, technique)
+                if (cued) owner.arm(2000, technique, 1500, 500)
+                else owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else 2000, technique)
                 val transition = owner.transition() ?: error("Transition window absent")
+                if (cued) {
+                    val cueStart = transition.start - 24000
+                    meter.await { it.start in (cueStart + 2400)..(transition.start - 4800) && it.first < 30 && it.second < 30 && it.marker in 2900.0..3050.0 }
+                    val clockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while (owner.positionUs() * 48000 / 1000000 < transition.start - 12000 && System.nanoTime() < clockDeadline) Thread.sleep(5)
+                    val played = owner.positionUs() * 48000 / 1000000
+                    assertTrue("Preroll cue was missed", played in (transition.start - 12000)..(transition.start - 4800))
+                    assertEquals("Silent preroll changed metadata", 0, owner.dominantInput())
+                    val expected = (played - cueStart) * 1000000 / 48000
+                    assertTrue("Silent incoming drifted from programme clock", abs(owner.inputPositionUs(1) - expected) < 20000)
+                }
                 val checkpoints = when {
                     technique == ProgramMixCurve.Technique.DIRECT -> listOf(1.0 to 1)
                     lateFailure -> listOf(0.95 to 1)
