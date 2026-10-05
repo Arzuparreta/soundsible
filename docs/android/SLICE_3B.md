@@ -280,3 +280,9 @@ HTTP/TLS2 falla por intentar cancelación con250ms antes del cue físico pero el
 render ya había reservado mezcla; el guard rechaza correctamente. Log
 /tmp/soundsible-s3b-cancel-native.log. Ajustar prueba a preroll2s/margen1.75s,
 mantener rechazo después de blend comprometido. La corrección no debilita el guard.
+
+Cancelación/seek standby aceptados HTTP/TLS2/0 sobre53717d2f limpio, log
+/tmp/soundsible-s3b-cancel-reservation-native.log. Cancelar futuro conserva
+PCM1320 y epoch, seek del standby reinicia sólo su clock, nuevo arm mezcla y
+rechazo de cancelación comprometida pasa. Normal APK/test APK/JVM41/lint pasa.
+No integra aún controller/planner; próximo retorno de rate y fachada Player.

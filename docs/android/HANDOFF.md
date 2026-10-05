@@ -71,7 +71,9 @@ APK/test/JVM41/lint pasan sobref180e8ea limpio, log
 APK/test/JVM41/lint pasan sobreb2e208b8 limpio, log
 /tmp/soundsible-s3b-tempo-native.log. Cue/preroll HTTP/TLS2/0 y normal
 APK/test/JVM41/lint pasan sobree7e36547 limpio, log
-/tmp/soundsible-s3b-cue-native.log. Próximo cancelación/phase/rate return,
+/tmp/soundsible-s3b-cue-native.log. Cancelación y seek standby HTTP/TLS2/0
+y normal APK/test/JVM41/lint pasan sobre53717d2f limpio, log
+/tmp/soundsible-s3b-cancel-reservation-native.log. Próximo rate return,
 luego fachada Player y planner; ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.

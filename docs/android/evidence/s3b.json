@@ -120,6 +120,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-cue-native.log",
       "scope": "HTTP/TLS scheduled frame cue, 500ms silent incoming preroll on shared clock, actualPCM silence before overlap and dominant metadata during blend; normal APK/test APK/JVM41/lint pass"
+    },
+    "cancelled_preroll_native": {
+      "source_revision_at_asset_prepare": "53717d2f",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-cancel-reservation-native.log",
+      "scope": "HTTP/TLS cancel uncommitted preroll, retain outgoing actualPCM, seek standby/rebuffer without master epoch reset, rearm and blend; reject cancellation after PCM commitment; normal APK/test APK/JVM41/lint pass"
     }
   },
   "diagnostics": [
@@ -166,6 +176,12 @@
       "tests": 2,
       "failures": 2,
       "reason": "Keeping ended decoder from pausing does not overcome latency-adjusted AudioTrack underrun clock. Bounded silence drain without device stop passes repeat2."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-cancel-native.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Test attempted future cancellation after render had reserved overlap despite physical preroll. Longer silent preroll leaves real uncommitted margin; guard kept unchanged and repeated2 pass."
     }
   ],
   "limitations": [
