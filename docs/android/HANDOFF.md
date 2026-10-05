@@ -1424,3 +1424,22 @@ UI1522/188, fixture Core1 y browser4 278/66+269/75 pasan. Core adquiere archivo
 con metadata y reproduce fuente local al nuevo Play; Atrás restaura consulta y
 scroll real. Review/cancel/retry Core y adquisición sin preview anterior siguen
 pendientes. Ver último apartado SLICE_2AE; seguir sin cierre de turno por slice.
+
+### Revisión y feedback Android aceptados; siguiente aceptación Settings
+
+/tmp/soundsible-s2ae-review-links-native.log:16/0 HTTP/TLS,14 review/profile/search
+más2 feedback; APK/test APK/JVM17/lint normales pasan sin CA temporal. Adquisición
+sin Save/preview anterior enlaza identidad confirmada del job con el archivo local
+sin crear guardados. El primer run review falló4 y se conserva como diagnóstico;
+la repetición confirma elegir versión/skip/cancel/retry reales. Feedback usa View
+sin permiso VIBRATE ni flags para ignorar al sistema; on/off persiste en Activity,
+rechazo del SO no toca programa/sesión. No aceptación de sensación física.
+
+Learning y diagnóstico UI añadidos DESPUÉS del prepare de ese artifact; no confundir
+con su aceptación Native. Controller confirma PATCH/GET, reset DELETE confirmado,
+scope cancelable; diagnóstico sólo mide lo que entrega el motor, desconocido ante
+fallo/desconexión. Dirigidos Learning4 y diagnóstico2 pasan. Repetir UI completa,
+preparar nuevo artifact y probar Core HTTP/TLS. Falta regresión browser4 de nuevas
+vistas antes del PR y principal limpia ampliada con restart2. Última principal
+limpia sigue8329de5 57+2. Continuar Settings pendientes, DJ/Live/Auto/firma/update,
+commit/push y finalmente PR/main/release con paridad completa. No cerrar por slice.

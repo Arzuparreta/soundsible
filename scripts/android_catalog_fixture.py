@@ -12,6 +12,7 @@ def install(app):
     controls = {"partial": True, "delay": False, "status": 0}
     calls = []
     requests = []
+    review_albums = {"choose": "920002", "skip": "920003", "retry": "920004", "cancel": "920005"}
 
     def direct(query, _limit):
         calls.append({"provider": "youtube", "query": query})
@@ -36,6 +37,12 @@ def install(app):
             sleep(2)
         if "fixture" not in query.lower():
             return []
+        review = next((name for name in review_albums if f"fixture review {name}" in query.lower()), None)
+        if review:
+            album_id = review_albums[review]
+            return [catalog._catalog_item(item_id=f"deezer:album:{album_id}", item_type="album", source="deezer",
+                title=f"fixture review album {review}", artist="fixture collection artist",
+                external_ids={"deezer_album_id": album_id})]
         if "collection" in query.lower():
             return [
                 catalog._catalog_item(item_id="deezer:artist:910001", item_type="artist", source="deezer",
@@ -67,6 +74,12 @@ def install(app):
 
     def candidates(_self, artist, title, max_results=8):
         calls.append({"provider": "resolution", "artist": artist, "title": title})
+        if title.startswith("fixture review song "):
+            if title.endswith("cancel"):
+                sleep(5)
+            identity = {"choose": "D1111111111", "skip": "B1111111111", "retry": "E1111111111", "cancel": "A1111111111"}[title.rsplit(" ", 1)[-1]]
+            return [{"id": identity, "title": title + " (Live)", "artist": artist,
+                     "channel": artist + " - Topic", "duration": 180}]
         if title != "fixture resolved song":
             return []
         return [{"id": "C1111111111", "title": title, "artist": artist, "channel": artist + " - Topic", "duration": 60}]
@@ -76,6 +89,18 @@ def install(app):
     real_deezer_get = catalog._deezer_get
 
     def provider(path, params=None, timeout=8):
+        review = next((name for name, identity in review_albums.items() if path.startswith(f"album/{identity}")), None)
+        if review:
+            album_id = review_albums[review]
+            artist = {"id": 910001, "name": "fixture collection artist"}
+            album = {"id": int(album_id), "title": f"fixture review album {review}", "artist": artist,
+                     "record_type": "album", "release_date": "2020-01-01"}
+            track = {"id": int(album_id) + 1000, "title": f"fixture review song {review}", "artist": artist,
+                     "duration": 60, "album": album, "track_position": 1, "disk_number": 1}
+            calls.append({"provider": "deezer-profile", "path": path})
+            if path.endswith("/tracks"):
+                return {"data": [track], "total": 1}
+            return {**album, "tracks": {"data": [track]}, "nb_tracks": 1}
         if "910001" not in path and "920001" not in path:
             return real_deezer_get(path, params, timeout)
         calls.append({"provider": "deezer-profile", "path": path})

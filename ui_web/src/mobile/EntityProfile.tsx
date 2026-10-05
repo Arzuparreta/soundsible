@@ -72,7 +72,8 @@ export default function NativeEntityProfile(props: {
   const bookmark = () => nativeProfileBookmark({ ...props.subject, view: view() }, profile.profile());
   const subject = () => ({ ...props.subject, deezerId: props.subject.deezerId ?? profile.profile()?.deezer_id ?? undefined });
   const collection = createNativeCollection({ subject, generation: () => props.generation, disconnected: () => props.disconnected,
-    songs: discovered, owned: item => !!props.catalog.trackFor(item) && props.catalog.trackFor(item)?.source !== 'preview', refresh: props.onChanged });
+    songs: discovered, owned: item => !!props.catalog.trackFor(item) && props.catalog.trackFor(item)?.source !== 'preview', refresh: props.onChanged,
+    onConfirmed: job => props.catalog.adoptCollection(job, props.generation) });
   const [bookmarkError, setBookmarkError] = createSignal(false);
   let closeDetails: (() => void) | undefined;
   onCleanup(() => closeDetails?.());

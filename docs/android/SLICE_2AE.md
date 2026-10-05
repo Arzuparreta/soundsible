@@ -140,3 +140,30 @@ UI completa1522/188 pasa; pytest fixture1 pasa. Browser4 compartido pasa278/66 y
 adquisición sin resolución previa en APK, además del resto del catálogo externo.
 No tratar seis casos dirigidos como matriz completa. Settings siguientes tienen
 plan S2AF; adaptador haptic preparado separado, todavía no conectado al APK.
+
+## Revisión Core en curso
+
+CollectionReviewTest añade ocho casos HTTP/TLS: elección de versión con confianza
+baja, omisión explícita, cancelación durante resolución y fallo real de adquisición
+con reintento. El pytest de fixture recorre Core real hasta needs_review, decision,
+resume y archivo adquirido; pasa1 en /tmp/soundsible-s2ae-review-core-fixture.log.
+El primer run Native /tmp/soundsible-s2ae-review-native.log NO está aceptado:
+encuentra que adquirir sin Save/preview anterior no enlaza el catálogo con el
+archivo. Core sólo amplía identidades de canciones ya guardadas. La corrección
+UI enlaza identity_keys de filas completed/existing de un job confirmado al
+matched_track_id presente en la biblioteca; no crea guardados ni usa títulos.
+Prueba dirigida de navegación, retirada y cambio de cuenta incluida. Reintento
+esperaba incorrectamente failed a nivel de job; Core usa partial para filas failed.
+Corregir esa expectativa y repetir el recorrido antes de aceptar el bloque.
+Fuentes Native/fixtures/assets permanecen congeladas hasta terminar este run.
+
+Repetición aceptada: /tmp/soundsible-s2ae-review-links-native.log termina0;
+16 tests, cero fallos/errores/omisiones (14 de review/fichas/búsqueda y2 feedback).
+XML propio en integration-targeted/com.soundsible.android.CollectionReviewTest_com.soundsible.android.CollectionProfileTest_com.soundsi/.
+APK/test APK/JVM17/lint normales pasan y CA temporal retirada. Review elegido,
+omitido, cancelado y reintentado recorren Core real HTTP/TLS; adquirir sin guardado
+previo termina en Play local. Enlace por identity_keys/matched_track_id confirmado,
+retirada de fuente y cambio de cuenta cubiertos en UI. UI1526/189 antes de Learning;
+Learning/diagnóstico posteriores se validan por separado y no estaban en esa APK.
+El primer run fallido queda diagnóstico, no aceptación. Principal limpia57/restart2
+anterior sigue vigente hasta repetir la ampliada desde commit limpio.

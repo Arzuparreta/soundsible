@@ -7,6 +7,7 @@ import { programTrack } from '../lib/program/tracks';
 import { resolveNativeCatalogProgram } from './catalogProgram';
 import { t } from '../lib/i18n';
 import type { CatalogItem, SavedEntry, Track } from '../types/music';
+import type { MigrationJob } from '../lib/migrationApi';
 
 export type CatalogPurpose = 'play' | 'save' | 'remove' | 'acquire';
 
@@ -21,7 +22,16 @@ export function createNativeCatalogActions(props: {
   const [error, setError] = createSignal('');
   const [partial, setPartial] = createSignal(false);
   const [resolvedTracks, setResolvedTracks] = createSignal(new Map<string, Track>());
+  const [collectionLinks, setCollectionLinks] = createSignal(new Map<string, Map<string, string>>());
   const libraryIndex = createMemo(() => buildIdentityIndex(props.tracks()));
+  const collectionIndex = createMemo(() => {
+    const index = new Map<string, Track>();
+    for (const links of collectionLinks().values()) for (const [key, id] of links) {
+      const track = libraryIndex().get(`lib:${id}`);
+      if (track && track.source !== 'preview' && programTrack(track)) index.set(key, track);
+    }
+    return index;
+  });
   const savedKeys = createMemo(() => new Set(props.saved().flatMap(entry => entry.keys)));
   const savedIndex = createMemo(() => {
     const index = new Map<string, Track>();
@@ -45,6 +55,10 @@ export function createNativeCatalogActions(props: {
       const held = savedIndex().get(key);
       if (held) return held;
     }
+    for (const key of catalogItemKeys(item)) {
+      const held = collectionIndex().get(key);
+      if (held) return held;
+    }
     const resolved = resolvedTracks().get(item.id);
     if (resolved) for (const key of trackKeys(resolved)) {
       const owned = libraryIndex().get(key);
@@ -54,7 +68,17 @@ export function createNativeCatalogActions(props: {
   };
   function reset(clearResolved = false) {
     epoch++; controller?.abort(); setPending(null); setError(''); setPartial(false);
-    if (clearResolved) setResolvedTracks(new Map());
+    if (clearResolved) { setResolvedTracks(new Map()); setCollectionLinks(new Map()); }
+  }
+  /** Confirmed Core rows link catalog identities to owned files without saving songs. */
+  function adoptCollection(job: MigrationJob, generation: number) {
+    if (disposed || props.generation() !== generation || !/^(album|artist):\d{1,20}$/.test(job.provider)) return;
+    const links = new Map<string, string>();
+    for (const row of job.tracks ?? []) {
+      if (!['completed', 'existing'].includes(row.state) || !row.matched_track_id || !Array.isArray(row.source?.identity_keys)) continue;
+      for (const key of row.source.identity_keys) if (typeof key === 'string' && key.length <= 256) links.set(key, row.matched_track_id);
+    }
+    const next = new Map(collectionLinks()); next.set(job.provider, links); setCollectionLinks(next);
   }
   onCleanup(() => { disposed = true; reset(true); });
   async function resolveRecording(item: CatalogItem, signal: AbortSignal, current: () => boolean) {
@@ -117,6 +141,6 @@ export function createNativeCatalogActions(props: {
       if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : 'search.noPreview'));
     } finally { if (current()) setPending(null); }
   }
-  return { trackFor, pending, error, partial, reset, act, playCollection,
+  return { trackFor, pending, error, partial, reset, act, playCollection, adoptCollection,
     isSaved: (item: CatalogItem) => catalogItemKeys(item).some(key => savedKeys().has(key)) };
 }

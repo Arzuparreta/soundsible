@@ -18,6 +18,7 @@ const downloads = {
 export function createNativeCollection(props: {
   subject: () => NativeEntitySubject; generation: () => number; disconnected: () => boolean;
   songs: () => CatalogItem[]; owned: (item: CatalogItem) => boolean; refresh: () => Promise<void>;
+  onConfirmed?: (job: MigrationJob) => void;
 }, confirm = confirmDialog) {
   const [job, setJob] = createSignal<MigrationJob | null>(null);
   const [busy, setBusy] = createSignal(false), [error, setError] = createSignal('');
@@ -34,6 +35,7 @@ export function createNativeCollection(props: {
   async function adopt(next: MigrationJob | null, current: () => boolean) {
     if (!current()) return;
     const before = job(); setJob(next);
+    if (next) props.onConfirmed?.(next);
     if (next && (next.selected_counts.completed !== before?.selected_counts.completed || next.selected_counts.existing !== before?.selected_counts.existing)) await props.refresh();
   }
   async function read() {

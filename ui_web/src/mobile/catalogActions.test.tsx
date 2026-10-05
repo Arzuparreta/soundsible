@@ -61,3 +61,23 @@ it('uses the acquired source for an exact YouTube catalog row', () => {
   expect(actions.trackFor({ id: 'youtube:track:A1111111111', source: 'youtube', type: 'track', title: 'Song', artist: 'Artist', raw: { id: 'A1111111111' } })).toBe(acquired);
   expect(mocks.resolve).not.toHaveBeenCalled();
 });
+it('uses only confirmed collection identities, retains them across navigation and drops removed or foreign-account sources', async () => {
+  const recording: CatalogItem = { id: 'deezer:track:8', source: 'deezer', type: 'track', title: 'Same title', artist: 'Artist', external_ids: { deezer_id: '8' } };
+  const acquired: Track = { id: 'downloaded', title: 'Same title', artist: 'Artist' };
+  const [library, setLibrary] = createSignal<Track[]>([acquired]), [generation, setGeneration] = createSignal(1);
+  const play = vi.fn().mockResolvedValue(undefined);
+  let actions!: ReturnType<typeof createNativeCatalogActions>;
+  render(() => { actions = createNativeCatalogActions({ generation, disconnected: () => false, saved: () => [], tracks: library,
+    onPlay: play, onChanged: vi.fn() }); return null; });
+  const receipt = { id: 'confirmed-job', provider: 'album:1', tracks: [{ source_key: '8', source: { identity_keys: ['deezer:8'] }, state: 'completed', matched_track_id: 'downloaded' }] } as unknown as import('../lib/migrationApi').MigrationJob;
+  expect(actions.trackFor(recording)).toBeNull();
+  actions.adoptCollection({ ...receipt, tracks: receipt.tracks!.map(row => ({ ...row, state: 'downloading' })) }, 1);
+  expect(actions.trackFor(recording)).toBeNull();
+  actions.adoptCollection(receipt, 1); expect(actions.trackFor(recording)).toBe(acquired);
+  expect(actions.trackFor({ ...recording, id: 'deezer:track:9', external_ids: { deezer_id: '9' } })).toBeNull();
+  actions.reset(); await actions.act(recording, 'play'); expect(play).toHaveBeenLastCalledWith(acquired);
+  expect(mocks.resolve).not.toHaveBeenCalled(); expect(mocks.save).not.toHaveBeenCalled();
+  setLibrary([]); expect(actions.trackFor(recording)).toBeNull();
+  setLibrary([acquired]); expect(actions.trackFor(recording)).toBe(acquired);
+  setGeneration(2); actions.reset(true); actions.adoptCollection(receipt, 1); expect(actions.trackFor(recording)).toBeNull();
+});

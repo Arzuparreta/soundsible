@@ -31,6 +31,7 @@ export interface MigrationTrack {
     artist: string;
     album: string;
     local_only?: boolean;
+    identity_keys?: string[];
   } | null;
   state: string;
   matched_track_id?: string | null;

@@ -103,6 +103,39 @@ def test_catalog_search_resolve_and_save_keep_real_account_isolation(tmp_path):
                 params={"deezer_id": "910001"}, timeout=15)
             assert discography.status_code == 200, discography.text
             assert len(discography.json()["tracklist"]) == 1
+            # A low confidence candidate enters the real durable review path;
+            # the user's choice resumes the normal acquisition pipeline.
+            started = member.post(origin + "/api/catalog/album/download", json={"deezer_id": "920002"}, timeout=15)
+            assert started.status_code == 202, started.text
+            job_id = started.json()["job"]["id"]
+            deadline = time.monotonic() + 40
+            while True:
+                job = member.get(origin + f"/api/migration/jobs/{job_id}", timeout=10).json()["job"]
+                if job["state"] == "needs_review":
+                    break
+                assert time.monotonic() < deadline, job
+                time.sleep(0.2)
+            assert job["provider"] == "album:920002"
+            row = job["tracks"][0]
+            assert row["state"] == "needs_review"
+            candidate = row["candidates"][0]
+            assert candidate["video_id"] == "D1111111111" and candidate["confidence"] < 0.75
+            assert member.get(origin + "/api/library", timeout=10).json()["tracks"] == before
+            choice = member.post(origin + f"/api/migration/jobs/{job_id}/decision",
+                json={"source_key": row["source_key"], "decision": "use_candidate", "candidate": candidate}, timeout=10)
+            assert choice.status_code == 200, choice.text
+            resumed = member.post(origin + f"/api/migration/jobs/{job_id}/control", json={"action": "resume"}, timeout=10)
+            assert resumed.status_code == 200, resumed.text
+            while True:
+                job = member.get(origin + f"/api/migration/jobs/{job_id}", timeout=10).json()["job"]
+                if job["state"] == "completed":
+                    break
+                assert time.monotonic() < deadline, job
+                time.sleep(0.2)
+            acquired = [track for track in member.get(origin + "/api/library", timeout=10).json()["tracks"]
+                        if track.get("youtube_id") == "D1111111111"]
+            assert len(acquired) == 1
+            assert acquired[0]["album"] == "fixture review album choose" and acquired[0]["track_number"] == 1
             owner = requests.Session()
             assert (
                 owner.post(
