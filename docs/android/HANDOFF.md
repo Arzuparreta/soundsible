@@ -36,7 +36,7 @@ No hay paridad completa ni PR final todavía.
   controles MediaSession/focus/noisy en AVD, retorno NORMAL y mezcla off confirmada.
   Recuperación de decoder previo a mezcla y de una entrada sin PCM durante mezcla
   aceptadas con controller real aislado. Reparación Core, pins al replanear y estado
-  «Preparada» aceptados. Placement musical/refinamiento y recuperación de red
+  «Preparada» y placement musical aceptados. Refinamiento y recuperación de red
   completa en servicio siguen pendientes. No declarar paridad DJ.
 - Live y Android Auto: pendientes. Firma permanente/update público: pendientes.
 
@@ -71,8 +71,16 @@ No hay paridad completa ni PR final todavía.
   respeta floor. UI198/1561 + TS en `/tmp/soundsible-s3b-repair-full-ui.log`.
   No acredita todavía placement musical, refinamiento, todos los negativos de
   respuestas Core ni larga sesión hasta el límite de1000 ocurrencias.
-- UI completa: **198 archivos/1559 tests + TypeScript**, último log
-  `/tmp/soundsible-s3b-repair-full-ui.log` (1561 tras repair/cued).
+- Placement: DJ2/0 HTTP/TLS, APK/test/JVM52/lint normal sin CA en
+  `/tmp/soundsible-s3b-placement-native.log` sobre `cebf7246` dirty. `dj-place`
+  calcula inserción/bridges/following transition; request user se conserva desde
+  su aceptación.503 conserva fallback en cola; respuesta computada y demorada2s
+  no revierte Move ni duplica petición. Cambio de fuentes conserva ambas requests,
+  incluyendo dos ocurrencias del mismo recording. Controles de fixture anónimos
+  sin header rechazados403. No prueba placement fijo lejano ni todas las variantes
+  de bridges, refinamiento o larga sesión. UI198/1564 + TS pasa.
+- UI completa: **198 archivos/1564 tests + TypeScript**, último log
+  `/tmp/soundsible-s3b-placement-full-ui.log`.
 - Browser4 último verde es anterior a S3: Chromium278/66 skips + WebKit269/75 skips,
   `/tmp/soundsible-s2ag-{chromium,webkit}.log`. Repetir los cuatro antes de PR.
 - Evidencia durable: [S3a](evidence/s3a.json), [S3b](evidence/s3b.json).
@@ -81,14 +89,15 @@ No hay paridad completa ni PR final todavía.
 
 ## Trabajo activo y siguiente paso
 
-Modo (`68e4e76b`) y harness (`be2894fc`) subidos. Repair8 termina exit0, congelación
-levantada; cerrar commit/push del bloque. Siguiente: placement `dj-place` con
-fallback que retenga siempre la petición explícita, sin tocar inputs comprometidos.
+Modo (`68e4e76b`), harness (`be2894fc`) y repair (`cebf7246`) subidos. Placement2
+termina exit0; congelación levantada. Cerrar commit/push del bloque y continuar
+historial de sesiones largas y refinamiento. Fixture DJ acota fallos/delays alrededor
+del Core real; no sustituye sus respuestas válidas por un planner falso.
 En futuros runs, **congelar fuentes/tests Native, fixtures, assets y recursos
 hasta final del runner, incluido build normal sin CA**. No atribuir un run a
 fuentes cambiadas después de su prepare.
 
-Después: cerrar placement/refinamiento DJ, negativos y larga sesión,
+Después: cerrar refinamiento DJ, negativos restantes y larga sesión,
 recuperación de red en producción y regresión completa; continuar Live receptor/
 emisor, Android Auto, restantes de matriz de teléfono y firma/update. Gate final:
 paridad + checks + PR abierta para review manual; nunca merge automático.

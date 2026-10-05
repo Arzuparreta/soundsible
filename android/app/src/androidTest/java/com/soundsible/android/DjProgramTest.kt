@@ -183,7 +183,9 @@ class DjProgramTest {
                 command("action:'pause'"); waitFor("!window.__dj.playWhenReady")
                 Thread.sleep(300)
                 web.evaluate(scenario, "window.__refillKey=window.__dj.items[window.__dj.index].key;window.__refillPosition=window.__dj.positionMs")
-                command("action:'append',tracks:[{source:'local',id:'member-pcm-soft',title:'Pinned request',artist:'member artist',duration:20}]")
+                web.evaluate(scenario, "window.__placementRevision=window.__dj.dj.editRevision||0")
+                command("action:'djRequest',tracks:[{source:'local',id:'member-pcm-soft',title:'Pinned request',artist:'member artist',duration:20}]")
+                waitFor("window.__dj.dj?.editRevision>window.__placementRevision && window.__dj.dj.editOutcome==='placed' && ['ready','degraded'].includes(window.__dj.dj.phase)")
                 waitFor("window.__dj.items.some(item=>item.title==='Pinned request')")
                 web.evaluate(scenario, "window.__pinIndex=window.__dj.items.findIndex(item=>item.title==='Pinned request');window.__pinKey=window.__dj.items[window.__pinIndex].key;window.__pinTarget=window.__dj.index+2")
                 command("action:'move',index:window.__pinIndex,toIndex:window.__pinTarget,key:window.__pinKey")
@@ -193,8 +195,29 @@ class DjProgramTest {
                 waitFor("window.__dj.dj?.editRevision>window.__repairRevision && ['ready','degraded'].includes(window.__dj.dj?.phase)")
                 assertEquals("Repair dropped or moved a requested occurrence", "true", web.evaluate(scenario, "window.__dj.items[window.__pinTarget]?.key===window.__pinKey"))
                 assertEquals("Repair replaced or resumed the current input", "true", web.evaluate(scenario, "window.__dj.items[window.__dj.index].key===window.__refillKey && !window.__dj.playWhenReady && Math.abs(window.__dj.positionMs-window.__refillPosition)<100"))
+                fun editorFixture(payload: String) {
+                    connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/dj-editor").header("X-Android-Fixture", "isolated")
+                        .post(payload.toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+                }
+                connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/dj-editor")
+                    .post("{}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals("DJ fixture controls must reject ordinary clients", 403, it.code) }
+                editorFixture("{\"failNext\":1}")
+                command("action:'djRequest',tracks:[{source:'local',id:'member-pcm-soft',title:'Fallback request',artist:'member artist',duration:20}]")
+                waitFor("window.__dj.dj?.editOutcome==='placement_fallback' && window.__dj.dj.phase==='degraded'")
+                assertEquals("Failed placement lost the request or resumed playback", "true", web.evaluate(scenario, "window.__dj.items[window.__dj.index+1]?.title==='Fallback request' && !window.__dj.playWhenReady"))
+                web.evaluate(scenario, "window.__fallbackKey=window.__dj.items[window.__dj.index+1].key;window.__pinTarget+=1")
+                editorFixture("{\"delaySeconds\":2}")
+                command("action:'djRequest',tracks:[{source:'local',id:'member-pcm-loud',title:'Moved during planning',artist:'member artist',duration:60}]")
+                waitFor("window.__dj.items[window.__dj.index+1]?.title==='Moved during planning'")
+                web.evaluate(scenario, "window.__lateKey=window.__dj.items[window.__dj.index+1].key")
+                command("action:'move',index:window.__dj.index+1,toIndex:window.__dj.items.length-1,key:window.__lateKey")
+                waitFor("window.__dj.dj?.editOutcome==='cancelled' && window.__dj.dj.phase==='cancelled'")
+                assertEquals("Late placement overwrote the listener's move", "true", web.evaluate(scenario, "window.__dj.items.at(-1)?.key===window.__lateKey && !window.__dj.playWhenReady"))
+                command("action:'remove',index:window.__dj.items.length-1,key:window.__lateKey")
+                waitFor("!window.__dj.items.some(item=>item.key===window.__lateKey)")
                 command("action:'djSettings',sources:[{id:'new-pcm',label:'New source',activation:0,tracks:[{id:'member-pcm-soft',title:'New soft',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'New loud',artist:'member artist',duration:60}]}]")
-                waitFor("window.__dj.dj?.sources[0].id==='new-pcm' && ['ready','degraded'].includes(window.__dj.dj.phase) && window.__dj.items.slice(window.__dj.index+1).some(item=>item.id==='member-pcm-loud') && window.__dj.items.length-window.__dj.index-1===2")
+                waitFor("window.__dj.dj?.sources[0].id==='new-pcm' && ['ready','degraded'].includes(window.__dj.dj.phase) && window.__dj.items.slice(window.__dj.index+1).some(item=>item.id==='member-pcm-loud') && window.__dj.items.length-window.__dj.index-1===3")
+                assertEquals("Changing sources lost the fallback request", "true", web.evaluate(scenario, "window.__dj.items[window.__dj.index+1]?.key===window.__fallbackKey"))
                 assertEquals("Changing sources lost the explicit request", "true", web.evaluate(scenario, "window.__dj.items[window.__pinTarget]?.key===window.__pinKey"))
                 assertEquals("Replan replaced or resumed the current input", "true", web.evaluate(scenario, "window.__dj.items[window.__dj.index].key===window.__refillKey && !window.__dj.playWhenReady && Math.abs(window.__dj.positionMs-window.__refillPosition)<100"))
                 command("action:'radio',enabled:true,profile:'balanced'")
@@ -206,6 +229,8 @@ class DjProgramTest {
             }
             } finally {
             mediaController?.let { controller -> InstrumentationRegistry.getInstrumentation().runOnMainSync { controller.release() } }
+            connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/dj-editor").header("X-Android-Fixture", "isolated")
+                .post("{}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
             try { for (id in listOf("member-pcm-soft", "member-pcm-loud") + (0 until 10).map { "member-radio-$it" }) connection.execute("/api/library/tracks/$id", "DELETE", null, emptyMap(), connection.generation, "dj-cleanup-$id", 15000).use { assertTrue(it.isSuccessful || it.code == 404) }
             connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
                 .post("{\"measured\":false}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }

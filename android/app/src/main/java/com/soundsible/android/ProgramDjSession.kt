@@ -207,13 +207,21 @@ internal class ProgramDjSession(private val context: Context, private val genera
     }
     fun snapshotCurrent(snapshot: RouteSnapshot): Boolean = owns() && snapshot.epoch == output.epoch() &&
         snapshot.revision == routeRevision && snapshot.floor == protectedIndex()
-    /** A repair may replace only the captured future, never a committed input. */
-    fun repair(snapshot: RouteSnapshot, repaired: List<Row>): Boolean {
+    /** Scoped edits may replace only the captured future, never a committed input. */
+    fun editFuture(snapshot: RouteSnapshot, future: List<Row>): Boolean {
         if (!snapshotCurrent(snapshot)) return false
-        val next = route.take(snapshot.floor + 1) + repaired + route.drop(snapshot.floor + 17)
+        val next = route.take(snapshot.floor + 1) + future
         applyPlaylist(next.map { it.item }, false)
         route = next; player.routeChanged(); changed()
         return true
+    }
+    /** The request remains queued even if musical placement is cancelled or fails. */
+    fun addRequested(item: MediaItem, beforeKey: String?): RouteSnapshot {
+        val floor = protectedIndex()
+        val insertion = beforeKey?.let { key -> route.indexOfFirst { itemKey(it.item) == key }.also { require(it > floor) } } ?: floor + 1
+        val next = route.take(insertion) + Row(item) + route.drop(insertion)
+        applyPlaylist(next.map { it.item }, false)
+        return routeSnapshot()
     }
     fun pin(key: String) {
         check(owns())

@@ -100,6 +100,8 @@ class PlaybackService : MediaLibraryService() {
             putString("djPhase", phase); putString("djProfile", profile); putInt("djErrorStatus", code)
             putLong("djEditRevision", djRouteEditor?.revision ?: 0)
             putInt("djEditableFrom", dj?.editableFrom() ?: 0)
+            putString("djEditOutcome", djRouteEditor?.outcome ?: "idle")
+            putString("djRequestTitle", djRouteEditor?.requestTitle ?: "")
             putString("djDirection", djPlanner.direction.toString()); putString("djSources", djPlanner.sources.toString())
         }) }
     }
@@ -279,7 +281,14 @@ class PlaybackService : MediaLibraryService() {
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
                 return Futures.immediateFuture(try {
-                    if (args.getString("action") == "djRepair") {
+                    if (args.getString("action") == "djRequest") {
+                        require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player) && args.getString("queueToken") == ProgramQueue.token(player))
+                        val rows = org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACK")); require(rows.length() == 1)
+                        val track = ProgramQueue.items(connection, rows, ProgramQueue.programToken(player)).single()
+                        require(track.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
+                        djPlanner.clear(); refillAnchor = ""
+                        djRouteEditor!!.place(track, args.getString("beforeKey")?.takeIf { it.isNotBlank() })
+                    } else if (args.getString("action") == "djRepair") {
                         require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player) && args.getString("queueToken") == ProgramQueue.token(player))
                         djPlanner.clear(); refillAnchor = ""
                         djRouteEditor!!.repair()

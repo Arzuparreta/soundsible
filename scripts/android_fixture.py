@@ -144,6 +144,9 @@ def main() -> None:
     from android_radio_fixture import install as install_radio
 
     install_radio(app, root, accounts)
+    from android_dj_fixture import install as install_dj
+
+    install_dj(app)
 
     stream_requests = []
     stream_failure = {}

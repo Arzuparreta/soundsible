@@ -40,6 +40,27 @@ it('allows a valid saved preview and forwards its source without external metada
   programLibraryMenu({ ...track, source: 'preview', id: 'A1111111111', cover: 'https://external.invalid' }, () => initial, () => false, execute).actions![1].onSelect();
   expect(execute).toHaveBeenCalledWith({ action: 'append', queueToken: 'order', tracks: [{ ...track, id: 'A1111111111', source: 'preview' }] });
 });
+it('places a DJ request in the captured programme and keeps external URLs out of the command', () => {
+  let state = { ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } } as ProgramState;
+  const execute = vi.fn(async () => {});
+  const menu = programLibraryMenu({ ...track, url: 'https://untrusted.invalid' } as Track, () => state, () => false, execute);
+  const action = menu.actions!.find(item => item.label === 'autoMode.dj.routeAction')!;
+  action.onSelect();
+  expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'djRequest', programToken: 'dj-owner', queueToken: 'order', tracks: [{ ...track, source: 'local' }] });
+  for (const changed of [{ ...state, queueToken: 'refilled' }, { ...state, programToken: 'new-programme' }, { ...state, generation: 2 }]) {
+    state = changed; action.onSelect();
+  }
+  expect(execute).toHaveBeenCalledTimes(1);
+});
+it('keeps podcasts out of a DJ route while leaving their explicit Play flow separate', () => {
+  const state = { ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } } as ProgramState;
+  const podcast = { ...track, media_kind: 'podcast_episode', podcast_episode_guid: 'episode', podcast_feed_id: 'feed' };
+  const execute = vi.fn(async () => {});
+  const menu = programLibraryMenu(podcast, () => state, () => false, execute);
+  expect(menu.actions!.every(action => action.disabled)).toBe(true);
+  menu.actions!.forEach(action => action.onSelect());
+  expect(execute).not.toHaveBeenCalled();
+});
 it('starts radio from the actual current music occurrence without replacing audio', () => {
   const state = { ...initial, index: 0, items: [{ ...track, source: 'local', key: 'current' }] } as ProgramState;
   const execute = vi.fn(async () => {});

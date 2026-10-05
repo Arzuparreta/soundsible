@@ -309,5 +309,33 @@
       "long session history pruning",
       "full native/browser regression or complete parity"
     ]
+  },
+  "production_dj_placement": {
+    "source_base_revision": "cebf7246",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "log": "/tmp/soundsible-s3b-placement-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "ui_log": "/tmp/soundsible-s3b-placement-full-ui.log",
+    "ui_files": 198,
+    "ui_tests": 1564,
+    "proves": [
+      "real Core dj-place with native requested occurrence retained",
+      "503 retains conservative queued request",
+      "computed response delayed after Move is discarded without reverting user intent",
+      "source replacement preserves two requested occurrences of one recording",
+      "fixture controls reject ordinary clients",
+      "existing Core repair and DJ OS/control flows remain green"
+    ],
+    "does_not_prove": [
+      "fixed placement beyond analysis horizon",
+      "all bridge variants",
+      "transition refinement",
+      "long session pruning",
+      "full native/browser regression or complete parity"
+    ]
   }
 }

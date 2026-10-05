@@ -86,8 +86,9 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
     <small>{clockTime(props.state.positionMs / 1000)} / {clockTime(props.state.durationMs / 1000)}</small>
     <Show when={props.state.dj?.phase === 'planning'}><p role="status">{t('autoMode.route.preparing')}</p></Show>
     <Show when={props.state.dj?.phase === 'repairing'}><p role="status">{t('autoMode.route.fixing')}</p></Show>
+    <Show when={props.state.dj?.phase === 'placing'}><p role="status">{t('autoMode.route.preparing')}</p></Show>
     <Show when={props.state.dj?.phase === 'warming'}><p role="status">{t('autoMode.route.retryingHint')}</p></Show>
-    <Show when={props.state.dj?.phase === 'degraded'}><p role="status">{t('autoMode.route.mixPending')}</p></Show>
+    <Show when={props.state.dj?.phase === 'degraded'}><p role="status">{props.state.dj?.editOutcome === 'placement_fallback' ? t('autoMode.agent.placedFallback', { title: props.state.dj.requestTitle ?? '' }) : t('autoMode.route.mixPending')}</p></Show>
     <Show when={props.state.dj?.phase === 'exhausted'}><p role="status">{t('autoMode.route.exhausted')}</p></Show>
     <Show when={['invalid', 'unavailable', 'blocked'].includes(props.state.dj?.phase ?? '')}><p role="alert">{t(props.state.dj?.phase === 'blocked' ? 'android.permissionDenied' : 'common.loadFailed')}</p></Show>
     <Show when={props.state.autoplay?.settingsPhase === 'unavailable'}><p role="alert">{t('common.loadFailed')}</p></Show>

@@ -9,7 +9,7 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
   execute: (command: ProgramCommand) => Promise<void>): ActionMenuOptions {
   const captured = state();
   const candidate = programTrack(track);
-  const disabled = !captured?.ready || pending() || captured.items.length >= 1000 || !candidate;
+  const disabled = !captured?.ready || pending() || captured.items.length >= 1000 || !candidate || captured.dj?.active === true && candidate.mediaKind === 'podcast_episode';
   const tracks = candidate ? [candidate] : [];
   const select = (action: 'append' | 'insertAfter') => {
     // A deferred sheet selection must never migrate to a different logged-in account.
@@ -24,6 +24,14 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
   return { title: track.title, subtitle: track.artist, actions: [
     { label: t('android.insertAfter'), disabled, onSelect: () => select('insertAfter') },
     { label: t('trackActions.addToQueue'), disabled, onSelect: () => select('append') },
+    ...(captured?.dj?.active && captured.programToken && candidate?.mediaKind !== 'podcast_episode' ? [{
+      label: t('autoMode.dj.routeAction'), disabled,
+      onSelect: () => {
+        const observed = state();
+        if (disabled || pending() || observed?.generation !== captured.generation || observed.programToken !== captured.programToken || !observed.dj?.active || observed.queueToken !== captured.queueToken) return;
+        void execute({ action: 'djRequest', tracks, programToken: captured.programToken!, queueToken: captured.queueToken }).catch(() => {});
+      },
+    }] : []),
     ...(candidate && candidate.mediaKind !== 'podcast_episode' && captured?.items[captured.index]?.id === candidate.id ? [{
       label: t(captured.radio?.active ? 'nowPlaying.stopRadioConfirm' : 'trackActions.startRadio'), disabled: !captured.ready || pending(),
       onSelect: () => {

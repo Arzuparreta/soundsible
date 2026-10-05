@@ -33,6 +33,15 @@ it('surfaces terminal DJ planning failure and clears it after confirmed recovery
   expect(screen.queryByRole('alert')).toBeNull();
   expect(screen.queryByRole('status')).toBeNull();
 });
+it('shows that a request remains queued when musical placement falls back', () => {
+  const [state, setState] = createSignal<ProgramState>({ ...initial, dj: { active: true, phase: 'placing', profile: 'adaptive', editOutcome: 'pending' } });
+  render(() => <ProgramTransport state={state()} pending={false} command={async () => {}} />);
+  expect(screen.getByRole('status').textContent).toBe('autoMode.route.preparing');
+  setState({ ...state(), dj: { ...state().dj!, phase: 'degraded', editOutcome: 'placement_fallback', requestTitle: 'Requested song' } });
+  expect(screen.getByRole('status').textContent).toBe('autoMode.agent.placedFallback');
+  setState({ ...state(), dj: { ...state().dj!, phase: 'ready', editOutcome: 'placed' } });
+  expect(screen.queryByRole('status')).toBeNull();
+});
 
 it('changes DJ profile within the captured programme and rejects a stale menu', async () => {
   const command = vi.fn(async () => {});
