@@ -37,11 +37,11 @@ Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
 bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrados
 en regresión (refresh Saved y presupuesto auth compartido) están corregidos.
-Última APK principal: **53 tests + dos fases offline persistentes pasan**, sources
-preparados desde commit limpio03e3446; APK/test APK/JVM17/lint normales pasan
-sin CA temporal. Log /tmp/soundsible-s2ab-main-clean.log.
-Últimos browser completos tras S2z: Chromium 278/66 y WebKit 269/75, sin fallos,
-sobre reparación de carrusel 78669b6. Repetir cuatro perfiles antes del PR final.
+Última APK principal: **57 tests + dos fases offline persistentes pasan**, sources
+preparados desde commit limpio8329de5; APK/test APK/JVM17/lint normales pasan
+sin CA temporal. Log /tmp/soundsible-s2ad-main-clean.log.
+Últimos browser completos S2ad: Chromium278/66 y WebKit269/75, sin fallos,
+secuenciales con1worker como CI, incluida Apariencia/cabecera/enlaces. Repetir cuatro perfiles antes del PR final.
 S2u selector OS y S2v prioridad de sidecar validados; S2w letras adquirido/preview
 usa panel compartido con runtime nativo y pasa HTTP/HTTPS. Faltan biblioteca/
 Discover/Settings completos, DJ, Live, Android Auto, firma y actualización.
@@ -1381,3 +1381,20 @@ feat/android-port-foundation; S2ae aún sin pantallas all/feed/fichas reales.
 Preparar artifact limpio después de guardar esta evidencia; congelar Native y
 assets durante principal57+restart2. Se puede avanzar UI S2ae después de prepare,
 pero no volver a preparar ni tocar fuentes/tests nativos durante el runner.
+
+
+## Principal limpia S2ad y UI S2ae en desarrollo
+
+8329de5 dirty=false: principal57, cero fallos/errores/omisiones; restart prepare1
+y force-stop/offline1 pasan. APK normal/test APK/JVM17/lint sin CA pasan en
+/tmp/soundsible-s2ad-main-clean.log. Sustituye la principal53 aceptada; no borra el
+diagnóstico55 aad83d4 fallido. Fuente Native y assets permanecieron congelados.
+
+UI S2ae posterior NO incluida en ese artifact: vistas web de Discover/discografía
+ya delegan a layouts puros; Android feed/canciones-artistas-álbumes/fichas con
+candidates/related/discografía y Play/shuffle de colección conectados en fuentes.
+Menú de canciones resueltas reutiliza songMenu de Library, incluido offline dentro
+de menú. UI dirigida26/7 pasa /tmp/soundsible-s2ae-connected-ui.log. Estado dirty
+en rama: descargas/review de colección aún en implementación, nuevos layouts
+requieren suite UI/cuatro perfiles y Android HTTP/HTTPS propios. No paridad S2ae
+ni release aún. Congelación Native anterior levantada al acabar runner0.

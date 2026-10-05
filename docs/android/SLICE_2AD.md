@@ -95,3 +95,9 @@ URL incluso tras readiness DOM; no declarar esa ejecución verde. S2ae durante
 los runs sólo cambió Native y añadió vistas compartidas aún sin conectar; las
 entradas web medidas permanecieron iguales. UI completa con bases S2ae se repite
 antes de preparar artifact limpio/principal57+restart2. No paridad ni alpha.
+
+
+Principal limpia8329de5 dirty=false aceptada:57 más restart prepare1/offline1,
+cero fallos/errores/omisiones. APK/testAPK/JVM17/lint normales sin CA pasan.
+/tmp/soundsible-s2ad-main-clean.log y evidence/s2ad.json. Posterior UI S2ae en
+fuentes no afecta a ese artifact congelado. Continuar hasta paridad y PR/release.
