@@ -50,6 +50,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-mix-direct-native.log",
       "scope": "HTTP/TLS fade and direct; hardware25/75percent metadata dominance, direct keeps incoming cue, seek/pause/session invalidation, normal APK/test/JVM38/lint pass"
+    },
+    "incoming_recovery_native": {
+      "source_revision_at_asset_prepare": "f001e95a",
+      "dirty_at_asset_prepare": false,
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-recovery-native.log",
+      "scope": "HTTP/TLS fade/direct/incoming decoder release; retained outgoing actualPCM restored with150ms ramp and playout metadata; seek/pause/scope and normal APK/test/JVM38/lint pass"
     }
   },
   "diagnostics": [
@@ -76,7 +86,7 @@
   ],
   "limitations": [
     "Isolated owner only; not connected to production service or DJ planner",
-    "No incoming-failure/EOS/other-technique or production service/planner proof yet",
+    "No late recovery after inactive gap, EOS, other-technique or production service/planner proof yet",
     "No exact compressor acoustic parity or physical listening acceptance",
     "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
   ]

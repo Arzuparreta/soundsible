@@ -58,7 +58,10 @@ Seek con marcador440→1320 real también pasa HTTP/TLS2 y build normal
 sobre6d0626a0 limpio, log /tmp/soundsible-s3b-mix-seek-replacement-native.log.
 Dominancia25/75% con reloj físico y corte direct también pasan HTTP/TLS4
 sobre5f762ba1 limpio, normal APK/test/JVM38/lint pasa, log
-/tmp/soundsible-s3b-mix-direct-native.log. Próximo fallo entrante/EOS/técnicas,
+/tmp/soundsible-s3b-mix-direct-native.log. Caída real del decoder entrante durante blend pasa HTTP/TLS6 sobref001e95a
+limpio, PCM saliente/rampa y dominancia restauradas, normal APK/test/JVM38/lint
+pasa. Log /tmp/soundsible-s3b-mix-recovery-native.log. Próximo reloj por tramos
+y recuperación tardía, EOS/técnicas,
 luego fachada Player y planner; ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.

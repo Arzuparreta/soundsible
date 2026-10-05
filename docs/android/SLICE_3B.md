@@ -163,3 +163,9 @@ TLS, PCM del saliente y pausa/scope posteriores. Kotlin/test/JVM38/lint pasan en
 predicate falló por trailing lambda JUnit, corregido a variable explícita.
 Native6 pendiente. Antes de producción añadir mapping de reloj por tramos para
 retomar un deck después de un hueco sin cambiar su posición antes del playout.
+
+Recuperación entrante aceptada HTTP/TLS6/0 sobref001e95a limpio, log
+/tmp/soundsible-s3b-mix-recovery-native.log. Decoder entrante se libera durante
+fade; tap confirma saliente restablecido y dominancia sobre playout; seek/pause/
+scope y normal APK/test APK/JVM38/lint pasan. No equivaler a red/proveedor vivo ni
+recuperación tardía después de hueco; siguiente clock mapping por tramos y Native8.
