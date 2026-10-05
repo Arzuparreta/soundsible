@@ -60,6 +60,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-mix-recovery-native.log",
       "scope": "HTTP/TLS fade/direct/incoming decoder release; retained outgoing actualPCM restored with150ms ramp and playout metadata; seek/pause/scope and normal APK/test/JVM38/lint pass"
+    },
+    "late_recovery_clock_native": {
+      "source_revision_at_asset_prepare": "ca242c26",
+      "dirty_at_asset_prepare": false,
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-clock-resume-native.log",
+      "scope": "HTTP/TLS includes late95percent incoming loss, non-regressing retained clock, actual outgoingPCM recovery and metadata; normal APK/test APK/JVM41/lint pass"
     }
   },
   "diagnostics": [
@@ -82,11 +92,17 @@
       "tests": 2,
       "failures": 2,
       "reason": "Media3 replaces/releases active input on seek; wrapper invalidated flush only. Idempotent release/replacement master invalidation fixes both transports."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-clock-native.log",
+      "tests": 8,
+      "failures": 2,
+      "reason": "Late incoming release pauses shared AudioTrack; recovery now resumes only while owned and not paused/fatal. Repeated8 passes."
     }
   ],
   "limitations": [
     "Isolated owner only; not connected to production service or DJ planner",
-    "No late recovery after inactive gap, EOS, other-technique or production service/planner proof yet",
+    "No EOS/other-technique or production service/planner proof yet",
     "No exact compressor acoustic parity or physical listening acceptance",
     "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
   ]

@@ -186,3 +186,9 @@ Corrección reanuda master retenido si no hay pausa deseada, sesión sigue propi
 y no hay error fatal; callback de entrada liberada no pausa ni flushea reemplazo.
 Kotlin/test/JVM41/lint pasan en /tmp/soundsible-s3b-mix-clock-resume-foundation.log.
 Repeat Native8 pendiente; no afirmar aceptación tardía ni clockmapping real todavía.
+
+Clock/recovery tardía aceptados HTTP/TLS8/0 sobreca242c26 limpio, log
+/tmp/soundsible-s3b-mix-clock-resume-native.log. Recurso entrante se pierde al95%,
+clock saliente no retrocede, master reanuda y PCM/dominancia vuelven al retenido.
+Normal APK/test APK/JVM41/lint sin CA pasa. No afirmar aún integración servicio,
+planner, restantes técnicas ni EOS. Continuar Native FX y luego fachada/planner.
