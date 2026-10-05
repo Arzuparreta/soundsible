@@ -55,9 +55,11 @@ class SoundsibleWidgetProvider : AppWidgetProvider() {
                 setTextViewText(R.id.widgetTitle, title)
                 setTextViewText(R.id.widgetSubtitle, subtitle.ifEmpty { context.getString(R.string.now_playing) })
                 if (artwork != null) {
+                    setViewVisibility(R.id.widgetArt, android.view.View.VISIBLE)
                     setImageViewBitmap(R.id.widgetArt, artwork)
                 } else {
-                    setImageViewResource(R.id.widgetArt, R.mipmap.ic_launcher)
+                    // No thumbnail: the black canvas shows through.
+                    setViewVisibility(R.id.widgetArt, android.view.View.GONE)
                 }
                 setImageViewResource(
                     R.id.widgetPlayPause,

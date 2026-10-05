@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.core.app.NotificationCompat
-import androidx.media.app.NotificationCompat.MediaStyle
 import com.soundsible.player.R
 
 /**
@@ -47,29 +46,50 @@ object WebNowPlaying {
             Intent(context, LibraryActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val collapsed = android.widget.RemoteViews(context.packageName, R.layout.notification_player).apply {
+            if (artwork != null) {
+                setViewVisibility(R.id.notifArtSmall, android.view.View.VISIBLE)
+                setImageViewBitmap(R.id.notifArtSmall, artwork)
+            } else {
+                setViewVisibility(R.id.notifArtSmall, android.view.View.GONE)
+            }
+            setTextViewText(R.id.notifTitleSmall, title)
+            setTextViewText(R.id.notifArtistSmall, artist)
+            setImageViewResource(
+                R.id.notifToggleSmall,
+                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+            )
+            setOnClickPendingIntent(R.id.notifToggleSmall, action(context, ACTION_WEB_TOGGLE, 12))
+        }
+        val expanded = android.widget.RemoteViews(context.packageName, R.layout.notification_player_big).apply {
+            if (artwork != null) {
+                setViewVisibility(R.id.notifArtBig, android.view.View.VISIBLE)
+                setImageViewBitmap(R.id.notifArtBig, artwork)
+            } else {
+                setViewVisibility(R.id.notifArtBig, android.view.View.GONE)
+            }
+            setTextViewText(R.id.notifTitleBig, title)
+            setTextViewText(R.id.notifArtistBig, artist)
+            val toggleIcon =
+                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+            setImageViewResource(R.id.notifToggle, toggleIcon)
+            setImageViewResource(R.id.notifPrev, android.R.drawable.ic_media_previous)
+            setImageViewResource(R.id.notifNext, android.R.drawable.ic_media_next)
+            setOnClickPendingIntent(R.id.notifPrev, action(context, ACTION_WEB_PREV, 11))
+            setOnClickPendingIntent(R.id.notifToggle, action(context, ACTION_WEB_TOGGLE, 12))
+            setOnClickPendingIntent(R.id.notifNext, action(context, ACTION_WEB_NEXT, 13))
+        }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(artist.ifEmpty { null })
-            .setSubText(context.getString(R.string.app_name))
-            .setLargeIcon(artwork)
             .setContentIntent(open)
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
-            .addAction(android.R.drawable.ic_media_previous, "Previous", action(context, ACTION_WEB_PREV, 11))
-            .addAction(
-                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
-                if (isPlaying) "Pause" else "Play",
-                action(context, ACTION_WEB_TOGGLE, 12),
-            )
-            .addAction(android.R.drawable.ic_media_next, "Next", action(context, ACTION_WEB_NEXT, 13))
-            .setStyle(
-                MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2)
-                    .setShowCancelButton(true)
-                    .setCancelButtonIntent(action(context, ACTION_WEB_TOGGLE, 14)),
-            )
+            .setCustomContentView(collapsed)
+            .setCustomBigContentView(expanded)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
         manager.notify(NOTIFICATION_ID, notification)

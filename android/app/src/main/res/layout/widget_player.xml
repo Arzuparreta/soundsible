@@ -1,31 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- YT Music / Spotify pattern: art-forward card, title stack, compact
-     transport. Rounded art clips via outline on S+ (background outline),
-     square fallback below. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Black canvas, full-bleed art, frosted control deck. No art: pure black. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/widget_background"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:padding="12dp">
+    android:background="#000000"
+    android:padding="8dp">
 
     <ImageView
         android:id="@+id/widgetArt"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:layout_marginEnd="12dp"
-        android:background="@drawable/widget_art_background"
-        android:clipToOutline="true"
+        android:layout_width="match_parent"
+        android:layout_height="180dp"
         android:contentDescription="Album art"
-        android:scaleType="centerCrop"
-        android:src="@mipmap/ic_launcher" />
+        android:scaleType="centerCrop" />
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:layout_gravity="bottom"
+        android:background="#CC0A0A0C"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <View
+            android:layout_width="32dp"
+            android:layout_height="3dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="6dp"
+            android:background="#33FFFFFF" />
 
         <TextView
             android:id="@+id/widgetTitle"
@@ -34,8 +35,8 @@
             android:ellipsize="marquee"
             android:singleLine="true"
             android:text="@string/app_name"
-            android:textColor="?android:attr/textColorPrimary"
-            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
             android:textStyle="bold" />
 
         <TextView
@@ -45,13 +46,14 @@
             android:ellipsize="end"
             android:singleLine="true"
             android:text="@string/now_playing"
-            android:textColor="?android:attr/textColorSecondary"
-            android:textSize="13sp" />
+            android:textColor="#B3FFFFFF"
+            android:textSize="12sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="start|center_vertical"
+            android:layout_marginTop="2dp"
+            android:gravity="center"
             android:orientation="horizontal">
 
             <ImageButton
@@ -61,16 +63,17 @@
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Previous"
                 android:src="@android:drawable/ic_media_previous"
-                android:tint="?android:attr/textColorPrimary" />
+                android:tint="#FFFFFF" />
 
             <ImageButton
                 android:id="@+id/widgetPlayPause"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
+                android:layout_width="54dp"
+                android:layout_height="54dp"
+                android:layout_marginHorizontal="8dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Play or pause"
                 android:src="@android:drawable/ic_media_play"
-                android:tint="?android:attr/textColorPrimary" />
+                android:tint="#FFFFFF" />
 
             <ImageButton
                 android:id="@+id/widgetNext"
@@ -79,7 +82,7 @@
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Next"
                 android:src="@android:drawable/ic_media_next"
-                android:tint="?android:attr/textColorPrimary" />
+                android:tint="#FFFFFF" />
         </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</FrameLayout>
