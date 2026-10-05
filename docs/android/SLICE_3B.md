@@ -209,3 +209,9 @@ propiedad/generación, ausencia de fatal, playing y50ms de PCM. El cruce exige e
 condición; test usa espera acotada5s sobre datos reales mientras saliente continúa.
 Kotlin/test/JVM41/lint pasan en /tmp/soundsible-s3b-mix-fx-ready-foundation.log;
 repetir clase18 antes de aceptar técnicas.
+
+Clase Native18 aceptada sobree0499c4e limpio, log
+/tmp/soundsible-s3b-mix-fx-ready-native.log: siete técnicas HTTP/TLS con espectros
+reales, readiness y clock/seek/recovery/pause/scope. Normal APK/test APK/JVM41/lint
+sin CA pasa. No confundir structural_fade equal-power con tempo/cues/phase del
+planner aún no conectado. Siguiente WAV+FLAC real, EOS y ejecución temporal nativa.

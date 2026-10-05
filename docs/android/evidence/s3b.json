@@ -70,6 +70,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-mix-clock-resume-native.log",
       "scope": "HTTP/TLS includes late95percent incoming loss, non-regressing retained clock, actual outgoingPCM recovery and metadata; normal APK/test APK/JVM41/lint pass"
+    },
+    "techniques_native": {
+      "source_revision_at_asset_prepare": "e0499c4e",
+      "dirty_at_asset_prepare": false,
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-fx-ready-native.log",
+      "scope": "All seven techniques HTTP/TLS; actual80Hz bass reduction,4400Hz filter/long blend,100Hz echo tail, structural equal-power/direct; readiness, clocks, seek/recovery/pause/scope and normal APK/test APK/JVM41/lint pass"
     }
   },
   "diagnostics": [
@@ -98,11 +108,17 @@
       "tests": 8,
       "failures": 2,
       "reason": "Late incoming release pauses shared AudioTrack; recovery now resumes only while owned and not paused/fatal. Repeated8 passes."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-fx-native.log",
+      "tests": 18,
+      "failures": 1,
+      "reason": "tlsStructuralFade input existed but had not delivered PCM. Buffered readiness plus bounded wait fixes full18 repeat."
     }
   ],
   "limitations": [
     "Isolated owner only; not connected to production service or DJ planner",
-    "No EOS/other-technique or production service/planner proof yet",
+    "No compressed two-source/EOS/tempo/phase or production service/planner proof yet",
     "No exact compressor acoustic parity or physical listening acceptance",
     "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
   ]
