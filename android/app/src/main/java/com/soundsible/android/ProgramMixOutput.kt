@@ -42,6 +42,17 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private var technique = ProgramMixCurve.Technique.SAFE_FADE
     private var active = 0
     private var window: ProgramMixWindow? = null
+    private var restoration: Pair<Long, Int>? = null
+    private var recovery: Recovery? = null
+    private data class Recovery(val start: Long, val length: Long, val controls: ProgramMixCurve.Controls) {
+        fun at(frame: Long): ProgramMixCurve.Controls {
+            val progress = ((frame - start).toDouble() / length).coerceIn(0.0, 1.0)
+            return ProgramMixCurve.Controls(controls.outgoing + (1 - controls.outgoing) * progress, 0.0,
+                controls.outgoingLowDb * (1 - progress), 0.0,
+                controls.outgoingCutoff + (22000 - controls.outgoingCutoff) * progress, 22000.0,
+                controls.echoWet * (1 - progress))
+        }
+    }
     private var limiter: ProgramMixLimiter? = null
     private var paused = false
     private var failure: Throwable? = null
@@ -81,9 +92,11 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     fun blend(lengthMs: Long, value: ProgramMixCurve.Technique) = synchronized(lock) {
         require(lengthMs in 50..30000 && sources.all { it != null } && mixStart == Long.MAX_VALUE)
         val rate = config!!.sampleRate
+        require(recovery == null) { "Current input is recovering" }
         val incoming = sources[1 - active]!!
         require(!incoming.released && incoming.playing && incoming.queued > 0) { "Incoming input not ready" }
-        incoming.joinedAt = frames
+        restoration = null
+        incoming.joinedAt = frames; technique = value
         if (value == ProgramMixCurve.Technique.DIRECT) {
             window = ProgramMixWindow(frames, 0, active, 1 - active, outputEpoch)
             active = 1 - active; limiter?.blend(false)
@@ -101,19 +114,34 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     fun transition(): ProgramMixWindow? = synchronized(lock) { window }
     fun dominantInput(): Int = synchronized(lock) {
         val current = window?.takeIf { it.epoch == outputEpoch }
-        current?.dominant(positionUs() * config!!.sampleRate / 1000000) ?: active
+        val played = positionUs() * (config?.sampleRate ?: 0) / 1000000
+        restoration?.takeIf { played >= it.first }?.second ?: current?.dominant(played) ?: active
     }
+    fun restoredAt(): Long? = synchronized(lock) { restoration?.first }
     fun epoch(): Long = outputEpoch
     fun positionUs(): Long = synchronized(deviceLock) { output?.positionUs ?: 0L }
     /** Called with the state lock; covers flush, release and input replacement on seek. */
     private fun invalidateDevice() {
         outputEpoch++
         synchronized(deviceLock) { output?.pause(); output?.flush() }
-        frames = 0L; mixStart = Long.MAX_VALUE; window = null; limiter?.reset()
+        frames = 0L; mixStart = Long.MAX_VALUE; window = null; restoration = null; recovery = null; limiter?.reset()
         sources.forEachIndexed { index, source -> source?.let {
             it.joinedAt = if (index == active) 0L else Long.MAX_VALUE
             it.effects.reset()
         } }
+    }
+    /** Losing an incoming deck restores the retained outgoing PCM without flushing the programme. */
+    private fun recoverIncoming(index: Int): Boolean {
+        val transition = window?.takeIf { it.epoch == outputEpoch && it.incoming == index } ?: return false
+        val outgoing = sources[transition.outgoing]?.takeIf { !it.released && it.playing && !(it.ended && it.queued == 0) } ?: return false
+        val progress = if (transition.length == 0L) 1.0 else (frames - transition.start).toDouble() / transition.length
+        val controls = ProgramMixCurve.at(technique, progress)
+        if (active != transition.outgoing) outgoing.joinedAt = frames - outgoing.supplied
+        active = transition.outgoing; mixStart = Long.MAX_VALUE
+        recovery = Recovery(frames, (config!!.sampleRate * 0.15).toLong(), controls)
+        restoration = frames to active
+        limiter?.blend(false); lock.notifyAll()
+        return true
     }
     private inner class Source(val index: Int, device: AudioOutput) : ForwardingAudioOutput(device) {
         val queue = ArrayDeque<ByteBuffer>()
@@ -162,7 +190,8 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         override fun release() = synchronized(lock) {
             if (!released) {
                 released = true; queue.clear(); queued = 0
-                if (index == active && !closed) invalidateDevice()
+                val recovered = !closed && recoverIncoming(index)
+                if (index == active && !closed && !recovered) invalidateDevice()
                 listeners.forEach { it.onReleased() }
             }
             lock.notifyAll()
@@ -204,7 +233,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                             val mixed = DoubleArray(channels)
                             limiter!!.blend(mixing)
                             repeat(count / channels) { frame ->
-                                val gains = if (mixing) ProgramMixCurve.at(technique, (frames + frame - mixStart).toDouble() / mixLength) else null
+                                val gains = if (mixing) ProgramMixCurve.at(technique, (frames + frame - mixStart).toDouble() / mixLength) else recovery?.at(frames + frame)
                                 if (frame % 48 == 0) {
                                     source.effects.configure(gains?.outgoingLowDb ?: 0.0, gains?.outgoingCutoff ?: 22000.0)
                                     if (mixing) incoming!!.effects.configure(gains!!.incomingLowDb, gains.incomingCutoff)
@@ -247,6 +276,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
                     if (batch.epoch == outputEpoch && mixStart != Long.MAX_VALUE && frames >= mixStart + mixLength) {
                         active = 1 - active; mixStart = Long.MAX_VALUE
                     }
+                    recovery?.takeIf { batch.epoch == outputEpoch && frames >= it.start + it.length }?.let { recovery = null }
                     lock.notifyAll()
                 }
             }

@@ -152,3 +152,14 @@ Dominancia/direct aceptados HTTP/TLS4/0 sobre5f762ba1 limpio, log
 DIRECT no consume cue entrante como overlap, seek/pause/scope siguen pasando.
 APK/test APK/JVM38/lint normales después de retirar CA pasan. Siguiente caída
 entrante durante blend sin cortar saliente, EOS/técnicas, luego fachada/planner.
+
+Recuperación en fuentes: liberar entrante comprometido durante blend conserva
+AudioTrack y buffers ya válidos, vuelve al saliente retenido con rampa150ms de
+ganancia/EQ/filtro/echo, libera limiter gradualmente y agenda dominancia restaurada
+en el frame que llegará al dispositivo. No vaciar programa ante fallo de standby.
+Test ampliado a seis casos incluye desaparición real de ExoPlayer entrante HTTP/
+TLS, PCM del saliente y pausa/scope posteriores. Kotlin/test/JVM38/lint pasan en
+/tmp/soundsible-s3b-mix-recovery-foundation-fixed.log; primer compile del nuevo
+predicate falló por trailing lambda JUnit, corregido a variable explícita.
+Native6 pendiente. Antes de producción añadir mapping de reloj por tramos para
+retomar un deck después de un hueco sin cambiar su posición antes del playout.

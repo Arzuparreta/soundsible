@@ -80,7 +80,9 @@ class ProgramMixOutputTest {
     @Test fun tlsTwoPrivateDecoders() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"))
     @Test fun httpDirectCut() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), ProgramMixCurve.Technique.DIRECT)
     @Test fun tlsDirectCut() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), ProgramMixCurve.Technique.DIRECT)
-    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE) {
+    @Test fun httpIncomingFailure() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), recoverIncoming = true)
+    @Test fun tlsIncomingFailure() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), recoverIncoming = true)
+    private fun run(origin: String?, technique: ProgramMixCurve.Technique = ProgramMixCurve.Technique.SAFE_FADE, recoverIncoming: Boolean = false) {
         assumeNotNull(origin)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -144,7 +146,11 @@ class ProgramMixOutputTest {
                 owner.setVolume(0.1f)
                 owner.blend(if (technique == ProgramMixCurve.Technique.DIRECT) 50 else 2000, technique)
                 val transition = owner.transition() ?: error("Transition window absent")
-                val checkpoints = if (technique == ProgramMixCurve.Technique.DIRECT) listOf(1.0 to 1) else listOf(0.25 to 0, 0.75 to 1)
+                val checkpoints = when {
+                    technique == ProgramMixCurve.Technique.DIRECT -> listOf(1.0 to 1)
+                    recoverIncoming -> listOf(0.25 to 0)
+                    else -> listOf(0.25 to 0, 0.75 to 1)
+                }
                 for ((fraction, dominant) in checkpoints) {
                     val target = transition.start + (transition.length * fraction).toLong()
                     val clockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
@@ -155,22 +161,33 @@ class ProgramMixOutputTest {
                 if (technique != ProgramMixCurve.Technique.DIRECT) {
                     meter.await { it.first < 30 && it.marker in 1800.0..2400.0 && it.second in 5500.0..7000.0 }
                 }
-                meter.await { it.first < 30 && it.marker < 30 && it.second in 8950.0..9050.0 }
+                val stable: (Spectrum) -> Boolean = if (recoverIncoming) {
+                    instrumentation.runOnMainSync { decoders[1].release(); decoders.removeAt(1) }
+                    val restored = owner.restoredAt() ?: error("Outgoing restoration was not scheduled")
+                    val clockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while (owner.positionUs() * 48000 / 1000000 < restored + 9600 && System.nanoTime() < clockDeadline) Thread.sleep(10)
+                    assertEquals("Failed incoming kept metadata ownership", 0, owner.dominantInput())
+                    val retained: (Spectrum) -> Boolean = { sample -> sample.first < 30 && sample.second < 30 && sample.marker in 2900.0..3050.0 }
+                    retained
+                } else {
+                    { sample -> sample.first < 30 && sample.marker < 30 && sample.second in 8950.0..9050.0 }
+                }
+                meter.await(stable)
                 if (technique == ProgramMixCurve.Technique.DIRECT) {
                     val incomingPosition = java.util.concurrent.atomic.AtomicLong()
                     instrumentation.runOnMainSync { incomingPosition.set(decoders[1].currentPosition) }
                     assertTrue("Direct cut consumed incoming cue ahead of playback", incomingPosition.get() < 1500)
                 }
                 assertNull("Decoder failed", playbackFailure.get()); assertNull("Output failed", owner.error())
-                instrumentation.runOnMainSync { decoders.first().release(); decoders.removeAt(0) }
-                meter.metrics.clear(); meter.await { it.first < 30 && it.marker < 30 && it.second in 8950.0..9050.0 }
+                if (!recoverIncoming) instrumentation.runOnMainSync { decoders.first().release(); decoders.removeAt(0) }
+                meter.metrics.clear(); meter.await(stable)
                 owner.pause(true)
                 Thread.sleep(200)
                 val pausedPosition = owner.positionUs()
                 Thread.sleep(300)
                 assertTrue("Physical output clock moved while paused", abs(pausedPosition - owner.positionUs()) <= 2000L)
                 owner.pause(false)
-                meter.metrics.clear(); meter.await { it.first < 30 && it.marker < 30 && it.second in 8950.0..9050.0 }
+                meter.metrics.clear(); meter.await(stable)
                 val resumeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                 while (owner.positionUs() <= pausedPosition && System.nanoTime() < resumeDeadline) Thread.sleep(20)
                 assertTrue("Physical output did not resume", owner.positionUs() > pausedPosition)
