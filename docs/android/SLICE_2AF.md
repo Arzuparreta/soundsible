@@ -120,3 +120,8 @@ Repeat/Radio/background/Activity/programToken, Closure2 y Settings6. APK/test AP
 JVM20/lint normales pasan sin CA temporal. Los tres JVM de ganancia S3a pasan;
 no DSP conectado. UI1536/192 y browser4 278/66+269/75 aceptados. Guardar commits,
 preparar limpio y principal73+restart2 antes de cambiar runtime/DSP nativo.
+
+Principal limpia ampliada aceptada46a6c3d dirty=false:73/0+restart1/0+offline1/0,
+APK normal/test APK/JVM20/lint sin CA pasan. Runner termina0 en
+/tmp/soundsible-s2af-main-clean.log. Fuentes Native/tests/fixtures/resources/assets
+congelados durante todo el runner; Subsonic UI posterior no incluido.

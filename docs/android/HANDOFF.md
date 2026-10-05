@@ -37,9 +37,9 @@ Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
 bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrados
 en regresión (refresh Saved y presupuesto auth compartido) están corregidos.
-Última APK principal: **57 tests + dos fases offline persistentes pasan**, sources
-preparados desde commit limpio8329de5; APK/test APK/JVM17/lint normales pasan
-sin CA temporal. Log /tmp/soundsible-s2ad-main-clean.log.
+Última APK principal: **73 tests + dos fases offline persistentes pasan**, sources
+preparados desde commit limpio46a6c3d; APK/test APK/JVM20/lint normales pasan
+sin CA temporal. Log /tmp/soundsible-s2af-main-clean.log.
 Últimos browser completos S2ad: Chromium278/66 y WebKit269/75, sin fallos,
 secuenciales con1worker como CI, incluida Apariencia/cabecera/enlaces. Repetir cuatro perfiles antes del PR final.
 S2u selector OS y S2v prioridad de sidecar validados; S2w letras adquirido/preview
@@ -1471,3 +1471,29 @@ No reemplazar todavía el último principal limpio57+2. Durante esa regresión
 puede avanzar UI futura no preparada de Subsonic/otros Settings, pero no fuentes
 nativas ni fixture ni recursos de pruebas del artifact. Después S3/DJ/Live/Auto/
 firma/update y PR/main/release autorizado. No cierre por slice.
+
+### Continuación S2ag durante principal limpia S2af
+
+Principal73 sobre46a6c3d dirty=false está en curso; no sustituir todavía57+restart2.
+Fuentes/tests Native, fixtures, recursos JVM y assets permanecen congelados hasta
+acabar ambas fases restart y build normal. UI posterior de Subsonic no pertenece
+al artifact en ejecución. SLICE_2AG documenta contrato y aceptación pendiente.
+
+Extracción de vista compartida y controlador scope/confirmación pasan21 tests
+conectados en5 archivos, typecheck correcto, log
+/tmp/soundsible-s2ag-connected-ui.log. Dos diagnósticos anteriores de screen tests
+fallaron por labels incorrectas y por montar con && fuera de Show reactivo;
+corregidos con labels reales y montaje/desmontaje real. Ruta Android conectada,
+adapter JS clipboard pendiente de plugin nativo y aceptación HTTP/TLS. No marcar
+Subsonic end to end aún; no afirmar cobertura browser4 de esta nueva extracción.
+Continuar principal, commit/push de evidencia aceptada y plugin/pruebas Subsonic,
+después DSP/DJ/Live/Auto/firma/update y PR/main/release. No cerrar por slice.
+
+### Principal limpia S2af aceptada
+
+46a6c3d37793c4b49f94d372e6b5e9287baed039 dirty=false: principal73/0,
+restart prepare1/0 y force-stop/offline1/0; APK normal/test APK/JVM20/lint pasan
+sin CA temporal. Runner /tmp/soundsible-s2af-main-clean.log termina0. XML actual
+integration-results confirma73 y los dos result.json confirman1+1. Sustituye
+principal57; no atribuir Subsonic posterior a este artifact. Congelación Native
+levantada al terminar runner. Continuar S2ag end to end y DSP/DJ/Live/Auto.
