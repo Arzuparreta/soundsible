@@ -320,3 +320,10 @@ ventana completa48s antes de liberar saliente y continuación del entrante.
 Normal APK/test APK/JVM48/lint pasa. Core overlap no se recorta al antiguo30s.
 Próximo caída saliente y luego fachada Player/servicio/planner; DJ productivo
 sigue pendiente.
+
+Pérdida de cualquiera de las entradas aceptada HTTP/TLS8/0 sobreb210eeb3
+limpio, log /tmp/soundsible-s3b-outgoing-loss-native.log. Si cae saliente durante
+blend, entrante sano continúa con EQ/dry restaurados150ms; no flush/epoch nuevo,
+clock y metadata siguen playout. Caídas entrantes early/late siguen verdes.
+Normal APK/test APK/JVM48/lint pasa. Preparar siguiente fachada Player estable,
+focus/noisy único y conexión del servicio/planner; no DJ productivo aún.

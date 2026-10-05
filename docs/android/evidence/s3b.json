@@ -160,6 +160,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-long-end-native.log",
       "scope": "HTTP/TLS full48s LONG_BLEND, source90s/60s, actual80/4400Hz PCM at25/75percent, physical full window before releasing outgoing; normal APK/test APK/JVM48/lint pass"
+    },
+    "both_input_loss_native": {
+      "source_revision_at_asset_prepare": "b210eeb3",
+      "dirty_at_asset_prepare": false,
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-outgoing-loss-native.log",
+      "scope": "HTTP/TLS early/late actual decoder release on either side; retained input PCM/clock, epoch preserved, playout metadata restored with150ms ramp; normal APK/test APK/JVM48/lint pass"
     }
   },
   "diagnostics": [
