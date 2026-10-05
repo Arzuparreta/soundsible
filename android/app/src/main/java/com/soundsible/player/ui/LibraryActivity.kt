@@ -25,6 +25,8 @@ class LibraryActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private var fileChooser: ValueCallback<Array<Uri>>? = null
     private var webSession: WebMediaSession? = null
+    private var pageReady = false
+    private var pendingCommand: String? = null
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val uris = if (result.resultCode == RESULT_OK) {
@@ -51,7 +53,16 @@ class LibraryActivity : AppCompatActivity() {
         webView.addJavascriptInterface(SoundsibleNative(this), "SoundsibleNative")
         WebAudio.attach(webView)
         webSession = WebMediaSession(this, webView)
-        webView.webViewClient = WebViewClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                pageReady = true
+                pendingCommand?.let {
+                    pendingCommand = null
+                    WebAudio.command(it)
+                }
+            }
+        }
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
                 view: WebView?,
@@ -75,6 +86,7 @@ class LibraryActivity : AppCompatActivity() {
         }
         val base = (application as SoundsibleApp).tokenStore.load()?.baseUrl?.trimEnd('/')
             ?: return finish()
+        handleCommand(intent.action)
         if (savedInstanceState == null) {
             webView.loadUrl("$base/player/desktop/")
         }
@@ -82,19 +94,17 @@ class LibraryActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (!::webView.isInitialized) return
-        val js = when (intent.action) {
-            WebNowPlaying.ACTION_WEB_TOGGLE -> "toggle()"
-            WebNowPlaying.ACTION_WEB_NEXT -> "next()"
-            WebNowPlaying.ACTION_WEB_PREV -> "previous()"
-            else -> return
-        }
-        try {
-            webView.evaluateJavascript(
-                "(function(){var c=window.SoundsibleNativeControl;if(c&&c.$js){c.$js();}})()",
-                null,
-            )
-        } catch (_: Exception) {
+        setIntent(intent)
+        handleCommand(intent.action)
+    }
+
+    /** Run a widget/notification command now, or stash it until the page loads. */
+    private fun handleCommand(action: String?) {
+        if (!WebCommand.isCommand(action)) return
+        if (pageReady) {
+            WebAudio.command(action)
+        } else {
+            pendingCommand = action
         }
     }
 

@@ -24,15 +24,31 @@ object WebAudio {
 
     /** Pause page audio if the page offers the hook. Never throws. */
     fun pause() {
-        val view = viewRef?.get() ?: return
+        command(WebCommand.PAUSE)
+    }
+
+    /**
+     * Run a page transport command. Returns false when no page is attached,
+     * so callers can fall back to opening the library first.
+     */
+    fun command(action: String?): Boolean {
+        val fn = when (action) {
+            WebCommand.TOGGLE -> "toggle()"
+            WebCommand.NEXT -> "next()"
+            WebCommand.PREV -> "previous()"
+            WebCommand.PAUSE -> "pause()"
+            else -> return false
+        }
+        val view = viewRef?.get() ?: return false
         main.post {
             try {
                 view.evaluateJavascript(
-                    "(function(){var c=window.SoundsibleNativeControl;if(c&&c.pause){c.pause();}})()",
+                    "(function(){var c=window.SoundsibleNativeControl;if(c&&c.$fn){c.$fn();}})()",
                     null,
                 )
             } catch (_: Exception) {
             }
         }
+        return true
     }
 }
