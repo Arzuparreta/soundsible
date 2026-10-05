@@ -206,7 +206,7 @@ La integración HTTP/HTTPS verificado comprueba acciones reales desde el menú,
 claves nuevas/existentes, inserción intermedia, pausa/posición/modos, append mientras
 suena, recreación de Activity, ancla antigua tras navegación OS, generación/orden
 antiguos y lotes inválidos/demasiado grandes sin modificación parcial. Ver
-[traspaso y resultados finales](HANDOFF.md#entrega-s2e).
+[traspaso y resultados finales](HANDOFF_HISTORY.md#entrega-s2e).
 
 ## S2f: recuperación explícita de conexión
 
