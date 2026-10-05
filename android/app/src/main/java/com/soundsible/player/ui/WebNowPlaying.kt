@@ -89,7 +89,21 @@ object WebNowPlaying {
             .setShowWhen(false)
             .setCustomContentView(collapsed)
             .setCustomBigContentView(expanded)
-            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .addAction(android.R.drawable.ic_media_previous, "Previous", action(context, ACTION_WEB_PREV, 11))
+            .addAction(
+                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+                if (isPlaying) "Pause" else "Play",
+                action(context, ACTION_WEB_TOGGLE, 12),
+            )
+            .addAction(android.R.drawable.ic_media_next, "Next", action(context, ACTION_WEB_NEXT, 13))
+            .setStyle(
+                // The media-decorated variant (not the plain decorated style):
+                // custom black views with the platform media treatment.
+                // System integration (lockscreen/car/BT) rides the separate
+                // compat session, which publishes regardless of this view.
+                androidx.media.app.NotificationCompat.DecoratedMediaCustomViewStyle()
+                    .setShowActionsInCompactView(0, 1, 2),
+            )
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
         manager.notify(NOTIFICATION_ID, notification)
