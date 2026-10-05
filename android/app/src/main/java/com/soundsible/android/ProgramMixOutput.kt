@@ -117,7 +117,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         "ended=${source.ended}, queued=${source.queued}, supplied=${source.clock.supplied}, played=${source.clock.played(positionUs() * config!!.sampleRate / 1000000)}, playing=${source.playing}"
     }
     fun blend(lengthMs: Long, value: ProgramMixCurve.Technique) = synchronized(lock) {
-        require(lengthMs in 50..30000 && sources.all { it != null } && mixStart == Long.MAX_VALUE)
+        require(lengthMs in 50..60000 && sources.all { it != null } && mixStart == Long.MAX_VALUE)
         val rate = config!!.sampleRate
         require(recovery == null) { "Current input is recovering" }
         val incoming = sources[1 - active]!!
@@ -136,8 +136,8 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     }
     /** Schedule against reserved output, consuming incoming preroll silently on the same clock. */
     fun arm(lengthMs: Long, value: ProgramMixCurve.Technique, leadMs: Long, prerollMs: Long) = synchronized(lock) {
-        require(value != ProgramMixCurve.Technique.DIRECT && lengthMs in 50..30000)
-        require(leadMs in 1..30000 && prerollMs in 0..4000 && prerollMs <= leadMs)
+        require(value != ProgramMixCurve.Technique.DIRECT && lengthMs in 50..60000)
+        require(leadMs in 1..60000 && prerollMs in 0..4000 && prerollMs <= leadMs)
         require(!closed && owns() && failure == null && recovery == null && mixStart == Long.MAX_VALUE)
         require(readyInput(1 - active)) { "Incoming input not ready" }
         val rate = config!!.sampleRate

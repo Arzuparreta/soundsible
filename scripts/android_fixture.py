@@ -298,14 +298,17 @@ def main() -> None:
                     first_frequency = data.get("firstFrequency", 440)
                     if type(first_frequency) is not int or first_frequency not in (80, 100, 440):
                         raise ValueError("Unsupported isolated PCM tone")
-                    custom = marker or "firstFrequency" in data
+                    first_duration = data.get("firstDuration", 20)
+                    if type(first_duration) is not int or first_duration not in (20, 90):
+                        raise ValueError("Unsupported isolated PCM duration")
+                    custom = marker or "firstFrequency" in data or "firstDuration" in data
                     soft = root / "music/tracks" / f"{name}-pcm-soft.{'wav' if custom else args.audio_format}"
                     if custom:
                         with wave.open(str(soft), "wb") as output:
                             output.setnchannels(1)
                             output.setsampwidth(2)
                             output.setframerate(16000)
-                            tones = ((first_frequency, 4), (1320, 16)) if marker else ((first_frequency, 20),)
+                            tones = ((first_frequency, 4), (1320, first_duration - 4)) if marker else ((first_frequency, first_duration),)
                             for frequency, seconds in tones:
                                 tone = b"".join(struct.pack("<h", int(3000 * math.sin(2 * math.pi * frequency * i / 16000))) for i in range(16000))
                                 output.writeframes(tone * seconds)
@@ -316,10 +319,10 @@ def main() -> None:
                         original = next(track for track in library.metadata.tracks if track.id == f"{name}-track")
                         library.metadata.add_track(replace(original, id=f"{name}-pcm-soft", title=f"{name} softer PCM song",
                             album=f"{name} PCM album", file_hash=f"{name}-pcm-soft-hash",
-                            duration=20 if custom else original.duration, format="wav" if custom else original.format,
+                            duration=first_duration if custom else original.duration, format="wav" if custom else original.format,
                             file_size=soft.stat().st_size, bitrate=256 if custom else original.bitrate,
                             original_filename=soft.name if custom else original.original_filename))
-                    soft_measurement = measure_loudness(soft, duration_hint=20) if custom else measurement
+                    soft_measurement = measure_loudness(soft, duration_hint=first_duration) if custom else measurement
                     if soft_measurement is None:
                         raise RuntimeError("Marker synthetic tone must be measurable")
                     store.put(f"{name}-pcm-soft-hash", source_stamp(soft), soft_measurement)
