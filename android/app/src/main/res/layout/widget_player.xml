@@ -1,27 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Proven card structure (art-left, compact transport) on a black canvas.
+<!-- Black canvas, full-bleed art at 80% under a frosted control deck.
      No art: the ImageView hides and pure black shows, like the notification. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="#000000"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:padding="12dp">
+    android:background="#000000">
 
     <ImageView
         android:id="@+id/widgetArt"
-        android:layout_width="64dp"
-        android:layout_height="64dp"
-        android:layout_marginEnd="12dp"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:alpha="0.8"
         android:contentDescription="Album art"
         android:scaleType="centerCrop" />
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:layout_gravity="bottom"
+        android:background="#CC0A0A0C"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <View
+            android:layout_width="32dp"
+            android:layout_height="3dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="6dp"
+            android:background="#33FFFFFF" />
 
         <TextView
             android:id="@+id/widgetTitle"
@@ -47,7 +53,8 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="start|center_vertical"
+            android:layout_marginTop="2dp"
+            android:gravity="center"
             android:orientation="horizontal">
 
             <ImageButton
@@ -61,9 +68,9 @@
 
             <ImageButton
                 android:id="@+id/widgetPlayPause"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:layout_marginHorizontal="4dp"
+                android:layout_width="54dp"
+                android:layout_height="54dp"
+                android:layout_marginHorizontal="8dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Play or pause"
                 android:src="@android:drawable/ic_media_play"
@@ -79,4 +86,4 @@
                 android:tint="#FFFFFF" />
         </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</FrameLayout>

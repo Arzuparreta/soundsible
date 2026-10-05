@@ -24,6 +24,8 @@ object WebNowPlaying {
     private const val LEGACY_CHANNEL_ID = "soundsible-web-playing"
     private const val NOTIFICATION_ID = 42
 
+    @Volatile private var permissionToastShown = false
+
     fun show(
         context: Context,
         title: String,
@@ -32,6 +34,28 @@ object WebNowPlaying {
         artwork: Bitmap?,
     ) {
         val manager = context.getSystemService(NotificationManager::class.java)
+        if (!manager.areNotificationsEnabled()) {
+            // The system drops everything below this point silently. Say so
+            // once, visibly: a toast needs no permission.
+            android.util.Log.w("SoundsiblePlaying", "notifications disabled; skipping media post")
+            if (!permissionToastShown) {
+                permissionToastShown = true
+                try {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        try {
+                            android.widget.Toast.makeText(
+                                context.applicationContext,
+                                "Enable notifications for playback controls",
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
+                        } catch (_: Exception) {
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            return
+        }
         try {
             // Fresh channel: importance upgrades never apply to an existing
             // channel, and lockscreen presence wants DEFAULT, not LOW.
