@@ -184,6 +184,11 @@ class DjProgramTest {
                 command("action:'djSettings',sources:[{id:'new-pcm',label:'New source',activation:0,tracks:[{id:'member-pcm-soft',title:'New soft',artist:'member artist',duration:20},{id:'member-pcm-loud',title:'New loud',artist:'member artist',duration:60}]}]")
                 waitFor("window.__dj.dj?.sources[0].id==='new-pcm' && window.__dj.items.slice(window.__dj.index+1).some(item=>item.id==='member-pcm-soft')")
                 assertEquals("Replan replaced or resumed the current input", "true", web.evaluate(scenario, "window.__dj.items[window.__dj.index].key===window.__refillKey && !window.__dj.playWhenReady && Math.abs(window.__dj.positionMs-window.__refillPosition)<100"))
+                command("action:'radio',enabled:true,profile:'balanced'")
+                waitFor("!window.__dj.dj?.active && window.__dj.radio?.active && !window.__dj.playWhenReady")
+                assertEquals("Radio discarded the retained occurrence or resumed paused playback", "true", web.evaluate(scenario, "window.__dj.items[window.__dj.index].key===window.__refillKey && Math.abs(window.__dj.positionMs-window.__refillPosition)<150"))
+                instrumentation.runOnMainSync { controller.play() }
+                waitFor("window.__dj.playing && !window.__dj.dj?.active && window.__dj.radio?.active")
                 command("action:'stop'")
             }
             } finally {

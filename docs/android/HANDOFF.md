@@ -19,9 +19,10 @@
 
 ## Estado actual
 
-Último commit validado y subido: `0b070887`, recuperación de PCM detenido durante
-mezcla DJ. `0f26f348` añadió preferencia de mezcla confirmada y `1ab49ea6` feedback
-observado del planner. No hay paridad completa ni PR final todavía.
+Últimos bloques validados: recuperación de PCM detenido durante mezcla DJ
+(`0b070887`) y DJ → Radio conservando canción/posición/pausa. `0f26f348` añadió
+preferencia de mezcla confirmada y `1ab49ea6` feedback observado del planner.
+No hay paridad completa ni PR final todavía.
 
 - Teléfono: NORMAL, podcasts, Radio/Autoplay, biblioteca/colecciones/bookmarks,
   adquisición/review/importación, metadata, letras, Cuenta/Apariencia/Feedback/
@@ -56,6 +57,11 @@ observado del planner. No hay paridad completa ni PR final todavía.
   Canciones completas; una transición ya preparada conserva su decisión.
 - Restart offline limpio `12a872d0`: prepare1 + force-stop/offline1 y build normal,
   `/tmp/soundsible-s3b-restart-offline-native.log`.
+- DJ → Radio: DjProgramTest2/0 HTTP/TLS, APK/test/JVM49/lint normal sin CA,
+  `/tmp/soundsible-s3b-radio-mode-native.log`. Mismo MediaController controla
+  NORMAL → DJ → NORMAL/Radio; KEY, posición y pausa retenidos al salir de DJ.
+  Artifact sobre `0b070887` dirty; fuentes finales dirty sobre `ba697dc4`.
+  Incluye feedback UI del planner. Runtime completo158.6s, sin baseline comparable.
 - UI completa: **198 archivos/1559 tests + TypeScript**, último log
   `/tmp/soundsible-s3b-dj-phase-full-ui.log`.
 - Browser4 último verde es anterior a S3: Chromium278/66 skips + WebKit269/75 skips,
@@ -66,17 +72,12 @@ observado del planner. No hay paridad completa ni PR final todavía.
 
 ## Trabajo activo y siguiente paso
 
-Working tree: DJ → Radio conserva canción/KEY/posición/pausa y cambia a backend
-NORMAL con la misma MediaSession; DjProgramTest ampliado. `scripts/android.py`
-arranca los tres fixtures independientes antes de esperar readiness. Ambos cambios
-compilan; **aceptación APK todavía en curso**, log
-`/tmp/soundsible-s3b-radio-mode-native.log`, sesión local1239. Artifact preparado
-sobre `0b070887` dirty; incluye feedback de planner UI.
-
-**Fuentes/tests Native, fixtures, assets y recursos congelados hasta final del
-runner, incluido build normal sin CA.** Confirmar exit y XML, corregir si falla,
-registrar evidencia y hacer commits/push enfocados de modo y harness. No atribuir
-un run anterior a fuentes que cambiaron después de su prepare.
+No runner activo; congelación levantada tras exit0 de DJ → Radio. Harness también
+validado en ese run: `scripts/android.py` arranca los tres fixtures independientes
+antes de esperar readiness, comprueba todos y conserva cleanup. Cerrar commit/push
+enfocado de modo y harness, después continuar DJ pendiente. En futuros runs,
+**congelar fuentes/tests Native, fixtures, assets y recursos hasta final del runner,
+incluido build normal sin CA**. No atribuir un run a fuentes cambiadas después.
 
 Después: cerrar cambios de modo y requests/placement/repair/refinamiento DJ,
 recuperación de red en producción y regresión completa; continuar Live receptor/
@@ -108,4 +109,4 @@ avances, fallos y comandos antiguos; consultar sólo el bloque relevante.
   GetStream consultadas no se pasa al constructor. Probar inyección de programa
   sin micrófono y recepción independiente antes de integrar salas/claim de emisión.
   Fuentes consultadas: [ADM upstream](https://webrtc.googlesource.com/src/+/main/modules/audio_device/g3doc/audio_device_module.md),
-  [JavaAudioDeviceModule GetStream](https://github.com/GetStream/webrtc-android/blob/main/webrtc-android/src/main/java/org/webrtc/audio/JavaAudioDeviceModule.java).
+  [JavaAudioDeviceModule GetStream](https://github.com/GetStream/webrtc-android/blob/main/stream-webrtc-android/src/main/java/org/webrtc/audio/JavaAudioDeviceModule.java).

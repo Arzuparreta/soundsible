@@ -309,7 +309,20 @@ class PlaybackService : MediaLibraryService() {
                     } else if (args.getString("action") == "radio") {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
                         args.getString("key")?.let { require(it == ProgramQueue.key(player, player.currentMediaItemIndex)) }
-                        if (args.getBoolean("enabled")) { autoplay.suspend(); radio.start(args.getString("profile") ?: "balanced") } else { radio.stop(); autoplay.sync() }
+                        if (args.getBoolean("enabled")) {
+                            val profile = args.getString("profile") ?: "balanced"
+                            require(profile in listOf("familiar", "balanced", "explore"))
+                            if (dj != null) {
+                                val seed = player.currentMediaItem ?: error("NO_SEED")
+                                val position = player.currentPosition
+                                val requested = player.playWhenReady
+                                djPlanner.clear(); refillAnchor = ""
+                                restoreNormal(); publishDj("idle", djProfile, 0)
+                                player.setMediaItem(seed, position); player.prepare()
+                                if (requested) player.play()
+                            }
+                            autoplay.suspend(); radio.start(profile)
+                        } else { radio.stop(); autoplay.sync() }
                     } else if (args.getString("action") == "stop") {
                         require(args.getLong("generation", -1) == connection.generation)
                         // Refills retain the program identity; replacement starts another.
