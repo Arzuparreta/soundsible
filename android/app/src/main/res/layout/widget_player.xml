@@ -58,7 +58,7 @@
                 android:id="@+id/widgetPrev"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:background="@android:color/transparent"
                 android:contentDescription="Previous"
                 android:src="@drawable/ic_skip_previous" />
 
@@ -67,7 +67,7 @@
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginHorizontal="4dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:background="@android:color/transparent"
                 android:contentDescription="Play or pause"
                 android:src="@drawable/ic_play_circle" />
 
@@ -75,7 +75,7 @@
                 android:id="@+id/widgetNext"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:background="@android:color/transparent"
                 android:contentDescription="Next"
                 android:src="@drawable/ic_skip_next" />
         </LinearLayout>
