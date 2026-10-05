@@ -313,3 +313,10 @@ prueba libera saliente al observar PCM casi silencioso antes del fin completo,
 porque low-shelf atenua su80Hz. Stack run:297 en
 /tmp/soundsible-s3b-full-long-native.log. Esperar fin físico de ventana48s antes
 de liberar el saliente; mantener los umbrales PCM y repetir. No aceptar48s aún.
+
+LongBlend48s aceptado HTTP/TLS2/0 sobrebbfcd056 limpio, log
+/tmp/soundsible-s3b-long-end-native.log: PCM80/4400 en25/75%, dominancia física,
+ventana completa48s antes de liberar saliente y continuación del entrante.
+Normal APK/test APK/JVM48/lint pasa. Core overlap no se recorta al antiguo30s.
+Próximo caída saliente y luego fachada Player/servicio/planner; DJ productivo
+sigue pendiente.

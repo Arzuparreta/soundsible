@@ -150,6 +150,16 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3b-complete-spike-native.log",
       "scope": "All32 HTTP/TLS isolated mix cases: seven techniques, WAV/FLAC, EOS, tempo/return, cue/preroll/cancel/standby seek, early/late loss, per-input levels0.5/0.75 with live ramp, physical clock/pause/scope; normal APK/test APK/JVM41/lint pass"
+    },
+    "full_core_long_blend_native": {
+      "source_revision_at_asset_prepare": "bbfcd056",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-long-end-native.log",
+      "scope": "HTTP/TLS full48s LONG_BLEND, source90s/60s, actual80/4400Hz PCM at25/75percent, physical full window before releasing outgoing; normal APK/test APK/JVM48/lint pass"
     }
   },
   "diagnostics": [
@@ -202,6 +212,12 @@
       "tests": 2,
       "failures": 2,
       "reason": "Test attempted future cancellation after render had reserved overlap despite physical preroll. Longer silent preroll leaves real uncommitted margin; guard kept unchanged and repeated2 pass."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-full-long-native.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Test mistook attenuated outgoing80Hz for completed48s overlap and released active decoder early. Explicit full-window physical wait retains decoder and repeated2 pass."
     }
   ],
   "limitations": [

@@ -78,7 +78,9 @@ y normal APK/test/JVM41/lint pasan sobre5b5dbed8 limpio, log
 /tmp/soundsible-s3b-rate-return-native.log. Regresión completa spike32/0
 y normal APK/test/JVM41/lint pasan sobref2e7a921 limpio, log
 /tmp/soundsible-s3b-complete-spike-native.log; niveles por entrada incluidos.
-Próximo LongBlend48s real y política fromKey,
+LongBlend48s HTTP/TLS2/0 y normal APK/test/JVM48/lint pasan sobrebbfcd056
+limpio, log /tmp/soundsible-s3b-long-end-native.log; política fromKey7 JVM verde.
+Próximo caída saliente,
 luego fachada Player y planner; ver evidence/s3b.json. DJ/Live/Auto/Settings restantes/firma/update
 siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
 PR abierta con checks pasando para review manual, sin merge ni automerge.
