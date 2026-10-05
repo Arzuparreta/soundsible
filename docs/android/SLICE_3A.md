@@ -152,5 +152,7 @@ FLAC HTTP/TLS2 también pasa, seguido de APK/test APK/JVM27/lint normales en
 OfflineStore conserva facts finitos al preparar la copia, junto con sus bytes;
 no los sustituye al refrescar etiquetas porque podrían describir otra grabación.
 Copias anteriores sin facts mantienen la política de no medidos. La preferencia
-confirmada se cachea por perfil nativo; PCM offline con servicio vivo está probado,
-pero su efecto tras muerte de proceso todavía requiere aceptación independiente.
+confirmada se cachea por perfil nativo. El protocolo force-stop posterior pasa
+prepare1/offline1 en `/tmp/soundsible-s3a-pcm-restart-native.log`: servicio nuevo,
+Core503 y pico PCM1893 sobre copia sin facts; APK/test APK/JVM27/lint normales
+pasan. El test restaura la preferencia original del motor aislado al terminar.

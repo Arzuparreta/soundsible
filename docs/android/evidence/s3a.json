@@ -30,7 +30,16 @@
       "errors": 0,
       "skipped": 0
     },
-    "normal_apk_test_apk_lint": "passed after temporary CA removal"
+    "normal_apk_test_apk_lint": "passed after temporary CA removal",
+    "offline_process_restart": {
+      "prepare_tests": 1,
+      "offline_tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-pcm-restart-native.log",
+      "scope": "Force-stop after confirmed leveling; new service loads profile preference and copied audio; actual PCM peak1893 during Core503"
+    }
   },
   "scope": [
     "Actual sole-service AudioSink samples; unity, unmeasured and actual production R128 facts",
@@ -40,7 +49,6 @@
   ],
   "limitations": [
     "Not a release; main clean73 and offline restart2 predate DSP",
-    "PCM offline tested with service alive; process death gain cache still pending",
     "No physical acoustic acceptance",
     "No DJ mixing or Live broadcast; tap is an internal bounded attachment",
     "Browser four profiles must repeat before final UI PR",

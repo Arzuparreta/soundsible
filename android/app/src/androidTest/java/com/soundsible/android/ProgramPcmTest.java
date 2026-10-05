@@ -68,7 +68,7 @@ public class ProgramPcmTest {
         final String key; final int peak; final long frame; final long offset; final int rate;
         Sample(String key, int peak, long frame, long offset, int rate) { this.key = key; this.peak = peak; this.frame = frame; this.offset = offset; this.rate = rate; }
     }
-    private static class Probe implements AutoCloseable {
+    static class Probe implements AutoCloseable {
         final ArrayBlockingQueue<Sample> samples = new ArrayBlockingQueue<>(16);
         final ProgramPcmTap.Capture capture;
         Probe(long generation) {
