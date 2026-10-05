@@ -101,6 +101,28 @@ Consulta análisis real de archivos sintéticos; transición measured aplicada
 con fromKey y outCue exactos antes de playback. Negativos restantes pendientes.
 Continuar recuperación de red en servicio y restantes de paridad. Fixture DJ acota fallos/delays alrededor
 del Core real; no sustituye sus respuestas válidas por un planner falso.
+Regresión principal actual **130/0 + restart prepare1/offline1 + build normal**
+pasa sobre `d7e95c44` preparado limpio:
+`/tmp/soundsible-s3b-regression-native.log`, sesión exec78409 terminó exit0. Runtime instrumentado1835.188s.
+Congelación principal levantada. Trabajo pendiente se encuentra en checkout
+independiente `/tmp/soundsible-android-next` (clonado de ese mismo commit):
+- ProgramDjPlanner/Refiner: memo y guards ligados a settingsRevision.
+- ProgramDjRecoveryTest: measured reconsulta el mismo par tras cambio de perfil.
+- DjNetworkTest nuevo + android_dj_fixture: incoming body stall22s tras64000bytes,
+  recuperación por servicio/Core y retry503 desde MediaController;
+  **todavía sin validar ni commit**. Dirigido en clone sesión78214 no: usar
+  `/tmp/soundsible-s3b-network-native.log` y comprobar proceso activo.
+- `/tmp/ProgramCarLibrary.kt`: borrador de browse, no integrado ni completo.
+Clone ya publicó `c3d392d`: car API conserva podcast_feed_id/episode_guid;
+`tests/test_car_routes.py`5/0 en `/tmp/soundsible-auto-car-contract.log`.
+Principal sigue en `d7e95c44` congelado; remote avanzó a ese commit nuevo.
+Actualizar principal al terminar runner preservando esta edición de HANDOFF.
+Worktree fue rechazado por ref nueva en `.git` read-only; clone independiente
+funcionó. No hace falta acción del usuario; commit/push actuales sí funcionan.
+Tras principal, preparar y validar dirigidos del clone (no Gradle paralelo),
+trasladar sólo sus cambios de task al principal, actualizar evidencia y commit/push.
+El HANDOFF principal puede tener esta edición de contexto sin commit; conservarla.
+
 En futuros runs, **congelar fuentes/tests Native, fixtures, assets y recursos
 hasta final del runner, incluido build normal sin CA**. No atribuir un run a
 fuentes cambiadas después de su prepare.

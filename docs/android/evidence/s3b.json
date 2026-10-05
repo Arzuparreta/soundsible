@@ -393,5 +393,29 @@
       "network-stalled service recovery",
       "complete parity"
     ]
+  },
+  "full_native_regression_after_refinement": {
+    "source_revision": "d7e95c44",
+    "prepared_clean": true,
+    "tests": 130,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 1835.188,
+    "log": "/tmp/soundsible-s3b-regression-native.log",
+    "restart_prepare": {
+      "tests": 1,
+      "failures": 0
+    },
+    "restart_offline": {
+      "tests": 1,
+      "failures": 0
+    },
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "does_not_prove": [
+      "complete DJ/Live/Android Auto parity",
+      "physical acoustic acceptance",
+      "later network/settings corrections"
+    ]
   }
 }
