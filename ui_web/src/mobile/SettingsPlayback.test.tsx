@@ -9,7 +9,7 @@ const initial: ProgramState = { generation: 1, sequence: 1, ready: true, playWhe
   autoplay: { enabled: false, settingsPhase: 'ready', active: false, phase: 'idle' } };
 it('waits for the service preference and disables duplicate changes while it confirms', async () => {
   const [state, setState] = createSignal(initial); let deliver!: () => void;
-  const command = vi.fn((command: { action: string }) => { if (command.action === 'leveling') return Promise.resolve(); setState({ ...initial, autoplay: { ...initial.autoplay!, settingsPhase: 'loading' } }); return new Promise<void>(done => { deliver = () => { setState({ ...initial, autoplay: { ...initial.autoplay!, enabled: true } }); done(); }; }); });
+  const command = vi.fn((command: { action: string }) => { if (command.action !== 'autoplay') return Promise.resolve(); setState({ ...initial, autoplay: { ...initial.autoplay!, settingsPhase: 'loading' } }); return new Promise<void>(done => { deliver = () => { setState({ ...initial, autoplay: { ...initial.autoplay!, enabled: true } }); done(); }; }); });
   render(() => <NativeSettingsPlayback state={state()} pending={false} available={true} command={command} />);
   const row = screen.getByRole('switch'); expect(row).toHaveAttribute('aria-checked', 'false'); await fireEvent.click(row);
   expect(command).toHaveBeenCalledWith({ action: 'autoplay', enabled: true, reload: false }); expect(screen.queryByRole('switch')).toBeNull();

@@ -174,6 +174,20 @@ PR abierta con checks pasando para review manual, sin merge ni automerge.
 No publicar release antes de revisión y merge; preparar información de alpha.
 Browser4 final debe repetirse antes de abrir PR.
 
+Preferencia «Mezcla DJ» conectada a Core mediante PATCH/GET confirmado, cache
+por perfil y estado nativo publicado a Settings. Comparte el worker de preferencias
+de audio con leveling; no comparte su valor ni sus comandos. Desactivar mezcla
+conserva una transición ya preparada y aplica DIRECT/duración completa a las
+siguientes. DJ2 + PCM2 HTTP/TLS pasan junto con APK/test/JVM49/lint normal en
+/tmp/soundsible-s3b-mixing-settings-native.log (dirty=true sobre12a872d0).
+La prueba verifica duración completa y ausencia de PCM mezclado con mezcla off,
+y vuelve a activar antes de refill. UI198 archivos/1557 tests y TypeScript pasan
+en /tmp/soundsible-s3b-mixing-settings-full-ui.log. Restart offline sobre12a872d0
+limpio pasa prepare1 + force-stop/offline1, con build normal posterior en
+/tmp/soundsible-s3b-restart-offline-native.log. No reemplaza la principal120/3:
+regresión completa actual y browser4 siguen pendientes. Siguiente: recuperación
+acotada de PCM ausente durante transición comprometida; no declarar paridad DJ.
+
 Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
 bookmarks sobre entidades adquiridas y refresh confirmado. Los fallos encontrados

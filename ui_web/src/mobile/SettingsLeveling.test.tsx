@@ -6,6 +6,16 @@ import type { ProgramState } from '../lib/program/runtime';
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 type State = Pick<ProgramState, 'ready' | 'leveling'>;
+it('edits DJ mixing independently from loudness leveling and awaits native confirmation', async () => {
+  const [state, setState] = createSignal<Pick<ProgramState, 'ready' | 'leveling' | 'mixing'>>({ ready: true, leveling: { enabled: true, settingsPhase: 'ready' }, mixing: { enabled: true, settingsPhase: 'ready' } });
+  const command = vi.fn().mockResolvedValue(undefined);
+  render(() => <NativeSettingsLeveling state={state()} preference="mixing" pending={false} available={true} command={command} />);
+  await fireEvent.click(screen.getByRole('switch', { name: 'settings.djMixing' }));
+  expect(command).toHaveBeenCalledWith({ action: 'mixing', enabled: false, reload: false });
+  expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+  setState({ ...state(), mixing: { enabled: false, settingsPhase: 'ready' } });
+  expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+});
 it('reads the service preference before first Play and does not poll on unrelated programme observations', async () => {
   const [state, setState] = createSignal<State>({ ready: true, leveling: { enabled: null, settingsPhase: 'idle' } });
   const command = vi.fn().mockResolvedValue(undefined);

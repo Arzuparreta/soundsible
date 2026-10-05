@@ -142,7 +142,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             }
             return
         }
-        if (!mixing() || resolved.technique == ProgramMixCurve.Technique.DIRECT || outgoing.playbackState == Player.STATE_ENDED) {
+        if (resolved.technique == ProgramMixCurve.Technique.DIRECT || outgoing.playbackState == Player.STATE_ENDED) {
             if (output.drainedInput(slot)) { output.blend(50, ProgramMixCurve.Technique.DIRECT); armed = true }
             return
         }

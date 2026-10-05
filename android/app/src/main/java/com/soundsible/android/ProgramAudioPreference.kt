@@ -14,8 +14,8 @@ import java.util.concurrent.TimeUnit
 
 /** Confirmed Core preference, owned by the native programme service. */
 @UnstableApi
-internal class ProgramLeveling(context: Context, private val connection: EngineConnection, private val main: Handler,
-    private val session: () -> MediaLibrarySession?) : AutoCloseable {
+internal class ProgramAudioPreference(context: Context, private val connection: EngineConnection, private val main: Handler,
+    private val settingsKey: String, private val tag: String, private val session: () -> MediaLibrarySession?) : AutoCloseable {
     private val prefs = context.getSharedPreferences("program-audio", Context.MODE_PRIVATE)
     private fun profile(generation: Long) = runCatching { connection.offline.profileKey(generation) }.getOrNull()
     private val worker = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(1))
@@ -29,8 +29,8 @@ internal class ProgramLeveling(context: Context, private val connection: EngineC
     fun active() = epoch == connection.generation && enabled == true
     private fun publish() {
         session()?.let { owner -> owner.setSessionExtras(Bundle(owner.sessionExtras).apply {
-            putLong("levelingGeneration", connection.generation); putString("levelingSettingsPhase", phase)
-            putBoolean("levelingKnown", enabled != null && epoch == connection.generation); putBoolean("levelingEnabled", active())
+            putLong(tag + "Generation", connection.generation); putString(tag + "SettingsPhase", phase)
+            putBoolean(tag + "Known", enabled != null && epoch == connection.generation); putBoolean(tag + "Enabled", active())
         }) }
     }
     fun sync(hasProgramme: Boolean) {
@@ -38,7 +38,7 @@ internal class ProgramLeveling(context: Context, private val connection: EngineC
         if (epoch != connection.generation) clear()
         if (hasProgramme && phase == "idle") {
             profile(connection.generation)?.let { key ->
-                if (prefs.contains(key + ".leveling")) { enabled = prefs.getBoolean(key + ".leveling", false); phase = "cached"; publish() }
+                if (prefs.contains(key + "." + tag)) { enabled = prefs.getBoolean(key + "." + tag, false); phase = "cached"; publish() }
             }
             if (connection.cookieHeader(connection.generation) != null) settings(null)
             else { phase = "unavailable"; publish() }
@@ -50,18 +50,18 @@ internal class ProgramLeveling(context: Context, private val connection: EngineC
         val sessionIdentity = runCatching { connection.sessionIdentity(generation) }.getOrNull()
         if (sessionIdentity == null) { phase = "unavailable"; publish(); return }
         val profileKey = profile(generation)
-        val token = ++serial; val id = "leveling-settings:" + java.util.UUID.randomUUID(); requestId = id
+        val token = ++serial; val id = tag + "-settings:" + java.util.UUID.randomUUID(); requestId = id
         phase = "loading"; publish()
         try { worker.execute {
             var answer: Boolean? = null
             try {
                 fun read(method: String, requested: Boolean?): Boolean {
-                    val body = requested?.let { JSONObject().put("volume_leveling", it).toString().toRequestBody("application/json".toMediaType()) }
+                    val body = requested?.let { JSONObject().put(settingsKey, it).toString().toRequestBody("application/json".toMediaType()) }
                     connection.execute("/api/discovery/settings", method, body, emptyMap(), generation, id, 15000).use { response ->
                         require(response.isSuccessful)
                         val raw = response.peekBody(65537).string(); require(raw.toByteArray().size <= 65536)
-                        val parsed = JSONObject(raw); require(parsed.get("volume_leveling") is Boolean)
-                        return parsed.getBoolean("volume_leveling")
+                        val parsed = JSONObject(raw); require(parsed.get(settingsKey) is Boolean)
+                        return parsed.getBoolean(settingsKey)
                     }
                 }
                 if (value != null) require(read("PATCH", value) == value)
@@ -75,7 +75,7 @@ internal class ProgramLeveling(context: Context, private val connection: EngineC
                 requestId = null; phase = if (answer == null) "unavailable" else "ready"
                 if (answer != null) {
                     epoch = generation; enabled = answer
-                    if (profileKey != null && profileKey == profile(generation)) prefs.edit().putBoolean(profileKey + ".leveling", answer!!).apply()
+                    if (profileKey != null && profileKey == profile(generation)) prefs.edit().putBoolean(profileKey + "." + tag, answer!!).apply()
                 }
                 publish()
             }

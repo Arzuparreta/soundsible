@@ -38,7 +38,8 @@ class PlaybackService : MediaLibraryService() {
     private var djError = 0
     private var refillAnchor = ""
     private lateinit var connection: EngineConnection
-    private lateinit var leveling: ProgramLeveling
+    private lateinit var leveling: ProgramAudioPreference
+    private lateinit var mixing: ProgramAudioPreference
     private val pcmTap = ProgramPcmTap()
     private lateinit var previews: PreviewProgram
     private lateinit var radio: RadioProgram
@@ -76,7 +77,7 @@ class PlaybackService : MediaLibraryService() {
         publishDj("idle", djProfile, 0)
         savePodcast()
         autoplay.clear()
-        leveling.clear()
+        leveling.clear(); mixing.clear()
         radio.clear()
         previews.clear()
         player.pause(); player.stop(); player.clearMediaItems()
@@ -192,7 +193,8 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         NativeProgramOutput.bind(pcmTap) { connection.generation }
-        leveling = ProgramLeveling(this, connection, main) { session }
+        leveling = ProgramAudioPreference(this, connection, main, "volume_leveling", "leveling") { session }
+        mixing = ProgramAudioPreference(this, connection, main, "dj_mixing", "mixing") { session }
         val processor = ProgramPcmProcessor({ connection.generation }, leveling::active, { leveling.shuffle }, pcmTap)
         val renderers = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
@@ -224,7 +226,7 @@ class PlaybackService : MediaLibraryService() {
             val epoch = connection.generation
             val identity = connection.sessionIdentity(epoch)
             val next = ProgramDjSession(this, epoch, { epoch == connection.generation && runCatching { connection.sessionIdentity(epoch) }.getOrNull() == identity },
-                sources, pcmTap, leveling::active, rows, position, changed = { publishDj(djPhase, djProfile, djError) })
+                sources, pcmTap, leveling::active, rows, position, mixing = mixing::active, changed = { publishDj(djPhase, djProfile, djError) })
             autoplay.clear(); radio.clear()
             val previousDj = dj; dj = next
             player.pause(); player.stop()
@@ -247,7 +249,7 @@ class PlaybackService : MediaLibraryService() {
                 podcasts.save(oldPosition.mediaItem, oldPosition.positionMs, if (oldPosition.mediaItem == player.currentMediaItem) player.duration else -1, reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
             }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { leveling.shuffle = shuffleModeEnabled }
-            override fun onEvents(player: Player, events: Player.Events) { previews.sync(); radio.sync(); autoplay.sync(); leveling.sync(player.mediaItemCount > 0); savePodcast()
+            override fun onEvents(player: Player, events: Player.Events) { previews.sync(); radio.sync(); autoplay.sync(); leveling.sync(player.mediaItemCount > 0); mixing.sync(player.mediaItemCount > 0); savePodcast()
                 val keys = (0 until player.mediaItemCount).map { ProgramQueue.key(player, it) }.toSet()
                 podcastSources.entries.filter { it.value !in keys }.forEach { it.key.cancel() }
             }
@@ -301,9 +303,9 @@ class PlaybackService : MediaLibraryService() {
                     } else if (args.getString("action") == "autoplay") {
                         require(args.getLong("generation", -1) == connection.generation)
                         autoplay.settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))
-                    } else if (args.getString("action") == "leveling") {
+                    } else if (args.getString("action") in listOf("leveling", "mixing")) {
                         require(args.getLong("generation", -1) == connection.generation)
-                        leveling.settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))
+                        (if (args.getString("action") == "mixing") mixing else leveling).settings(if (args.getBoolean("reload")) null else args.getBoolean("enabled"))
                     } else if (args.getString("action") == "radio") {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
                         args.getString("key")?.let { require(it == ProgramQueue.key(player, player.currentMediaItemIndex)) }
@@ -332,7 +334,7 @@ class PlaybackService : MediaLibraryService() {
         djPlanner.close()
         dj?.close(); dj = null
         autoplay.close()
-        leveling.close()
+        leveling.close(); mixing.close()
         NativeProgramOutput.unbind(pcmTap)
         radio.close()
         previews.close()

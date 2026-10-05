@@ -56,8 +56,9 @@ class PlaybackPlugin : Plugin() {
         val radio = if (extras?.getLong("radioGeneration") == EngineConnection.shared(context).generation) JSObject().put("active", extras.getBoolean("radioActive")).put("phase", extras.getString("radioPhase")).put("profile", extras.getString("radioProfile")) else null
         val autoplay = if (extras?.getLong("autoplayGeneration") == EngineConnection.shared(context).generation) JSObject().put("enabled", if (extras.getBoolean("autoplayKnown")) extras.getBoolean("autoplayEnabled") else null).put("settingsPhase", extras.getString("autoplaySettingsPhase")).put("active", extras.getBoolean("autoplayActive")).put("phase", extras.getString("autoplayPhase")) else null
         val leveling = if (extras?.getLong("levelingGeneration") == EngineConnection.shared(context).generation) JSObject().put("enabled", if (extras.getBoolean("levelingKnown")) extras.getBoolean("levelingEnabled") else null).put("settingsPhase", extras.getString("levelingSettingsPhase")) else null
+        val mixing = if (extras?.getLong("mixingGeneration") == EngineConnection.shared(context).generation) JSObject().put("enabled", if (extras.getBoolean("mixingKnown")) extras.getBoolean("mixingEnabled") else null).put("settingsPhase", extras.getString("mixingSettingsPhase")) else null
         val dj = if (extras?.getLong("djGeneration") == EngineConnection.shared(context).generation) JSObject().put("active", extras.getBoolean("djActive")).put("phase", extras.getString("djPhase")).put("profile", extras.getString("djProfile")).put("direction", extras.getString("djDirection")?.let { JSObject(it) }).put("sources", extras.getString("djSources")?.let { JSArray(it) }) else null
-        return JSObject().put("dj", dj).put("leveling", leveling).put("autoplay", autoplay).put("radio", radio).put("preview", preview).put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
+        return JSObject().put("dj", dj).put("leveling", leveling).put("mixing", mixing).put("autoplay", autoplay).put("radio", radio).put("preview", preview).put("sequence", ++sequence).put("generation", EngineConnection.shared(context).generation)
             .put("items", items).put("queueToken", if (p != null) ProgramQueue.token(p) else "").put("programToken", if (p != null) ProgramQueue.programToken(p) else "")
             .put("ready", p != null).put("playing", p?.isPlaying ?: false)
             .put("playWhenReady", p?.playWhenReady ?: false).put("errorKind", if (authFailure) "auth" else if (plannerError == 403) "permission" else PlaybackRecovery.kind(p?.playerError))
@@ -80,7 +81,7 @@ class PlaybackPlugin : Plugin() {
             require((call.getInt("generation")?.toLong() ?: -1L) == connection.generation)
             val p = controller ?: error("NOT_READY")
             when (call.getString("action")) {
-                "djSettings", "dj", "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay", "leveling", "metadata", "retireSource" -> {
+                "djSettings", "dj", "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay", "leveling", "mixing", "metadata", "retireSource" -> {
                     val args = Bundle().apply {
                         if (call.getString("action") == "metadata") putString("metadataRevision", java.util.UUID.randomUUID().toString())
                         putBoolean("fromCurrent", call.getBoolean("fromCurrent") ?: true)

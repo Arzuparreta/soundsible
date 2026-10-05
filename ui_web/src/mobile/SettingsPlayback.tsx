@@ -5,7 +5,7 @@ import type { ProgramCommand, ProgramState } from '../lib/program/runtime';
 import { t } from '../lib/i18n';
 
 /** The existing service confirms preference and updates the actual native runway. */
-export default function NativeSettingsPlayback(props: { state: Pick<ProgramState, 'ready' | 'autoplay' | 'leveling'> | null; pending: boolean; available: boolean;
+export default function NativeSettingsPlayback(props: { state: Pick<ProgramState, 'ready' | 'autoplay' | 'leveling' | 'mixing'> | null; pending: boolean; available: boolean;
   command: (command: ProgramCommand) => Promise<void> }) {
   const [busy, setBusy] = createSignal(false), [error, setError] = createSignal('');
   let disposed = false; onCleanup(() => { disposed = true; });
@@ -28,7 +28,7 @@ export default function NativeSettingsPlayback(props: { state: Pick<ProgramState
     </Show>}>
       <AutoplaySettingsView enabled={props.state!.autoplay!.enabled === true} disabled={disabled()} onChange={() => void change()} />
     </Show>
-    <NativeSettingsLeveling {...props} />
+    <NativeSettingsLeveling {...props} /><NativeSettingsLeveling {...props} preference="mixing" />
     <Show when={error()}><p role="alert">{error()} <button disabled={disabled()} onClick={() => void change(true)}>{t('common.retry')}</button></p></Show>
   </section>;
 }
