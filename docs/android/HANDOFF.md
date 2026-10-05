@@ -21,13 +21,16 @@ historial del chat ni memoria privada. Ver [guía](../ANDROID.md),
 - No hay teléfono Android propio. Separar emulador, dispositivos remotos y
   teléfono/coche reales; no llamar a CI aceptación acústica.
 - Cada implementación termina con commit y push en rama, nunca main directo.
-  Autorización vigente: continuar hasta paridad completa; después integrar todo
-  por PR a main y cortar release con información/instrucciones de alpha.
+  Autorización vigente (actualizada 2026-10-05): continuar hasta paridad completa,
+  hacer commit/push y dejar la PR abierta con todos los checks pasando para review
+  manual del usuario. No hacer merge ni activar automerge. Preparar documentación
+  e instrucciones de alpha; no publicar release antes de su revisión y merge.
+  Esta instrucción revoca cualquier autorización anterior de merge/release.
   El usuario confirma mantener paridad completa antes de alpha (no alpha parcial).
   No delegar sin autorización.
 - Respetar AGENTS: versión central, nada de `npm run build` local, suite completa
   de cuatro perfiles antes de abrir PR que toque `ui_web`, y base remota actual
-  e impact label al abrir/integrar el PR autorizado tras completar la paridad.
+  e impact label al abrir la PR autorizada tras completar la paridad; dejarla abierta.
 - La app iOS es Swift independiente, no Solid sincronizado. Su runtime sigue
   sin validación de dispositivo. Mantener las advertencias sobre iOS/PAL.
 
@@ -50,7 +53,7 @@ Radio2→PCM2 HTTP/TLS y build normal pasan, sin borrar datos de otros casos.
 Log /tmp/soundsible-s3a-pcm-isolated-album-native.log. Repetir principal antes de
 reemplazar la evidencia limpia73 anterior; DJ no está implementado todavía.
 DJ/Live/Auto/firma/update siguen pendientes; continuar hasta paridad y después
-PR/main/release autorizados, sin cerrar por slice. Browser4 final debe repetirse.
+PR abierta para review manual autorizados, sin cerrar por slice. Browser4 final debe repetirse.
 
 Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade
@@ -77,7 +80,7 @@ de sustituir el resultado anterior. Los archivos en
 integration-results sólo se actualizan si pasa: no usar el antiguo XML de 35
 como resultado de esta ejecución fallida. Próximo bloque:
 [eliminar adquirido](SLICE_2AA.md).
-No PR/main/release todavía; mantener gates de alpha completa y continuar.
+No PR abierta para review manual todavía; mantener gates de alpha completa y continuar.
 
 ## Entrega S0
 
@@ -745,7 +748,7 @@ Build de instrumentación: metadata del HEAD previo (`ccec0f9`), `dirty=true`;
 no presentar ese APK como build limpio de release. Se reconstruirá desde HEAD
 limpio tras cerrar el siguiente corte. S6a no cierra paridad ni habilita alpha.
 Autorización vigente: continuar S2j y la matriz completa, push de avances; después
-PR a main y release con gates de firma/actualización y paridad completos.
+PR abierta con checks pasando para review manual; sin merge ni automerge.
 
 
 ## Entrega S2j: búsqueda y guardado explícito
@@ -843,7 +846,7 @@ Siguiente trabajo autorizado: ampliar podcasts con directorio y seguir/dejar de
 seguir, adquisición real/progreso y acciones de episodios; después Radio NORMAL.
 Continuar sin cerrar el turno por un checkpoint. DJ/Live/Auto, UI/acciones completas,
 firma/actualización y demás filas de PORT_PLAN siguen siendo requisitos antes del
-PR/merge/release. No se ha publicado alpha parcial ni integrado a main.
+PR abierta para review manual. No se ha publicado alpha parcial ni integrado a main.
 
 ## S2l: directorio y adquisición podcast
 
@@ -898,7 +901,7 @@ Continuación activa S2n: favoritos explícitos, filtro/estados de filas y selec
 playlist sin runtime web de audio. Sus **37 tests backend** y **1.395 /156 UI**
 pasan antes de los últimos guards de prompt. APK todavía pendiente. Sus fuentes
 están separadas del commit S2m; no dar acciones por aceptadas sólo por scaffolding.
-Continuar hasta la paridad y después PR/merge/release autorizados; no finalizar por
+Continuar hasta la paridad y después PR abierta para review manual autorizados; no finalizar por
 este checkpoint ni cambiar el requisito a alpha parcial.
 
 ## S2n: favoritos y pertenencia playlist validados
@@ -922,7 +925,7 @@ marks en arranque offline frío; no confundirlo con copias de música S6a.
 
 Continuación: gestión completa de playlists/acciones, Radio/autoplay completos y
 resto de paridad de PORT_PLAN. Mantener commit/push en rama por trabajo validado,
-seguir sin terminar el turno por un slice. PR/merge/release sólo al cerrar gates.
+seguir sin terminar el turno por un slice. PR abierta para review manual sólo al cerrar gates.
 
 ## S2o: gestión de playlists validada
 
@@ -943,7 +946,7 @@ fixture ahora drena timers y cleanup, sin modificar gesto de producto; commit
 Última suite APK completa sigue S2m 25 + dos fases restart; browser completos S2j.
 Repetir sobre head final antes del PR. Instrumentación dirty/HEAD previo, no release.
 Continuación activa: perfiles/refill/cancelación de Radio NORMAL, autoplay y resto
-de matriz. No finalizar por checkpoint; PR/merge/release requieren paridad completa.
+de matriz. No finalizar por checkpoint; PR abierta para review manual requieren paridad completa.
 
 ## S2p: perfiles Radio y refill en background
 
@@ -968,7 +971,7 @@ real y la final pasa. No se debilitan guards de escritura o se inventa éxito.
 
 Suite completa anterior sigue S2m 25 + restart2; browser S2j. Instrumentación
 sobre HEAD S2o dirty, desarrollo. Continuar [S2q autoplay](SLICE_2Q.md) y matriz
-completa; ningún checkpoint termina autorización PR/merge/release tras paridad.
+completa; ningún checkpoint termina autorización PR abierta para review manual tras paridad.
 
 ## S2q: primer vertical autoplay NORMAL validado
 
@@ -1001,7 +1004,7 @@ Continuación activa S2r: formulario de metadata extraído sin stores/audio web 
 adaptador Native REST, todavía sin conectar a programa/shell. Typecheck y tres
 tests de presentación pasan; Native metadata/artwork y recorrido APK pendientes.
 Estos archivos no pertenecen al APK de aceptación S2q ni al commit de autoplay.
-Mantener commits separados y continuar hasta paridad/PR/merge/release autorizados.
+Mantener commits separados y continuar hasta paridad/PR abierta para review manual autorizados.
 
 
 ## S2r: primer vertical de metadata/carátulas
@@ -1016,7 +1019,7 @@ sidecar y null album_artist fallback.
 **No es todavía edición completa**: formatos con tags pueden rehash/cambiar ID
 con las rutas históricas. Continuar con contrato de edición que preserve audio/ID
 y pruebas de formatos con tags antes de cerrar esta fila. Última APK completa
-S2q31 + restart2; browser S2j. No PR/main/release hasta matriz completa; continuar
+S2q31 + restart2; browser S2j. No PR abierta para review manual hasta matriz completa; continuar
 sin terminar por checkpoint. Instrumentación dirty/HEAD anterior, desarrollo.
 
 
@@ -1051,7 +1054,7 @@ identity helpers puros compartidos y snapshot saved-entities por cuenta; no guar
 canciones ni archivos. UI **1.416/163**, Python saved-entities **15** pasan.
 Recorrido APK conjunto CatalogSearch + EntityBookmarks en curso; repetir principal
 y restart tras corregir todos sus fallos. No presentar S2t como validado todavía.
-Continúa autorizado hasta matriz completa, PR/merge/release; no finalizar por slice.
+Continúa autorizado hasta matriz completa, PR abierta para review manual; no finalizar por slice.
 
 
 ## S2t: bookmarks adquiridos validados
@@ -1086,7 +1089,7 @@ no borra cuentas/cookies/colas/copias y deja restart offline con su protocolo.
 Volver a ejecutar principal/restart sobre HEAD final. [S2u](SLICE_2U.md) selector
 OS todavía es contrato/draft (draft reproducible en docs/android/drafts/CoverPickerTest.java),
 no aceptado; trasladarlo a androidTest y probar después de cerrar esta regresión.
-Continuar hasta paridad completa; PR/main/release siguen pendientes.
+Continuar hasta paridad completa; PR abierta para review manual siguen pendientes.
 
 
 ## Regresión principal S2t final
@@ -1106,7 +1109,7 @@ ese caso por aceptado. No está corregido todavía; no llamar completa la parida
 
 Diff acumulado detectó blank line final en catalogTrack heredado de S2j; eliminado
 sin cambiar lógica. Browser completos siguen S2j hasta repetición previa al PR.
-Continuar hasta todos los gates de paridad, luego PR/main/release autorizados.
+Continuar hasta todos los gates de paridad, luego PR abierta para review manual autorizados.
 
 
 ## S2u selector OS real
@@ -1140,7 +1143,7 @@ FLAC con MediaMetadataRetriever y sesión del sistema por separado.
 Letras temporizadas compartidas completadas después en S2w. Continuar acciones biblioteca,
 Discover/adquisición/importación/Settings, DJ/Live/Auto y release gates. Principal
 completa última S2t35+restart2; tras S2u/S2v hace falta regresión final ampliada.
-No cerrar por slice; continuar hasta PR/main/release de paridad completa.
+No cerrar por slice; continuar hasta PR abierta para review manual de paridad completa.
 
 
 ## S2w letras nativas compartidas
@@ -1189,7 +1192,7 @@ Inventariar límites multipart y formatos admitidos antes de modificar transport
 Después resto biblioteca/Discover/Settings/share/multidispositivo, DJ/Live/Auto,
 firma/update/release gates. Principal completa última35+restart2; ahora41 tests
 principales esperados más restart2 y browser4 a repetir sobre implementación final.
-No cerrar por slice; continuar hasta paridad completa y PR/main/release autorizados.
+No cerrar por slice; continuar hasta paridad completa y PR abierta para review manual autorizados.
 
 
 ## Entrega S2y: migración compartida y grant OS con streaming
@@ -1229,7 +1232,7 @@ menús/overlays, colecciones/podcasts/pestañas y raíz minimizada sin parar pro
 Principal completa última35+restart2; ahora43 principales esperados+restart2;
 repetir completa y browser4 sobre implementación final. Después completar resto
 biblioteca/Discover/Settings/share/multidispositivo, DJ/Live/Auto, firma/update y
-PR/main/release autorizados. No finalizar por slice.
+PR abierta para review manual autorizados. No finalizar por slice.
 
 
 ## Entrega S2z: Atrás del sistema y limpieza de navegación
@@ -1258,7 +1261,7 @@ Ahora45 tests principales esperados +restart2; repetir principal completa y
 browser4 por limpieza global y extracciones compartidas recientes. Continuar
 acciones restantes de biblioteca (retirar archivo y referencias/programa/copia),
 entidades/Discover/Settings/share/multidispositivo, DJ/Live/Auto y firma/update.
-No cerrar turno por slice ni publicar antes de paridad; PR/main/release después.
+No cerrar turno por slice ni publicar antes de paridad; PR abierta para review manual después.
 
 ## Continuación S2aa: eliminación y filesystem recuperable
 
@@ -1278,7 +1281,7 @@ tests y generaban lint unit models no acreditan ejecución JVM. La ejecución
 explícita17 sí; el helper ahora añade testDebugUnitTest al cierre normal sin CA.
 Preparar commit limpio y repetir principal ampliada49 + dos fases offline;
 no sustituir el verde histórico35 por XML antiguo ni por targeted4. Continuar
-sin cerrar por slice hasta paridad completa y PR/main/release autorizados.
+sin cerrar por slice hasta paridad completa y PR abierta para review manual autorizados.
 
 
 ## Principal limpia S2aa
@@ -1296,7 +1299,7 @@ instrumentación específica; no atribuirla al artifact limpio anterior. UI1465/
 pasa en /tmp/soundsible-s2aa-online-recovery-ui.log. Próximo: incorporar draft
 PlannerRetirementTest y comprobar HTTP/HTTPS Radio/autoplay, junto a la nueva
 assertion de biblioteca conectada en OfflineRemovalTest. Continuar luego resto
-paridad; PR/main/release aún pendientes.
+paridad; PR abierta para review manual aún pendientes.
 
 
 Recuperación local posterior validada: restoreOffline(false) actualiza estado de
@@ -1319,7 +1322,7 @@ refill nuevo sin ID retirado; conserva key/programToken/pausa20s y modos. Cleanu
 restaura preferencias y fuentes sintéticas, drena delay antes del próximo caso.
 APK/test APK/JVM17/lint normales sin CA pasan. Principal53+restart2 pendiente;
 última limpia dc29b73 49+2. Continuar Settings/Discover/biblioteca restantes,
-DJ/Live/Auto/firma/update y después PR/main/release; no finalizar por slice.
+DJ/Live/Auto/firma/update y después PR abierta para review manual; no finalizar por slice.
 
 
 ## Principal limpia S2ab
@@ -1331,7 +1334,7 @@ android/build/integration-results. Sustituye principal49 de dc29b73. Durante la
 regresión sólo avanzaron fuentes UI de [Settings S2ac](SLICE_2AC.md), sin tocar
 fuentes nativas ni assets del artifact limpio. UI1481/175 pasa; Settings aún
 requiere recorrido instrumentado HTTP/HTTPS y aceptación de sesión rotada.
-Continuar sin detenerse por slice hasta paridad completa y PR/main/release.
+Continuar sin detenerse por slice hasta paridad completa y PR abierta para review manual.
 
 
 ## S2ac: Cuenta compartida e historial por perfil
@@ -1352,7 +1355,7 @@ Fallos iniciales de localizador username y logout durante revalidación corregid
 y archivados; no reutilizar sus resultados como verdes.
 
 Continuar Appearance/accesibilidad según SLICE_2AD, después Settings/Discover
-restantes, DJ/Live/Auto y firma/update. No PR/main/release todavía; no cerrar por
+restantes, DJ/Live/Auto y firma/update. No PR abierta para review manual todavía; no cerrar por
 slice. Gates de alpha completa vigentes.
 
 
@@ -1380,7 +1383,7 @@ no considerar verdes ni ese run ni sus predecesores parciales.
 Continuar sin cierre de slice: terminar regresión cuatro perfiles, commit/push,
 preparar artifact limpio y principal57+restart2. S2ae Discover inventariado en
 SLICE_2AE; Settings restantes, DJ, Live, Auto y firma/update siguen pendientes.
-Gates de alpha completa vigentes; PR/main/release sólo al cumplirlos.
+Gates de alpha completa vigentes; PR abierta para review manual sólo al cumplirlos.
 
 
 ## Regresión completa S2ad aceptada
@@ -1461,7 +1464,7 @@ fallo/desconexión. Dirigidos Learning4 y diagnóstico2 pasan. Repetir UI comple
 preparar nuevo artifact y probar Core HTTP/TLS. Falta regresión browser4 de nuevas
 vistas antes del PR y principal limpia ampliada con restart2. Última principal
 limpia sigue8329de5 57+2. Continuar Settings pendientes, DJ/Live/Auto/firma/update,
-commit/push y finalmente PR/main/release con paridad completa. No cerrar por slice.
+commit/push y finalmente PR abierta para review manual con paridad completa. No cerrar por slice.
 
 Settings6 aceptados en /tmp/soundsible-s2af-settings-recovery-native.log; normal
 APK/test APK/JVM17/lint y retiradaCA pasan. Learning off impide eventos, Cancel
@@ -1470,7 +1473,7 @@ preferencia y503 usa offline/Retry general sin defaults inventados. UI1534/192
 pasa; Browser4 siguiente. Settings Playback Autoplay Native tiene vista/pruebas
 preparadas, aún sin ruta ni aceptación APK. Última principal limpia sigue57+2;
 preparar limpia ampliada73+2 después de commits. DSP/otros Settings/DJ/Live/Auto/
-firma/update siguen pendientes. Continuar hasta PR/main/release autorizado.
+firma/update siguen pendientes. Continuar hasta PR abierta para review manual autorizado.
 
 ### Autoplay Settings confirmado y regresión compartida cerrada
 
@@ -1489,7 +1492,7 @@ SLICE_3A. Próximo paso inmediato: commit/push, preparar commit limpio y princip
 No reemplazar todavía el último principal limpio57+2. Durante esa regresión
 puede avanzar UI futura no preparada de Subsonic/otros Settings, pero no fuentes
 nativas ni fixture ni recursos de pruebas del artifact. Después S3/DJ/Live/Auto/
-firma/update y PR/main/release autorizado. No cierre por slice.
+firma/update y PR abierta para review manual autorizado. No cierre por slice.
 
 ### Continuación S2ag durante principal limpia S2af
 
@@ -1506,7 +1509,7 @@ corregidos con labels reales y montaje/desmontaje real. Ruta Android conectada,
 adapter JS clipboard pendiente de plugin nativo y aceptación HTTP/TLS. No marcar
 Subsonic end to end aún; no afirmar cobertura browser4 de esta nueva extracción.
 Continuar principal, commit/push de evidencia aceptada y plugin/pruebas Subsonic,
-después DSP/DJ/Live/Auto/firma/update y PR/main/release. No cerrar por slice.
+después DSP/DJ/Live/Auto/firma/update y PR abierta para review manual. No cerrar por slice.
 
 ### Principal limpia S2af aceptada
 
@@ -1538,5 +1541,5 @@ detenido. UI web no cambió durante los runs. Cambios DSP sólo Native y docs,
 aún sin compilar/probar; ver SLICE_3A. No preparar ni ejecutar Gradle pesado
 durante browsers. Ahora compilar processor/kernel/tap y worker Core confirmado;
 conectar Native Track/contexto/Settings y demostrar PCM real antes de aceptar.
-No cerrar por S2ag: Settings restantes, DJ/Live/Auto/firma/update/PR/main/release
+No cerrar por S2ag: Settings restantes, DJ/Live/Auto/firma/update/PR abierta para review manual
 continúan autorizados, alpha de paridad completa únicamente.

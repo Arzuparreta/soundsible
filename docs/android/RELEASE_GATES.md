@@ -14,6 +14,15 @@ La firma debug no establece una identidad permanente: no garantizar actualizaci�
 entre runners que generan claves diferentes. Las actualizaciones públicas deben
 comprobarse con una clave permanente.
 
+## Revisión manual antes de publicación
+
+Instrucción del usuario actualizada el 2026-10-05: continuar hasta paridad completa
+con commit/push y dejar la PR abierta con los checks pasando. No hacer merge ni
+activar automerge. Preparar la documentación e instrucciones de alpha; la release
+queda pendiente de revisión manual del usuario y del merge. La autorización
+anterior de integrar/publicar queda revocada; cumplir los gates técnicos no
+habilita por sí solo el merge ni la publicación.
+
 ## Primera alpha
 
 Antes de habilitar el workflow de publicación deben cumplirse:
