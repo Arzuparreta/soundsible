@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-05",
+  "slice": "S3b isolated two-decoder single-output spike",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "16ed5d83",
+  "dirty_at_asset_prepare": false,
+  "checks": {
+    "jvm": {
+      "tests": 36,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-looper-foundation.log"
+    },
+    "mix_native": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-looper-native.log",
+      "scope": "HTTP/TLS actual mono16k and stereo48k decoders normalize to stereo48k; 440/880 spectrum during equal-power, local volume independent, outgoing release leaves incoming continuous"
+    },
+    "normal_apk_test_apk_lint": "passed after temporary CA removal"
+  },
+  "diagnostics": [
+    {
+      "log": "/tmp/soundsible-s3b-mix-foundation.log",
+      "reason": "Kotlin rejects Java OkHttp constructors; fixed extension calls"
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-native.log",
+      "reason": "System JDK rejected before instrumentation; repeated with JDK21"
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-native-jdk21.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Shared AudioOutputProvider requires one playback looper; cleanup requires Looper; common owned decoder thread and onReleased await fix tested"
+    }
+  ],
+  "limitations": [
+    "Isolated owner only; not connected to production service or DJ planner",
+    "No pause/seek/EOS/starvation/scope proof yet",
+    "No exact compressor acoustic parity or physical listening acceptance",
+    "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
+  ]
+}

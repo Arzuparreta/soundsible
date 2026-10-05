@@ -94,3 +94,11 @@ antes de cerrar el hilo. Kotlin/test/JVM36/lint pasan en
 /tmp/soundsible-s3b-mix-looper-foundation.log; repetir AudioTrack real antes de
 aceptarlo. El rechazo inicial de JDK sistema se conserva como diagnóstico en
 /tmp/soundsible-s3b-mix-native.log, sin instrumentación ejecutada.
+
+Segunda ejecución real aceptada: HTTP/TLS2/0/0/0 sur prepare propre16ed5d83,
+log /tmp/soundsible-s3b-mix-looper-native.log. Les deux formats distincts sont
+normalisés; amplitudes 440/880 mesurées durant equal-power; volume local0.1 ne
+change pas le tap et libérer le sortant conserve l'entrant. APK/test APK/JVM36/lint
+normaux après retrait CA passent. Voir evidence/s3b.json. Ce résultat reste un
+spike isolé: continuer pause/seek/EOS/starvation/scope et techniques, puis façade
+Player/MediaSession et planner; ne pas décrire DJ de production comme livré.
