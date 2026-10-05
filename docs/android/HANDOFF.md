@@ -36,24 +36,24 @@ historial del chat ni memoria privada. Ver [guía](../ANDROID.md),
 
 ## Estado actual de continuación
 
-S3a conecta nivelación nativa y tap PCM interno acotado del único servicio,
-después de DSP y antes de volumen local. WAV HTTP/TLS2 y FLAC HTTP/TLS2 pasan,
-incluidos medición R128 real, álbum/shuffle, seek, Activity/background y copias
-offline medidas con Core503. UI1550/196, JVM27 y APK/test APK/lint normales pasan.
-Ver [S3a](SLICE_3A.md) y [evidencia](evidence/s3a.json). Esta prueba dirigida no
-sustituye principal limpia73 anterior al DSP. Protocolo posterior force-stop
-prepare1/offline1 pasa con PCM1893, preferencia recuperada por perfil y Core503;
-normal APK/test APK/JVM27/lint también pasa. Facts generados Radio/autoplay
-con hash de grabación pasan Python79 (planner real WAV/FLAC) y Radio/parser/
-Autoplay6 HTTP/TLS, con PCM de ocurrencia generada y build normal. Próximo:
-regresión completa sobre commit limpio y [mezcla DJ](SLICE_3B.md).
-Primera principal S3a sobre4e5b981 termina78/2: PCM esperaba sólo dos temas en
-álbum que Radio de casos previos amplía. Fixture corregido con álbum PCM propio;
-Radio2→PCM2 HTTP/TLS y build normal pasan, sin borrar datos de otros casos.
-Log /tmp/soundsible-s3a-pcm-isolated-album-native.log. Repetir principal antes de
-reemplazar la evidencia limpia73 anterior; DJ no está implementado todavía.
-DJ/Live/Auto/firma/update siguen pendientes; continuar hasta paridad y después
-PR abierta para review manual autorizados, sin cerrar por slice. Browser4 final debe repetirse.
+S3a queda validado sobre commit limpio d049f40481dc1626d2d037186241dedffe794ed7
+(dirty=false): principal78/0, restart prepare1/0 y force-stop/offline1/0 con PCM
+real y preferencia por perfil. APK/test APK/JVM27/lint normales pasan después de
+retirar la CA temporal. Log /tmp/soundsible-s3a-main-isolated-clean-native.log;
+XML actual confirma78/0/0/0. Sustituye principal limpia73 anterior al DSP.
+WAV/FLAC dirigidos, Radio/parser/Autoplay6 y planner Python79 también pasan.
+Ver [S3a](SLICE_3A.md) y [evidencia](evidence/s3a.json). El primer principal78/2
+falló por asumir dos pistas en el álbum ampliado por Radio; se conserva diagnóstico
+y el fixture de álbum PCM propio corrige el problema sin borrar otras filas.
+
+Siguiente: integrar y compilar [mezcla DJ](SLICE_3B.md), probar dos decodificadores
+privados mono16k/estéreo48k normalizados a estéreo48k, con un único AudioTrack,
+FX/limiter y salida post-DSP/pre-volumen. Borradores en /tmp/soundsible-s3b-staging
+no están compilados ni aceptados. DJ/Live/Auto/Settings restantes/firma/update
+siguen pendientes; continuar hasta paridad sin cerrar por slice. Después dejar
+PR abierta con checks pasando para review manual, sin merge ni automerge.
+No publicar release antes de revisión y merge; preparar información de alpha.
+Browser4 final debe repetirse antes de abrir PR.
 
 Los apartados de entrega siguientes son históricos; usar el último y PORT_PLAN
 para saber qué falta. S2s conserva audio/ID al editar metadata/sidecar; S2t añade

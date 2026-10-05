@@ -61,6 +61,19 @@
       "skipped": 0,
       "log": "/tmp/soundsible-s3a-pcm-isolated-album-native.log",
       "scope": "Radio HTTP/TLS runs before PCM HTTP/TLS; separate two-recording PCM album preserves existing radio rows; normal APK/test APK/JVM27/lint pass"
+    },
+    "clean_full_regression": {
+      "source_revision": "d049f40481dc1626d2d037186241dedffe794ed7",
+      "dirty_at_asset_prepare": false,
+      "tests": 78,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "restart_prepare_tests": 1,
+      "restart_offline_tests": 1,
+      "jvm_tests": 27,
+      "normal_apk_test_apk_lint": "passed after temporary CA removal",
+      "log": "/tmp/soundsible-s3a-main-isolated-clean-native.log"
     }
   },
   "scope": [
@@ -70,7 +83,7 @@
     "Explicit measured offline copies; Core503 playback from Songs and album"
   ],
   "limitations": [
-    "Not a release; main clean73 and offline restart2 predate DSP",
+    "Development build only; complete Android parity and manual PR review remain pending",
     "No physical acoustic acceptance",
     "No DJ mixing or Live broadcast; tap is an internal bounded attachment",
     "Browser four profiles must repeat before final UI PR"
