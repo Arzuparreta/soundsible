@@ -217,8 +217,22 @@ def get_car_items(item_id: str):
     if item_id == "podcasts":
         return jsonify({"id": item_id, "items": _podcast_items(metadata), "status": "ok"})
 
+    if item_id.startswith("podcast:"):
+        feed_id = unquote(item_id.split(":", 1)[1])
+        subscriptions = getattr(metadata, "podcast_subscriptions", []) or []
+        known = any(str(sub.get("id") or sub.get("title") or "") == feed_id if isinstance(sub, dict)
+                    else str(getattr(sub, "id", "") or getattr(sub, "title", "")) == feed_id
+                    for sub in subscriptions)
+        if not known:
+            return jsonify({"error": "Podcast not found"}), 404
+        # Only acquired episodes in this account can become native sources.
+        episodes = [t for t in tracks if getattr(t, "media_kind", None) == "podcast_episode"
+                    and str(getattr(t, "podcast_feed_id", "") or "") == feed_id]
+        return jsonify({"id": item_id, "items": [_track_item(t) for t in episodes[:MAX_CAR_ITEMS]], "status": "ok"})
+
     if item_id == "radio":
-        seed_items = [_track_item(t) for t in tracks[:MAX_CAR_ITEMS]]
+        music = [t for t in tracks if getattr(t, "media_kind", None) != "podcast_episode"]
+        seed_items = [_track_item(t) for t in music[:MAX_CAR_ITEMS]]
         for item in seed_items:
             item["kind"] = "radio_seed"
             item["radio_seed_track_id"] = item.get("track_id")
