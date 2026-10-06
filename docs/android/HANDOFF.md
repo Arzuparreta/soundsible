@@ -150,3 +150,11 @@ no copiarlo sobre root actual. No aplicar stash/clone viejo. No merge/automerge/
 - Investigación Live anterior no implementada: JavaADM AudioRecord no es entrada
   PCM externa; SamplesReadyCallback no inyecta programa. Validar entrada post-DSP/
   pre-volumen sin micrófono y recepción independiente antes de claim de emisión.
+
+S4b relay nativo validado: Core HTTP/TLS crea sesión firmada en Community real;
+WHIP HTTPS autenticado → MediaMTX fijado por digest → WHEP HTTPS → PCM nativo.
+Mute local, pausa/silencio, resume, Activity cerrada y segundo publisher rechazado
+sin perder tap.2/0,runner exit0 + normal APK/test APK/JVM54/lint sin CA.
+Ver SLICE_4B/evidence/s4b.json. El runner inicia relay desechable automáticamente
+en principal o filtro LiveRelayTest. Siguiente prioridad: socket/lease y metadata
+de host desde servicio, adaptador UI y escucha MediaSession. No paridad todavía.

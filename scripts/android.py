@@ -113,6 +113,7 @@ def integration(*, restart_only: bool = False) -> None:
     from android_test_tls import create_fixture_tls
 
     processes: list[subprocess.Popen] = []
+    live_fixture = None
     certificate_resource = ANDROID / "app/src/debug/res/raw/android_fixture_ca.pem"
     policy_resource = ANDROID / "app/src/debug/res/xml/network_security_config.xml"
     if certificate_resource.exists() or policy_resource.exists():
@@ -122,6 +123,11 @@ def integration(*, restart_only: bool = False) -> None:
         with (ANDROID / "build/fixture.log").open("w") as log:
             try:
                 ca_path, certificate, key = create_fixture_tls(Path(temporary))
+                test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class", "")
+                if not restart_only and (not test_filter or "LiveRelayTest" in test_filter or os.environ.get("SOUNDSIBLE_ANDROID_LIVE_FIXTURE") == "1"):
+                    from android_live_fixture import LiveFixture
+                    live_fixture = LiveFixture(Path(temporary) / "live", ca_path, certificate, key, log)
+                    live_fixture.start()
                 certificate_resource.parent.mkdir(parents=True, exist_ok=True)
                 policy_resource.parent.mkdir(parents=True, exist_ok=True)
                 certificate_resource.write_bytes(ca_path.read_bytes())
@@ -163,6 +169,8 @@ def integration(*, restart_only: bool = False) -> None:
                         command.extend(("--tls-cert", str(certificate), "--tls-key", str(key)))
                     # Import project modules independently of the caller's working directory.
                     environment = {**os.environ, "PYTHONPATH": str(ROOT)}
+                    if live_fixture is not None:
+                        environment.update(SOUNDSIBLE_ANDROID_LIVE_FIXTURE="1", SOUNDSIBLE_COMMUNITY_URL="https://10.0.2.2:58443", REQUESTS_CA_BUNDLE=str(ca_path), NO_PROXY="10.0.2.2,127.0.0.1,localhost")
                     process = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=log, stderr=log)
                     processes.append(process)
                 # Each engine owns a separate database and port. Start all of them
@@ -268,6 +276,8 @@ def integration(*, restart_only: bool = False) -> None:
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait()
+                if live_fixture is not None:
+                    live_fixture.close()
                 certificate_resource.unlink(missing_ok=True)
                 policy_resource.unlink(missing_ok=True)
     # The distributed development APK is rebuilt without temporary test trust.

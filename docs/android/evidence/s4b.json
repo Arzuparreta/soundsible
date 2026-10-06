@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4b",
+  "channel": "development",
+  "base_revision": "0ada0a9a",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "scripts/android.py": "e7599abd784b75f8ef026e44889b3775b6746924350e9b8330cb1d1af5d882b9",
+    "scripts/android_fixture.py": "4f885b58d67c2179816fa24c9f88a88e5f6b54f9159481d27f71d4d69b26ad33",
+    "scripts/android_live_fixture.py": "54f8e5bf1dfe24b3c21ecd5396997ecc2f4505a7414ba04abd6a9573f1114a8c",
+    "android/app/src/main/java/com/soundsible/android/LivePeer.kt": "3f9c96440335021c4726a0572b74bd0fb478c995c13781af038554ad860d4fce",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveRelayTest.kt": "d6f0cc97a95ea5fc3a613205663ac0330df3062e7f80d7508886b11cc08f2637"
+  },
+  "tests": 2,
+  "failures": 0,
+  "skips": 0,
+  "seconds": 13.628,
+  "runner_exit": 0,
+  "log": "/tmp/soundsible-live-relay-verified-native.log",
+  "normal_build": "APK/test APK/JVM54/lint without temporary CA pass",
+  "proves": [
+    "Real signed Core HTTP/TLS session creation with disposable Community and pinned MediaMTX",
+    "TLS WHIP authenticated publisher -> TLS WHEP -> native decoded programme PCM",
+    "Mute local independent; pause remote silence; resume and Activity close retain received PCM",
+    "Second publisher rejected before stealing active capture"
+  ],
+  "limits": [
+    "No shared UI adapter, native room socket/lease/chat or listener MediaSession yet",
+    "No real Internet STUN/TURN, DJ relay or physical listening acceptance",
+    "Not current whole regression or parity"
+  ]
+}

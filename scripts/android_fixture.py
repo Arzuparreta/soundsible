@@ -43,6 +43,14 @@ def main() -> None:
     os.environ.pop("SOUNDSIBLE_ADMIN_TOKEN", None)
     os.environ.pop("SOUNDSIBLE_OWNER_TOKEN_FILE", None)
 
+    if os.environ.get("SOUNDSIBLE_ANDROID_LIVE_FIXTURE") == "1":
+        # Emulator gateway resolves to host loopback only inside this disposable engine.
+        import socket
+        resolve = socket.getaddrinfo
+        def fixture_resolve(host, *arguments, **keywords):
+            return resolve("127.0.0.1" if host == "10.0.2.2" else host, *arguments, **keywords)
+        socket.getaddrinfo = fixture_resolve
+
     from flask import jsonify, request, redirect
     from gevent import sleep
     from shared.runtime import RuntimeConfig, configure_runtime
