@@ -387,6 +387,24 @@ class PlaybackService : MediaLibraryService() {
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+                if (args.getString("action") == "retry" && liveListener != null) {
+                    return Futures.immediateFuture(try {
+                        require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player) && args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
+                        player.prepare(); player.play(); SessionResult(SessionResult.RESULT_SUCCESS)
+                    } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })
+                }
+                if (args.getString("action") in listOf("liveLeave", "livePause", "liveResume", "liveVolume")) {
+                    return Futures.immediateFuture(try {
+                        require(args.getLong("generation", -1) == connection.generation && liveListener != null)
+                        when (args.getString("action")) {
+                            "liveLeave" -> closeProgram()
+                            "livePause" -> player.pause()
+                            "liveResume" -> player.play()
+                            "liveVolume" -> { val volume = args.getFloat("volume", -1f); require(volume in 0f..1f); player.volume = volume }
+                        }
+                        SessionResult(SessionResult.RESULT_SUCCESS)
+                    } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })
+                }
                 if (args.getString("action") == "liveListen") {
                     return Futures.immediateFuture(try {
                         require(args.getLong("generation", -1) == connection.generation)
@@ -395,7 +413,9 @@ class PlaybackService : MediaLibraryService() {
                         val target = room.getString("whep_url").toHttpUrl()
                         require(target.isHttps && target.username.isEmpty() && target.password.isEmpty())
                         closeProgram()
-                        val listener = NativeLivePlayer(this@PlaybackService, connection, room).apply { volume = player.volume }
+                        val listener = NativeLivePlayer(this@PlaybackService, connection, room) { state ->
+                            session?.let { owner -> owner.setSessionExtras(Bundle(owner.sessionExtras).apply { putString("nativeLiveListener", state.toString()) }) }
+                        }.apply { volume = player.volume }
                         player.pause(); player.stop()
                         player.replaceBackend(listener).release(); liveListener = listener
                         player.prepare(); player.play()
@@ -407,7 +427,7 @@ class PlaybackService : MediaLibraryService() {
                     return when (args.getString("action")) {
                         "liveStart" -> liveHost.start(args.getString("title").orEmpty())
                         "liveTitle" -> liveHost.title(args.getString("title").orEmpty())
-                        "liveChat" -> liveHost.chat(args.getString("text").orEmpty())
+                        "liveChat" -> liveListener?.chat(args.getString("text").orEmpty()) ?: liveHost.chat(args.getString("text").orEmpty())
                         else -> liveHost.stop()
                     }
                 }

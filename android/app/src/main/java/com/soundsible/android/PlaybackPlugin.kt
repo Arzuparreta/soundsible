@@ -15,6 +15,8 @@ import com.google.common.util.concurrent.ListenableFuture
 @UnstableApi
 @CapacitorPlugin(name = "SoundsiblePlayback")
 class PlaybackPlugin : Plugin() {
+    private val liveRequests = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val liveWorker = java.util.concurrent.ThreadPoolExecutor(1, 1, 0, java.util.concurrent.TimeUnit.MILLISECONDS, java.util.concurrent.ArrayBlockingQueue<Runnable>(2))
     private var sequence = 0L
     private var alive = true
     private var visible = true
@@ -71,7 +73,57 @@ class PlaybackPlugin : Plugin() {
             .put("error", p?.playerError?.errorCode ?: 0)
             .put("errorStatus", if (authFailure) 401 else if (plannerError == 403) 403 else generateSequence(p?.playerError as Throwable?) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode ?: 0)
     }
-    private fun publish() { if (alive && visible) notifyListeners("playbackState", snapshot()) }
+    private fun liveSnapshot(): JSObject {
+        val generation = EngineConnection.shared(context).generation
+        fun scoped(key: String): JSObject? = controller?.sessionExtras?.getString(key)?.let { value ->
+            runCatching { JSObject(value).takeIf { it.optLong("generation", -1) == generation } }.getOrNull()
+        }
+        return JSObject().put("generation", generation).put("ready", controller != null)
+            .put("host", scoped("nativeLiveHost")).put("listener", scoped("nativeLiveListener"))
+    }
+    private fun publish() { if (alive && visible) { notifyListeners("playbackState", snapshot()); notifyListeners("nativeLiveState", liveSnapshot()) } }
+    @PluginMethod fun liveDirectory(call: PluginCall) {
+        val connection = EngineConnection.shared(context)
+        val generation = call.getInt("generation")?.toLong() ?: -1L
+        val id = "live-directory-${java.util.UUID.randomUUID()}"
+        liveRequests.add(id)
+        try { liveWorker.execute {
+            try {
+                require(alive && generation == connection.generation)
+                val result = NativeLiveDirectory.load(connection, generation, id)
+                main.post { if (alive && generation == connection.generation) call.resolve(result) else call.reject("Live session changed", "LIVE_DIRECTORY") }
+            } catch (_: NativeLiveAuthenticationExpired) { main.post { call.reject("Authentication expired", "AUTH_EXPIRED") } }
+            catch (_: Exception) { main.post { call.reject("Live directory unavailable", "LIVE_DIRECTORY") } }
+            finally { liveRequests.remove(id) }
+        } } catch (_: java.util.concurrent.RejectedExecutionException) { liveRequests.remove(id); call.reject("Live directory busy", "LIVE_DIRECTORY") }
+    }
+    @PluginMethod fun liveState(call: PluginCall) { main.post { call.resolve(liveSnapshot()) } }
+    @PluginMethod fun liveCommand(call: PluginCall) { main.post {
+        try {
+            val connection = EngineConnection.shared(context)
+            val generation = call.getInt("generation")?.toLong() ?: -1L
+            require(generation == connection.generation)
+            val active = controller ?: error("NOT_READY")
+            val action = call.getString("action") ?: error("NO_ACTION")
+            require(action in listOf("liveStart", "liveStop", "liveTitle", "liveChat", "liveListen", "liveLeave", "livePause", "liveResume", "liveVolume"))
+            val args = Bundle().apply {
+                putLong("generation", generation); putString("action", action)
+                putString("title", call.getString("title")); putString("text", call.getString("text")); putFloat("volume", (call.getDouble("volume") ?: -1.0).toFloat())
+                call.getObject("session")?.toString()?.let { require(it.length <= 65536); putString("session", it) }
+            }
+            val future = active.sendCustomCommand(ProgramQueue.command, args)
+            future.addListener({
+                try {
+                    val result = future.get()
+                    if (result.resultCode == androidx.media3.session.SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED) call.reject("Authentication expired", "AUTH_EXPIRED")
+                    else {
+                        require(alive && generation == connection.generation && result.resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS)
+                        call.resolve(liveSnapshot())
+                    }
+                } catch (_: Exception) { call.reject("Live command unavailable or session changed", "LIVE_COMMAND") }
+            }, { task -> main.post(task) })
+        } catch (_: Exception) { call.reject("Live unavailable or session changed", "LIVE_COMMAND") }
+    } }
     override fun handleOnPause() { visible = false; main.removeCallbacks(ticker) }
     override fun handleOnResume() { visible = true; main.removeCallbacks(ticker); if (controller != null) main.post(ticker) }
     @PluginMethod fun state(call: PluginCall) { main.post { call.resolve(snapshot()) } }
@@ -171,7 +223,7 @@ class PlaybackPlugin : Plugin() {
         main.postDelayed({ awaitClosed(call, player, connection, epoch, deadline) }, 20)
     }
     override fun handleOnDestroy() {
-        alive = false; main.removeCallbacksAndMessages(null); controller?.removeListener(listener)
+        alive = false; liveRequests.forEach { EngineConnection.shared(context).cancel(it) }; liveRequests.clear(); liveWorker.shutdownNow(); main.removeCallbacksAndMessages(null); controller?.removeListener(listener)
         pending?.let { MediaController.releaseFuture(it) }; controller = null
     }
 }

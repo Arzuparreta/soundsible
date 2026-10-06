@@ -135,6 +135,7 @@ export const zh: Dict = {
     shortcuts: '快捷访问',
   },
   live: {
+    leave: '离开房间',
     title: '直播',
     meta: 'Soundsible 社区现场会话',
     goLive: '开始直播',

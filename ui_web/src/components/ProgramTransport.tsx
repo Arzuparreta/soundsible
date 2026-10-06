@@ -20,6 +20,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
   createEffect(() => { occurrence(); setSeeking(null); });
   const run = (command: ProgramCommand) => { vibrate(); return props.command(command).catch(() => {}); };
   const disabled = () => !props.state.ready || props.pending;
+  const live = () => props.state.id.startsWith('soundsible:live:');
   return <section class={styles.program} data-testid="android-program" aria-label={t('nowPlaying.nowPlayingSection')} aria-busy={props.pending}>
     <div class={styles.heading}><span class={styles.artwork} data-program-artwork aria-hidden="true" style={coverStyle(props.state.id, programCover(props.state.items[props.state.index]))} />
     <p>{props.state.title || props.state.id}<br /><small>{props.state.artist}</small></p>
@@ -36,13 +37,13 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
       ];
       const enabled = props.state.autoplay?.enabled;
       const known = typeof enabled === 'boolean';
-      openContextMenu({ title: props.state.title, actions: [...(props.onLyrics && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' ? [{ label: t('nowPlaying.showLyrics'), onSelect: () => { if (props.state.generation === generation && !disabled()) props.onLyrics?.(); } }] : []), {
+      openContextMenu({ title: props.state.title, actions: [...(!live() && props.onLyrics && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' ? [{ label: t('nowPlaying.showLyrics'), onSelect: () => { if (props.state.generation === generation && !disabled()) props.onLyrics?.(); } }] : []), ...(!live() ? [{
         label: known ? t('settings.autoplay') : t('common.retry'), selected: enabled === true,
         disabled: props.state.autoplay?.settingsPhase === 'loading', onSelect: () => {
           if (disabled() || props.state.generation !== generation) return;
           void run({ action: 'autoplay', enabled: enabled !== true, reload: !known });
         },
-      }, ...(props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' && !props.state.dj?.active ? [{
+      }] : []), ...(!live() && props.state.items[props.state.index]?.mediaKind !== 'podcast_episode' && !props.state.dj?.active ? [{
         label: t('musicExplorer.startDjFromCurrent'),
         disabled: ['planning', 'warming'].includes(props.state.dj?.phase ?? ''),
         onSelect: () => {
@@ -87,7 +88,7 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
     <button disabled={disabled() || !props.state.hasPrevious} onClick={() => void run({ action: 'previous' })}>{t('common.prev')}</button>
     <button disabled={disabled()} onClick={() => void run({ action: props.state.playWhenReady ? 'pause' : 'play' })}>{props.state.playWhenReady ? t('common.pause') : t('common.play')}</button>
     <button disabled={disabled() || !props.state.hasNext} onClick={() => void run({ action: 'next' })}>{t('common.next')}</button>
-    <Show when={!props.state.dj?.active}><button disabled={disabled()} aria-pressed={props.state.shuffle} onClick={() => void run({ action: 'shuffle', enabled: !props.state.shuffle })}>{t('nowPlaying.shuffle')}</button>
+    <Show when={!live() && !props.state.dj?.active}><button disabled={disabled()} aria-pressed={props.state.shuffle} onClick={() => void run({ action: 'shuffle', enabled: !props.state.shuffle })}>{t('nowPlaying.shuffle')}</button>
     <label>{t('nowPlaying.repeat')} <select aria-label={t('nowPlaying.repeat')} value={props.state.repeat} disabled={disabled()} onChange={event => void run({ action: 'repeat', mode: Number(event.currentTarget.value) as 0 | 1 | 2 })}>
       <option value="0">{t('android.repeatOff')}</option><option value="1">{t('android.repeatOne')}</option><option value="2">{t('android.repeatAll')}</option>
     </select></label></Show>

@@ -135,6 +135,7 @@ export const es: Dict = {
     shortcuts: 'Accesos',
   },
   live: {
+    leave: 'Salir de la sala',
     title: 'Live',
     meta: 'Sesiones de la comunidad Soundsible',
     goLive: 'Emitir en directo',

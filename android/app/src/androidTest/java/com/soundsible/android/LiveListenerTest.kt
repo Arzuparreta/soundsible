@@ -40,6 +40,7 @@ class LiveListenerTest {
         var browser: MediaBrowser? = null
         var publisher: LivePeer? = null
         var receiving = false
+        var hostSocket: NativeCommunitySocket? = null
         var sessionId: String? = null
         fun <T> call(work: () -> com.google.common.util.concurrent.ListenableFuture<T>): T {
             val future = AtomicReference<com.google.common.util.concurrent.ListenableFuture<T>>()
@@ -80,6 +81,9 @@ class LiveListenerTest {
             }
             publisher = LivePeer(context, connection, room.getString("whip_url"), room.getString("publish_token"), true, {}, inputFactory = { input })
             publisher.start()
+            hostSocket = NativeCommunitySocket(room.getString("socket_url"), mapOf("session_id" to sessionId!!, "host_token" to room.getString("host_token")), android.os.Handler(android.os.Looper.getMainLooper()), { connection.generation == epoch }, { _, _ -> })
+            hostSocket.connect()
+            await("Synthetic publisher room socket did not connect") { hostSocket.connected() }
             NativeLivePlayer.decodedObservers.add(sink)
             instrumentation.runOnMainSync { active.volume = .8f }
             val selected = call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
@@ -92,6 +96,23 @@ class LiveListenerTest {
             await("MediaSession did not expose Live playback") {
                 instrumentation.runOnMainSync { playing.set(active.isPlaying && active.currentMediaItem?.mediaId == "soundsible:live:$sessionId" && !active.isCommandAvailable(androidx.media3.common.Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) }
                 playing.get()
+            }
+            hostSocket.emit("program_event", JSONObject().put("v", 1).put("seq", 1).put("emitted_at", System.currentTimeMillis())
+                .put("program_time", 1).put("transport", "playing").put("paused_since", JSONObject.NULL)
+                .put("primary", JSONObject().put("id", "remote-track").put("title", "Remote native song").put("artist", "Remote artist").put("position", 0).put("duration", 600).put("gain", 1))
+                .put("secondary", JSONObject.NULL).put("transition", JSONObject.NULL))
+            await("Guest metadata did not reach MediaSession") {
+                instrumentation.runOnMainSync { playing.set(active.mediaMetadata.title?.toString() == "Remote native song") }; playing.get()
+            }
+            val chat = call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
+                putString("action", "liveChat"); putString("text", "Native guest message"); putLong("generation", epoch)
+            }) }
+            assertEquals(androidx.media3.session.SessionResult.RESULT_SUCCESS, chat.resultCode)
+            await("Native guest chat echo missing") {
+                val observed = AtomicReference<String>()
+                instrumentation.runOnMainSync { observed.set(active.sessionExtras.getString("nativeLiveListener")) }
+                val messages = observed.get()?.let { JSONObject(it).optJSONArray("messages") }
+                messages != null && (0 until messages.length()).any { messages.getJSONObject(it).optString("text") == "Native guest message" && messages.getJSONObject(it).getJSONObject("sender").getString("kind") == "guest" }
             }
             // Actual decoded Live is not a source for a new native programme capture.
             LiveProgramInput(connection).use { programme ->
@@ -114,11 +135,16 @@ class LiveListenerTest {
             instrumentation.runOnMainSync { active.prepare(); active.play() }
             rms.set(0.0)
             await("Manual retry did not recover decoded Live") { rms.get() > 500 }
+            val leave = call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
+                putString("action", "liveLeave"); putLong("generation", epoch)
+            }) }
+            assertEquals(androidx.media3.session.SessionResult.RESULT_SUCCESS, leave.resultCode)
             // Canonical car selection returns to NORMAL and releases the Live backend.
             instrumentation.runOnMainSync { active.setMediaItem(song); active.prepare(); active.play() }
             await("Return to local programme failed") { instrumentation.runOnMainSync { playing.set(active.isPlaying && active.currentMediaItem?.mediaId == "member-track") }; playing.get() }
         } finally {
             NativeLivePlayer.decodedObservers.remove(sink)
+            hostSocket?.close()
             browser?.let { active -> if (receiving) instrumentation.runOnMainSync { active.pause(); active.stop() } }
             publisher?.close()
             sessionId?.let { request("/api/community/sessions/$it", "DELETE") }

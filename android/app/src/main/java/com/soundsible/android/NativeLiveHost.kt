@@ -78,6 +78,7 @@ internal class NativeLiveHost(
     private fun current(token: Long) = !closed && revision.get() == token && epoch == connection.generation
     private fun core(path: String, method: String, body: JSONObject? = null): JSONObject =
         connection.execute(path, method, body?.toString()?.toRequestBody("application/json".toMediaType()), emptyMap(), epoch, "live-host-${System.nanoTime()}", 15000).use {
+            if (it.code == 401) { connection.clearSession(false); throw NativeLiveAuthenticationExpired() }
             check(it.isSuccessful) { "LIVE_CORE_${it.code}" }
             val text = it.body?.string().orEmpty()
             if (text.isBlank()) JSONObject() else JSONObject(text)
@@ -105,7 +106,7 @@ internal class NativeLiveHost(
                 val endpoint = created.getString("socket_url").toHttpUrl()
                 require(endpoint.isHttps && endpoint.username.isEmpty() && endpoint.password.isEmpty())
                 val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
-                    .callTimeout(20, TimeUnit.SECONDS).addInterceptor { chain ->
+                    .readTimeout(40, TimeUnit.SECONDS).callTimeout(40, TimeUnit.SECONDS).addInterceptor { chain ->
                         val url = chain.request().url
                         if (url.scheme != endpoint.scheme || url.host != endpoint.host || url.port != endpoint.port) throw java.io.IOException("LIVE_SOCKET_ORIGIN")
                         chain.proceed(chain.request())
@@ -158,9 +159,9 @@ internal class NativeLiveHost(
                     if (current(token)) { main.removeCallbacks(tick); main.post(tick); publish(snapshot()); result.set(SessionResult(SessionResult.RESULT_SUCCESS, Bundle().apply { putString("liveSession", publicRoom(created).toString()) })) }
                     else result.set(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
                 }
-            } catch (_: Exception) {
+            } catch (error: Exception) {
                 release(true)
-                main.post { starting = false; publish(snapshot()); result.set(SessionResult(SessionError.ERROR_IO)) }
+                main.post { starting = false; publish(snapshot()); result.set(SessionResult(if (error is NativeLiveAuthenticationExpired) SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED else SessionError.ERROR_IO)) }
             }
         }
         return result
@@ -195,7 +196,7 @@ internal class NativeLiveHost(
                         result.set(SessionResult(SessionResult.RESULT_SUCCESS))
                     } else result.set(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
                 }
-            } catch (_: Exception) { result.set(SessionResult(SessionError.ERROR_IO)) }
+            } catch (error: Exception) { result.set(SessionResult(if (error is NativeLiveAuthenticationExpired) SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED else SessionError.ERROR_IO)) }
         }
         return result
     }

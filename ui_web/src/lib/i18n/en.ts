@@ -135,6 +135,7 @@ export const en = {
     shortcuts: 'Quick access',
   },
   live: {
+    leave: 'Leave room',
     title: 'Live',
     meta: 'Sessions from the Soundsible community',
     goLive: 'Go live',

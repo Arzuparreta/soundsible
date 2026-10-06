@@ -124,7 +124,7 @@ def integration(*, restart_only: bool = False) -> None:
             try:
                 ca_path, certificate, key = create_fixture_tls(Path(temporary))
                 test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class", "")
-                if not restart_only and (not test_filter or any(name in test_filter for name in ("LiveRelayTest", "LiveHostTest", "LiveListenerTest")) or os.environ.get("SOUNDSIBLE_ANDROID_LIVE_FIXTURE") == "1"):
+                if not restart_only and (not test_filter or any(name in test_filter for name in ("LiveRelayTest", "LiveHostTest", "LiveListenerTest", "LiveUiTest")) or os.environ.get("SOUNDSIBLE_ANDROID_LIVE_FIXTURE") == "1"):
                     from android_live_fixture import LiveFixture
                     live_fixture = LiveFixture(Path(temporary) / "live", ca_path, certificate, key, log)
                     live_fixture.start()

@@ -173,3 +173,15 @@ a NORMAL; Live recibido no se recaptura para emisión. Fix real: comandos de
 selección de música al salir de Live. Ver SLICE_4D/evidence/s4d.json.
 Siguiente: controles UI + guest socket/metadata/artwork, después DJ/recovery.
 No suite activa tras exec11498. AVD5554 sigue. PR sólo abierta/revisión manual.
+
+S4e UI/guest nativo: directorio por NativeLiveDirectory (WebView bloquea JSON
+remoto), host y guest controles/chat reales desde Solid→Capacitor→servicio.
+Guest recibe programa/metadata MediaSession/chat/presencia/fin desde socket nativo.
+Estado JS sin tokens. Escucha oculta cola/letras/DJ/autoplay como acciones de canción.
+Combinado11/0,71.289s antes del probe401; intento final11/2 sólo por marcador
+fixture omitido en ambos probesUI (otros9 pasan). Corregido test; UI2/0,20.704s,
+runner exit0 + normal APK/test APK/JVM54/lint.205/1599 y TypeScript pasan.
+UI prueba emisión/título/chat/fin y directorio/escucha PCM/pausa/volumen/chat/salida,
+además401 real→login/biblioteca/panel retirados. Ver SLICE_4E/evidence/s4e.json.
+Siguiente Live: DJ/transition metadata + artwork públicos; recovery de media/red/
+lease y handshake/reset/proceso. No suite activa tras exec29062. AVD5554 sigue.
