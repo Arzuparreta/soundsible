@@ -233,3 +233,11 @@ sin identidad deben prepararse de nuevo para matching. Intentos previos sin AVD
 y compile del test por API OkHttp obsoleta no son evidencia funcional; corregidos.
 Fuentes descongeladas; AVD reiniciado headless sigue conectado. Próximo cola1000
 DJ mediante servicio/controller; después negativos Core y regresión actual.
+
+Cola larga servicio/controller validada sobre6bd23fc4 dirty: DJ2/0 HTTP/TLS,
+23.115s; APK/test APK/JVM54/lint sin CA pasa, runner exit0.
+/tmp/soundsible-s3b-service-history-native.log. Core DJ real + append hasta1000,
+MediaController seek996/6000ms, recorte a4 preserva KEY/token/posición/pausa,
+append a5 y resume PCM48k no silencioso. Es stress acotado mediante seek, no
+1000 canciones naturales ni soak de días. Fuentes descongeladas. Siguiente:
+negativos Core/refiner y regresión principal actual; Auto/Live/teléfono/firma pendientes.

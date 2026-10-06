@@ -30,7 +30,9 @@ import kotlin.math.hypot
 class DjProgramTest {
     @Test fun httpDjFromCurrent() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"))
     @Test fun tlsDjFromCurrent() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"))
-    private fun run(origin: String?) {
+    @Test fun httpLongRouteThroughController() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), true)
+    @Test fun tlsLongRouteThroughController() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), true)
+    private fun run(origin: String?, history: Boolean = false) {
         assumeNotNull(origin)
         val connection = EngineConnection.shared(InstrumentationRegistry.getInstrumentation().targetContext)
         connection.clearSession(true)
@@ -96,6 +98,36 @@ class DjProgramTest {
                 waitFor("window.__dj.dj?.active && window.__dj.playing && window.__dj.items.length>1")
                 assertEquals(key, web.evaluate(scenario, "window.__dj.items[0].key"))
                 assertEquals("false", web.evaluate(scenario, "!!document.querySelector('audio')"))
+                if (history) {
+                    instrumentation.runOnMainSync { controller.pause() }
+                    waitFor("!window.__dj.playWhenReady")
+                    command("action:'append',tracks:Array.from({length:1000-window.__dj.items.length},(_,i)=>({source:'local',id:'member-pcm-soft',title:'Long route '+i,artist:'member artist',duration:20}))")
+                    waitFor("window.__dj.items.length===1000")
+                    val retainedKey = web.evaluate(scenario, "window.__dj.items[996].key")
+                    val retainedProgram = web.evaluate(scenario, "window.__dj.programToken")
+                    instrumentation.runOnMainSync { assertEquals(1000, controller.mediaItemCount); controller.seekTo(996, 6000) }
+                    waitFor("window.__dj.items.length===4 && window.__dj.index===0 && window.__dj.items[0].key==$retainedKey")
+                    assertEquals(retainedProgram, web.evaluate(scenario, "window.__dj.programToken"))
+                    assertEquals("false", web.evaluate(scenario, "window.__dj.playWhenReady"))
+                    assertEquals(6000.0, web.evaluate(scenario, "window.__dj.positionMs").toDouble(), 150.0)
+                    command("action:'append',tracks:[{source:'local',id:'member-pcm-loud',title:'After prune',artist:'member artist',duration:60}]")
+                    waitFor("window.__dj.items.length===5")
+                    assertEquals(retainedKey, web.evaluate(scenario, "window.__dj.items[0].key"))
+                    val resumedPcm = AtomicBoolean()
+                    NativeProgramOutput.subscribe(connection.generation) { block ->
+                        if (block.sampleRate == 48000 && block.channels == 2 && block.bytes.any { it != 0.toByte() }) resumedPcm.set(true)
+                    }.use { resumed ->
+                        instrumentation.runOnMainSync { controller.play() }
+                        waitFor("window.__dj.playing")
+                        val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+                        while (!resumedPcm.get() && System.nanoTime() < until) Thread.sleep(50)
+                        assertTrue("Pruned service route did not resume PCM", resumedPcm.get())
+                        assertFalse(resumed.failed.get())
+                        instrumentation.runOnMainSync { assertEquals(5, controller.mediaItemCount); assertEquals(0, controller.currentMediaItemIndex) }
+                    }
+                    command("action:'stop'")
+                    return
+                }
                 waitFor("window.__dj.dj.editableFrom>window.__dj.index+1")
                 waitFor("Array.from(document.querySelectorAll('[data-queue-key]')).find(row=>row.dataset.queueKey===window.__dj.items[window.__dj.index+1]?.key)?.textContent.includes('Cued')===true")
                 scenario.moveToState(Lifecycle.State.CREATED)

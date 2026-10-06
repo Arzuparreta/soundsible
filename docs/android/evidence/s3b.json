@@ -583,5 +583,25 @@
       "Full current regression and service/controller long1000 session pending",
       "Not complete DJ parity"
     ]
+  },
+  "long_route_service_controller": {
+    "source_base_revision": "6bd23fc4",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "instrumentation_seconds": 23.115,
+    "log": "/tmp/soundsible-s3b-service-history-native.log",
+    "normal_build": "APK/test APK/JVM54/lint passed without temporary CA",
+    "proves": [
+      "Real Core DJ plan and production service receives append up to1000 occurrences",
+      "MediaController sees1000 and seeks occurrence996 at6000ms",
+      "Service prunes prior996 while retaining current KEY programme token position and pause",
+      "Append after pruning accepted; MediaController resumes nonzero stereo48k PCM"
+    ],
+    "limits": [
+      "Bounded stress test with seek, not1000 naturally completed songs or multi-day soak",
+      "All malformed/stale endpoint cases and full current regression pending",
+      "Not complete DJ parity or physical acoustic acceptance"
+    ]
   }
 }
