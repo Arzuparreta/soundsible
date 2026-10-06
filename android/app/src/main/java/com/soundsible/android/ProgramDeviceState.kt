@@ -9,7 +9,10 @@ import org.json.JSONObject
 /** Shared playbackSession v1 wire format. Native source URLs/cookies never travel. */
 @UnstableApi
 internal object ProgramDeviceState {
-    data class Restored(val rows: JSONArray, val index: Int, val positionMs: Long, val shuffle: Boolean, val repeat: Int)
+    private const val DEVICE_PLAN = "soundsible_device_plan"
+    private const val DEVICE_ROUTE = "soundsible_device_route"
+    private const val DEVICE_YOUTUBE = "soundsible_device_youtube"
+    data class Restored(val rows: JSONArray, val index: Int, val positionMs: Long, val shuffle: Boolean, val repeat: Int, val workspace: JSONObject? = null, val entries: JSONArray? = null)
     fun track(item: MediaItem): JSONObject {
         val extras = item.mediaMetadata.extras
         val source = extras?.getString(ProgramQueue.SOURCE)
@@ -19,6 +22,11 @@ internal object ProgramDeviceState {
             .put("duration", extras?.getDouble(ProgramPcmProcessor.DURATION, 0.0) ?: 0.0).apply {
                 if (source == "preview" || source == "podcast") put("source", "preview")
                 if (source == "preview") put("youtube_id", id)
+                extras?.getString(DEVICE_YOUTUBE)?.takeIf { Regex("^[A-Za-z0-9_-]{11}$").matches(it) }?.let { put("youtube_id", it) }
+                extras?.let { facts ->
+                    if (facts.containsKey(ProgramPcmProcessor.LUFS)) put("loudness_lufs", facts.getDouble(ProgramPcmProcessor.LUFS))
+                    if (facts.containsKey(ProgramPcmProcessor.PEAK)) put("loudness_peak_dbtp", facts.getDouble(ProgramPcmProcessor.PEAK))
+                }
                 if (extras?.getBoolean(ProgramQueue.PODCAST) == true) {
                     put("media_kind", "podcast_episode"); put("podcast_enclosure_url", extras.getString(ProgramQueue.ENCLOSURE))
                     put("podcast_episode_guid", extras.getString(ProgramQueue.EPISODE)); put("podcast_feed_id", extras.getString(ProgramQueue.FEED))
@@ -40,12 +48,69 @@ internal object ProgramDeviceState {
         return JSONObject().put("track_id", track(player.getMediaItemAt(index)).getString("id")).put("track", track(player.getMediaItemAt(index)))
             .put("position_sec", player.currentPosition.coerceAtLeast(0) / 1000.0).put("is_playing", player.isPlaying).put("session", session)
     }
+    fun snapshotDj(player: Player, dj: ProgramDjSession, planner: ProgramDjPlanner): JSONObject? {
+        val body = snapshot(player) ?: return null
+        val session = body.getJSONObject("session"); val queue = session.getJSONArray("queue")
+        val route = dj.routeSnapshot().rows.associateBy { it.item.mediaMetadata.extras?.getString(ProgramQueue.KEY) }
+        val plan = JSONObject()
+        for (i in 0 until queue.length()) {
+            val entry = queue.getJSONObject(i); val key = entry.getString("queueId"); val native = route[key] ?: continue
+            entry.put("queueSource", "auto_mode").put("queueLane", if (native.kind == "user") "manual" else "generated")
+            entry.put("autoRoute", (native.item.mediaMetadata.extras?.getString(DEVICE_ROUTE)?.let(::JSONObject)?.put("kind", native.kind) ?: JSONObject().put("kind", native.kind)).put("placement", if (native.kind == "user") "fixed" else "dj").apply {
+                native.ownerKey?.let { put("ownerQueueId", it) }
+            })
+            native.proposal?.let { proposal ->
+                val transition = JSONObject().put("technique", proposal.technique.name.lowercase(java.util.Locale.ROOT))
+                    .put("out_cue", if (proposal.outCue.isFinite()) proposal.outCue else JSONObject.NULL)
+                    .put("in_cue", proposal.inCue.takeIf { it.isFinite() } ?: 0.0).put("overlap_seconds", proposal.overlap.takeIf { it.isFinite() } ?: 6.0)
+                    .put("playback_rate", proposal.rate.takeIf { it.isFinite() } ?: 1.0).put("confidence", proposal.confidence.takeIf { it.isFinite() } ?: 0.0)
+                    .put("overlap_bars", 0).put("score", 0).put("fallback", proposal.confidence < 0.35)
+                    .put("sync", JSONObject().put("out_period", 0).put("in_period", 0).put("phase_tolerance_ms", proposal.phaseToleranceMs.takeIf { it.isFinite() } ?: 5.0).put("grid_source", "estimated"))
+                val previous = route[proposal.fromKey]?.item?.let(::track)
+                if (previous != null) {
+                    val inherited = native.item.mediaMetadata.extras?.getString(DEVICE_PLAN)?.let(::JSONObject) ?: JSONObject()
+                        .put("source", if (entry.optString("source") == "preview") "related" else "local").put("reasonKey", "autoMode.reason.library")
+                    plan.put(key, inherited.put("trackId", entry.optString("youtube_id").ifBlank { entry.getString("id") })
+                        .put("fromKey", previous.optString("youtube_id").ifBlank { previous.getString("id") }).put("transition", transition))
+                }
+            }
+        }
+        val workspace = planner.workspace().put("heard", JSONArray().apply { dj.heardIds().toList().takeLast(15).forEach { put(JSONObject().put("id", it)) } })
+            .put("plan", plan).put("staleSeams", JSONArray())
+        session.put("mode", "auto").put("auto", workspace)
+        return body
+    }
+    fun djRows(connection: EngineConnection, restored: Restored, planner: ProgramDjPlanner): List<ProgramDjSession.Row> {
+        val entries = restored.entries ?: error("REMOTE_DJ_QUEUE_MISSING")
+        val items = ProgramQueue.items(connection, restored.rows)
+        val keys = items.indices.associate { i -> entries.getJSONObject(i).getString("queueId") to items[i].mediaMetadata.extras!!.getString(ProgramQueue.KEY)!! }
+        val plan = restored.workspace?.optJSONObject("plan") ?: JSONObject()
+        return items.indices.map { i ->
+            val entry = entries.getJSONObject(i); val route = entry.optJSONObject("autoRoute")
+            val kind = route?.optString("kind", "generated") ?: "generated"
+            require(kind in listOf("user", "generated", "bridge"))
+            val owner = route?.optString("ownerQueueId")?.takeIf { it.isNotBlank() }
+            val planned = plan.optJSONObject(entry.getString("queueId"))
+            val item = items[i].buildUpon().setMediaMetadata(items[i].mediaMetadata.buildUpon().setExtras(android.os.Bundle(items[i].mediaMetadata.extras).apply {
+                planned?.let { putString(DEVICE_PLAN, it.toString()) }
+                route?.let { putString(DEVICE_ROUTE, it.toString()) }
+                entry.optString("youtube_id").takeIf { Regex("^[A-Za-z0-9_-]{11}$").matches(it) }?.let { putString(DEVICE_YOUTUBE, it) }
+                if (kind == "bridge") { require(owner != null && keys.containsKey(owner)); putString(ProgramQueue.BRIDGE_OWNER, keys[owner]) }
+            }).build()).build()
+            val previousEntry = entries.optJSONObject(i - 1)
+            val from = planned?.optString("fromKey")
+            val previousIdentity = previousEntry?.optString("youtube_id")?.ifBlank { previousEntry.optString("id") }
+            val previousKey = items.getOrNull(i - 1)?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
+            ProgramDjSession.Row(item, if (planned != null && from == previousIdentity && previousKey != null) planner.proposal(planned, previousKey) else null, kind)
+        }
+    }
     private fun row(track: JSONObject): JSONObject {
         require(!track.has("pendingResolve")) { "REMOTE_CATALOG_UNRESOLVED" }
         val podcast = track.optString("media_kind") == "podcast_episode"
         val source = if (track.optString("source") == "preview") { if (podcast) "podcast" else "preview" } else "local"
         return JSONObject().put("source", source).put("id", track.getString("id")).put("title", track.optString("title"))
             .put("artist", track.optString("artist")).put("album", track.optString("album")).put("duration", track.optDouble("duration", 0.0)).apply {
+                for (name in listOf("loudness_lufs", "loudness_peak_dbtp")) track.optDouble(name, Double.NaN).takeIf { it.isFinite() }?.let { put(name, it) }
                 if (podcast) { put("mediaKind", "podcast_episode"); put("enclosure", track.optString("podcast_enclosure_url"))
                     put("episodeGuid", track.optString("podcast_episode_guid")); put("feedId", track.optString("podcast_feed_id")) }
             }
@@ -53,7 +118,12 @@ internal object ProgramDeviceState {
     fun restore(payload: JSONObject): Restored? {
         val state = payload.optJSONObject("state") ?: JSONObject()
         val session = state.optJSONObject("session")
-        if (session?.optString("mode") == "auto") return null // DJ workspace restore is a separate explicit acceptance gate.
+        val workspace = if (session?.optString("mode") == "auto") session.optJSONObject("auto") ?: error("REMOTE_DJ_WORKSPACE_MISSING") else null
+        if (workspace != null) {
+            require(workspace.optString("djProfile", "adaptive") in listOf("adaptive", "long_blend", "cuts_drops", "open_format"))
+            require(workspace.toString().length <= 131072)
+            require(session != null && session.optInt("v") == 1 && session.optJSONArray("queue")?.length() in 1..46)
+        }
         val position = state.optDouble("position_sec", 0.0).takeIf { it.isFinite() && it >= 0 && it <= 604800 } ?: 0.0
         if (session?.optInt("v") == 1) {
             val queue = session.optJSONArray("queue")
@@ -66,7 +136,7 @@ internal object ProgramDeviceState {
                 }
                 val index = session.optInt("index", 0).coerceIn(0, rows.length() - 1)
                 return Restored(rows, index, (position * 1000).toLong(), session.optBoolean("shuffle"),
-                    when (session.optString("repeat")) { "all" -> Player.REPEAT_MODE_ALL; "one" -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF })
+                    when (session.optString("repeat")) { "all" -> Player.REPEAT_MODE_ALL; "one" -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF }, workspace, queue)
             }
         }
         val track = payload.optJSONObject("track") ?: return null

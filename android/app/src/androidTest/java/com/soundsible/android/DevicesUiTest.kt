@@ -76,7 +76,7 @@ class DevicesUiTest {
                 val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
                 while (System.nanoTime() < until && !main { active.isPlaying }) Thread.sleep(50)
                 assertTrue(main { active.isPlaying })
-                main { active.seekTo(54321); active.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL; active.shuffleModeEnabled = true }
+                main { active.seekTo(8321); active.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL; active.shuffleModeEnabled = true }
                 waitFor("!!document.querySelector('[data-testid=android-settings-devices] button:not(:disabled)')&&Array.from(document.querySelectorAll('[data-testid=android-settings-devices] button')).some(b=>b.textContent==='Transfer playback'&&!b.disabled)")
                 latestStart.set(null)
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-settings-devices] button')).find(b=>b.textContent==='Transfer playback').click()")
@@ -87,7 +87,7 @@ class DevicesUiTest {
                 assertEquals(2, session.getJSONArray("queue").length()); assertEquals(1, session.getInt("index"))
                 assertEquals("Native second", session.getJSONArray("queue").getJSONObject(1).getString("title"))
                 assertEquals("all", session.getString("repeat")); assertTrue(session.getBoolean("shuffle"))
-                assertTrue("Outgoing position was stale", state.getDouble("position_sec") in 54.0..65.0)
+                assertTrue("Outgoing position was stale", state.getDouble("position_sec") in 8.0..18.0)
                 val stopped = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
                 while (System.nanoTime() < stopped && main { active.playWhenReady }) Thread.sleep(50)
                 assertFalse("Handoff did not stop native source", main { active.playWhenReady })

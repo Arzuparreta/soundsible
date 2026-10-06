@@ -318,3 +318,16 @@ covered by final UI typecheck/tests; no four-language native claim. SLICE_2AN an
 evidence/s2an.json. Outgoing DJ disabled until workspace restore complete. Next
 DJ/Radio/pending catalog and device reconnect exhaustion; then remaining public
 invites/pairing, DJ/Auto negatives, distribution, principal/browser4. Continue.
+
+S2ao accepted: shared auto workspace restored in native dual decoders at index/
+position with source trays/direction/profile/heard/avoid/exploration and proposals.
+Wire transition fromKey = musical identity, native fromKey = preceding occurrence;
+bridge owners remapped; public plan labels preserved. Genuine Core handoff marker
+prevents same-queue resume optimization discarding edits from another device.
+Native DJ background controls and incoming/outgoing PCM/socket contract, returned
+direction edit and malformed-profile refusal pass HTTP/TLS; combined6/0,51.706s;
+Core16/0; runner exit0 + normal APK/test/JVM56/lint. SLICE_2AO/evidence/s2ao.json.
+NORMAL test seeks shortened for independence from short PCM fixtures; historical
+54s/123s evidence unchanged. Next Radio workspace + pending catalog resolution,
+device reconnection exhaustion, public invites/pairing, broader negatives,
+distribution and final principal/browser4. Do not merge/automerge/publish.

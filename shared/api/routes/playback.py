@@ -245,8 +245,10 @@ def _emit_playback_stop(api, scope: str, device_id: str) -> None:
     api["socketio"].emit("playback_stop_requested", {}, room=_playback_room(scope, device_id))
 
 
-def _emit_playback_start(api, scope: str, device_id: str, state: dict, track: dict | None = None) -> None:
+def _emit_playback_start(api, scope: str, device_id: str, state: dict, track: dict | None = None, *, handoff: bool = False) -> None:
     payload = {"state": state}
+    if handoff:
+        payload["handoff"] = True
     if track:
         payload["track"] = track
     api["socketio"].emit("playback_start_requested", payload, room=_playback_room(scope, device_id))
@@ -1302,7 +1304,7 @@ def playback_handoff():
     if not track_payload and isinstance(target_state.get("track"), dict):
         track_payload = target_state["track"]
 
-    _emit_playback_start(api, scope, to_device_id, target_state, track=track_payload)
+    _emit_playback_start(api, scope, to_device_id, target_state, track=track_payload, handoff=True)
     response = {
         "status": "sent",
         "from_device_id": from_device_id,

@@ -20,7 +20,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
     private val ownsAccount: () -> Boolean, private val sources: MediaSource.Factory,
     private val tap: ProgramPcmTap, private val leveling: () -> Boolean,
     initial: List<Row>, startPositionMs: Long = 0, private val mixing: () -> Boolean = { true },
-    private val refine: (ProgramDjSession) -> Unit = {}, private val changed: () -> Unit = {}) : AutoCloseable {
+    private val refine: (ProgramDjSession) -> Unit = {}, private val changed: () -> Unit = {}, startIndex: Int = 0, initialHeard: Set<String> = emptySet()) : AutoCloseable {
     companion object { const val CONTEXT_LEAD = "soundsible_dj_context_lead" }
     data class Row(val item: MediaItem, val proposal: ProgramDjPlan.Proposal? = null, val kind: String = "user") {
         val ownerKey: String? get() = item.mediaMetadata.extras?.getString(ProgramQueue.BRIDGE_OWNER)
@@ -42,9 +42,9 @@ internal class ProgramDjSession(private val context: Context, private val genera
     private var route = initial.toList()
     private var contextLead = initial.drop(1).firstOrNull { it.item.mediaMetadata.extras?.getBoolean(CONTEXT_LEAD) == true }?.item?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
     private var routeRevision = 0L
-    private val heard = linkedSetOf<String>()
-    private val indices = intArrayOf(0, -1)
-    private var current = 0
+    private val heard = linkedSetOf<String>().apply { addAll(initialHeard.take(80)) }
+    private val indices = intArrayOf(startIndex, -1)
+    private var current = startIndex
     private var armed = false
     private var recovering = false
     private var pendingSince = 0L
@@ -69,11 +69,11 @@ internal class ProgramDjSession(private val context: Context, private val genera
     }
     init {
         check(Looper.myLooper() == main.looper)
-        require(initial.isNotEmpty() && initial.size <= ProgramQueue.LIMIT && startPositionMs >= 0)
+        require(initial.isNotEmpty() && initial.size <= ProgramQueue.LIMIT && startPositionMs >= 0 && startIndex in initial.indices)
         require(initial.all { it.item.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true })
         player = ProgramMixPlayer(context, output, decks, ::owns, ::decoderFailed,
             { slot -> ProgramMixPlayer.View(route.map { it.item }, indices[slot].takeIf { it in route.indices } ?: current) }, ::seek, ::editPlaylist)
-        load(0, 0, startPositionMs, 1f)
+        load(0, startIndex, startPositionMs, 1f)
         main.post(tick)
     }
     private fun decoder(index: Int): ExoPlayer {

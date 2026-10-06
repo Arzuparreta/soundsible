@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2ao",
+  "channel": "development",
+  "base_revision": "46955670",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "4af799d299d67f1f44957fcb8537bc60c1edae77cd32576dac5d32ed0e262cce",
+    "android/app/src/main/java/com/soundsible/android/ProgramDeviceState.kt": "5cda83350c124ed01bf1ab2cfe076412a536305af7d031c338413d21169beabd",
+    "android/app/src/main/java/com/soundsible/android/ProgramDjPlanner.kt": "2f33342b2a0f228e213531e5952e551c6c352d5a86cbb76408705d0fe5940ce7",
+    "android/app/src/main/java/com/soundsible/android/ProgramDjSession.kt": "b5dd54f13cdc5a8933480644b68ac1219ff8bdaeee56d625b1300879f0bace0c",
+    "android/app/src/androidTest/java/com/soundsible/android/DeviceDjSessionTest.kt": "fcec0d3031bf5e512719e85305c814fa265eda7456b8ecf3b150bbabeb02e2a1",
+    "android/app/src/androidTest/java/com/soundsible/android/DeviceSessionTest.kt": "c9089e0a610beea231d2f97c581996067a947feb251e9f06388835dfb0cc4cbf",
+    "android/app/src/androidTest/java/com/soundsible/android/DevicesUiTest.kt": "72302d565fffe03932d16b3d165460a0fee1f7d32360874bfdd8e06d96bd5726",
+    "shared/api/routes/playback.py": "817ceeace9183aa2fbe1e39171d9c114bee7e58d57260cea8a8e1091feeb53b5",
+    "tests/test_playback_car_commands.py": "ecb5b5392af88084f45edb491eb4e3bb675aa93d09f35840a23a9bd845132d51"
+  },
+  "core": {
+    "tests": 16,
+    "failures": 0
+  },
+  "native": {
+    "tests": 6,
+    "failures": 0,
+    "seconds": 51.706,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-dj-device-final-native.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Resolved local DJ workspace enters dual-decoder native engine at index/position with PCM",
+    "Profile/direction/sources/explicit policy/heard/avoid/plan and bridge ownership round trip",
+    "Background pause/play/seek/next/previous; remote resume retains occurrence keys",
+    "Native DJ outgoing handoff reaches real Core peer socket",
+    "Returned same queue receives edited direction and source label",
+    "Malformed DJ profile retains valid paused native programme",
+    "NORMAL and visible device control regression"
+  ],
+  "limits": [
+    "Outgoing peer verifies contract, not audio",
+    "One planned local route; not all techniques/source combinations",
+    "Radio/pending catalog/reconnect exhaustion pending",
+    "No physical phone/car evidence"
+  ]
+}

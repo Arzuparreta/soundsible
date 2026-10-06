@@ -78,7 +78,7 @@ class DeviceSessionTest {
             assertEquals(key, main { ProgramQueue.key(active, 0) })
             remote("play"); pcm.set(false); await("Remote play did not restore PCM") { NativeProgramOutput.playing && pcm.get() }
             assertEquals("Remote resume replaced occurrence identity", key, main { ProgramQueue.key(active, 0) })
-            remote("seek", JSONObject().put("position_sec", 30)); await("Remote seek failed") { main { active.currentPosition in 30000..35000 } }
+            remote("seek", JSONObject().put("position_sec", 8)); await("Remote seek failed") { main { active.currentPosition in 8000..13000 } }
             remote("next"); await("Remote next lost duplicate occurrence") { main { active.currentMediaItemIndex == 1 && active.mediaMetadata.title.toString() == "Second occurrence" } }
             remote("previous"); await("Remote previous failed") { main { active.currentMediaItemIndex == 0 } }
             request("/api/playback/remote-command", "POST", JSONObject().put("device_id", id).put("command", "pause"), cookie = otherCookie, expected = 404)
@@ -93,11 +93,11 @@ class DeviceSessionTest {
             val session = JSONObject().put("v", 1).put("mode", "now_playing").put("queue", remoteQueue).put("index", 1)
                 .put("shuffle", true).put("repeat", "one").put("radio", JSONObject().put("active", false).put("seedId", JSONObject.NULL)).put("auto", JSONObject.NULL)
             request("/api/playback/state", "PUT", JSONObject().put("device_id", peerId).put("track_id", "member-track").put("track", remoteQueue.getJSONObject(1))
-                .put("position_sec", 123).put("is_playing", false).put("session", session))
+                .put("position_sec", 5).put("is_playing", false).put("session", session))
             request("/api/playback/handoff", "POST", JSONObject().put("from_device_id", peerId).put("to_device_id", id))
             pcm.set(false)
             await("Handoff did not restore queue/position/preferences and PCM") { main { active.mediaItemCount == 2 && active.currentMediaItemIndex == 1 && active.mediaMetadata.title.toString() == "Remote second" &&
-                active.currentPosition in 123000..128000 && active.shuffleModeEnabled && active.repeatMode == Player.REPEAT_MODE_ONE && active.isPlaying } && pcm.get() }
+                active.currentPosition in 5000..10000 && active.shuffleModeEnabled && active.repeatMode == Player.REPEAT_MODE_ONE && active.isPlaying } && pcm.get() }
             await("Handoff queue was not republished") { request("/api/playback/state").optJSONObject("session")?.optString("repeat") == "one" }
             main { connection.clearSession(false) }
             await("Logout left native device socket authorized") { device()?.optBoolean("connected") != true }

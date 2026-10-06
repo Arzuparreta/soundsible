@@ -51,6 +51,7 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var podcasts: PodcastProgressStore
     private val progressTicker = object : Runnable { override fun run() { if (session != null) { savePodcast(); maybeRefill(); main.postDelayed(this, 5000) } } }
     private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
+    private lateinit var installDj: (List<ProgramDjSession.Row>, Long, Int, Set<String>) -> Unit
     private lateinit var deviceSession: NativeDeviceSession
     private lateinit var liveHost: NativeLiveHost
     private lateinit var carArt: ProgramCarArtwork
@@ -106,6 +107,7 @@ class PlaybackService : MediaLibraryService() {
     private fun orgJson(value: String) = org.json.JSONObject(value)
     private fun publishDj(phase: String, profile: String, code: Int) {
         djPhase = phase; djProfile = profile; djError = code
+        if (::deviceSession.isInitialized) deviceSession.changed()
         session?.let { owner -> owner.setSessionExtras(Bundle(owner.sessionExtras).apply {
             putLong("djGeneration", connection.generation); putBoolean("djActive", dj != null)
             putString("djPhase", phase); putString("djProfile", profile); putInt("djErrorStatus", code)
@@ -238,17 +240,11 @@ class PlaybackService : MediaLibraryService() {
         previews = PreviewProgram(connection, player, main, { session }) { key -> cancelAudio(key) }
         radio = RadioProgram(connection, player, main, session = { session })
         autoplay = AutoplayProgram(connection, player, main, { session }, { radio.active() || dj != null })
-        djPlanner = ProgramDjPlanner(connection, player, main, { dj?.heardIds() ?: emptySet() }, ::publishDj) { rows, position, kind ->
-            if (kind != ProgramDjPlanner.Kind.START) {
-                dj?.let { owner ->
-                    if (kind == ProgramDjPlanner.Kind.APPEND) owner.append(rows.drop(1)) else { owner.replaceFuture(rows); refillAnchor = "" }
-                    publishDj(djPhase, djProfile, djError)
-                }
-            } else {
+        installDj = { rows, position, index, heard ->
             val epoch = connection.generation
             val identity = connection.sessionIdentity(epoch)
             val next = ProgramDjSession(this, epoch, { epoch == connection.generation && runCatching { connection.sessionIdentity(epoch) }.getOrNull() == identity },
-                sources, pcmTap, leveling::active, rows, position, mixing = mixing::active, refine = { djRefiner?.refine(it) }, changed = { publishDj(djPhase, djProfile, djError) })
+                sources, pcmTap, leveling::active, rows, position, mixing = mixing::active, refine = { djRefiner?.refine(it) }, changed = { publishDj(djPhase, djProfile, djError) }, startIndex = index, initialHeard = heard)
             autoplay.clear(); radio.clear()
             val resume = player.playWhenReady || rows.firstOrNull()?.kind != "user"
             val previousDj = dj; dj = next
@@ -259,6 +255,15 @@ class PlaybackService : MediaLibraryService() {
             next.player.volume = volume
             if (resume) next.player.play()
             publishDj(djPhase, djProfile, djError); refillAnchor = ""
+        }
+        djPlanner = ProgramDjPlanner(connection, player, main, { dj?.heardIds() ?: emptySet() }, ::publishDj) { rows, position, kind ->
+            if (kind != ProgramDjPlanner.Kind.START) {
+                dj?.let { owner ->
+                    if (kind == ProgramDjPlanner.Kind.APPEND) owner.append(rows.drop(1)) else { owner.replaceFuture(rows); refillAnchor = "" }
+                    publishDj(djPhase, djProfile, djError)
+                }
+            } else {
+            installDj(rows, position, 0, emptySet())
             }
         }
         djRefiner = ProgramDjRefiner(connection, main, { dj }, djPlanner)
@@ -291,7 +296,7 @@ class PlaybackService : MediaLibraryService() {
         liveHost = NativeLiveHost(this, connection, main, { player }, artwork, { dj?.liveSnapshot() }) { state ->
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeLiveHost", state.toString()) }) }
         }
-        deviceSession = NativeDeviceSession(this, connection, main, { if (dj == null) ProgramDeviceState.snapshot(player) else null }, ::remoteDeviceCommand) { state ->
+        deviceSession = NativeDeviceSession(this, connection, main, { dj?.let { ProgramDeviceState.snapshotDj(player, it, djPlanner) } ?: ProgramDeviceState.snapshot(player) }, ::remoteDeviceCommand) { state ->
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeDevice", state.toString()) }) }
         }
         carArt = ProgramCarArtwork(this, connection)
@@ -562,7 +567,7 @@ class PlaybackService : MediaLibraryService() {
                 val incoming = payload.optJSONObject("state")?.optJSONObject("session")?.optJSONArray("queue")
                 val firstKey = incoming?.optJSONObject(0)?.optString("queueId")
                 val offset = if (firstKey.isNullOrBlank()) -1 else (0 until player.mediaItemCount).firstOrNull { ProgramQueue.key(player, it) == firstKey } ?: -1
-                val sameQueue = dj == null && incoming != null && offset >= 0 && offset + incoming.length() <= player.mediaItemCount &&
+                val sameQueue = !payload.optBoolean("handoff") && (dj != null) == (restored.workspace != null) && incoming != null && offset >= 0 && offset + incoming.length() <= player.mediaItemCount &&
                     (0 until incoming.length()).all { i ->
                         val entry = incoming.getJSONObject(i)
                         ProgramQueue.key(player, offset + i) == entry.optString("queueId") &&
@@ -573,6 +578,16 @@ class PlaybackService : MediaLibraryService() {
                     player.seekTo(offset + restored.index, restored.positionMs)
                     if (player.playerError != null || player.playbackState == Player.STATE_ENDED) player.prepare()
                     player.play(); return
+                }
+                if (restored.workspace != null) {
+                    val rows = ProgramDeviceState.djRows(connection, restored, djPlanner)
+                    val heard = restored.workspace.optJSONArray("heard") ?: org.json.JSONArray()
+                    val heardIds = (0 until minOf(15, heard.length())).mapNotNull { heard.optJSONObject(it)?.optString("id")?.takeIf { id -> id.isNotBlank() && id.length <= 512 } }.toSet()
+                    djPlanner.restoreWorkspace(restored.workspace)
+                    djRouteEditor?.clear(); djRefiner?.clear(); refillAnchor = ""
+                    installDj(rows, restored.positionMs, restored.index, heardIds)
+                    player.play(); publishDj("ready", djPlanner.profile, 0)
+                    return
                 }
                 val items = ProgramQueue.items(connection, restored.rows)
                 djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", djProfile, 0)

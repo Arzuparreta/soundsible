@@ -173,3 +173,12 @@ def test_device_list_exposes_live_socket_flag_for_shared_clients(tmp_path, monke
     response = _make_app().test_client().get('/api/devices')
     assert response.status_code == 200
     assert response.get_json()['devices'][0]['socket_active'] is True
+
+
+def test_start_event_distinguishes_handoff_from_transport_resume():
+    socket = _FakeSocketIO()
+    api = {'socketio': socket}
+    playback_routes._emit_playback_start(api, 'member', 'android', {'session': {}}, handoff=True)
+    playback_routes._emit_playback_start(api, 'member', 'android', {'session': {}})
+    assert socket.events[0]['payload']['handoff'] is True
+    assert 'handoff' not in socket.events[1]['payload']

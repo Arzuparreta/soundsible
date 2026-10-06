@@ -22,6 +22,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
     var profile = "adaptive"; private set
     var direction = JSONObject(); private set
     var sources = JSONArray(); private set
+    private var restoredWorkspace = JSONObject()
     private var sessionId = ""
     private var segment = 0
     private var revision = 0
@@ -31,6 +32,30 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
     private var requestId: String? = null
     private var retry: Runnable? = null
     @Volatile private var closed = false
+    fun restoreWorkspace(workspace: JSONObject) {
+        val nextProfile = workspace.optString("djProfile", "adaptive")
+        require(nextProfile in listOf("adaptive", "long_blend", "cuts_drops", "open_format"))
+        val nextDirection = workspace.optJSONObject("direction") ?: JSONObject()
+        val nextSources = workspace.optJSONArray("sources") ?: JSONArray()
+        require(nextDirection.toString().length <= 16384 && nextSources.length() <= 6 && nextSources.toString().length <= 65536)
+        for (i in 0 until nextSources.length()) require(nextSources.getJSONObject(i).getJSONArray("tracks").length() <= 15)
+        clear(); profile = nextProfile; direction = JSONObject(nextDirection.toString()); sources = JSONArray(nextSources.toString())
+        restoredWorkspace = JSONObject(workspace.toString()); settingsRevision++
+        sessionId = java.util.UUID.randomUUID().toString(); segment = 0; revision = workspace.optInt("directionRevision", 0).coerceIn(0, 1000000)
+    }
+    fun workspace(): JSONObject = JSONObject(restoredWorkspace.toString()).put("profile", restoredWorkspace.optString("profile", "balanced"))
+        .put("djProfile", profile).put("direction", JSONObject(direction.toString())).put("sources", JSONArray().apply {
+            for (i in maxOf(0, sources.length() - 6) until sources.length()) {
+                val source = JSONObject(sources.getJSONObject(i).toString())
+                val tracks = source.optJSONArray("tracks") ?: JSONArray()
+                source.put("tracks", JSONArray().apply { for (j in 0 until minOf(15, tracks.length())) put(tracks.getJSONObject(j)) })
+                put(source)
+            }
+        }).put("directionRevision", revision).apply {
+            if (sources.length() > 0 || restoredWorkspace.optString("sourcePolicy") == "explicit") put("sourcePolicy", "explicit")
+            if (!has("avoidedIdentities")) put("avoidedIdentities", JSONArray())
+            if (!has("exploration")) put("exploration", JSONArray())
+        }
     fun start(profile: String, direction: JSONObject, sources: JSONArray, fromCurrent: Boolean,
         kind: Kind = Kind.START, anchor: MediaItem? = null, lead: MediaItem? = null) {
         require(profile in listOf("adaptive", "long_blend", "cuts_drops", "open_format"))
@@ -39,6 +64,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         require(!fromCurrent || seed != null && seed.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
         require(seed != null || sources.length() > 0)
         clear()
+        if (kind == Kind.START) restoredWorkspace = JSONObject()
         if (this.profile != profile || this.direction.toString() != direction.toString() || this.sources.toString() != sources.toString()) settingsRevision++
         this.profile = profile; this.direction = JSONObject(direction.toString()); this.sources = JSONArray(sources.toString())
         if (kind == Kind.START) { sessionId = java.util.UUID.randomUUID().toString(); segment = 0; revision = 0 }
@@ -52,9 +78,18 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         val body = JSONObject().put("dj_profile", profile).put("direction", direction)
             .put("limit", 8).put("session_id", sessionId)
             .put("segment_index", segment).put("direction_revision", revision)
-        if (sources.length() > 0) body.put("sources", sources).put("source_policy", "explicit")
+        if (sources.length() > 0 || restoredWorkspace.optString("sourcePolicy") == "explicit") body.put("sources", sources).put("source_policy", "explicit")
+        val exploration = restoredWorkspace.optJSONArray("exploration") ?: JSONArray()
+        body.put("exploration", JSONArray().apply { for (i in maxOf(0, exploration.length() - 4) until exploration.length()) put(exploration.getJSONObject(i)) })
+        val heard = restoredWorkspace.optJSONArray("heard") ?: JSONArray()
+        body.put("heard", JSONArray().apply { for (i in maxOf(0, heard.length() - 15) until heard.length()) put(heard.getJSONObject(i)) })
+        val avoided = restoredWorkspace.optJSONArray("avoidedIdentities") ?: JSONArray()
+        val excluded = (0 until minOf(60, avoided.length())).flatMap { i ->
+            val id = avoided.optString(i)
+            listOf(id, id.removePrefix("music:track:").removePrefix("music:youtube:"))
+        }.filter { it.isNotBlank() && it.length <= 512 }
         if (seed != null) body.put("seed", reference(seed)).put("exclude", JSONArray(
-            if (kind == Kind.START) listOf(seed.mediaId) else ((0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId } + heardIds()).distinct()))
+            ((if (kind == Kind.START) listOf(seed.mediaId) else (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId } + heardIds()) + excluded).distinct()))
         val started = android.os.SystemClock.elapsedRealtime()
         var attempt = 0
         fun valid(): Boolean = !closed && token == serial && generation == connection.generation &&
