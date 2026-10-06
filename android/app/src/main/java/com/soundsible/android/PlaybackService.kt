@@ -289,7 +289,14 @@ class PlaybackService : MediaLibraryService() {
         session = MediaLibrarySession.Builder(this, player, object : MediaLibrarySession.Callback {
             override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
                 // Same app owns queue replacement. Trusted OS controllers can control its current program.
-                if (controller.uid != android.os.Process.myUid() && !controller.isTrusted) return MediaSession.ConnectionResult.reject()
+                // Newer Android stores notification-listener authorization in
+                // the system service, while Media3's legacy trust helper also
+                // consults the older secure-settings list.
+                val systemTrusted = android.os.Build.VERSION.SDK_INT >= 28 && controller.isPackageNameVerified && runCatching {
+                    getSystemService(android.media.session.MediaSessionManager::class.java).isTrustedForMediaControl(
+                        android.media.session.MediaSessionManager.RemoteUserInfo(controller.packageName, -1, controller.uid))
+                }.getOrDefault(false)
+                if (controller.uid != android.os.Process.myUid() && !controller.isTrusted && !systemTrusted) return MediaSession.ConnectionResult.reject()
                 val commands = Player.Commands.Builder().addAllCommands()
                 if (controller.uid != android.os.Process.myUid()) commands.remove(Player.COMMAND_CHANGE_MEDIA_ITEMS)
                 val sessions = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()

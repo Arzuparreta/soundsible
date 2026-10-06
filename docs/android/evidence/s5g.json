@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-06",
+  "slice": "S5g",
+  "channel": "development",
+  "base_revision": "00013238",
+  "dirty_at_asset_prepare": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "c00fb671a05581bee22ae57490a5f88b3712bbf6886971b1bda16f093392d7d4",
+    "android/app/src/androidTest/AndroidManifest.xml": "7e4871651c04047c5accf69d5becf9c1e07040214caf68298068581ef228981f",
+    "android/app/src/androidTest/java/com/soundsible/android/CarExternalTest.kt": "651ef5210b12ae8fdc2abb14fcd027090aba9dd649623cf4d00a8c1d0a063a65",
+    "android/app/src/androidTest/java/com/soundsible/android/CarExternalProbeService.java": "956853269a90f60be0be296b3f118f8e9d29a885675cbb50f6236d6c9777260b",
+    "android/app/src/androidTest/java/com/soundsible/android/CarProbeNotificationListener.java": "78f1d6b3edbafe1bb4efb67afe4119f0e0fe30f387005907bfe68a452a4b3dec"
+  },
+  "tests": 6,
+  "failures": 0,
+  "seconds": 34.329,
+  "runner_exit": 0,
+  "log": "/tmp/soundsible-auto-external-verified-native.log",
+  "normal_build": "APK/test APK/JVM54/lint without temporary CA pass",
+  "classes": [
+    "CarExternalTest2",
+    "CarLegacyTest2",
+    "CarLibraryTest2"
+  ],
+  "proves": [
+    "Probe service runs in test APK process under a different Binder UID",
+    "Untrusted external classic browser rejected",
+    "OS notification-listener authorization allows canonical browse and opaque artwork URI; image read across UID succeeds and write denied",
+    "Existing sameUID modern/classic canonical selection and account revocation tests remain green"
+  ],
+  "limits": [
+    "System notification-listener trust on API36, not Google Auto host identity or DHU",
+    "External control/URI revocation after logout still pending",
+    "No physical acceptance or whole current regression"
+  ],
+  "diagnostics": [
+    "Independent test APK cannot load Kotlin stdlib from target app; probe uses Java and Android APIs only",
+    "API36 notification-manager authorization was not reflected in legacy enabled_notification_listeners setting; Media3 helper rejected trusted caller",
+    "Fallback uses platform media-session trust only for package/UID verified by Media3, API28+; no package allowlist or broad permission"
+  ]
+}
