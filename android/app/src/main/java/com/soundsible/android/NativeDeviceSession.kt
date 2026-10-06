@@ -17,9 +17,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
     private val main: Handler, private val snapshot: () -> JSONObject?,
     private val command: (String, JSONObject) -> Unit, private val publish: (JSONObject) -> Unit) : AutoCloseable {
     private val prefs = context.getSharedPreferences("soundsible-device", Context.MODE_PRIVATE)
-    /** What the phone calls itself (Settings → About phone), so other devices see a recognisable name until the user picks one. */
-    private val systemName = runCatching { android.provider.Settings.Global.getString(context.contentResolver, "device_name") }.getOrNull()
-        ?.trim()?.takeIf(::validName) ?: android.os.Build.MODEL?.trim()?.takeIf(::validName) ?: "Soundsible Android"
+    private val appContext = context.applicationContext
     private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "soundsible-device-session").apply { isDaemon = true } }
     private var socket: Socket? = null
     private var client: okhttp3.OkHttpClient? = null
@@ -54,12 +52,10 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
     init { connection.resetListeners.add(resetListener); main.post(tick) }
     private fun owns(): Boolean = !closed && identity != null && epoch == connection.generation &&
         runCatching { connection.sessionIdentity(epoch) == identity && connection.offline.profileKey(epoch) == profile }.getOrDefault(false)
-    fun name(): String = prefs.getString("device_name", null)?.takeIf(::validName) ?: systemName
+    fun name(): String = DeviceName.get(appContext)
     /** A per-install name; a connected session re-registers at once so peers and Core see it without reconnecting. */
     fun rename(value: String): Boolean {
-        val next = value.trim()
-        if (!validName(next)) return false
-        prefs.edit().putString("device_name", next).apply()
+        if (!DeviceName.set(appContext, value)) return false
         if (owns() && socket?.connected() == true) { socket?.emit("playback_register", registration()); changed() } else publish(state())
         return true
     }
@@ -237,5 +233,3 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         closed = true; main.removeCallbacks(tick); connection.resetListeners.remove(resetListener); reset(); worker.shutdown()
     }
 }
-
-private fun validName(value: String): Boolean = value.length in 1..64 && value.none { it.isISOControl() }

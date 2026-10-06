@@ -3,6 +3,7 @@ import NativeSettings from './Settings';
 import NativeInvite from './Invite';
 import { nativeInviteLink } from './inviteLink';
 import { createIncomingInvite } from './incomingInvite';
+import { claimPairing, pairingCode, pairingPayload, PairingError, type PairingTarget } from './pairing';
 import { openNativeLive } from './Live';
 import type { createNativeAppearance } from './appearance';
 import type { createNativeFeedback } from './feedback';
@@ -231,7 +232,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     if (current !== epoch) return;
     // The passwordless instance still gets a real account session for sockets.
     if (!state.requires_login) {
-      const signed = await request<{ user: User }>('/api/auth/login', { method: 'POST', body: { device_name: 'Soundsible Android' }, signal: controller.signal });
+      const signed = await request<{ user: User }>('/api/auth/login', { method: 'POST', body: { device_name: await sessionName() }, signal: controller.signal });
       state = { ...state, user: signed.user };
     }
     if (current !== epoch) return;
@@ -287,12 +288,55 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     } catch { setError(t('android.connectFailed')); }
     finally { setBusy(false); }
   }
+  /** Core names each session after the device it came from, as it appears in Settings → Devices. */
+  const sessionName = () => engine.deviceName().then(value => value.name).catch(() => 'Android');
+  const [manualPairing, setManualPairing] = createSignal(false);
+  let pairingInput: HTMLInputElement | undefined;
+  /** Signing in by a code another device is showing: that account, on that server, as an ordinary session. */
+  async function pair(target: PairingTarget) {
+    if (busy()) return;
+    setBusy(true); setError(''); reset();
+    try {
+      const next = await engine.configure({ origin: target.origin });
+      generation = next.generation; void runtime.bind(generation); useEngine(next); setServer(next.origin); setOrigin(next.origin);
+      await claimPairing(target.code, controller.signal);
+      setManualPairing(false);
+      await resolveIdentity();
+    } catch (failure) {
+      setError(failure instanceof PairingError ? t(`android.pairing.${failure.reason}`) : t('android.connectFailed'));
+    } finally { setBusy(false); }
+  }
+  async function scanPairing() {
+    if (busy()) return;
+    setError('');
+    let text: string;
+    try { text = (await engine.scanPairing({ hint: t('android.pairing.hint'), close: t('common.close') })).text; }
+    catch (failure) {
+      const code = (failure as { code?: string } | null)?.code;
+      if (code === 'PAIRING_CAMERA_DENIED') { setError(t('android.pairing.cameraDenied')); setManualPairing(true); }
+      else if (code === 'PAIRING_CAMERA_UNAVAILABLE') { setError(t('android.pairing.cameraUnavailable')); setManualPairing(true); }
+      return;
+    }
+    const target = pairingPayload(text);
+    if (!target) { setError(t('android.pairing.notSoundsible')); return; }
+    await pair(target);
+  }
+  async function pairWithCode(event: SubmitEvent) {
+    event.preventDefault();
+    if (busy()) return;
+    const code = pairingCode(pairingInput?.value ?? '');
+    if (!code) { setError(t('android.pairing.badCode')); return; }
+    let server: URL | null = null;
+    try { server = new URL(nativeInviteLink(origin().trim())?.origin ?? origin().trim()); } catch { server = null; }
+    if (!server || !['http:', 'https:'].includes(server.protocol)) { setError(t('android.pairing.needsServer')); return; }
+    await pair({ origin: server.origin, code });
+  }
   async function signIn(event: SubmitEvent) {
     event.preventDefault();
     if (busy()) return;
     setBusy(true); setError('');
     try {
-      await request('/api/auth/login', { method: 'POST', body: { username: username?.value, password: password?.value, device_name: 'Soundsible Android' }, signal: controller.signal });
+      await request('/api/auth/login', { method: 'POST', body: { username: username?.value, password: password?.value, device_name: await sessionName() }, signal: controller.signal });
       if (password) password.value = '';
       await resolveIdentity();
     } catch (failure) { setError(t(failure instanceof ApiError && failure.status === 401 ? 'android.wrongLogin' : 'android.connectFailed')); }
@@ -381,6 +425,14 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
         <label class={styles.field}>{t('android.server')}<input type="url" required value={origin()} placeholder="http://10.0.2.2:5005" autocomplete="url" disabled={busy()} onInput={event => setOrigin(event.currentTarget.value)} /></label>
         <p>{t('android.serverHint')}</p><button type="submit" disabled={busy()}>{t('android.connect')}</button>
       </form>
+      <div class={styles.form} data-pairing>
+        <button type="button" data-pairing-scan disabled={busy()} onClick={() => void scanPairing()}>{t('android.pairing.scan')}</button>
+        <button type="button" data-pairing-manual aria-expanded={manualPairing()} disabled={busy()} onClick={() => setManualPairing(open => !open)}>{t('android.pairing.useCode')}</button>
+      </div>
+      <Show when={manualPairing()}><form class={styles.form} data-pairing-form onSubmit={pairWithCode}>
+        <label class={styles.field}>{t('android.pairing.code')}<input ref={pairingInput} data-pairing-code required maxLength={12} autocomplete="one-time-code" autocapitalize="characters" spellcheck={false} disabled={busy()} /></label>
+        <p>{t('android.pairing.codeHint')}</p><button type="submit" disabled={busy()}>{t('android.pairing.pair')}</button>
+      </form></Show>
       <Show when={inviteToken()}>{token => {
         const captured = epoch;
         return <NativeInvite token={token()} current={() => captured === epoch && !user()} onCancel={() => { setInviteToken(null); setNeedsLogin(true); }}
@@ -427,7 +479,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       <Show when={snapshot()} fallback={<button onClick={() => void refresh()}>{t('common.retry')}</button>}>
         {data => <><nav class={styles.tabs} aria-label={t('nav.library')}><button aria-pressed={surface() === 'library'} onClick={() => { setLibraryTab('songs'); setSurface('library'); }}>{t('nav.library')}</button><button aria-pressed={surface() === 'search'} data-android-discover onClick={() => setSurface('search')}>{t('nav.search')}</button><button data-android-podcasts aria-pressed={surface() === 'podcasts'} onClick={() => setSurface('podcasts')}>{t('nav.podcasts')}</button><button data-android-downloads aria-pressed={surface() === 'downloads'} onClick={() => setSurface('downloads')}>{t('downloads.title')}</button><button data-android-migrate aria-pressed={surface() === 'migrate'} onClick={() => setSurface('migrate')}>{t('migrate.title')}</button><button data-android-live onClick={() => { const owner = epoch; openNativeLive(() => generation, () => owner === epoch && !!user(), user()?.display_name || user()?.username || 'DJ', () => void expireSession()); }}>{t('live.title')}</button><button data-android-settings aria-pressed={surface() === 'settings'} onClick={() => setSurface('settings')}>{t('nav.settings')}</button></nav>
           <Show when={surface() === 'library'} fallback={<Show when={surface() === 'settings'} fallback={<Show when={surface() === 'podcasts'} fallback={<Show when={surface() === 'downloads'} fallback={<Show when={surface() === 'migrate'} fallback={<CatalogSearch scrollTarget={() => scrollContainer} offlineMenuActions={tracks => offlineActions(tracks, offlineState, offlineCommand, () => generation)} onResolvedMenu={(track, event, actions) => songMenu(track, event, undefined, actions)} savedEntities={savedEntities()} onEntityMenu={entityMenu} onPlayCollection={play} history={searchHistory} generation={generation} tracks={data().tracks} saved={savedEntries()} disconnected={stale()} activeId={program()?.id} isActive={isActive} onAcquire={acquisition.add} onPlay={track => play([track], 0)} onChanged={sync} />}><NativeMigrate generation={generation} available={() => !stale()} current={() => !!user()} origin={origin()} onOpenPlaylists={() => { setLibraryTab('playlists'); setSurface('library'); void sync(); }} /></Show>}><NativeDownloads items={downloadItems()} disconnected={stale()} generation={generation} onChanged={sync} /></Show>}><PodcastBrowser generation={generation} subscriptions={data().podcast_subscriptions ?? []} acquired={data().podcast_tracks ?? []} disconnected={stale()} activeId={program()?.id} onPlay={track => play([track], 0)} onChanged={sync} /></Show>}><NativeSettings library={{ trackCount: () => snapshot()?.tracks.length ?? 0, sync,
-              onImport: () => { setSurface('migrate'); } }} online={() => eventsOnline() && !stale()} generation={() => generation} subsonic={{ identity: () => epoch, accountId: () => user()?.id ?? '', username: () => user()?.username ?? '', origin, available: () => !stale() && !!user(), copy: nativeCopy(() => generation) }} playback={{ state: program(), pending: programPending(), available: !stale(), command: runtime.execute }} feedback={props.feedback} appearance={props.appearance} busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
+              onImport: () => { setSurface('migrate'); } }} online={() => eventsOnline() && !stale()} server={server} generation={() => generation} subsonic={{ identity: () => epoch, accountId: () => user()?.id ?? '', username: () => user()?.username ?? '', origin, available: () => !stale() && !!user(), copy: nativeCopy(() => generation) }} playback={{ state: program(), pending: programPending(), available: !stale(), command: runtime.execute }} feedback={props.feedback} appearance={props.appearance} busy={busy()} user={user()!} identity={() => epoch} available={() => !stale()} signal={controller.signal} history={searchHistory} onLogout={() => leave(false)} onUser={async updated => {
               const owner = epoch;
               if (updated.id !== user()?.id) throw new Error('Account changed');
               setUser(updated); await restoreOffline(false);

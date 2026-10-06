@@ -9,7 +9,7 @@ import { ActionRow, SettingsGroup } from '../components/SettingsRows';
 import styles from '../components/DeviceSheet.module.css';
 
 /** Account HTTP transport and service identity; importing web playback would create another device. */
-export default function NativeDevices(props: { generation: () => number; current: () => boolean }) {
+export default function NativeDevices(props: { generation: () => number; current: () => boolean; origin?: () => string }) {
   const [devices, setDevices] = createSignal<Device[]>([]), [self, setSelf] = createSignal<NativeDeviceState | null>(null);
   const [loading, setLoading] = createSignal(true), [busy, setBusy] = createSignal(false), [error, setError] = createSignal(false);
   const generation = props.generation();
@@ -64,7 +64,7 @@ export default function NativeDevices(props: { generation: () => number; current
       <ActionRow anchor="device-name" label={t('settings.deviceName')} hint={self()?.device_name} disabled={!current() || busy() || !self()?.device_name} onClick={() => void rename()} />
     </SettingsGroup>
     <SettingsGroup anchor="paired-devices" label={t('settings.pairedDevices')} note={t('settings.pairNote')}>
-      <PairedDevicesPanel />
+      <PairedDevicesPanel origin={() => props.origin?.() || null} />
     </SettingsGroup>
     <h3>{t('settings.group.network')}</h3>
     <Show when={error()}><p role="status">{t('deviceSheet.failed')}</p></Show>

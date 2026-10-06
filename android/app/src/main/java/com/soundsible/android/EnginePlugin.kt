@@ -1,7 +1,9 @@
 package com.soundsible.android
 
 import com.getcapacitor.*
+import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
+import androidx.activity.result.ActivityResult
 import io.socket.client.IO
 import io.socket.client.Socket
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,6 +27,24 @@ class EnginePlugin : Plugin() {
     }
     private fun result() = JSObject().put("origin", connection.origin).put("generation", connection.generation)
     @PluginMethod fun state(call: PluginCall) { call.resolve(result()) }
+    @PluginMethod fun deviceName(call: PluginCall) { call.resolve(JSObject().put("name", DeviceName.get(context))) }
+    /** Opens the camera for a pairing code; the scanned text goes back to the WebView, which validates it before any request. */
+    @PluginMethod fun scanPairing(call: PluginCall) {
+        val intent = android.content.Intent(context, PairingScanActivity::class.java)
+            .putExtra(PairingScanActivity.EXTRA_HINT, call.getString("hint")).putExtra(PairingScanActivity.EXTRA_CLOSE, call.getString("close"))
+        try { startActivityForResult(call, intent, "pairingScanned") }
+        catch (_: Exception) { call.reject("Camera unavailable", "PAIRING_CAMERA_UNAVAILABLE") }
+    }
+    @ActivityCallback private fun pairingScanned(call: PluginCall?, result: ActivityResult) {
+        val active = call ?: return
+        val text = result.data?.getStringExtra(PairingScanActivity.EXTRA_TEXT)
+        if (result.resultCode == android.app.Activity.RESULT_OK && text != null && PairingQr.isPairing(text)) { active.resolve(JSObject().put("text", text)); return }
+        when (result.data?.getStringExtra(PairingScanActivity.EXTRA_ERROR)) {
+            "camera_denied" -> active.reject("Camera permission denied", "PAIRING_CAMERA_DENIED")
+            "camera_unavailable" -> active.reject("Camera unavailable", "PAIRING_CAMERA_UNAVAILABLE")
+            else -> active.reject("Scan cancelled", "PAIRING_SCAN_CANCELLED")
+        }
+    }
     @PluginMethod fun configure(call: PluginCall) {
         executor.execute {
             try { connection.configure(call.getString("origin") ?: ""); call.resolve(result()) }

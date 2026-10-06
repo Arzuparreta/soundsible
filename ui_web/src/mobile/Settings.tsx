@@ -27,6 +27,8 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
   subsonic?: ComponentProps<typeof NativeSettingsSubsonic>;
   library: { trackCount: () => number; sync: () => Promise<void>; onImport: () => void };
   online: () => boolean;
+  /** The connected server's address: where other phones claim a pairing code shown here. */
+  server?: () => string;
 }) {
   const [section, setSection] = createSignal<'account' | 'appearance' | 'accessibility' | 'recommendations' | 'playback' | 'library' | 'downloads' | 'subsonic' | 'users' | 'devices' | 'community' | 'about'>('account');
   const captured = props.identity();
@@ -50,7 +52,7 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
     <Show when={section() === 'users' && props.user.role === 'admin'}><section data-testid="android-settings-users">
       <h2>{t('users.title')}</h2><fieldset disabled={!current() || props.busy}><UsersPanel account={() => props.user} current={current} /></fieldset>
     </section></Show>
-    <Show when={section() === 'devices' && props.generation}>{generation => <NativeDevices generation={generation()} current={current} />}</Show>
+    <Show when={section() === 'devices' && props.generation}>{generation => <NativeDevices generation={generation()} current={current} origin={props.server} />}</Show>
     <Show when={section() === 'account'}><NativeSettingsAccount {...props} /></Show>
     <Show when={section() === 'recommendations'}><NativeSettingsRecommendations identity={props.identity} available={props.available} /></Show>
     <Show when={section() === 'library'}><NativeSettingsLibrary identity={props.identity} available={props.available} signal={props.signal}

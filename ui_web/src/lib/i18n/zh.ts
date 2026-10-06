@@ -24,7 +24,7 @@ export const zh: Dict = {
     insertAfter: '加入当前曲目之后',
     repeatOff: '关闭',
     repeatOne: '单曲',
-    repeatAll: '整个队列', useInvite: "使用邀请", inviteSignsOut: "使用此邀请将退出当前账户并停止播放。", refresh: "刷新", permissionDenied: "你的账户无权访问此资源。", title: '连接你的 Soundsible', unconfigured: '尚未连接服务器。', server: "服务器地址", serverHint: "远程连接使用 HTTPS；HTTP 仅限私人局域网或 Tailscale。", connect: "连接", username: "用户名", password: "密码", login: "登录", logout: "退出登录", changeServer: "更换服务器", connectFailed: "连接失败。请检查地址、网络和服务器证书。", wrongLogin: "用户名或密码错误。", browseOnly: '开发版本：尚未正式发布。', seek: '播放位置', eventsPending: "实时更新已断开。请重试或刷新音乐库。" },
+    repeatAll: '整个队列', useInvite: "使用邀请", inviteSignsOut: "使用此邀请将退出当前账户并停止播放。", pairing: { scan: "扫描配对码", useCode: "使用配对码", code: "配对码", codeHint: "Soundsible → 设置 → 设备 → 配对新设备 中二维码下方的 8 个字符。使用上方的服务器地址。", pair: "配对", hint: "将相机对准 Soundsible → 设置 → 设备 中显示的配对码", notSoundsible: "这不是 Soundsible 配对码。", invalid: "配对码错误或已过期。", used: "该配对码已被使用，请显示新的配对码。", notShowing: "扫描或输入时，请保持 Soundsible 上的配对码处于打开状态。", unavailable: "该账户目前无法登录。", cameraDenied: "扫描需要相机权限，你也可以手动输入配对码。", cameraUnavailable: "没有可用的相机，请手动输入配对码。", badCode: "配对码由 8 个字母和数字组成。", needsServer: "请先在上方输入服务器地址。" }, refresh: "刷新", permissionDenied: "你的账户无权访问此资源。", title: '连接你的 Soundsible', unconfigured: '尚未连接服务器。', server: "服务器地址", serverHint: "远程连接使用 HTTPS；HTTP 仅限私人局域网或 Tailscale。", connect: "连接", username: "用户名", password: "密码", login: "登录", logout: "退出登录", changeServer: "更换服务器", connectFailed: "连接失败。请检查地址、网络和服务器证书。", wrongLogin: "用户名或密码错误。", browseOnly: '开发版本：尚未正式发布。', seek: '播放位置', eventsPending: "实时更新已断开。请重试或刷新音乐库。" },
   savedEntities: {
     albums: "已收藏专辑",
     artists: "已收藏艺人",

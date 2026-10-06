@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2av",
+  "channel": "development",
+  "base_revision": "90e9d1ef",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "shared/api/routes/pairing.py": "b00dabf6f43a2a3674fa868d21024e1290deda5ad136e8af3c53673e233f08fe",
+    "shared/users.py": "467f560dc1e0db26a5f98d2fa2a4a4ed4db2b8d86d7356d8b89af927a01020a5",
+    "tests/test_pairing_routes.py": "639d4fbdd0170936848033afd13e8df176bfd4aeaff6860c5659596b704f0e9e",
+    "android/app/src/main/java/com/soundsible/android/PairingScanActivity.kt": "004baaa64b0aa37e857f10806ab485a84393415651bd9d4cad3a1679e54fb49b",
+    "android/app/src/main/java/com/soundsible/android/PairingQr.kt": "9ac0c765f966d0f443995be02425acbf0edd09cee11c3788a14e7188ee84c61b",
+    "android/app/src/main/java/com/soundsible/android/DeviceName.kt": "3b902915ef8945fa9ccb163c8a11e7bdb6c9a1482abd8859841e9b809d32f759",
+    "android/app/src/main/java/com/soundsible/android/EnginePlugin.kt": "64aa9c16b867c918116a8aa5685b22de83fb305eb13d7284733e4d089c5f43ef",
+    "ui_web/src/mobile/pairing.ts": "a4c70113487201256c74741eabd840a6c8d49882fec9c90cadfde5890ed7293f",
+    "ui_web/src/lib/pairingQr.ts": "181842b105e827deb38b69dca71cbc40ed3306e5e7af3e6567202005ef2de13f",
+    "ui_web/src/components/PairDevice.tsx": "fce9d382273093e855d20792d572c9b451244306366b1fbbaf7be3ecde2bc209",
+    "ui_web/src/mobile/AndroidStart.tsx": "b324c36c5fd5807ea096c5b8ec2fb318c8d230aeef347fa9e9d8c47b147d194b",
+    "android/app/src/androidTest/java/com/soundsible/android/PairingTest.kt": "de18ae89d1a22c2c2eeb61c0243d471b867c1a5088c7a6dec353c14d01828269",
+    "android/app/src/test/java/com/soundsible/android/PairingQrTest.kt": "30045401850056d5223e7c62e8b2d937ef89920882f7e7728fe972197c832e7d"
+  },
+  "decision": "QR pairing on Android signs in a full session of the showing account (user, 2026-10-06)",
+  "native": {
+    "tests": 20,
+    "failures": 0,
+    "seconds": 235.817,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-pairing-block-native.log",
+    "classes": [
+      "PairingTest",
+      "ConnectionTest",
+      "StartupTest",
+      "InviteTest",
+      "IncomingInviteTest",
+      "DevicesUiTest",
+      "DeviceSessionTest",
+      "SettingsServerTest",
+      "UsersTest"
+    ]
+  },
+  "jvm": {
+    "tests": 59,
+    "failures": 0
+  },
+  "core": {
+    "tests": 78,
+    "failures": 0,
+    "files": [
+      "tests/test_pairing_routes.py",
+      "tests/test_auth_scopes.py",
+      "tests/test_multiuser.py",
+      "tests/test_subsonic_auth.py"
+    ]
+  },
+  "ui": {
+    "files": 215,
+    "tests": 1637,
+    "typecheck": "pass"
+  },
+  "normal_build": "APK/test APK/JVM59/lint without temporary CA pass",
+  "coverage": [
+    "Hidden code refused with pairing_display_required and left pending",
+    "Typed code (dash/lowercase) signs in owner; session named after device; listed as paired",
+    "Revoking from the phone's own Paired devices signs it out",
+    "Camera denied falls back to manual entry",
+    "Scanned QR (stubbed scanner result) signs in",
+    "Real scanner activity binds camera on AVD and Back returns cancelled with no text",
+    "QR text uses viewing/connected origin; strict payload validation"
+  ],
+  "limits": [
+    "Physical camera decode of a real QR not exercised on device",
+    "No physical or final principal/browser coverage"
+  ]
+}

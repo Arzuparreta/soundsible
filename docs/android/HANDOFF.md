@@ -399,7 +399,15 @@ S2au validado: Settings nativo con Biblioteca, Descargas (admin), Comunidad,
 Acerca de y Dispositivos (nombre por instalación + emparejados). Vistas extraídas
 de SettingsSections y compartidas con la web. Nombre por defecto del sistema y
 re-registro inmediato. Bloque22/0 HTTP/TLS,280.499s + normal; UI213/1631+TS.
-SLICE_2AU/evidence/s2au.json. Pendiente de decisión del usuario: emparejar este
-teléfono por QR (lado reclamante, no existe en web). Siguiente: inventario de
+SLICE_2AU/evidence/s2au.json. Siguiente: inventario de
 paridad restante (biblioteca/búsqueda/cola/podcasts), negativos DJ/Auto, firma y
 regresión final principal/browser4. PR manual, no merge/automerge/publicación.
+
+S2av validado: el usuario decidió que el QR de emparejamiento inicie una sesión
+completa de la cuenta que lo muestra (no token restringido como iOS). Core claim
+`credential: session` sólo con hoja abierta, vinculada y revocable; Android escanea
+con CameraX+ZXing (sin GMS) o código escrito; QR usa la dirección visible/servidor
+conectado. Bloque20/0 HTTP/TLS,235.817s + normal JVM59/lint; Core78; UI215/1637.
+SLICE_2AV/evidence/s2av.json. Siguiente: inventario de paridad restante
+(biblioteca/búsqueda/cola/podcasts), negativos DJ/Auto, firma y regresión final
+principal/browser4. PR manual, no merge/automerge/publicación.

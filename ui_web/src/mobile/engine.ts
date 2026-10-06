@@ -14,6 +14,8 @@ interface EnginePlugin {
   events(options: { generation: number }): Promise<void>;
   stopEvents(): Promise<void>;
   addListener(event: 'engineEvent', callback: (data: { event: string; generation: number }) => void): Promise<PluginListenerHandle>;
+  deviceName(): Promise<{ name: string }>;
+  scanPairing(options: { hint: string; close: string }): Promise<{ text: string }>;
 }
 export const engine = registerPlugin<EnginePlugin>('SoundsibleEngine');
 let active: EngineState = { origin: '', generation: -1 };

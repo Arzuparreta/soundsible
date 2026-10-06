@@ -10,7 +10,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify, make_response, request
 
 from shared.database import DatabaseManager, instance_db
 from shared.hardening import (
@@ -259,6 +259,50 @@ def create_pairing_session():
     return jsonify(_session_response(record)), 201
 
 
+def _pairing_session_ids(user_id) -> set[str]:
+    """Sign-in sessions minted by scanning this account's pairing code."""
+    return {
+        record["auth_token_id"]
+        for record in _db().list_pairing_sessions(user_id=user_id)
+        if record.get("status") == "completed" and record.get("auth_token_id")
+    }
+
+
+def _claim_signed_in_session(session: dict, *, device_name: str, device_type: str):
+    """Scanning the code an account is *showing* signs that account in on the phone.
+
+    Only while the owner's pairing sheet is open (auto-confirm + display): the
+    plaintext credential goes to the phone that claimed it, never to whoever
+    confirms later, and it is an ordinary session of that account, revocable from
+    its paired devices.
+    """
+    from shared.api.routes.auth import _set_session_cookie
+    from shared.users import UserError, create_session, get_user
+
+    if not (session.get("auto_confirm") and session.get("display_active")):
+        return jsonify({
+            "error": "Open the pairing code on your Soundsible and scan it while it is showing",
+            "code": "pairing_display_required",
+        }), 409
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "This pairing code belongs to no account", "code": "pairing_account_required"}), 409
+    claimed = _db().claim_pairing_session(session["id"], device_name=device_name, device_type=device_type)
+    if not claimed:
+        return jsonify({"error": "Pairing code is no longer available"}), 409
+    try:
+        token, record = create_session(user_id, device_name=device_name, device_type=device_type)
+    except UserError:
+        _db().cancel_pairing_session(session["id"])
+        return jsonify({"error": "Account is not available", "code": "pairing_account_unavailable"}), 409
+    completed = _db().confirm_pairing_session(session["id"], auth_token_id=record["id"])
+    if not completed:
+        _db().revoke_auth_token(record["id"])
+        return jsonify({"error": "Pairing session could not be completed"}), 409
+    body = {"user": get_user(user_id), "session": _session_response(completed), "auto_confirmed": True}
+    return _set_session_cookie(make_response(jsonify(body)), token), 201
+
+
 @pairing_bp.route("/api/pairing/sessions/claim", methods=["POST"])
 @rate_limit("pairing_sessions_claim", limit=20, window_sec=60)
 def claim_pairing_session():
@@ -266,16 +310,21 @@ def claim_pairing_session():
     code = str(data.get("code") or "").strip().upper()
     device_name = str(data.get("device_name") or "").strip()
     device_type = str(data.get("device_type") or "phone").strip() or "phone"
+    credential = str(data.get("credential") or "paired_device")
     if not code:
         return jsonify({"error": "code is required"}), 400
     if not device_name:
         return jsonify({"error": "device_name is required"}), 400
+    if credential not in ("paired_device", "session"):
+        return jsonify({"error": "credential must be paired_device or session"}), 400
 
     session = _db().get_pairing_session_by_code(code)
     if not session:
         return jsonify({"error": "Invalid or expired pairing code"}), 404
     if session["status"] != "pending":
         return jsonify({"error": "Pairing code is no longer available"}), 409
+    if credential == "session":
+        return _claim_signed_in_session(session, device_name=device_name[:128], device_type=device_type[:32])
 
     claimed = _db().claim_pairing_session(
         session["id"],
@@ -370,9 +419,12 @@ def cancel_pairing_session(session_id: str):
 @require_scope(SCOPE_ADMIN_CONFIG, allow_trusted_network=True)
 @rate_limit("paired_devices_list", limit=60, window_sec=60)
 def list_paired_devices():
+    caller = _caller_user_id()
+    signed_in = _pairing_session_ids(caller)
     tokens = [
         _paired_device_response(record)
-        for record in _db().list_auth_tokens(kind="paired_device", user_id=_caller_user_id())
+        for record in _db().list_auth_tokens(kind="paired_device", user_id=caller)
+        + [row for row in _db().list_auth_tokens(kind="session", user_id=caller) if row["id"] in signed_in]
         if record.get("revoked_at") is None
     ]
     return jsonify({"devices": tokens})
@@ -384,7 +436,9 @@ def list_paired_devices():
 def revoke_paired_device(token_id: str):
     record = _db().get_auth_token(token_id)
     caller = _caller_user_id()
-    if not record or record.get("kind") != "paired_device":
+    paired = record and (record.get("kind") == "paired_device" or
+                         record.get("kind") == "session" and token_id in _pairing_session_ids(caller))
+    if not paired:
         return jsonify({"error": "Paired device not found"}), 404
     if record.get("user_id") and caller and record["user_id"] != caller:
         # Indistinguishable from a wrong id on purpose: revoking somebody
