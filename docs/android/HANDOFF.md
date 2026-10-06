@@ -241,3 +241,11 @@ OPTIONS TLS lento retira receptor <3s; no reintenta en8s ni acepta prepare viejo
 Runner53807 exit0 + APK/test APK/JVM56/lint normales sin CA temporal. Log
 /tmp/soundsible-live-recovery-final.log. Ver SLICE_4J. Siguiente: publisher
 agotamiento/reset dirigido, presentación/share Live y pendientes de matriz.
+
+S4k validado: publisher HTTP/TLS2/0,85.109s, runner21182 exit0 + APK/test APK/
+JVM56/lint normales. Activity cerrada: tres retries reales rechazados, Live
+retirado estable conservando música/KEY, Go live recupera misma sala. Segundo
+corte + reset cancela retries sin publisher y sin nuevas autorizaciones en5s.
+Log /tmp/soundsible-live-publisher-exhaustion.log, SLICE_4K/evidence/s4k.json.
+Ninguna suite activa; AVD5554 sigue. Siguiente: presentación del programa y
+compartir Live; luego restantes matriz y regresión final. No merge ni release.

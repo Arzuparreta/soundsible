@@ -117,8 +117,8 @@ def main():
     def isolated_media_failure():
         if request.path == "/internal/media-auth":
             body = request.get_json(silent=True) or {}
-            path = body.get("path")
-            if body.get("action") == "read" and path in blocked_reads:
+            path = (body.get("path"), body.get("action"))
+            if path in blocked_reads:
                 denied_reads[path] = denied_reads.get(path, 0) + 1
                 return "", 503
 
@@ -131,7 +131,10 @@ def main():
         room = _session_row(body.get("session_id", request.args.get("session_id", "")))
         if room is None:
             return jsonify(error="invalid isolated resource"), 400
-        path = room["stream_path"]
+        role = body.get("role", request.args.get("role", "read"))
+        if role not in ("read", "publish"):
+            return jsonify(error="invalid isolated role"), 400
+        path = (room["stream_path"], role)
         if request.method == "POST":
             if body.get("blocked") is True:
                 blocked_reads.add(path)

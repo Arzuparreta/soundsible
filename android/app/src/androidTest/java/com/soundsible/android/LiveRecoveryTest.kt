@@ -19,7 +19,9 @@ class LiveRecoveryTest {
     @Test fun tlsRecovery() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin")!!, false)
     @Test fun httpReset() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin")!!, true)
     @Test fun tlsReset() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin")!!, true)
-    private fun run(origin: String, reset: Boolean) {
+    @Test fun httpPublisherRecovery() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin")!!, false, true)
+    @Test fun tlsPublisherRecovery() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin")!!, false, true)
+    private fun run(origin: String, reset: Boolean, publisherRecovery: Boolean = false) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val connection = EngineConnection.shared(context)
@@ -51,12 +53,52 @@ class LiveRecoveryTest {
         var publisher: LivePeer? = null
         var player: NativeLivePlayer? = null
         var host: NativeCommunitySocket? = null
+        var browser: androidx.media3.session.MediaBrowser? = null
         val audio = context.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
         val competing = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
             .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).build())
             .setOnAudioFocusChangeListener { }.build()
         try {
             scenario = ActivityScenario.launch(MainActivity::class.java)
+            if (publisherRecovery) {
+                val active = main { androidx.media3.session.MediaBrowser.Builder(context, androidx.media3.session.SessionToken(context,
+                    android.content.ComponentName(context, PlaybackService::class.java))).buildAsync() }.get(15, TimeUnit.SECONDS)
+                browser = active
+                fun command(action: String): androidx.media3.session.SessionResult = main {
+                    active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
+                        putString("action", action); putLong("generation", connection.generation); putString("title", "Publisher recovery")
+                    })
+                }.get(15, TimeUnit.SECONDS)
+                fun snapshot(): JSONObject? = main { active.sessionExtras.getString("nativeLiveHost") }?.let(::JSONObject)
+                val songs = main { active.getChildren("all-tracks", 0, 200, null) }.get(15, TimeUnit.SECONDS).value!!
+                main { active.setMediaItem(songs.single { it.mediaId == "soundsible:track:member-track" }); active.prepare(); active.play() }
+                await("Local programme not playing") { NativeProgramOutput.playing }
+                assertEquals(0, command("liveStart").resultCode)
+                await("Publisher did not connect") { snapshot()?.optBoolean("connected") == true }
+                val key = main { ProgramQueue.key(active, active.currentMediaItemIndex) }
+                scenario.close(); scenario = null
+                fun block() = fixture("read-failure", JSONObject().put("session_id", id).put("role", "publish").put("blocked", true))
+                fun denied() = fixture("read-failure?session_id=$id&role=publish").getInt("denied")
+                fun kick() = fixture("relay-kick", JSONObject().put("session_id", id).put("role", "publish"))
+                block(); kick()
+                await("Publisher retry exhaustion did not retire Live", 40) { snapshot()?.isNull("session") == true }
+                assertEquals("Publisher must perform exactly three reconnect attempts", 3, denied())
+                Thread.sleep(2000); assertEquals(3, denied())
+                assertTrue("Live exhaustion stopped local music", NativeProgramOutput.playing)
+                assertEquals("Live exhaustion replaced local queue occurrence", key, main { ProgramQueue.key(active, active.currentMediaItemIndex) })
+                fixture("read-failure", JSONObject().put("session_id", id).put("role", "publish").put("blocked", false))
+                assertEquals(0, command("liveStart").resultCode)
+                await("Explicit publisher recovery did not preserve room") { snapshot()?.let { it.optBoolean("connected") && it.optJSONObject("session")?.optString("id") == id } == true }
+                block(); kick()
+                await("Publisher reconnect rejection not reached") { denied() >= 1 }
+                main { connection.clearSession(false) }
+                await("Account reset did not retire publisher", 3) { snapshot()?.isNull("session") == true }
+                val stopped = denied(); Thread.sleep(5000)
+                assertEquals("Stale publisher continued retrying after account reset", stopped, denied())
+                assertEquals(0, fixture("relay-state?session_id=$id").getInt("publishers"))
+                core("/api/auth/login", "POST", JSONObject().put("username", "member").put("password", "android-test"))
+                return
+            }
             host = NativeCommunitySocket(room.getString("socket_url"), mapOf("session_id" to id, "host_token" to room.getString("host_token")),
                 android.os.Handler(android.os.Looper.getMainLooper()), { connection.generation == epoch }, { _, _ -> })
             host.connect(); host.awaitConnected()
@@ -109,7 +151,7 @@ class LiveRecoveryTest {
             }
         } finally {
             main { audio.abandonAudioFocusRequest(competing); player?.release() }
-            publisher?.close(); host?.close(); scenario?.close()
+            publisher?.close(); host?.close(); main { browser?.release() }; scenario?.close()
             runCatching { connection.execute("/api/community/sessions/$id", "DELETE", null, emptyMap(), connection.generation, "live-recovery-cleanup", 15000).close() }
             connection.clearSession(true); client.dispatcher.cancelAll(); client.connectionPool.evictAll()
         }
