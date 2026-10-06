@@ -103,7 +103,12 @@ S5e validado: CarDjTest2/0 HTTP/TLS + normal APK/test/JVM54/lint sin CA;
 ver SLICE_5E/evidence/s5e.json. Browsers moderno/clásico conservan programa DJ
 al browse/pausa/seek/resume y reflejan canción dominante. Sin suite activa tras49040.
 
-Siguiente: labels del programa activo y pérdida/reconexión real. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
+S5f validado: CarEventsTest2/0 HTTP/TLS + normal APK/test/JVM54/lint sin CA.
+Transport close + handshake503 observado, reconexión recupera etiqueta perdida
+con Activity cerrada y conserva NORMAL KEY/PCM. Producción sin cambios; fixture
+acelera heartbeat sólo en test. Ver SLICE_5F/evidence/s5f.json. Sin suite activa tras6518.
+
+Siguiente: labels del programa activo y UID externo. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
 actualizadas del programa activo. Luego UID externo, negativos DJ, Live/teléfono/
 firma y regresión final/browser4. Clone /tmp/soundsible-auto-next ya se trasladó;
 no copiarlo sobre root actual. No aplicar stash/clone viejo. No merge/automerge/release.

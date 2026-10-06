@@ -62,7 +62,23 @@ class CarEventsTest {
                 .header("X-Android-Fixture", "isolated").post("{\"enabled\":$enabled}".toRequestBody("application/json".toMediaType()))
                 .build()).execute().use { assertEquals(200, it.code) }
         }
+        fun socketNetwork(enabled: Boolean? = null): JSONObject {
+            return connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/socket-network")
+                .header("X-Android-Fixture", "isolated").post((if (enabled == null) "{}" else "{\"enabled\":$enabled}").toRequestBody("application/json".toMediaType()))
+                .build()).execute().use {
+                    assertEquals(200, it.code)
+                    val state = JSONObject(it.body!!.string())
+                    if (enabled == true) assertTrue("Fixture closed no socket: $state", state.getInt("before") > 0)
+                    state
+                }
+        }
+        fun socketTiming(enabled: Boolean) {
+            connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/socket-timing")
+                .header("X-Android-Fixture", "isolated").post("{\"enabled\":$enabled}".toRequestBody("application/json".toMediaType()))
+                .build()).execute().use { assertEquals(200, it.code) }
+        }
         try {
+            socketTiming(true)
             connection.execute("/api/auth/login", "POST", "{\"username\":\"member\",\"password\":\"android-test\"}".toRequestBody("application/json".toMediaType()),
                 emptyMap(), generation, "car-events-login", 15000).use {
                 assertTrue(it.isSuccessful); connection.offline.bind(JSONObject(it.body!!.string()).getJSONObject("user"))
@@ -114,6 +130,15 @@ class CarEventsTest {
                 await("Background playlist added", { playlistCount.get() == initialPlaylists + 1 })
                 request("/api/library/playlists/Car%20background", "DELETE", null)
                 await("Background playlist removed", { playlistCount.get() == initialPlaylists })
+                socketNetwork(true)
+                Thread.sleep(500) // Drain notifications sent before the transport was closed.
+                request("/api/library/track-labels/member-track/metadata", "POST", "{\"title\":\"Car reconnect title\"}")
+                val retryUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
+                while (socketNetwork().getInt("blocked") == 0 && System.nanoTime() < retryUntil) Thread.sleep(100)
+                assertTrue("Fixture rejected no reconnect", socketNetwork().getInt("blocked") > 0)
+                assertEquals("Disconnected subscription delivered new metadata", "Car background title", title.get())
+                socketNetwork(false)
+                await("Native socket reconnected and refreshed missed labels", { title.get() == "Car reconnect title" })
                 pcm.set(false)
                 await("Programme retained", {
                     active.isPlaying && pcm.get() && active.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY) == key.get()
@@ -129,6 +154,8 @@ class CarEventsTest {
                 assertEquals("Unsubscribed browser received events", stopped, changes.get())
             }
         } finally {
+            runCatching { socketNetwork(false) }
+            runCatching { socketTiming(false) }
             runCatching { delayStreams(false) }
             runCatching { request("/api/library/track-labels/member-track/metadata", "POST", "{\"title\":\"member private song\"}") }
             runCatching { request("/api/library/playlists/Car%20background", "DELETE", null) }

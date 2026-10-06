@@ -154,6 +154,18 @@ def main() -> None:
     stream_delay = {}
     offline_body = {}
     connection_failure = {}
+    socket_failure = {"enabled": False, "blocked": 0}
+    socket_app = app.wsgi_app
+
+    def socket_network(environ, start_response):
+        # Engine.IO handles /socket.io before Flask before_request hooks.
+        if socket_failure["enabled"] and environ.get("PATH_INFO", "").startswith("/socket.io"):
+            socket_failure["blocked"] += 1
+            start_response("503 Service Unavailable", [("Content-Type", "text/plain")])
+            return [b"fixture socket unavailable"]
+        return socket_app(environ, start_response)
+
+    app.wsgi_app = socket_network
     artwork_mode = {}
     auth_events = []
     discovery_requests = []
@@ -277,6 +289,23 @@ def main() -> None:
             with _rate_limiter._lock:
                 _rate_limiter._events.pop(f"auth_login:{request.remote_addr}", None)
             return jsonify({"ok": True})
+        if action == "socket-network":
+            before = len(socketio.server.eio.sockets)
+            data = request.get_json(silent=True) or {}
+            if "enabled" in data:
+                socket_failure["enabled"] = bool(data["enabled"])
+            if data.get("enabled"):
+                # Close the Engine.IO transport, not a namespace-level logout.
+                # Subsequent handshakes fail until the fixture network recovers.
+                for sid, client in list(socketio.server.eio.sockets.items()):
+                    socketio.server.eio.sockets.pop(sid, None)
+                    client.close(wait=False, abort=True)
+            return jsonify(ok=True, clients=len(socketio.server.eio.sockets), before=before, blocked=socket_failure["blocked"])
+        if action == "socket-timing":
+            fast = bool((request.get_json(silent=True) or {}).get("enabled"))
+            socketio.server.eio.ping_interval = 2 if fast else 25
+            socketio.server.eio.ping_timeout = 3 if fast else 20
+            return jsonify(ok=True)
         name = (request.get_json(silent=True) or {}).get("account", "member")
         uid = accounts[name]
         if action == "artwork":
