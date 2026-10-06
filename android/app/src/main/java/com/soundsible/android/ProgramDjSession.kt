@@ -21,11 +21,13 @@ internal class ProgramDjSession(private val context: Context, private val genera
     private val tap: ProgramPcmTap, private val leveling: () -> Boolean,
     initial: List<Row>, startPositionMs: Long = 0, private val mixing: () -> Boolean = { true },
     private val refine: (ProgramDjSession) -> Unit = {}, private val changed: () -> Unit = {}) : AutoCloseable {
+    companion object { const val CONTEXT_LEAD = "soundsible_dj_context_lead" }
     data class Row(val item: MediaItem, val proposal: ProgramDjPlan.Proposal? = null, val kind: String = "user")
     data class RouteSnapshot(val epoch: Long, val revision: Long, val floor: Int, val rows: List<Row>)
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var closed = false
     private var route = initial.toList()
+    private var contextLead = initial.drop(1).firstOrNull { it.item.mediaMetadata.extras?.getBoolean(CONTEXT_LEAD) == true }?.item?.mediaMetadata?.extras?.getString(ProgramQueue.KEY)
     private var routeRevision = 0L
     private val heard = linkedSetOf<String>()
     private val indices = intArrayOf(0, -1)
@@ -250,8 +252,23 @@ internal class ProgramDjSession(private val context: Context, private val genera
         applyPlaylist(next.map { it.item }, false)
         return routeSnapshot()
     }
+    /** Explicit session changes replace generated runway and retain ordinary requests. */
+    fun changeContext(item: MediaItem) {
+        check(owns())
+        if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
+        val floor = protectedIndex()
+        val anchor = route[floor].item
+        fun sameRecording(other: MediaItem) = other.mediaId == item.mediaId &&
+            other.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)
+        val lead = if (sameRecording(anchor)) emptyList() else listOf(Row(item))
+        val requests = route.drop(floor + 1).filter { it.kind == "user" && itemKey(it.item) != contextLead &&
+            (lead.isEmpty() || !sameRecording(it.item)) }
+        applyPlaylist((route.take(floor + 1) + lead + requests).map { it.item }, false)
+        contextLead = lead.firstOrNull()?.item?.let(::itemKey)
+    }
     fun pin(key: String) {
         check(owns())
+        if (contextLead == key) contextLead = null
         val index = route.indexOfFirst { itemKey(it.item) == key }
         if (index < 0 || route[index].kind == "user") return
         route = route.toMutableList().also { it[index] = it[index].copy(kind = "user") }

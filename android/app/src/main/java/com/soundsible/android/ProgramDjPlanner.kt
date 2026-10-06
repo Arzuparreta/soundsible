@@ -32,7 +32,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
     private var retry: Runnable? = null
     @Volatile private var closed = false
     fun start(profile: String, direction: JSONObject, sources: JSONArray, fromCurrent: Boolean,
-        kind: Kind = Kind.START, anchor: MediaItem? = null) {
+        kind: Kind = Kind.START, anchor: MediaItem? = null, lead: MediaItem? = null) {
         require(profile in listOf("adaptive", "long_blend", "cuts_drops", "open_format"))
         require(direction.toString().length <= 16384 && sources.length() <= 64 && sources.toString().length <= 65536)
         val seed = anchor ?: player.currentMediaItem.takeIf { fromCurrent }
@@ -89,7 +89,14 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
                     try {
                         if (response != null) {
                             val actualSeed = seedKey?.let { key -> (0 until player.mediaItemCount).firstOrNull { ProgramQueue.key(player, it) == key }?.let(player::getMediaItemAt) }
-                            val parsed = rows(response, actualSeed, generation)
+                            val planned = rows(response, actualSeed, generation)
+                            fun sameReference(a: MediaItem, b: MediaItem) = a.mediaId == b.mediaId &&
+                                a.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == b.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)
+                            val parsed = if (lead != null && actualSeed != null && !sameReference(lead, actualSeed)) {
+                                val marked = lead.buildUpon().setMediaMetadata(lead.mediaMetadata.buildUpon()
+                                    .setExtras(android.os.Bundle(lead.mediaMetadata.extras).apply { putBoolean(ProgramDjSession.CONTEXT_LEAD, true) }).build()).build()
+                                planned.take(1) + ProgramDjSession.Row(marked) + planned.drop(1).filter { !sameReference(it.item, lead) }
+                            } else planned
                             if (parsed.size > if (seed == null) 0 else 1) {
                                 status(if (response.optBoolean("degraded")) "degraded" else "ready", profile, 0)
                                 ready(parsed, if (seed == null) 0 else player.currentPosition, kind)

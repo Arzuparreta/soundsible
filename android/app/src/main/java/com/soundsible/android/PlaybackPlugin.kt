@@ -81,7 +81,7 @@ class PlaybackPlugin : Plugin() {
             require((call.getInt("generation")?.toLong() ?: -1L) == connection.generation)
             val p = controller ?: error("NOT_READY")
             when (call.getString("action")) {
-                "djRequest", "djRepair", "djSettings", "dj", "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay", "leveling", "mixing", "metadata", "retireSource" -> {
+                "djContext", "djRequest", "djRepair", "djSettings", "dj", "queue", "play", "select", "move", "remove", "append", "insertAfter", "retry", "stop", "skip", "radio", "autoplay", "leveling", "mixing", "metadata", "retireSource" -> {
                     val args = Bundle().apply {
                         if (call.getString("action") == "metadata") putString("metadataRevision", java.util.UUID.randomUUID().toString())
                         putBoolean("fromCurrent", call.getBoolean("fromCurrent") ?: true)

@@ -36,8 +36,8 @@ No hay paridad completa ni PR final todavía.
   controles MediaSession/focus/noisy en AVD, retorno NORMAL y mezcla off confirmada.
   Recuperación de decoder previo a mezcla y de una entrada sin PCM durante mezcla
   aceptadas con controller real aislado. Reparación Core, pins al replanear y estado
-  «Preparada» y placement musical aceptados. Refinamiento previo a preparación conectado; recuperación de red
-  completa en servicio sigue pendiente. No declarar paridad DJ.
+  «Preparada» y placement musical aceptados. Refinamiento previo a preparación conectado y recuperación de una entrada
+  con body pendiente validada en servicio. Ambas entradas indisponibles pendientes. No declarar paridad DJ.
 - Live y Android Auto: pendientes. Firma permanente/update público: pendientes.
 
 ## Evidencia que importa al continuar
@@ -121,15 +121,23 @@ Range-native6/2 muestra que64000bytes no arrancan decoder antes del bloqueo;
 600000bytes y contador pendiente corrigen el fixture. No declarar éxitos de esos
 runs fallidos ni recuperación si el bloqueo ya había terminado.
 
-Principal/remote `12c7e537` combinan contrato car podcast y evidencia130.
+Principal/remote `acbd83d7` incluyen contrato car podcast, evidencia130 y
+network/settings validados. Menús DJ desde canción/usar como fuente en validación
+sobre ese HEAD dirty: UI198/1568 + TS pasan; Context2 + DJ2 nativo4/0 HTTP/TLS pasan,123.203s,
+(`/tmp/soundsible-s3b-context-native.log`). Runner termina exit1 por lint del
+borrador Auto no conectado (LibraryResult constantes antiguas). Corregido a
+SessionError; build normal separado APK/test APK/JVM52/lint pasa
+(`/tmp/soundsible-s3b-context-normal-build.log`), fuentes DJ sin cambios.
 ProgramCarLibrary.kt nuevo está en desarrollo en principal; no integrado/validado
 ni committed. Root HANDOFF/evidence se actualizan al cerrar network. Clone tiene
 los mismos cambios network, no volver a copiarlos después de editar el principal.
 Worktree falló ref nueva read-only; clone independiente funcionó. Commit/push sí
 funcionan; no pedir acción al usuario. Mantener suites pesadas en serie; futuros
 runs completos pueden usar checkout aislado para seguir editando otra copia.
-Siguiente DJ: menú desde canción/usar como fuente, respetando canción actual y
-requests como web changeAutoSession; negativos restantes y límite largo en servicio.
+Menú desde canción/usar como fuente validado: KEY/posición/pausa retenidos,
+lead anterior retirado al cambiar contexto y requests explícitas retenidas.
+Siguiente DJ: menús de ruta/cola con acciones compartidas y placement fijo,
+negativos restantes y límite largo en servicio.
 Android Auto: browse draft en ProgramCarLibrary, requiere integración, selección,
 Radio, covers/offline y aceptación de host. Live y firma siguen pendientes.
 

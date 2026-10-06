@@ -443,5 +443,35 @@
       "complete parity",
       "physical acoustic acceptance"
     ]
+  },
+  "dj_song_context": {
+    "source_base_revision": "acbd83d7",
+    "dirty": true,
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 123.203,
+    "log": "/tmp/soundsible-s3b-context-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA in /tmp/soundsible-s3b-context-normal-build.log; separate build after fixing lint constants only in unintegrated Auto draft; DJ sources unchanged",
+    "ui": {
+      "files": 198,
+      "tests": 1568,
+      "typescript": "pass",
+      "log": "/tmp/soundsible-s3b-context-full-ui.log"
+    },
+    "proves": [
+      "real library menus through HTTP/TLS native bridge and Core",
+      "NORMAL paused current occurrence and position retained when starting from another song",
+      "changing context removes prior context lead while retaining explicit listener request by key",
+      "adding source retains pause/current/request and does not increment placement revision",
+      "existing DjProgramTest HTTP/TLS regression passes"
+    ],
+    "does_not_prove": [
+      "all route menus and fixed placement interactions",
+      "both inputs unavailable recovery",
+      "complete DJ parity",
+      "physical acoustic continuity"
+    ]
   }
 }

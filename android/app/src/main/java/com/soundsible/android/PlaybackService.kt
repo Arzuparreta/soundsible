@@ -238,13 +238,15 @@ class PlaybackService : MediaLibraryService() {
             val next = ProgramDjSession(this, epoch, { epoch == connection.generation && runCatching { connection.sessionIdentity(epoch) }.getOrNull() == identity },
                 sources, pcmTap, leveling::active, rows, position, mixing = mixing::active, refine = { djRefiner?.refine(it) }, changed = { publishDj(djPhase, djProfile, djError) })
             autoplay.clear(); radio.clear()
+            val resume = player.playWhenReady || rows.firstOrNull()?.kind != "user"
             val previousDj = dj; dj = next
             player.pause(); player.stop()
             val volume = player.volume
             val previous = player.replaceBackend(next.player)
             if (previousDj != null) previousDj.close() else previous.release()
             next.player.volume = volume
-            next.player.play(); publishDj(djPhase, djProfile, djError); refillAnchor = ""
+            if (resume) next.player.play()
+            publishDj(djPhase, djProfile, djError); refillAnchor = ""
             }
         }
         djRefiner = ProgramDjRefiner(connection, main, { dj }, djPlanner)
@@ -291,7 +293,26 @@ class PlaybackService : MediaLibraryService() {
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
                 return Futures.immediateFuture(try {
-                    if (args.getString("action") == "djRequest") {
+                    if (args.getString("action") == "djContext") {
+                        require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
+                        if (player.mediaItemCount > 0) require(args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))
+                        if (dj != null) require(args.getString("programToken") == ProgramQueue.programToken(player))
+                        require(player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(ProgramQueue.PODCAST) != true)
+                        val requested = org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACK")); require(requested.length() == 1)
+                        val track = ProgramQueue.items(connection, requested, ProgramQueue.programToken(player)).single()
+                        require(track.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
+                        val source = org.json.JSONObject().put("id", java.util.UUID.randomUUID().toString())
+                            .put("label", track.mediaMetadata.title?.toString() ?: "").put("activation", 1)
+                            .put("tracks", org.json.JSONArray().put(djPlanner.reference(track)))
+                        djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
+                        if (dj != null) {
+                            dj!!.changeContext(track)
+                            djPlanner.start(djPlanner.profile, djPlanner.direction, org.json.JSONArray().put(source), true, ProgramDjPlanner.Kind.REPLACE)
+                        } else {
+                            djPlanner.start(djPlanner.profile, djPlanner.direction, org.json.JSONArray().put(source), player.mediaItemCount > 0,
+                                lead = track.takeIf { player.mediaItemCount > 0 })
+                        }
+                    } else if (args.getString("action") == "djRequest") {
                         require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player) && args.getString("queueToken") == ProgramQueue.token(player))
                         val rows = org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACK")); require(rows.length() == 1)
                         val track = ProgramQueue.items(connection, rows, ProgramQueue.programToken(player)).single()

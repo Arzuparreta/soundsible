@@ -24,6 +24,34 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
   return { title: track.title, subtitle: track.artist, actions: [
     { label: t('android.insertAfter'), disabled, onSelect: () => select('insertAfter') },
     { label: t('trackActions.addToQueue'), disabled, onSelect: () => select('append') },
+    ...(candidate && candidate.mediaKind !== 'podcast_episode' ? [{
+      label: t(captured?.items[captured.index]?.id === candidate.id ? 'musicExplorer.startDjFromCurrent' : 'musicExplorer.startDjFromSong'),
+      disabled: disabled || captured?.items[captured.index]?.mediaKind === 'podcast_episode',
+      onSelect: () => {
+        const observed = state();
+        if (disabled || pending() || !observed?.ready || observed.generation !== captured?.generation ||
+          observed.programToken !== captured.programToken || observed.queueToken !== captured.queueToken ||
+          observed.items[observed.index]?.mediaKind === 'podcast_episode') return;
+        void execute({ action: 'djContext', tracks, queueToken: captured.queueToken,
+          programToken: captured.programToken, key: captured.items[captured.index]?.key }).catch(() => {});
+      },
+    }] : []),
+    ...(captured?.dj?.active && candidate && candidate.mediaKind !== 'podcast_episode' ? [{
+      label: t('musicExplorer.reference'),
+      selected: captured.dj.sources?.some(source => source.tracks.length === 1 && source.tracks[0].id === candidate.id && (source.tracks[0].source ?? 'local') === candidate.source),
+      disabled: disabled || (captured.dj.sources?.length ?? 0) >= 64 || captured.dj.sources?.some(source => source.tracks.length === 1 && source.tracks[0].id === candidate.id && (source.tracks[0].source ?? 'local') === candidate.source),
+      onSelect: () => {
+        const observed = state();
+        if (disabled || pending() || !observed?.dj?.active || observed.generation !== captured.generation ||
+          observed.programToken !== captured.programToken || !observed.programToken || observed.queueToken !== captured.queueToken) return;
+        const sources = observed.dj.sources ?? [];
+        if (sources.length >= 64 || sources.some(source => source.tracks.length === 1 && source.tracks[0].id === candidate.id && (source.tracks[0].source ?? 'local') === candidate.source)) return;
+        void execute({ action: 'djSettings', programToken: observed.programToken, sources: [...sources, {
+          id: crypto.randomUUID(), label: candidate.title, tracks: [{ ...candidate, source: candidate.source === 'preview' ? 'preview' as const : undefined }],
+          activation: Math.max(0, ...sources.map(source => source.activation)) + 1,
+        }] }).catch(() => {});
+      },
+    }] : []),
     ...(captured?.dj?.active && captured.programToken && candidate?.mediaKind !== 'podcast_episode' ? [{
       label: t('autoMode.dj.routeAction'), disabled,
       onSelect: () => {

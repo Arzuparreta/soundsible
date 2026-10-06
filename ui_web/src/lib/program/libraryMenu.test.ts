@@ -85,3 +85,35 @@ it('replans a selected radio profile and rejects selection after the seed occurr
   menu.actions!.find(action => action.label === 'autoMode.profile.familiar')!.onSelect();
   expect(execute).toHaveBeenCalledTimes(1);
 });
+it('starts a song context without passing URLs or switching playback directly', () => {
+  const execute = vi.fn(async () => {});
+  const menu = programLibraryMenu({ ...track, url: 'https://external.invalid' } as Track, () => initial, () => false, execute);
+  menu.actions!.find(action => action.label === 'musicExplorer.startDjFromSong')!.onSelect();
+  expect(execute).toHaveBeenCalledExactlyOnceWith({ action: 'djContext', tracks: [{ ...track, source: 'local' }], queueToken: 'order', programToken: undefined, key: 'second' });
+});
+it('rejects a deferred context after the current programme or order changed', () => {
+  let state = initial; const execute = vi.fn(async () => {});
+  const action = programLibraryMenu(track, () => state, () => false, execute).actions!.find(action => action.label === 'musicExplorer.startDjFromSong')!;
+  state = { ...initial, programToken: 'different' }; action.onSelect();
+  state = { ...initial, queueToken: 'different' }; action.onSelect();
+  expect(execute).not.toHaveBeenCalled();
+});
+it('adds a source from normalized metadata while preserving newer directions', () => {
+  let state = { ...initial, programToken: 'dj', dj: { active: true, phase: 'ready', profile: 'adaptive', sources: [] } } as ProgramState;
+  const execute = vi.fn(async () => {});
+  const action = programLibraryMenu(track, () => state, () => false, execute).actions!.find(action => action.label === 'musicExplorer.reference')!;
+  state = { ...state, dj: { ...state.dj!, sources: [{ id: 'newer', label: 'Newer', activation: 4, tracks: [{ ...track, id: 'other' }] }] } };
+  action.onSelect();
+  expect(execute).toHaveBeenCalledWith({ action: 'djSettings', programToken: 'dj', sources: [state.dj!.sources![0], { id: expect.any(String), label: 'Song', activation: 5, tracks: [{ ...track, source: undefined }] }] });
+});
+it('keeps duplicate sources and podcasts out of context actions', () => {
+  const execute = vi.fn(async () => {});
+  const state = { ...initial, programToken: 'dj', dj: { active: true, phase: 'ready', profile: 'adaptive', sources: [{ id: 'existing', label: 'Song', activation: 1, tracks: [track] }] } } as ProgramState;
+  const reference = programLibraryMenu(track, () => state, () => false, execute).actions!.find(action => action.label === 'musicExplorer.reference')!;
+  expect(reference.selected).toBe(true); expect(reference.disabled).toBe(true); reference.onSelect();
+  expect(execute).not.toHaveBeenCalled();
+  const podcastState = { ...initial, index: 0, items: [{ ...track, id: 'episode-id', source: 'podcast', mediaKind: 'podcast_episode', key: 'episode' }] } as ProgramState;
+  const action = programLibraryMenu(track, () => podcastState, () => false, execute).actions!.find(action => action.label === 'musicExplorer.startDjFromSong')!;
+  expect(action.disabled).toBe(true); action.onSelect();
+  expect(execute).not.toHaveBeenCalled();
+});
