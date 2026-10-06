@@ -41,8 +41,8 @@ public class CatalogSearchTest {
         waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==="+JSONObject.quote(name+" private song")+")");
     }
     private void menu(StartupTest web,ActivityScenario<MainActivity> scenario,String title,String action) throws Exception {
-        waitFor(web,scenario,"!!document.querySelector('[aria-label="+JSONObject.quote("More options: "+title)+"]') && document.querySelector('[aria-label="+JSONObject.quote("More options: "+title)+"]').closest('[data-music-list-row]').getAttribute('aria-busy')!=='true'");
-        web.evaluate(scenario,"document.querySelector('[aria-label="+JSONObject.quote("More options: "+title)+"]').click()");
+        waitFor(web,scenario,"!!document.querySelector('[data-testid=android-catalog-search] [aria-label="+JSONObject.quote("More options: "+title)+"]') && document.querySelector('[data-testid=android-catalog-search] [aria-label="+JSONObject.quote("More options: "+title)+"]').closest('[data-music-list-row]').getAttribute('aria-busy')!=='true'");
+        web.evaluate(scenario,"document.querySelector('[data-testid=android-catalog-search] [aria-label="+JSONObject.quote("More options: "+title)+"]').click()");
         waitFor(web,scenario,"!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent.startsWith("+JSONObject.quote(action)+"))");
         web.evaluate(scenario,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.startsWith("+JSONObject.quote(action)+")).click()");
     }
