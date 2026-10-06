@@ -176,7 +176,8 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False) 
                 # Each engine owns a separate database and port. Start all of them
                 # before waiting, so unrelated bootstrap work does not serialize.
                 for (port, _passwordless), process in zip(fixtures, processes, strict=True):
-                    deadline = time.monotonic() + 60
+                    # Includes synthetic audio encoding on a shared CI runner.
+                    deadline = time.monotonic() + 240
                     while True:
                         if process.poll() is not None:
                             raise RuntimeError(

@@ -32,7 +32,8 @@ def install(app, root: Path):
         ]
         if suffix == "mp4":
             command += ["-b:a", "192k", "-movflags", "+faststart"]
-        subprocess.run([*command, "-y", str(path)], check=True, timeout=30)
+        # Three engines encode these ten-minute tones alongside the CI emulator.
+        subprocess.run([*command, "-y", str(path)], check=True, timeout=180)
         samples[suffix] = path.read_bytes()
     fragmented = root / "fragmented.mp4"
     subprocess.run(
