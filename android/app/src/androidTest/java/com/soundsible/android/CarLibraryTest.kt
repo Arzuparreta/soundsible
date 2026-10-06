@@ -130,6 +130,21 @@ class CarLibraryTest {
                 connection.client.newCall(okhttp3.Request.Builder().url(origin + path).header("X-Android-Fixture", "isolated")
                     .header("Cookie", connection.cookieHeader(generation)!!).post(body.toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
             }
+            fixture("/__fixture/car-collections", "{\"enabled\":true}")
+            try {
+                for (parent in listOf("playlists", "podcasts")) {
+                    val first = call { active.getChildren(parent, 0, 200, null) }
+                    val second = call { active.getChildren(parent, 1, 200, null) }
+                    val last = call { active.getChildren(parent, 2, 200, null) }
+                    for (result in listOf(first, second, last)) assertEquals(SessionResult.RESULT_SUCCESS, result.resultCode)
+                    assertEquals(200, first.value!!.size); assertEquals(200, second.value!!.size)
+                    assertTrue(last.value!!.size >= 5)
+                    assertTrue(first.value!!.map { it.mediaId }.intersect(second.value!!.map { it.mediaId }.toSet()).isEmpty())
+                    val legacy = call { active.getChildren(parent, 0, Int.MAX_VALUE, null) }
+                    assertEquals(SessionResult.RESULT_SUCCESS, legacy.resultCode)
+                    assertTrue(legacy.value!!.size >= 405)
+                }
+            } finally { fixture("/__fixture/car-collections", "{\"enabled\":false}") }
             fixture("/__fixture/podcast", "{\"acquire_episode\":true}")
             val podcasts = call { active.getChildren("podcasts", 0, 200, null) }
             assertEquals(SessionResult.RESULT_SUCCESS, podcasts.resultCode)

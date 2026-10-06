@@ -30,8 +30,16 @@ class EngineConnection(private val context: Context) {
     private val calls = ConcurrentHashMap<String, Call>()
     var onReset: () -> Unit = {}
     val resetListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
-    val client: OkHttpClient get() = transport(origin)
-    private fun transport(selected: String, epoch: Long = generation): OkHttpClient {
+    private data class Transport(val origin: String, val generation: Long, val client: OkHttpClient)
+    private var activeTransport: Transport? = null
+    val client: OkHttpClient get() = synchronized(lock) { transport(origin, generation) }
+    private fun transport(selected: String, epoch: Long): OkHttpClient = synchronized(lock) {
+        require(selected == origin && epoch == generation) { "STALE_SESSION" }
+        activeTransport?.takeIf { it.origin == selected && it.generation == epoch }?.let { return@synchronized it.client }
+        activeTransport?.client?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll() }
+        buildTransport(selected, epoch).also { activeTransport = Transport(selected, epoch, it) }
+    }
+    private fun buildTransport(selected: String, epoch: Long = generation): OkHttpClient {
         val target = selected.toHttpUrl()
         return OkHttpClient.Builder()
             .followRedirects(false).followSslRedirects(false)
@@ -95,6 +103,11 @@ class EngineConnection(private val context: Context) {
 
     private fun resetLocked() {
         generation++
+        activeTransport?.client?.let {
+            it.dispatcher.cancelAll()
+            it.connectionPool.evictAll()
+        }
+        activeTransport = null
         calls.values.forEach { it.cancel() }
         calls.clear()
         onReset()

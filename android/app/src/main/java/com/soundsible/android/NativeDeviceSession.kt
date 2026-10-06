@@ -95,7 +95,10 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
                     if (denied) rejectedIdentity = cookieIdentity
                     publish(state()); return@post }
                 try {
-                    val transport = connection.client
+                    // This socket owner cancels/shuts down its transport on close;
+                    // do not let that lifecycle retire the shared REST pool.
+                    val transport = connection.client.newBuilder().dispatcher(okhttp3.Dispatcher())
+                        .connectionPool(okhttp3.ConnectionPool()).build()
                     client = transport
                     val options = IO.Options().apply {
                         forceNew = true; reconnection = true; reconnectionAttempts = 5

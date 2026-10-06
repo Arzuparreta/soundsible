@@ -58,6 +58,7 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
         if (closed || parent.length > 1024 || page < 0 || (!unpaginated && size !in 1..200)) {
             future.set(LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)); return future
         }
+        val collectionPage = parent == "playlists" || parent == "podcasts"
         val epoch = connection.generation
         val identity = identity(epoch)
         if (identity == null) { future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)); return future }
@@ -94,7 +95,7 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
                     val path = when {
                         parent == ROOT -> "/api/car/home"
                         parent.startsWith(SEARCH) -> "/api/car/search?q=" + Uri.encode(parent.removePrefix(SEARCH))
-                        else -> "/api/car/items/" + Uri.encode(parent)
+                        else -> "/api/car/items/" + Uri.encode(parent) + if (collectionPage) "?page=$page&page_size=${minOf(pageSize, 200)}" else ""
                     }
                     connection.execute(path, "GET", null, emptyMap(), epoch, id, 10000).use {
                         code = it.code
@@ -103,8 +104,27 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
                             answer = JSONObject(raw)
                         }
                     }
+                    // The legacy bridge requests an unpaged tree. Fetch bounded server
+                    // pages up to our existing 1000-row cap, preserving that contract.
+                    if (collectionPage && unpaginated && code == 200 && answer!!.has("total")) {
+                        val collected = answer!!.getJSONArray("items")
+                        val total = answer!!.getInt("total")
+                        var nextPage = 1
+                        while (collected.length() < minOf(total, 1000)) {
+                            connection.execute("/api/car/items/" + Uri.encode(parent) + "?page=$nextPage&page_size=200",
+                                "GET", null, emptyMap(), epoch, id, 10000).use {
+                                code = it.code
+                                require(it.isSuccessful)
+                                val raw = it.peekBody(262145).string(); require(raw.toByteArray().size <= 262144)
+                                val rows = JSONObject(raw).getJSONArray("items")
+                                require(rows.length() in 1..200)
+                                for (index in 0 until rows.length()) if (collected.length() < 1000) collected.put(rows.getJSONObject(index))
+                            }
+                            nextPage++
+                        }
                     }
-                } catch (_: Exception) { }
+                    }
+                } catch (_: Exception) { answer = null }
                 main.post {
                     requests.remove(id); pending.remove(id)
                     if (closed || epoch != connection.generation || identity(epoch) != identity) {
@@ -125,9 +145,9 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
                             future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)); return@post
                         }
                         val items = answer?.getJSONArray("items") ?: if (parent == ROOT && code !in listOf(401, 403) && copies.length() > 0) org.json.JSONArray() else throw IllegalArgumentException()
-                        require(items.length() <= if (parent == OFFLINE) 1000 else 200)
+                        require(items.length() <= if (parent == OFFLINE || (collectionPage && (unpaginated || answer?.has("total") != true))) 1000 else 200)
                         if (parent == ROOT && copies.length() > 0) items.put(JSONObject().put("id", OFFLINE).put("title", offlineTitle).put("is_browsable", true).put("is_playable", false))
-                        complete(parent, items, page, pageSize, params, future)
+                        complete(parent, items, page, pageSize, params, future, if (collectionPage && answer?.has("total") == true) answer?.getInt("total") else null)
                     } catch (_: Exception) { future.set(LibraryResult.ofError(if (code == 404) SessionError.ERROR_BAD_VALUE else SessionError.ERROR_IO)) }
                 }
             }
@@ -152,11 +172,11 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
         }
         return result
     }
-    private fun complete(parent: String, items: org.json.JSONArray, page: Int, size: Int, params: LibraryParams?, future: SettableFuture<LibraryResult<ImmutableList<MediaItem>>>) {
-        require(items.length() <= 1000)
-        counts.remove(parent); counts[parent] = items.length()
+    private fun complete(parent: String, items: org.json.JSONArray, page: Int, size: Int, params: LibraryParams?, future: SettableFuture<LibraryResult<ImmutableList<MediaItem>>>, total: Int? = null) {
+        require(items.length() <= 1000 && (total == null || total >= items.length()))
+        counts.remove(parent); counts[parent] = total ?: items.length()
         while (counts.size > 500) counts.remove(counts.keys.first())
-        val offset = (page.toLong() * size).coerceAtMost(items.length().toLong()).toInt()
+        val offset = if (total != null) 0 else (page.toLong() * size).coerceAtMost(items.length().toLong()).toInt()
         val parsed = (offset until minOf(offset + size, items.length())).map { index ->
             val row = items.getJSONObject(index)
             val key = row.getString("id"); require(key.isNotBlank() && key.length <= 1024)

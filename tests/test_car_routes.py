@@ -256,3 +256,22 @@ def test_car_search_matches_acquired_library_before_limiting(tmp_path, monkeypat
     assert client.get("/api/car/search?q=missing").get_json()["items"] == []
     assert client.get("/api/car/search?q=").status_code == 400
     assert client.get("/api/car/search", query_string={"q": "x" * 257}).status_code == 400
+
+
+def test_large_car_collections_are_paged_without_changing_legacy_response(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[], settings={},
+        playlists={f"List {i}": [] for i in range(405)},
+        podcast_subscriptions=[{"id": f"feed-{i}", "title": f"Show {i}"} for i in range(405)])
+    _patch_api(monkeypatch, metadata)
+    client = _make_app().test_client()
+    for parent in ("playlists", "podcasts"):
+        path = f"/api/car/items/{parent}"
+        assert len(client.get(path).get_json()["items"]) == 405
+        pages = [client.get(f"{path}?page={page}&page_size=200").get_json() for page in range(4)]
+        assert [len(page["items"]) for page in pages] == [200, 200, 5, 0]
+        assert all(page["total"] == 405 for page in pages)
+        assert len({row["id"] for page in pages for row in page["items"]}) == 405
+        for query in ("page=-1", "page=bad", "page_size=201", "page_size=0"):
+            assert client.get(f"{path}?{query}").status_code == 400

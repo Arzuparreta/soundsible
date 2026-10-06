@@ -153,6 +153,22 @@ def _podcast_items(metadata) -> list[dict]:
     ][:MAX_CAR_ITEMS]
 
 
+def _collection_page(item_id: str, items: list[dict]):
+    # Older clients retain the unpaged response; native clients request bounded pages.
+    if "page" not in request.args and "page_size" not in request.args:
+        return jsonify({"id": item_id, "items": items, "status": "ok"})
+    try:
+        page = int(request.args.get("page", "0"))
+        size = int(request.args.get("page_size", str(MAX_CAR_ITEMS)))
+        if page < 0 or not 1 <= size <= MAX_CAR_ITEMS:
+            raise ValueError
+    except ValueError:
+        return jsonify({"error": "Invalid collection page"}), 400
+    offset = page * size
+    return jsonify({"id": item_id, "items": items[offset:offset + size],
+                    "total": len(items), "page": page, "page_size": size, "status": "ok"})
+
+
 def _home_items(metadata) -> list[dict]:
     playlists = getattr(metadata, "playlists", {}) or {}
     tracks = getattr(metadata, "tracks", []) or []
@@ -209,7 +225,7 @@ def get_car_items(item_id: str):
         return jsonify({"id": item_id, "items": [_track_item(t) for t in tracks[:MAX_CAR_ITEMS]], "status": "ok"})
 
     if item_id == "playlists":
-        return jsonify({"id": item_id, "items": _playlist_items(metadata), "status": "ok"})
+        return _collection_page(item_id, _playlist_items(metadata))
 
     if item_id.startswith("playlist:"):
         name = unquote(item_id.split(":", 1)[1])
@@ -236,7 +252,7 @@ def get_car_items(item_id: str):
         return jsonify({"id": item_id, "items": items, "playback_state": state, "status": "ok"})
 
     if item_id == "podcasts":
-        return jsonify({"id": item_id, "items": _podcast_items(metadata), "status": "ok"})
+        return _collection_page(item_id, _podcast_items(metadata))
 
     if item_id.startswith("podcast:"):
         feed_id = unquote(item_id.split(":", 1)[1])

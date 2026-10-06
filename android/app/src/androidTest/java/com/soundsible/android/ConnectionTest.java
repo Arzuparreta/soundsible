@@ -96,8 +96,14 @@ public class ConnectionTest {
             try { delayed.get(8, TimeUnit.SECONDS); fail("In-flight old account response accepted"); }
             catch (java.util.concurrent.ExecutionException expected) { assertTrue(expected.getCause() instanceof java.io.IOException || expected.getCause() instanceof IllegalArgumentException); }
             finally { worker.shutdownNow(); }
+            var previousClient = c.getClient();
+            assertSame("REST calls must reuse the current transport", previousClient, c.getClient());
+            try (Response response = request(c, "/api/library", "GET", null)) { assertEquals(200, response.code()); }
+            assertTrue("Closed response must return a connection to the shared pool", previousClient.connectionPool().idleConnectionCount() > 0);
             long previous = c.getGeneration();
             c.configure(server);
+            assertNotSame("Reset must retire the old transport", previousClient, c.getClient());
+            assertEquals(0, previousClient.connectionPool().idleConnectionCount());
             try { c.execute("/api/library", "GET", null, Collections.emptyMap(), previous, "old", 1000); fail("Old generation accepted"); }
             catch (IllegalArgumentException expected) { }
             try (Response response = request(c, "/api/auth/logout", "POST", "{}")) { assertEquals(200, response.code()); }

@@ -329,6 +329,22 @@ def main() -> None:
         elif action == "connection-failure":
             connection_failure["enabled"] = bool((request.get_json() or {}).get("enabled"))
             connection_failure["status"] = int((request.get_json() or {}).get("status", 503))
+        elif action == "car-collections":
+            data = request.get_json() or {}
+            enabled = bool(data.get("enabled"))
+            with user_context(uid):
+                library = get_user_core(uid).library
+                prefix = "car-page-fixture-"
+                library.metadata.playlists = {key: value for key, value in library.metadata.playlists.items()
+                                              if not key.startswith(prefix)}
+                library.metadata.podcast_subscriptions = [sub for sub in library.metadata.podcast_subscriptions
+                                                          if not sub.get("id", "").startswith(prefix)]
+                if enabled:
+                    for index in range(405):
+                        library.metadata.playlists[f"{prefix}{index}"] = []
+                        library.metadata.podcast_subscriptions.append({"id": f"{prefix}{index}", "title": f"Fixture show {index}"})
+                library._save_metadata()
+            return jsonify(ok=True)
         elif action == "loudness-facts":
             # Measure only synthetic fixture audio with the production R128 meter
             # and store. Native acceptance receives facts through real /api/library.

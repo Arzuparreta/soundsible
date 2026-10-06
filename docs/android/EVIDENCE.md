@@ -25,3 +25,11 @@ commit son la referencia. «Normal» = APK normal + APK de test + JVM + lint del
 La ejecución completa del commit de entrega y los checks de todas las plataformas
 se consultan en la [PR #300](https://github.com/Arzuparreta/soundsible/pull/300/checks).
 Los resultados locales anteriores no sustituyen esos checks del head vigente.
+
+- Revisión PR #300: ambos P2 confirmados. Transporte REST reutilizado por origen/generación,
+  pool retirado al reset; socket de dispositivos conserva transporte de lifecycle propio.
+  Colecciones Auto paginadas en Core (máximo 200 por respuesta), total conservado;
+  bridge legacy agrega páginas hasta 1000 y mantiene compatibilidad con respuestas anteriores.
+  Core: test con 405 listas/podcasts, páginas sin solapamiento y parámetros inválidos;
+  instrumentación Connection/CarLibrary añade reutilización/reset y páginas/legacy de 405 colecciones.
+  Compilación y aceptación nativa del commit corregido se validan en CI de la PR.
