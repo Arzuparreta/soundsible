@@ -54,7 +54,10 @@ class IncomingTrackTest {
                 web.evaluate(scenario, "window.__incomingDone=false;Capacitor.Plugins.SoundsiblePlayback.command({...window.__incomingState,action:'queue',index:0,tracks:[{source:'local',id:'member-track',title:'Retained song',artist:'member artist',duration:180}]}).then(()=>window.__incomingDone=true)")
                 waitFor("window.__incomingDone && window.__incomingState.playing")
                 web.evaluate(scenario, "window.__incomingDone=false;Capacitor.Plugins.SoundsiblePlayback.command({...window.__incomingState,action:'pause'}).then(()=>window.__incomingDone=true)")
-                waitFor("window.__incomingDone && !window.__incomingState.playWhenReady")
+                waitFor("window.__incomingDone && !window.__incomingState.playWhenReady && !window.__incomingState.playing")
+                // The polling snapshot may predate the renderer finishing pause.
+                // Establish a settled position before testing that intents retain it.
+                waitFor("(()=>{const p=window.__incomingState.positionMs;if(p!==window.__pausedPosition){window.__pausedPosition=p;window.__pausedSince=Date.now()}return Date.now()-window.__pausedSince>=400})()")
                 val key = web.evaluate(scenario, "window.__incomingState.items[window.__incomingState.index].key")
                 val position = web.evaluate(scenario, "window.__incomingState.positionMs").toDouble()
                 val oldToken = requireNotNull(IncomingTrackState.pending(context)!!.getString("token"))

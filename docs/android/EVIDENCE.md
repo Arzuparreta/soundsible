@@ -33,3 +33,11 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   Core: test con 405 listas/podcasts, páginas sin solapamiento y parámetros inválidos;
   instrumentación Connection/CarLibrary añade reutilización/reset y páginas/legacy de 405 colecciones.
   Compilación y aceptación nativa del commit corregido se validan en CI de la PR.
+- Regresión CI posterior: el transporte TLS retirado en background ya no aborta
+  CarLibrary. La suite alcanzó 87 casos y detectó cancelación de artwork que podía
+  completarse con error antes del listener, callbacks offline tras destruir la
+  Activity y dos capturas de posición anteriores a asentarse la pausa. Artwork
+  cancela resultados de generaciones retiradas; OfflinePlugin rechaza llamadas
+  tardías (prueba determinista de llamada/respuesta de permiso tras destroy);
+  IncomingTrack espera posición estable sin ampliar la tolerancia. Regresión
+  completa del head corregido pendiente de los checks de la PR.

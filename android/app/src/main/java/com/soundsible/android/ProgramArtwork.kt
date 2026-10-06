@@ -28,7 +28,7 @@ class ProgramArtwork(private val connection: EngineConnection) : BitmapLoader, A
     private val executor = ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(16))
     private val jobs = mutableMapOf<SettableFuture<Bitmap>, Call?>()
     private var last: Pair<Uri, ListenableFuture<Bitmap>>? = null
-    private var closed = false
+    @Volatile private var closed = false
     private val reset: () -> Unit = { synchronized(lock) {
         last = null
         jobs.keys.toList().forEach { it.cancel(true) }
@@ -96,7 +96,13 @@ class ProgramArtwork(private val connection: EngineConnection) : BitmapLoader, A
                         require(!future.isCancelled && epoch == connection.generation)
                         val bitmap = work(future)
                         synchronized(lock) { if (closed || future.isCancelled || epoch != connection.generation) bitmap.recycle() else future.set(bitmap) }
-                    } catch (error: Exception) { future.setException(error) }
+                    } catch (error: Exception) {
+                        // Shared transport cancellation can reach this worker before
+                        // the reset listener. An old account's result is cancelled,
+                        // rather than completed with an incidental socket error.
+                        if (closed || epoch != connection.generation) future.cancel(true)
+                        else future.setException(error)
+                    }
                     finally { synchronized(lock) { jobs.remove(future) } }
                 }
             } catch (error: java.util.concurrent.RejectedExecutionException) { jobs.remove(future); future.setException(error) }
