@@ -91,12 +91,15 @@ playlist counts tras cerrar Activity, conserva KEY/PCM y respeta unsubscribe.
 desconexión conserva otra razón. Root/children toleran cambio de epoch al leer
 identidad. No hay suite activa después de exec21942; AVD5554 sigue disponible.
 
-S5c validado y listo para commit: cookie expirada sin401 no elimina copias con
+S5c validado y pushed6c906d2f: cookie expirada sin401 no elimina copias con
 backend503; root/search/play locales y logout probados en bloque8/0,60.403s,exit0.
 No hay suite activa tras exec24330.
 
-Siguiente: observer de copias locales, controles/metadata durante DJ y pérdida/
-reconexión real. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
+S5d validado: observer de copias locales, bloque8/0 HTTP/TLS101.090s y
+completado en background2/0,38.286s; ambos normal APK/test/JVM54/lint sin CA.
+Ver SLICE_5D/evidence/s5d.json. No hay suite activa tras exec53504.
+
+Siguiente: controles/metadata durante DJ y pérdida/reconexión real. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
 actualizadas del programa activo. Luego UID externo, negativos DJ, Live/teléfono/
 firma y regresión final/browser4. Clone /tmp/soundsible-auto-next ya se trasladó;
 no copiarlo sobre root actual. No aplicar stash/clone viejo. No merge/automerge/release.

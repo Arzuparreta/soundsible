@@ -22,6 +22,7 @@ import org.junit.Test
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicInteger
 
 @UnstableApi
 class CarOfflineExpiryTest {
@@ -36,6 +37,8 @@ class CarOfflineExpiryTest {
         val generation = connection.configure(origin!!)
         var visible: ActivityScenario<MainActivity>? = null
         var browser: MediaBrowser? = null
+        val copyCount = AtomicInteger(-1)
+        val copyTitle = AtomicReference<String>()
         fun <T> call(work: () -> ListenableFuture<T>): T {
             val selected = AtomicReference<ListenableFuture<T>>()
             instrumentation.runOnMainSync { selected.set(work()) }
@@ -61,7 +64,18 @@ class CarOfflineExpiryTest {
                 assertTrue(it.isSuccessful); connection.offline.bind(JSONObject(it.body!!.string()).getJSONObject("user"))
             }
             visible = ActivityScenario.launch(MainActivity::class.java)
-            val active = call { MediaBrowser.Builder(context, SessionToken(context, ComponentName(context, PlaybackService::class.java))).buildAsync() }
+            val listener = object : MediaBrowser.Listener {
+                override fun onChildrenChanged(owner: MediaBrowser, parentId: String, itemCount: Int, params: androidx.media3.session.MediaLibraryService.LibraryParams?) {
+                    if (parentId != ProgramCarLibrary.OFFLINE) return
+                    copyCount.set(itemCount)
+                    val future = owner.getChildren(parentId, 0, 200, params)
+                    future.addListener({
+                        val result = runCatching { future.get() }.getOrNull()
+                        if (result?.resultCode == SessionResult.RESULT_SUCCESS) copyTitle.set(result.value!!.singleOrNull()?.mediaMetadata?.title?.toString())
+                    }, { task -> task.run() })
+                }
+            }
+            val active = call { MediaBrowser.Builder(context, SessionToken(context, ComponentName(context, PlaybackService::class.java))).setListener(listener).buildAsync() }
             browser = active
             val tracks = call { active.getChildren("all-tracks", 0, 200, null) }.value!!
             val online = tracks.single { it.mediaId == "soundsible:track:member-track" }
@@ -87,6 +101,8 @@ class CarOfflineExpiryTest {
             val home = call { active.getChildren(ProgramCarLibrary.ROOT, 0, 200, null) }.value!!
             assertEquals(listOf(ProgramCarLibrary.OFFLINE), home.map { it.mediaId })
             val local = call { active.getChildren(ProgramCarLibrary.OFFLINE, 0, 200, null) }.value!!.single()
+            assertEquals(SessionResult.RESULT_SUCCESS, call { active.subscribe(ProgramCarLibrary.OFFLINE, null) }.resultCode)
+            await("Local subscription initial count", { copyCount.get() == 1 && copyTitle.get() == "member private song" })
             assertNull("Offline B uses artwork placeholders", local.mediaMetadata.artworkUri)
             val pcm = AtomicBoolean()
             NativeProgramOutput.subscribe(generation) { block -> if (block.bytes.any { it != 0.toByte() }) pcm.set(true) }.use { capture ->
@@ -105,6 +121,12 @@ class CarOfflineExpiryTest {
                 await("Offline acquired search did not play", { active.isPlaying && pcm.get() && active.currentMediaItem?.mediaMetadata?.extras?.getBoolean("offline") == true })
                 assertFalse(capture.failed.get())
             }
+            // Local cache changes must notify even with no cookie/network/WebView.
+            connection.offline.updateMetadata(generation, JSONArray().put(JSONObject().put("id", "member-track").put("title", "Local copy changed")))
+            await("Offline cache labels event missing", { copyCount.get() == 1 && copyTitle.get() == "Local copy changed" })
+            connection.offline.remove(generation, JSONArray().put("member-track"))
+            await("Offline removal event missing", { copyCount.get() == 0 })
+            assertEquals(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED, call { active.getLibraryRoot(null) }.resultCode)
             connection.clearSession(false)
             await("Logout retained programme", { active.mediaItemCount == 0 })
             assertEquals(0, connection.offline.state(connection.generation).getJSONArray("items").length())

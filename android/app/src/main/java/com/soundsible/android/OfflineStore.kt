@@ -29,6 +29,8 @@ class OfflineStore private constructor(private val context: Context) {
     private var active: Pair<String, Call>? = null
     private var revision = 0L
     private val verified = mutableMapOf<String, Long>()
+    internal val changes = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+    private fun changed() { changes.forEach { listener -> runCatching { listener() } } }
     private fun name(id: String) = MessageDigest.getInstance("SHA-256").digest(id.toByteArray()).joinToString("") { "%02x".format(it) }
     private fun file(id: String) = File(directory, name(id) + ".audio")
     private fun part(id: String) = File(directory, name(id) + ".part")
@@ -55,6 +57,7 @@ class OfflineStore private constructor(private val context: Context) {
         revision++; active?.second?.cancel(); active = null; verified.clear()
         database.delete("copies", null, null); directory.listFiles()?.forEach { it.delete() }
         prefs.edit().clear().apply()
+        changed()
     }
     @Synchronized private fun requireProfile(epoch: Long) {
         require(epoch == connection.generation && prefs.getString("origin", "") == connection.origin && prefs.contains("user")) { "STALE_PROFILE" }
@@ -122,6 +125,7 @@ class OfflineStore private constructor(private val context: Context) {
     /** Refresh labels of existing copies without changing their bytes, digest or download ticket. */
     @Synchronized fun updateMetadata(epoch: Long, rows: JSONArray) {
         if (!canUse(epoch)) return
+        var changed = false
         database.beginTransaction()
         try {
             for (i in 0 until rows.length()) {
@@ -129,12 +133,17 @@ class OfflineStore private constructor(private val context: Context) {
                 database.rawQuery("SELECT metadata FROM copies WHERE id=?", arrayOf(id)).use { cursor ->
                     if (!cursor.moveToFirst()) return@use
                     val saved = JSONObject(cursor.getString(0))
+                    val previous = saved.toString()
                     for (key in listOf("title", "artist", "album", "album_artist", "album_id", "artist_id")) if (row.has(key)) saved.put(key, row.get(key))
-                    database.update("copies", ContentValues().apply { put("metadata", saved.toString()) }, "id=?", arrayOf(id))
+                    if (previous != saved.toString()) {
+                        database.update("copies", ContentValues().apply { put("metadata", saved.toString()) }, "id=?", arrayOf(id))
+                        changed = true
+                    }
                 }
             }
             database.setTransactionSuccessful()
         } finally { database.endTransaction() }
+        if (changed) changed()
     }
     @Synchronized fun limit(epoch: Long, bytes: Long) { requireProfile(epoch); require(bytes in setOf(512L * 1024 * 1024, 2L * 1024 * 1024 * 1024, 8L * 1024 * 1024 * 1024)); prefs.edit().putLong("limit", bytes).apply() }
     @Synchronized fun remove(epoch: Long, ids: JSONArray) {
@@ -165,6 +174,7 @@ class OfflineStore private constructor(private val context: Context) {
             playlists.put(name, retained)
         }
         prefs.edit().putString("playlists", playlists.toString()).apply()
+        changed()
         if (failed) throw java.io.IOException("storage")
     }
     @Synchronized fun interrupt() {
@@ -224,9 +234,9 @@ class OfflineStore private constructor(private val context: Context) {
             }
         } catch (error: Exception) {
             synchronized(this) { if(valid(id,ticket,epoch,rev)) database.execSQL("UPDATE copies SET state='error',bytes=0,error=? WHERE id=? AND ticket=?", arrayOf(error.message?.takeIf { it in setOf("space","integrity","permission","server","session","storage") } ?: "network",id,ticket)) }
-        } finally { synchronized(this) { if(active?.first==id) active=null }; output.delete() }
+        } finally { synchronized(this) { if(active?.first==id) active=null }; output.delete(); changed() }
     }
-    @Synchronized private fun invalid(id: String) { verified.remove(id); database.execSQL("UPDATE copies SET state='error',error='integrity',bytes=0 WHERE id=?", arrayOf(id)); file(id).delete() }
+    @Synchronized private fun invalid(id: String) { verified.remove(id); database.execSQL("UPDATE copies SET state='error',error='integrity',bytes=0 WHERE id=?", arrayOf(id)); file(id).delete(); changed() }
     /** Native-only lookup. Paths never cross the bridge; full hash checked once per process. */
     @Synchronized fun local(id: String, epoch: Long): File? {
         requireProfile(epoch)

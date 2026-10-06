@@ -36,6 +36,7 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
                 .digest(connection.offline.profileKey(epoch).toByteArray(Charsets.UTF_8)), android.util.Base64.NO_WRAP)
         } else null
     }.getOrNull()
+    fun accountIdentity(epoch: Long): String? = identity(epoch)
     fun root(params: LibraryParams?): ListenableFuture<LibraryResult<MediaItem>> {
         val epoch = connection.generation
         if (identity(epoch) == null) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED))

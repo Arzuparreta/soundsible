@@ -36,6 +36,7 @@ class CarEventsTest {
         var browser: MediaBrowser? = null
         val title = AtomicReference<String>()
         val playlistCount = AtomicInteger(-1)
+        val copyCount = AtomicInteger(-1)
         val changes = AtomicInteger()
         val pcm = AtomicBoolean()
         fun <T> call(work: () -> ListenableFuture<T>): T {
@@ -56,6 +57,11 @@ class CarEventsTest {
             connection.execute(path, method, body?.toRequestBody("application/json".toMediaType()), emptyMap(),
                 generation, "car-events-" + System.nanoTime(), 15000).use { assertEquals(200, it.code) }
         }
+        fun delayStreams(enabled: Boolean) {
+            connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/stream-delay")
+                .header("X-Android-Fixture", "isolated").post("{\"enabled\":$enabled}".toRequestBody("application/json".toMediaType()))
+                .build()).execute().use { assertEquals(200, it.code) }
+        }
         try {
             connection.execute("/api/auth/login", "POST", "{\"username\":\"member\",\"password\":\"android-test\"}".toRequestBody("application/json".toMediaType()),
                 emptyMap(), generation, "car-events-login", 15000).use {
@@ -66,6 +72,7 @@ class CarEventsTest {
                 override fun onChildrenChanged(owner: MediaBrowser, parentId: String, itemCount: Int, params: LibraryParams?) {
                     changes.incrementAndGet()
                     if (parentId == "playlists") playlistCount.set(itemCount)
+                    if (parentId == ProgramCarLibrary.OFFLINE) copyCount.set(itemCount)
                     if (parentId == "all-tracks") {
                         val future = owner.getChildren(parentId, 0, 200, params)
                         future.addListener({
@@ -81,6 +88,7 @@ class CarEventsTest {
             browser = active
             assertEquals(SessionResult.RESULT_SUCCESS, call { active.subscribe("all-tracks", null) }.resultCode)
             assertEquals(SessionResult.RESULT_SUCCESS, call { active.subscribe("playlists", null) }.resultCode)
+            assertEquals(SessionResult.RESULT_SUCCESS, call { active.subscribe(ProgramCarLibrary.OFFLINE, null) }.resultCode)
             await("Initial subscription", { title.get() == "member private song" && playlistCount.get() >= 0 })
             val initialPlaylists = playlistCount.get()
             val children = call { active.getChildren("all-tracks", 0, 200, null) }.value!!
@@ -90,7 +98,15 @@ class CarEventsTest {
                 await("Programme playing", { active.isPlaying && pcm.get() })
                 val key = AtomicReference<String>()
                 instrumentation.runOnMainSync { key.set(active.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY)) }
+                delayStreams(true)
+                connection.offline.prepare(generation, org.json.JSONArray().put(JSONObject().put("id", "member-track")
+                    .put("title", "member private song")), JSONObject())
+                androidx.core.content.ContextCompat.startForegroundService(context, android.content.Intent(context, OfflineService::class.java))
                 visible!!.close(); visible = null
+                await("Copy completed after Activity destruction", { copyCount.get() == 1 })
+                delayStreams(false)
+                connection.offline.remove(generation, org.json.JSONArray().put("member-track"))
+                await("Native copy removal", { copyCount.get() == 0 })
                 // All subsequent refreshes come from the native subscription owner.
                 request("/api/library/track-labels/member-track/metadata", "POST", "{\"title\":\"Car background title\"}")
                 await("Background labels event", { title.get() == "Car background title" })
@@ -105,6 +121,7 @@ class CarEventsTest {
                 assertFalse(capture.failed.get())
                 assertEquals(SessionResult.RESULT_SUCCESS, call { active.unsubscribe("all-tracks") }.resultCode)
                 assertEquals(SessionResult.RESULT_SUCCESS, call { active.unsubscribe("playlists") }.resultCode)
+                assertEquals(SessionResult.RESULT_SUCCESS, call { active.unsubscribe(ProgramCarLibrary.OFFLINE) }.resultCode)
                 Thread.sleep(500)
                 val stopped = changes.get()
                 request("/api/library/track-labels/member-track/metadata", "POST", "{\"title\":\"member private song\"}")
@@ -112,6 +129,7 @@ class CarEventsTest {
                 assertEquals("Unsubscribed browser received events", stopped, changes.get())
             }
         } finally {
+            runCatching { delayStreams(false) }
             runCatching { request("/api/library/track-labels/member-track/metadata", "POST", "{\"title\":\"member private song\"}") }
             runCatching { request("/api/library/playlists/Car%20background", "DELETE", null) }
             browser?.let { selected -> instrumentation.runOnMainSync { selected.release() } }

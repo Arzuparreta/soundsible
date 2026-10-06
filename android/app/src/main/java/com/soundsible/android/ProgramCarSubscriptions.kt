@@ -25,7 +25,15 @@ internal class ProgramCarSubscriptions(
     private var generation = -1L
     private var identity: String? = null
     private var closed = false
+    private var observingCopies = false
     private val refresh = Runnable { refreshParents() }
+    private val copiesChanged: () -> Unit = {
+        main.post {
+            if (!current()) { reset(); return@post }
+            queued.addAll(subscriptions.keys.map { it.second })
+            main.removeCallbacks(refresh); main.postDelayed(refresh, 250)
+        }
+    }
 
     fun add(browser: ControllerInfo, parent: String, params: LibraryParams?): Boolean {
         if (closed) return false
@@ -33,6 +41,7 @@ internal class ProgramCarSubscriptions(
         if (key !in subscriptions && (subscriptions.size >= 64 ||
             parent !in subscriptions.keys.map { it.second } && subscriptions.keys.map { it.second }.distinct().size >= 16)) return false
         subscriptions[key] = params
+        if (!observingCopies) { connection.offline.changes.add(copiesChanged); observingCopies = true }
         ensureSocket()
         return true
     }
@@ -47,13 +56,13 @@ internal class ProgramCarSubscriptions(
     }
 
     private fun current(): Boolean = !closed && generation == connection.generation && identity != null &&
-        runCatching { connection.sessionIdentity(generation) }.getOrNull() == identity
+        library.accountIdentity(generation) == identity
 
     private fun ensureSocket() {
         if (socket != null && current()) return
         socket?.off(); socket?.disconnect(); socket = null
         generation = connection.generation
-        identity = runCatching { connection.sessionIdentity(generation) }.getOrNull()
+        identity = library.accountIdentity(generation)
         if (identity == null) return
         try {
             val epoch = generation
@@ -69,7 +78,8 @@ internal class ProgramCarSubscriptions(
             for (event in listOf(Socket.EVENT_CONNECT, "library_updated", "saved_entities_updated", "favourites_updated")) {
                 next.on(event) {
                     main.post {
-                        if (socket !== next || epoch != generation || !current()) return@post
+                        if (socket !== next || epoch != generation) return@post
+                        if (!current()) { reset(); return@post }
                         // Coalesce bursts, fetch current scoped metadata, then notify.
                         queued.addAll(subscriptions.keys.map { it.second })
                         main.removeCallbacks(refresh); main.postDelayed(refresh, 250)
@@ -95,9 +105,11 @@ internal class ProgramCarSubscriptions(
                     pending.remove(parent)
                     if (!current()) { reset(); return@post }
                     val result = runCatching { future.get() }.getOrNull()
-                    if (result?.resultCode == SessionResult.RESULT_SUCCESS) {
+                    if (result?.resultCode == SessionResult.RESULT_SUCCESS ||
+                        result?.resultCode == androidx.media3.session.SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED) {
                         subscriptions.toMap().forEach { (key, selected) ->
-                            if (key.second == parent) notify(key.first, parent, library.childCount(parent), selected)
+                            if (key.second == parent) notify(key.first, parent,
+                                if (result.resultCode == SessionResult.RESULT_SUCCESS) library.childCount(parent) else 0, selected)
                         }
                     }
                     if (dirty.remove(parent)) { queued.add(parent); main.removeCallbacks(refresh); main.postDelayed(refresh, 250) }
@@ -107,6 +119,7 @@ internal class ProgramCarSubscriptions(
     }
 
     fun reset() {
+        if (observingCopies) { connection.offline.changes.remove(copiesChanged); observingCopies = false }
         main.removeCallbacks(refresh)
         socket?.off(); socket?.disconnect(); socket = null
         pending.values.toList().forEach { it.cancel(true) }; pending.clear()

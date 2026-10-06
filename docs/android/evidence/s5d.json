@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-06",
+  "slice": "S5d",
+  "channel": "development",
+  "base_revision": "6c906d2f",
+  "dirty_at_asset_prepare": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/OfflineStore.kt": "4e29ea0cd9f942371a229b8858a4254a26bfa8bf03e6f04e746c573f810d3787",
+    "android/app/src/main/java/com/soundsible/android/ProgramCarLibrary.kt": "a78f8da328129ba39153fec750ce3837d3c7b89884af7b19d431e3ccdeb79c0b",
+    "android/app/src/main/java/com/soundsible/android/ProgramCarSubscriptions.kt": "a73aa6fbdfc1fee786d0bd891ab14841b9225c1da4ee47b118b24ae3efcc4ede",
+    "android/app/src/androidTest/java/com/soundsible/android/CarOfflineExpiryTest.kt": "94de79750dcdedf9bc435c22c765185a4ebc9f1b7097d9207682a3b981d3d39c",
+    "android/app/src/androidTest/java/com/soundsible/android/CarEventsTest.kt": "ae95aa3390ca70c14dc551a4188049dce12f7b33529eea656ea6df45a5cd3a17"
+  },
+  "blocks": [
+    {
+      "classes": {
+        "CarOfflineExpiryTest": 2,
+        "CarEventsTest": 2,
+        "CarLibraryTest": 2,
+        "OfflineTest": 2
+      },
+      "tests": 8,
+      "failures": 0,
+      "seconds": 101.09,
+      "runner_exit": 0,
+      "log": "/tmp/soundsible-auto-copy-events-native.log"
+    },
+    {
+      "classes": {
+        "CarEventsTest": 2
+      },
+      "tests": 2,
+      "failures": 0,
+      "seconds": 38.286,
+      "runner_exit": 0,
+      "log": "/tmp/soundsible-auto-copy-completion-native.log",
+      "note": "Test-only extension after first block; native source unchanged."
+    }
+  ],
+  "normal_build": "Both blocks pass APK/test APK/JVM54/lint without temporary CA",
+  "proves": [
+    "Native copy-store observer updates car subscribers after download completes with Activity destroyed; fixture delays headers5s",
+    "Local removal updates count0 while retaining normal programme KEY and nonzero PCM",
+    "With expired cookie and APIs503, cached-label changes and removal notify subscribed browser",
+    "No ready copies after removal means root denied; logout cleanup remains accepted",
+    "Existing explicit offline preparation/errors/integrity/removal tests pass"
+  ],
+  "limits": [
+    "Local cache label primitive, not offline server mutation",
+    "No network-loss/reconnect or DJ metadata/control acceptance yet",
+    "Subscription scope follows verified offline profile when cookie absent; no network socket opened without cookie",
+    "No physical/acoustic/host/external UID acceptance",
+    "Not whole current principal regression or full parity"
+  ]
+}
