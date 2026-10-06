@@ -67,10 +67,12 @@ Estado vigente y forma de trabajar. Lo superado está en
 - [x] Negativos Auto: el socket del coche quedaba muerto al agotar reintentos (fallo real, corregido con
       enfriamiento de 30 s como S2aq). Etiquetas del programa activo: `CarDjTest`/`CarEventsTest`.
 - [x] Regresión local Core (1792), UI (1660), browser4 completos y restart offline/Live (4 fases).
-- [ ] Suite principal final en CI: la ejecución local completa (211 casos) descubrió fallos de fixture
+- [→] Suite principal final en CI: la ejecución local completa (211 casos) descubrió fallos de fixture
       y reloj compartido; corregidos y revalidados por radio de impacto (EVIDENCE).
-      La PR debe quedar con todos los checks verdes antes del cierre de la entrega.
-- [ ] PR con una etiqueta de impacto, base `origin/main` verificada.
+      El resultado vigente se consulta en los checks de la PR; debe quedar en verde antes de cerrar la entrega.
+- [x] [PR #300](https://github.com/Arzuparreta/soundsible/pull/300) abierta con `impact:minor`,
+      base `origin/main` verificada y head remoto coincidente; sin automerge ni merge.
+      Crédito `Co-authored-by` a emrothenberg en el commit de implementación y en la PR.
 - [ ] Requiere al usuario, no bloquea la PR: clave de firma permanente y canal de
       publicación (RELEASE_GATES 4–8).
 
