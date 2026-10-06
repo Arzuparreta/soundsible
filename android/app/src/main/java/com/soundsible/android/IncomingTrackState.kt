@@ -35,6 +35,10 @@ internal object IncomingTrackState {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("url", candidates.single()).putString("token", token).apply()
         return pending(context)
     }
+    /** An engine invitation link (`<origin>/player/#/invite/<token>`), shared as text; accepting it is a later explicit step. */
+    private fun invitation(uri: Uri): Boolean =
+        uri.scheme in listOf("http", "https") && !uri.host.isNullOrBlank() && uri.query == null &&
+            uri.encodedPath == "/player/" && uri.fragment?.matches(Regex("^/invite/[A-Za-z0-9_-]{16,128}$")) == true
     private fun supported(value: String): Boolean = runCatching {
         if (value.length > 8192) return false
         val uri = Uri.parse(value)
@@ -43,6 +47,6 @@ internal object IncomingTrackState {
             uri.queryParameterNames == setOf("shared") && uri.getQueryParameters("shared").size == 1) uri.getQueryParameter("shared")
         else if (uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.query == null && uri.fragment?.startsWith("t=") == true) uri.fragment!!.substring(2)
         else null
-        encoded?.matches(Regex("^[A-Za-z0-9_-]{1,4096}$")) == true
+        encoded?.matches(Regex("^[A-Za-z0-9_-]{1,4096}$")) == true || invitation(uri)
     }.getOrDefault(false)
 }

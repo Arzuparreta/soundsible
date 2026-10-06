@@ -2,6 +2,7 @@ import type { MenuAction } from '../components/ActionMenu';
 import NativeSettings from './Settings';
 import NativeInvite from './Invite';
 import { nativeInviteLink } from './inviteLink';
+import { createIncomingInvite } from './incomingInvite';
 import { openNativeLive } from './Live';
 import type { createNativeAppearance } from './appearance';
 import type { createNativeFeedback } from './feedback';
@@ -92,6 +93,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   const [downloadItems, setDownloadItems] = createSignal<DownloadQueueItem[]>([]);
   const [savedEntities, setSavedEntities] = createSignal<SavedEntity[]>([]);
   const incoming = createIncomingTrack();
+  const incomingInvite = createIncomingInvite();
   const incomingSong = (): Track | null => {
     const capsule = incoming.selection()?.capsule;
     if (!capsule) return null;
@@ -308,6 +310,17 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       setBusy(false);
     }
   }
+  /** Only this explicit choice leaves the current account; receiving the link changed nothing. */
+  async function useIncomingInvite(invitation: { token: string; origin: string; invitationToken: string }) {
+    if (busy()) return;
+    try {
+      await incomingInvite.dismiss(invitation.token);
+      if (incomingInvite.selection() || busy()) return;
+      if (user() || server()) { await leave(true); if (incomingInvite.selection() || busy()) return; }
+      setOrigin(`${invitation.origin}/player/#/invite/${invitation.invitationToken}`);
+      await connect();
+    } catch { setError(t('android.connectFailed')); }
+  }
   function songMenu(track: Track, event?: MouseEvent, context?: { playlist: string; index: number }, catalogActions: MenuAction[] = []) {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
             const menu = programLibraryMenu(track, program, programPending, runtime.execute, candidate => openNativeDjPlacement(candidate, program, programPending, runtime.execute));
@@ -358,6 +371,11 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
         <button type="button" disabled={busy()} onClick={() => void leave(false)}>{t('android.logout')}</button>
         <button type="button" disabled={busy()} onClick={() => void leave(true)}>{t('android.changeServer')}</button></header>}
     </Show>
+    <Show when={incomingInvite.selection()}>{invitation => <section class={styles.library} data-testid="android-incoming-invite">
+      <h2>{t('invite.title')}</h2><p>{invitation().origin}</p><Show when={user()}><p>{t('android.inviteSignsOut')}</p></Show>
+      <button data-invite-connect disabled={busy()} onClick={() => void useIncomingInvite(invitation())}>{t(user() ? 'android.useInvite' : 'android.connect')}</button>
+      <button data-invite-dismiss disabled={busy()} onClick={() => void incomingInvite.dismiss(invitation().token).catch(() => setError(t('common.loadFailed')))}>{t('common.close')}</button>
+    </section>}</Show>
     <Show when={!user()}>
       <form class={styles.form} onSubmit={connect}>
         <label class={styles.field}>{t('android.server')}<input type="url" required value={origin()} placeholder="http://10.0.2.2:5005" autocomplete="url" disabled={busy()} onInput={event => setOrigin(event.currentTarget.value)} /></label>
@@ -391,6 +409,10 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
       const captured = epoch;
       openNativeLyrics(program, () => snapshot()?.tracks ?? [], savedEntries, () => captured === epoch && !!user() && !stale(), runtime.execute);
     } : undefined} /><Show when={!state().id.startsWith('soundsible:live:')}><ProgramQueue state={state()} pending={programPending()} command={runtime.execute} onMenu={(entry, event, actions) => {
+      if (entry.source === 'pending') {
+        openContextMenu({ title: entry.title, subtitle: entry.artist, actions }, event);
+        return;
+      }
       const track = snapshot()?.tracks.find(track => track.id === entry.id && (track.source ?? 'local') === entry.source) ?? {
         id: entry.id, title: entry.title, artist: entry.artist, album: entry.album, duration: entry.duration,
         source: entry.source === 'preview' || entry.source === 'podcast' ? 'preview' as const : undefined,

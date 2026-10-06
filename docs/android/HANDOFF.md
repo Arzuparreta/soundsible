@@ -384,3 +384,13 @@ WholeUI210/1617+TS; Core fixture1/0. SLICE_2AS/evidence/s2as.json.
 Siguiente: guard del menú de ocurrencia pendiente (AndroidStart reconstruye
 actualmente fallback sin pendingResolve), e invites VIEW/SEND con acción explícita
 sin cambiar cuenta/origen al recibirlos. Luego pairing/negativos/firma/final.
+
+S2at validado (Claude Code toma el relevo de Codex): invite compartido por SEND es
+propuesta; sin sesión Conectar, con sesión aviso + «Usar invitación» cierra sesión
+explícitamente (Android hace la elección, no copia el descarte web). Menú de
+ocurrencia pendiente sólo retira (negativo verificado). Combinado8/0 HTTP/TLS,
+66.403s, runner exit0 + APK/test APK/JVM56/lint; UI211/1620+TS. SLICE_2AT/
+evidence/s2at.json. Paridad = funciones: si la web usa un apaño por limitación
+del navegador, Android lo hace de la mejor manera nativa. Siguiente: puente
+público/App Links (VIEW https), negativos DJ/Auto, firma/distribución y
+regresión final principal/browser4. PR manual, no merge/automerge/publicación.
