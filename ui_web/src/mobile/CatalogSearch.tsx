@@ -4,6 +4,8 @@ import { itemArtist } from '../lib/catalogTrack';
 import { createNativeCatalogActions } from './catalogActions';
 import { createNativeDiscoveryFeed } from './discoveryFeed';
 import NativeEntityProfile from './EntityProfile';
+import { catalogFeedback, nativeFeedbackActions, nativeMusicLinkActions } from './songActions';
+import { catalogItemMusic } from '../lib/musicLinks';
 import { nativeEntitySubject, type NativeEntitySubject } from './entityProfile';
 import { registerNativeBack } from './backNavigation';
 import { catalogEntityBookmark, catalogEntityDestination, catalogEntityHeld, catalogEntityHoldings } from '../lib/catalogEntity';
@@ -31,6 +33,8 @@ export default function CatalogSearch(props: {
   savedEntities?: SavedEntity[]; onEntityMenu?: (entry: SavedEntity, event?: MouseEvent) => void;
   onPlayCollection?: (tracks: Track[], index: number) => Promise<void>;
   activeId?: string; isActive?: (track: Track) => boolean; onAcquire?: (track: Track) => Promise<void>; onPlay: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
+  /** An artist or album page asked for from a song menu elsewhere; each id opens once. */
+  openRequest?: { path: string; id: number } | null; onRequestHandled?: (id: number) => void;
 }) {
   const [query, setQuery] = createSignal('');
   const [rows, setRows] = createSignal<CatalogItem[]>([]);
@@ -68,6 +72,12 @@ export default function CatalogSearch(props: {
     navigation++; catalog.reset(); restorePosition = 0;
     setEntities(previous => [...previous, { subject, returnScroll: scrollPosition() }]);
   }
+  let handledRequest = 0;
+  createEffect(() => {
+    const requested = props.openRequest;
+    if (!requested || requested.id <= handledRequest) return;
+    handledRequest = requested.id; openEntity(requested.path); props.onRequestHandled?.(requested.id);
+  });
   function backEntity() {
     const previous = entity(); if (!previous) return;
     navigation++; catalog.reset(); restorePosition = previous.returnScroll;
@@ -113,18 +123,23 @@ export default function CatalogSearch(props: {
     const search = searchEpoch, route = navigation;
     const saved = isSaved(item);
     const run = (purpose: 'play' | 'save' | 'remove' | 'acquire') => { if (generation === props.generation && search === searchEpoch && route === navigation && !disposed) void act(item, purpose); };
+    const current = () => generation === props.generation && !disposed && !props.disconnected;
+    const feedback = nativeFeedbackActions(catalogFeedback(item), current);
     if (resolved && props.onResolvedMenu) {
       if (resolved.source === 'preview') props.onResolvedMenu(resolved, event, [
         { label: t('common.play'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('play') },
         { label: t(saved ? 'collection.unsave' : 'collection.save'), selected: saved, disabled: props.disconnected || pending() === item.id, onSelect: () => run(saved ? 'remove' : 'save') },
+        ...feedback,
       ]);
-      else props.onResolvedMenu(resolved, event);
+      else props.onResolvedMenu(resolved, event, feedback);
       return;
     }
     openContextMenu({ title: item.title, actions: [
       { label: t('common.play'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('play') },
       { label: t(saved ? 'collection.unsave' : 'collection.save'), selected: saved, disabled: props.disconnected || pending() === item.id, onSelect: () => run(saved ? 'remove' : 'save') },
       ...(props.onAcquire && (!trackFor(item) || trackFor(item)?.source === 'preview') ? [{ label: t('collectionControl.download'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('acquire') }] : []),
+      ...nativeMusicLinkActions(catalogItemMusic(item), path => { if (current()) openEntity(path); }, props.disconnected),
+      ...feedback,
     ] }, event);
   }
   function entityMenu(item: CatalogItem, event?: MouseEvent) {

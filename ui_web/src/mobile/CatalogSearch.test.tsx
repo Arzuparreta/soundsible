@@ -165,3 +165,26 @@ it('keeps explicit catalog save actions when a resolved preview uses the shared 
   await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
   expect(mocks.save.mock.calls[0][0][0].keys).toContain('deezer:1');
 });
+it('opens an artist asked for from a song menu once, and Back returns to search', async () => {
+  mocks.feed.mockResolvedValue({});
+  mocks.artist.mockResolvedValue({ name: 'Artist', deezer_id: '11', resolved: true, candidates: [], top_tracks: [], albums: [], singles_eps: [], related_artists: [], in_library: false, cached: false });
+  const handled = vi.fn();
+  const [request, setRequest] = createSignal<{ path: string; id: number } | null>({ path: '/artist/Artist?view=discover&deezer_id=11', id: 1 });
+  const view = render(() => <CatalogSearch openRequest={request()} onRequestHandled={id => { handled(id); setRequest(null); }} generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  await waitFor(() => expect(mocks.artist).toHaveBeenCalledWith('Artist', '11', expect.any(AbortSignal)));
+  expect(handled).toHaveBeenCalledExactlyOnceWith(1);
+  expect(dispatchNavigationBack()).toBe(true);
+  await waitFor(() => expect(view.getByRole('searchbox')).toBeVisible());
+  setRequest({ path: '/artist/Artist?view=discover&deezer_id=11', id: 1 });
+  expect(mocks.artist).toHaveBeenCalledTimes(1);
+});
+it('adds artist links and "not interested" to a recommended song that has not resolved yet', async () => {
+  const recommended = { ...row, album: 'Record', raw: { recommendation: { identity: 'r1', source: 'discover', reason: 'Because you played Artist' } } } as CatalogItem;
+  mocks.feed.mockResolvedValue({ items: [{ id: recommended.id, title: 'Song', artist: 'Artist', album: 'Record', recommendation_identity: 'r1', reason: 'Because you played Artist' }] });
+  const view = render(() => <CatalogSearch generation={1} tracks={[]} saved={[]} disconnected={false} onPlay={vi.fn()} onChanged={vi.fn()} />);
+  await waitFor(() => expect(view.getByText('Song')).toBeTruthy());
+  fireEvent.contextMenu(view.getByText('Song'));
+  await waitFor(() => expect(mocks.menu).toHaveBeenCalled());
+  const labels = mocks.menu.mock.calls.at(-1)![0].actions.map((action: { label: string }) => action.label);
+  expect(labels).toEqual(expect.arrayContaining(['Go to artist', 'Go to album', 'Because you played Artist', 'Not interested']));
+});
