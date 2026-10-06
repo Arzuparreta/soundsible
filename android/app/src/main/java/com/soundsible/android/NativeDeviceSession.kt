@@ -3,6 +3,7 @@ package com.soundsible.android
 import android.content.Context
 import android.os.Handler
 import androidx.media3.common.util.UnstableApi
+import io.socket.client.Manager
 import io.socket.client.IO
 import io.socket.client.Socket
 import okhttp3.MediaType.Companion.toMediaType
@@ -52,6 +53,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         runCatching { connection.sessionIdentity(epoch) == identity && connection.offline.profileKey(epoch) == profile }.getOrDefault(false)
     fun state(): JSONObject = JSONObject().put("generation", connection.generation)
         .put("device_id", if (owns()) deviceId else JSONObject.NULL).put("connected", owns() && socket?.connected() == true)
+        .put("retrying", retryAfter > android.os.SystemClock.elapsedRealtime())
         .put("can_handoff", owns() && socket?.connected() == true && handoffFuture == null && snapshot() != null)
     private fun connect() {
         if (closed || connecting || android.os.SystemClock.elapsedRealtime() < retryAfter) return
@@ -97,6 +99,12 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
                     next.on(Socket.EVENT_CONNECT) { main.post {
                         if (owns() && socket === next) {
                             next.emit("playback_register", registration()); publish(state()); changed()
+                        }
+                    } }
+                    next.io().on(Manager.EVENT_RECONNECT_FAILED) { main.post {
+                        if (owns() && socket === next) {
+                            retryAfter = android.os.SystemClock.elapsedRealtime() + 30000
+                            reset() // Release this exhausted manager; tick starts a verified one after cooldown.
                         }
                     } }
                     for (event in listOf(Socket.EVENT_DISCONNECT, Socket.EVENT_CONNECT_ERROR)) next.on(event) { main.post {
@@ -200,7 +208,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         return future
     }
     private fun reset() {
-        socket?.off(); socket?.disconnect(); socket = null
+        socket?.io()?.off(); socket?.off(); socket?.disconnect(); socket = null
         val previous = client; client = null
         if (previous != null && !worker.isShutdown) worker.execute {
             previous.dispatcher.cancelAll(); previous.connectionPool.evictAll(); previous.dispatcher.executorService.shutdown()

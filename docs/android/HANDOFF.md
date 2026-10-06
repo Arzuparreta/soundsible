@@ -342,3 +342,13 @@ facts retained for imported NORMAL. DeviceRadio+DeviceDj+DeviceSession+DevicesUi
 Next device reconnect exhaustion and deferred catalog playback/handoff, then
 public invites/pairing, broader negatives, distribution and final full suites.
 Continue; no PR merge/automerge/publication. Last UI complete210/1614+TS unchanged.
+
+S2aq accepted: exhausted device Socket.IO manager is retired and retried after30s
+cooldown with cookie/profile revalidation and stable UUID. Actor reset removes
+manager callbacks. Activity-closed real transport503 exhaustion/recovery while
+20s PCM repeats, same device registration/publication and restored remote controls
+HTTP/TLS2/0; exit0 + normal APK/test/JVM56/lint. SLICE_2AQ/evidence/s2aq.json.
+Initial fixture-path test issue corrected with raw test client; no production
+path restriction weakened. Next deferred catalogue: retain pending entries and
+resolve in native source loader, generation/occurrence guarded, no web audio.
+Then public invites/pairing, broader negatives, distribution and final full suites.
