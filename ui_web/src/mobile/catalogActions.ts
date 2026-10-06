@@ -4,7 +4,6 @@ import { catalogTrack, itemArtist } from '../lib/catalogTrack';
 import { buildIdentityIndex, catalogItemKeys, trackKeys } from '../lib/playbackIdentity';
 import { savedFromCatalogItem, savedFromTrack, savedToTrack } from '../lib/saved';
 import { programTrack } from '../lib/program/tracks';
-import { resolveNativeCatalogProgram } from './catalogProgram';
 import { t } from '../lib/i18n';
 import type { CatalogItem, SavedEntry, Track } from '../types/music';
 import type { MigrationJob } from '../lib/migrationApi';
@@ -132,12 +131,16 @@ export function createNativeCatalogActions(props: {
     setPending(items[selectedIndex]?.id ?? null); setError(''); setPartial(false);
     try {
       if (!props.onPlayCollection) throw new Error('Collection playback unavailable');
-      const program = await resolveNativeCatalogProgram(items, selectedIndex, async item =>
-        trackFor(item) ?? (await resolveRecording(item, request.signal, current)).track, current);
+      if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= items.length || items.length > 1000) throw new Error('Missing selected recording');
+      const selected = trackFor(items[selectedIndex]) ?? (await resolveRecording(items[selectedIndex], request.signal, current)).track;
       if (!current()) return;
-      setPartial(program.unavailable > 0);
-      if (context || shuffle) await props.onPlayCollection(program.tracks, program.index, context, shuffle);
-      else await props.onPlayCollection(program.tracks, program.index);
+      if (!selected || !programTrack(selected)) throw new Error('Selected recording unavailable');
+      const tracks = items.map((item, index): import('../lib/playbackQueue').ContextTrack => index === selectedIndex ? selected : trackFor(item) ?? {
+        id: item.id, title: item.title, artist: itemArtist(item), album: item.album, duration: item.duration, cover: item.cover,
+        pendingResolve: { catalogItemId: item.id, title: item.title, artist: itemArtist(item), duration: item.duration },
+      });
+      if (context || shuffle) await props.onPlayCollection(tracks, selectedIndex, context, shuffle);
+      else await props.onPlayCollection(tracks, selectedIndex);
     } catch (failure) {
       if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : 'search.noPreview'));
     } finally { if (current()) setPending(null); }

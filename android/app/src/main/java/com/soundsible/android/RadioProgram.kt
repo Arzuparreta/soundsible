@@ -54,6 +54,7 @@ class RadioProgram(private val connection: EngineConnection, private val player:
     fun start(nextProfile: String) {
         require(nextProfile in listOf("familiar", "balanced", "explore"))
         val item = selectSeed() ?: error("NO_SEED")
+        require(item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) != "pending")
         require(item.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true && connection.cookieHeader(connection.generation) != null)
         stop(); profile = nextProfile; generation = connection.generation
         seed = JSONObject().put("id", item.mediaId).put("title", item.mediaMetadata.title?.toString() ?: "").put("artist", item.mediaMetadata.artist?.toString() ?: "").put("album", item.mediaMetadata.albumTitle?.toString() ?: "")
@@ -87,6 +88,7 @@ class RadioProgram(private val connection: EngineConnection, private val player:
             seed = JSONObject().put("id", replacement.mediaId).put("title", replacement.mediaMetadata.title?.toString() ?: "").put("artist", replacement.mediaMetadata.artist?.toString() ?: "").put("album", replacement.mediaMetadata.albumTitle?.toString() ?: "")
                 .put(if (replacement.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "preview") "youtube_id" else "track_id", replacement.mediaId)
         }
+        if (player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) == "pending") return
         val current = ProgramQueue.key(player, player.currentMediaItemIndex)
         if (current != lastCurrent && phase == "exhausted") phase = "ready"
         lastCurrent = current

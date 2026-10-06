@@ -24,6 +24,7 @@ internal object ProgramDeviceState {
         return JSONObject().put("id", id).put("title", item.mediaMetadata.title?.toString().orEmpty())
             .put("artist", item.mediaMetadata.artist?.toString().orEmpty()).put("album", item.mediaMetadata.albumTitle?.toString().orEmpty())
             .put("duration", extras?.getDouble(ProgramPcmProcessor.DURATION, 0.0) ?: 0.0).apply {
+                extras?.getString(ProgramQueue.PENDING)?.let { put("pendingResolve", JSONObject(it)) }
                 if (source == "preview" || source == "podcast") put("source", "preview")
                 if (source == "preview") put("youtube_id", id)
                 extras?.getString(DEVICE_YOUTUBE)?.takeIf { Regex("^[A-Za-z0-9_-]{11}$").matches(it) }?.let { put("youtube_id", it) }
@@ -105,6 +106,7 @@ internal object ProgramDeviceState {
     }
     fun djRows(connection: EngineConnection, restored: Restored, planner: ProgramDjPlanner): List<ProgramDjSession.Row> {
         val entries = restored.entries ?: error("REMOTE_DJ_QUEUE_MISSING")
+        require((0 until restored.rows.length()).none { restored.rows.getJSONObject(it).optString("source") == "pending" }) { "REMOTE_DJ_CATALOG_UNRESOLVED" }
         val items = ProgramQueue.items(connection, restored.rows)
         val keys = items.indices.associate { i -> entries.getJSONObject(i).getString("queueId") to items[i].mediaMetadata.extras!!.getString(ProgramQueue.KEY)!! }
         val plan = restored.workspace?.optJSONObject("plan") ?: JSONObject()
@@ -128,11 +130,12 @@ internal object ProgramDeviceState {
         }
     }
     private fun row(track: JSONObject): JSONObject {
-        require(!track.has("pendingResolve")) { "REMOTE_CATALOG_UNRESOLVED" }
+        val pending = track.optJSONObject("pendingResolve")
         val podcast = track.optString("media_kind") == "podcast_episode"
-        val source = if (track.optString("source") == "preview") { if (podcast) "podcast" else "preview" } else "local"
+        val source = if (pending != null) "pending" else if (track.optString("source") == "preview") { if (podcast) "podcast" else "preview" } else "local"
         return JSONObject().put("source", source).put("id", track.getString("id")).put("title", track.optString("title"))
             .put("artist", track.optString("artist")).put("album", track.optString("album")).put("duration", track.optDouble("duration", 0.0)).apply {
+                if (pending != null) put("pendingResolve", JSONObject(pending.toString()))
                 for (name in listOf("loudness_lufs", "loudness_peak_dbtp")) track.optDouble(name, Double.NaN).takeIf { it.isFinite() }?.let { put(name, it) }
                 if (podcast) { put("mediaKind", "podcast_episode"); put("enclosure", track.optString("podcast_enclosure_url"))
                     put("episodeGuid", track.optString("podcast_episode_guid")); put("feedId", track.optString("podcast_feed_id")) }

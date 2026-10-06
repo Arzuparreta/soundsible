@@ -352,3 +352,27 @@ Initial fixture-path test issue corrected with raw test client; no production
 path restriction weakened. Next deferred catalogue: retain pending entries and
 resolve in native source loader, generation/occurrence guarded, no web audio.
 Then public invites/pairing, broader negatives, distribution and final full suites.
+
+## Recuperación del entorno tras reinicio
+
+Workspace vigente: `/mnt/storage/Git-projects-storage/soundsible` en HDD ext4
+`/dev/sda1`, montado rw. El 2026-10-06 se verificó escritura/lectura/fsync y fetch
+de GitHub; HEAD b119384d ya estaba en remoto. `/home/arsu/soundsible` era un
+clone limpio de junio (`new-ui`, HEAD 3e4a961, ancestro del trabajo vigente),
+sin commits exclusivos ni archivos no ignorados pendientes. Eliminado a petición
+del usuario; `.claude`, `.gstack` y `.env` ignorado se preservaron fuera del repo
+en `/mnt/storage/Git-projects-storage/recovered-soundsible-home`. No copiar ese
+backup sobre el trabajo vigente ni publicar su contenido. AVD API36 reiniciado.
+Los logs `/tmp` anteriores no sobreviven al reinicio; evidence JSON y commits
+conservan los resultados históricos, no afirmar que se rerunearon.
+
+S2ar validado: catálogo pendiente en NORMAL y colecciones UI, source loader Core
+con Activity cerrada, identidad/contexto conservados, replay sin matcher extra y
+reset durante matcher lento sin resurrección. DeviceCatalogSession2 +
+CollectionProfile4 + CatalogSearch2 HTTP/TLS8/0,95.019s; runner exit0 y normal
+APK/test APK/JVM56/lint. WholeUI210/1616 + TS pasan. Log
+`/tmp/soundsible-deferred-native.log`, SLICE_2AR/evidence/s2ar.json.
+Siguiente inmediato: matcher404 debe continuar colección; retry temporal acotado,
+menús DJ/Radio no deben convertir pendientes en source local. Luego OS invites/
+pairing, negativos DJ/Auto, firma/distribución y principal/browser4 final.
+PR manual, no merge/automerge/publicación.

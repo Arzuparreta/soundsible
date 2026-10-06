@@ -10,3 +10,10 @@ it('refuses a missing or non-http enclosure before replacing a program', () => {
   expect(programTrack({ ...episode, podcast_enclosure_url: undefined })).toBeNull();
   expect(programTrack({ ...episode, podcast_enclosure_url: 'file:///private' })).toBeNull();
 });
+
+it('keeps an unresolved catalogue identity in the native queue until playback', () => {
+  const pending = { id: 'deezer:track:7', title: 'Song', artist: 'Artist', pendingResolve: { catalogItemId: 'deezer:track:7', title: 'Song', artist: 'Artist' } };
+  expect(programTrack(pending)).toMatchObject({ source: 'pending', id: pending.id, pendingResolve: pending.pendingResolve });
+  const invalid = { ...pending, pendingResolve: { ...pending.pendingResolve, title: '' } };
+  expect(programTrack(invalid)).toBeNull();
+});

@@ -13,6 +13,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 /** Stable occurrence identity crosses MediaSession IPC in metadata; never contains credentials. */
 @UnstableApi
 object ProgramQueue {
+    const val PENDING = "soundsible_catalog_pending"
     const val PODCAST = "soundsible_podcast"
     const val ENCLOSURE = "soundsible_enclosure"
     const val EPISODE = "soundsible_episode"
@@ -43,7 +44,7 @@ object ProgramQueue {
         return (0 until rows.length()).map { i ->
             val row = rows.getJSONObject(i)
             val source = row.getString("source")
-            require(source in listOf("local", "preview", "podcast"))
+            require(source in listOf("local", "preview", "podcast", "pending"))
             val id = row.getString("id")
             if (source == "preview") require(Regex("^[A-Za-z0-9_-]{11}$").matches(id))
             val podcast = source == "podcast" || row.optString("mediaKind") == "podcast_episode"
@@ -58,12 +59,18 @@ object ProgramQueue {
                     require(enclosure.length <= 8192 && url.encodedUsername.isEmpty() && url.encodedPassword.isEmpty())
                 }
             }
+            val pending = if (source == "pending") row.getJSONObject("pendingResolve") else null
+            if (pending != null) {
+                require(pending.getString("catalogItemId").length in 1..512)
+                require(pending.getString("title").isNotBlank())
+                require(pending.getString("artist").length <= 4096 && pending.getString("title").length <= 4096 && pending.toString().length <= 16384)
+            }
             val title = row.optString("title"); val artist = row.optString("artist"); val album = row.optString("album")
             require(listOf(title, artist, album).all { it.length <= 4096 })
             val key = java.util.UUID.randomUUID().toString()
             val offline = source == "local" && connection.offline.canUse(connection.generation) && connection.offline.local(id,connection.generation) != null
             require(connection.cookieHeader(connection.generation) != null || offline)
-            val path = if (source == "preview") "/api/preview/stream/" else if (source == "podcast") "/api/android-podcast/" else "/api/static/stream/"
+            val path = if (source == "pending") "/api/native-pending/" else if (source == "preview") "/api/preview/stream/" else if (source == "podcast") "/api/android-podcast/" else "/api/static/stream/"
             MediaItem.Builder().setMediaId(id)
                 .setUri(connection.origin + path + android.net.Uri.encode(id) + "?android_generation=" + connection.generation + "&android_occurrence=" + key)
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).setArtworkUri(if (source == "local" && !offline) ProgramArtwork.uri(connection.generation, id) else null)
@@ -76,6 +83,7 @@ object ProgramQueue {
                             putString(ProgramPcmProcessor.CONTEXT_KIND, contextKind); putString(ProgramPcmProcessor.CONTEXT_ID, contextId)
                             reference?.let { putDouble(ProgramPcmProcessor.ALBUM_LUFS, it.lufs); putDouble(ProgramPcmProcessor.ALBUM_PEAK, it.peakDbtp) }
                         }
+                        if (pending != null) putString(PENDING, pending.toString())
                         putBoolean(PODCAST, podcast); if (podcast) { putString(ENCLOSURE, enclosure); putString(EPISODE, episode); putString(FEED, feed); putString(PROFILE, connection.offline.profileKey(connection.generation)) }; putString(KEY, key); putString(PROGRAM, owner); putString(SOURCE, source); putBoolean("offline", offline) }).build()).build()
         }
     }

@@ -51,6 +51,7 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var podcasts: PodcastProgressStore
     private val progressTicker = object : Runnable { override fun run() { if (session != null) { savePodcast(); maybeRefill(); main.postDelayed(this, 5000) } } }
     private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
+    private val catalogCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     private lateinit var installDj: (List<ProgramDjSession.Row>, Long, Int, Set<String>) -> Unit
     private lateinit var deviceSession: NativeDeviceSession
     private lateinit var liveHost: NativeLiveHost
@@ -86,6 +87,7 @@ class PlaybackService : MediaLibraryService() {
         pendingCarRadio = null
         djRefiner?.clear()
         djRouteEditor?.clear()
+        catalogCache.clear()
         djPlanner.clear(); refillAnchor = ""
         restoreNormal()
         publishDj("idle", djProfile, 0)
@@ -204,6 +206,21 @@ class PlaybackService : MediaLibraryService() {
             override fun getSupportedTypes() = localFactory.supportedTypes
             override fun createMediaSource(item: MediaItem): androidx.media3.exoplayer.source.MediaSource {
                 val extras = item.mediaMetadata.extras
+                if (item.localConfiguration?.uri?.pathSegments?.take(2) == listOf("api", "native-pending")) {
+                    val epoch = item.localConfiguration!!.uri.getQueryParameter("android_generation")?.toLongOrNull() ?: -1
+                    val identity = connection.sessionIdentity(epoch)
+                    val pendingFactory = androidx.media3.datasource.DataSource.Factory {
+                        CatalogDataSource(connection, factory, item, { updated -> main.post {
+                            if (epoch == connection.generation && connection.sessionIdentity(epoch) == identity && dj == null) {
+                                val key = updated.mediaMetadata.extras?.getString(ProgramQueue.KEY)
+                                val index = (0 until player.mediaItemCount).firstOrNull { ProgramQueue.key(player, it) == key }
+                                if (index != null) player.replaceMediaItem(index, updated)
+                            }
+                        } }, catalogCache)
+                    }
+                    return androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(pendingFactory, PreviewExtractors())
+                        .setLoadErrorHandlingPolicy(previews.policy(extras?.getString(ProgramQueue.KEY) ?: "", epoch)).createMediaSource(item)
+                }
                 if (extras?.getString(ProgramQueue.SOURCE) == "podcast") {
                     val podcastFactory = androidx.media3.datasource.DataSource.Factory { run { val key = extras.getString(ProgramQueue.KEY) ?: ""; lateinit var source: PodcastDataSource
                         source = PodcastDataSource(connection, factory, extras.getString(ProgramQueue.ENCLOSURE) ?: error("NO_ENCLOSURE"), item.localConfiguration?.uri?.getQueryParameter("android_generation")?.toLongOrNull() ?: -1, key, { podcastSources[it] = key }) { podcastSources.remove(source) }

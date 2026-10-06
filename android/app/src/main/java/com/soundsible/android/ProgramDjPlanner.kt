@@ -61,6 +61,7 @@ internal class ProgramDjPlanner(private val connection: EngineConnection, privat
         require(profile in listOf("adaptive", "long_blend", "cuts_drops", "open_format"))
         require(direction.toString().length <= 16384 && sources.length() <= 64 && sources.toString().length <= 65536)
         val seed = anchor ?: player.currentMediaItem.takeIf { fromCurrent }
+        require(seed?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) != "pending")
         require(!fromCurrent || seed != null && seed.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
         require(seed != null || sources.length() > 0)
         clear()

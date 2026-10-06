@@ -81,3 +81,19 @@ it('uses only confirmed collection identities, retains them across navigation an
   setLibrary([acquired]); expect(actions.trackFor(recording)).toBe(acquired);
   setGeneration(2); actions.reset(true); actions.adoptCollection(receipt, 1); expect(actions.trackFor(recording)).toBeNull();
 });
+
+it('resolves only the selected recording and preserves deferred duplicate occurrences', async () => {
+  mocks.resolve.mockResolvedValue({ video_id: 'A1111111111' });
+  const play = vi.fn().mockResolvedValue(undefined);
+  let actions!: ReturnType<typeof createNativeCatalogActions>;
+  render(() => { actions = createNativeCatalogActions({ generation: () => 1, disconnected: () => false, saved: () => [], tracks: () => [],
+    onPlay: vi.fn(), onPlayCollection: play, onChanged: vi.fn() }); return null; });
+  const remote = (id: string): CatalogItem => ({ id, source: 'deezer', type: 'track', title: id, artist: 'Artist' });
+  await actions.playCollection([remote('future'), remote('selected'), remote('future')], 1);
+  expect(mocks.resolve).toHaveBeenCalledOnce();
+  expect(play).toHaveBeenCalledWith([
+    expect.objectContaining({ id: 'future', pendingResolve: { catalogItemId: 'future', title: 'future', artist: 'Artist', duration: undefined } }),
+    expect.objectContaining({ id: 'A1111111111', source: 'preview' }),
+    expect.objectContaining({ id: 'future', pendingResolve: { catalogItemId: 'future', title: 'future', artist: 'Artist', duration: undefined } }),
+  ], 1);
+});

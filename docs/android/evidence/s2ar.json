@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2ar",
+  "channel": "development",
+  "base_revision": "b119384d",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/CatalogDataSource.kt": "2aad43078ca3f9352fad884d154257968ae1e86ce5bf092c92139ca187167ccb",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "f52879abafdef976ec04431ab574c7e19477e1f1168aef5759a3138fcab835e4",
+    "android/app/src/main/java/com/soundsible/android/ProgramQueue.kt": "ca8582ed89544d0750d39f8132685dc5dc599efe718ac2973c713b2e7bd2b83d",
+    "android/app/src/main/java/com/soundsible/android/ProgramDeviceState.kt": "086d1b5a0b5a580225eeb579bd344634e0eb34bbfe0fb287e3ecc3c6a8411a7b",
+    "android/app/src/androidTest/java/com/soundsible/android/DeviceCatalogSessionTest.kt": "0a7bdd192372c434a7e7f953217a8cdee89e922b4f563f8024fff68c9c894e9c",
+    "ui_web/src/mobile/catalogActions.ts": "c82efa55c8e964e3a23c71e926d7004caba8e17c58b6d439fd4e7d5aff401a8c",
+    "ui_web/src/lib/program/tracks.ts": "e9437aeb3fa37d4b372ffaaba4378d840b5aa16fc2340d753dcb5fb5f4421d71"
+  },
+  "native": {
+    "tests": 8,
+    "failures": 0,
+    "seconds": 95.019,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-deferred-native.log"
+  },
+  "ui": {
+    "files": 210,
+    "tests": 1616,
+    "typecheck": "pass"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Deferred incoming NORMAL catalogue with closed Activity resolves on native source load and produces PCM",
+    "Occurrence key and album context retained; pending future republished",
+    "Resolved alias retry produces PCM without second matcher call",
+    "Account reset cancels slow matcher without late queue resurrection",
+    "Native collection acquisition/profile and catalog search HTTP/TLS regression"
+  ],
+  "limits": [
+    "Synthetic providers with actual Core matcher and native decoders",
+    "Permanent unmatched continuation and temporary matcher retry pending next block",
+    "Pending DJ entries refused; no physical phone/car acceptance",
+    "Final principal and browser four profiles remain pending"
+  ]
+}

@@ -5,6 +5,12 @@ import type { ProgramTrack } from './runtime';
 
 /** The same eligibility rule drives rows, menus and queue conversion. */
 export function programTrack(track: Track): ProgramTrack | null {
+  const pending = (track as import('../playbackQueue').ContextTrack).pendingResolve;
+  if (pending) {
+    if (isPodcastTrack(track) || !track.id || track.id.length > 512 || !pending.catalogItemId || pending.catalogItemId.length > 512 ||
+      typeof pending.artist !== 'string' || pending.artist.length > 4096 || !pending.title || pending.title.length > 4096) return null;
+    return { source: 'pending', id: track.id, title: track.title, artist: track.artist, album: track.album, duration: track.duration, pendingResolve: { ...pending } };
+  }
   if (isPodcastTrack(track)) {
     if (track.source !== undefined && track.source !== 'preview') return null;
     const enclosure = track.podcast_enclosure_url;

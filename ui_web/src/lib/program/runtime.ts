@@ -16,7 +16,7 @@ export interface ProgramState {
 }
 export interface ProgramContext { kind: 'album' | 'artist' | 'playlist'; id: string }
 export interface ProgramOccurrence extends ProgramTrack { key: string; routeOwnerKey?: string | null; generated?: boolean; generatedSource?: 'radio' | 'autoplay' | null }
-export interface ProgramTrack { loudness_lufs?: number | null; loudness_peak_dbtp?: number | null; duration?: number; offline?: boolean; source: 'local' | 'preview' | 'podcast'; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
+export interface ProgramTrack { loudness_lufs?: number | null; loudness_peak_dbtp?: number | null; duration?: number; offline?: boolean; source: 'local' | 'preview' | 'podcast' | 'pending'; pendingResolve?: import('../playbackQueue').PendingCatalogReference; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
   | { action: 'dj'; profile: DjProfile; fromCurrent: boolean; queueToken: string; key?: string; direction?: DjDirection; sources?: DjMusicSetSource[] }

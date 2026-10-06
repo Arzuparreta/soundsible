@@ -27,7 +27,8 @@ class AutoplayProgram(private val connection: EngineConnection, private val play
     private fun seed(): MediaItem? = future().lastOrNull { it.mediaMetadata.extras?.getBoolean("autoplayGenerated") == true }
         ?: future().lastOrNull() ?: player.currentMediaItem
     private fun eligible(): Boolean = enabled == true && !radioActive() && player.repeatMode == Player.REPEAT_MODE_OFF &&
-        player.currentMediaItem != null && player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(ProgramQueue.PODCAST) != true &&
+        player.currentMediaItem != null && player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) != "pending" &&
+        future().none { it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "pending" } && player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(ProgramQueue.PODCAST) != true &&
         future().none { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true } &&
         future().count { it.mediaMetadata.extras?.getBoolean("autoplayGenerated") != true } <= 2 &&
         connection.cookieHeader(connection.generation) != null
