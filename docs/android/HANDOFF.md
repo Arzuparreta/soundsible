@@ -99,7 +99,11 @@ S5d validado: observer de copias locales, bloque8/0 HTTP/TLS101.090s y
 completado en background2/0,38.286s; ambos normal APK/test/JVM54/lint sin CA.
 Ver SLICE_5D/evidence/s5d.json. No hay suite activa tras exec53504.
 
-Siguiente: controles/metadata durante DJ y pérdida/reconexión real. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
+S5e validado: CarDjTest2/0 HTTP/TLS + normal APK/test/JVM54/lint sin CA;
+ver SLICE_5E/evidence/s5e.json. Browsers moderno/clásico conservan programa DJ
+al browse/pausa/seek/resume y reflejan canción dominante. Sin suite activa tras49040.
+
+Siguiente: labels del programa activo y pérdida/reconexión real. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
 actualizadas del programa activo. Luego UID externo, negativos DJ, Live/teléfono/
 firma y regresión final/browser4. Clone /tmp/soundsible-auto-next ya se trasladó;
 no copiarlo sobre root actual. No aplicar stash/clone viejo. No merge/automerge/release.
