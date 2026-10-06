@@ -152,18 +152,24 @@ Blocks2 + DJ2 + Recovery10 + Network2,18/0 HTTP/TLS;332.005s instrumentados;
 normal APK/test APK/JVM54/lint, `/tmp/soundsible-s3b-owned-block-native.log`.
 UI200/1581 + TS. Retirar fuente conserva petición/actual/pausa; última fuente
 protegida. Bridge/owner viajan como bloque; un bridge audible protege a owner
- y bridges pendientes, y placement/repair arrancan después del bloque comprometido.
+y bridges pendientes, y placement/repair arrancan después del bloque comprometido.
 Blocks2 suministra rows de ownership controladas a sesión de producción con
 HTTP/TLS/decoders reales; no afirmar que el Core generó bridges en todos los casos.
 Siguiente DJ: negativos restantes, ambas entradas indisponibles y larga sesión
 hasta1000 en servicio/controller, luego regresión principal actual.
 
-Trabajo teléfono en copia independiente `/tmp/soundsible-android-next`, rama
-`feat/android-phone-continuation` sobre `1eec3df3`: compartir canción en menú,
-SharePlugin/ShareTest y helper mobile/share en desarrollo. Dirigidos UI3 + TS
-pasan en `/tmp/soundsible-s2ah-share-ui.log`; Native aún sin compilar/ejecutar.
-No copiar fuentes network antiguas: están preservadas en stash del clone.
-Tras cierre de bloque DJ, integrar sólo archivos de compartir y validarlos.
+Teléfono S2ah: compartir canción integrado al principal y validado sobre
+`23c5c416` dirty. Share2 + LibraryActions2 + DjContext2,6/0 HTTP/TLS,57.095s;
+APK/test APK/JVM54/lint normal sin CA en `/tmp/soundsible-s2ah-share-native.log`.
+UI201/1584 + TS. Selector nativo usa cápsula pública común o texto local/podcast;
+Intent interceptado en tests, no entrega a destinatario ni prueba física.
+Ver [S2ah](SLICE_2AH.md). Recepción/deep links/invites y multidispositivo pendientes.
+Clone `/tmp/soundsible-android-next`, rama `feat/android-phone-continuation` sobre
+`1eec3df3`: sharing ya copiado al principal; no volver a copiar archivos viejos.
+Parser incomingTrack nuevo en desarrollo para cápsulas públicas/URL nativa open;
+sin conexión automática ni autoplay. Native recepción aún no implementada.
+Network viejo preservado en stash del clone; no aplicarlo sobre fuentes nuevas.
+
 Android Auto: browse draft en ProgramCarLibrary, requiere integración, selección,
 Radio, covers/offline y aceptación de host. Live y firma siguen pendientes.
 

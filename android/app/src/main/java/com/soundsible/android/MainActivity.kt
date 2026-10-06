@@ -19,6 +19,7 @@ class MainActivity : BridgeActivity() {
         registerPlugin(AppearancePlugin::class.java)
         registerPlugin(FeedbackPlugin::class.java)
         registerPlugin(ClipboardPlugin::class.java)
+        registerPlugin(SharePlugin::class.java)
         registerPlugin(EnginePlugin::class.java)
         registerPlugin(ImportPlugin::class.java)
         registerPlugin(PlaybackPlugin::class.java)

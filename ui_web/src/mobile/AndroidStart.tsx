@@ -23,6 +23,7 @@ import { registerArtworkMetadata } from '../lib/media';
 import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
 import type { User } from '../lib/session';
 import { nativeCopy } from './clipboard';
+import { nativeShareTrack } from './share';
 import { engine, useEngine, watchEngine } from './engine';
 import NativeDownloads from './Downloads';
 import NativeMigrate from './Migrate';
@@ -290,6 +291,10 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
             const menu = programLibraryMenu(track, program, programPending, runtime.execute, candidate => openNativeDjPlacement(candidate, program, programPending, runtime.execute));
             openContextMenu({ ...menu, actions: [...catalogActions, ...(menu.actions ?? []),
+              { label: t('trackActions.share'), disabled: captured !== epoch || !user(), onSelect: () => {
+                const shareCurrent = () => captured === epoch && !!user();
+                if (shareCurrent()) void nativeShareTrack(track, () => generation, shareCurrent).catch(() => { if (shareCurrent()) setError(t('common.loadFailed')); });
+              } },
               ...(track.source === 'preview' ? [{ label: t('collectionControl.download'), disabled: !current() || acquisition.busy(track.id), onSelect: () => { if (current()) void acquisition.add(track).catch(() => { if (current()) setError(t('collectionControl.failed')); }); } }] : []),
               songMarkAction(track, savedEntries, () => epoch, () => !current(), sync, () => { if (current()) setError(t('common.loadFailed')); }),
               { label: t('trackActions.addToPlaylist'), disabled: !current(), onSelect: () => { if (current()) openNativePlaylistPicker(track, () => snapshot()?.playlists ?? {}, current, sync, () => snapshot()?.settings?.playlist_order); } },
