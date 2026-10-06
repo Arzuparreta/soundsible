@@ -1,4 +1,4 @@
-import { holdForMenu } from './playerGestures';
+import { holdCarousel, holdForMenu, releaseCarousel, snapCarousel } from './playerGestures';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
@@ -222,14 +222,11 @@ test('queue editing follows an occurrence through consecutive moves and returns 
   }
   await page.locator('[data-omni-player]').click();
   const queue = page.locator('[data-now-playing-tile="queue"]');
-  await page.locator('[data-now-playing-carousel]').evaluate(async (element) => {
-    const carousel = element as HTMLElement;
-    const target = carousel.querySelector<HTMLElement>('[data-now-playing-tile="queue"]')!;
-    carousel.style.scrollBehavior = 'auto';
-    carousel.scrollLeft += target.getBoundingClientRect().left - carousel.getBoundingClientRect().left;
-    carousel.dispatchEvent(new Event('scroll'));
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  });
+  // Opening schedules an alignment to Stage. A real gesture cancels it;
+  // changing scrollLeft alone races that frame under WebKit CI load.
+  await holdCarousel(page, '[data-now-playing-carousel]');
+  await snapCarousel(page, 'queue');
+  await releaseCarousel(page, '[data-now-playing-carousel]');
   await expect(queue).not.toHaveAttribute('inert', '');
   const second = queue.locator('[data-drag-row]').nth(1);
   const id = await second.getAttribute('data-drag-row');
