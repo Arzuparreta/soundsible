@@ -1345,6 +1345,7 @@ def playback_remote_command():
     if command == "pause":
         _emit_playback_stop(api, scope, device_id)
         api["put_playback_state"](scope, {
+            **(api["get_playback_state"](scope, device_id=device_id) or {}),
             "is_playing": False,
             "device_id": device_id,
             "device_name": target.get("device_name"),

@@ -349,16 +349,25 @@ def on_playback_register(data):
     device_id = (data or {}).get('device_id')
     if not device_id:
         return
-    scope = get_scope_from_request()
-    register_device(
-        scope,
-        device_id=device_id,
-        device_name=(data or {}).get("device_name"),
-        device_type=(data or {}).get("device_type") or "desktop",
-    )
-    room = f"playback:{scope}:{device_id}"
-    join_room(room, sid=request.sid)
-    mark_device_socket_active(scope, device_id, request.sid)
+    # Socket events bypass Flask's user-binding hooks. Resolve the account for
+    # this event instead of registering every socket in the default scope.
+    from shared.user_context import user_context
+
+    with request_scope.request_scope():
+        user_id = _resolve_request_user_id()
+        if not user_id:
+            return
+        with user_context(user_id):
+            scope = get_scope_from_request()
+            register_device(
+                scope,
+                device_id=device_id,
+                device_name=(data or {}).get("device_name"),
+                device_type=(data or {}).get("device_type") or "desktop",
+            )
+            room = f"playback:{scope}:{device_id}"
+            join_room(room, sid=request.sid)
+            mark_device_socket_active(scope, device_id, request.sid)
 
 
 def _join_user_room_for_socket() -> None:

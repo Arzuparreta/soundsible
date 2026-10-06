@@ -51,6 +51,7 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var podcasts: PodcastProgressStore
     private val progressTicker = object : Runnable { override fun run() { if (session != null) { savePodcast(); maybeRefill(); main.postDelayed(this, 5000) } } }
     private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
+    private lateinit var deviceSession: NativeDeviceSession
     private lateinit var liveHost: NativeLiveHost
     private lateinit var carArt: ProgramCarArtwork
     private lateinit var carLibrary: ProgramCarLibrary
@@ -276,6 +277,7 @@ class PlaybackService : MediaLibraryService() {
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { leveling.shuffle = shuffleModeEnabled }
             override fun onEvents(player: Player, events: Player.Events) {
                 NativeProgramOutput.playbackChanged(player.isPlaying)
+                if (::deviceSession.isInitialized) deviceSession.changed()
                 pendingCarRadio?.let { key ->
                     if (player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.KEY) == key) {
                         pendingCarRadio = null; autoplay.suspend(); radio.start("balanced")
@@ -288,6 +290,9 @@ class PlaybackService : MediaLibraryService() {
         })
         liveHost = NativeLiveHost(this, connection, main, { player }, artwork, { dj?.liveSnapshot() }) { state ->
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeLiveHost", state.toString()) }) }
+        }
+        deviceSession = NativeDeviceSession(this, connection, main, { if (dj == null) ProgramDeviceState.snapshot(player) else null }, ::remoteDeviceCommand) { state ->
+            session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeDevice", state.toString()) }) }
         }
         carArt = ProgramCarArtwork(this, connection)
         carLibrary = ProgramCarLibrary(connection, main, getString(R.string.offline_title))
@@ -533,11 +538,52 @@ class PlaybackService : MediaLibraryService() {
         }).setBitmapLoader(artwork).setSessionActivity(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build()
         main.post(progressTicker)
     }
+    private fun remoteDeviceCommand(event: String, payload: org.json.JSONObject) {
+        when (event) {
+            "playback_stop_requested" -> player.pause()
+            "playback_next_requested" -> if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)) player.seekToNextMediaItem()
+            "playback_previous_requested" -> if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)) player.seekToPreviousMediaItem()
+            "playback_seek_requested" -> {
+                val seconds = payload.optDouble("position_sec", Double.NaN)
+                if (seconds.isFinite() && seconds >= 0 && seconds <= 604800 && player.isCurrentMediaItemSeekable) player.seekTo((seconds * 1000).toLong())
+            }
+            "playback_start_requested" -> {
+                val restored = ProgramDeviceState.restore(payload)
+                if (restored == null) {
+                    if (!payload.has("track") && payload.optJSONObject("state")?.optJSONObject("session")?.optString("mode") != "auto" && player.mediaItemCount > 0) player.play()
+                    return
+                }
+                // A remote resume carries our own bounded session. Keep its
+                // occurrence identities and the rest of the native queue.
+                val incoming = payload.optJSONObject("state")?.optJSONObject("session")?.optJSONArray("queue")
+                val firstKey = incoming?.optJSONObject(0)?.optString("queueId")
+                val offset = if (firstKey.isNullOrBlank()) -1 else (0 until player.mediaItemCount).firstOrNull { ProgramQueue.key(player, it) == firstKey } ?: -1
+                val sameQueue = dj == null && incoming != null && offset >= 0 && offset + incoming.length() <= player.mediaItemCount &&
+                    (0 until incoming.length()).all { i ->
+                        val entry = incoming.getJSONObject(i)
+                        ProgramQueue.key(player, offset + i) == entry.optString("queueId") &&
+                            ProgramDeviceState.track(player.getMediaItemAt(offset + i)).optString("id") == entry.optString("id")
+                    }
+                if (sameQueue) {
+                    player.shuffleModeEnabled = restored.shuffle; player.repeatMode = restored.repeat
+                    player.seekTo(offset + restored.index, restored.positionMs)
+                    if (player.playerError != null || player.playbackState == Player.STATE_ENDED) player.prepare()
+                    player.play(); return
+                }
+                val items = ProgramQueue.items(connection, restored.rows)
+                djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", djProfile, 0)
+                autoplay.clear(); radio.clear()
+                player.shuffleModeEnabled = restored.shuffle; player.repeatMode = restored.repeat
+                player.setMediaItems(items, restored.index, restored.positionMs); player.prepare(); player.play()
+            }
+        }
+    }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
     override fun onDestroy() {
         savePodcast()
         connection.resetListeners.remove(reset)
         liveHost.close()
+        deviceSession.close()
         carSubscriptions.close()
         carArt.close()
         carLibrary.close()

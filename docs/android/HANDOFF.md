@@ -283,3 +283,16 @@ multidispositivo: dueño/socket en PlaybackService con playback_register, evento
 playback_*_requested y estado/handoff Core; no activar audio/store web.
 ProgramCarSubscriptions sólo al suscribir Auto, no dueño remoto general. Faltan
 negativos DJ/Auto, firma/distribución y principal/browser4 final. PR manual.
+
+S2al accepted: NativeDeviceSession owns authenticated Core registration/control
+with Activity closed. NORMAL bounded state and real incoming handoff preserve
+queue/index/position/shuffle/repeat; remote resume preserves occurrence identities.
+Two Core bugs fixed: socket registration binds its account rather than default;
+remote pause retains track/position/session, avoiding immediate-play404.
+Core14/0; DeviceSession HTTP/TLS2/0,15.639s; integration exit0 and normal APK/test
+APK/JVM56/lint without fixture CA. Log /tmp/soundsible-device-session-final-native.log.
+See SLICE_2AL and evidence/s2al.json. No UI change in this slice.
+Next device-list UI/outgoing handoff, DJ/Radio workspace and pending catalog
+restoration; then remaining pairing/public links, DJ/Auto negatives, distribution
+and final principal/browser4. Do not claim full multidispositivo parity yet.
+Never merge/automerge/release; final PR stays open for manual review.

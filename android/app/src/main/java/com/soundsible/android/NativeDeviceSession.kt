@@ -1,0 +1,163 @@
+package com.soundsible.android
+
+import android.content.Context
+import android.os.Handler
+import androidx.media3.common.util.UnstableApi
+import io.socket.client.IO
+import io.socket.client.Socket
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.util.concurrent.Executors
+
+/** Account-scoped device registration and remote transport belong to the service, not the WebView. */
+@UnstableApi
+internal class NativeDeviceSession(context: Context, private val connection: EngineConnection,
+    private val main: Handler, private val snapshot: () -> JSONObject?,
+    private val command: (String, JSONObject) -> Unit, private val publish: (JSONObject) -> Unit) : AutoCloseable {
+    private val prefs = context.getSharedPreferences("soundsible-device", Context.MODE_PRIVATE)
+    private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "soundsible-device-session").apply { isDaemon = true } }
+    private var socket: Socket? = null
+    private var client: okhttp3.OkHttpClient? = null
+    private var epoch = -1L
+    private var identity: String? = null
+    private var profile: String? = null
+    private var deviceId: String? = null
+    private var serial = 0L
+    private var authRequest: String? = null
+    private var stateRequest: String? = null
+    private var retryAfter = 0L
+    private var rejectedIdentity: String? = null
+    private var connecting = false
+    private var publishing = false
+    private var dirty = false
+    private var lastBody: String? = null
+    private var hadTrack = false
+    private var lastPositionPing = 0L
+    private var stateRetryAfter = 0L
+    @Volatile private var closed = false
+    private val resetListener: () -> Unit = { main.post { reset() } }
+    private val tick = object : Runnable {
+        override fun run() {
+            if (closed) return
+            if (!owns()) { reset(); connect() }
+            else if (socket?.connected() == true) report()
+            main.postDelayed(this, 2000)
+        }
+    }
+    init { connection.resetListeners.add(resetListener); main.post(tick) }
+    private fun owns(): Boolean = !closed && identity != null && epoch == connection.generation &&
+        runCatching { connection.sessionIdentity(epoch) == identity && connection.offline.profileKey(epoch) == profile }.getOrDefault(false)
+    fun state(): JSONObject = JSONObject().put("generation", connection.generation)
+        .put("device_id", if (owns()) deviceId else JSONObject.NULL).put("connected", owns() && socket?.connected() == true)
+    private fun connect() {
+        if (closed || connecting || android.os.SystemClock.elapsedRealtime() < retryAfter) return
+        val generation = connection.generation
+        val cookieIdentity = runCatching { connection.sessionIdentity(generation) }.getOrNull() ?: return
+        if (cookieIdentity == rejectedIdentity) return
+        val owner = runCatching { connection.offline.profileKey(generation) }.getOrNull() ?: return
+        epoch = generation; identity = cookieIdentity; profile = owner
+        val key = java.security.MessageDigest.getInstance("SHA-256").digest(owner.toByteArray()).joinToString("") { "%02x".format(it) }
+        deviceId = prefs.getString(key, null) ?: java.util.UUID.randomUUID().toString().also { prefs.edit().putString(key, it).apply() }
+        connecting = true
+        val token = ++serial
+        val requestId = "device-auth-" + java.util.UUID.randomUUID()
+        authRequest = requestId
+        publish(state())
+        worker.execute {
+            // A cached offline profile does not authorize a new Core socket. Verify the cookie without purging offline music.
+            var denied = false
+            val valid = runCatching {
+                connection.execute("/api/auth/state", "GET", null, emptyMap(), generation, requestId, 8000).use {
+                    val ownerMatches = it.isSuccessful && it.peekBody(65536).string().let { body -> JSONObject(body).optJSONObject("user")?.optString("id") == owner.substringAfterLast('|') }
+                    denied = it.code == 401 || it.code == 403 || it.isSuccessful && !ownerMatches
+                    ownerMatches
+                }
+            }.getOrDefault(false)
+            main.post {
+                if (token != serial) return@post
+                connecting = false; authRequest = null
+                if (!owns() || epoch != generation || profile != owner) return@post
+                if (!valid) { identity = null; retryAfter = android.os.SystemClock.elapsedRealtime() + 8000
+                    if (denied) rejectedIdentity = cookieIdentity
+                    publish(state()); return@post }
+                try {
+                    val transport = connection.client
+                    client = transport
+                    val options = IO.Options().apply {
+                        forceNew = true; reconnection = true; reconnectionAttempts = 5
+                        reconnectionDelay = 1000; reconnectionDelayMax = 5000; timeout = 8000
+                        callFactory = transport; webSocketFactory = transport
+                        extraHeaders = mapOf("Cookie" to listOf(connection.cookieHeader(generation)!!))
+                    }
+                    val next = IO.socket(connection.origin, options); socket = next
+                    next.on(Socket.EVENT_CONNECT) { main.post {
+                        if (owns() && socket === next) {
+                            next.emit("playback_register", registration()); publish(state()); changed()
+                        }
+                    } }
+                    for (event in listOf(Socket.EVENT_DISCONNECT, Socket.EVENT_CONNECT_ERROR)) next.on(event) { main.post {
+                        if (owns() && socket === next) publish(state())
+                    } }
+                    for (event in listOf("playback_stop_requested", "playback_start_requested", "playback_next_requested", "playback_previous_requested", "playback_seek_requested")) {
+                        next.on(event) { arguments ->
+                            val payload = (arguments.firstOrNull() as? JSONObject) ?: JSONObject()
+                            if (payload.toString().length <= 256 * 1024) main.post {
+                                if (owns() && socket === next) { runCatching { command(event, payload) }; changed() }
+                            }
+                        }
+                    }
+                    next.connect()
+                } catch (_: Exception) { reset() }
+            }
+        }
+    }
+    private fun registration() = JSONObject().put("device_id", deviceId).put("device_name", "Soundsible Android").put("device_type", "android")
+    fun changed() { dirty = true; report() }
+    private fun report() {
+        if (!owns() || socket?.connected() != true || publishing) return
+        val body = snapshot() ?: if (hadTrack) JSONObject().put("track_id", JSONObject.NULL).put("track", JSONObject.NULL)
+            .put("position_sec", 0).put("is_playing", false).put("session", JSONObject.NULL) else return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now < stateRetryAfter) return
+        val content = body.toString()
+        if (!dirty && content == lastBody && (!body.optBoolean("is_playing") || now - lastPositionPing < 15000)) return
+        // Position advances continuously; throttle periodic updates but publish actual transport/queue changes immediately.
+        if (!dirty && now - lastPositionPing < 15000) return
+        body.put("device_id", deviceId).put("device_name", "Soundsible Android").put("device_type", "android")
+        val generation = epoch; val owner = identity; val token = serial
+        val requestId = "device-state-" + java.util.UUID.randomUUID()
+        stateRequest = requestId
+        publishing = true; dirty = false
+        worker.execute {
+            val success = runCatching {
+                connection.execute("/api/playback/state", "PUT", body.toString().toRequestBody("application/json".toMediaType()), emptyMap(), generation,
+                    requestId, 8000).use { it.isSuccessful }
+            }.getOrDefault(false)
+            main.post {
+                if (token != serial) return@post
+                publishing = false; stateRequest = null
+                if (owns() && generation == epoch && owner == identity) {
+                    if (success) { lastBody = content; lastPositionPing = now; hadTrack = !body.isNull("track_id"); stateRetryAfter = 0 }
+                    else { dirty = true; stateRetryAfter = android.os.SystemClock.elapsedRealtime() + 8000 }
+                    if (dirty) report()
+                }
+            }
+        }
+    }
+    private fun reset() {
+        socket?.off(); socket?.disconnect(); socket = null
+        val previous = client; client = null
+        if (previous != null && !worker.isShutdown) worker.execute {
+            previous.dispatcher.cancelAll(); previous.connectionPool.evictAll(); previous.dispatcher.executorService.shutdown()
+        }
+        serial++; connecting = false; publishing = false
+        authRequest?.let(connection::cancel); stateRequest?.let(connection::cancel); authRequest = null; stateRequest = null
+        epoch = -1; identity = null; profile = null; deviceId = null; lastBody = null; hadTrack = false; lastPositionPing = 0; stateRetryAfter = 0; dirty = false
+        publish(state())
+    }
+    override fun close() {
+        if (closed) return
+        closed = true; main.removeCallbacks(tick); connection.resetListeners.remove(resetListener); reset(); worker.shutdown()
+    }
+}

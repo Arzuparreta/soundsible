@@ -146,3 +146,21 @@ def test_remote_play_command_writes_track_payload_for_native_clients(tmp_path, m
     assert states["ios-car-client"]["position_sec"] == 12
     assert socketio.events[0]["event"] == "playback_start_requested"
     assert socketio.events[0]["payload"]["track"]["id"] == "t1"
+
+
+def test_remote_pause_then_resume_preserves_track_position_and_session(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    socket, _, states = _patch_api(monkeypatch)
+    original = {'device_id': 'ios-car-client', 'track_id': 't1', 'track': _FakeTrack().to_dict(),
+                'position_sec': 42, 'is_playing': True, 'session': {'v': 1, 'queue': [{'id': 't1', 'queueId': 'occurrence'}]}}
+    states['ios-car-client'] = original
+    client = _make_app().test_client()
+    assert client.post('/api/playback/remote-command', json={'device_id': 'ios-car-client', 'command': 'pause'}).status_code == 200
+    paused = states['ios-car-client']
+    assert paused['track_id'] == 't1'
+    assert paused['position_sec'] == 42
+    assert paused['session'] == original['session']
+    assert paused['is_playing'] is False
+    assert client.post('/api/playback/remote-command', json={'device_id': 'ios-car-client', 'command': 'play'}).status_code == 200
+    assert socket.events[-1]['payload']['state']['session'] == original['session']
