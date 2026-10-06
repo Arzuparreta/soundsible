@@ -10,13 +10,34 @@ from __future__ import annotations
 
 from urllib.parse import quote, unquote
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from shared.hardening import SCOPE_LIBRARY_READ, require_scope
 
 car_bp = Blueprint("car", __name__, url_prefix="")
 
 MAX_CAR_ITEMS = 200
+
+
+@car_bp.route("/api/car/search", methods=["GET"])
+@require_scope(SCOPE_LIBRARY_READ, allow_trusted_network=True)
+def search_car_items():
+    query = request.args.get("q", "").strip()
+    if not query or len(query) > 256:
+        return jsonify(error="Invalid search query"), 400
+    _, metadata = _load_metadata(_get_api())
+    if not metadata:
+        return jsonify(items=[], status="library_not_loaded"), 404
+    terms = query.casefold().split()
+    tracks = sorted(getattr(metadata, "tracks", []) or [], key=lambda t: t.added_at or "", reverse=True)
+    matches = []
+    for track in tracks:
+        text = " ".join(str(getattr(track, field, "") or "") for field in ("title", "artist", "album")).casefold()
+        if all(term in text for term in terms):
+            matches.append(_track_item(track))
+            if len(matches) == MAX_CAR_ITEMS:
+                break
+    return jsonify(items=matches, status="ok")
 
 
 def _get_api():

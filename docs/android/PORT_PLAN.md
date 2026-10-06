@@ -47,7 +47,7 @@ y después integrar por PR y publicar mediante los gates establecidos.
 | Live escuchar | `lib/community.ts` | Sala, controles, chat/directorio, reconexión y fin de sala; no recapturar audio recibido | Pendiente |
 | Live emitir | `audio/capture.ts`, `docs/LIVE.md` | Programa completo al relay; volumen local independiente; pausas/silencio; listener oye y reconecta | Pendiente |
 | Audio nativo/lockscreen/Bluetooth | PlaybackService Media3 | Estado/posición/metadata, focus y políticas de pausa en emulador; llamadas/Bluetooth y evidencia física para beta | Servicio/metadata/carátulas/notificación/foco probados en emulador; teléfono, llamadas/Bluetooth y lockscreen físico pendientes |
-| Android Auto | `/api/car/*`, `docs/CAR_INTEGRATION.md` | Browse/play/control, errores/red y metadata durante DJ en contrato multimedia; DHU y coche para beta | Pendiente |
+| Android Auto | `/api/car/*`, `docs/CAR_INTEGRATION.md` | Browse/play/control, errores/red y metadata durante DJ en contrato multimedia; DHU y coche para beta | S5a: árbol autenticado, selección canónica, música/podcasts/Radio, búsqueda/playFromSearch, artwork por URI opaca, offline503 y401, protocolos moderno/clásico HTTP/TLS validados en bloque12/0 + normal APK/test/JVM54/lint. Actualización proactiva/reconexión/controles durante DJ, cookie expirada/offline y UID externo pendientes; host/DHU físico para beta |
 | Offline | [Decisión aprobada](OFFLINE_DECISION.md) | Copias completas, vuelos/espacio/cuenta/UI validados | S6a implementado/validado en emulador; evidencia en HANDOFF. Alpha requiere además paridad completa |
 | Actualizaciones/distribución | [Release gates](RELEASE_GATES.md) | Clave permanente, versión/code coherentes, actualización conserva datos y session | Pendiente |
 

@@ -49,6 +49,9 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var podcasts: PodcastProgressStore
     private val progressTicker = object : Runnable { override fun run() { if (session != null) { savePodcast(); maybeRefill(); main.postDelayed(this, 5000) } } }
     private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
+    private lateinit var carArt: ProgramCarArtwork
+    private lateinit var carLibrary: ProgramCarLibrary
+    private var pendingCarRadio: String? = null
     private lateinit var artwork: ProgramArtwork
     @Volatile private var transport: Pair<Long, OkHttpClient>? = null
     private val networkCleanup = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
@@ -70,10 +73,11 @@ class PlaybackService : MediaLibraryService() {
     private val reset: () -> Unit = {
         cancelAudio()
         retireTransport()
-        main.post { if (session != null) closeProgram() }
+        main.post { if (session != null) { carArt.clear(); carLibrary.reset(); closeProgram() } }
     }
     /** On the player looper; does not touch account generation, cookie or library. */
     private fun closeProgram() {
+        pendingCarRadio = null
         djRefiner?.clear()
         djRouteEditor?.clear()
         djPlanner.clear(); refillAnchor = ""
@@ -264,21 +268,83 @@ class PlaybackService : MediaLibraryService() {
                 podcasts.save(oldPosition.mediaItem, oldPosition.positionMs, if (oldPosition.mediaItem == player.currentMediaItem) player.duration else -1, reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION)
             }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { leveling.shuffle = shuffleModeEnabled }
-            override fun onEvents(player: Player, events: Player.Events) { previews.sync(); radio.sync(); autoplay.sync(); leveling.sync(player.mediaItemCount > 0); mixing.sync(player.mediaItemCount > 0); savePodcast()
+            override fun onEvents(player: Player, events: Player.Events) {
+                pendingCarRadio?.let { key ->
+                    if (player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.KEY) == key) {
+                        pendingCarRadio = null; autoplay.suspend(); radio.start("balanced")
+                    }
+                }
+                previews.sync(); radio.sync(); autoplay.sync(); leveling.sync(player.mediaItemCount > 0); mixing.sync(player.mediaItemCount > 0); savePodcast()
                 val keys = (0 until player.mediaItemCount).map { ProgramQueue.key(player, it) }.toSet()
                 podcastSources.entries.filter { it.value !in keys }.forEach { it.key.cancel() }
             }
         })
+        carArt = ProgramCarArtwork(this, connection)
+        carLibrary = ProgramCarLibrary(connection, main, getString(R.string.offline_title))
         connection.resetListeners.add(reset)
         session = MediaLibrarySession.Builder(this, player, object : MediaLibrarySession.Callback {
             override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
                 // Same app owns queue replacement. Trusted OS controllers can control its current program.
                 if (controller.uid != android.os.Process.myUid() && !controller.isTrusted) return MediaSession.ConnectionResult.reject()
                 val commands = Player.Commands.Builder().addAllCommands()
-                if (controller.uid != android.os.Process.myUid()) commands.remove(Player.COMMAND_CHANGE_MEDIA_ITEMS).remove(Player.COMMAND_SET_MEDIA_ITEM)
+                if (controller.uid != android.os.Process.myUid()) commands.remove(Player.COMMAND_CHANGE_MEDIA_ITEMS)
                 val sessions = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
                 if (controller.uid == android.os.Process.myUid()) sessions.add(ProgramQueue.command)
                 return MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller).setSessionExtras(session.sessionExtras).setAvailablePlayerCommands(commands.build()).setAvailableSessionCommands(sessions.build()).build()
+            }
+            override fun onGetLibraryRoot(session: MediaLibrarySession, browser: MediaSession.ControllerInfo, params: LibraryParams?) = carLibrary.root(params)
+            override fun onGetChildren(session: MediaLibrarySession, browser: MediaSession.ControllerInfo, parentId: String, page: Int, pageSize: Int, params: LibraryParams?) =
+                Futures.transform(carLibrary.children(parentId, page, pageSize, params), { result ->
+                    if (result!!.resultCode != SessionResult.RESULT_SUCCESS) result
+                    else androidx.media3.session.LibraryResult.ofItemList(result.value!!.map { item -> carLibrary.decorate(item, browser.packageName, carArt) }, params)
+                }, { task -> main.post(task) })
+            override fun onSubscribe(session: MediaLibrarySession, browser: MediaSession.ControllerInfo, parentId: String, params: LibraryParams?): ListenableFuture<androidx.media3.session.LibraryResult<Void>> {
+                return Futures.transform(carLibrary.children(parentId, 0, 200, params), { result ->
+                    if (result!!.resultCode == SessionResult.RESULT_SUCCESS) {
+                        session.notifyChildrenChanged(browser, parentId, carLibrary.childCount(parentId), params)
+                        androidx.media3.session.LibraryResult.ofVoid(params)
+                    } else androidx.media3.session.LibraryResult.ofError(result.sessionError!!)
+                }, { task -> main.post(task) })
+            }
+            override fun onGetItem(session: MediaLibrarySession, browser: MediaSession.ControllerInfo, mediaId: String) =
+                Futures.transform(carLibrary.item(mediaId), { result ->
+                    if (result!!.resultCode != SessionResult.RESULT_SUCCESS) result
+                    else androidx.media3.session.LibraryResult.ofItem(carLibrary.decorate(result.value!!, browser.packageName, carArt), result.params)
+                }, { task -> main.post(task) })
+            override fun onSearch(session: MediaLibrarySession, browser: MediaSession.ControllerInfo, query: String, params: LibraryParams?): ListenableFuture<androidx.media3.session.LibraryResult<Void>> =
+                Futures.transform(carLibrary.search(query, 0, 200, params), { result ->
+                    if (result!!.resultCode == SessionResult.RESULT_SUCCESS) {
+                        session.notifySearchResultChanged(browser, query, carLibrary.searchCount(query), params)
+                        androidx.media3.session.LibraryResult.ofVoid(params)
+                    } else androidx.media3.session.LibraryResult.ofError(result.sessionError!!)
+                }, { task -> main.post(task) })
+            override fun onGetSearchResult(session: MediaLibrarySession, browser: MediaSession.ControllerInfo, query: String, page: Int, pageSize: Int, params: LibraryParams?) =
+                Futures.transform(carLibrary.search(query, page, pageSize, params), { result ->
+                    if (result!!.resultCode != SessionResult.RESULT_SUCCESS) result
+                    else androidx.media3.session.LibraryResult.ofItemList(result.value!!.map { item -> carLibrary.decorate(item, browser.packageName, carArt) }, params)
+                }, { task -> main.post(task) })
+            override fun onSetMediaItems(session: MediaSession, controller: MediaSession.ControllerInfo, mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+                val query = mediaItems.singleOrNull()?.requestMetadata?.searchQuery
+                val carSelection = query != null || controller.uid != android.os.Process.myUid() || mediaItems.any { it.mediaId.startsWith("soundsible:track:") || it.mediaId.startsWith("soundsible:radio:") }
+                if (!carSelection) return super.onSetMediaItems(session, controller, mediaItems, startIndex, startPositionMs)
+                fun resolve(items: List<MediaItem>): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = try {
+                    val selected = carLibrary.select(items)
+                    require(startIndex == C.INDEX_UNSET || startIndex in selected.items.indices)
+                    require(selected.generation == connection.generation && connection.sessionIdentity(selected.generation) == selected.identity)
+                    djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
+                    restoreNormal(); publishDj("idle", djProfile, 0)
+                    autoplay.clear(); radio.clear(); previews.clear()
+                    pendingCarRadio = if (selected.radio) selected.items.single().mediaMetadata.extras!!.getString(ProgramQueue.KEY) else null
+                    val index = if (startIndex == C.INDEX_UNSET) 0 else startIndex
+                    val position = if (startPositionMs == C.TIME_UNSET) podcasts.position(selected.items[index]) else startPositionMs.coerceAtLeast(0)
+                    Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(selected.items, index, position))
+                } catch (_: Exception) { Futures.immediateFailedFuture(IllegalArgumentException("Unsupported car selection")) }
+                if (query != null) return Futures.transformAsync(carLibrary.search(query, 0, 200, null), { result ->
+                    if (result!!.resultCode != SessionResult.RESULT_SUCCESS || result.value!!.isEmpty())
+                        Futures.immediateFailedFuture(IllegalArgumentException("No acquired search result"))
+                    else resolve(result.value!!.take(1))
+                }, { task -> main.post(task) })
+                return resolve(mediaItems)
             }
             override fun onPlayerCommandRequest(session: MediaSession, controller: MediaSession.ControllerInfo, command: Int): Int {
                 val recovers = command == Player.COMMAND_PREPARE || command == Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM || command == Player.COMMAND_SEEK_TO_DEFAULT_POSITION || command == Player.COMMAND_SEEK_TO_MEDIA_ITEM || (command == Player.COMMAND_PLAY_PAUSE && !player.playWhenReady)
@@ -399,6 +465,8 @@ class PlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         savePodcast()
         connection.resetListeners.remove(reset)
+        carArt.close()
+        carLibrary.close()
         djRefiner?.close()
         djPlanner.close()
         djRouteEditor?.close()

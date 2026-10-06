@@ -236,3 +236,23 @@ def test_car_podcast_feed_browses_only_its_acquired_episodes(tmp_path, monkeypat
     assert response.get_json()["items"][0]["podcast_episode_guid"] == "guid-one"
     assert client.get("/api/car/items/podcast:empty").get_json()["items"] == []
     assert client.get("/api/car/items/podcast:other-feed").status_code == 404
+
+
+def test_car_search_matches_acquired_library_before_limiting(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    old = _track("found", "Canción antigua", artist="Única artista")
+    old.added_at = "2020-01-01"
+    new = [_track(f"other-{i}", "Unrelated") for i in range(210)]
+    for track in new:
+        track.added_at = "2026-01-01"
+    metadata = LibraryMetadata(version=1, tracks=[old, *new], playlists={}, settings={})
+    _patch_api(monkeypatch, metadata)
+    client = _make_app().test_client()
+    response = client.get("/api/car/search", query_string={"q": " CANCIÓN  única "})
+    assert response.status_code == 200
+    assert [item["track_id"] for item in response.get_json()["items"]] == ["found"]
+    assert client.get("/api/car/search?q=unrelated").get_json()["items"][-1]["track_id"] == "other-199"
+    assert client.get("/api/car/search?q=missing").get_json()["items"] == []
+    assert client.get("/api/car/search?q=").status_code == 400
+    assert client.get("/api/car/search", query_string={"q": "x" * 257}).status_code == 400

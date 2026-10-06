@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-06",
+  "slice": "S5a",
+  "channel": "development",
+  "checkout": "/tmp/soundsible-auto-next",
+  "base_revision": "dcdd6a3b2c317d4a800c8d69b9b8739ed01d2859",
+  "dirty_at_asset_prepare": true,
+  "source_hashes": {
+    "android/app/src/main/AndroidManifest.xml": "9fc514a05318547daa75de7f9586a6fe09929b0ea72d0edb0115879e4094baa8",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "13af23997deb9a64c91fd045474157fd10d9591bfa5c4f66ddd5b3523907aa4c",
+    "android/app/src/main/java/com/soundsible/android/ProgramCarLibrary.kt": "94bb4bef84e1e1505ca7b48c87e415122de264db42aad4c4f2c6c9baf69bc45c",
+    "android/app/src/main/java/com/soundsible/android/ProgramCarArtwork.kt": "1942d5bdf8cfa63d49e2108b4f30c251b7eb1deaaf7c55e1345c7534f8d856e4",
+    "android/app/src/main/java/com/soundsible/android/CarArtworkProvider.kt": "deedff6dde73d45649d0a4b52e7cf87868c9e2ed4df103ef868d45c3e08f71e9",
+    "android/app/src/main/res/xml/automotive_app_desc.xml": "0b6e23c337b983034ff69d8823b0c26a4ccd10665889e36ab33c581cfbf772ad",
+    "android/app/src/androidTest/java/com/soundsible/android/CarLibraryTest.kt": "97ecdc6c9fa56c5c59b25f370a64cfefbe6fff9bee80a7fe87c9e12e100e41a5",
+    "android/app/src/androidTest/java/com/soundsible/android/CarLegacyTest.kt": "24d753d5ddd0ab10c4d87806653a9ccd58734493fd7a46feb5fac1a03c316062",
+    "android/app/src/main/java/com/soundsible/android/EngineConnection.kt": "562ab6a61da7ec3b626b88690d5eb534ca3f2d01d9ec492e7d12e0dc49b8e796",
+    "android/app/src/androidTest/java/com/soundsible/android/TransportResetTest.kt": "d121a061b2bc4dffcaa3ab22adcc8c69c0a03fee594ce9d789b92c6700fb18ea",
+    "android/app/src/androidTest/java/com/soundsible/android/CatalogSearchTest.java": "bcd5f5ff824b7e6bed2914410e6f43e5882c0493c2b1122a0793e7cdd8bbe303",
+    "shared/api/routes/car.py": "03108cad49c4b1b96835159e3ead1162e70a27689d9b75bed65fd9a24641dc10",
+    "tests/test_car_routes.py": "5c38e36d518c0b0ab375177308ebb1f5a89959749022a4403e1a961d7b013c62"
+  },
+  "instrumentation": {
+    "tests": 12,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 94.079,
+    "runner_exit": 0,
+    "classes": {
+      "CarLibraryTest": 2,
+      "CarLegacyTest": 2,
+      "CatalogSearchTest": 2,
+      "TransportResetTest": 2,
+      "ConnectionTest": 4
+    },
+    "log": "/tmp/soundsible-auto-search-connection-native.log"
+  },
+  "normal_build": {
+    "apk": true,
+    "test_apk": true,
+    "jvm_tests": 54,
+    "jvm_failures": 0,
+    "lint": true,
+    "temporary_ca_removed": true
+  },
+  "core_tests": {
+    "tests": 11,
+    "failures": 0,
+    "log": "/tmp/soundsible-auto-search-core-tests.log"
+  },
+  "proves": [
+    "Authenticated root/children/subscription/item via real modern and platform legacy browsers",
+    "Canonical playback with nonzero stereo48k PCM; caller title/URI ignored; another account ID/search excluded",
+    "Opaque private artwork read/cache and old URI unavailable after revocation",
+    "Acquired podcast feed tree with120s seek/resume",
+    "Radio selection/refill excludes podcasts",
+    "Modern acquired-library search and legacy playFromSearch with PCM; no automatic playback on browse/search",
+    "Explicit complete offline copy prepared by OfflineService; browse/play with APIs503",
+    "Car browse401 clears copies/programme and denies root/item",
+    "Async stale transport callback across same-origin generation reset and forgotten origin",
+    "Existing account/cookie/TLS/sockets/roles/revocation/server-switch native tests pass"
+  ],
+  "limitations": [
+    "Not full Auto or Android parity; S5b remains",
+    "SameUID protocols, not Google Auto host, external trusted classification or external URI-grant acceptance",
+    "No voice recognition or provider acquisition",
+    "No physical/acoustic/car/Bluetooth acceptance",
+    "No complete current principal regression or browser4; failed dcdd144/2 retained separately",
+    "Offline root currently requires valid cookie; expired cookie without observed401 pending",
+    "Proactive background subscriptions/reconnect/DJ control acceptance pending",
+    "Cache artwork is process-local; cross-process offline covers pending",
+    "Already-open artwork FD/received bytes cannot be revoked retroactively"
+  ]
+}
