@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-06",
+  "slice": "S5b",
+  "channel": "development",
+  "base_revision": "dff42084",
+  "dirty_at_asset_prepare": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/ProgramCarSubscriptions.kt": "dc153b8895131480b2fc1fbd0ff59314c8345504580ab514491985e7628cca68",
+    "android/app/src/main/java/com/soundsible/android/ProgramCarLibrary.kt": "d6c2ba8488ceaaafe2b2bd95420b892549c928270654bfc5ec1e23a014941392",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "7dcf62885417a5a73b8d1de3ef1ae73ca7fb50dae7f9460d8c64babdd8846c8f",
+    "android/app/src/androidTest/java/com/soundsible/android/CarEventsTest.kt": "3a86bca3fa5c38d110d8adda796a9f2e7854d2b08b4824e99d6c142b3fc2d0d2"
+  },
+  "instrumentation": {
+    "tests": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 50.108,
+    "runner_exit": 0,
+    "classes": {
+      "CarEventsTest": 2,
+      "CarLibraryTest": 2,
+      "CarLegacyTest": 2,
+      "TransportResetTest": 2
+    },
+    "log": "/tmp/soundsible-auto-events-auth-native.log"
+  },
+  "normal_build": {
+    "apk": true,
+    "test_apk": true,
+    "jvm_tests": 54,
+    "jvm_failures": 0,
+    "lint": true,
+    "temporary_ca_removed": true
+  },
+  "proves": [
+    "Actual Core library_updated events reach native car subscriptions after Activity/WebView destruction",
+    "Scoped Core label mutation updates children returned after browser notification",
+    "Playlist create/delete notify actual total counts in background",
+    "Programme occurrence KEY and nonzero stereo48k PCM retained across library updates",
+    "Unsubscribe removes listeners; subsequent Core update does not notify browser",
+    "Auto modern/legacy browse/play/search, podcast, Radio, offline503/401 and transport-reset tests remain green"
+  ],
+  "diagnostics": [
+    {
+      "log": "/tmp/soundsible-auto-events-native.log",
+      "tests": 8,
+      "failures": 1,
+      "cause": "Subscription browse observes401 before foreground browse; cancelled foreground future returned disconnected instead of authentication expired.",
+      "fix": "On observed401, reset outstanding library futures with authentication-expired before clearing session; normal disconnect keeps separate reason."
+    }
+  ],
+  "limits": [
+    "Not complete Auto or Android parity",
+    "Initial connect and Core events accepted; actual network loss/reconnect still pending",
+    "No metadata-refresh acceptance for the active programme during DJ",
+    "Offline Auto still requires valid cookie; expiration without observed401 pending",
+    "Native subscription bounds64 registrations/16 distinct parents; requests coalesced with per-parent dirty replay; no unlimited polling",
+    "No local offline-store completion/removal event observer yet",
+    "SameUID browsers, not host/external trust/grant or acoustic evidence",
+    "Whole current principal regression and browser4 still pending"
+  ]
+}

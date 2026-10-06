@@ -82,9 +82,18 @@ La implementación actual exige cookie vigente para root/offline. Carátulas son
 cache nativa de proceso; no afirmar covers offline tras muerte de proceso.
 Host/DHU y permisos externos siguen pendientes; aceptación física para beta.
 
-Después: negativos DJ/fallo permanente de ambos streams, Live/teléfono/firma y
-regresión final/browser4 actuales. No hay suite Native activa tras exit12877;
-AVD emulator-5554 headless sigue disponible. No aplicar stash/clone viejo.
+S5b validado:8/0 HTTP/TLS,50.108s,exit0 + normal APK/test/JVM54/lint sin CA.
+Ver SLICE_5B y evidence/s5b.json. Native socket lazy del car actualiza labels y
+playlist counts tras cerrar Activity, conserva KEY/PCM y respeta unsubscribe.
+401 concurrente devuelve autenticación expirada a browse pendientes; reset por
+desconexión conserva otra razón. Root/children toleran cambio de epoch al leer
+identidad. No hay suite activa después de exec21942; AVD5554 sigue disponible.
+
+Siguiente: Auto cookie expirada sin401, controles/metadata durante DJ, pérdida/
+reconexión real y observer de copias locales. Actualizar árbol no prueba labels
+actualizadas del programa activo. Luego UID externo, negativos DJ, Live/teléfono/
+firma y regresión final/browser4. Clone /tmp/soundsible-auto-next ya se trasladó;
+no copiarlo sobre root actual. No aplicar stash/clone viejo. No merge/automerge/release.
 
 ## Comandos y reglas operativas
 

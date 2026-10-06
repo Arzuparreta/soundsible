@@ -51,6 +51,7 @@ class PlaybackService : MediaLibraryService() {
     private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
     private lateinit var carArt: ProgramCarArtwork
     private lateinit var carLibrary: ProgramCarLibrary
+    private lateinit var carSubscriptions: ProgramCarSubscriptions
     private var pendingCarRadio: String? = null
     private lateinit var artwork: ProgramArtwork
     @Volatile private var transport: Pair<Long, OkHttpClient>? = null
@@ -73,7 +74,7 @@ class PlaybackService : MediaLibraryService() {
     private val reset: () -> Unit = {
         cancelAudio()
         retireTransport()
-        main.post { if (session != null) { carArt.clear(); carLibrary.reset(); closeProgram() } }
+        main.post { if (session != null) { carSubscriptions.reset(); carArt.clear(); carLibrary.reset(); closeProgram() } }
     }
     /** On the player looper; does not touch account generation, cookie or library. */
     private fun closeProgram() {
@@ -281,6 +282,9 @@ class PlaybackService : MediaLibraryService() {
         })
         carArt = ProgramCarArtwork(this, connection)
         carLibrary = ProgramCarLibrary(connection, main, getString(R.string.offline_title))
+        carSubscriptions = ProgramCarSubscriptions(connection, carLibrary, main) { browser, parent, count, params ->
+            session?.notifyChildrenChanged(browser, parent, count, params)
+        }
         connection.resetListeners.add(reset)
         session = MediaLibrarySession.Builder(this, player, object : MediaLibrarySession.Callback {
             override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
@@ -301,10 +305,18 @@ class PlaybackService : MediaLibraryService() {
             override fun onSubscribe(session: MediaLibrarySession, browser: MediaSession.ControllerInfo, parentId: String, params: LibraryParams?): ListenableFuture<androidx.media3.session.LibraryResult<Void>> {
                 return Futures.transform(carLibrary.children(parentId, 0, 200, params), { result ->
                     if (result!!.resultCode == SessionResult.RESULT_SUCCESS) {
+                        if (!carSubscriptions.add(browser, parentId, params)) return@transform androidx.media3.session.LibraryResult.ofError(SessionError.ERROR_IO)
                         session.notifyChildrenChanged(browser, parentId, carLibrary.childCount(parentId), params)
                         androidx.media3.session.LibraryResult.ofVoid(params)
                     } else androidx.media3.session.LibraryResult.ofError(result.sessionError!!)
                 }, { task -> main.post(task) })
+            }
+            override fun onUnsubscribe(session: MediaLibrarySession, browser: MediaSession.ControllerInfo, parentId: String): ListenableFuture<androidx.media3.session.LibraryResult<Void>> {
+                carSubscriptions.remove(browser, parentId)
+                return Futures.immediateFuture(androidx.media3.session.LibraryResult.ofVoid(null))
+            }
+            override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
+                carSubscriptions.remove(controller)
             }
             override fun onGetItem(session: MediaLibrarySession, browser: MediaSession.ControllerInfo, mediaId: String) =
                 Futures.transform(carLibrary.item(mediaId), { result ->
@@ -465,6 +477,7 @@ class PlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         savePodcast()
         connection.resetListeners.remove(reset)
+        carSubscriptions.close()
         carArt.close()
         carLibrary.close()
         djRefiner?.close()

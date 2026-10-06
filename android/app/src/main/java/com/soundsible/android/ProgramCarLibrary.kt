@@ -25,13 +25,13 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
     private val rows = linkedMapOf<String, JSONObject>()
     private val counts = linkedMapOf<String, Int>()
     private val requests = mutableSetOf<String>()
-    private val pending = mutableMapOf<String, () -> Unit>()
+    private val pending = mutableMapOf<String, (Int) -> Unit>()
     private var generation = -1L
     private var cacheIdentity: String? = null
     @Volatile private var closed = false
     fun root(params: LibraryParams?): ListenableFuture<LibraryResult<MediaItem>> {
         val epoch = connection.generation
-        if (connection.sessionIdentity(epoch) == null) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED))
+        if (runCatching { connection.sessionIdentity(epoch) }.getOrNull() == null) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED))
         return Futures.immediateFuture(LibraryResult.ofItem(MediaItem.Builder().setMediaId(ROOT).setMediaMetadata(
             MediaMetadata.Builder().setTitle("Soundsible").setIsBrowsable(true).setIsPlayable(false).build()).build(), params))
     }
@@ -45,12 +45,12 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
             future.set(LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)); return future
         }
         val epoch = connection.generation
-        val identity = connection.sessionIdentity(epoch)
+        val identity = runCatching { connection.sessionIdentity(epoch) }.getOrNull()
         if (identity == null) { future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)); return future }
         if (generation != epoch || cacheIdentity != identity) { rows.clear(); counts.clear(); generation = epoch; cacheIdentity = identity }
         val id = "car-browse:" + java.util.UUID.randomUUID()
         requests.add(id)
-        pending[id] = { future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_DISCONNECTED)) }
+        pending[id] = { reason -> future.set(LibraryResult.ofError(reason)) }
         try {
             worker.execute {
                 var answer: JSONObject? = null; var code = 0
@@ -85,7 +85,10 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
                         future.set(LibraryResult.ofError(if (code == 401) SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED else SessionError.ERROR_PERMISSION_DENIED))
                         // Observed revocation invalidates explicit copies and the
                         // active programme; a permission403 never switches account.
-                        if (code == 401) connection.clearSession(false)
+                        if (code == 401) {
+                            reset(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)
+                            connection.clearSession(false)
+                        }
                         return@post
                     }
                     try {
@@ -187,9 +190,9 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
         }
         return Selection(ProgramQueue.items(connection, decoded), generation, cacheIdentity!!, radio)
     }
-    fun reset() {
+    fun reset(reason: Int = SessionError.ERROR_SESSION_DISCONNECTED) {
         requests.forEach(connection::cancel); requests.clear()
-        pending.values.toList().forEach { it() }; pending.clear()
+        pending.values.toList().forEach { it(reason) }; pending.clear()
         rows.clear(); counts.clear(); generation = -1; cacheIdentity = null; worker.queue.clear()
     }
     // Proactive subscription updates and external host acceptance remain pending.
