@@ -26,6 +26,8 @@ class ProgramDjRecoveryTest {
     @Test fun tlsStarvedIncoming() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), 1)
     @Test fun httpStarvedOutgoing() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), 0)
     @Test fun tlsStarvedOutgoing() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), 0)
+    @Test fun httpBothInputsUnavailable() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), 2)
+    @Test fun tlsBothInputsUnavailable() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), 2)
     @Test fun httpHistoryPrune() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), history = true)
     @Test fun tlsHistoryPrune() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin"), history = true)
     @Test fun httpMeasuredRefinement() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"), measured = true)
@@ -74,7 +76,7 @@ class ProgramDjRecoveryTest {
                 val routeItems = if (history) ProgramQueue.items(connection, JSONArray().apply {
                     repeat(1000) { put(JSONObject().put("source", "local").put("id", "member-pcm-soft").put("title", "History $it").put("duration", 20)) }
                 }) else items
-                successorKey.set(routeItems[if (history) 996 else if (starved == 1) 0 else 1].mediaMetadata.extras!!.getString(ProgramQueue.KEY))
+                successorKey.set(routeItems[if (history) 996 else if (starved == 1 || starved == 2) 0 else 1].mediaMetadata.extras!!.getString(ProgramQueue.KEY))
                 session = ProgramDjSession(instrumentation.targetContext, generation, owns, DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)), tap, { false }, routeItems.map { ProgramDjSession.Row(it) }, mixing = { starved != null })
                 output = ProgramDjSession::class.java.getDeclaredField("output").apply { isAccessible = true }.get(session) as ProgramMixOutput
                 @Suppress("UNCHECKED_CAST")
@@ -173,11 +175,26 @@ class ProgramDjRecoveryTest {
                 successorPcm.set(false)
                 // Stop delivery without an ExoPlayer error or output release: this
                 // exercises the PCM watchdog, rather than the decoder error path.
-                instrumentation.runOnMainSync { output.pause(true); decks[starved].pause() }
-                Thread.sleep(2200)
-                assertNull("Paused programme retired an input", output.restoredAt())
-                instrumentation.runOnMainSync { output.pause(false) }
-                await { output.restoredAt() != null && session!!.player.isPlaying && session!!.player.currentMediaItem?.mediaId == if (starved == 1) "member-pcm-soft" else "member-pcm-loud" }
+                if (starved == 2) {
+                    // Both decoders stop supplying PCM while the programme still
+                    // requests playback. There is no healthy input to retire toward.
+                    instrumentation.runOnMainSync { decks.forEach { it.pause() } }
+                    Thread.sleep(2200)
+                    assertNull("No healthy counterpart, but an input was retired", output.restoredAt())
+                    assertEquals("Both-input loss flushed the output", epoch, output.epoch())
+                    instrumentation.runOnMainSync {
+                        assertNull(session!!.player.playerError)
+                        assertTrue(session!!.player.playWhenReady)
+                        assertEquals(2, session!!.player.mediaItemCount)
+                        decks[0].play()
+                    }
+                } else {
+                    instrumentation.runOnMainSync { output.pause(true); decks[starved].pause() }
+                    Thread.sleep(2200)
+                    assertNull("Paused programme retired an input", output.restoredAt())
+                    instrumentation.runOnMainSync { output.pause(false) }
+                }
+                await { output.restoredAt() != null && session!!.player.isPlaying && session!!.player.currentMediaItem?.mediaId == if (starved == 1 || starved == 2) "member-pcm-soft" else "member-pcm-loud" }
                 minimumFrame.set(output.restoredAt()!! + 9600)
                 await { successorPcm.get() }
                 assertFalse("Retained PCM consumer failed", capture.failed.get())

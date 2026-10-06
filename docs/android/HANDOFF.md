@@ -217,3 +217,10 @@ hasta Play explícito. Primer compile nullable y siguiente4/2 replay corregidos,
 no contar esos runs como verdes. SLICE_2AI/evidence/s2ai.json guardan límites:
 puente público/App Links, offline cached-match, invites/multidispositivo pendientes.
 Congelación levantada. Siguiente DJ: ambas entradas indisponibles en Recovery.
+
+DJ ambas entradas PCM: Recovery2/0 HTTP/TLS sobre450b207d dirty,
+46.949s; normal APK/test APK/JVM54/lint sin CA pasa. Log
+/tmp/soundsible-s3b-both-inputs-native.log. Ambos decoders pausados durante overlap
+>2s: ninguna retirada sin contraparte sana; al volver outgoing hay recuperación,
+PCM48k no silencioso y epoch/reloj retenidos. No prueba fallo permanente de ambas
+fuentes de red. Pendientes negativos Core y cola1000 en servicio/controller.

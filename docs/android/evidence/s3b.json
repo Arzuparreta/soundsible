@@ -565,5 +565,23 @@
       "complete DJ parity",
       "physical acoustic acceptance"
     ]
+  },
+  "both_inputs_pcm_interruption": {
+    "source_base_revision": "450b207d",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "instrumentation_seconds": 46.949,
+    "log": "/tmp/soundsible-s3b-both-inputs-native.log",
+    "normal_build": "APK/test APK/JVM54/lint passed without temporary CA",
+    "proves": [
+      "Both private decoders paused during armed overlap for >2s; no healthy input, no retirement or output epoch reset",
+      "Resuming outgoing decoder triggers recovery retaining programme clock, requested playback and nonzero stereo48k PCM"
+    ],
+    "limits": [
+      "Controlled decoder PCM interruption; not permanent failure of both network sources",
+      "Full current regression and service/controller long1000 session pending",
+      "Not complete DJ parity"
+    ]
   }
 }
