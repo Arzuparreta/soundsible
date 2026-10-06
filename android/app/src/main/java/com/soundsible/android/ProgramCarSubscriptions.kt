@@ -7,6 +7,7 @@ import androidx.media3.session.MediaSession.ControllerInfo
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.ListenableFuture
 import io.socket.client.IO
+import io.socket.client.Manager
 import io.socket.client.Socket
 
 /** Native car subscriptions survive the WebView; events carry no library payload. */
@@ -27,6 +28,9 @@ internal class ProgramCarSubscriptions(
     private var closed = false
     private var observingCopies = false
     private val refresh = Runnable { refreshParents() }
+    /** After the manager gives up, a fresh verified socket is tried after a cooldown (as the device session does). */
+    private var retryAfter = 0L
+    private val retry = Runnable { if (!closed && subscriptions.isNotEmpty()) ensureSocket() }
     private val copiesChanged: () -> Unit = {
         main.post {
             if (!current()) { reset(); return@post }
@@ -60,6 +64,8 @@ internal class ProgramCarSubscriptions(
 
     private fun ensureSocket() {
         if (socket != null && current()) return
+        val wait = retryAfter - android.os.SystemClock.elapsedRealtime()
+        if (socket == null && wait > 0 && generation == connection.generation) { main.removeCallbacks(retry); main.postDelayed(retry, wait); return }
         socket?.off(); socket?.disconnect(); socket = null
         generation = connection.generation
         identity = library.accountIdentity(generation)
@@ -84,6 +90,15 @@ internal class ProgramCarSubscriptions(
                         queued.addAll(subscriptions.keys.map { it.second })
                         main.removeCallbacks(refresh); main.postDelayed(refresh, 250)
                     }
+                }
+            }
+            // An exhausted manager never reconnects on its own; without this the car would stop hearing about changes.
+            next.io().on(Manager.EVENT_RECONNECT_FAILED) {
+                main.post {
+                    if (socket !== next) return@post
+                    next.off(); next.io().off(); next.disconnect(); socket = null
+                    retryAfter = android.os.SystemClock.elapsedRealtime() + 30000
+                    main.removeCallbacks(retry); main.postDelayed(retry, 30000)
                 }
             }
             next.connect()
@@ -120,8 +135,8 @@ internal class ProgramCarSubscriptions(
 
     fun reset() {
         if (observingCopies) { connection.offline.changes.remove(copiesChanged); observingCopies = false }
-        main.removeCallbacks(refresh)
-        socket?.off(); socket?.disconnect(); socket = null
+        main.removeCallbacks(refresh); main.removeCallbacks(retry); retryAfter = 0
+        socket?.io()?.off(); socket?.off(); socket?.disconnect(); socket = null
         pending.values.toList().forEach { it.cancel(true) }; pending.clear()
         dirty.clear(); queued.clear(); subscriptions.clear(); generation = -1; identity = null
     }

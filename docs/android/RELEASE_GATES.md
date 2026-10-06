@@ -52,6 +52,11 @@ Antes de habilitar el workflow de publicación deben cumplirse:
    notas de instalación/actualización y límites verificados. El manifest de
    capacidades requerido y la decisión offline deben ser gates de publicación.
 
+9. Enlaces https a la app (App Links): `assetlinks.json` con el SHA-256 de la clave permanente en
+   `https://Arzuparreta.github.io/.well-known/assetlinks.json` (la raíz del dominio, no el subdirectorio del
+   sitio), intent-filter `autoVerify` para la ruta `/soundsible.github.io/open/` y, en el puente, un enlace a la
+   app sólo cuando exista una APK pública. Las invitaciones usan el dominio de cada servidor y siguen por SEND.
+
 No escribir una versión de producto a mano, ni siquiera para un ejemplo de tag
 Android. El nombre de madurez alpha/beta no crea otra versión comercial.
 

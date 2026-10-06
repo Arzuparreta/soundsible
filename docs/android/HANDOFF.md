@@ -58,9 +58,13 @@ Estado vigente y forma de trabajar. Lo superado está en
       peticiones de una canción y no tiene grupos que se vayan al cambiar de sesión; sin eso repetiría el fallo
       de las 38 favoritas que sobrevivían a los cambios de sesión. Opciones: implementarlo con grupos nativos o
       dejarlo fuera de Android.
-- [ ] Puente público/App Links: abrir enlaces https de canción/invitación con VIEW.
-- [ ] Negativos DJ/Auto: fallo permanente de ambos streams de red (DJ); etiquetas del
-      programa activo y agotamiento de reintentos (Auto).
+- [→] Puente público/App Links: movido a RELEASE_GATES (punto 9). Necesita clave permanente, `assetlinks.json`
+      en la raíz `Arzuparreta.github.io` y APK pública; hoy el puente no pasa nada a Android. Las invitaciones
+      viven en el dominio de cada servidor (no verificable): su camino es SEND, ya aceptado (S2at).
+- [x] Negativos DJ: el fallo persistente de los streams (503 en todos, ambos platos) ya está en `DjNetworkTest`:
+      error visible sin cuelgue, misma ocurrencia y recuperación con reintento explícito.
+- [x] Negativos Auto: el socket del coche quedaba muerto al agotar reintentos (fallo real, corregido con
+      enfriamiento de 30 s como S2aq). Etiquetas del programa activo: `CarDjTest`/`CarEventsTest`.
 - [ ] Regresión final: principal nativa completa HTTP+TLS, restart offline/Live, browser4 (AGENTS).
 - [ ] PR con una etiqueta de impacto, base `origin/main` verificada.
 - [ ] Requiere al usuario, no bloquea la PR: clave de firma permanente y canal de

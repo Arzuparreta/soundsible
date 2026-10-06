@@ -44,8 +44,8 @@ class CarEventsTest {
             instrumentation.runOnMainSync { selected.set(work()) }
             return selected.get().get(20, TimeUnit.SECONDS)
         }
-        fun await(label: String, condition: () -> Boolean) {
-            val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
+        fun await(label: String, condition: () -> Boolean, seconds: Long = 20) {
+            val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds)
             while (System.nanoTime() < until) {
                 val done = AtomicBoolean(); instrumentation.runOnMainSync { done.set(condition()) }
                 if (done.get()) return
@@ -144,6 +144,21 @@ class CarEventsTest {
                     active.isPlaying && pcm.get() && active.currentMediaItem!!.mediaMetadata.extras!!.getString(ProgramQueue.KEY) == key.get()
                 })
                 assertFalse(capture.failed.get())
+                // Exhaustion: once the socket manager gives up, a fresh socket must come back after the cooldown.
+                socketNetwork(true)
+                Thread.sleep(500)
+                request("/api/library/track-labels/member-track/metadata", "POST", "{\"title\":\"Car exhausted title\"}")
+                var lastBlocked = -1; var stableSince = System.nanoTime(); val exhaustUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(60)
+                while (System.nanoTime() < exhaustUntil) {
+                    val blocked = socketNetwork().getInt("blocked")
+                    if (blocked != lastBlocked) { lastBlocked = blocked; stableSince = System.nanoTime() }
+                    else if (blocked >= 6 && System.nanoTime() - stableSince > TimeUnit.SECONDS.toNanos(8)) break
+                    Thread.sleep(250)
+                }
+                assertTrue("Reconnection attempts never ran out: $lastBlocked", lastBlocked >= 6)
+                assertEquals("Disconnected subscription delivered new metadata", "Car reconnect title", title.get())
+                socketNetwork(false)
+                await("Exhausted socket replaced after cooldown and missed labels refreshed", { title.get() == "Car exhausted title" }, 50)
                 assertEquals(SessionResult.RESULT_SUCCESS, call { active.unsubscribe("all-tracks") }.resultCode)
                 assertEquals(SessionResult.RESULT_SUCCESS, call { active.unsubscribe("playlists") }.resultCode)
                 assertEquals(SessionResult.RESULT_SUCCESS, call { active.unsubscribe(ProgramCarLibrary.OFFLINE) }.resultCode)
