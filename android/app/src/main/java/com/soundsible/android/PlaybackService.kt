@@ -49,6 +49,7 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var podcasts: PodcastProgressStore
     private val progressTicker = object : Runnable { override fun run() { if (session != null) { savePodcast(); maybeRefill(); main.postDelayed(this, 5000) } } }
     private fun savePodcast() { if (::player.isInitialized && ::podcasts.isInitialized) podcasts.save(player.currentMediaItem, player.currentPosition, player.duration, player.playbackState == Player.STATE_ENDED) }
+    private lateinit var liveHost: NativeLiveHost
     private lateinit var carArt: ProgramCarArtwork
     private lateinit var carLibrary: ProgramCarLibrary
     private lateinit var carSubscriptions: ProgramCarSubscriptions
@@ -281,6 +282,9 @@ class PlaybackService : MediaLibraryService() {
                 podcastSources.entries.filter { it.value !in keys }.forEach { it.key.cancel() }
             }
         })
+        liveHost = NativeLiveHost(this, connection, main, { player }) { state ->
+            session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeLiveHost", state.toString()) }) }
+        }
         carArt = ProgramCarArtwork(this, connection)
         carLibrary = ProgramCarLibrary(connection, main, getString(R.string.offline_title))
         carSubscriptions = ProgramCarSubscriptions(connection, carLibrary, main) { browser, parent, count, params ->
@@ -379,6 +383,15 @@ class PlaybackService : MediaLibraryService() {
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+                if (args.getString("action") in listOf("liveStart", "liveStop", "liveTitle", "liveChat")) {
+                    if (args.getLong("generation", -1) != connection.generation) return Futures.immediateFuture(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
+                    return when (args.getString("action")) {
+                        "liveStart" -> liveHost.start(args.getString("title").orEmpty())
+                        "liveTitle" -> liveHost.title(args.getString("title").orEmpty())
+                        "liveChat" -> liveHost.chat(args.getString("text").orEmpty())
+                        else -> liveHost.stop()
+                    }
+                }
                 return Futures.immediateFuture(try {
                     if (args.getString("action") == "djContext") {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player))
@@ -485,6 +498,7 @@ class PlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         savePodcast()
         connection.resetListeners.remove(reset)
+        liveHost.close()
         carSubscriptions.close()
         carArt.close()
         carLibrary.close()

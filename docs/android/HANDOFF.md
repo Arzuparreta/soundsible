@@ -158,3 +158,10 @@ sin perder tap.2/0,runner exit0 + normal APK/test APK/JVM54/lint sin CA.
 Ver SLICE_4B/evidence/s4b.json. El runner inicia relay desechable automáticamente
 en principal o filtro LiveRelayTest. Siguiente prioridad: socket/lease y metadata
 de host desde servicio, adaptador UI y escucha MediaSession. No paridad todavía.
+
+S4c host propiedad de PlaybackService: sesión firmada, WHIP + socket Community,
+metadata/heartbeat sin Activity, título y chat; secretos sólo en servicio.
+Host2 + Relay2 + Input3,7/0,42.984s,runner exit0 y normal APK/test APK/JVM54/lint
+sin CA. Fin explícito borra sala conservando KEY/playback local. Ver SLICE_4C y
+evidence/s4c.json. Siguiente: escucha nativa MediaSession y controles UI; después
+DJ/metadata/artwork y recovery. No suite activa tras exec30219. AVD5554 sigue.
