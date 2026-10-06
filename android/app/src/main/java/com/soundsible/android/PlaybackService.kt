@@ -24,6 +24,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaLibraryService
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /** One program, independent of the Activity. Queue survives Activity recreation, not process death. */
 @UnstableApi
@@ -32,6 +33,7 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var player: ProgramPlayerRouter
     private lateinit var normalFactory: () -> ExoPlayer
     private lateinit var djPlanner: ProgramDjPlanner
+    private var liveListener: NativeLivePlayer? = null
     private var dj: ProgramDjSession? = null
     private var djRouteEditor: ProgramDjRouteEditor? = null
     private var djPhase = "idle"
@@ -126,11 +128,13 @@ class PlaybackService : MediaLibraryService() {
     }
     private fun restoreNormal() {
         djRefiner?.clear()
-        val previous = dj ?: return
+        val previous = dj
+        val listener = liveListener
+        if (previous == null && listener == null) return
         player.pause(); player.stop()
         val normal = normalFactory().apply { volume = player.volume }
         player.replaceBackend(normal)
-        previous.close(); dj = null
+        previous?.close(); listener?.release(); dj = null; liveListener = null
     }
     private fun retireSource(args: Bundle) {
         require(args.getLong("generation", -1) == connection.generation)
@@ -383,6 +387,21 @@ class PlaybackService : MediaLibraryService() {
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+                if (args.getString("action") == "liveListen") {
+                    return Futures.immediateFuture(try {
+                        require(args.getLong("generation", -1) == connection.generation)
+                        val room = org.json.JSONObject(args.getString("session") ?: error("NO_LIVE_ROOM"))
+                        require(room.getString("id").length in 1..128)
+                        val target = room.getString("whep_url").toHttpUrl()
+                        require(target.isHttps && target.username.isEmpty() && target.password.isEmpty())
+                        closeProgram()
+                        val listener = NativeLivePlayer(this@PlaybackService, connection, room).apply { volume = player.volume }
+                        player.pause(); player.stop()
+                        player.replaceBackend(listener).release(); liveListener = listener
+                        player.prepare(); player.play()
+                        SessionResult(SessionResult.RESULT_SUCCESS)
+                    } catch (_: Exception) { SessionResult(SessionError.ERROR_BAD_VALUE) })
+                }
                 if (args.getString("action") in listOf("liveStart", "liveStop", "liveTitle", "liveChat")) {
                     if (args.getLong("generation", -1) != connection.generation) return Futures.immediateFuture(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
                     return when (args.getString("action")) {
@@ -506,6 +525,7 @@ class PlaybackService : MediaLibraryService() {
         djPlanner.close()
         djRouteEditor?.close()
         dj?.close(); dj = null
+        liveListener?.release(); liveListener = null
         autoplay.close()
         leveling.close(); mixing.close()
         NativeProgramOutput.unbind(pcmTap)

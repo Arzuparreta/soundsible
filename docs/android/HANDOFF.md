@@ -165,3 +165,11 @@ Host2 + Relay2 + Input3,7/0,42.984s,runner exit0 y normal APK/test APK/JVM54/lin
 sin CA. Fin explícito borra sala conservando KEY/playback local. Ver SLICE_4C y
 evidence/s4c.json. Siguiente: escucha nativa MediaSession y controles UI; después
 DJ/metadata/artwork y recovery. No suite activa tras exec30219. AVD5554 sigue.
+
+S4d escucha NativeLivePlayer en MediaSession: Listener2 + Host2 + Relay2 + Input3,
+9/0,54.967s,runner exit0 + normal APK/test APK/JVM54/lint sin CA.
+PCM independiente vía relay, pausa/volumen/Activity cerrada/stop-prepare/vuelta
+a NORMAL; Live recibido no se recaptura para emisión. Fix real: comandos de
+selección de música al salir de Live. Ver SLICE_4D/evidence/s4d.json.
+Siguiente: controles UI + guest socket/metadata/artwork, después DJ/recovery.
+No suite activa tras exec11498. AVD5554 sigue. PR sólo abierta/revisión manual.

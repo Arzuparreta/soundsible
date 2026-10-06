@@ -27,10 +27,13 @@ internal class LivePeer(
     private val publishing: Boolean,
     private val onState: (PeerConnection.PeerConnectionState) -> Unit,
     private val onAudio: AudioTrackSink? = null,
+    private val playDecodedAudio: Boolean = onAudio == null && !publishing,
+    private val inputFactory: () -> WebRtcAudioRecord.ProgramInput = { LiveProgramInput(connection) },
 ) : AutoCloseable {
     private val epoch = connection.generation
     private val closed = AtomicBoolean()
-    private var input: LiveProgramInput? = null
+    private var input: WebRtcAudioRecord.ProgramInput? = null
+    @Volatile private var volume = 1.0
     private var adm: JavaAudioDeviceModule? = null
     private var factory: PeerConnectionFactory? = null
     private var peer: PeerConnection? = null
@@ -67,10 +70,10 @@ internal class LivePeer(
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build()).createAudioDeviceModule()
             adm = module
             // Receiver playback is routed by its owner; tests receive decoded PCM without a second device output.
-            module.setSpeakerMute(onAudio != null || publishing)
+            module.setSpeakerMute(!playDecodedAudio)
             if (publishing) {
                 check(publisher.compareAndSet(null, this)) { "LIVE_INPUT_IN_USE" }
-                input = LiveProgramInput(connection)
+                input = inputFactory()
                 check(WebRtcAudioRecord.attach(input!!)) { "LIVE_INPUT_IN_USE" }
             }
             val owner = PeerConnectionFactory.builder().setAudioDeviceModule(module).createPeerConnectionFactory()
@@ -90,7 +93,7 @@ internal class LivePeer(
                 override fun onRenegotiationNeeded() {}
                 override fun onConnectionChange(state: PeerConnection.PeerConnectionState) { if (owns()) onState(state) }
                 override fun onTrack(transceiver: RtpTransceiver) {
-                    (transceiver.receiver.track() as? AudioTrack)?.let { track -> incoming = track; onAudio?.let(track::addSink) }
+                    (transceiver.receiver.track() as? AudioTrack)?.let { track -> incoming = track; track.setVolume(volume); onAudio?.let(track::addSink) }
                 }
             }) ?: error("LIVE_PEER_FAILED")
             peer = next
@@ -124,14 +127,14 @@ internal class LivePeer(
             set { next.setRemoteDescription(it, SessionDescription(SessionDescription.Type.ANSWER, answer)) }
         } catch (failure: Exception) { close(); throw failure }
     }
-    fun setVolume(volume: Double) { require(volume in 0.0..1.0); incoming?.setVolume(volume) }
+    fun setVolume(volume: Double) { require(volume in 0.0..1.0); this.volume = volume; incoming?.setVolume(volume) }
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         incoming?.let { track -> onAudio?.let(track::removeSink) }
         peer?.close(); peer?.dispose(); peer = null
         outgoing?.dispose(); source?.dispose(); outgoing = null; source = null
         factory?.dispose(); factory = null; adm?.release(); adm = null
-        input?.close(); input = null
+        input?.let { WebRtcAudioRecord.detach(it); (it as? AutoCloseable)?.close() }; input = null
         publisher.compareAndSet(this, null)
         resource?.let { url -> runCatching { request(url, "DELETE").close() } }; resource = null
         client.dispatcher.cancelAll(); client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown()
