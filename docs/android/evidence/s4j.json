@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4j",
+  "channel": "development",
+  "base_revision": "68901a04",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "scripts/android.py": "cfe9bc38ab6221f533b3a94bc362be0dd80330aacf0bd2acf2f5869ba26c6a53",
+    "scripts/android_live_fixture.py": "275a970f163734fa7b6570552cb9e325d94e0dd932e705f6d7c3c074bf818cb8",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveRecoveryTest.kt": "be01d73aa9897de5e26abca2ba1206348849c7179561cf191a385d587f02108d"
+  },
+  "acceptance": {
+    "tests": 4,
+    "failures": 0,
+    "seconds": 56.701,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-recovery-final.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Persistent real MediaMTX reader authorization rejection: initial attempt plus three retries, stable exhaustion",
+    "Manual prepare/play recovers and retains volume",
+    "Real AudioManager transient focus suppresses then resumes; system-UID noisy pauses without leaving room",
+    "Account reset during stalled real TLS OPTIONS retires Live under3s; no retry across8s and stale prepare/play denied"
+  ],
+  "limits": [
+    "Publisher exhaustion/reset acceptance remains separate",
+    "No physical acoustic, whole principal or browser suite claim"
+  ]
+}

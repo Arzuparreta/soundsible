@@ -233,3 +233,11 @@ No regresión principal/browser completa en este bloque. AVD5554 sigue, ninguna
 suite activa. Siguiente: agotamiento/reset/foco Live, después restantes teléfono/
 DJ/Auto/firma y regresión final. PR abierta para review manual cuando paridad;
 no merge, automerge ni release. Ping Community20s/timeout25s corregido en docs.
+
+S4j aceptación dirigida4/0,56.701s: listener rechazos reales de autorización relay,
+cuatro intentos exactos, agotamiento estable, recuperación manual/volumen, foco
+transitorio por AudioManager y noisy por UID sistema. Reset de cuenta durante
+OPTIONS TLS lento retira receptor <3s; no reintenta en8s ni acepta prepare viejo.
+Runner53807 exit0 + APK/test APK/JVM56/lint normales sin CA temporal. Log
+/tmp/soundsible-live-recovery-final.log. Ver SLICE_4J. Siguiente: publisher
+agotamiento/reset dirigido, presentación/share Live y pendientes de matriz.

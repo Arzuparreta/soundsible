@@ -109,6 +109,47 @@ def main():
     from urllib.request import Request
     import json
 
+    blocked_reads = set()
+    denied_reads = {}
+    slow_listeners = 0
+
+    @app.before_request
+    def isolated_media_failure():
+        if request.path == "/internal/media-auth":
+            body = request.get_json(silent=True) or {}
+            path = body.get("path")
+            if body.get("action") == "read" and path in blocked_reads:
+                denied_reads[path] = denied_reads.get(path, 0) + 1
+                return "", 503
+
+    @app.route("/__fixture/read-failure", methods=["POST", "GET"])
+    def read_failure():
+        if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
+            return jsonify(error="fixture only"), 403
+        from community_service.app import _session_row
+        body = request.get_json(silent=True) or {}
+        room = _session_row(body.get("session_id", request.args.get("session_id", "")))
+        if room is None:
+            return jsonify(error="invalid isolated resource"), 400
+        path = room["stream_path"]
+        if request.method == "POST":
+            if body.get("blocked") is True:
+                blocked_reads.add(path)
+                denied_reads[path] = 0
+            else:
+                blocked_reads.discard(path)
+        return jsonify(denied=denied_reads.get(path, 0), slow_listeners=slow_listeners)
+
+    @app.route("/__fixture/slow-listener", methods=["OPTIONS"])
+    def slow_listener():
+        nonlocal slow_listeners
+        if request.remote_addr != "127.0.0.1":
+            return jsonify(error="fixture only"), 403
+        slow_listeners += 1
+        from gevent import sleep
+        sleep(10)
+        return "", 204
+
     @app.route("/__fixture/slow-handshake", methods=["OPTIONS"])
     def slow_handshake():
         if request.remote_addr != "127.0.0.1" or request.headers.get("Authorization") != "Bearer isolated":
