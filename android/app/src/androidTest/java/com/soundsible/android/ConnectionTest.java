@@ -176,10 +176,14 @@ public class ConnectionTest {
             assertEquals("false", web.evaluate(scenario, "document.body.innerText.includes('owner private song')"));
             assertEquals("false", web.evaluate(scenario, "!!document.querySelector('audio') || !!navigator.serviceWorker?.controller"));
             awaitText(web, scenario, "Development build:");
-            web.evaluate(scenario, "const cover=document.querySelector('[data-row-cover]');const source=/url\\(\"([^\"]+)\"\\)/.exec(getComputedStyle(cover).backgroundImage)?.[1];const image=new Image();image.onload=()=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,1,1);const pixel=ctx.getImageData(0,0,1,1).data;window.__fixtureCoverLoaded=pixel[0]>pixel[1]*2};image.src=source");
+            String coverReady = "(()=>{const row=Array.from(document.querySelectorAll('[data-row-main]')).find(b=>b.textContent==='member private song')?.closest('[data-music-list-row]');const cover=row?.querySelector('[data-row-cover]');window.__fixtureCoverSource=cover?/url\\(\"([^\"]+)\"\\)/.exec(getComputedStyle(cover).backgroundImage)?.[1]:null;return !!window.__fixtureCoverSource})()";
+            long sourceDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (!"true".equals(web.evaluate(scenario, coverReady)) && System.nanoTime() < sourceDeadline) Thread.sleep(100);
+            assertEquals("Member track cover source missing", "true", web.evaluate(scenario, "!!window.__fixtureCoverSource"));
+            web.evaluate(scenario, "window.__fixtureCoverLoaded=false;const image=new Image();image.onload=()=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,1,1);const pixel=ctx.getImageData(0,0,1,1).data;window.__fixtureCoverLoaded=pixel[0]>pixel[1]*2};image.src=window.__fixtureCoverSource");
             long coverDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
             while (!"true".equals(web.evaluate(scenario, "window.__fixtureCoverLoaded===true")) && System.nanoTime() < coverDeadline) Thread.sleep(100);
-            assertEquals("Authenticated WebView cover did not load", "true", web.evaluate(scenario, "window.__fixtureCoverLoaded===true"));
+            assertEquals("Authenticated WebView cover did not load: " + web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-row-main]')).map(b=>b.textContent).join(',')"), "true", web.evaluate(scenario, "window.__fixtureCoverLoaded===true"));
             try (android.os.ParcelFileDescriptor command = InstrumentationRegistry.getInstrumentation().getUiAutomation()
                     .executeShellCommand("screencap -p /sdcard/Download/soundsible-s1-library.png");
                  java.io.InputStream output = new android.os.ParcelFileDescriptor.AutoCloseInputStream(command)) {

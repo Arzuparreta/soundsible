@@ -17,7 +17,7 @@ import org.junit.runner.notification.RunListener;
 public class FixtureIsolationListener extends RunListener {
     @Override public void testStarted(Description description) throws Exception {
         // Ordinary audio/offline tests do not interact with system permission dialogs.
-        // NotificationPermissionTest revokes and exercises both choices explicitly.
+        // Fresh-install runs of NotificationPermissionTest exercise both system choices.
         if (android.os.Build.VERSION.SDK_INT >= 33 && !description.getClassName().endsWith("NotificationPermissionTest")) {
             var instrumentation = InstrumentationRegistry.getInstrumentation();
             instrumentation.getUiAutomation().grantRuntimePermission(instrumentation.getTargetContext().getPackageName(), android.Manifest.permission.POST_NOTIFICATIONS);

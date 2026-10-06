@@ -334,7 +334,8 @@ def main() -> int:
         else:
             # Tests install/run the packaged APK and exercise App.getInfo through
             # the real bridge, including offline reopening and locale persistence.
-            gradle(":app:connectedDebugAndroidTest")
+            gradle(":app:connectedDebugAndroidTest",
+                   "-Pandroid.testInstrumentationRunnerArguments.class=com.soundsible.android.StartupTest")
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"Android: {error}", file=sys.stderr)
         return 1

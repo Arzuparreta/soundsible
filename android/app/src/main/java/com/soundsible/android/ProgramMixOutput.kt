@@ -31,6 +31,8 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     private val lock = Object()
     private val deviceLock = Any()
     private var output: AudioOutput? = null
+    // Guarded by deviceLock: Media3 play() resets its timestamp poller even when already playing.
+    private var outputPlaying = false
     private var config: AudioOutputProvider.OutputConfig? = null
     private val sources = arrayOfNulls<Source>(2)
     private val levels = doubleArrayOf(1.0, 1.0)
@@ -135,7 +137,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         if (value == ProgramMixCurve.Technique.DIRECT) {
             window = ProgramMixWindow(frames, 0, active, 1 - active, outputEpoch)
             active = 1 - active; limiter?.blend(false)
-            if (!paused) synchronized(deviceLock) { if (owns() && failure == null) output?.play() }
+            if (!paused) synchronized(deviceLock) { if (owns() && failure == null) playDevice() }
         } else {
             mixStart = frames; mixLength = lengthMs * rate / 1000; technique = value
             window = ProgramMixWindow(mixStart, mixLength, active, 1 - active, outputEpoch)
@@ -166,7 +168,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     }
     fun pause(value: Boolean) = synchronized(lock) {
         paused = value; starvedSince = 0L
-        synchronized(deviceLock) { if (value) output?.pause() else output?.play() }; lock.notifyAll()
+        synchronized(deviceLock) { if (value) pauseDevice() else playDevice() }; lock.notifyAll()
     }
     fun setVolume(value: Float) = synchronized(lock) {
         require(value.isFinite() && value in 0f..1f)
@@ -201,6 +203,14 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     fun recoveryPending(): Boolean = synchronized(lock) { recovery != null }
     fun epoch(): Long = outputEpoch
     fun positionUs(): Long = synchronized(deviceLock) { output?.positionUs ?: 0L }
+    /** Called under deviceLock; repeated transport commands must not restart clock estimation. */
+    private fun playDevice() {
+        val device = output ?: return
+        if (!outputPlaying) { device.play(); outputPlaying = true }
+    }
+    private fun pauseDevice() {
+        if (outputPlaying) { output?.pause(); outputPlaying = false }
+    }
     fun reservedPositionUs(): Long = synchronized(lock) { frames * 1000000 / (config?.sampleRate ?: 48000) }
     /** Explicit user navigation retires queued PCM from both inputs before loading another occurrence. */
     fun resetTo(index: Int) = synchronized(lock) {
@@ -219,7 +229,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     /** Called with the state lock; covers flush, release and input replacement on seek. */
     private fun invalidateDevice() {
         outputEpoch++
-        synchronized(deviceLock) { output?.pause(); output?.flush() }
+        synchronized(deviceLock) { pauseDevice(); output?.flush() }
         frames = 0L; mixStart = Long.MAX_VALUE; prerollStart = Long.MAX_VALUE; window = null; restoration = null; recovery = null; limiter?.reset()
         starvedSince = 0L; starvedInput = null
         sources.forEach { source -> source?.let { it.clock.reset(); it.effects.reset() } }
@@ -248,7 +258,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
         recovery = Recovery(frames, (config!!.sampleRate * 0.15).toLong(), controls)
         restoration = frames to active
         limiter?.blend(false)
-        if (!paused && source.playing) synchronized(deviceLock) { if (owns() && failure == null) output?.play() }
+        if (!paused && source.playing) synchronized(deviceLock) { if (owns() && failure == null) playDevice() }
         lock.notifyAll()
         return true
     }
@@ -299,12 +309,18 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             }
             clock.reserve(frames, count / Integer.bitCount(config!!.channelMask))
         }
-        override fun play() = synchronized(lock) { playing = true; if (index == active && !paused && !released && owns() && failure == null) synchronized(deviceLock) { output?.play() }; lock.notifyAll() }
+        override fun play() = synchronized(lock) { playing = true; if (index == active && !paused && !released && owns() && failure == null) synchronized(deviceLock) { playDevice() }; lock.notifyAll() }
         override fun pause() = synchronized(lock) {
             playing = false
             // A decoder's ended-state pause must not truncate the shared hardware tail.
             // Programme pause remains controlled explicitly by the owner.
-            if (!ended && index == active && !released && sources[index] === this) synchronized(deviceLock) { output?.pause() }
+            // A decoder pauses as it fails/releases. Keep the programme running when
+            // its other input can recover; the owner still handles an explicit pause.
+            val recoverable = window?.epoch == outputEpoch && sources[1 - index]?.let {
+                !it.released && it.playing && !(it.ended && it.queued == 0)
+            } == true
+            if (!ended && index == active && !released && sources[index] === this && !recoverable)
+                synchronized(deviceLock) { pauseDevice() }
             lock.notifyAll()
         }
         override fun flush() = synchronized(lock) {
@@ -312,7 +328,7 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             queue.clear(); queued = 0; clock.reset(); ended = false; effects.reset()
             if (index == active) {
                 invalidateDevice()
-                if (playing && !paused) synchronized(deviceLock) { output?.play() }
+                if (playing && !paused) synchronized(deviceLock) { playDevice() }
             }
             lock.notifyAll()
         }
@@ -435,11 +451,11 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
             }
         } catch (_: InterruptedException) { /* Explicit owner close. */ }
         catch (problem: Throwable) {
-            synchronized(lock) { failure = problem; sources.forEach { it?.queue?.clear(); it?.queued = 0 }; synchronized(deviceLock) { output?.pause(); output?.flush() }; lock.notifyAll() }
+            synchronized(lock) { failure = problem; sources.forEach { it?.queue?.clear(); it?.queued = 0 }; synchronized(deviceLock) { pauseDevice(); output?.flush() }; lock.notifyAll() }
         }
     }
     override fun close() {
-        synchronized(lock) { if (closed) return; closed = true; synchronized(deviceLock) { output?.pause(); output?.flush() }; sources.forEach { it?.queue?.clear(); it?.queued = 0 }; lock.notifyAll() }
+        synchronized(lock) { if (closed) return; closed = true; synchronized(deviceLock) { pauseDevice(); output?.flush() }; sources.forEach { it?.queue?.clear(); it?.queued = 0 }; lock.notifyAll() }
         check(Looper.myLooper() != playbackLooper) { "Close the mix owner outside its decoder looper" }
         worker.interrupt(); worker.join(1000)
         val cleanup = CountDownLatch(1)

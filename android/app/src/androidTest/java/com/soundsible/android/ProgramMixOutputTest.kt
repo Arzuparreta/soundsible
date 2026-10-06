@@ -127,6 +127,7 @@ class ProgramMixOutputTest {
         var mix: ProgramMixOutput? = null
         var rateReturn: ProgramRateReturn? = null
         var audioClient: okhttp3.OkHttpClient? = null
+        var fixtureCleaned = false
         val playbackFailure = AtomicReference<PlaybackException?>()
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -292,7 +293,8 @@ class ProgramMixOutputTest {
                     val restored = owner.restoredAt() ?: if (outgoingLoss) transition.start + transition.length else error("Outgoing restoration was not scheduled")
                     val clockDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                     while (owner.positionUs() * 48000 / 1000000 < restored + 9600 && System.nanoTime() < clockDeadline) {
-                        assertTrue("Retained source clock moved backwards before recovery playout", owner.inputPositionUs(retainedIndex) + 20000 >= retainedPosition)
+                        val retainedNow = owner.inputPositionUs(retainedIndex)
+                        assertTrue("Retained source clock moved backwards before recovery playout: before=$retainedPosition now=$retainedNow output=${owner.positionUs()} restored=$restored epoch=${owner.epoch()} initialEpoch=$epoch", retainedNow + 20000 >= retainedPosition)
                         Thread.sleep(10)
                     }
                     assertTrue("Physical recovery output stalled", owner.positionUs() * 48000 / 1000000 >= restored + 9600)
@@ -370,6 +372,7 @@ class ProgramMixOutputTest {
                 while (owner.positionUs() <= pausedPosition && System.nanoTime() < resumeDeadline) Thread.sleep(20)
                 assertTrue("Physical output did not resume", owner.positionUs() > pausedPosition)
                 cleanFixture(connection, origin)
+                fixtureCleaned = true
                 connection.clearSession(true)
                 val cancelDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                 while (owner.error() == null && System.nanoTime() < cancelDeadline) Thread.sleep(20)
@@ -383,7 +386,7 @@ class ProgramMixOutputTest {
             instrumentation.runOnMainSync { rateReturn?.close(); decoders.forEach { it.release() } }; mix?.close()
             audioClient?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll(); it.dispatcher.executorService.shutdown() }
             try {
-                cleanFixture(connection, origin)
+                if (!fixtureCleaned) cleanFixture(connection, origin)
             } finally { connection.clearSession(true) }
         }
     }

@@ -44,7 +44,7 @@ public class PlannerRetirementTest {
         assumeNotNull(origin);
         var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         var connection = EngineConnection.shared(context); connection.clearSession(true);
-        String cookie = null; Boolean previous = null;
+        String cookie = null; Boolean previous = null; String retired = null;
         try (var scenario = ActivityScenario.launch(MainActivity.class)) {
             web.awaitReady(scenario); web.evaluate(scenario, "localStorage.setItem('lang','en')"); scenario.recreate(); web.awaitReady(scenario);
             web.evaluate(scenario, "document.querySelector('input[type=url]').value=" + JSONObject.quote(origin) + ";document.querySelector('input[type=url]').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('form').requestSubmit()");
@@ -54,6 +54,8 @@ public class PlannerRetirementTest {
             cookie = connection.cookieHeader(connection.getGeneration()); assertNotNull(cookie);
             previous = api(connection, origin, cookie, "/api/discovery/settings", "GET", null).getBoolean("autoplay_enabled");
             api(connection, origin, null, "/__fixture/radio-seed", "POST", new JSONObject());
+            if (mode.equals("autoplay"))
+                api(connection, origin, null, "/__fixture/loudness-facts", "POST", new JSONObject().put("album", true));
             web.evaluate(scenario, "window.__retirementTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__retirementState=s),100)");
             waitFor(scenario, "window.__retirementState?.ready");
             command(scenario, "action:'autoplay',enabled:false");
@@ -73,11 +75,16 @@ public class PlannerRetirementTest {
                 if (stats.getInt("pending") > 0) break;
                 assertTrue("Planner must compute a delayed production response", System.nanoTime() < until); Thread.sleep(50);
             } while (true);
-            String retired = null;
             var planned = stats.getJSONArray("delayed_ids");
             for (int index = 0; index < planned.length(); index++) {
                 String id = planned.getString(index);
                 if (id.startsWith("member-radio-")) { retired = id; break; }
+            }
+            // Earlier cases may make PCM recordings score ahead of radio clones.
+            // Retire a real computed candidate, never impose a recommendation order.
+            if (retired == null) for (int index = 0; index < planned.length(); index++) {
+                String id = planned.getString(index);
+                if (id.equals("member-pcm-soft") || id.equals("member-pcm-loud")) { retired = id; break; }
             }
             assertNotNull("Computed plan must contain a recording owned by this retirement fixture: " + planned, retired);
             String selector = "[data-browse-track-id=" + JSONObject.quote(retired) + "] [data-row-menu]";
@@ -112,6 +119,8 @@ public class PlannerRetirementTest {
                     assertTrue("Fixture delayed response must drain before next case", System.nanoTime() < cleanupUntil); Thread.sleep(50);
                 }
                 api(connection, origin, null, "/__fixture/radio-seed", "POST", new JSONObject());
+                if (retired != null && retired.startsWith("member-pcm-"))
+                    api(connection, origin, null, "/__fixture/loudness-facts", "POST", new JSONObject().put("album", true));
             } finally { connection.clearSession(true); }
         }
     }

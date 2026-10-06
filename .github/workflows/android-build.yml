@@ -50,7 +50,8 @@ concurrency:
 jobs:
   development:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Full HTTP/TLS regression plus restart protocols and cold SDK/Gradle builds.
+    timeout-minutes: 75
     env:
       SOUNDSIBLE_ANDROID_BUILD_NUMBER: ${{ github.run_number }}
     steps:

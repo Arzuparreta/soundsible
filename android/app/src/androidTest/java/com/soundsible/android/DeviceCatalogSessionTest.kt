@@ -28,6 +28,10 @@ class DeviceCatalogSessionTest {
             }
         core("/api/auth/login", "POST", JSONObject().put("username", "member").put("password", "android-test"))
         core("/api/discovery/settings", "PATCH", JSONObject().put("autoplay_enabled", false))
+        fun resolutionCalls(): Int {
+            val stats = core("/api/android-fixture/catalog-stats").getJSONArray("calls")
+            return (0 until stats.length()).count { stats.getJSONObject(it).optString("provider") == "resolution" && stats.getJSONObject(it).optString("title") == "fixture resolved song" }
+        }
         fun <T> main(work: () -> T): T { val value = AtomicReference<T>(); instrumentation.runOnMainSync { value.set(work()) }; return value.get() }
         fun await(label: String, condition: () -> Boolean) { val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
             while (System.nanoTime() < until) { if (condition()) return; Thread.sleep(50) }; fail(label) }
@@ -72,11 +76,12 @@ class DeviceCatalogSessionTest {
             }
             val wire = core("/api/playback/state").getJSONObject("session").getJSONArray("queue")
             assertEquals("catalog-album", wire.getJSONObject(1).getJSONObject("queueContext").getString("id"))
+            // A warm Core cache can avoid the matcher entirely on first resolution.
+            val resolutionsBefore = resolutionCalls()
             // Replay the resolved alias: no second matcher call or native placeholder HTTP path.
             main { active.seekTo(0); active.prepare(); active.play() }; pcm.set(false)
             await("Resolved occurrence retry lost PCM") { pcm.get() && main { active.isPlaying && active.currentMediaItem?.mediaId == "C1111111111" } }
-            val stats = core("/api/android-fixture/catalog-stats").getJSONArray("calls")
-            assertEquals(1, (0 until stats.length()).count { stats.getJSONObject(it).optString("provider") == "resolution" && stats.getJSONObject(it).optString("title") == "fixture resolved song" })
+            assertEquals("Replay called the matcher again", resolutionsBefore, resolutionCalls())
             // A matcher404 removes only its occurrence and continues to the next playable song.
             val continuation = JSONArray().put(pending("deezer:track:missing", "unmatched fixture song"))
                 .put(JSONObject().put("id", "member-track").put("title", "After unmatched").put("queueId", "after").put("queueLane", "manual").put("queueSource", "library"))
