@@ -95,9 +95,15 @@ def adb(*args: str, serial: str | None = None) -> None:
     run(str(binary), *(["-s", serial] if serial else []), *args)
 
 
-def integration(*, restart_only: bool = False, live_restart_only: bool = False) -> None:
-    """Own three disposable engines and run real native account integration on an AVD."""
+def integration(*, restart_only: bool = False, live_restart_only: bool = False, shard: tuple[int, int] | None = None) -> None:
+    """Own three disposable engines and run real native account integration on an AVD.
+
+    A shard runs one slice of the suite on its own emulator, so CI can run slices
+    in parallel. Process-restart protocols and the clean distributable rebuild
+    belong to shard 0 and the static job respectively.
+    """
     doctor()
+    first = shard is None or shard[0] == 0
     if (restart_only or live_restart_only) and os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
         raise RuntimeError("Restart protocol cannot be combined with a single-class instrumentation filter")
     binary = str(sdk() / "platform-tools/adb")
@@ -208,6 +214,14 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False) 
                         "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
                         "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
                         "-Pandroid.testInstrumentationRunnerArguments.listener=com.soundsible.android.FixtureIsolationListener",
+                        *(
+                            (
+                                f"-Pandroid.testInstrumentationRunnerArguments.shardIndex={shard[0]}",
+                                f"-Pandroid.testInstrumentationRunnerArguments.numShards={shard[1]}",
+                            )
+                            if shard
+                            else ()
+                        ),
                     )
                     test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class")
                     results = (
@@ -219,7 +233,7 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False) 
                     # suite or its process-restart phases.
                     shutil.rmtree(results, ignore_errors=True)
                     shutil.copytree(ANDROID / "app/build/outputs/androidTest-results", results, dirs_exist_ok=True)
-                if not os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
+                if first and not os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
                     # connectedDebugAndroidTest uninstalls its target afterwards.
                     # Install once and invoke the runner directly so phase two
                     # observes process death rather than a fresh installation.
@@ -282,8 +296,13 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False) 
                                 json.dumps({"phase": phase, "tests": 1, "failures": 0, "errors": 0, "skipped": 0}, indent=2)
                                 + "\n"
                             )
-                adb("pull", "/sdcard/Download/soundsible-s1-library.png", str(ANDROID / "build/library.png"))
-                adb("pull", "/sdcard/Download/soundsible-s2-program.png", str(ANDROID / "build/program.png"))
+                for screenshot, target in (("soundsible-s1-library.png", "library.png"), ("soundsible-s2-program.png", "program.png")):
+                    try:
+                        adb("pull", f"/sdcard/Download/{screenshot}", str(ANDROID / "build" / target))
+                    except subprocess.CalledProcessError:
+                        # Another shard's test produces this screenshot.
+                        if not shard:
+                            raise
             finally:
                 for process in processes:
                     process.terminate()
@@ -297,6 +316,9 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False) 
                     live_fixture.close()
                 certificate_resource.unlink(missing_ok=True)
                 policy_resource.unlink(missing_ok=True)
+    if shard:
+        # The static job builds, lints and unit-tests the distributable APK.
+        return
     # The distributed development APK is rebuilt without temporary test trust.
     gradle(":app:assembleDebug", ":app:assembleDebugAndroidTest", ":app:testDebugUnitTest", ":app:lintDebug")
 
@@ -313,7 +335,16 @@ def main() -> int:
     )
     restart.add_argument("--live-restart-only", action="store_true",
                          help="integration: run only Live prepare/force-stop/resume on the isolated relay")
+    parser.add_argument("--shard", metavar="INDEX/COUNT", help="integration: run one slice of the suite, e.g. 0/4")
     args = parser.parse_args()
+    shard = None
+    if args.shard:
+        match = re.fullmatch(r"(\d+)/(\d+)", args.shard)
+        if not match or not int(match[1]) < int(match[2]):
+            parser.error("--shard must be INDEX/COUNT with INDEX < COUNT")
+        shard = (int(match[1]), int(match[2]))
+    if shard and (args.command != "integration" or args.offline_restart_only or args.live_restart_only):
+        parser.error("--shard only applies to the full integration run")
     if (args.offline_restart_only or args.live_restart_only) and args.command != "integration":
         parser.error("restart-only flags require integration")
     if args.serial:
@@ -337,7 +368,7 @@ def main() -> int:
                 serial=args.serial,
             )
         elif args.command == "integration":
-            integration(restart_only=args.offline_restart_only, live_restart_only=args.live_restart_only)
+            integration(restart_only=args.offline_restart_only, live_restart_only=args.live_restart_only, shard=shard)
         else:
             # Tests install/run the packaged APK and exercise App.getInfo through
             # the real bridge, including offline reopening and locale persistence.

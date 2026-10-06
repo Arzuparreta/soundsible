@@ -163,7 +163,10 @@ personal para estos tests.
 ## GitHub y límites
 
 El workflow **Android development** compila y prueba los cambios relevantes y
-permite ejecución manual. Sus artifacts caducan a los 14 días. En un repositorio
+permite ejecución manual. La suite instrumentada se reparte en 4 emuladores en paralelo
+(`python scripts/android.py integration --shard 0/4`; el shard 0 también ejecuta
+el arranque sin red y los protocolos de reinicio) y un job aparte compila, pasa
+lint y tests unitarios. Sus artifacts caducan a los 14 días. En un repositorio
 público los artifacts pueden ser descargables: son builds de desarrollo, no una
 alpha publicada ni un canal de actualización. El workflow sólo tiene lectura,
 no usa claves de firma públicas y no publica releases ni tags.

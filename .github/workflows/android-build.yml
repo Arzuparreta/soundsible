@@ -48,10 +48,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  development:
+  # Everything that needs no emulator, and the distributable development APK.
+  static:
+    name: Build, lint and unit tests
     runs-on: ubuntu-latest
-    # Full HTTP/TLS regression plus restart protocols and cold SDK/Gradle builds.
-    timeout-minutes: 75
+    timeout-minutes: 30
     env:
       SOUNDSIBLE_ANDROID_BUILD_NUMBER: ${{ github.run_number }}
     steps:
@@ -73,10 +74,6 @@ jobs:
           # The retired SDK tools package is still an action default.
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
-      - name: Install native audio fixture dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
       - name: Install SDK and JS dependencies
         run: |
           sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
@@ -89,6 +86,63 @@ jobs:
       - name: Native retry unit tests
         working-directory: android
         run: ./gradlew --no-daemon :app:testDebugUnitTest
+      - name: Upload development APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundsible-android-development-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/androidTest/debug/*.apk
+            android/app/build/reports/
+            android/build-info.json
+
+  # The instrumented suite is split across emulators that run in parallel:
+  # one emulator ran every case in series and took most of an hour. Slices are
+  # independent (each case resets its own fixture state) and every runner owns
+  # its three disposable engines. Shard 0 also owns the offline smoke run and
+  # the process-restart protocols, which are single, ordered scenarios.
+  emulator:
+    name: Emulator shard ${{ matrix.shard }}/4 (API 36)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      SOUNDSIBLE_ANDROID_BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui_web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install native audio fixture dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install SDK and JS dependencies
+        run: |
+          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+          npm ci --prefix ui_web
+          python -m pip install -r requirements.txt
+      - name: Prepare web bundle
+        run: python scripts/android.py prepare
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -105,24 +159,16 @@ jobs:
           script: |
             adb shell svc wifi disable
             adb shell svc data disable
-            python scripts/android.py smoke
-            python scripts/android.py integration
-            python scripts/android.py install
-            adb exec-out screencap -p > android/build/startup.png
-            adb logcat -d > android/build/emulator.log
-      - name: Upload development evidence
+            scripts/android_ci_shard.sh ${{ matrix.shard }} 4
+      - name: Upload emulator evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: soundsible-android-development-${{ github.sha }}
+          name: soundsible-android-emulator-${{ matrix.shard }}-${{ github.sha }}
           retention-days: 14
           if-no-files-found: error
           path: |
-            android/app/build/outputs/apk/debug/*.apk
-            android/app/build/outputs/apk/androidTest/debug/*.apk
-            android/app/build/reports/
             android/app/build/outputs/androidTest-results/
-            android/build-info.json
             android/build/startup.png
             android/build/library.png
             android/build/program.png
