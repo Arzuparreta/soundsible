@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-06",
+  "slice": "S5c",
+  "channel": "development",
+  "base_revision": "ff9c7770",
+  "dirty_at_asset_prepare": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/ProgramCarLibrary.kt": "d9ad9de88a4a9da633d9883cb85d0ba6b3af9721ba289237c78d5a470e3ecfdc",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "476a7fe1838d6daaa4309b8042ea74e7264cb19bc5d7da63faf5a886dd0051a8",
+    "android/app/src/androidTest/java/com/soundsible/android/CarOfflineExpiryTest.kt": "9d926dcbc5d5855425bb7ed653526262466f80e8708ce2712aa0dba6798244a3",
+    "scripts/android_fixture.py": "598ccdf04cfa50479bbc2b7997161ceedb16a8e9b346050e0112b6e0e8bce0ec"
+  },
+  "instrumentation": {
+    "tests": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 60.403,
+    "runner_exit": 0,
+    "classes": {
+      "CarOfflineExpiryTest": 2,
+      "CarEventsTest": 2,
+      "CarLibraryTest": 2,
+      "CarLegacyTest": 2
+    },
+    "log": "/tmp/soundsible-auto-expiry-native.log"
+  },
+  "normal_build": {
+    "apk": true,
+    "test_apk": true,
+    "jvm_tests": 54,
+    "jvm_failures": 0,
+    "lint": true,
+    "temporary_ca_removed": true
+  },
+  "proves": [
+    "Cookie shortened through disposable fixture Set-Cookie parsed by real native jar; expires without logout or observed401",
+    "With APIs503 and Activity destroyed, complete copies remain in verified local profile",
+    "Old online cache invalid under expired identity; all-tracks browse denied",
+    "Root exposes only explicit offline category; local children have placeholder artwork",
+    "Actual local file playback and nonzero stereo48k PCM without cookie",
+    "Acquired-copy-only search and explicit search playback; another account title yields no result",
+    "Explicit logout removes copies, empties programme and denies root",
+    "Existing native events, normal authenticated Auto/podcast/Radio, modern/classic search and401 accepted together"
+  ],
+  "limits": [
+    "Cookie expiry is client-side fixture shortening; not remote token revocation",
+    "No backend auth-state revalidation acceptance after restored network in this new test; observed401 still covered by CarLibraryTest",
+    "No arbitrary Core/provider access with expired cookie",
+    "Offline B uses placeholders; no cross-process cover-cache claim",
+    "Local copy completion/removal observer, network reconnect and DJ metadata/control still pending",
+    "SameUID protocols; no external trust/URI-grant/host or acoustic evidence",
+    "Not complete Auto/Android parity or current whole principal regression"
+  ]
+}

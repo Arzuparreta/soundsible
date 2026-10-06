@@ -29,11 +29,24 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
     private var generation = -1L
     private var cacheIdentity: String? = null
     @Volatile private var closed = false
+    /** A cached verified profile authorizes only complete local copies after cookie expiry. */
+    private fun identity(epoch: Long): String? = runCatching {
+        connection.sessionIdentity(epoch) ?: if (connection.offline.canUse(epoch)) {
+            "offline:" + android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(connection.offline.profileKey(epoch).toByteArray(Charsets.UTF_8)), android.util.Base64.NO_WRAP)
+        } else null
+    }.getOrNull()
     fun root(params: LibraryParams?): ListenableFuture<LibraryResult<MediaItem>> {
         val epoch = connection.generation
-        if (runCatching { connection.sessionIdentity(epoch) }.getOrNull() == null) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED))
-        return Futures.immediateFuture(LibraryResult.ofItem(MediaItem.Builder().setMediaId(ROOT).setMediaMetadata(
-            MediaMetadata.Builder().setTitle("Soundsible").setIsBrowsable(true).setIsPlayable(false).build()).build(), params))
+        if (identity(epoch) == null) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED))
+        fun item() = LibraryResult.ofItem(MediaItem.Builder().setMediaId(ROOT).setMediaMetadata(
+            MediaMetadata.Builder().setTitle("Soundsible").setIsBrowsable(true).setIsPlayable(false).build()).build(), params)
+        if (runCatching { connection.sessionIdentity(epoch) }.getOrNull() != null) return Futures.immediateFuture(item())
+        // Integrity and ready-copy lookup run in children()'s worker, never here.
+        return Futures.transform(children(ROOT, 0, 200, params), { result ->
+            if (result!!.resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS) item()
+            else LibraryResult.ofError<MediaItem>(result.sessionError!!)
+        }, { task -> main.post(task) })
     }
     fun children(parent: String, page: Int, size: Int, params: LibraryParams?): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
         val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
@@ -45,8 +58,12 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
             future.set(LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)); return future
         }
         val epoch = connection.generation
-        val identity = runCatching { connection.sessionIdentity(epoch) }.getOrNull()
+        val identity = identity(epoch)
         if (identity == null) { future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)); return future }
+        val offlineOnly = runCatching { connection.sessionIdentity(epoch) }.getOrNull() == null
+        if (offlineOnly && parent != ROOT && parent != OFFLINE && !parent.startsWith(SEARCH)) {
+            future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)); return future
+        }
         if (generation != epoch || cacheIdentity != identity) { rows.clear(); counts.clear(); generation = epoch; cacheIdentity = identity }
         val id = "car-browse:" + java.util.UUID.randomUUID()
         requests.add(id)
@@ -58,8 +75,19 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
                 try {
                     // Initial integrity checks can hash large files; keep them
                     // off the service/player looper.
-                    if (parent == ROOT || parent == OFFLINE) copies = offlineRows(epoch)
-                    if (parent == OFFLINE) {
+                    if (parent == ROOT || parent == OFFLINE || offlineOnly) copies = offlineRows(epoch)
+                    if (offlineOnly && parent == ROOT) {
+                        code = 200; answer = JSONObject().put("items", org.json.JSONArray())
+                    } else if (offlineOnly && parent.startsWith(SEARCH)) {
+                        val terms = parent.removePrefix(SEARCH).lowercase(java.util.Locale.ROOT).split(Regex("\\s+"))
+                        val matches = org.json.JSONArray()
+                        for (index in 0 until copies.length()) {
+                            val row = copies.getJSONObject(index)
+                            val text = listOf("title", "artist", "album").joinToString(" ") { row.optString(it) }.lowercase(java.util.Locale.ROOT)
+                            if (terms.all { it in text }) { matches.put(row); if (matches.length() == 200) break }
+                        }
+                        code = 200; answer = JSONObject().put("items", matches)
+                    } else if (parent == OFFLINE) {
                         code = 200; answer = JSONObject().put("items", copies)
                     } else {
                     val path = when {
@@ -78,7 +106,7 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
                 } catch (_: Exception) { }
                 main.post {
                     requests.remove(id); pending.remove(id)
-                    if (closed || epoch != connection.generation || runCatching { connection.sessionIdentity(epoch) }.getOrNull() != identity) {
+                    if (closed || epoch != connection.generation || identity(epoch) != identity) {
                         future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_DISCONNECTED)); return@post
                     }
                     if (code == 401 || code == 403) {
@@ -92,6 +120,9 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
                         return@post
                     }
                     try {
+                        if (offlineOnly && parent == ROOT && copies.length() == 0) {
+                            future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)); return@post
+                        }
                         val items = answer?.getJSONArray("items") ?: if (parent == ROOT && code !in listOf(401, 403) && copies.length() > 0) org.json.JSONArray() else throw IllegalArgumentException()
                         require(items.length() <= if (parent == OFFLINE) 1000 else 200)
                         if (parent == ROOT && copies.length() > 0) items.put(JSONObject().put("id", OFFLINE).put("title", offlineTitle).put("is_browsable", true).put("is_playable", false))
@@ -146,10 +177,12 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
             .setIsBrowsable(row.optBoolean("is_browsable")).setIsPlayable(playable).build()).build()
     }
     private fun currentCache(): Boolean = !closed && generation == connection.generation && cacheIdentity != null &&
-        runCatching { connection.sessionIdentity(generation) }.getOrNull() == cacheIdentity
+        identity(generation) == cacheIdentity
     fun decorate(item: MediaItem, recipient: String, artwork: ProgramCarArtwork): MediaItem {
         val row = rows[item.mediaId] ?: return item
         if (!currentCache() || !row.optBoolean("is_playable")) return item
+        // Offline B specifies placeholders; never attempt authenticated artwork without a cookie.
+        if (runCatching { connection.sessionIdentity(generation) }.getOrNull() == null) return item
         val id = row.optString("track_id")
         if (id.isBlank()) return item
         return item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkUri(artwork.publish(id, recipient)).build()).build()
@@ -167,6 +200,7 @@ internal class ProgramCarLibrary(private val connection: EngineConnection, priva
         return Futures.immediateFuture(LibraryResult.ofItem(mediaItem(row), null))
     }
     data class Selection(val items: List<MediaItem>, val generation: Long, val identity: String, val radio: Boolean)
+    fun owns(selection: Selection): Boolean = selection.generation == connection.generation && identity(selection.generation) == selection.identity
     /** Resolve IDs returned by this authenticated tree; ignore caller metadata and URI. */
     fun select(requested: List<MediaItem>): Selection {
         require(currentCache() && requested.size in 1..32)

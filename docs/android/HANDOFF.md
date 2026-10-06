@@ -78,7 +78,9 @@ Siguiente S5b: actualización de suscripciones/árbol en background, reconexión
 controles/metadata durante DJ; revisar offline cuando la cookie expira sin401
 observado. Corregir guard de root/children frente a generation que cambie entre
 capturar epoch y leer identidad (devolver error tipado, nunca excepción del callback).
-La implementación actual exige cookie vigente para root/offline. Carátulas son
+S5c permite root/copias/search locales con perfil verificado tras expirar cookie;
+carpetas Core denegadas y artwork placeholder.8/0 HTTP/TLS,60.403s + normal
+APK/test/JVM54/lint sin CA. Ver SLICE_5C y evidence/s5c.json. Carátulas son
 cache nativa de proceso; no afirmar covers offline tras muerte de proceso.
 Host/DHU y permisos externos siguen pendientes; aceptación física para beta.
 
@@ -89,8 +91,12 @@ playlist counts tras cerrar Activity, conserva KEY/PCM y respeta unsubscribe.
 desconexión conserva otra razón. Root/children toleran cambio de epoch al leer
 identidad. No hay suite activa después de exec21942; AVD5554 sigue disponible.
 
-Siguiente: Auto cookie expirada sin401, controles/metadata durante DJ, pérdida/
-reconexión real y observer de copias locales. Actualizar árbol no prueba labels
+S5c validado y listo para commit: cookie expirada sin401 no elimina copias con
+backend503; root/search/play locales y logout probados en bloque8/0,60.403s,exit0.
+No hay suite activa tras exec24330.
+
+Siguiente: observer de copias locales, controles/metadata durante DJ y pérdida/
+reconexión real. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
 actualizadas del programa activo. Luego UID externo, negativos DJ, Live/teléfono/
 firma y regresión final/browser4. Clone /tmp/soundsible-auto-next ya se trasladó;
 no copiarlo sobre root actual. No aplicar stash/clone viejo. No merge/automerge/release.

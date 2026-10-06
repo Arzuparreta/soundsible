@@ -342,7 +342,7 @@ class PlaybackService : MediaLibraryService() {
                 fun resolve(items: List<MediaItem>): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = try {
                     val selected = carLibrary.select(items)
                     require(startIndex == C.INDEX_UNSET || startIndex in selected.items.indices)
-                    require(selected.generation == connection.generation && connection.sessionIdentity(selected.generation) == selected.identity)
+                    require(carLibrary.owns(selected))
                     djRouteEditor?.clear(); djRefiner?.clear(); djPlanner.clear(); refillAnchor = ""
                     restoreNormal(); publishDj("idle", djProfile, 0)
                     autoplay.clear(); radio.clear(); previews.clear()

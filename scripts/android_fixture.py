@@ -253,6 +253,21 @@ def main() -> None:
     def redirection():
         return redirect("https://example.invalid/must-not-receive-cookie", code=302)
 
+    @app.post("/api/android-fixture/session-expiry")
+    def session_expiry():
+        # Only in this disposable engine; never imported by the real server.
+        data = request.get_json(silent=True) or {}
+        seconds = data.get("seconds")
+        if (request.remote_addr != "127.0.0.1" or data.get("fixture") != "isolated"
+                or not request.cookies.get("sb_session")):
+            return jsonify(error="fixture only"), 403
+        if isinstance(seconds, bool) or not isinstance(seconds, int) or not 1 <= seconds <= 10:
+            return jsonify(error="invalid expiry"), 400
+        response = jsonify(ok=True)
+        response.set_cookie("sb_session", request.cookies["sb_session"], max_age=seconds,
+                            httponly=True, secure=bool(args.tls_cert), samesite="Lax")
+        return response
+
     @app.route("/__fixture/<action>", methods=["POST"])
     def control(action):
         if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
