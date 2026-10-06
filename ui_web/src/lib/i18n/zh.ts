@@ -982,6 +982,7 @@ export const zh: Dict = {
     empty: '歌单中没有曲目。',
   },
   deviceSheet: {
+    transfer: '转移播放',
     sendingTo: '正在发送到 {device}…',
     fallbackDevice: '设备',
     playingOn: '正在设备上播放',

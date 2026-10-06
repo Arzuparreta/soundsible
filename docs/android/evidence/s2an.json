@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2an",
+  "channel": "development",
+  "base_revision": "dc0ca9ed",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/NativeDeviceSession.kt": "1483e23c7b58ec98f1d85698000b8581e801f4b696782572164072f56cc1f47f",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "f652a753abc1385517bedb182149216598718641585f791a7275e3ef9234c0f6",
+    "android/app/src/main/java/com/soundsible/android/PlaybackPlugin.kt": "7489bcbb0922f094c9f46ece7e7457bfaa720fad71cc4ea8750750752ad4b72a",
+    "android/app/src/androidTest/java/com/soundsible/android/DevicesUiTest.kt": "620fa61452a44dc622daa9f6992f5d58600fa49766d62fc7e1771761d38fce24",
+    "ui_web/src/mobile/Devices.tsx": "ab381379a2a7b62b0169cffc5d671a9e78b5a63d6248c415b649e33be5ecbc3f",
+    "ui_web/src/mobile/Devices.test.tsx": "b2df54f714b47368bea7528118ee220a344f7e181134e690743aa50bc6d562a2",
+    "ui_web/src/mobile/devices.ts": "ceac032024cefe1ead6bc0d08b2e236f923db02ab5b862671c95d221a314b477",
+    "ui_web/src/lib/i18n/en.ts": "60cc5a210f0f90018ab5107bd7fc50b2f9adad7cd8403b5df48c6b1f8b98e8c8",
+    "ui_web/src/lib/i18n/es.ts": "8777dcb8df9eb057d532dd80b72dd1e71e60adc159b9afca23f1c58db64c62c9",
+    "ui_web/src/lib/i18n/fr.ts": "3ccd9b3b0ddec13131afd6fbac52b164e4bec1fa716862a1c0a25d7606a33374",
+    "ui_web/src/lib/i18n/zh.ts": "e542266fb975fc9db277a0c0edf8cc3a6fc01386e634451fd854bb245a4bcb3f"
+  },
+  "ui": {
+    "files": 210,
+    "tests": 1614,
+    "failures": 0,
+    "typescript": "pass",
+    "log": "/tmp/soundsible-outgoing-unit-final.log"
+  },
+  "native": {
+    "tests": 4,
+    "failures": 0,
+    "seconds": 31.965,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-outgoing-native.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Service serializes fresh NORMAL snapshot then Core handoff",
+    "Real UI transfers duplicate queue/index/recent position/shuffle/repeat all to peer socket",
+    "Core stops native source after transfer",
+    "Incoming handoff and background controls regression",
+    "UI invalid ownership cannot transfer"
+  ],
+  "limits": [
+    "Peer validates received contract; does not decode audio",
+    "DJ/Radio/pending catalog workspace restore pending",
+    "FR/ZH label added after native runner; final UI tests/typecheck cover keys",
+    "No physical-device/car evidence"
+  ]
+}

@@ -2,15 +2,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { afterEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import NativeDevices from './Devices';
-const mocks = vi.hoisted(() => ({ state: vi.fn(), listen: vi.fn(), request: vi.fn() }));
-vi.mock('./devices', () => ({ nativeDevices: { deviceState: mocks.state, addListener: mocks.listen } }));
+const mocks = vi.hoisted(() => ({ state: vi.fn(), listen: vi.fn(), handoff: vi.fn(), request: vi.fn() }));
+vi.mock('./devices', () => ({ nativeDevices: { deviceState: mocks.state, deviceHandoff: mocks.handoff, addListener: mocks.listen } }));
 vi.mock('../lib/http', () => ({ request: mocks.request }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 function setup() {
   const remove = vi.fn().mockResolvedValue(undefined);
   mocks.listen.mockResolvedValue({ remove });
-  mocks.state.mockResolvedValue({ generation: 4, device_id: 'native', connected: true });
+  mocks.state.mockResolvedValue({ generation: 4, device_id: 'native', connected: true, can_handoff: true });
   mocks.request.mockResolvedValue({ devices: [
     { device_id: 'native', device_name: 'Android', socket_active: true },
     { device_id: 'peer', device_name: 'Laptop', socket_active: true },
@@ -42,4 +42,16 @@ it('ignores a device list which finishes after account ownership changes', async
   await waitFor(() => expect(mocks.request).toHaveBeenCalled());
   setGeneration(5); resolve({ devices: [{ device_id: 'old', device_name: 'Old account' }] });
   await Promise.resolve(); expect(screen.queryByText('Old account')).not.toBeInTheDocument();
+});
+
+it('uses the service to publish and hand off its queue, with account ownership guards', async () => {
+  setup(); mocks.handoff.mockResolvedValue({ generation: 4, device_id: 'native', connected: true, can_handoff: true });
+  const [current, setCurrent] = createSignal(true);
+  render(() => <NativeDevices generation={() => 4} current={current} />);
+  await waitFor(() => expect(screen.getAllByRole('button', { name: 'deviceSheet.transfer' })[0]).toBeEnabled());
+  await fireEvent.click(screen.getAllByRole('button', { name: 'deviceSheet.transfer' })[0]);
+  expect(mocks.handoff).toHaveBeenCalledWith({ generation: 4, device_id: 'peer' });
+  await waitFor(() => expect(screen.getAllByRole('button', { name: 'deviceSheet.transfer' })[0]).toBeEnabled());
+  setCurrent(false); await fireEvent.click(screen.getAllByRole('button', { name: 'deviceSheet.transfer' })[0]);
+  expect(mocks.handoff).toHaveBeenCalledOnce();
 });

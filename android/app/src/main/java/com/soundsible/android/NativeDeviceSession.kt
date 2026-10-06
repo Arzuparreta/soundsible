@@ -26,6 +26,8 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
     private var serial = 0L
     private var authRequest: String? = null
     private var stateRequest: String? = null
+    @Volatile private var handoffRequest: String? = null
+    private var handoffFuture: com.google.common.util.concurrent.SettableFuture<androidx.media3.session.SessionResult>? = null
     private var retryAfter = 0L
     private var rejectedIdentity: String? = null
     private var connecting = false
@@ -50,6 +52,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         runCatching { connection.sessionIdentity(epoch) == identity && connection.offline.profileKey(epoch) == profile }.getOrDefault(false)
     fun state(): JSONObject = JSONObject().put("generation", connection.generation)
         .put("device_id", if (owns()) deviceId else JSONObject.NULL).put("connected", owns() && socket?.connected() == true)
+        .put("can_handoff", owns() && socket?.connected() == true && handoffFuture == null && snapshot() != null)
     private fun connect() {
         if (closed || connecting || android.os.SystemClock.elapsedRealtime() < retryAfter) return
         val generation = connection.generation
@@ -113,9 +116,9 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         }
     }
     private fun registration() = JSONObject().put("device_id", deviceId).put("device_name", "Soundsible Android").put("device_type", "android")
-    fun changed() { dirty = true; report() }
+    fun changed() { dirty = true; publish(state()); report() }
     private fun report() {
-        if (!owns() || socket?.connected() != true || publishing) return
+        if (!owns() || socket?.connected() != true || publishing || handoffFuture != null) return
         val body = snapshot() ?: if (hadTrack) JSONObject().put("track_id", JSONObject.NULL).put("track", JSONObject.NULL)
             .put("position_sec", 0).put("is_playing", false).put("session", JSONObject.NULL) else return
         val now = android.os.SystemClock.elapsedRealtime()
@@ -145,12 +148,65 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
             }
         }
     }
+    /** Publish fresh native state before Core stops this device and starts its peer. */
+    fun handoff(target: String): com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.SessionResult> {
+        val future = com.google.common.util.concurrent.SettableFuture.create<androidx.media3.session.SessionResult>()
+        val initial = snapshot()
+        if (!owns() || socket?.connected() != true || handoffFuture != null || initial == null || target == deviceId ||
+            target.isBlank() || target.length > 128) {
+            future.set(androidx.media3.session.SessionResult(androidx.media3.session.SessionError.ERROR_BAD_VALUE)); return future
+        }
+        val token = serial; val generation = epoch
+        fun signature(body: JSONObject) = JSONObject(body.toString()).apply { remove("position_sec") }.toString()
+        val source = signature(initial)
+        fun valid() = owns() && serial == token && handoffFuture === future
+        fun unchanged() = valid() && snapshot()?.let { signature(it) == source } == true
+        fun finish(success: Boolean) {
+            if (handoffFuture !== future) return
+            handoffFuture = null; handoffRequest = null
+            future.set(androidx.media3.session.SessionResult(if (success) androidx.media3.session.SessionResult.RESULT_SUCCESS else androidx.media3.session.SessionError.ERROR_IO))
+            publish(state()); dirty = true; report()
+        }
+        fun request(path: String, method: String, body: JSONObject? = null): JSONObject {
+            val id = "device-handoff-" + java.util.UUID.randomUUID()
+            handoffRequest = id
+            return connection.execute(path, method, body?.toString()?.toRequestBody("application/json".toMediaType()), emptyMap(), generation, id, 8000).use {
+                require(it.isSuccessful)
+                val text = it.peekBody(256 * 1024L).string()
+                if (text.isBlank()) JSONObject() else JSONObject(text)
+            }
+        }
+        handoffFuture = future; publish(state())
+        worker.execute {
+            val ready = runCatching {
+                val devices = request("/api/devices", "GET").getJSONArray("devices")
+                (0 until devices.length()).any { devices.getJSONObject(it).let { row -> row.optString("device_id") == target && row.optBoolean("socket_active") } }
+            }.getOrDefault(false)
+            main.post {
+                if (!unchanged() || !ready) { finish(false); return@post }
+                val body = snapshot()!!.put("device_id", deviceId).put("device_name", "Soundsible Android").put("device_type", "android")
+                worker.execute {
+                    val stored = runCatching { request("/api/playback/state", "PUT", body); true }.getOrDefault(false)
+                    main.post {
+                        if (!unchanged() || !stored) { finish(false); return@post }
+                        worker.execute {
+                            val sent = runCatching { request("/api/playback/handoff", "POST", JSONObject().put("from_device_id", deviceId).put("to_device_id", target)); true }.getOrDefault(false)
+                            main.post { if (valid()) finish(sent) }
+                        }
+                    }
+                }
+            }
+        }
+        return future
+    }
     private fun reset() {
         socket?.off(); socket?.disconnect(); socket = null
         val previous = client; client = null
         if (previous != null && !worker.isShutdown) worker.execute {
             previous.dispatcher.cancelAll(); previous.connectionPool.evictAll(); previous.dispatcher.executorService.shutdown()
         }
+        handoffRequest?.let(connection::cancel); handoffRequest = null
+        handoffFuture?.set(androidx.media3.session.SessionResult(androidx.media3.session.SessionError.ERROR_SESSION_DISCONNECTED)); handoffFuture = null
         serial++; connecting = false; publishing = false
         authRequest?.let(connection::cancel); stateRequest?.let(connection::cancel); authRequest = null; stateRequest = null
         epoch = -1; identity = null; profile = null; deviceId = null; lastBody = null; hadTrack = false; lastPositionPing = 0; stateRetryAfter = 0; dirty = false

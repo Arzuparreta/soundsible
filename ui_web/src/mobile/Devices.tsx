@@ -32,6 +32,13 @@ export default function NativeDevices(props: { generation: () => number; current
     } catch { if (current()) setError(true); }
     finally { if (current()) setBusy(false); }
   }
+  async function handoff(device: Device) {
+    if (!current() || busy() || !self()?.can_handoff || !device.socket_active || device.device_id === self()?.device_id) return;
+    setBusy(true); setError(false);
+    try { accept(await nativeDevices.deviceHandoff({ generation, device_id: device.device_id })); if (current()) await refresh(); }
+    catch { if (current()) setError(true); }
+    finally { if (current()) setBusy(false); }
+  }
   onMount(() => {
     void nativeDevices.deviceState().then(accept).catch(() => { if (current()) setError(true); });
     void nativeDevices.addListener('nativeDeviceState', accept).then(handle => { if (alive) listener = handle; else void handle.remove(); }).catch(() => { if (current()) setError(true); });
@@ -51,6 +58,8 @@ export default function NativeDevices(props: { generation: () => number; current
           <For each={['previous', 'pause', 'play', 'next'] as const}>{action => <button type="button" class={styles.ctrl}
             disabled={!current() || busy() || !device.socket_active} aria-label={t(`deviceSheet.aria${action === 'previous' ? 'Prev' : action[0].toUpperCase() + action.slice(1)}` as Parameters<typeof t>[0])}
             onClick={() => void command(device, action)}>{action === 'previous' ? '⏮' : action === 'pause' ? '⏸' : action === 'play' ? '▶' : '⏭'}</button>}</For>
+          <button type="button" disabled={!current() || busy() || !device.socket_active || !self()?.can_handoff}
+            onClick={() => void handoff(device)}>{t('deviceSheet.transfer')}</button>
         </div></Show>
       </div>}</For>
     </Show></Show>

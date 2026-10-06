@@ -990,6 +990,7 @@ export const en = {
     empty: 'The playlist has no tracks.',
   },
   deviceSheet: {
+    transfer: 'Transfer playback',
     sendingTo: 'Sending to {device}…',
     fallbackDevice: 'device',
     playingOn: 'Playing on device',

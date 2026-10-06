@@ -990,6 +990,7 @@ export const es: Dict = {
     empty: 'La lista no tiene pistas.',
   },
   deviceSheet: {
+    transfer: 'Transferir reproducción',
     sendingTo: 'Enviando a {device}…',
     fallbackDevice: 'dispositivo',
     playingOn: 'Reproduciendo en el dispositivo',

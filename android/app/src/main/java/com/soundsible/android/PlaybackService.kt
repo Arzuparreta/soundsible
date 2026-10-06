@@ -392,6 +392,10 @@ class PlaybackService : MediaLibraryService() {
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+                if (args.getString("action") == "deviceHandoff") {
+                    if (args.getLong("generation", -1) != connection.generation) return Futures.immediateFuture(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
+                    return deviceSession.handoff(args.getString("device_id").orEmpty())
+                }
                 if (args.getString("action") == "retry" && liveListener != null) {
                     return Futures.immediateFuture(try {
                         require(args.getLong("generation", -1) == connection.generation && args.getString("queueToken") == ProgramQueue.token(player) && args.getString("key") == ProgramQueue.key(player, player.currentMediaItemIndex))

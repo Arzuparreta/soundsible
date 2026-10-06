@@ -307,3 +307,14 @@ See SLICE_2AM/evidence/s2am.json. Next outgoing handoff must publish exact fresh
 native state then call Core handoff with same-account/generation checks. Full DJ/
 Radio/pending catalog restore, public invite intents/pairing, negative coverage,
 distribution and final full suites remain. Continue; PR manual, no release/merge.
+
+S2an accepted: Settings transfer delegates to native actor, verifies same-account
+online peer, publishes fresh bounded NORMAL queue/position then calls Core handoff.
+Queue/preferences/transport/identity changes cancel pre-send, reset cancels future/
+request, no optimistic source pause. Real UI to remote Core socket + source pause
+HTTP/TLS, combined DevicesUi/DeviceSession4/0,31.965s; normal APK/test/JVM56/lint
+and integration exit0. UI210/1614+TS. FR/ZH transfer label added after native runner,
+covered by final UI typecheck/tests; no four-language native claim. SLICE_2AN and
+evidence/s2an.json. Outgoing DJ disabled until workspace restore complete. Next
+DJ/Radio/pending catalog and device reconnect exhaustion; then remaining public
+invites/pairing, DJ/Auto negatives, distribution, principal/browser4. Continue.

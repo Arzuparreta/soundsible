@@ -998,6 +998,7 @@ export const fr: Dict = {
     empty: 'La liste ne contient aucun titre.',
   },
   deviceSheet: {
+    transfer: 'Transférer la lecture',
     sendingTo: 'Envoi vers {device}…',
     fallbackDevice: 'appareil',
     playingOn: 'Lecture sur l’appareil',
