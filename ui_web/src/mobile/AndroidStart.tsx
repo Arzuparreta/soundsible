@@ -1,5 +1,7 @@
 import type { MenuAction } from '../components/ActionMenu';
 import NativeSettings from './Settings';
+import NativeInvite from './Invite';
+import { nativeInviteLink } from './inviteLink';
 import { openNativeLive } from './Live';
 import type { createNativeAppearance } from './appearance';
 import type { createNativeFeedback } from './feedback';
@@ -143,6 +145,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     setOfflineState(result);
     if (restoreLibrary && result.user && result.items.length) { setUser(result.user); setSnapshot(availableLibrary(result)); setStale(true); }
   }
+  const [inviteToken, setInviteToken] = createSignal<string | null>(null);
   let username: HTMLInputElement | undefined;
   let password: HTMLInputElement | undefined;
   let epoch = 0;
@@ -150,7 +153,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   let cancelEvents: (() => void) | undefined;
   let controller = new AbortController();
   function reset(stopPlayback = true) {
-    epoch++; syncEpoch++; discardOverlays(); dismissContextMenu(); controller.abort(); controller = new AbortController();
+    epoch++; syncEpoch++; setInviteToken(null); discardOverlays(); dismissContextMenu(); controller.abort(); controller = new AbortController();
     cancelEvents?.(); cancelEvents = undefined;
     if (stopPlayback) {
       const active = program();
@@ -274,9 +277,11 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     if (busy()) return;
     setBusy(true); setError(''); reset();
     try {
-      const next = await engine.configure({ origin: origin().trim() });
+      const invitation = nativeInviteLink(origin().trim());
+      const next = await engine.configure({ origin: invitation?.origin ?? origin().trim() });
       generation = next.generation; void runtime.bind(generation); useEngine(next); setServer(next.origin); setOrigin(next.origin);
-      await resolveIdentity();
+      if (invitation) { setNeedsLogin(false); setInviteToken(invitation.token); }
+      else await resolveIdentity();
     } catch { setError(t('android.connectFailed')); }
     finally { setBusy(false); }
   }
@@ -358,7 +363,12 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
         <label class={styles.field}>{t('android.server')}<input type="url" required value={origin()} placeholder="http://10.0.2.2:5005" autocomplete="url" disabled={busy()} onInput={event => setOrigin(event.currentTarget.value)} /></label>
         <p>{t('android.serverHint')}</p><button type="submit" disabled={busy()}>{t('android.connect')}</button>
       </form>
-      <Show when={needsLogin()}><form class={styles.form} onSubmit={signIn}>
+      <Show when={inviteToken()}>{token => {
+        const captured = epoch;
+        return <NativeInvite token={token()} current={() => captured === epoch && !user()} onCancel={() => { setInviteToken(null); setNeedsLogin(true); }}
+          onAccepted={async () => { if (captured !== epoch) return; setInviteToken(null); await revalidateIdentity(); }} />;
+      }}</Show>
+      <Show when={needsLogin() && !inviteToken()}><form class={styles.form} onSubmit={signIn}>
         <label class={styles.field}>{t('android.username')}<input ref={username} autocomplete="username" required disabled={busy()} /></label>
         <label class={styles.field}>{t('android.password')}<input ref={password} type="password" autocomplete="current-password" disabled={busy()} /></label>
         <button type="submit" disabled={busy()}>{t('android.login')}</button>

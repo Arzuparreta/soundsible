@@ -260,3 +260,15 @@ SLICE_4L/evidence/s4l.json, /tmp/soundsible-live-presentation-fixed-native.log.
 Ninguna suite activa, AVD5554 sigue. Siguiente: invites/admin/multidispositivo
 según inventario real, negativos DJ/Auto y distribución; principal/browser4 final
 aún pendientes. PR abierta review manual, no merge/automerge/release.
+
+S2aj validado: invite pegado explícitamente en conexión, preview/accept nativo,
+contraseña confirmada, bind perfil/cookie y biblioteca aislada sin reload.
+Native2/0 HTTP/TLS,17.238s, runner28188 exit0 + APK/test APK/JVM56/lint normales.
+Inicial2/2 por helper test que esperaba startup sin configurar aunque Core seguía
+configurado; corregido inicio fresh/waitlibrary en recreate. WholeUI208/1606
+antes de copy hint y guard de mensaje preview pendiente; dirigido final5/0 y
+TypeScript pasan. SLICE_2AJ/evidence/s2aj.json, log
+/tmp/soundsible-invite-corrected-native.log. Ninguna suite activa, AVD5554 sigue.
+Siguiente: admin y controles/handoff entre dispositivos, negativos DJ/Auto,
+distribución y regresión final. No OS invite intent probado aún. PR manual;
+no merge/automerge/release. Sources vigentes root.

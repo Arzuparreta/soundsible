@@ -23,7 +23,7 @@ export const en = {
     insertAfter: 'Add after current',
     repeatOff: 'Off',
     repeatOne: 'One song',
-    repeatAll: 'Whole queue', refresh: "Refresh", permissionDenied: "Your account cannot access this resource.", title: 'Connect your Soundsible', unconfigured: 'No server is connected yet.', server: "Server address", serverHint: "HTTPS for remote access; HTTP only on your private LAN or Tailscale.", connect: "Connect", username: "Username", password: "Password", login: "Sign in", logout: "Sign out", changeServer: "Change server", connectFailed: "Could not connect. Check the address, network and server certificate.", wrongLogin: "Wrong username or password.", browseOnly: 'Development build: music and podcasts. DJ, Live and Android Auto are pending.', seek: 'Playback position', eventsPending: "Live updates disconnected. You can retry or refresh the library." },
+    repeatAll: 'Whole queue', refresh: "Refresh", permissionDenied: "Your account cannot access this resource.", title: 'Connect your Soundsible', unconfigured: 'No server is connected yet.', server: "Server address", serverHint: "Paste your server address or invitation link. HTTPS for remote access; HTTP only on your private LAN or Tailscale.", connect: "Connect", username: "Username", password: "Password", login: "Sign in", logout: "Sign out", changeServer: "Change server", connectFailed: "Could not connect. Check the address, network and server certificate.", wrongLogin: "Wrong username or password.", browseOnly: 'Development build: music and podcasts. DJ, Live and Android Auto are pending.', seek: 'Playback position', eventsPending: "Live updates disconnected. You can retry or refresh the library." },
   savedEntities: {
     albums: "Saved albums",
     artists: "Saved artists",

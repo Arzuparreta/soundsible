@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2aj",
+  "channel": "development",
+  "base_revision": "de674d0d",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "ui_web/src/mobile/AndroidStart.tsx": "b4eeeebfe9230cc3637d0bd0b55bcff0d531742e4c4dad8c8856d9569fd53119",
+    "ui_web/src/mobile/Invite.tsx": "7b8ec49f74eb6d36ab19a148d8b12d9fc949c457208b6c0c58fae6b2eb07b899",
+    "ui_web/src/mobile/inviteLink.ts": "2eb8fe393ff06efc2cee5f93d9d86fa1f82f220e63cb17d25a474537ddae4d31",
+    "ui_web/src/mobile/Invite.test.tsx": "b822ad4d6d83bec097901473d37aaeba4b8ebdeb5628a9a7b78792984c266863",
+    "ui_web/src/mobile/inviteLink.test.ts": "069c86ff0c978fe99f3ee0f3fa31b04b419aba20342285839708275193978bd3",
+    "android/app/src/androidTest/java/com/soundsible/android/InviteTest.kt": "97b6476ec36ffe45217e8425f67372f0e1117dafab67614231400fc329716ab8",
+    "ui_web/src/lib/i18n/en.ts": "f7d2301664c38e6b020e53c0a6ad73abdf98f900955de1861f4c6167e0c607ac",
+    "ui_web/src/lib/i18n/es.ts": "7918fc5144fc5768931868c8fd067efd7915e05a271eeb613ed220133e7bd2e2"
+  },
+  "ui": {
+    "whole_files": 208,
+    "whole_tests": 1606,
+    "whole_failures": 0,
+    "whole_log": "/tmp/soundsible-invite-unit-final.log",
+    "final_targeted_tests": 5,
+    "final_targeted_failures": 0,
+    "final_log": "/tmp/soundsible-invite-corrected-unit.log",
+    "typescript": "pass",
+    "note": "Whole suite before hint copy and pending-preview message fix; final targeted covers invitation behaviour"
+  },
+  "initial_native": {
+    "tests": 2,
+    "failures": 2,
+    "log": "/tmp/soundsible-invite-native.log",
+    "explanation": "Test reused unconfigured StartupTest.awaitReady with an already configured origin. Corrected test starts fresh and waits configured library on final recreate; no invitation interaction reached in initial run."
+  },
+  "final_native": {
+    "tests": 2,
+    "failures": 0,
+    "seconds": 17.238,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-invite-corrected-native.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Explicit invitation link configures only its origin",
+    "Native preview and confirmed password create real member account",
+    "Auth state binds own offline profile and cookie; library has no other account music",
+    "Activity recreate preserves account; invitation cannot be redeemed again",
+    "Invalid/stale/pending preview UI and ownership guards"
+  ],
+  "limits": [
+    "No OS invitation intent/App Link acceptance",
+    "Admin and remote device controls remain separate",
+    "Final principal/browser4 and physical device acceptance pending"
+  ]
+}
