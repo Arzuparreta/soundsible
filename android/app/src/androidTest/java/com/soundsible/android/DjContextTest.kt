@@ -82,6 +82,13 @@ class DjContextTest {
                 retained()
                 assertEquals(revision, web.evaluate(scenario, "window.__dj.dj.editRevision"))
                 assertEquals("true", web.evaluate(scenario, "window.__dj.items.some(i=>i.key===" + request + ")"))
+                waitFor("['ready','degraded'].includes(window.__dj.dj.phase)")
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-queue-key]')).find(row=>row.dataset.queueKey===" + request + ").querySelector('[data-row-menu]').click()")
+                waitFor("!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add to playlist')")
+                assertEquals("true", web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.startsWith('Mix into session') && b.disabled)"))
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Remove from queue').click()")
+                waitFor("!window.__dj.items.some(i=>i.key===" + request + ")")
+                retained()
             } finally {
                 web.evaluate(scenario, "clearInterval(window.__djTimer)")
                 val generation = connection.generation

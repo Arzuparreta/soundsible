@@ -64,3 +64,30 @@ it('marks the cued DJ occurrence and keeps edits outside the committed pair', as
   expect(screen.queryByText('autoMode.dj.cued')).toBeNull();
   expect(disabled('first', 'remove')).toBe(false);
 });
+
+it('opens shared actions for the selected occurrence without playing and rejects a stale removal', async () => {
+  const [state, setState] = createSignal(initial); const command = vi.fn(async () => {}); const onMenu = vi.fn();
+  const { container } = render(() => <ProgramQueue state={state()} pending={false} command={command} onMenu={onMenu} />);
+  await fireEvent.click(container.querySelector('[data-queue-key=first] [data-row-menu]')!);
+  expect(command).not.toHaveBeenCalled(); expect(onMenu.mock.calls[0][0].key).toBe('first');
+  const remove = onMenu.mock.calls[0][2][0];
+  expect(remove.disabled).toBe(false); remove.onSelect();
+  expect(command).toHaveBeenCalledExactlyOnceWith({ action: 'remove', index: 0, key: 'first', queueToken: 'first-second' });
+  for (const changed of [{ ...initial, generation: 2 }, { ...initial, programToken: 'new-owner' },
+    { ...initial, items: [...initial.items].reverse(), queueToken: 'second-first' }]) {
+    setState(changed); remove.onSelect();
+  }
+  expect(command).toHaveBeenCalledTimes(1);
+});
+it('allows song actions on cued DJ rows but forbids removal when a handoff becomes committed', async () => {
+  const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0, programToken: 'dj',
+    dj: { active: true, phase: 'ready', profile: 'adaptive', editableFrom: 1 } });
+  const command = vi.fn(async () => {}); const onMenu = vi.fn();
+  const { container } = render(() => <ProgramQueue state={state()} pending={false} command={command} onMenu={onMenu} />);
+  await fireEvent.click(container.querySelector('[data-queue-key=second] [data-row-menu]')!);
+  const remove = onMenu.mock.calls[0][2][0]; expect(remove.disabled).toBe(false);
+  setState({ ...state(), dj: { ...state().dj!, editableFrom: 2 } }); remove.onSelect();
+  expect(command).not.toHaveBeenCalled();
+  await fireEvent.click(container.querySelector('[data-queue-key=second] [data-row-menu]')!);
+  expect(onMenu.mock.calls[1][2][0].disabled).toBe(true);
+});

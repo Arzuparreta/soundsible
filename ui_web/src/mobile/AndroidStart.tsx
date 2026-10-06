@@ -349,7 +349,15 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     <Show when={program()?.queue.length ? program() : null}>{state => <><ProgramTransport state={state()} pending={programPending()} command={runtime.execute} onLyrics={user() && !stale() ? () => {
       const captured = epoch;
       openNativeLyrics(program, () => snapshot()?.tracks ?? [], savedEntries, () => captured === epoch && !!user() && !stale(), runtime.execute);
-    } : undefined} /><ProgramQueue state={state()} pending={programPending()} command={runtime.execute} /></>}</Show>
+    } : undefined} /><ProgramQueue state={state()} pending={programPending()} command={runtime.execute} onMenu={(entry, event, actions) => {
+      const track = snapshot()?.tracks.find(track => track.id === entry.id && (track.source ?? 'local') === entry.source) ?? {
+        id: entry.id, title: entry.title, artist: entry.artist, album: entry.album, duration: entry.duration,
+        source: entry.source === 'preview' || entry.source === 'podcast' ? 'preview' as const : undefined,
+        ...(entry.mediaKind === 'podcast_episode' ? { media_kind: 'podcast_episode' as const, podcast_feed_id: entry.feedId,
+          podcast_episode_guid: entry.episodeGuid, podcast_enclosure_url: entry.enclosure } : {}),
+      } as Track;
+      songMenu(track, event, undefined, actions);
+    }} /></>}</Show>
     <Show when={user()}>
       <Show when={stale()}><p role="status">{t('library.unreachable')} <button onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>
       <Show when={!eventsOnline() && !stale()}><p class={styles.notice}>{t('android.eventsPending')}</p></Show>

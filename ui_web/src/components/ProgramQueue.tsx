@@ -3,11 +3,12 @@ import { createVirtualizer } from '@tanstack/solid-virtual';
 import { MusicListRowView } from './MusicListRowView';
 import { programCover } from '../lib/program/tracks';
 import { t } from '../lib/i18n';
-import type { ProgramCommand, ProgramState } from '../lib/program/runtime';
+import type { MenuAction } from './ActionMenu';
+import type { ProgramCommand, ProgramOccurrence, ProgramState } from '../lib/program/runtime';
 import styles from './ProgramQueue.module.css';
 
 /** Observe the service queue; never regenerate its sources from library rows. */
-export default function ProgramQueue(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void> }) {
+export default function ProgramQueue(props: { state: ProgramState; pending: boolean; command(command: ProgramCommand): Promise<void>; onMenu?: (entry: ProgramOccurrence, event: MouseEvent | undefined, actions: MenuAction[]) => void }) {
   const [editing, setEditing] = createSignal(false);
   const [height, setHeight] = createSignal(56);
   let scroll!: HTMLDivElement;
@@ -49,7 +50,15 @@ export default function ProgramQueue(props: { state: ProgramState; pending: bool
           const canMove = (target: number) => !protectedRow(row().index) && !protectedRow(target);
           return <Show when={entries().has(key)}><div class={styles.row} data-queue-key={key} data-index={row().index} ref={element => queueMicrotask(() => { if (element.isConnected) rows.measureElement(element); })} style={{ transform: `translateY(${positions().get(key) ?? 0}px)` }}>
             <MusicListRowView title={row().entry.title || row().entry.id} subtitle={row().entry.artist} annotation={protectedRow(row().index) && row().index > props.state.index ? t('autoMode.dj.cued') : row().entry.generated ? t(row().entry.generatedSource === 'autoplay' ? 'nowPlaying.autoplayQueue' : 'nowPlaying.radioQueue') : undefined} seed={row().entry.id} cover={programCover(row().entry)} actionLabel={`${row().index + 1} · ${row().entry.title || row().entry.id} — ${row().entry.artist}`} index={row().index + 1} playback active={props.state.index === row().index}
-              disabled={disabled()} playbackTrack={props.state.items[props.state.index]?.key} onActivate={() => run({ action: 'select', ...target() })} />
+              disabled={disabled()} playbackTrack={props.state.items[props.state.index]?.key} onActivate={() => run({ action: 'select', ...target() })} onMenu={props.onMenu ? event => {
+                const captured = { ...target(), generation: props.state.generation, programToken: props.state.programToken };
+                props.onMenu?.(row().entry, event, [{ label: t('nowPlaying.removeFromQueue'), danger: true,
+                  disabled: disabled() || protectedRow(row().index), onSelect: () => {
+                    if (disabled() || props.state.generation !== captured.generation || props.state.programToken !== captured.programToken ||
+                      props.state.queueToken !== captured.queueToken || props.state.items[captured.index]?.key !== key || protectedRow(captured.index)) return;
+                    run({ action: 'remove', index: captured.index, key, queueToken: captured.queueToken });
+                  } }]);
+              } : undefined} />
               <Show when={editing()}><div class={styles.edit}>
                 <button type="button" data-queue-action="up" aria-label={`${t('musicList.moveUp')}: ${row().index + 1} · ${row().entry.title}`} disabled={disabled() || row().index === 0 || !canMove(row().index - 1)} onClick={() => run({ action: 'move', ...target(), toIndex: row().index - 1 })}>↑</button>
                 <button type="button" data-queue-action="down" aria-label={`${t('musicList.moveDown')}: ${row().index + 1} · ${row().entry.title}`} disabled={disabled() || row().index === props.state.items.length - 1 || !canMove(row().index + 1)} onClick={() => run({ action: 'move', ...target(), toIndex: row().index + 1 })}>↓</button>

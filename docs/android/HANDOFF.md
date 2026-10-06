@@ -136,8 +136,12 @@ funcionan; no pedir acción al usuario. Mantener suites pesadas en serie; futuro
 runs completos pueden usar checkout aislado para seguir editando otra copia.
 Menú desde canción/usar como fuente validado: KEY/posición/pausa retenidos,
 lead anterior retirado al cambiar contexto y requests explícitas retenidas.
-Siguiente DJ: menús de ruta/cola con acciones compartidas y placement fijo,
-negativos restantes y límite largo en servicio.
+Menús de ruta/cola con acciones de canción compartidas validados: Context2/0
+HTTP/TLS, normal APK/test/JVM52/lint,19.962s instrumentados,
+`/tmp/soundsible-s3b-route-menu-native.log` sobre `4f75ba17` dirty.
+Eliminación por KEY preserva actual/posición/pausa; source existente seleccionado
+y disabled. UI198/1570 + TS. Siguiente DJ: placement fijo, negativos restantes y
+límite largo en servicio.
 Android Auto: browse draft en ProgramCarLibrary, requiere integración, selección,
 Radio, covers/offline y aceptación de host. Live y firma siguen pendientes.
 

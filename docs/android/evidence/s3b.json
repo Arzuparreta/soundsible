@@ -473,5 +473,33 @@
       "complete DJ parity",
       "physical acoustic continuity"
     ]
+  },
+  "dj_route_song_menus": {
+    "source_base_revision": "4f75ba17",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 19.962,
+    "log": "/tmp/soundsible-s3b-route-menu-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "ui": {
+      "files": 198,
+      "tests": 1570,
+      "typescript": "pass",
+      "log": "/tmp/soundsible-s3b-route-menu-full-ui.log"
+    },
+    "proves": [
+      "real DJ route overflow opens shared song actions by HTTP/TLS",
+      "duplicate source action visibly selected and disabled",
+      "removal targets requested occurrence key and retains current key position and pause",
+      "web guard rejects deferred removal after account programme order changes or committed handoff"
+    ],
+    "does_not_prove": [
+      "all menu actions from a cued route row on physical device",
+      "fixed placement picker",
+      "complete DJ parity"
+    ]
   }
 }
