@@ -179,6 +179,18 @@ class LiveHostTest {
             rms.set(0.0)
             await("Activity close stopped remote programme") { rms.get() > 500 }
             await("Room heartbeat stopped with Activity") { publicRoom().getJSONObject("program").getLong("seq") > previousSequence + 2 }
+            if (!dj) {
+                publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/__fixture/socket-cut").header("X-Android-Fixture", "isolated")
+                    .post(JSONObject().put("session_id", sessionId).put("role", "host").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+                await("Lost host lease kept publisher alive") {
+                    val observed = AtomicReference<String>()
+                    instrumentation.runOnMainSync { observed.set(active.sessionExtras.getString("nativeLiveHost")) }
+                    observed.get()?.let { JSONObject(it).isNull("session") } == true
+                }
+                await("Disconnected host room did not expire") {
+                    publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/v1/sessions/$sessionId").build()).execute().use { it.code == 404 }
+                }
+            }
             val stop = call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
                 putString("action", "liveStop"); putLong("generation", epoch)
             }) }

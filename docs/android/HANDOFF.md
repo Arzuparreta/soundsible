@@ -206,3 +206,17 @@ No suite activa tras13061. AVD5554 sigue. Siguiente: autorización guest antes d
 WHEP (hoy Socket y media arrancan en paralelo), lease/polling y process death/
 resume409; reset de servicio durante handshake. Luego negativos DJ, teléfono/
 Auto/firma y regresión final. No paridad, merge, automerge ni release.
+
+S4h validado: Host4/Listener2 pasan en combinado9/2; TLSUI chat se enviaba
+antes de terminar title, y una sala sin limpiar contaminó Polling. Sólo tests
+corregidos: UI2/Polling1,3/0, runner exit0 + normal APK/test APK/JVM56/lint.
+Producto idéntico entre runs. Ver SLICE_4H/evidence/s4h.json, logs
+/tmp/soundsible-live-leases-native.log y /tmp/soundsible-live-leases-ui-fixed-native.log.
+Host/guest esperan autorización Socket antes de WHIP/WHEP; rechazo sala con
+WHEP real no produce PCM. Lease perdida en background retira Live tras10s,
+conservando local; polling-only35s sobre ping25s estable. No suite activa tras
+31747. AVD5554 sigue. Siguiente: proceso/resume409 y agotamiento/reset. El
+publisher muerto puede seguir ocupando MediaMTX aunque Core rote tokens;
+continuidad debe retirar sólo la resource del owner firmado y probarse en relay
+real, no basta POST resume. Sources vigentes root. PR no creada aún (ghprview
+verificado). No final de checkpoint, no merge/automerge/release.

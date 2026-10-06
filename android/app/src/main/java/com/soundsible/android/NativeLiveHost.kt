@@ -43,6 +43,7 @@ internal class NativeLiveHost(
     @Volatile private var peer: LivePeer? = null
     private var socket: Socket? = null
     private var transport: OkHttpClient? = null
+    private val pendingSocketAuth = java.util.concurrent.atomic.AtomicReference<java.util.concurrent.CompletableFuture<Boolean>?>()
     private var messages = JSONArray()
     private var programme: JSONObject? = null
     private var sequence = 0L
@@ -193,7 +194,10 @@ internal class NativeLiveHost(
                 }
                 val next = IO.socket(endpoint.toString(), options)
                 socket = next
-                next.on(Socket.EVENT_CONNECT) { main.post { if (current(token)) { main.removeCallbacks(leaseExpired); main.removeCallbacks(tick); main.post(tick) } } }
+                val authorized = java.util.concurrent.CompletableFuture<Boolean>()
+                pendingSocketAuth.set(authorized)
+                next.on(Socket.EVENT_CONNECT) { authorized.complete(true); main.post { if (current(token)) { main.removeCallbacks(leaseExpired); main.removeCallbacks(tick); main.post(tick) } } }
+                next.on(Socket.EVENT_CONNECT_ERROR) { authorized.complete(false) }
                 next.on(Socket.EVENT_DISCONNECT) { main.post { if (current(token)) { main.removeCallbacks(leaseExpired); main.postDelayed(leaseExpired, 10000) } } }
                 for (event in listOf("session_snapshot", "session_updated")) next.on(event) { arguments ->
                     val update = (arguments.firstOrNull() as? JSONObject)?.optJSONObject("session")
@@ -222,6 +226,8 @@ internal class NativeLiveHost(
                 }
                 next.on("session_ended") { main.post { if (current(token)) stop(false) } }
                 next.connect()
+                try { check(authorized.get(10, TimeUnit.SECONDS) && current(token) && next.connected()) { "LIVE_SOCKET_UNAUTHORIZED" } }
+                finally { pendingSocketAuth.compareAndSet(authorized, null) }
                 val publisher = publisher(created, token)
                 peer = publisher
                 check(current(token)) { "STALE_LIVE" }
@@ -242,6 +248,7 @@ internal class NativeLiveHost(
     fun stop(endRoom: Boolean = true): ListenableFuture<SessionResult> {
         revision.incrementAndGet(); connected = false; main.removeCallbacks(tick)
         reconnect.cancel(); main.removeCallbacks(leaseExpired)
+        pendingSocketAuth.get()?.cancel(false)
         peer?.cancel()
         thumbnails.clear(); pendingArtwork.clear(); artworkFailures.clear()
         val result = SettableFuture.create<SessionResult>()
@@ -290,6 +297,7 @@ internal class NativeLiveHost(
         if (closed) return
         closed = true; revision.incrementAndGet(); connection.resetListeners.remove(reset); main.removeCallbacks(tick)
         reconnect.cancel(); main.removeCallbacks(leaseExpired)
+        pendingSocketAuth.get()?.cancel(false)
         peer?.cancel()
         artWorker.shutdownNow()
         worker.execute { release(true) }; worker.shutdown()

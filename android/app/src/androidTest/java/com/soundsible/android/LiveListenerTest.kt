@@ -86,6 +86,15 @@ class LiveListenerTest {
             await("Synthetic publisher room socket did not connect") { hostSocket.connected() }
             NativeLivePlayer.decodedObservers.add(sink)
             instrumentation.runOnMainSync { active.volume = .8f }
+            val unauthorized = JSONObject(room.toString()).put("id", "missing-room")
+            assertEquals(androidx.media3.session.SessionResult.RESULT_SUCCESS, call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
+                putString("action", "liveListen"); putString("session", unauthorized.toString()); putLong("generation", epoch)
+            }) }.resultCode)
+            Thread.sleep(1500)
+            assertEquals("Guest played WHEP before its room authorized the socket", 0.0, rms.get(), 0.0)
+            assertEquals(androidx.media3.session.SessionResult.RESULT_SUCCESS, call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
+                putString("action", "liveLeave"); putLong("generation", epoch)
+            }) }.resultCode)
             val selected = call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
                 putString("action", "liveListen"); putString("session", room.toString()); putLong("generation", epoch)
             }) }
@@ -143,8 +152,12 @@ class LiveListenerTest {
             scenario.close(); scenario = null
             rms.set(0.0)
             await("Activity close stopped remote programme") { rms.get() > 500 }
-            instrumentation.runOnMainSync { active.pause(); active.stop() }
+            okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build().newCall(okhttp3.Request.Builder()
+                .url("https://10.0.2.2:58443/__fixture/socket-cut").header("X-Android-Fixture", "isolated")
+                .post(JSONObject().put("session_id", sessionId).put("role", "guest").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
             await("MediaSession stop was ignored") { instrumentation.runOnMainSync { playing.set(active.playbackState == androidx.media3.common.Player.STATE_IDLE && !active.playWhenReady) }; playing.get() }
+            rms.set(0.0); Thread.sleep(300)
+            assertEquals("Guest kept decoding after its lease was lost", 0.0, rms.get(), 0.0)
             instrumentation.runOnMainSync { active.prepare(); active.play() }
             rms.set(0.0)
             await("Manual retry did not recover decoded Live") { rms.get() > 500 }

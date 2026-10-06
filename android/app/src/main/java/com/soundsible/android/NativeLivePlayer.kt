@@ -33,13 +33,13 @@ internal class NativeLivePlayer(
     private val epoch = connection.generation
     private val main = Handler(applicationLooper)
     private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "soundsible-live-listener").apply { isDaemon = true } }
-    private var peer: LivePeer? = null
+    @Volatile private var peer: LivePeer? = null
     private var requested = false
     private var suppressed = false
     private var duck = 1f
     private var volumeValue = 1f
     private var state = Player.STATE_IDLE
-    private var closed = false
+    @Volatile private var closed = false
     private var failure: PlaybackException? = null
     private var reason = Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
     private var startedAt = 0L
@@ -50,6 +50,13 @@ internal class NativeLivePlayer(
         failure = PlaybackException("Live recovery exhausted", null, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
         changed(snapshot()); invalidateState()
     })
+    private val leaseExpired = Runnable {
+        if (current() && socket?.connected() != true) {
+            stopOutput()
+            failure = PlaybackException("Live room connection lost", null, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
+            changed(snapshot()); invalidateState()
+        }
+    }
     private val artWorker = java.util.concurrent.ThreadPoolExecutor(1, 1, 0, java.util.concurrent.TimeUnit.MILLISECONDS, java.util.concurrent.ArrayBlockingQueue<Runnable>(1))
     private val publicArtwork = LiveArtwork(room.optString("api_url").ifBlank { room.getString("socket_url") }, room.getString("id"))
     private var artworkUrl: String? = null
@@ -75,11 +82,15 @@ internal class NativeLivePlayer(
         .setAudioAttributes(attributes).setVolume(volumeValue).setPlayerError(failure)
         .setContentPositionMs { if (startedAt == 0L) 0L else (android.os.SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0) }
         .build()
-    fun snapshot(): JSONObject = JSONObject().put("generation", epoch).put("connected", state == Player.STATE_READY)
+    fun snapshot(): JSONObject = JSONObject().put("generation", epoch).put("connected", state == Player.STATE_READY && socket?.connected() == true)
         .put("session", JSONObject(room.toString()).apply { for (key in listOf("host_token", "publish_token", "whip_url", "socket_url", "stream_path", "api_url", "guest_name")) remove(key) })
         .put("program", programme ?: JSONObject.NULL).put("messages", messages).put("playing", requested && !suppressed && state == Player.STATE_READY).put("volume", volumeValue)
     private fun socketEvent(event: String, payload: JSONObject) {
         when (event) {
+            io.socket.client.Socket.EVENT_CONNECT -> main.removeCallbacks(leaseExpired)
+            io.socket.client.Socket.EVENT_DISCONNECT, io.socket.client.Socket.EVENT_CONNECT_ERROR -> {
+                main.removeCallbacks(leaseExpired); main.postDelayed(leaseExpired, 10000)
+            }
             "session_snapshot", "session_updated" -> payload.optJSONObject("session")?.takeIf { it.optString("id") == room.getString("id") }?.let {
                 room = JSONObject(room.toString()).apply { for (key in listOf("title", "status", "listener_count", "updated_at")) if (it.has(key)) put(key, it.get(key)) }
                 it.optJSONObject("program")?.let { next -> programme = next }
@@ -150,6 +161,7 @@ internal class NativeLivePlayer(
         val previous = peer; peer = null
         previous?.cancel()
         val previousSocket = socket; socket = null
+        previousSocket?.cancel()
         if (previous != null || previousSocket != null) worker.execute {
             previousSocket?.close()
             if (socketPeer === previous) { socket?.close(); socket = null; socketPeer = null }
@@ -179,6 +191,8 @@ internal class NativeLivePlayer(
                     "guest_id" to java.util.UUID.randomUUID().toString().replace("-", ""),
                     "guest_name" to room.optString("guest_name", "Listener").take(32)), main, { current() && peer === next }, ::socketEvent)
                 socketPeer = next; socket = roomSocket; roomSocket.connect()
+                roomSocket.awaitConnected()
+                check(current() && peer === next) { "STALE_LIVE_LISTENER" }
                 next.start()
             }
             catch (error: Exception) { main.post { if (current() && peer === next) {
@@ -194,12 +208,14 @@ internal class NativeLivePlayer(
     override fun handleSetVolume(volume: Float): ListenableFuture<*> { volumeValue = volume; gain(); changed(snapshot()); invalidateState(); return Futures.immediateVoidFuture() }
     private fun stopOutput() {
         reconnect.cancel()
+        main.removeCallbacks(leaseExpired)
         ++artworkRevision; artworkUrl = null; artWorker.queue.clear()
         setRequested(false, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
         state = Player.STATE_IDLE
         val previous = peer; peer = null
         previous?.cancel()
         val previousSocket = socket; socket = null
+        previousSocket?.cancel()
         if (previous != null || previousSocket != null) worker.execute {
             previousSocket?.close()
             if (socketPeer === previous) { socket?.close(); socket = null; socketPeer = null }

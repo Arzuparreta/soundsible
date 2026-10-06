@@ -136,6 +136,21 @@ def main():
             with urlopen(Request("http://127.0.0.1:59997/v3/webrtcsessions/kick/" + peer["id"], method="POST"), timeout=2):
                 pass
         return jsonify(kicked=len(selected))
+
+    @app.post("/__fixture/socket-cut")
+    def socket_cut():
+        if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
+            return jsonify(error="fixture only"), 403
+        from community_service.app import _connections, socketio
+        body = request.get_json(silent=True) or {}
+        role = body.get("role")
+        if role not in ("host", "guest"):
+            return jsonify(error="invalid isolated role"), 400
+        selected = [sid for sid, connection in list(_connections.items())
+                    if connection["session_id"] == body.get("session_id") and connection["host"] == (role == "host")]
+        for sid in selected:
+            socketio.server.disconnect(sid, namespace="/")
+        return jsonify(disconnected=len(selected))
     internal = WSGIServer(("127.0.0.1", 58080), app, handler_class=WebSocketHandler)
     internal.start()
     WSGIServer(("127.0.0.1", 58443), app, handler_class=WebSocketHandler,

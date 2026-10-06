@@ -20,6 +20,7 @@ class LiveUiTest {
         val web = StartupTest()
         var publisher: LivePeer? = null
         var roomId: String? = null
+        var hostedRoomId: String? = null
         val received = java.util.concurrent.atomic.AtomicReference(0.0)
         val sink = org.webrtc.AudioTrackSink { data, bits, _, _, frames, _ ->
             if (bits == 16 && frames > 0) {
@@ -54,13 +55,17 @@ class LiveUiTest {
                 waitFor("Array.from(document.querySelectorAll('[data-native-live] li strong')).some(e=>e.textContent==='UI native room')")
                 web.evaluate(scenario, "Capacitor.Plugins.SoundsiblePlayback.liveState().then(s=>window.__liveState=s)")
                 waitFor("!!window.__liveState?.host?.connected")
+                hostedRoomId = org.json.JSONTokener(web.evaluate(scenario, "window.__liveState.host.session.id")).nextValue() as String
                 assertEquals("false", web.evaluate(scenario, "JSON.stringify(window.__liveState).includes('publish_token') || JSON.stringify(window.__liveState).includes('host_token')"))
                 web.evaluate(scenario, "(()=>{const field=document.querySelector('[data-native-live] input');field.value='UI updated title';field.dispatchEvent(new Event('input',{bubbles:true}));field.form.requestSubmit();})()")
                 waitFor("document.querySelector('[data-native-live] h3')?.textContent==='UI updated title'")
-                web.evaluate(scenario, "(()=>{const field=document.querySelector('[data-native-live] input[placeholder]');field.value='UI chat message';field.dispatchEvent(new Event('input',{bubbles:true}));field.form.requestSubmit();})()")
+                web.evaluate(scenario, "(()=>{const field=document.querySelector('[data-native-live] input[placeholder]');field.value='UI chat message';field.dispatchEvent(new Event('input',{bubbles:true}));})()")
+                waitFor("!document.querySelector('[data-native-live] input[placeholder]').form.querySelector('button').disabled")
+                web.evaluate(scenario, "document.querySelector('[data-native-live] input[placeholder]').form.requestSubmit()")
                 waitFor("document.querySelector('[data-native-live]').innerText.includes('UI chat message')")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='End session').click()")
                 waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Go live' && !b.disabled)")
+                hostedRoomId = null
                 val epoch = connection.generation
                 val room = connection.execute("/api/community/sessions", "POST",
                     "{\"title\":\"UI listener room\"}".toRequestBody("application/json".toMediaType()), emptyMap(), epoch, "ui-listener-room", 15000).use {
@@ -91,7 +96,9 @@ class LiveUiTest {
                 waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Play')")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Play').click()")
                 waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Pause')")
-                web.evaluate(scenario, "(()=>{const field=document.querySelector('[data-native-live] input[placeholder]');field.value='UI guest message';field.dispatchEvent(new Event('input',{bubbles:true}));field.form.requestSubmit();})()")
+                web.evaluate(scenario, "(()=>{const field=document.querySelector('[data-native-live] input[placeholder]');field.value='UI guest message';field.dispatchEvent(new Event('input',{bubbles:true}));})()")
+                waitFor("!document.querySelector('[data-native-live] input[placeholder]').form.querySelector('button').disabled")
+                web.evaluate(scenario, "document.querySelector('[data-native-live] input[placeholder]').form.requestSubmit()")
                 waitFor("document.querySelector('[data-native-live]').innerText.includes('UI guest message')")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Leave room').click()")
                 waitFor("!Array.from(document.querySelectorAll('[data-native-live] button')).some(b=>b.textContent==='Leave room')")
@@ -108,6 +115,7 @@ class LiveUiTest {
         } finally {
             NativeLivePlayer.decodedObservers.remove(sink); publisher?.close()
             roomId?.let { runCatching { connection.execute("/api/community/sessions/$it", "DELETE", null, emptyMap(), connection.generation, "ui-room-cleanup", 15000).close() } }
+            hostedRoomId?.let { runCatching { connection.execute("/api/community/sessions/$it", "DELETE", null, emptyMap(), connection.generation, "ui-host-cleanup", 15000).close() } }
             connection.clearSession(true)
         }
     }

@@ -6,7 +6,7 @@ cierre nativo queda en su worker; DELETE de la resource tiene límite de2s. Las
 Locations detrás de `/media/` conservan exactamente un prefijo y siguen ligadas
 al origen HTTPS, sin credenciales en URL ni fragmentos.
 
-Host y listener tienen hasta tres intentos, con esperas de1/2/4s y deadline30s.
+Host y listener tienen hasta tres reintentos, con esperas de1/2/4s y deadline30s.
 El listener conserva la intención de pausa/reproducción, volumen e identidad
 MediaSession al sustituir el peer. Un cierre explícito o generation nueva cancela
 el trabajo viejo; agotamiento termina el audio y deja el retry manual. El host
