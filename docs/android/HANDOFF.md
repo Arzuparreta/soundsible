@@ -147,8 +147,23 @@ Normal APK/test/JVM52/lint;22.075s instrumentados,
 `/tmp/soundsible-s3b-fixed-placement-native.log` sobre `182a8dff` dirty.
 UI199/1576 + TS. Selector sigue orden vigente del mismo programa; bloquea
 destino retirado/comprometido y cambio de cuenta/programa.
-Siguiente DJ: gestión de fuentes, ownership de bridges al mover/retirar requests,
-negativos restantes y límite largo en servicio.
+Fuentes + ownership de bridges validados sobre `1eec3df3` dirty: Context2 +
+Blocks2 + DJ2 + Recovery10 + Network2,18/0 HTTP/TLS;332.005s instrumentados;
+normal APK/test APK/JVM54/lint, `/tmp/soundsible-s3b-owned-block-native.log`.
+UI200/1581 + TS. Retirar fuente conserva petición/actual/pausa; última fuente
+protegida. Bridge/owner viajan como bloque; un bridge audible protege a owner
+ y bridges pendientes, y placement/repair arrancan después del bloque comprometido.
+Blocks2 suministra rows de ownership controladas a sesión de producción con
+HTTP/TLS/decoders reales; no afirmar que el Core generó bridges en todos los casos.
+Siguiente DJ: negativos restantes, ambas entradas indisponibles y larga sesión
+hasta1000 en servicio/controller, luego regresión principal actual.
+
+Trabajo teléfono en copia independiente `/tmp/soundsible-android-next`, rama
+`feat/android-phone-continuation` sobre `1eec3df3`: compartir canción en menú,
+SharePlugin/ShareTest y helper mobile/share en desarrollo. Dirigidos UI3 + TS
+pasan en `/tmp/soundsible-s2ah-share-ui.log`; Native aún sin compilar/ejecutar.
+No copiar fuentes network antiguas: están preservadas en stash del clone.
+Tras cierre de bloque DJ, integrar sólo archivos de compartir y validarlos.
 Android Auto: browse draft en ProgramCarLibrary, requiere integración, selección,
 Radio, covers/offline y aceptación de host. Live y firma siguen pendientes.
 

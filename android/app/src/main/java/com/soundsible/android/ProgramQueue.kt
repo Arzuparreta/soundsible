@@ -20,6 +20,7 @@ object ProgramQueue {
     const val PROFILE = "soundsible_profile"
     const val SOURCE = "soundsible_source"
     const val KEY = "soundsible_occurrence"
+    const val BRIDGE_OWNER = "soundsible_bridge_owner"
     const val PROGRAM = "soundsible_program"
     val command = SessionCommand("soundsible.queue.edit", Bundle.EMPTY)
     fun key(player: Player, index: Int): String = player.getMediaItemAt(index).mediaMetadata.extras?.getString(KEY) ?: ""
@@ -79,7 +80,7 @@ object ProgramQueue {
         }
     }
     /** Called on the service's player looper: validate actual queue, then mutate it once. */
-    fun edit(player: Player, connection: EngineConnection, args: Bundle, beforeRetry: () -> Unit = {}, resume: (MediaItem) -> Long = { 0 }, manualInsertion: Int? = null, protectedThrough: Int? = null) {
+    fun edit(player: Player, connection: EngineConnection, args: Bundle, beforeRetry: () -> Unit = {}, resume: (MediaItem) -> Long = { 0 }, manualInsertion: Int? = null, protectedThrough: Int? = null, editBlock: ((String, Int, Int) -> Unit)? = null) {
         require(args.getLong("generation", -1) == connection.generation && (connection.cookieHeader(connection.generation) != null || connection.offline.canUse(connection.generation)))
         require(args.getString("queueToken") == token(player))
         val action = args.getString("action")
@@ -125,8 +126,8 @@ object ProgramQueue {
                 player.prepare() // Retry at the retained position and keep the latest playWhenReady intention.
             }
             "select" -> { if (index == player.currentMediaItemIndex && (player.playerError != null || player.playbackState == Player.STATE_ENDED)) beforeRetry(); player.seekTo(index, resume(player.getMediaItemAt(index))); if (player.playerError != null || player.playbackState == Player.STATE_ENDED) player.prepare(); player.play() }
-            "move" -> { val target = args.getInt("toIndex", -1); require(target in 0 until player.mediaItemCount); player.moveMediaItem(index, target) }
-            "remove" -> { if (player.mediaItemCount == 1) { player.stop(); player.clearMediaItems() } else player.removeMediaItem(index) }
+            "move" -> { val target = args.getInt("toIndex", -1); require(target in 0 until player.mediaItemCount); if (editBlock != null) editBlock("move", index, target) else player.moveMediaItem(index, target) }
+            "remove" -> { if (editBlock != null) editBlock("remove", index, index) else if (player.mediaItemCount == 1) { player.stop(); player.clearMediaItems() } else player.removeMediaItem(index) }
             else -> error("INVALID_EDIT")
         }
     }

@@ -58,3 +58,10 @@ it('keeps a failed request open for retry and blocks submission during another c
   await fireEvent.submit(view.getByTestId('android-dj-placement'));
   await waitFor(() => expect(mocks.close).toHaveBeenCalled()); expect(execute).toHaveBeenCalledTimes(2);
 });
+
+it('offers complete future blocks and excludes the owner of a prepared bridge', () => {
+  const { view, change } = picker();
+  change({ ...initial, index: 0, items: [...initial.items, { ...song, key: 'bridge', routeOwnerKey: 'owner' }, { ...song, key: 'owner' }, { ...song, key: 'later' }],
+    dj: { ...initial.dj!, editableFrom: 2, protectedKeys: ['current', 'cued', 'future'] } });
+  expect([...view.getByRole('combobox').querySelectorAll('option')].map(option => option.value)).toEqual(['', 'owner', 'later']);
+});

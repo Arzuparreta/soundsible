@@ -91,3 +91,20 @@ it('allows song actions on cued DJ rows but forbids removal when a handoff becom
   await fireEvent.click(container.querySelector('[data-queue-key=second] [data-row-menu]')!);
   expect(onMenu.mock.calls[1][2][0].disabled).toBe(true);
 });
+
+it('moves a requested block past its own bridge and locks the owner of a prepared bridge', async () => {
+  const song = initial.items[0];
+  const items = [{ ...song, key: 'seed' }, { ...song, key: 'filler' }, { ...song, key: 'bridge', routeOwnerKey: 'request' },
+    { ...song, key: 'request' }, { ...song, key: 'last' }];
+  const [state, setState] = createSignal<ProgramState>({ ...initial, index: 0, items,
+    dj: { active: true, phase: 'ready', profile: 'adaptive', editableFrom: 1, protectedKeys: ['seed'] } });
+  const command = vi.fn(async () => {}); const onMenu = vi.fn();
+  const { container } = render(() => <ProgramQueue state={state()} pending={false} command={command} onMenu={onMenu} />);
+  await fireEvent.click(screen.getByText('musicExplorer.edit'));
+  await fireEvent.click(container.querySelector('[data-queue-key=request] [data-queue-action=up]')!);
+  expect(command).toHaveBeenLastCalledWith({ action: 'move', index: 3, key: 'request', queueToken: initial.queueToken, toIndex: 1 });
+  setState({ ...state(), index: 1, dj: { ...state().dj!, editableFrom: 4, protectedKeys: ['filler', 'bridge', 'request'] } });
+  expect((container.querySelector('[data-queue-key=request] [data-queue-action=remove]') as HTMLButtonElement).disabled).toBe(true);
+  await fireEvent.click(container.querySelector('[data-queue-key=request] [data-row-menu]')!);
+  expect(onMenu.mock.calls[0][2][0].disabled).toBe(true);
+});

@@ -27,32 +27,42 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
     fun repair() {
         val programme = owner() ?: error("NO_DJ")
         val snapshot = programme.routeSnapshot()
-        val future = snapshot.rows.drop(snapshot.floor + 1).take(16)
+        val start = programme.editableFrom()
+        val locked = snapshot.rows.subList(snapshot.floor + 1, start)
+        val allFuture = snapshot.rows.drop(start)
+        var count = minOf(16, allFuture.size)
+        allFuture.take(count).mapNotNull { it.ownerKey }.forEach { owner ->
+            count = maxOf(count, allFuture.indexOfFirst { key(it.item) == owner } + 1)
+        }
+        val future = allFuture.take(count)
         require(future.size >= 2)
-        val seed = snapshot.rows[snapshot.floor].item
-        val body = body(snapshot).put("route", JSONArray(future.map { row -> reference(row) }))
+        val seed = snapshot.rows[start - 1].item
+        val body = body(snapshot, start - 1).put("route", JSONArray(future.map { row -> reference(row) }))
         submit(programme, snapshot, body, "dj-repair", "repairing", false) { answer ->
-            rows(answer, seed, future) + snapshot.rows.drop(snapshot.floor + 17)
+            locked + rows(answer, seed, future) + allFuture.drop(count)
         }
     }
     fun place(track: MediaItem, beforeKey: String?) {
         val programme = owner() ?: error("NO_DJ")
         clear()
-        val snapshot = programme.addRequested(track, beforeKey)
-        val future = snapshot.rows.drop(snapshot.floor + 1).filter { key(it.item) != key(track) }
-        val horizon = if (beforeKey == null) future.take(16) else future
-        val payload = body(snapshot).put("route", JSONArray(horizon.map { reference(it) }))
+        val destination = beforeKey?.let(programme::blockStartKey)
+        val snapshot = programme.addRequested(track, destination)
+        val start = programme.editableFrom()
+        val locked = snapshot.rows.subList(snapshot.floor + 1, start)
+        val future = snapshot.rows.drop(start).filter { key(it.item) != key(track) }
+        val horizon = if (destination == null) future.take(16) else future
+        val payload = body(snapshot, start - 1).put("route", JSONArray(horizon.map { reference(it) }))
             .put("track", planner.reference(track)).put("requested_queue_id", key(track))
-        beforeKey?.let { payload.put("before_queue_id", it) }
+        destination?.let { payload.put("before_queue_id", it) }
         submit(programme, snapshot, payload, "dj-place", "placing", true, track.mediaMetadata.title?.toString() ?: "") { answer ->
-            placement(answer, snapshot.rows[snapshot.floor].item, future, track, beforeKey)
+            locked + placement(answer, snapshot.rows[start - 1].item, future, track, destination)
         }
     }
-    private fun reference(row: ProgramDjSession.Row) = planner.reference(row.item).put("queue_id", key(row.item)).put("route_kind", row.kind)
-    private fun body(snapshot: ProgramDjSession.RouteSnapshot) = JSONObject()
-        .put("dj_profile", planner.profile).put("seed", planner.reference(snapshot.rows[snapshot.floor].item))
+    private fun reference(row: ProgramDjSession.Row) = planner.reference(row.item).put("queue_id", key(row.item)).put("route_kind", row.kind).apply { row.ownerKey?.let { put("owner_queue_id", it) } }
+    private fun body(snapshot: ProgramDjSession.RouteSnapshot, seedIndex: Int = snapshot.floor) = JSONObject()
+        .put("dj_profile", planner.profile).put("seed", planner.reference(snapshot.rows[seedIndex].item))
         .put("source_policy", "explicit").put("sources", JSONArray(planner.sources.toString()))
-        .put("exclude", JSONArray(snapshot.rows.take(snapshot.floor + 1).map { it.item.mediaId }))
+        .put("exclude", JSONArray(snapshot.rows.take(seedIndex + 1).map { it.item.mediaId }))
     private fun submit(programme: ProgramDjSession, snapshot: ProgramDjSession.RouteSnapshot, body: JSONObject,
         endpoint: String, phase: String, keepRequest: Boolean, title: String = "",
         decode: (JSONObject) -> List<ProgramDjSession.Row>) {
@@ -120,7 +130,8 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
                 require(parsed.getString("id") == requested.mediaId && parsed.getString("source") == requested.mediaMetadata.extras!!.getString(ProgramQueue.SOURCE))
                 requests++; requested
             } else ProgramQueue.items(connection, decoded, requested.mediaMetadata.extras!!.getString(ProgramQueue.PROGRAM)!!).single()
-            additions.add(ProgramDjSession.Row(item, planner.proposal(candidate, previous), kind)); previous = key(item)
+            val owned = bridgeOwner(item, kind, candidate.optString("owner_queue_id"), setOf(key(requested)))
+            additions.add(ProgramDjSession.Row(owned, planner.proposal(candidate, previous), kind)); previous = key(owned)
         }
         require(requests == 1)
         val tail = future.drop(insertion).toMutableList()
@@ -128,6 +139,12 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
             if (tail.isNotEmpty()) tail[0] = tail[0].copy(proposal = planner.proposal(JSONObject().put("transition", transition), previous))
         }
         return future.take(insertion) + additions + tail
+    }
+    private fun bridgeOwner(item: MediaItem, kind: String, owner: String, anchors: Set<String>): MediaItem {
+        val extras = android.os.Bundle(item.mediaMetadata.extras)
+        if (kind == "bridge") { require(owner in anchors); extras.putString(ProgramQueue.BRIDGE_OWNER, owner) }
+        else extras.remove(ProgramQueue.BRIDGE_OWNER)
+        return item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setExtras(extras).build()).build()
     }
     private fun key(item: MediaItem) = item.mediaMetadata.extras?.getString(ProgramQueue.KEY) ?: ""
     private fun rows(response: JSONObject, seed: MediaItem, future: List<ProgramDjSession.Row>): List<ProgramDjSession.Row> {
@@ -157,8 +174,9 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
                 ProgramQueue.items(connection, decoded, programme).single()
             }
             require(seenKeys.add(key(item)))
-            result.add(ProgramDjSession.Row(item, planner.proposal(candidate, previous), kind))
-            previous = key(item)
+            val owned = bridgeOwner(item, kind, candidate.optString("owner_queue_id"), anchors.toSet())
+            result.add(ProgramDjSession.Row(owned, planner.proposal(candidate, previous), kind))
+            previous = key(owned)
         }
         require(returned == anchors) { "REPAIR_LOST_USER_ANCHOR" }
         return result

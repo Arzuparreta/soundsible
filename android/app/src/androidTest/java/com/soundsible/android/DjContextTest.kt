@@ -98,6 +98,15 @@ class DjContextTest {
                 waitFor("window.__dj.dj.editRevision>window.__fixedRevision && window.__dj.dj.editOutcome==='placed'")
                 assertEquals("true", web.evaluate(scenario, "(()=>{let target=window.__dj.items.findIndex(i=>i.key===window.__fixedTarget);let placed=window.__dj.items[target-1];return target>0 && placed.id==='member-pcm-loud' && !window.__fixedBefore.includes(placed.key)})()"))
                 retained()
+                web.evaluate(scenario, "window.__fixedRequest=window.__dj.items[window.__dj.items.findIndex(i=>i.key===window.__fixedTarget)-1].key;document.querySelector('[data-program-menu]').click()")
+                waitFor("!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Sources')")
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Sources').click()")
+                waitFor("!!document.querySelector('[data-testid=android-dj-sources]')")
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-dj-sources] button')).find(b=>b.getAttribute('aria-label')==='Remove the member louder PCM song source').click()")
+                waitFor("window.__dj.dj.sources.length===1 && document.querySelectorAll('[data-testid=android-dj-sources] button').length===1")
+                assertEquals("true", web.evaluate(scenario, "document.querySelector('[data-testid=android-dj-sources] button').disabled"))
+                assertEquals("true", web.evaluate(scenario, "window.__dj.items.some(i=>i.key===window.__fixedRequest)"))
+                retained()
             } finally {
                 web.evaluate(scenario, "clearInterval(window.__djTimer)")
                 val generation = connection.generation

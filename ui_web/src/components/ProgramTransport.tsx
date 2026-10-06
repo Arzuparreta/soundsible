@@ -56,6 +56,15 @@ export default function ProgramTransport(props: { state: ProgramState; pending: 
           void run({ action: 'djSettings', programToken, profile });
         },
       })).concat([{
+        label: t('autoMode.source.title'), selected: false,
+        onSelect: () => {
+          const current = () => props.state.generation === generation && props.state.programToken === programToken && props.state.dj?.active === true;
+          if (disabled() || !current()) return;
+          void import('../mobile/DjSources').then(({ openNativeDjSources }) => {
+            if (current()) openNativeDjSources(() => props.state, () => props.pending, props.command);
+          });
+        },
+      }, {
         label: t('autoMode.dj.direction'), selected: false,
         onSelect: () => {
           const current = () => props.state.generation === generation && props.state.programToken === programToken && props.state.dj?.active === true;

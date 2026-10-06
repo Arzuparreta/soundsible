@@ -21,7 +21,8 @@ export function openNativeDjPlacement(track: ProgramTrack, state: () => ProgramS
     const targets = createMemo(() => {
       const observed = state();
       if (!observed?.dj?.active) return [];
-      return observed.items.slice(Math.max(observed.index + 1, observed.dj.editableFrom ?? observed.index + 1));
+      return observed.items.slice(Math.max(observed.index + 1, observed.dj.editableFrom ?? observed.index + 1))
+        .filter(item => !item.routeOwnerKey && !observed.dj?.protectedKeys?.includes(item.key));
     });
     const validTarget = () => !beforeKey() || targets().some(item => item.key === beforeKey());
     const disabled = () => !current() || !state()?.ready || pending() || busy() || !validTarget() || (state()?.items.length ?? 1000) >= 1000;

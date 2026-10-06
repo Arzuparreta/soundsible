@@ -22,7 +22,9 @@ internal class ProgramDjSession(private val context: Context, private val genera
     initial: List<Row>, startPositionMs: Long = 0, private val mixing: () -> Boolean = { true },
     private val refine: (ProgramDjSession) -> Unit = {}, private val changed: () -> Unit = {}) : AutoCloseable {
     companion object { const val CONTEXT_LEAD = "soundsible_dj_context_lead" }
-    data class Row(val item: MediaItem, val proposal: ProgramDjPlan.Proposal? = null, val kind: String = "user")
+    data class Row(val item: MediaItem, val proposal: ProgramDjPlan.Proposal? = null, val kind: String = "user") {
+        val ownerKey: String? get() = item.mediaMetadata.extras?.getString(ProgramQueue.BRIDGE_OWNER)
+    }
     data class RouteSnapshot(val epoch: Long, val revision: Long, val floor: Int, val rows: List<Row>)
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var closed = false
@@ -228,7 +230,32 @@ internal class ProgramDjSession(private val context: Context, private val genera
     fun heardIds(): Set<String> = heard.toSet()
     fun items(): List<MediaItem> = route.map { it.item }
     fun currentIndex(): Int = current
-    fun editableFrom() = protectedIndex() + 1
+    fun protectedKeys(): Set<String> {
+        if (route.isEmpty()) return emptySet()
+        val live = route.subList(current, protectedIndex() + 1)
+        val owners = live.mapNotNull { it.ownerKey }.toSet()
+        return live.map { itemKey(it.item) }.toSet() + route.filter { itemKey(it.item) in owners || it.ownerKey in owners }.map { itemKey(it.item) }
+    }
+    fun blockStartKey(key: String) = itemKey(ProgramDjRoutePolicy.block(route, key, { itemKey(it.item) }, { it.ownerKey }).first().item)
+    fun editBlock(action: String, index: Int, target: Int) {
+        require(index in route.indices && target in route.indices)
+        val moving = ProgramDjRoutePolicy.block(route, itemKey(route[index].item), { itemKey(it.item) }, { it.ownerKey })
+        val locked = protectedKeys()
+        require(moving.none { itemKey(it.item) in locked }) { "A committed route block cannot be edited" }
+        val next = if (action == "remove") {
+            val keys = moving.map { itemKey(it.item) }.toSet(); route.filter { itemKey(it.item) !in keys }
+        } else {
+            require(action == "move")
+            val neighbour = ProgramDjRoutePolicy.block(route, itemKey(route[target].item), { itemKey(it.item) }, { it.ownerKey })
+            require(neighbour.none { itemKey(it.item) in locked })
+            ProgramDjRoutePolicy.moveBlock(route, itemKey(route[index].item), target, { itemKey(it.item) }, { it.ownerKey })
+        }
+        applyPlaylist(next.map { it.item }, false)
+    }
+    fun editableFrom(): Int {
+        val locked = protectedKeys()
+        return maxOf(protectedIndex(), route.indexOfLast { itemKey(it.item) in locked }) + 1
+    }
     private fun protectedIndex() = if (armed || recovering) maxOf(current, indices.maxOrNull() ?: current) else current
     fun routeSnapshot(): RouteSnapshot {
         check(Looper.myLooper() == main.looper && owns())
@@ -247,7 +274,8 @@ internal class ProgramDjSession(private val context: Context, private val genera
     /** The request remains queued even if musical placement is cancelled or fails. */
     fun addRequested(item: MediaItem, beforeKey: String?): RouteSnapshot {
         val floor = protectedIndex()
-        val insertion = beforeKey?.let { key -> route.indexOfFirst { itemKey(it.item) == key }.also { require(it > floor) } } ?: floor + 1
+        val locked = protectedKeys()
+        val insertion = beforeKey?.let(::blockStartKey)?.let { key -> route.indexOfFirst { itemKey(it.item) == key }.also { require(it > floor && key !in locked) } } ?: editableFrom()
         val next = route.take(insertion) + Row(item) + route.drop(insertion)
         applyPlaylist(next.map { it.item }, false)
         return routeSnapshot()
@@ -256,20 +284,23 @@ internal class ProgramDjSession(private val context: Context, private val genera
     fun changeContext(item: MediaItem) {
         check(owns())
         if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
-        val floor = protectedIndex()
+        val floor = editableFrom() - 1
         val anchor = route[floor].item
         fun sameRecording(other: MediaItem) = other.mediaId == item.mediaId &&
             other.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)
-        val lead = if (sameRecording(anchor)) emptyList() else listOf(Row(item))
-        val requests = route.drop(floor + 1).filter { it.kind == "user" && itemKey(it.item) != contextLead &&
-            (lead.isEmpty() || !sameRecording(it.item)) }
+        val lead = if (sameRecording(anchor) || sameRecording(route[current].item)) emptyList() else listOf(Row(item))
+        val future = route.drop(floor + 1)
+        val wanted = future.filter { it.kind == "user" && itemKey(it.item) != contextLead &&
+            (lead.isEmpty() || !sameRecording(it.item)) }.map { itemKey(it.item) }.toSet()
+        val requests = future.filter { itemKey(it.item) in wanted || it.ownerKey in wanted }
         applyPlaylist((route.take(floor + 1) + lead + requests).map { it.item }, false)
         contextLead = lead.firstOrNull()?.item?.let(::itemKey)
     }
     fun pin(key: String) {
         check(owns())
-        if (contextLead == key) contextLead = null
-        val index = route.indexOfFirst { itemKey(it.item) == key }
+        val parent = route.firstOrNull { itemKey(it.item) == key }?.ownerKey ?: key
+        if (contextLead == parent) contextLead = null
+        val index = route.indexOfFirst { itemKey(it.item) == parent }
         if (index < 0 || route[index].kind == "user") return
         route = route.toMutableList().also { it[index] = it[index].copy(kind = "user") }
         routeRevision++; changed()
@@ -282,11 +313,19 @@ internal class ProgramDjSession(private val context: Context, private val genera
         require(items.all { item -> itemKey(item).isNotBlank() &&
             item.mediaMetadata.extras?.getLong(ProgramPcmProcessor.GENERATION, -1) == generation &&
             item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) in listOf("local", "preview") })
+        val ownerGroups = items.withIndex().filter { it.value.mediaMetadata.extras?.getString(ProgramQueue.BRIDGE_OWNER) != null }
+            .groupBy { it.value.mediaMetadata.extras!!.getString(ProgramQueue.BRIDGE_OWNER)!! }
+        ownerGroups.forEach { (owner, bridges) ->
+            val ownerIndex = items.indexOfFirst { itemKey(it) == owner }
+            require(ownerIndex >= 0 && ownerIndex == bridges.last().index + 1 &&
+                bridges.zipWithNext().all { (before, after) -> after.index == before.index + 1 }) { "Orphaned or separated DJ bridge" }
+        }
         val before = route.associateBy { itemKey(it.item) }
         val oldCurrent = route.getOrNull(current)?.item?.let(::itemKey)
         val slotKeys = indices.map { index -> route.getOrNull(index)?.item?.let(::itemKey) }
         if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
         val retained = items.map(::itemKey).toSet()
+        if (!force) require(protectedKeys().all { it in retained }) { "A committed route owner cannot be removed" }
         if ((armed || recovering) && !force) require(slotKeys.filterNotNull().all { it in retained }) { "A committed transition cannot be removed" }
         if ((armed || recovering) && !force) {
             val committed = indices.filter { it >= 0 }.sorted().map { itemKey(route[it].item) }
@@ -321,7 +360,10 @@ internal class ProgramDjSession(private val context: Context, private val genera
         }
         player.routeChanged(); changed()
     }
-    fun retire(id: String) { applyPlaylist(items().filter { it.mediaId != id || it.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) != "local" }, true) }
+    fun retire(id: String) {
+        val removed = route.filter { it.item.mediaId == id && it.item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == "local" }.map { itemKey(it.item) }.toSet()
+        applyPlaylist(route.filter { itemKey(it.item) !in removed && it.ownerKey !in removed }.map { it.item }, true)
+    }
     /** A replan changes only uncommitted future; already rendered inputs keep their occurrence. */
     fun replaceFuture(rows: List<Row>) {
         check(owns())
@@ -330,8 +372,10 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val prefix = route.take(protected + 1)
         val committedIds = prefix.map { it.item.mediaId }.toSet()
         val candidates = rows.drop(1).filter { it.item.mediaId !in committedIds }
-        val future = ProgramDjRoutePolicy.retainPins(route.drop(protected + 1), candidates,
-            { it.kind == "user" }, { it.item.mediaId })
+        val previous = route.drop(protected + 1)
+        val anchors = previous.filter { it.kind == "user" }.map { itemKey(it.item) }.toSet()
+        val future = ProgramDjRoutePolicy.retainPins(previous, candidates,
+            { it.kind == "user" || it.ownerKey in anchors }, { it.item.mediaId })
         val next = prefix + future
         applyPlaylist(next.map { it.item }, false)
         route = next; player.routeChanged()

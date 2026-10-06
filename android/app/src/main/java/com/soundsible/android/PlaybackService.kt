@@ -102,6 +102,7 @@ class PlaybackService : MediaLibraryService() {
             putString("djPhase", phase); putString("djProfile", profile); putInt("djErrorStatus", code)
             putLong("djEditRevision", djRouteEditor?.revision ?: 0)
             putInt("djEditableFrom", dj?.editableFrom() ?: 0)
+            putString("djProtectedKeys", org.json.JSONArray(dj?.protectedKeys()?.toList() ?: emptyList<String>()).toString())
             putString("djEditOutcome", djRouteEditor?.outcome ?: "idle")
             putString("djRequestTitle", djRouteEditor?.requestTitle ?: "")
             putString("djDirection", djPlanner.direction.toString()); putString("djSources", djPlanner.sources.toString())
@@ -383,7 +384,7 @@ class PlaybackService : MediaLibraryService() {
                         else require(args.getString("queueToken") == ProgramQueue.token(player))
                         closeProgram()
                     } else {
-                        ProgramQueue.edit(player, connection, args, { previews.manualRetry() }, podcasts::position, (radio.manualInsertion() ?: autoplay.manualInsertion()), dj?.editableFrom()?.minus(1))
+                        ProgramQueue.edit(player, connection, args, { previews.manualRetry() }, podcasts::position, (radio.manualInsertion() ?: autoplay.manualInsertion()), dj?.editableFrom()?.minus(1), dj?.let { owner -> { action, index, target -> owner.editBlock(action, index, target) } })
                         if (args.getString("action") == "move") args.getString("key")?.let { dj?.pin(it) }
                     }
                     SessionResult(SessionResult.RESULT_SUCCESS) } catch (failure: Exception) {

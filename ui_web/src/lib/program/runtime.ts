@@ -5,7 +5,7 @@ export interface ProgramState {
   playWhenReady: boolean; errorKind: '' | 'connection' | 'server' | 'auth' | 'permission' | 'source';
   state: number; index: number; id: string; title: string; artist: string;
   items: ProgramOccurrence[]; queueToken: string; programToken?: string; queue: string[]; positionMs: number; durationMs: number; error: number; errorStatus: number;
-  dj?: { active: boolean; phase: string; profile: DjProfile; editRevision?: number; editableFrom?: number; editOutcome?: string; requestTitle?: string; direction?: DjDirection; sources?: DjMusicSetSource[] } | null;
+  dj?: { active: boolean; phase: string; profile: DjProfile; editRevision?: number; editableFrom?: number; protectedKeys?: string[]; editOutcome?: string; requestTitle?: string; direction?: DjDirection; sources?: DjMusicSetSource[] } | null;
   radio?: { active: boolean; phase: string; profile: 'familiar' | 'balanced' | 'explore' } | null;
   leveling?: { enabled: boolean | null; settingsPhase: string } | null;
   mixing?: { enabled: boolean | null; settingsPhase: string } | null;
@@ -15,7 +15,7 @@ export interface ProgramState {
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
 }
 export interface ProgramContext { kind: 'album' | 'artist' | 'playlist'; id: string }
-export interface ProgramOccurrence extends ProgramTrack { key: string; generated?: boolean; generatedSource?: 'radio' | 'autoplay' | null }
+export interface ProgramOccurrence extends ProgramTrack { key: string; routeOwnerKey?: string | null; generated?: boolean; generatedSource?: 'radio' | 'autoplay' | null }
 export interface ProgramTrack { loudness_lufs?: number | null; loudness_peak_dbtp?: number | null; duration?: number; offline?: boolean; source: 'local' | 'preview' | 'podcast'; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }

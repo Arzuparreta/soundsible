@@ -531,5 +531,39 @@
       "complete DJ parity",
       "physical acceptance"
     ]
+  },
+  "dj_sources_and_owned_blocks": {
+    "source_base_revision": "1eec3df3",
+    "dirty": true,
+    "tests": 18,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 332.005,
+    "log": "/tmp/soundsible-s3b-owned-block-native.log",
+    "normal_build": "APK/test APK/JVM54/lint pass without temporary CA",
+    "ui": {
+      "files": 200,
+      "tests": 1581,
+      "typescript": "pass",
+      "log": "/tmp/soundsible-s3b-block-full-ui.log"
+    },
+    "proves": [
+      "real library/route/context/fixed placement and source removal HTTP/TLS via Core and service",
+      "source removal retains explicit requested occurrence and paused playback; last source protected",
+      "controlled owned bridge rows in production session with real authenticated decoders: moving bridge or owner moves complete block",
+      "bridge or owner removal drops the complete future block; same recording in another occurrence retained",
+      "audible bridge protects dependent owner and remaining bridge block from removal and insertion",
+      "fixed destination normalizes to block start; musical fallback stays after committed block",
+      "edits retain output epoch and usable nonzero PCM; existing Recovery10, Network2 and DjProgram2 pass"
+    ],
+    "does_not_prove": [
+      "Core-generated bridge ownership across every audio-analysis combination",
+      "all malformed endpoint responses",
+      "both inputs unavailable recovery",
+      "long1000 session through service/controller",
+      "complete DJ parity",
+      "physical acoustic acceptance"
+    ]
   }
 }
