@@ -4,11 +4,14 @@ import { setLocale } from '../lib/i18n';
 import LibraryBrowser from './LibraryBrowser';
 import { dispatchNavigationBack } from './backNavigation';
 import type { OfflineState } from './offline';
-const { request } = vi.hoisted(() => ({ request: vi.fn() }));
+const { request, menu } = vi.hoisted(() => ({ request: vi.fn(), menu: vi.fn() }));
+vi.mock('../lib/contextMenu', () => ({ openContextMenu: menu }));
+// jsdom has no layout for the virtualizer; order is what is under test here, so render every row.
+vi.mock('../components/VirtualBrowseRows', () => ({ VirtualBrowseRows: (props: { tracks: { title: string }[] }) => <ol data-all-rows>{props.tracks.map(track => <li>{track.title}</li>)}</ol> }));
 vi.mock('../lib/http', () => ({ request }));
 const a = { id: 'a', title: 'One', artist: 'Artist', album: 'Album' };
 const b = { ...a, id: 'b', title: 'Two' };
-beforeEach(() => { cleanup(); setLocale('en'); request.mockReset(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
+beforeEach(() => { cleanup(); setLocale('en'); request.mockReset(); menu.mockReset(); localStorage.clear(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
 it('collection preparation includes all members even when song search filters the view', () => {
   const menu = vi.fn();
   const view = render(() => <LibraryBrowser snapshot={{ tracks: [a, b], playlists: { Flight: ['a', 'b', 'a'] } }} revision={0} onCollectionMenu={menu} />);
@@ -33,7 +36,7 @@ it('derives offline album and artist navigation without REST or incomplete songs
 });
 it('album row and collection menus retain the catalog identity without acquiring songs', async () => {
   const entityMenu = vi.fn(), collectionMenu = vi.fn();
-  request.mockImplementation((path: string) => Promise.resolve(path === '/api/library/albums'
+  request.mockImplementation((path: string) => Promise.resolve(path.startsWith('/api/library/albums?')
     ? { albums: [{ id: 'album-one', title: 'Album', album_artist: 'Artist', track_count: 2 }] }
     : { track_ids: ['a', 'b'] }));
   const view = render(() => <LibraryBrowser snapshot={{ tracks: [a, b] }} revision={0} onEntityMenu={entityMenu} onCollectionMenu={collectionMenu} />);
@@ -63,7 +66,7 @@ it('system Back leaves a collection before its tab and unregisters on disposal',
 });
 it('system Back cancels an unfinished album and ignores its late detail', async () => {
   let resolve!: (value: {track_ids: string[]}) => void;
-  request.mockImplementation((path: string) => path === '/api/library/albums'
+  request.mockImplementation((path: string) => path.startsWith('/api/library/albums?')
     ? Promise.resolve({ albums: [{ id: 'album-one', title: 'Album', album_artist: 'Artist', track_count: 1 }] })
     : new Promise(done => { resolve = done; }));
   const view = render(() => <LibraryBrowser snapshot={{ tracks: [a] }} revision={0} />);
@@ -74,4 +77,33 @@ it('system Back cancels an unfinished album and ignores its late detail', async 
   resolve({ track_ids: ['a'] }); await Promise.resolve();
   expect(view.queryByRole('heading', { name: 'Album' })).toBeNull();
   expect(view.getByText('Songs')).toHaveAttribute('aria-pressed', 'true');
+});
+
+const pick = (label: string) => { const actions = menu.mock.calls.at(-1)![0]; const all = [...(actions.actions ?? []), ...(actions.sections ?? []).flatMap((s: { actions: unknown[] }) => s.actions)];
+  (all.find((action: { label: string }) => action.label === label) as { onSelect(): void }).onSelect(); };
+it('orders and narrows the songs list with the shared preferences, but never a collection', async () => {
+  const songs = [{ ...a, id: 'z', title: 'Zulu' }, { ...a, id: 'm', title: 'Mike', source: 'preview' as const }, { ...a, id: 'b2', title: 'Bravo' }];
+  const view = render(() => <LibraryBrowser snapshot={{ tracks: songs, playlists: { Mix: ['z', 'm', 'b2'] } }} revision={0} onManageOffline={vi.fn()} isFavourite={track => track.id === 'b2'} />);
+  const titles = () => Array.from(view.container.querySelectorAll('[data-all-rows] li')).map(row => row.textContent);
+  fireEvent.click(view.container.querySelector('[data-library-menu]')!); pick('A–Z');
+  await waitFor(() => expect(titles()).toEqual(['Bravo', 'Mike', 'Zulu']));
+  fireEvent.click(view.container.querySelector('[data-library-menu]')!); pick('Downloaded');
+  await waitFor(() => expect(titles()).toEqual(['Bravo', 'Zulu']));
+  expect(localStorage.getItem('library:sort')).toBe('az'); expect(localStorage.getItem('library:filter')).toBe('downloaded');
+  fireEvent.click(view.getByText('Playlists')); fireEvent.click(view.getByText('Mix'));
+  await waitFor(() => expect(titles()).toEqual(['Zulu', 'Mike', 'Bravo']));
+});
+it('asks the engine for the chosen album order and genre, and offers to clear a filter that matches nothing', async () => {
+  request.mockImplementation((path: string) => Promise.resolve(path.startsWith('/api/library/genres') ? { genres: [{ name: 'Jazz', album_count: 1 }] }
+    : path.startsWith('/api/library/years') ? { years: [] }
+    : path.includes('genre=Jazz') ? { albums: [] } : { albums: [{ id: 'x', title: 'Album', album_artist: 'Artist', track_count: 1 }] }));
+  const view = render(() => <LibraryBrowser snapshot={{ tracks: [a] }} revision={0} />);
+  fireEvent.click(view.getByText('Albums')); await waitFor(() => expect(view.getByText('Album')).toBeTruthy());
+  fireEvent.click(view.container.querySelector('[data-album-menu]')!); await waitFor(() => expect(menu).toHaveBeenCalled());
+  pick('Most played'); await waitFor(() => expect(request.mock.calls.some(([path]) => String(path).includes('sort=frequent'))).toBe(true));
+  fireEvent.click(view.container.querySelector('[data-album-menu]')!); await waitFor(() => expect(menu).toHaveBeenCalledTimes(2));
+  pick('Genre'); pick('Jazz');
+  await waitFor(() => expect(view.getByText('No albums match this filter.')).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'All albums' }));
+  await waitFor(() => expect(view.getByText('Album')).toBeTruthy());
 });
