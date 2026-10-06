@@ -546,7 +546,7 @@ class PlaybackService : MediaLibraryService() {
                             org.json.JSONArray(args.getString("sources") ?: "[]"), args.getBoolean("fromCurrent", true))
                     } else if (args.getString("action") == "queue") {
                         require(args.getLong("generation", -1) == connection.generation)
-                        val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"))
+                        val items = ProgramQueue.items(connection, org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACKS")), contextKind = args.getString("contextKind"), contextId = args.getString("contextId"), lane = "context")
                         val index = args.getInt("index", -1); require(index in items.indices)
                         djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", djProfile, 0)
                         autoplay.clear()

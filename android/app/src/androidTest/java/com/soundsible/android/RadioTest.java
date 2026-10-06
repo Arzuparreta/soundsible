@@ -65,7 +65,8 @@ public class RadioTest {
             assertEquals(key,web.evaluate(scenario,"window.__radio.items[0].key"));
             assertEquals("true",web.evaluate(scenario,"!window.__radio.playWhenReady && Math.abs(window.__radio.positionMs-60000)<1000 && window.__radio.items[1].id==='member-radio-0' && new Set(window.__radio.items.map(i=>i.id)).size===window.__radio.items.length"));
             command(web,scenario,"action:'append',tracks:[{source:'local',id:'member-track',title:'Another manual occurrence',artist:'member artist'}]");
-            waitFor(web,scenario,"window.__radio.items[2]?.title==='Another manual occurrence' && !window.__radio.items[2]?.generated");
+            // As on the web, a request plays right after the current song, ahead of the generated runway.
+            waitFor(web,scenario,"window.__radio.items[1]?.title==='Another manual occurrence' && !window.__radio.items[1]?.generated && window.__radio.items[1]?.lane==='manual' && window.__radio.items[2]?.id==='member-radio-0'");
             scenario.recreate();waitFor(web,scenario,"!!document.querySelector('[data-testid=android-library]') && !document.documentElement.hasAttribute('data-booting')");observe(web,scenario);
             waitFor(web,scenario,"window.__radio?.radio?.active && window.__radio.items.length>2");
             // Advance far enough to exhaust the initial runway; refill must happen

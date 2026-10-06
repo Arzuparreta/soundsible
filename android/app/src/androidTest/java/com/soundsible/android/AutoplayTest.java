@@ -68,7 +68,8 @@ public class AutoplayTest {
             assertEquals(key,web.evaluate(scenario,"window.__radio.items[0].key"));
             assertEquals("true",web.evaluate(scenario,"!window.__radio.playWhenReady && window.__radio.items.slice(3).every(i=>i.generatedSource==='autoplay')"));
             command(web,scenario,"action:'append',tracks:[{source:'local',id:'member-track',title:'Another manual occurrence',artist:'member artist'}]");
-            waitFor(web,scenario,"window.__radio.items[3]?.title==='Another manual occurrence' && !window.__radio.items[3].generated");
+            // As on the web, a request plays right after the current song, ahead of the rest of the queue and of autoplay.
+            waitFor(web,scenario,"window.__radio.items[1]?.title==='Another manual occurrence' && !window.__radio.items[1].generated && window.__radio.items[1].lane==='manual' && window.__radio.items.slice(4).every(i=>i.generatedSource==='autoplay')");
             waitFor(web,scenario,"window.__radio.items.length>5");
             int initialCount=Integer.parseInt(web.evaluate(scenario,"window.__radio.items.length"));
             int callsBefore;

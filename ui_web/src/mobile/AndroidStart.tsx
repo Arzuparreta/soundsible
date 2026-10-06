@@ -5,7 +5,9 @@ import { nativeInviteLink } from './inviteLink';
 import { createIncomingInvite } from './incomingInvite';
 import { canPlayOnDevice, nativeMusicLinkActions, openNativePlayOnDevice } from './songActions';
 import { trackMusic } from '../lib/musicLinks';
-import { nativeDevices } from './devices';
+import { nativeDevices, type NativeDeviceState } from './devices';
+import { createNativeResume } from './resume';
+import { ResumeBannerView } from '../components/ResumeBannerView';
 import { claimPairing, pairingCode, pairingPayload, PairingError, type PairingTarget } from './pairing';
 import { openNativeLive } from './Live';
 import type { createNativeAppearance } from './appearance';
@@ -291,6 +293,21 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
     } catch { setError(t('android.connectFailed')); }
     finally { setBusy(false); }
   }
+  // This phone's registration with Core, so a resumed session can be handed to it.
+  const [device, setDevice] = createSignal<NativeDeviceState | null>(null);
+  onMount(() => {
+    let alive = true, listener: { remove(): Promise<void> } | undefined;
+    void nativeDevices.deviceState().then(state => { if (alive) setDevice(state); }).catch(() => {});
+    void nativeDevices.addListener('nativeDeviceState', state => { if (alive) setDevice(state); }).then(handle => { if (alive) listener = handle; else void handle.remove(); }).catch(() => {});
+    onCleanup(() => { alive = false; void listener?.remove(); });
+  });
+  const resumeOffer = createNativeResume({
+    identity: () => { user(); return epoch; },
+    available: () => !!user() && !stale(),
+    idle: () => !program()?.queue.length,
+    // `generation` is not reactive; the account signal is set after it, so read it to re-check this phone's registration.
+    self: () => { const account = user(); const state = device(); return account && state?.connected && state.generation === generation ? state.device_id : null; },
+  });
   /** Core names each session after the device it came from, as it appears in Settings → Devices. */
   const sessionName = () => engine.deviceName().then(value => value.name).catch(() => 'Android');
   const [manualPairing, setManualPairing] = createSignal(false);
@@ -430,6 +447,8 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
         <button type="button" disabled={busy()} onClick={() => void leave(false)}>{t('android.logout')}</button>
         <button type="button" disabled={busy()} onClick={() => void leave(true)}>{t('android.changeServer')}</button></header>}
     </Show>
+    <ResumeBannerView offer={resumeOffer.offer()} busy={resumeOffer.busy()} onDismiss={resumeOffer.dismiss}
+      onResume={() => void resumeOffer.resume().catch(() => setError(t('deviceSheet.failed')))} />
     <Show when={incomingInvite.selection()}>{invitation => <section class={styles.library} data-testid="android-incoming-invite">
       <h2>{t('invite.title')}</h2><p>{invitation().origin}</p><Show when={user()}><p>{t('android.inviteSignsOut')}</p></Show>
       <button data-invite-connect disabled={busy()} onClick={() => void useIncomingInvite(invitation())}>{t(user() ? 'android.useInvite' : 'android.connect')}</button>

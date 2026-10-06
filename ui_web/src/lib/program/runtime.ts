@@ -15,7 +15,7 @@ export interface ProgramState {
   shuffle: boolean; repeat: 0 | 1 | 2; hasNext: boolean; hasPrevious: boolean;
 }
 export interface ProgramContext { kind: 'album' | 'artist' | 'playlist'; id: string }
-export interface ProgramOccurrence extends ProgramTrack { key: string; routeOwnerKey?: string | null; generated?: boolean; generatedSource?: 'radio' | 'autoplay' | null }
+export interface ProgramOccurrence extends ProgramTrack { key: string; routeOwnerKey?: string | null; generated?: boolean; generatedSource?: 'radio' | 'autoplay' | null; lane?: 'manual' | 'context' | 'generated' | null }
 export interface ProgramTrack { loudness_lufs?: number | null; loudness_peak_dbtp?: number | null; duration?: number; offline?: boolean; source: 'local' | 'preview' | 'podcast' | 'pending'; pendingResolve?: import('../playbackQueue').PendingCatalogReference; mediaKind?: 'podcast_episode'; enclosure?: string; episodeGuid?: string; feedId?: string; id: string; title: string; artist: string; album?: string }
 export type ProgramCommand =
   | { action: 'play' | 'pause' | 'next' | 'previous' }
@@ -28,6 +28,7 @@ export type ProgramCommand =
   | { action: 'metadata'; tracks: { id: string; title: string; artist: string; album: string; album_artist?: string | null; album_id?: string | null; artist_id?: string | null }[] }
   | { action: 'autoplay' | 'leveling' | 'mixing'; enabled: boolean; reload?: boolean }
   | { action: 'stop'; queueToken: string; programToken?: string }
+  | { action: 'clearManual'; queueToken: string }
   | { action: 'retireSource'; id: string }
   | { action: 'seek'; positionMs: number }
   | { action: 'skip'; seconds: -15 | 15; index: number; key: string; queueToken: string }

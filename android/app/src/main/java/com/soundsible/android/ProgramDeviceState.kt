@@ -9,8 +9,8 @@ import org.json.JSONObject
 /** Shared playbackSession v1 wire format. Native source URLs/cookies never travel. */
 @UnstableApi
 internal object ProgramDeviceState {
-    private const val DEVICE_LANE = "soundsible_device_lane"
-    private const val DEVICE_SOURCE = "soundsible_device_source"
+    private const val DEVICE_LANE = ProgramQueue.LANE
+    private const val DEVICE_SOURCE = ProgramQueue.LANE_SOURCE
     private const val DEVICE_CONTEXT = "soundsible_device_context"
     private const val DEVICE_CONTEXT_INDEX = "soundsible_device_context_index"
     private const val DEVICE_PLAN = "soundsible_device_plan"

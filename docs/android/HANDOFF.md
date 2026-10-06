@@ -48,7 +48,7 @@ Estado vigente y forma de trabajar. Lo superado está en
 - [x] S2aw Menú de canción: ir a artista/álbum, «No me interesa» con motivo, reproducir en otro dispositivo.
 - [x] Podcasts: sección Top/recomendados con suscribir y «No me interesa»; filtro «sólo descargados» en el programa.
 - [x] Biblioteca: ordenar (A–Z, recientes, favoritos primero), filtro descargados, álbumes por género/año.
-- [ ] Cola: vaciar la cola manual; aviso de reanudar sesión de otro dispositivo (ResumeBanner).
+- [x] Cola: peticiones tras la canción actual como en la web, vaciar peticiones; aviso de reanudar sesión de otro dispositivo (traspaso vía Core).
 - [ ] Reproductor: silenciar; búsqueda: elegir versión; DJ: «pedir todas» de una colección.
 - [ ] Ajustes: buscador de ajustes.
 - [ ] Puente público/App Links: abrir enlaces https de canción/invitación con VIEW.

@@ -14,6 +14,16 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 @UnstableApi
 object ProgramQueue {
     const val PENDING = "soundsible_catalog_pending"
+    /** Queue lane as the web app models it: what is playing ("context"), what the listener added ("manual"), or a generated runway. */
+    const val LANE = "soundsible_device_lane"
+    const val LANE_SOURCE = "soundsible_device_source"
+    fun lane(player: Player, index: Int): String? = player.getMediaItemAt(index).mediaMetadata.extras?.getString(LANE)
+    /** After the current song and the requests already queued behind it: the web's `manualInsertIndex(…, 'last')`. */
+    fun afterRequests(player: Player): Int {
+        var at = player.currentMediaItemIndex + 1
+        while (at < player.mediaItemCount && lane(player, at) == "manual") at++
+        return at
+    }
     const val PODCAST = "soundsible_podcast"
     const val ENCLOSURE = "soundsible_enclosure"
     const val EPISODE = "soundsible_episode"
@@ -32,7 +42,7 @@ object ProgramQueue {
     }
     const val LIMIT = 1000
     /** Metadata only crosses the bridge. Credentials and source addresses stay native. */
-    fun items(connection: EngineConnection, rows: JSONArray, program: String = "", contextKind: String? = null, contextId: String? = null): List<MediaItem> {
+    fun items(connection: EngineConnection, rows: JSONArray, program: String = "", contextKind: String? = null, contextId: String? = null, lane: String? = null): List<MediaItem> {
         require(rows.length() in 1..LIMIT && rows.toString().toByteArray(Charsets.UTF_8).size <= 256 * 1024)
         require(contextKind == null || contextKind in listOf("album", "artist", "playlist"))
         require(contextId == null || (contextId.isNotBlank() && contextId.length <= 512))
@@ -84,6 +94,7 @@ object ProgramQueue {
                             reference?.let { putDouble(ProgramPcmProcessor.ALBUM_LUFS, it.lufs); putDouble(ProgramPcmProcessor.ALBUM_PEAK, it.peakDbtp) }
                         }
                         if (pending != null) putString(PENDING, pending.toString())
+                        if (lane != null) { putString(LANE, lane); putString(LANE_SOURCE, if (lane == "context") contextKind ?: "library" else "library") }
                         putBoolean(PODCAST, podcast); if (podcast) { putString(ENCLOSURE, enclosure); putString(EPISODE, episode); putString(FEED, feed); putString(PROFILE, connection.offline.profileKey(connection.generation)) }; putString(KEY, key); putString(PROGRAM, owner); putString(SOURCE, source); putBoolean("offline", offline) }).build()).build()
         }
     }
@@ -92,9 +103,16 @@ object ProgramQueue {
         require(args.getLong("generation", -1) == connection.generation && (connection.cookieHeader(connection.generation) != null || connection.offline.canUse(connection.generation)))
         require(args.getString("queueToken") == token(player))
         val action = args.getString("action")
+        if (action == "clearManual") {
+            // Requests only: the current song, its context and any generated runway stay. A DJ route has no request lane.
+            require(protectedThrough == null && player.mediaItemCount > 0)
+            for (i in player.mediaItemCount - 1 downTo player.currentMediaItemIndex + 1) if (lane(player, i) == "manual") player.removeMediaItem(i)
+            return
+        }
         if (action == "append" || action == "insertAfter") {
             val empty = player.mediaItemCount == 0
-            val insertion = if (action == "append") (manualInsertion ?: player.mediaItemCount).also { require(it in 0..player.mediaItemCount) } else {
+            val runway = manualInsertion ?: player.mediaItemCount
+            val insertion = if (action == "append") (if (empty || protectedThrough != null) runway else minOf(afterRequests(player), runway)).also { require(it in 0..player.mediaItemCount) } else {
                 val anchor = args.getInt("index", -1)
                 if (empty) { require(anchor == -1 && args.getString("key") == ""); 0 }
                 else {
@@ -105,7 +123,7 @@ object ProgramQueue {
             }
             val rows = JSONArray(args.getString("tracks") ?: error("NO_TRACKS"))
             require(rows.length() in 1..(LIMIT - player.mediaItemCount))
-            val additions = items(connection, rows, programToken(player)) // Validate the entire payload before changing the player.
+            val additions = items(connection, rows, programToken(player), lane = "manual") // Validate the entire payload before changing the player.
             if (empty) player.pause() // stop/clear can leave playWhenReady set; adding must never autoplay.
             player.addMediaItems(insertion, additions)
             if (empty) player.prepare()

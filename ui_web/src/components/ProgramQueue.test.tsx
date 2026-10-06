@@ -108,3 +108,20 @@ it('moves a requested block past its own bridge and locks the owner of a prepare
   await fireEvent.click(container.querySelector('[data-queue-key=request] [data-row-menu]')!);
   expect(onMenu.mock.calls[0][2][0].disabled).toBe(true);
 });
+it('clears only upcoming requests and marks where the playing context continues', async () => {
+  const command = vi.fn(async () => {});
+  const lanes: ProgramState = { ...initial, index: 0, queue: ['a', 'r1', 'r2', 'c'], items: [
+    { source: 'local', key: 'now', id: 'a', title: 'Now', artist: '', lane: 'context' },
+    { source: 'local', key: 'r1', id: 'r1', title: 'Request one', artist: '', lane: 'manual' },
+    { source: 'local', key: 'r2', id: 'r2', title: 'Request two', artist: '', lane: 'manual' },
+    { source: 'local', key: 'c', id: 'c', title: 'Album next', artist: '', lane: 'context' },
+  ] };
+  const [state, setState] = createSignal(lanes);
+  render(() => <ProgramQueue state={state()} pending={false} command={command} />);
+  expect(screen.getByText('nowPlaying.continuationSection')).toBeVisible();
+  await fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.clearManualQueue' }));
+  expect(command).toHaveBeenCalledWith({ action: 'clearManual', queueToken: lanes.queueToken });
+  setState({ ...lanes, queue: ['a', 'c'], items: [lanes.items[0], lanes.items[3]] });
+  expect(screen.queryByRole('button', { name: 'nowPlaying.clearManualQueue' })).toBeNull();
+  expect(screen.queryByText('nowPlaying.continuationSection')).toBeNull();
+});

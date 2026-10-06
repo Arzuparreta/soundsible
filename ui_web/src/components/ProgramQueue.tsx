@@ -35,12 +35,21 @@ export default function ProgramQueue(props: { state: ProgramState; pending: bool
   const positions = createMemo(() => new Map(rows.getVirtualItems().map(item => [String(item.key), item.start])));
   const run = (command: ProgramCommand) => { void props.command(command).catch(() => {}); };
   const disabled = () => props.pending || !props.state.ready;
+  /** Upcoming songs the listener asked for, as the web's manual lane; the DJ route has none. */
+  const requests = createMemo(() => props.state.dj?.active ? 0 : props.state.items.filter((entry, index) => index > props.state.index && entry.lane === 'manual').length);
+  /** The first upcoming song of what was playing, once requests sit before it: where the web's "Then" section starts. */
+  const continuation = createMemo(() => {
+    const index = props.state.items.findIndex((entry, at) => at > props.state.index && entry.lane === 'context');
+    return index > props.state.index + 1 && props.state.items.slice(props.state.index + 1, index).some(entry => entry.lane === 'manual') ? index : -1;
+  });
   onMount(() => {
     const measure = () => { setHeight(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h')) || 56); rows.measure(); };
     const observer = new ResizeObserver(measure); observer.observe(scroll); measure(); onCleanup(() => observer.disconnect());
   });
   return <section class={styles.queue} data-testid="program-queue" aria-label={t('nowPlaying.manualQueue')} aria-busy={props.pending}>
-    <header><h2>{t('nowPlaying.manualQueue')} · {props.state.items.length}</h2><button type="button" aria-pressed={editing()} onClick={() => setEditing(value => !value)}>{editing() ? t('musicList.done') : t('musicExplorer.edit')}</button></header>
+    <header><h2>{t('nowPlaying.manualQueue')} · {props.state.items.length}</h2><Show when={requests() > 0}><button type="button" data-queue-clear-requests disabled={disabled()}
+      onClick={() => run({ action: 'clearManual', queueToken: props.state.queueToken })}>{t('nowPlaying.clearManualQueue')}</button></Show>
+      <button type="button" aria-pressed={editing()} onClick={() => setEditing(value => !value)}>{editing() ? t('musicList.done') : t('musicExplorer.edit')}</button></header>
     <div ref={scroll} class={styles.scroll}>
       <div style={{ height: `${rows.getTotalSize()}px`, position: 'relative' }}>
         <For each={[...positions().keys()]}>{key => {
@@ -55,7 +64,7 @@ export default function ProgramQueue(props: { state: ProgramState; pending: bool
           };
           const canMove = (target: number) => !protectedRow(row().index) && !protectedRow(target);
           return <Show when={entries().has(key)}><div class={styles.row} data-queue-key={key} data-index={row().index} ref={element => queueMicrotask(() => { if (element.isConnected) rows.measureElement(element); })} style={{ transform: `translateY(${positions().get(key) ?? 0}px)` }}>
-            <MusicListRowView title={row().entry.title || row().entry.id} subtitle={row().entry.artist} annotation={protectedRow(row().index) && row().index > props.state.index ? t('autoMode.dj.cued') : row().entry.generated ? t(row().entry.generatedSource === 'autoplay' ? 'nowPlaying.autoplayQueue' : 'nowPlaying.radioQueue') : undefined} seed={row().entry.id} cover={programCover(row().entry)} actionLabel={`${row().index + 1} · ${row().entry.title || row().entry.id} — ${row().entry.artist}`} index={row().index + 1} playback active={props.state.index === row().index}
+            <MusicListRowView title={row().entry.title || row().entry.id} subtitle={row().entry.artist} annotation={protectedRow(row().index) && row().index > props.state.index ? t('autoMode.dj.cued') : row().entry.generated ? t(row().entry.generatedSource === 'autoplay' ? 'nowPlaying.autoplayQueue' : 'nowPlaying.radioQueue') : row().index === continuation() ? t('nowPlaying.continuationSection') : undefined} seed={row().entry.id} cover={programCover(row().entry)} actionLabel={`${row().index + 1} · ${row().entry.title || row().entry.id} — ${row().entry.artist}`} index={row().index + 1} playback active={props.state.index === row().index}
               disabled={disabled()} playbackTrack={props.state.items[props.state.index]?.key} onActivate={() => run({ action: 'select', ...target() })} onMenu={props.onMenu ? event => {
                 const captured = { ...target(), generation: props.state.generation, programToken: props.state.programToken };
                 props.onMenu?.(row().entry, event, [{ label: t('nowPlaying.removeFromQueue'), danger: true,
