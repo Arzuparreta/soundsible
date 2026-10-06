@@ -101,8 +101,10 @@ public class ConnectionTest {
             try (Response response = request(c, "/api/library", "GET", null)) { assertEquals(200, response.code()); }
             assertTrue("Closed response must return a connection to the shared pool", previousClient.connectionPool().idleConnectionCount() > 0);
             long previous = c.getGeneration();
-            c.configure(server);
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> c.configure(server));
             assertNotSame("Reset must retire the old transport", previousClient, c.getClient());
+            long evictionDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (previousClient.connectionPool().idleConnectionCount() > 0 && System.nanoTime() < evictionDeadline) Thread.sleep(20);
             assertEquals(0, previousClient.connectionPool().idleConnectionCount());
             try { c.execute("/api/library", "GET", null, Collections.emptyMap(), previous, "old", 1000); fail("Old generation accepted"); }
             catch (IllegalArgumentException expected) { }

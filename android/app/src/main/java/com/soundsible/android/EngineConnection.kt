@@ -32,11 +32,20 @@ class EngineConnection(private val context: Context) {
     val resetListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
     private data class Transport(val origin: String, val generation: Long, val client: OkHttpClient)
     private var activeTransport: Transport? = null
+    private val transportRetirement = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+        Thread(task, "soundsible-transport-retirement").apply { isDaemon = true }
+    }
+    private fun retireTransport(client: OkHttpClient) {
+        client.dispatcher.cancelAll()
+        // TLS close can write close_notify. Reset is called on the main thread
+        // during logout/revocation; socket eviction must run outside that thread.
+        transportRetirement.execute { client.connectionPool.evictAll() }
+    }
     val client: OkHttpClient get() = synchronized(lock) { transport(origin, generation) }
     private fun transport(selected: String, epoch: Long): OkHttpClient = synchronized(lock) {
         require(selected == origin && epoch == generation) { "STALE_SESSION" }
         activeTransport?.takeIf { it.origin == selected && it.generation == epoch }?.let { return@synchronized it.client }
-        activeTransport?.client?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll() }
+        activeTransport?.client?.let(::retireTransport)
         buildTransport(selected, epoch).also { activeTransport = Transport(selected, epoch, it) }
     }
     private fun buildTransport(selected: String, epoch: Long = generation): OkHttpClient {
@@ -103,10 +112,7 @@ class EngineConnection(private val context: Context) {
 
     private fun resetLocked() {
         generation++
-        activeTransport?.client?.let {
-            it.dispatcher.cancelAll()
-            it.connectionPool.evictAll()
-        }
+        activeTransport?.client?.let(::retireTransport)
         activeTransport = null
         calls.values.forEach { it.cancel() }
         calls.clear()
