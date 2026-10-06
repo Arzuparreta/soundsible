@@ -69,6 +69,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with:
+          # The retired SDK tools package is still an action default.
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
       - name: Install SDK and JS dependencies
         run: |
