@@ -17,6 +17,11 @@ object ProgramQueue {
     /** Queue lane as the web app models it: what is playing ("context"), what the listener added ("manual"), or a generated runway. */
     const val LANE = "soundsible_device_lane"
     const val LANE_SOURCE = "soundsible_device_source"
+    /** The DJ route role carried with a handoff (`autoRoute`), including the web's `requestGroup`. */
+    const val ROUTE = "soundsible_device_route"
+    /** A collection-wide DJ request; such requests leave with the session that asked for them. */
+    fun requestGroup(item: MediaItem): String? = item.mediaMetadata.extras?.getString(ROUTE)
+        ?.let { runCatching { org.json.JSONObject(it).optString("requestGroup") }.getOrNull() }?.takeIf { it.isNotBlank() }
     fun lane(player: Player, index: Int): String? = player.getMediaItemAt(index).mediaMetadata.extras?.getString(LANE)
     /** After the current song and the requests already queued behind it: the web's `manualInsertIndex(…, 'last')`. */
     fun afterRequests(player: Player): Int {

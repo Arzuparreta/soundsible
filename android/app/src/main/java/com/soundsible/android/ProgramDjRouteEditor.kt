@@ -58,6 +58,33 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
             locked + placement(answer, snapshot.rows[start - 1].item, future, track, destination)
         }
     }
+    /** A collection requested into the set: queued at once, then placed by Core one after another, as on the web. */
+    fun placeGroup(tracks: List<MediaItem>, beforeKey: String?) {
+        val programme = owner() ?: error("NO_DJ")
+        require(tracks.size in 2..ProgramQueue.LIMIT && tracks.map(::key).toSet().size == tracks.size)
+        clear()
+        val destination = beforeKey?.let(programme::blockStartKey)
+        val snapshot = programme.addRequestedGroup(tracks, destination)
+        val start = programme.editableFrom()
+        val locked = snapshot.rows.subList(snapshot.floor + 1, start)
+        val requested = tracks.associateBy(::key)
+        val future = snapshot.rows.drop(start).filter { key(it.item) !in requested }
+        val payload = body(snapshot, start - 1).put("route", JSONArray(future.map { reference(it) }))
+            .put("requests", JSONArray(tracks.map { JSONObject().put("track", planner.reference(it)).put("requested_queue_id", key(it)) }))
+        destination?.let { payload.put("before_queue_id", it) }
+        submit(programme, snapshot, payload, "dj-place", "placing", true, tracks.first().mediaMetadata.title?.toString() ?: "") { answer ->
+            val placements = answer.getJSONArray("placements"); require(placements.length() == tracks.size)
+            var working = future
+            val placed = mutableSetOf<String>()
+            for (index in 0 until placements.length()) {
+                val placement = placements.getJSONObject(index)
+                val item = requested[placement.getString("requested_queue_id")] ?: error("UNKNOWN_REQUEST")
+                require(placed.add(key(item)))
+                working = placement(placement, snapshot.rows[start - 1].item, working, item, destination, Int.MAX_VALUE)
+            }
+            locked + working
+        }
+    }
     private fun reference(row: ProgramDjSession.Row) = planner.reference(row.item).put("queue_id", key(row.item)).put("route_kind", row.kind).apply { row.ownerKey?.let { put("owner_queue_id", it) } }
     private fun body(snapshot: ProgramDjSession.RouteSnapshot, seedIndex: Int = snapshot.floor) = JSONObject()
         .put("dj_profile", planner.profile).put("seed", planner.reference(snapshot.rows[seedIndex].item))
@@ -110,12 +137,12 @@ internal class ProgramDjRouteEditor(private val connection: EngineConnection, pr
             requestId = null; failed(0)
         }
     }
-    private fun placement(response: JSONObject, seed: MediaItem, future: List<ProgramDjSession.Row>, requested: MediaItem, beforeKey: String?): List<ProgramDjSession.Row> {
+    private fun placement(response: JSONObject, seed: MediaItem, future: List<ProgramDjSession.Row>, requested: MediaItem, beforeKey: String?, horizon: Int = 16): List<ProgramDjSession.Row> {
         require(response.getInt("v") == 1 && response.getString("requested_queue_id") == key(requested))
         val insertion = response.getInt("insert_at")
         require(insertion in 0..future.size)
         if (beforeKey != null) require(insertion == future.indexOfFirst { key(it.item) == beforeKey })
-        else require(insertion <= 16)
+        else require(insertion <= horizon)
         val items = response.getJSONArray("items"); require(items.length() in 1..3)
         val additions = mutableListOf<ProgramDjSession.Row>()
         var previous = if (insertion == 0) key(seed) else key(future[insertion - 1].item)

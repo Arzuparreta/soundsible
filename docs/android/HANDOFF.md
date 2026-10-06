@@ -54,20 +54,11 @@ Estado vigente y forma de trabajar. Lo superado está en
 - [x] Ajustes: buscador de ajustes (índice web filtrado a lo que Android dibuja).
 - [—] Silenciar: no se porta. En Android volumen y silencio son del sistema (teclas, controles); el botón web
       existe porque el navegador no los tiene.
-- [ ] DJ «Pedir todas» (el usuario decidió implementarlo, 2026-10-06). **EN CURSO, sin commit ni pruebas:**
-      `ProgramQueue.ROUTE/requestGroup`, `ProgramDjSession.addRequestedGroup` + `replaceFuture`/`changeContext`
-      descartan grupos, `ProgramDjRouteEditor.placeGroup` (Core `dj-place` con `requests`), `djRequest` 1..50.
-      Falta: comprobar formato de respuesta de Core (`v` en cada colocación), acción UI en `djSources.ts`
-      («musicExplorer.requestAll» → `djRequest` con las canciones), unit tests y prueba nativa (grupo se va al
-      «Cambiar sesión», petición suelta sobrevive).
-- [ ] POST_NOTIFICATIONS: declarar y pedir al preparar la primera copia offline (Android 13+).
-- [ ] Después: regresión principal completa (se interrumpió a 13/210 a propósito), pytest completo, browser4,
-      fetch + ancestro, PR `impact:minor` sin automerge con trailer `Co-authored-by: emrothenberg
-      <187884098+emrothenberg@users.noreply.github.com>` (pedido por el usuario). Borrador del cuerpo: ver
-      descripción en la sesión (Native Android app…). El servicio nativo sólo admite
-      peticiones de una canción y no tiene grupos que se vayan al cambiar de sesión; sin eso repetiría el fallo
-      de las 38 favoritas que sobrevivían a los cambios de sesión. Opciones: implementarlo con grupos nativos o
-      dejarlo fuera de Android.
+- [x] DJ «Pedir todas»: acción de colección → lote Core; grupos en `autoRoute.requestGroup`,
+      retirados sólo al cambiar de sesión, con petición suelta y reproducción conservadas.
+      Perfil/dirección/añadir fuentes conservan los grupos.
+- [x] POST_NOTIFICATIONS: declarado; primera preparación offline pide permiso en Android 13+.
+      Conceder/denegar continúa la copia; no se insiste después de denegar.
 - [→] Puente público/App Links: movido a RELEASE_GATES (punto 9). Necesita clave permanente, `assetlinks.json`
       en la raíz `Arzuparreta.github.io` y APK pública; hoy el puente no pasa nada a Android. Las invitaciones
       viven en el dominio de cada servidor (no verificable): su camino es SEND, ya aceptado (S2at).

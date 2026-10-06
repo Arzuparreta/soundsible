@@ -14,7 +14,7 @@ internal object ProgramDeviceState {
     private const val DEVICE_CONTEXT = "soundsible_device_context"
     private const val DEVICE_CONTEXT_INDEX = "soundsible_device_context_index"
     private const val DEVICE_PLAN = "soundsible_device_plan"
-    private const val DEVICE_ROUTE = "soundsible_device_route"
+    private const val DEVICE_ROUTE = ProgramQueue.ROUTE
     private const val DEVICE_YOUTUBE = "soundsible_device_youtube"
     data class Restored(val rows: JSONArray, val index: Int, val positionMs: Long, val shuffle: Boolean, val repeat: Int, val workspace: JSONObject? = null, val entries: JSONArray? = null, val radio: JSONObject? = null)
     fun track(item: MediaItem): JSONObject {

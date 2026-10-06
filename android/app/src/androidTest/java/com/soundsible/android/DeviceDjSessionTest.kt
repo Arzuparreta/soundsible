@@ -52,7 +52,7 @@ class DeviceDjSessionTest {
             val queue = JSONArray()
             for (i in 0..7) queue.put(JSONObject().put("id", "member-track").put("title", "Remote DJ $i").put("artist", "member artist").put("duration", 600)
                 .put("queueId", "remote-$i").put("queueLane", if (i == 4) "manual" else "generated").put("queueSource", "auto_mode")
-                .put("autoRoute", JSONObject().put("kind", when (i) { 3 -> "bridge"; 4 -> "user"; else -> "generated" }).apply { if (i == 3) put("ownerQueueId", "remote-4") }))
+                .put("autoRoute", JSONObject().put("kind", when (i) { 3 -> "bridge"; 4 -> "user"; else -> "generated" }).apply { if (i == 3) put("ownerQueueId", "remote-4"); if (i == 4) put("requestGroup", "remote-collection") }))
             val source = JSONObject().put("id", "direction-source").put("label", "Direction fixture").put("activation", 7)
                 .put("tracks", JSONArray().put(JSONObject().put("id", "member-track").put("title", "Source song").put("artist", "member artist")))
             val transition = JSONObject().put("technique", "safe_fade").put("out_cue", 300).put("in_cue", 0).put("overlap_seconds", 6)
@@ -82,6 +82,7 @@ class DeviceDjSessionTest {
             assertTrue(auto.getJSONArray("avoidedIdentities").toString().contains("avoided-before"))
             val wireQueue = published.getJSONArray("queue")
             assertEquals(wireQueue.getJSONObject(4).getString("queueId"), wireQueue.getJSONObject(3).getJSONObject("autoRoute").getString("ownerQueueId"))
+            assertEquals("remote-collection", wireQueue.getJSONObject(4).getJSONObject("autoRoute").getString("requestGroup"))
             val planned = auto.getJSONObject("plan").getJSONObject(wireQueue.getJSONObject(2).getString("queueId"))
             assertEquals("member-track", planned.getString("fromKey")); assertEquals("Direction fixture", planned.getString("sourceSetLabel"))
             remote("play"); pcm.set(false); await("DJ remote resume did not restore PCM") { main { active.isPlaying } && pcm.get() }
@@ -95,6 +96,7 @@ class DeviceDjSessionTest {
             assertEquals("Native DJ outgoing handoff failed", 0, result.resultCode)
             await("Peer did not receive DJ workspace") { transferred.get()?.optJSONObject("state")?.optJSONObject("session")?.optString("mode") == "auto" }
             assertEquals("cuts_drops", transferred.get()!!.getJSONObject("state").getJSONObject("session").getJSONObject("auto").getString("djProfile"))
+            assertEquals("remote-collection", transferred.get()!!.getJSONObject("state").getJSONObject("session").getJSONArray("queue").getJSONObject(4).getJSONObject("autoRoute").getString("requestGroup"))
             assertFalse("Native credentials entered public workspace", transferred.get().toString().contains("sb_session"))
             assertFalse(main { active.playWhenReady })
             // The peer edits the workspace while retaining this queue's original occurrence IDs.

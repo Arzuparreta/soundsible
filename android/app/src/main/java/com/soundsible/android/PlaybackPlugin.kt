@@ -175,6 +175,7 @@ class PlaybackPlugin : Plugin() {
                 "djContext", "djRequest", "djRepair", "djSettings", "dj", "queue", "play", "select", "move", "remove", "append", "insertAfter", "clearManual", "retry", "stop", "skip", "radio", "autoplay", "leveling", "mixing", "metadata", "retireSource" -> {
                     val args = Bundle().apply {
                         if (call.getString("action") == "metadata") putString("metadataRevision", java.util.UUID.randomUUID().toString())
+                        putBoolean("resetRequestGroups", call.getBoolean("resetRequestGroups") ?: false)
                         putBoolean("fromCurrent", call.getBoolean("fromCurrent") ?: true)
                         putString("direction", call.getObject("direction")?.toString()); putString("sources", call.getArray("sources")?.toString())
                         putBoolean("shuffle", call.getBoolean("shuffle") ?: false)

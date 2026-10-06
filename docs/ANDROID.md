@@ -1,33 +1,25 @@
 # Soundsible para Android: desarrollo del port
 
-**Estado: cliente de desarrollo con conexión, programa nativo local/preview y cola/transporte Solid asíncronos (S2q); copias offline explícitas validadas (S6a), no alpha.**
-La APK conecta a una instancia, inicia sesión como cuenta, conserva la sesión en
-Android y navega canciones, álbumes, artistas y playlists con carátulas y eventos.
-Comparte la fila visual Solid; no carga el runtime Web Audio. Los archivos de la
-biblioteca reproducen con Media3, transporte/seek y shuffle/repeat; la cola permite
-seleccionar, mover, quitar y añadir desde la biblioteca sin reconstruir las fuentes; el servicio conserva
-el programa al recrear la Activity, también al fallar la conexión, y ofrece
-reintento explícito de audio conservando posición/pausa. Usa la sesión multimedia
-de Android. Previews guardados también usan el proxy nativo del motor.
-Podcasts/radio, UI completa, edición/adquisición y teléfono/coche siguen pendientes.
+**Estado: cliente Android de desarrollo, preparado para revisión de la alpha; no hay release pública.**
+La APK conecta a tu servidor Soundsible y usa tu cuenta. Incluye biblioteca,
+búsqueda y adquisición, playlists/favoritos/metadatos, podcasts, Radio/Autoplay,
+cola NORMAL, DJ con mezcla nativa y Live (escuchar y emitir), además de Android
+Auto y copias explícitas sin conexión. La interfaz Solid viaja en la APK; el audio
+lo ejecutan los servicios nativos, sin cargar el runtime Web Audio.
 
-El objetivo es la experiencia completa del teléfono: biblioteca, descubrimiento,
-adquisición, NORMAL, podcasts, radio, DJ y Live, más Android Auto. No se publicará
-una alpha incompleta. Offline B está aprobado: copias explícitas de música adquirida,
-«Disponible sin conexión» dentro de menús de tres puntos. S6a implementa y valida
-este contrato; no sustituye los requisitos de paridad completa.
+La validación automatizada y sus límites están en [EVIDENCE](android/EVIDENCE.md).
+El emulador verifica servicios, PCM, transporte y controles; no acredita escucha,
+Bluetooth ni funcionamiento en un coche físico. Firma permanente, actualización,
+App Links verificados y publicación siguen sujetos a
+[RELEASE_GATES](android/RELEASE_GATES.md). La PR se revisa manualmente, sin automerge.
 
 ## Retomar el trabajo
 
-Leer primero [el traspaso](android/HANDOFF.md), después
-[arquitectura y contratos](android/ARCHITECTURE.md),
-[slices y matriz de paridad](android/PORT_PLAN.md),
-[el primer slice funcional](android/SLICE_1.md),
-[el programa nativo y continuación S2](android/SLICE_2.md),
-[la decisión offline aprobada](android/OFFLINE_DECISION.md),
-[el contrato offline S6a](android/SLICE_6.md) y
-[distribución y aceptación](android/RELEASE_GATES.md).
-Estos documentos y sus referencias al código son suficientes sin acceso al chat.
+Leer [HANDOFF](android/HANDOFF.md) para el estado vigente y
+[EVIDENCE](android/EVIDENCE.md) para las pruebas. La
+[matriz](android/PORT_PLAN.md) conserva la trazabilidad por capacidad; los documentos
+`SLICE_*` y el historial describen cortes anteriores, no el estado actual.
+La decisión offline vigente es [Offline B](android/OFFLINE_DECISION.md).
 
 ## Arquitectura
 
@@ -151,7 +143,8 @@ confianza sólo en recursos debug temporales, ejecuta el APK y elimina esos
 recursos y las claves. Después recompila la APK normal sin esa CA; release no
 recibe excepciones TLS. No se desactiva la verificación de certificados.
 Las cuentas sintéticas son `owner`/`member`, contraseña `android-test`.
-`smoke` omite los tests que requieren fixture; `integration` ejecuta los cinco.
+`smoke` omite los tests que requieren fixture; `integration` ejecuta la suite
+principal completa y los protocolos de reinicio offline y Live.
 Los controles `/__fixture/*` y `/api/android-fixture/*` existen sólo en el proceso
 `scripts/android_fixture.py`, nunca se registran en el motor de producción.
 
@@ -180,33 +173,42 @@ Play. No habrá actualización silenciosa por el mero hecho de compartir código
 Ver [los requisitos de publicación](android/RELEASE_GATES.md).
 
 
-## Primer programa nativo (S2a)
+## Uso y revisión de la alpha
 
-Tocar una canción reproducible crea una cola NORMAL con archivos y previews
-guardados de esa vista; las entradas sin vídeo resuelto permanecen desactivadas. Play/Pause,
-Previous/Next y seek usan MediaController; título/posición/estado proceden del
-servicio. La notificación multimedia lleva la misma metadata y controles.
-Una fuente fallida permite reintentar con Play; 401 revalida la sesión y vuelve
-al login, 403 muestra falta de permiso. Logout/cambio destruyen el programa.
+1. Instalar la APK de desarrollo de la PR o compilarla con los comandos anteriores.
+   Su package `.dev` y firma debug corresponden a pruebas, no a distribución pública.
+2. Conectar con dirección y contraseña, o escanear el QR que otra sesión de tu
+   cuenta muestra en Ajustes → Dispositivos. También puedes escribir su código.
+   El QR inicia una sesión completa de esa cuenta, revocable desde Dispositivos.
+3. Reproducir canciones o colecciones. «Añadir a la cola» coloca las peticiones
+   tras la canción actual; «Vaciar peticiones» conserva el álbum/playlist y lo
+   generado. Puedes reanudar una sesión de otro dispositivo mediante traspaso.
+4. Iniciar DJ desde una canción/colección. «Añadir a la sesión» pide la colección
+   en grupo; «Cambiar sesión» retira esos grupos y conserva peticiones sueltas.
+   Los ajustes de perfil/dirección/fuentes conservan el grupo. La cola admite
+   hasta 1.000 ocurrencias; el payload del puente y las respuestas están acotados.
+   Si falla la colocación musical, las peticiones quedan en cola y el estado
+   muestra el fallback; no se descartan canciones por un fallo del planner.
+5. Preparar música adquirida desde «Disponible sin conexión» en su menú. En
+   Android 13+ se pide permiso de notificaciones al preparar por primera vez,
+   para mostrar el progreso en segundo plano. Denegarlo no impide las copias ni
+   la reproducción y no provoca nuevas preguntas. Se puede cambiar después en
+   Ajustes de Android → Apps → Soundsible → Notificaciones. No se usa micrófono;
+   la cámara sólo se pide al escanear QR.
+6. Antes de desconectar la red, comprobar que las copias figuran listas en
+   gestión offline. Las parciales no cuentan; las carátulas offline usan
+   placeholder. Cerrar sesión elimina las copias del perfil.
 
-El programa sobrevive a recreación y background de la Activity, pero este corte
-no restaura la cola tras muerte del proceso. S2g añade carátulas privadas al programa, cola y sesión/notificación nativa.
-S2h permite cerrar el reproductor con ×: vacía el programa y retira la notificación,
-sin borrar login; funciona también con el servidor inaccesible.
-S6a añade copias explícitas de música adquirida: «Disponible sin conexión» en los
-menús de tres puntos de canciones/colecciones. Preparar y retirar copias sólo afecta
-al teléfono. Gestión de preparación y espacio, y filtro local, están en el menú de
-biblioteca; no hay un segundo botón Descargar en el shell. Antes del vuelo espera
-que todas las canciones deseadas figuren listas en gestión. Copias parciales no
-cuentan; carátulas offline usan placeholder. Logout elimina las copias del perfil.
-Ver [decisión y límites](android/OFFLINE_DECISION.md). No hay mezcla, DJ/Live ni Android Auto. La cola de desarrollo admite hasta 1.000 ocurrencias locales/preview.
-S2i usa el proxy del motor para previews guardados, con progreso y retry 429/503
-acotado; sus carátulas nativas usan placeholder.
-S2j añade búsqueda de canciones y guardado explícito confirmado por el motor,
-sin adquirir archivos; reproduce mediante el mismo servicio nativo.
-S2k añade episodios de podcasts, resume y ±15s con progreso guardado por el servicio.
-S2l añade directorio, seguimiento y adquisición podcast con retry/cancel.
-S2m añade el primer vertical Radio NORMAL propiedad del servicio; S2n favoritos
-y create/add playlist confirmados; S2o gestión de playlists condicionada. S2p
-perfiles/refill Radio y S2q primer vertical autoplay nativo con preferencia real. Radio/autoplay completos y la UI autenticada
-completa siguen pendientes. Ver [contrato y pendientes](android/SLICE_2.md).
+Los enlaces recibidos por Compartir (SEND) requieren una acción explícita antes
+de cambiar cuenta/servidor. La apertura automática de enlaces https requiere la
+firma y asociación de dominio pendientes de publicación. El volumen de escucha
+se controla con Android y no cambia el programa que se emite por Live.
+
+## Contribuciones
+
+El trabajo de [emrothenberg en la PR #298](https://github.com/Arzuparreta/soundsible/pull/298)
+aportó la propuesta de cliente Android y observaciones incorporadas a este port,
+incluido el permiso de notificaciones para las copias offline. Se le acredita
+como coautor en el commit de cierre y en la PR. Este cliente conserva el motor
+en el servidor del usuario; el servidor embebido de aquella propuesta no forma
+parte de esta entrega.

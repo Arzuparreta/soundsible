@@ -291,7 +291,25 @@ internal class ProgramDjSession(private val context: Context, private val genera
         applyPlaylist(next.map { it.item }, false)
         return routeSnapshot()
     }
-    /** Explicit session changes replace generated runway and retain ordinary requests. */
+    /** A collection's songs requested together, queued at once; the editor then places them musically. */
+    fun addRequestedGroup(items: List<MediaItem>, beforeKey: String?): RouteSnapshot {
+        val floor = protectedIndex()
+        val locked = protectedKeys()
+        val insertion = beforeKey?.let(::blockStartKey)?.let { key -> route.indexOfFirst { itemKey(it.item) == key }.also { require(it > floor && key !in locked) } } ?: editableFrom()
+        val next = route.take(insertion) + items.map { Row(it) } + route.drop(insertion)
+        applyPlaylist(next.map { it.item }, false)
+        return routeSnapshot()
+    }
+    /** Only a session replacement drops grouped requests; profile/direction/source edits keep them. */
+    fun dropRequestGroups() {
+        check(owns())
+        val floor = protectedIndex()
+        val future = route.drop(floor + 1)
+        val grouped = future.filter { it.kind == "user" && ProgramQueue.requestGroup(it.item) != null }.map { itemKey(it.item) }.toSet()
+        if (grouped.isEmpty()) return
+        applyPlaylist((route.take(floor + 1) + future.filter { itemKey(it.item) !in grouped && it.ownerKey !in grouped }).map { it.item }, false)
+    }
+    /** Explicit session changes replace generated runway and retain ordinary requests (never collection-wide ones). */
     fun changeContext(item: MediaItem) {
         check(owns())
         if (armed && output.cancelArmed()) { armed = false; plan = null; pendingSince = 0 }
@@ -301,7 +319,7 @@ internal class ProgramDjSession(private val context: Context, private val genera
             other.mediaMetadata.extras?.getString(ProgramQueue.SOURCE) == item.mediaMetadata.extras?.getString(ProgramQueue.SOURCE)
         val lead = if (sameRecording(anchor) || sameRecording(route[current].item)) emptyList() else listOf(Row(item))
         val future = route.drop(floor + 1)
-        val wanted = future.filter { it.kind == "user" && itemKey(it.item) != contextLead &&
+        val wanted = future.filter { it.kind == "user" && ProgramQueue.requestGroup(it.item) == null && itemKey(it.item) != contextLead &&
             (lead.isEmpty() || !sameRecording(it.item)) }.map { itemKey(it.item) }.toSet()
         val requests = future.filter { itemKey(it.item) in wanted || it.ownerKey in wanted }
         applyPlaylist((route.take(floor + 1) + lead + requests).map { it.item }, false)

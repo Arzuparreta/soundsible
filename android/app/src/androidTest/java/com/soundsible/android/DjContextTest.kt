@@ -31,7 +31,7 @@ class DjContextTest {
                 fail("DJ condition failed: $condition; state=" + web.evaluate(scenario, "JSON.stringify(window.__dj)"))
             }
             fun command(fields: String) {
-                web.evaluate(scenario, "window.__done=false;window.__failure=null;Capacitor.Plugins.SoundsiblePlayback.state().then(s=>Capacitor.Plugins.SoundsiblePlayback.command({...s,$fields})).then(()=>window.__done=true).catch(e=>window.__failure=e.code+':'+e.message)")
+                web.evaluate(scenario, "window.__done=false;window.__failure=null;Capacitor.Plugins.SoundsiblePlayback.state().then(s=>Capacitor.Plugins.SoundsiblePlayback.command({...s,$fields})).then(()=>Capacitor.Plugins.SoundsiblePlayback.state()).then(s=>{window.__dj=s;window.__done=true}).catch(e=>window.__failure=e.code+':'+e.message)")
                 waitFor("!!(window.__done || window.__failure)")
                 assertEquals("Command rejected: " + web.evaluate(scenario, "window.__failure"), "true", web.evaluate(scenario, "window.__done===true"))
             }
@@ -72,8 +72,25 @@ class DjContextTest {
                 command("action:'djRequest',tracks:[{source:'local',id:'member-pcm-soft',title:'Listener request',artist:'member artist',duration:20}]")
                 waitFor("window.__dj.items.some(i=>i.title==='Listener request') && ['ready','degraded'].includes(window.__dj.dj.phase)")
                 val request = web.evaluate(scenario, "window.__dj.items.find(i=>i.title==='Listener request').key")
+                command("action:'djRequest',tracks:[{source:'local',id:'member-pcm-soft',title:'Collection request one',artist:'member artist',duration:20},{source:'local',id:'member-pcm-loud',title:'Collection request two',artist:'member artist',duration:20}]")
+                waitFor("window.__dj.items.filter(i=>i.title.startsWith('Collection request')).length===2 && window.__dj.dj.editOutcome==='placed'")
+                retained()
+                // All two fixture recordings are already queued: a profile replan may exhaust,
+                // but it must keep both grouped requests.
+                command("action:'djSettings',profile:'adaptive'")
+                waitFor("['ready','degraded','exhausted'].includes(window.__dj.dj.phase)")
+                assertEquals("Profile edits dropped collection requests", "true", web.evaluate(scenario, "window.__dj.items.filter(i=>i.title.startsWith('Collection request')).length===2"))
+                // Groups travel in the same autoRoute contract used by web/native handoffs.
+                waitFor("['ready','degraded','exhausted'].includes(window.__dj.dj.phase)")
                 menu("member softer PCM song", "Start DJ from current song")
                 waitFor("window.__dj.dj.sources.length===1 && window.__dj.dj.sources[0].tracks[0].id==='member-pcm-soft' && !window.__dj.items.some(i=>i.key===" + lead + ")")
+                retained()
+                assertEquals("true", web.evaluate(scenario, "window.__dj.items.some(i=>i.key===" + request + ")"))
+                assertEquals("Collection requests survived a context change", "false", web.evaluate(scenario, "window.__dj.items.some(i=>i.title.startsWith('Collection request'))"))
+                command("action:'djRequest',tracks:[{source:'local',id:'member-pcm-soft',title:'Collection replacement one',artist:'member artist',duration:20},{source:'local',id:'member-pcm-loud',title:'Collection replacement two',artist:'member artist',duration:20}]")
+                waitFor("window.__dj.items.filter(i=>i.title.startsWith('Collection replacement')).length===2 && window.__dj.dj.editOutcome==='placed'")
+                command("action:'djSettings',resetRequestGroups:true,sources:window.__dj.dj.sources")
+                waitFor("['ready','degraded','exhausted'].includes(window.__dj.dj.phase) && !window.__dj.items.some(i=>i.title.startsWith('Collection replacement'))")
                 retained()
                 assertEquals("true", web.evaluate(scenario, "window.__dj.items.some(i=>i.key===" + request + ")"))
                 val revision = web.evaluate(scenario, "window.__dj.dj.editRevision")
@@ -82,7 +99,7 @@ class DjContextTest {
                 retained()
                 assertEquals(revision, web.evaluate(scenario, "window.__dj.dj.editRevision"))
                 assertEquals("true", web.evaluate(scenario, "window.__dj.items.some(i=>i.key===" + request + ")"))
-                waitFor("['ready','degraded'].includes(window.__dj.dj.phase)")
+                waitFor("['ready','degraded','exhausted'].includes(window.__dj.dj.phase)")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-queue-key]')).find(row=>row.dataset.queueKey===" + request + ").querySelector('[data-row-menu]').click()")
                 waitFor("!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Add to playlist')")
                 assertEquals("true", web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.startsWith('Mix into session') && b.disabled)"))

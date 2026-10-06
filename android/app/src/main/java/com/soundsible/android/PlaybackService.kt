@@ -520,11 +520,19 @@ class PlaybackService : MediaLibraryService() {
                         }
                     } else if (args.getString("action") == "djRequest") {
                         require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player) && args.getString("queueToken") == ProgramQueue.token(player))
-                        val rows = org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACK")); require(rows.length() == 1)
-                        val track = ProgramQueue.items(connection, rows, ProgramQueue.programToken(player)).single()
-                        require(track.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
+                        val rows = org.json.JSONArray(args.getString("tracks") ?: error("NO_TRACK")); require(rows.length() in 1..ProgramQueue.LIMIT)
+                        val before = args.getString("beforeKey")?.takeIf { it.isNotBlank() }
+                        val tracks = ProgramQueue.items(connection, rows, ProgramQueue.programToken(player))
+                        require(tracks.none { it.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true })
                         djPlanner.clear(); refillAnchor = ""
-                        djRouteEditor!!.place(track, args.getString("beforeKey")?.takeIf { it.isNotBlank() })
+                        if (tracks.size == 1) djRouteEditor!!.place(tracks.single(), before)
+                        else {
+                            // One group per collection request, carried in the route role so it also travels in handoffs.
+                            val group = java.util.UUID.randomUUID().toString()
+                            val route = org.json.JSONObject().put("kind", "user").put("placement", if (before != null) "fixed" else "dj").put("requestGroup", group).toString()
+                            djRouteEditor!!.placeGroup(tracks.map { item -> item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon()
+                                .setExtras(android.os.Bundle(item.mediaMetadata.extras).apply { putString(ProgramQueue.ROUTE, route) }).build()).build() }, before)
+                        }
                     } else if (args.getString("action") == "djRepair") {
                         require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player) && args.getString("queueToken") == ProgramQueue.token(player))
                         djPlanner.clear(); refillAnchor = ""
@@ -533,6 +541,7 @@ class PlaybackService : MediaLibraryService() {
                         require(dj != null && args.getLong("generation", -1) == connection.generation && args.getString("programToken") == ProgramQueue.programToken(player))
                         refillAnchor = ""
                         djRouteEditor?.clear()
+                        if (args.getBoolean("resetRequestGroups")) dj!!.dropRequestGroups()
                         djPlanner.start(args.getString("profile") ?: djPlanner.profile,
                             args.getString("direction")?.let(::orgJson) ?: djPlanner.direction,
                             args.getString("sources")?.let { org.json.JSONArray(it) } ?: djPlanner.sources,
