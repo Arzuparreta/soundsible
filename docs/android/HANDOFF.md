@@ -114,7 +114,12 @@ por URI opaca, write denegado. CarExternal2 + Legacy2 + Library2,6/0 HTTP/TLS
 fallback a confianza del sistema API28+ sólo con paquete/UID verificado.
 Sin suite activa tras95429.
 
-Siguiente: controles/revocación artwork externa y labels del programa activo. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
+S5h validado: CarExternal2/0 HTTP/TLS + normal APK/test/JVM54/lint sin CA.
+Externo playFromMediaId observa ID canónico/playing y PCM; URI reabre antes de
+logout y se deniega después. Ver SLICE_5H/evidence/s5h.json. Sin suite activa tras75392.
+
+Siguiente: labels del programa durante DJ; luego negativos DJ, Live/teléfono/firma
+y regresión final/browser4. Host Google Auto sigue sin ejecutarse. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
 actualizadas del programa activo. Luego UID externo, negativos DJ, Live/teléfono/
 firma y regresión final/browser4. Clone /tmp/soundsible-auto-next ya se trasladó;
 no copiarlo sobre root actual. No aplicar stash/clone viejo. No merge/automerge/release.

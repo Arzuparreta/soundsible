@@ -22,6 +22,16 @@ public class CarExternalProbeService extends Service {
             if (browser != null) browser.disconnect();
             final Bundle response = new Bundle();
             response.putInt("uid", android.os.Process.myUid());
+            String retained = message.getData().getString("readUri");
+            if (retained != null) {
+                new Thread(() -> {
+                    try (var input = getContentResolver().openInputStream(android.net.Uri.parse(retained))) {
+                        response.putBoolean("readable", input != null && input.read() >= 0);
+                    } catch (Exception denied) { response.putBoolean("readable", false); }
+                    main.post(() -> finish(reply, response));
+                }).start();
+                return;
+            }
             String target = message.getData().getString("target");
             if (target == null) return;
             browser = new MediaBrowser(CarExternalProbeService.this,
@@ -37,8 +47,20 @@ public class CarExternalProbeService extends Service {
                                 if (song == null) { response.putString("error", "missing_song"); finish(reply, response); return; }
                                 final android.net.Uri uri = song.getDescription().getIconUri();
                                 response.putString("uri", uri == null ? null : uri.toString());
+                                final var controller = new android.media.session.MediaController(CarExternalProbeService.this, browser.getSessionToken());
+                                controller.getTransportControls().playFromMediaId(song.getMediaId(), null);
                                 new Thread(() -> {
                                     try {
+                                        long until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+                                        while (System.nanoTime() < until) {
+                                            var metadata = controller.getMetadata();
+                                            var state = controller.getPlaybackState();
+                                            if (metadata != null && "member-track".equals(metadata.getString(android.media.MediaMetadata.METADATA_KEY_MEDIA_ID)) &&
+                                                state != null && state.getState() == android.media.session.PlaybackState.STATE_PLAYING) {
+                                                response.putString("playingId", "member-track"); break;
+                                            }
+                                            Thread.sleep(100);
+                                        }
                                         android.graphics.Bitmap image;
                                         try (var input = getContentResolver().openInputStream(uri)) { image = android.graphics.BitmapFactory.decodeStream(input); }
                                         response.putBoolean("artwork", image != null);
