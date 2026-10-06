@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4l",
+  "channel": "development",
+  "base_revision": "768f7258",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "ui_web/src/lib/liveLinks.ts": "50a523fc2ccc2767223f42cdd64b0a5a6a2b0bddd13a12f535b1c5f51324cc43",
+    "ui_web/src/lib/community.ts": "df4cb792ac16c34806932e3c9c55ff4ae6bd9ce371b5daecc94ccf21f67d760d",
+    "ui_web/src/mobile/Live.tsx": "6b593748fb7ce447e8b90b13ca5cec91f924ff8170b12cb70873b97bba2fc69f",
+    "ui_web/src/mobile/Live.module.css": "2704725f5db79fb64547153b31351b91fa8cd19f0abee9d9898b22955b97fa00",
+    "ui_web/src/mobile/share.ts": "420cdcf6034a7faa1500173db5f932d9316ebebddfd7b032b479a3e76a68e32e",
+    "ui_web/src/mobile/livePresentation.ts": "09dc2bd76ac8470cfeb7b7fe2a466ab4655b5646e5a265cebbbe4e83696aba1f",
+    "android/app/src/main/java/com/soundsible/android/SharePlugin.kt": "82d15761d02346e8ffeffbf7640fa36abb130add3cdf49339192867629708e79",
+    "android/app/src/main/java/com/soundsible/android/MainActivity.kt": "75289845a9119753a50fc2d4794d5ddde11d32d8209e02d741d8b976ee00336f",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveUiTest.kt": "6e07d581ab494e4d68431c10eb5d54c5baf043dca749d140da1651a7ccf5331e"
+  },
+  "ui": {
+    "files": 206,
+    "tests": 1602,
+    "failures": 0,
+    "typescript": "pass",
+    "log": "/tmp/soundsible-live-presentation-unit-fixed.log"
+  },
+  "initial_native": {
+    "tests": 4,
+    "failures": 1,
+    "log": "/tmp/soundsible-live-presentation-native.log",
+    "explanation": "HTTP LiveUi and Share2 pass. TLS LiveUi pressed disabled Pause while volume command pending. Test now waits enabled controls; volume slider also disabled while command pending."
+  },
+  "final_ui_native": {
+    "tests": 2,
+    "failures": 0,
+    "seconds": 24.451,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-presentation-fixed-native.log"
+  },
+  "normal_build": "Final runner APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Primary public artwork renders in actual WebView over HTTP/TLS Core",
+    "Public room link in intercepted Android chooser; no Core/media credentials",
+    "Extra duplicate query and fragment rejected by native share plugin",
+    "Two decks/blend and origin/room thumbnail rejection validated in UI units"
+  ],
+  "limits": [
+    "Share2 sources unchanged between initial and final runs; not whole4/0 rerun",
+    "Browser4 and native principal final regression pending",
+    "No physical device or complete parity claim"
+  ]
+}

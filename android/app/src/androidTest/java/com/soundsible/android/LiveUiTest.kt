@@ -15,7 +15,17 @@ class LiveUiTest {
     @Test fun tlsHostUi() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin")!!)
     @androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
     private fun run(origin: String) {
-        val connection = EngineConnection.shared(InstrumentationRegistry.getInstrumentation().targetContext)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val connection = EngineConnection.shared(instrumentation.targetContext)
+        val captured = java.util.concurrent.atomic.AtomicReference<android.content.Intent>()
+        val monitor = object : android.app.Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: android.content.Intent): android.app.Instrumentation.ActivityResult? {
+                if (intent.action != android.content.Intent.ACTION_CHOOSER) return null
+                captured.set(intent)
+                return android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED, null)
+            }
+        }
+        instrumentation.addMonitor(monitor)
         connection.clearSession(true)
         val web = StartupTest()
         var publisher: LivePeer? = null
@@ -56,6 +66,26 @@ class LiveUiTest {
                 web.evaluate(scenario, "Capacitor.Plugins.SoundsiblePlayback.liveState().then(s=>window.__liveState=s)")
                 waitFor("!!window.__liveState?.host?.connected")
                 hostedRoomId = org.json.JSONTokener(web.evaluate(scenario, "window.__liveState.host.session.id")).nextValue() as String
+                waitFor("!!document.querySelector('[data-native-live-deck=primary] img') && document.querySelector('[data-native-live-deck=primary] img').naturalWidth>0")
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Share room').click()")
+                val shareDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+                while (captured.get() == null && System.nanoTime() < shareDeadline) Thread.sleep(50)
+                assertNotNull("Live share did not open system chooser", captured.get())
+                @Suppress("DEPRECATION")
+                val send = captured.get()!!.getParcelableExtra<android.content.Intent>(android.content.Intent.EXTRA_INTENT)!!
+                assertEquals(android.content.Intent.ACTION_SEND, send.action)
+                val shared = send.getStringExtra(android.content.Intent.EXTRA_TEXT)!!
+                val publicUrl = android.net.Uri.parse(shared.substringAfter('\n'))
+                assertEquals(hostedRoomId, publicUrl.getQueryParameter("session"))
+                assertTrue(publicUrl.path!!.endsWith("/live/")); assertFalse(shared.contains(origin))
+                assertFalse(shared.contains("publish_token")); assertFalse(shared.contains("host_token"))
+                waitFor("!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Share room').disabled")
+                for (url in listOf("https://public.invalid/live/?session=$hostedRoomId&token=private", "https://public.invalid/live/?session=$hostedRoomId&session=other", "https://public.invalid/live/?session=$hostedRoomId#token=private")) {
+                    captured.set(null)
+                    web.evaluate(scenario, "window.__shareError=null;Capacitor.Plugins.SoundsibleShare.open({generation:window.__liveState.generation,title:'Invalid',text:'Invalid',url:${JSONObject.quote(url)}}).catch(e=>window.__shareError=e.code)")
+                    waitFor("!!window.__shareError")
+                    assertEquals("\"INVALID_SHARE\"", web.evaluate(scenario, "window.__shareError")); assertNull(captured.get())
+                }
                 assertEquals("false", web.evaluate(scenario, "JSON.stringify(window.__liveState).includes('publish_token') || JSON.stringify(window.__liveState).includes('host_token')"))
                 web.evaluate(scenario, "(()=>{const field=document.querySelector('[data-native-live] input');field.value='UI updated title';field.dispatchEvent(new Event('input',{bubbles:true}));field.form.requestSubmit();})()")
                 waitFor("document.querySelector('[data-native-live] h3')?.textContent==='UI updated title'")
@@ -87,19 +117,21 @@ class LiveUiTest {
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Refresh').click()")
                 waitFor("Array.from(document.querySelectorAll('[data-native-live] li strong')).some(e=>e.textContent==='UI listener room')")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-native-live] li')).find(e=>e.querySelector('strong')?.textContent==='UI listener room').querySelector('button').click()")
-                waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Pause')")
+                waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Pause' && !b.disabled)")
                 web.evaluate(scenario, "(()=>{const volume=document.querySelector('[data-native-live] input[type=range]');volume.value='0.8';volume.dispatchEvent(new Event('change',{bubbles:true}));})()")
                 val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
                 while (received.get() < 500 && System.nanoTime() < until) Thread.sleep(50)
                 assertTrue("UI listener did not decode actual relay PCM", received.get() > 500)
+                waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Pause' && !b.disabled)")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Pause').click()")
-                waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Play')")
+                waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Play' && !b.disabled)")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Play').click()")
-                waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Pause')")
+                waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Pause' && !b.disabled)")
                 web.evaluate(scenario, "(()=>{const field=document.querySelector('[data-native-live] input[placeholder]');field.value='UI guest message';field.dispatchEvent(new Event('input',{bubbles:true}));})()")
                 waitFor("!document.querySelector('[data-native-live] input[placeholder]').form.querySelector('button').disabled")
                 web.evaluate(scenario, "document.querySelector('[data-native-live] input[placeholder]').form.requestSubmit()")
                 waitFor("document.querySelector('[data-native-live]').innerText.includes('UI guest message')")
+                waitFor("!!Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Leave room' && !b.disabled)")
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-native-live] button')).find(b=>b.textContent==='Leave room').click()")
                 waitFor("!Array.from(document.querySelectorAll('[data-native-live] button')).some(b=>b.textContent==='Leave room')")
                 publisher.close(); publisher = null
@@ -113,6 +145,7 @@ class LiveUiTest {
 
             }
         } finally {
+            instrumentation.removeMonitor(monitor)
             NativeLivePlayer.decodedObservers.remove(sink); publisher?.close()
             roomId?.let { runCatching { connection.execute("/api/community/sessions/$it", "DELETE", null, emptyMap(), connection.generation, "ui-room-cleanup", 15000).close() } }
             hostedRoomId?.let { runCatching { connection.execute("/api/community/sessions/$it", "DELETE", null, emptyMap(), connection.generation, "ui-host-cleanup", 15000).close() } }

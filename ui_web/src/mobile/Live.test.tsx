@@ -2,8 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { afterEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { NativeLive } from './Live';
-const mocked = vi.hoisted(() => ({ state: vi.fn(), command: vi.fn(), listen: vi.fn(), directory: vi.fn() }));
+const mocked = vi.hoisted(() => ({ state: vi.fn(), command: vi.fn(), listen: vi.fn(), directory: vi.fn(), share: vi.fn() }));
 vi.mock('./live', () => ({ nativeLive: { liveState: mocked.state, liveCommand: mocked.command, addListener: mocked.listen, liveDirectory: mocked.directory } }));
+vi.mock('./share', () => ({ nativeShareLive: mocked.share }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 const session = { id: 'room', title: 'Room', host: { display_name: 'DJ' }, listener_count: 1, whep_url: 'https://media.example/live/whep' };
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
@@ -59,4 +60,21 @@ it('hands observed authentication expiry back to the account owner', async () =>
   await waitFor(() => expect(screen.getByRole('button', { name: 'live.goLive' })).toBeEnabled());
   await fireEvent.click(screen.getByRole('button', { name: 'live.goLive' }));
   await waitFor(() => expect(expired).toHaveBeenCalledOnce());
+});
+
+it('shows both programme decks and blend progress, rejects foreign artwork and shares only the public room', async () => {
+  const controls = setup(); mocked.share.mockResolvedValue(true);
+  const room = { ...session, id: 'isolated-room-123' };
+  render(() => <NativeLive generation={() => 4} current={() => true} username="member" />);
+  await waitFor(() => expect(mocked.listen).toHaveBeenCalled());
+  controls.update({ generation: 4, ready: true, host: null, listener: { session: room, connected: true, playing: true, messages: [], program: {
+    transport: 'playing', primary: { title: 'Outgoing', artist: 'First artist', artwork_url: `https://community.example/v1/artwork/${room.id}/one.jpg` },
+    secondary: { title: 'Incoming', artist: 'Second artist', artwork_url: `https://foreign.example/v1/artwork/${room.id}/two.jpg` },
+    transition: { technique: 'long_blend', progress: .4 },
+  } } });
+  expect(screen.getByText('Outgoing')).toBeInTheDocument(); expect(screen.getByText('Incoming')).toBeInTheDocument();
+  expect(screen.getByRole('progressbar', { name: 'long blend' })).toHaveAttribute('value', '0.4');
+  expect(document.querySelectorAll('[data-native-live-deck] img')).toHaveLength(1);
+  await fireEvent.click(screen.getByRole('button', { name: 'live.share' }));
+  expect(mocked.share).toHaveBeenCalledWith(room, expect.any(Function), expect.any(Function));
 });

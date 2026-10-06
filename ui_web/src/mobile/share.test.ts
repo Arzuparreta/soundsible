@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { Track } from '../types/music';
 const bridge = vi.hoisted(() => ({ open: vi.fn() }));
 vi.mock('@capacitor/core', () => ({ registerPlugin: () => bridge }));
-import { nativeShareTrack } from './share';
+import { nativeShareTrack, nativeShareLive } from './share';
 import { decodeTrackCapsule } from '../lib/trackShare';
 afterEach(() => vi.resetAllMocks());
 it('uses the shared fragment capsule and keeps origin cookies and stream URLs out of the payload', async () => {
@@ -32,4 +32,18 @@ it('rejects stale invocation and completion and propagates native refusal', asyn
   expect(await result).toBe(false);
   bridge.open.mockRejectedValueOnce(new Error('SHARE_SESSION_CHANGED'));
   await expect(nativeShareTrack(track, () => 8, () => true)).rejects.toThrow('SHARE_SESSION_CHANGED');
+});
+
+it('shares Live through the public hub without room credentials and rejects invalid or stale ownership', async () => {
+  bridge.open.mockResolvedValue({ opened: true });
+  const session = { id: 'isolated-room-123', title: 'Programme', host_token: 'private-token', whip_url: 'https://private.invalid/publish' };
+  expect(await nativeShareLive(session, () => 7, () => true)).toBe(true);
+  const payload = bridge.open.mock.calls[0][0];
+  expect(new URL(payload.url).searchParams.get('session')).toBe(session.id);
+  expect(payload).toMatchObject({ generation: 7, title: 'Programme', text: 'Programme' });
+  expect(JSON.stringify(payload)).not.toMatch(/private-token|private.invalid/);
+  bridge.open.mockClear();
+  expect(await nativeShareLive(session, () => 7, () => false)).toBe(false);
+  expect(await nativeShareLive({ ...session, id: '../private' }, () => 7, () => true)).toBe(false);
+  expect(bridge.open).not.toHaveBeenCalled();
 });

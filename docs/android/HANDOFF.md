@@ -249,3 +249,14 @@ corte + reset cancela retries sin publisher y sin nuevas autorizaciones en5s.
 Log /tmp/soundsible-live-publisher-exhaustion.log, SLICE_4K/evidence/s4k.json.
 Ninguna suite activa; AVD5554 sigue. Siguiente: presentación del programa y
 compartir Live; luego restantes matriz y regresión final. No merge ni release.
+
+S4l validado: programa primary/secondary/artista/thumbnail/mezcla/pausa y share
+público común web→chooser nativo. UI206/1602 + TypeScript pasan. Inicial4/1:
+HTTPUI/Share2 pasan; TLSUI pulsó Pause deshabilitado durante cambio volumen.
+Test espera controles disponibles; slider deshabilitado durante busy. FinalUI2/0,
+24.451s, runner36960 exit0 + APK/test APK/JVM56/lint normales sin CA temporal.
+Imagen real WebView, chooser interceptado y rechazo query extra/duplicada/fragment.
+SLICE_4L/evidence/s4l.json, /tmp/soundsible-live-presentation-fixed-native.log.
+Ninguna suite activa, AVD5554 sigue. Siguiente: invites/admin/multidispositivo
+según inventario real, negativos DJ/Auto y distribución; principal/browser4 final
+aún pendientes. PR abierta review manual, no merge/automerge/release.

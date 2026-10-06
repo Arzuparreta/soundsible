@@ -34,7 +34,7 @@ class SharePlugin : Plugin() {
         val text = call.getString("text")
         val url = call.getString("url")
         if (title.isNullOrBlank() || title.length > 1024 || text.isNullOrBlank() || text.length > 4096 ||
-            url != null && !publicCapsule(url)) {
+            url != null && !publicShare(url)) {
             call.reject("A supported share value is required.", "INVALID_SHARE"); return
         }
         val connection = EngineConnection.shared(context)
@@ -54,10 +54,13 @@ class SharePlugin : Plugin() {
             } catch (_: Exception) { call.reject("The system share sheet is unavailable.", "SHARE_UNAVAILABLE") }
         }
     }
-    private fun publicCapsule(value: String): Boolean {
+    private fun publicShare(value: String): Boolean {
         if (value.length > 8192) return false
         val uri = Uri.parse(value)
-        return uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null &&
-            uri.fragment?.matches(Regex("^t=[A-Za-z0-9_-]{1,4096}$")) == true
+        if (uri.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null) return false
+        if (uri.query == null && uri.fragment?.matches(Regex("^t=[A-Za-z0-9_-]{1,4096}$")) == true) return true
+        return uri.fragment == null && uri.encodedPath?.endsWith("/live/") == true &&
+            uri.queryParameterNames == setOf("session") && uri.getQueryParameters("session").size == 1 &&
+            uri.getQueryParameter("session")?.matches(Regex("^[A-Za-z0-9_-]{12,64}$")) == true
     }
 }

@@ -4,6 +4,9 @@ import { t } from '../lib/i18n';
 import { openOverlay } from '../lib/overlay';
 import type { CommunityConfig, LiveSession } from '../lib/community';
 import styles from './Live.module.css';
+import { nativeShareLive } from './share';
+import { liveArtworkUrl } from './livePresentation';
+import type { LiveDeck } from '../lib/community';
 
 export function NativeLive(props: { generation: () => number; current: () => boolean; username: string; onAuthExpired?: () => void }) {
   const [state, setState] = createSignal<NativeLiveState | null>(null);
@@ -48,6 +51,20 @@ export function NativeLive(props: { generation: () => number; current: () => boo
     catch (error) { failed(error); return false; }
     finally { if (valid()) setBusy(false); }
   }
+  async function share(session: LiveSession) {
+    if (!valid() || busy()) return;
+    setBusy(true);
+    try { await nativeShareLive(session, props.generation, valid); }
+    catch (error) { failed(error); }
+    finally { if (valid()) setBusy(false); }
+  }
+  function Deck(props: { deck: LiveDeck; roomId: string; secondary?: boolean }) {
+    const artwork = () => liveArtworkUrl(props.deck.artwork_url, config()?.api_url, props.roomId);
+    return <div class={styles.deck} data-native-live-deck={props.secondary ? 'secondary' : 'primary'}>
+      <Show when={artwork()}>{url => <img src={url()} alt="" loading="lazy" />}</Show>
+      <div><strong>{props.deck.title}</strong><p>{props.deck.artist}</p></div>
+    </div>;
+  }
   onMount(() => {
     void nativeLive.addListener('nativeLiveState', accept).then(handle => { if (valid()) listener = handle; else void handle.remove(); });
     void nativeLive.liveState().then(accept).catch(() => { if (valid()) setError(true); });
@@ -72,11 +89,22 @@ export function NativeLive(props: { generation: () => number; current: () => boo
     <Show when={listening()}>{active => <section>
       <h3>{active().session!.title}</h3>
       <button disabled={busy()} onClick={() => void command({ action: active().playing ? 'livePause' : 'liveResume' })}>{active().playing ? t('common.pause') : t('common.play')}</button>
-      <label>{t('omnibar.volume')}<input aria-label={t('omnibar.volume')} type="range" min="0" max="1" step="0.05" value={active().volume ?? 1} onChange={event => void command({ action: 'liveVolume', volume: Number(event.currentTarget.value) })} /></label>
+      <label>{t('omnibar.volume')}<input aria-label={t('omnibar.volume')} type="range" disabled={busy()} min="0" max="1" step="0.05" value={active().volume ?? 1} onChange={event => void command({ action: 'liveVolume', volume: Number(event.currentTarget.value) })} /></label>
       <button disabled={busy()} onClick={() => void command({ action: 'liveLeave' })}>{t('live.leave')}</button>
     </section>}</Show>
     <Show when={room()}>{active => <section aria-label={t('live.chat')}>
-      <p>{active().program?.primary?.title}</p>
+      <Show when={active().program?.primary} fallback={<p>{t('live.waiting')}</p>}>
+        {deck => <Deck deck={deck()} roomId={active().session!.id} />}
+      </Show>
+      <Show when={active().program?.transport === 'paused'}><p role="status">{t('live.breakHint')}</p></Show>
+      <Show when={active().program?.secondary}>{deck => <>
+        <Deck deck={deck()} roomId={active().session!.id} secondary />
+        <Show when={active().program?.transition}>{mix => <label class={styles.transition}>
+          {mix().technique.replaceAll('_', ' ')}
+          <progress aria-label={mix().technique.replaceAll('_', ' ')} max="1" value={Math.max(0, Math.min(1, mix().progress))} />
+        </label>}</Show>
+      </>}</Show>
+      <button disabled={busy()} onClick={() => void share(active().session!)}>{t('live.share')}</button>
       <p>{t('live.listeners', { count: active().session!.listener_count })}</p>
       <ul><For each={active().messages ?? []}>{message => <li><strong>{message.sender.display_name}: </strong>{message.text}</li>}</For></ul>
       <form onSubmit={event => { event.preventDefault(); void command({ action: 'liveChat', text: text() }).then(sent => { if (sent && valid()) setText(''); }); }}>

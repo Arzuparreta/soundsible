@@ -64,6 +64,14 @@ class MainActivity : BridgeActivity() {
                 // embeds and images cannot inherit credentials or access the bridge.
                 if (uri.host != "localhost") return try {
                     require(request.method == "GET" && uri.userInfo == null && uri.scheme in setOf("http", "https"))
+                    if (uri.path?.startsWith("/v1/artwork/") == true) {
+                        val parts = uri.pathSegments
+                        require(parts.size == 4 && parts[2].matches(Regex("^[A-Za-z0-9_-]{12,64}$")))
+                        val bytes = LiveArtwork("${uri.scheme}://${uri.authority}", parts[2]).use { it.download(uri.toString()) }
+                        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                        return WebResourceResponse(bounds.outMimeType, null, 200, "OK", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(bytes))
+                    }
                     val publicClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
                         .dns(object : Dns { override fun lookup(hostname: String): List<InetAddress> {
                             val addresses = Dns.SYSTEM.lookup(hostname)

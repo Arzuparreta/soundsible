@@ -8,3 +8,9 @@
 .panel ul { padding: 0; list-style: none; }
 .panel li { padding-block: var(--space-sm); overflow-wrap: anywhere; }
 .panel li button { margin-inline-start: var(--space-sm); }
+
+.deck { display: flex; align-items: center; gap: var(--space-sm); margin-block: var(--space-sm); min-width: 0; }
+.deck img { width: 3rem; height: 3rem; object-fit: cover; border-radius: var(--radius-sm); flex-shrink: 0; }
+.deck p { margin: 0; overflow-wrap: anywhere; }
+.deck[data-native-live-deck=secondary] { font-size: .9em; }
+.transition progress { width: 100%; }
