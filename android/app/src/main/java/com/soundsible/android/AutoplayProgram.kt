@@ -79,6 +79,11 @@ class AutoplayProgram(private val connection: EngineConnection, private val play
     }
     fun suspend() { if (runway.active()) runway.stop() }
     fun retire(id: String) { runway.retire(id) }
+    fun restoreGenerated(keys: Set<String>) {
+        if (keys.isEmpty() || player.currentMediaItem == null) return
+        val item = seed() ?: return
+        runway.restore(JSONObject().put("active", true).put("seedId", item.mediaId).put("profile", "balanced"), keys)
+    }
     fun manualInsertion(): Int? = runway.manualInsertion()
     fun clear() {
         serial++; requestId?.let(connection::cancel); requestId = null

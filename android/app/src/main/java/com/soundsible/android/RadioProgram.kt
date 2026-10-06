@@ -32,6 +32,25 @@ class RadioProgram(private val connection: EngineConnection, private val player:
     private var scheduled = false
     private val refill = Runnable { scheduled = false; plan() }
     fun active(): Boolean = seed != null
+    fun generatedKeys(): Set<String> = generated.toSet()
+    fun snapshot(): JSONObject = JSONObject().put("active", seed != null).put("seedId", seed?.optString("id") ?: JSONObject.NULL)
+        .put("profile", profile).put("seed", seed?.let { JSONObject(it.toString()) } ?: JSONObject.NULL)
+    /** Keep the received runway; starting a new radio would remove it. */
+    fun restore(state: JSONObject, keys: Set<String>) {
+        require(state.optBoolean("active"))
+        val id = state.getString("seedId")
+        require(id.isNotBlank() && id.length <= 512 && player.mediaItemCount > 0 && connection.cookieHeader(connection.generation) != null)
+        require(player.currentMediaItem?.mediaMetadata?.extras?.getBoolean(ProgramQueue.PODCAST) != true)
+        val nextProfile = state.optString("profile", "balanced")
+        require(nextProfile in listOf("familiar", "balanced", "explore"))
+        val known = (0 until player.mediaItemCount).map(player::getMediaItemAt).firstOrNull { it.mediaId == id }
+        val nextSeed = state.optJSONObject("seed")?.takeIf { it.optString("id") == id }?.let { JSONObject(it.toString()) }
+            ?: JSONObject().put("id", id).apply {
+                if (known != null) { put("title", known.mediaMetadata.title?.toString().orEmpty()); put("artist", known.mediaMetadata.artist?.toString().orEmpty()) }
+                put(if (known?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) == "preview" || known == null && Regex("^[A-Za-z0-9_-]{11}$").matches(id)) "youtube_id" else "track_id", id)
+            }
+        clear(); profile = nextProfile; generation = connection.generation; seed = nextSeed; generated.addAll(keys); phase = "ready"; publish(); sync()
+    }
     fun start(nextProfile: String) {
         require(nextProfile in listOf("familiar", "balanced", "explore"))
         val item = selectSeed() ?: error("NO_SEED")

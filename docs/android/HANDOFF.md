@@ -331,3 +331,14 @@ NORMAL test seeks shortened for independence from short PCM fixtures; historical
 54s/123s evidence unchanged. Next Radio workspace + pending catalog resolution,
 device reconnection exhaustion, public invites/pairing, broader negatives,
 distribution and final principal/browser4. Do not merge/automerge/publish.
+
+S2ap accepted: Radio seed/profile/intent and generated occurrence ownership survive
+incoming/outgoing NORMAL handoff; Stop keeps manual future and current identity.
+Autoplay imported markers obey receiver account setting; disabled strips only its
+runway. Shared radio fields active/seedId; profile/seed are native extensions,
+balanced default for web/common snapshots. Context metadata + identity/loudness
+facts retained for imported NORMAL. DeviceRadio+DeviceDj+DeviceSession+DevicesUi
+8/0 HTTP/TLS,86.694s; exit0 + normal APK/test/JVM56/lint. See SLICE_2AP/evidence.
+Next device reconnect exhaustion and deferred catalog playback/handoff, then
+public invites/pairing, broader negatives, distribution and final full suites.
+Continue; no PR merge/automerge/publication. Last UI complete210/1614+TS unchanged.

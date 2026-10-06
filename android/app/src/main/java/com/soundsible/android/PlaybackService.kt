@@ -296,7 +296,7 @@ class PlaybackService : MediaLibraryService() {
         liveHost = NativeLiveHost(this, connection, main, { player }, artwork, { dj?.liveSnapshot() }) { state ->
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeLiveHost", state.toString()) }) }
         }
-        deviceSession = NativeDeviceSession(this, connection, main, { dj?.let { ProgramDeviceState.snapshotDj(player, it, djPlanner) } ?: ProgramDeviceState.snapshot(player) }, ::remoteDeviceCommand) { state ->
+        deviceSession = NativeDeviceSession(this, connection, main, { dj?.let { ProgramDeviceState.snapshotDj(player, it, djPlanner) } ?: ProgramDeviceState.snapshot(player, radio) }, ::remoteDeviceCommand) { state ->
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeDevice", state.toString()) }) }
         }
         carArt = ProgramCarArtwork(this, connection)
@@ -589,11 +589,19 @@ class PlaybackService : MediaLibraryService() {
                     player.play(); publishDj("ready", djPlanner.profile, 0)
                     return
                 }
-                val items = ProgramQueue.items(connection, restored.rows)
+                val items = ProgramDeviceState.items(connection, restored)
+                val continuation = restored.radio?.optBoolean("active") == true || items.any { it.mediaMetadata.extras?.getBoolean("autoplayGenerated") == true }
+                if (continuation) require(items[restored.index].mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) != true)
                 djRouteEditor?.clear(); djPlanner.clear(); restoreNormal(); publishDj("idle", djProfile, 0)
                 autoplay.clear(); radio.clear()
                 player.shuffleModeEnabled = restored.shuffle; player.repeatMode = restored.repeat
-                player.setMediaItems(items, restored.index, restored.positionMs); player.prepare(); player.play()
+                player.setMediaItems(items, restored.index, restored.positionMs)
+                val entries = restored.entries
+                fun generated(source: String) = items.indices.filter { i -> entries?.optJSONObject(i)?.let { it.optString("queueLane") == "generated" && it.optString("queueSource") == source } == true }
+                    .map { items[it].mediaMetadata.extras!!.getString(ProgramQueue.KEY)!! }.toSet()
+                if (restored.radio?.optBoolean("active") == true) radio.restore(restored.radio, generated("radio"))
+                else autoplay.restoreGenerated(generated("autoplay"))
+                player.prepare(); player.play()
             }
         }
     }
