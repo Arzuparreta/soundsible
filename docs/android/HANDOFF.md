@@ -17,7 +17,7 @@
 
 ## Estado y evidencia actuales
 
-Principal/remote **dcdd6a3b**. Paridad completa y PR final todavía pendientes.
+Principal/remote **5290684b** (código Native preparado en dcdd6a3b). Paridad completa y PR final todavía pendientes.
 Ver [PORT_PLAN](PORT_PLAN.md), [RELEASE_GATES](RELEASE_GATES.md) y las evidencias;
 [historial](HANDOFF_HISTORY.md) conserva diagnósticos y snapshots anteriores.
 
@@ -57,11 +57,11 @@ Ver [PORT_PLAN](PORT_PLAN.md), [RELEASE_GATES](RELEASE_GATES.md) y las evidencia
 
 ## Trabajo activo: comprobar antes de editar
 
-Regresión principal nueva sobredcdd6a3b: **144 tests**, en curso. Tracked limpio al
+Regresión principal sobredcdd6a3b: **144 tests,2 fallos,1984.904s,exit1**. Tracked limpio al
 prepare; incluye draft ProgramCarLibrary no conectado/no committed. Log
 `/tmp/soundsible-android-dcdd-regression-native.log`, exec62863.
-**Congelar root Native/UI assets/fixtures hasta terminar, incluido build normal.**
-No declarar resultado final antes del exit. AVD headless exec76258, emulator-5554.
+Terminada; el runner omitió restart/build normal tras los fallos. Registro en
+`evidence/s3b.json`; no sustituirlo por confirmación dirigida. AVD headless exec76258, emulator-5554.
 
 Dos fallos encontrados: CatalogSearchTest HTTP/TLS. Selector global por aria-label
 abre nueva fila de cola antes del resultado Discover; espera Save que esa fila
@@ -81,17 +81,18 @@ Checkout independiente **/tmp/soundsible-auto-next**, rama
 - Manifest descriptor Android Auto media, sin Android Automotive OS/templates.
 - ProgramCarArtwork/CarArtworkProvider: provider no exportado, grants read de
   URI opaca al browser; loader privado, registro400/cache32 thumbnails hasta2MiB,
-  revocación/limpieza al cambiar cuenta. Último fix LRU de eviction async pendiente
-  compile. No prometer revocar bytes/descriptores que el cliente ya recibió.
+  revocación/limpieza al cambiar cuenta. Fix LRU de eviction async y aislamiento por identidad compilan;
+  runtime pendiente. No prometer revocar bytes/descriptores que el cliente ya recibió.
 - CarLibraryTest HTTP/TLS preparado: MediaBrowser real, root/children/subscribe,
   música PCM, ID de otra cuenta desconocido, URI/título falsificado ignorado,
   offline503 y carátulas/cache/rechazo tras logout. **Runtime no probado todavía.**
 - Compile Kotlin+androidTest1worker/Xmx512m pasa en auto-compile.log,
   auto-counts-compile.log y auto-art-compile.log. Logs bajo /tmp/soundsible-*.
-- Ejecutar Native Auto después de principal; primero recompile último fix y
-  preparar assets del clone. No copiar draft root viejo sobre clone nuevo.
-- SLICE_4A en clone tiene contrato/fuentes. Pendientes Radio/podcasts, cambios
-  proactivos de árbol/background, voice/search, permisos a host externo y host/DHU.
+- Ejecutar Native Auto después de principal; preparar assets del clone y
+  ejecutar CarLibraryTest + CarLegacyTest + CatalogSearchTest (6 casos HTTP/TLS). No copiar draft root viejo sobre clone nuevo.
+- SLICE_5A en clone tiene contrato/fuentes. Radio/podcasts y revocación401 compilan
+  con pruebas preparadas; runtime, cambios proactivos de árbol/background,
+  permisos a host externo y host/DHU pendientes.
   MediaBrowser sameUID no equivale a Android Auto validado.
 
 Después: registrar principal/fallos, integrar Catalog fix, validar Auto, negativos
@@ -114,3 +115,15 @@ Nunca habilitar merge/automerge ni publicación como consecuencia de tests verde
 - Investigación Live anterior no implementada: JavaADM AudioRecord no es entrada
   PCM externa; SamplesReadyCallback no inyecta programa. Validar entrada post-DSP/
   pre-volumen sin micrófono y recepción independiente antes de claim de emisión.
+
+Actualización clone Auto (S5a, S4 corresponde a Live): CarLegacyTest y extensión
+CarLibraryTest con acquired podcast seek/resume120s, Radio+refill, covers/cache y
+revocación401 compilan; /tmp/soundsible-auto-auth-compile.log. Radio Core filtra
+podcasts antes de límite200; Core tests9/0 en /tmp/soundsible-auto-core-tests.log.
+Artwork tiene loader propio y limpia por identidad de sesión, además de generation.
+Runtime pendiente. Compilar no cierra Auto ni prueba permisos de host externo.
+
+Auto/Catalog dirigido en curso: exec4752, /tmp/soundsible-auto-catalog-native.log,
+6 casos HTTP/TLS. Assets preparados tras fix de límite offline1000. Congelar
+clone Native/UI/fixtures hasta exit y build normal. Root libre; no copiar fuentes
+al clone ni sobrescribir su preparación.

@@ -603,5 +603,31 @@
       "All malformed/stale endpoint cases and full current regression pending",
       "Not complete DJ parity or physical acoustic acceptance"
     ]
+  },
+  "full_native_regression_dcdd": {
+    "source_revision_at_asset_prepare": "dcdd6a3b2c317d4a800c8d69b9b8739ed01d2859",
+    "dirty_at_asset_prepare": true,
+    "tracked_sources_clean_at_asset_prepare": true,
+    "untracked_sources": [
+      "ProgramCarLibrary.kt unused draft, not connected to PlaybackService"
+    ],
+    "tests": 144,
+    "failures": 2,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 1984.904,
+    "runner_exit": 1,
+    "log": "/tmp/soundsible-android-dcdd-regression-native.log",
+    "failures_identified": [
+      "CatalogSearchTest.httpSearchAndExplicitSaved",
+      "CatalogSearchTest.verifiedTlsSearchAndExplicitSaved"
+    ],
+    "diagnosis": "Global More options locator selects new queue occurrence menu before Discover result; scope locator to android-catalog-search. Directed confirmation pending.",
+    "normal_build": "Skipped by runner after failed instrumentation; no claim of normal-build verification for this full run.",
+    "limits": [
+      "Failed full regression retained; directed passing tests do not replace it.",
+      "No Android Auto integration in this source revision.",
+      "No physical device or acoustic acceptance."
+    ]
   }
 }
