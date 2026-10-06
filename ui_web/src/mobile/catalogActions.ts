@@ -5,6 +5,8 @@ import { buildIdentityIndex, catalogItemKeys, trackKeys } from '../lib/playbackI
 import { savedFromCatalogItem, savedFromTrack, savedToTrack } from '../lib/saved';
 import { programTrack } from '../lib/program/tracks';
 import { t } from '../lib/i18n';
+import { toast } from '../lib/toast';
+import { openContextMenu } from '../lib/contextMenu';
 import type { CatalogItem, SavedEntry, Track } from '../types/music';
 import type { MigrationJob } from '../lib/migrationApi';
 
@@ -100,6 +102,11 @@ export function createNativeCatalogActions(props: {
     setPending(item.id); setError(''); setPartial(false);
     try {
       let track = trackFor(item), entry = savedFromCatalogItem(item);
+      if (purpose === 'acquire' && (!track || track.source === 'preview')) {
+        // As on the web: the engine checks the recording and asks when it is not sure which video it is.
+        await acquireCatalogItem(item, current);
+        return;
+      }
       if (purpose !== 'remove' && !track) {
         const resolved = await resolveRecording(item, request.signal, current);
         entry = resolved.entry; track = resolved.track;
@@ -120,8 +127,31 @@ export function createNativeCatalogActions(props: {
         if (!disposed && generation === props.generation()) await props.onChanged();
       }
     } catch (failure) {
-      if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : purpose === 'play' ? 'search.noPreview' : 'common.loadFailed'));
+      if (current()) setError(t(failure instanceof ApiError && failure.status === 403 ? 'android.permissionDenied' : purpose === 'play' ? 'search.noPreview' : purpose === 'acquire' ? 'search.notSaved' : 'common.loadFailed'));
     } finally { if (current()) setPending(null); }
+  }
+  async function acquireCatalogItem(item: CatalogItem, current: () => boolean, confirm?: string): Promise<void> {
+    const artist = itemArtist(item);
+    if (!artist || !item.title) throw new Error('Missing recording');
+    const response = await api.saveCatalogItem({ catalog_item_id: item.id, source: item.source, artist, title: item.title, duration: item.duration,
+      cover: item.cover, external_ids: item.external_ids, identity_keys: catalogItemKeys(item),
+      confirm_video_id: confirm || (item.external_ids?.youtube_id ? String(item.external_ids.youtube_id) : undefined) });
+    if (!current()) return;
+    if (response.status === 'queued') { toast.success(t('search.addedToDownloads')); await props.onChanged(); return; }
+    if (response.status !== 'needs_review') throw new Error('Not saved');
+    const candidates = (response.candidates ?? []).slice(0, 5).map(candidate => ({ id: String(candidate.video_id || candidate.id || ''), title: String(candidate.title || ''), channel: String(candidate.channel || '') }))
+      .filter(candidate => /^[A-Za-z0-9_-]{11}$/.test(candidate.id));
+    if (!candidates.length) throw new Error('Not saved');
+    openContextMenu({ title: t('search.chooseVersion'), subtitle: `${item.title} — ${artist}`, actions: candidates.map(candidate => ({
+      label: candidate.channel ? `${candidate.title} · ${candidate.channel}` : candidate.title,
+      disabled: !current(),
+      onSelect: () => {
+        if (!current()) return;
+        setPending(item.id);
+        void acquireCatalogItem(item, current, candidate.id).catch(() => { if (current()) setError(t('search.notSaved')); })
+          .finally(() => { if (current()) setPending(null); });
+      },
+    })) });
   }
   async function playCollection(items: readonly CatalogItem[], selectedIndex: number, context?: import('../lib/program/runtime').ProgramContext, shuffle = false) {
     if (disposed || props.disconnected()) return;

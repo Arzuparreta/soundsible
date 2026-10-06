@@ -66,7 +66,7 @@ export default function NativeDevices(props: { generation: () => number; current
     <SettingsGroup anchor="paired-devices" label={t('settings.pairedDevices')} note={t('settings.pairNote')}>
       <PairedDevicesPanel origin={() => props.origin?.() || null} />
     </SettingsGroup>
-    <h3>{t('settings.group.network')}</h3>
+    <h3 data-setting="network-devices">{t('settings.group.network')}</h3>
     <Show when={error()}><p role="status">{t('deviceSheet.failed')}</p></Show>
     <button disabled={!current() || busy()} onClick={() => void refresh()}>{t('android.refresh')}</button>
     <Show when={!loading()}><Show when={devices().length} fallback={<p>{t('deviceSheet.empty')}</p>}>

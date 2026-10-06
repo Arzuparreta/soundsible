@@ -49,3 +49,21 @@ it('passes the latest native preference through Settings without an optimistic a
   expect(command).toHaveBeenCalledWith({ action: 'autoplay', enabled: false, reload: false });
   expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
 });
+it('searches settings the web way and opens the matching tab, Back clearing the search first', async () => {
+  render(() => <NativeSettings user={{ id: 'member', username: 'member', display_name: 'Member', role: 'member', has_password: true }}
+    identity={() => 1} available={() => false} signal={new AbortController().signal} history={createSearchHistoryStorage(key => key)}
+    appearance={preference} feedback={feedback} playback={{ state: null, pending: false, available: false, command: vi.fn() }} onUser={vi.fn()} onLogout={vi.fn()}
+    library={{ trackCount: () => 0, sync: vi.fn(), onImport: vi.fn() }} online={() => false} />);
+  await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'contrast' } });
+  const result = (anchor: string) => document.querySelector(`[data-settings-result="${anchor}"]`) as HTMLElement | null;
+  await fireEvent.click(result('high-contrast')!);
+  expect(screen.getByRole('button', { name: 'Accessibility' })).toHaveAttribute('aria-pressed', 'true');
+  await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'quality' } });
+  expect(result('quality')).toBeNull();
+  await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'bottom bar' } });
+  expect(result('bottom-bar')).toBeNull();
+  expect(dispatchNavigationBack()).toBe(true); expect(screen.getByRole('searchbox')).toHaveValue('');
+  await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'learn' } });
+  await fireEvent.click(screen.getAllByRole('button').find(button => button.dataset.settingsResult === 'learn-activity')!);
+  expect(screen.getByRole('button', { name: 'Recommendations' })).toHaveAttribute('aria-pressed', 'true');
+});

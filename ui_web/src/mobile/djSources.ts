@@ -17,7 +17,18 @@ export function nativeDjSourceActions(id: string, label: string, tracks: Track[]
   const included = sources.some(item => item.id === id);
   const next = included ? sources.filter(item => item.id !== id) : [...sources, source];
   const payload = active ? next : [source];
-  return [{
+  const only = sources.length === 1 && included;
+  const fits = (value: unknown[]) => value.length <= 64 && JSON.stringify(value).length <= 65536;
+  return [
+    // The web's primary DJ action on a collection: the session moves onto it, as one source, at once.
+    ...(active && captured.programToken && !only ? [{
+      label: t('musicExplorer.change'), disabled: pending() || !fits([source]),
+      onSelect: () => {
+        if (!valid() || !fits([source])) return;
+        void execute({ action: 'djSettings', programToken: captured.programToken!, sources: [source] }).catch(() => {});
+      },
+    }] : []),
+    {
     label: t(active ? (included ? 'autoMode.source.remove' : 'autoMode.source.add') : 'autoMode.startDj', { title: label }),
     disabled: pending() || payload.length > 64 || JSON.stringify(payload).length > 65536,
     onSelect: () => {

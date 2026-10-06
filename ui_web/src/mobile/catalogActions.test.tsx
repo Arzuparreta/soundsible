@@ -3,8 +3,10 @@ import { createSignal } from 'solid-js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createNativeCatalogActions } from './catalogActions';
 import type { CatalogItem, Track } from '../types/music';
-const mocks = vi.hoisted(() => ({ resolve: vi.fn(), save: vi.fn() }));
-vi.mock('../lib/api', async () => ({ ApiError: (await import('../lib/http')).ApiError, api: { resolveCatalogItem: mocks.resolve, setSavedEntries: mocks.save } }));
+const mocks = vi.hoisted(() => ({ resolve: vi.fn(), save: vi.fn(), catalogSave: vi.fn(), menu: vi.fn(), toast: vi.fn() }));
+vi.mock('../lib/api', async () => ({ ApiError: (await import('../lib/http')).ApiError, api: { resolveCatalogItem: mocks.resolve, setSavedEntries: mocks.save, saveCatalogItem: mocks.catalogSave } }));
+vi.mock('../lib/contextMenu', () => ({ openContextMenu: mocks.menu }));
+vi.mock('../lib/toast', () => ({ toast: { success: mocks.toast } }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const item = (id: string): CatalogItem => ({ id, title: id, artist: 'Artist', source: 'library', type: 'library_track', track_id: id });
 const tracks: Track[] = [{ id: 'first', title: 'First', artist: 'Artist' }, { id: 'second', title: 'Second', artist: 'Artist' }];
@@ -96,4 +98,36 @@ it('resolves only the selected recording and preserves deferred duplicate occurr
     expect.objectContaining({ id: 'A1111111111', source: 'preview' }),
     expect.objectContaining({ id: 'future', pendingResolve: { catalogItemId: 'future', title: 'future', artist: 'Artist', duration: undefined } }),
   ], 1);
+});
+
+const remote: CatalogItem = { id: 'deezer:track:7', title: 'Song', artist: 'Artist', source: 'deezer', type: 'track', duration: 200, external_ids: { deezer_id: '7' } };
+function acquiring(acquire = vi.fn()) {
+  const changed = vi.fn().mockResolvedValue(undefined);
+  let actions!: ReturnType<typeof createNativeCatalogActions>;
+  render(() => { actions = createNativeCatalogActions({ generation: () => 1, disconnected: () => false, saved: () => [], tracks: () => [],
+    onPlay: vi.fn(), onAcquire: acquire, onChanged: changed }); return null; });
+  return { actions, changed, acquire };
+}
+it('downloads a catalog song through the engine check, never by queueing a guessed video', async () => {
+  mocks.catalogSave.mockResolvedValue({ status: 'queued', video_id: 'A1111111111' });
+  const { actions, changed, acquire } = acquiring();
+  await actions.act(remote, 'acquire');
+  expect(mocks.catalogSave).toHaveBeenCalledWith(expect.objectContaining({ catalog_item_id: 'deezer:track:7', artist: 'Artist', title: 'Song', confirm_video_id: undefined }));
+  expect(mocks.resolve).not.toHaveBeenCalled(); expect(acquire).not.toHaveBeenCalled(); expect(changed).toHaveBeenCalledOnce();
+});
+it('asks which version when the engine is unsure, and downloads the chosen one', async () => {
+  mocks.catalogSave.mockResolvedValueOnce({ status: 'needs_review', candidates: [{ video_id: 'B2222222222', title: 'Song (Live)', channel: 'Artist' }, { id: 'bad' }, { id: 'C3333333333', title: 'Song' }] })
+    .mockResolvedValueOnce({ status: 'queued' });
+  const { actions, changed } = acquiring();
+  await actions.act(remote, 'acquire');
+  const menu = mocks.menu.mock.calls[0][0];
+  expect(menu.title).toBe('Choose a version'); expect(menu.actions.map((action: { label: string }) => action.label)).toEqual(['Song (Live) · Artist', 'Song']);
+  menu.actions[1].onSelect(); await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+  expect(mocks.catalogSave.mock.calls[1][0].confirm_video_id).toBe('C3333333333');
+});
+it('reports a refused download', async () => {
+  mocks.catalogSave.mockResolvedValue({ status: 'failed' });
+  const { actions } = acquiring();
+  await actions.act(remote, 'acquire');
+  expect(actions.error()).toBe('Could not save');
 });

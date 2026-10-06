@@ -1,4 +1,6 @@
-import { createSignal, Show } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
+import { SearchField } from '../components/SearchField';
+import { searchNativeSettings, type NativeSettingsTab } from './settingsSearch';
 import { UsersPanel } from '../components/UsersPanel';
 import NativeDevices from './Devices';
 import NativeSettingsAccount from './SettingsAccount';
@@ -30,11 +32,30 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
   /** The connected server's address: where other phones claim a pairing code shown here. */
   server?: () => string;
 }) {
-  const [section, setSection] = createSignal<'account' | 'appearance' | 'accessibility' | 'recommendations' | 'playback' | 'library' | 'downloads' | 'subsonic' | 'users' | 'devices' | 'community' | 'about'>('account');
+  const [section, setSection] = createSignal<NativeSettingsTab>('account');
+  const [query, setQuery] = createSignal('');
+  const results = createMemo(() => query().trim() ? searchNativeSettings(query(), { admin: props.user.role === 'admin', subsonic: !!props.subsonic, devices: !!props.generation }) ?? [] : null);
+  /** A result opens its tab and brings the row itself into view, as the web's settings search does. */
+  function open(tab: NativeSettingsTab, anchor?: string) {
+    setQuery(''); setSection(tab);
+    if (anchor) requestAnimationFrame(() => requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-testid=android-settings] [data-setting="${anchor}"]`);
+      row?.scrollIntoView({ block: 'center' });
+      (row?.matches('button, input, a') ? row : row?.querySelector<HTMLElement>('button, input, a'))?.focus({ preventScroll: true });
+    }));
+  }
   const captured = props.identity();
   const current = () => captured === props.identity() && props.available();
-  registerNativeBack(() => { if (section() === 'account') return false; setSection('account'); return true; });
+  registerNativeBack(() => { if (query()) { setQuery(''); return true; } if (section() === 'account') return false; setSection('account'); return true; });
   return <section class={styles.library} data-testid="android-settings">
+    <SearchField value={query()} placeholder={t('settings.searchPlaceholder')} onInput={setQuery} />
+    <Show when={results()}>{found => <section data-settings-results aria-label={t('settings.searchResults')}>
+      <Show when={found().length} fallback={<p role="status">{t('settings.searchNoResults', { query: query().trim() })}</p>}>
+        <For each={found()}>{result => <button type="button" data-settings-result={result.anchor ?? result.tab} onClick={() => open(result.tab, result.anchor)}>
+          <span>{result.label}</span> <small>{result.path}</small></button>}</For>
+      </Show>
+    </section>}</Show>
+    <Show when={!results()}>
     <nav class={styles.tabs} aria-label={t('nav.settings')}>
       <button data-android-settings-account aria-pressed={section() === 'account'} onClick={() => setSection('account')}>{t('account.title')}</button>
       <button data-android-settings-appearance aria-pressed={section() === 'appearance'} onClick={() => setSection('appearance')}>{t('settings.appearance')}</button>
@@ -66,5 +87,6 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
     <Show when={section() === 'accessibility'}><DisplayPreferencesView interfaceSize={props.appearance.interfaceSize()} highContrast={props.appearance.highContrast()}
       onSize={props.appearance.setInterfaceSize} onContrast={props.appearance.setHighContrast} />
       <HapticSettingsView enabled={props.feedback.enabled()} onChange={props.feedback.setEnabled} /></Show>
+    </Show>
   </section>;
 }

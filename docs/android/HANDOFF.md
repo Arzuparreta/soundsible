@@ -49,8 +49,15 @@ Estado vigente y forma de trabajar. Lo superado está en
 - [x] Podcasts: sección Top/recomendados con suscribir y «No me interesa»; filtro «sólo descargados» en el programa.
 - [x] Biblioteca: ordenar (A–Z, recientes, favoritos primero), filtro descargados, álbumes por género/año.
 - [x] Cola: peticiones tras la canción actual como en la web, vaciar peticiones; aviso de reanudar sesión de otro dispositivo (traspaso vía Core).
-- [ ] Reproductor: silenciar; búsqueda: elegir versión; DJ: «pedir todas» de una colección.
-- [ ] Ajustes: buscador de ajustes.
+- [x] Búsqueda: descargar del catálogo pasa por la comprobación del motor (`/api/catalog/save`) y pide «Elegir versión» si duda.
+- [x] DJ: «Cambiar sesión» desde una colección (la sesión pasa a ser esa única fuente).
+- [x] Ajustes: buscador de ajustes (índice web filtrado a lo que Android dibuja).
+- [—] Silenciar: no se porta. En Android volumen y silencio son del sistema (teclas, controles); el botón web
+      existe porque el navegador no los tiene.
+- [?] DJ «Pedir todas» de una colección: **decisión del usuario pendiente**. El servicio nativo sólo admite
+      peticiones de una canción y no tiene grupos que se vayan al cambiar de sesión; sin eso repetiría el fallo
+      de las 38 favoritas que sobrevivían a los cambios de sesión. Opciones: implementarlo con grupos nativos o
+      dejarlo fuera de Android.
 - [ ] Puente público/App Links: abrir enlaces https de canción/invitación con VIEW.
 - [ ] Negativos DJ/Auto: fallo permanente de ambos streams de red (DJ); etiquetas del
       programa activo y agotamiento de reintentos (Auto).
