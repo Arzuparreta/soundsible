@@ -31,7 +31,7 @@ class EngineConnection(private val context: Context) {
     var onReset: () -> Unit = {}
     val resetListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
     val client: OkHttpClient get() = transport(origin)
-    private fun transport(selected: String): OkHttpClient {
+    private fun transport(selected: String, epoch: Long = generation): OkHttpClient {
         val target = selected.toHttpUrl()
         return OkHttpClient.Builder()
             .followRedirects(false).followSslRedirects(false)
@@ -39,8 +39,11 @@ class EngineConnection(private val context: Context) {
             .cache(null)
             .addInterceptor { chain ->
                 val req = chain.request()
-                require(req.url.scheme == target.scheme && req.url.host == target.host && req.url.port == target.port)
-                require(origin == selected) { "STALE_SESSION" }
+                // OkHttp's async dispatcher reports IOExceptions to onFailure;
+                // unchecked exceptions here can terminate the application.
+                if (req.url.scheme != target.scheme || req.url.host != target.host || req.url.port != target.port)
+                    throw java.io.IOException("ENGINE_ORIGIN_ONLY")
+                if (origin != selected || generation != epoch) throw java.io.IOException("STALE_SESSION")
                 // Android denies general cleartext. Only this reserved routing
                 // alias has an OS exception; DNS below pins it to private addresses
                 // of the explicitly selected engine. Host remains the real server.
@@ -51,9 +54,9 @@ class EngineConnection(private val context: Context) {
             }
             .dns(object : Dns { override fun lookup(hostname: String): List<InetAddress> {
                 if (hostname != PRIVATE_ALIAS) return Dns.SYSTEM.lookup(hostname)
-                require(!target.isHttps)
+                if (target.isHttps) throw java.net.UnknownHostException("PRIVATE_ALIAS_ONLY")
                 val addresses = Dns.SYSTEM.lookup(target.host)
-                require(addresses.all { privateAddress(it) }) { "HTTP_PRIVATE_ONLY" }
+                if (addresses.any { !privateAddress(it) }) throw java.net.UnknownHostException("HTTP_PRIVATE_ONLY")
                 return addresses
             } }).build()
     }
@@ -136,7 +139,7 @@ class EngineConnection(private val context: Context) {
             cookieHeader(epoch)?.let { builder.header("Cookie", it) }
             request = builder.build()
         }
-        val call = transport(selected).newCall(request)
+        val call = transport(selected, epoch).newCall(request)
         call.timeout().timeout(timeout.coerceIn(1, 120000), TimeUnit.MILLISECONDS)
         synchronized(lock) {
             require(epoch == generation)
