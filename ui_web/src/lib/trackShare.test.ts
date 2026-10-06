@@ -69,3 +69,7 @@ describe('Soundsible track capsules', () => {
     expect(decodeTrackCapsule(unknown)).toBeNull();
   });
 });
+
+it('falls back to text sharing when valid-length Unicode metadata exceeds the capsule byte budget', () => {
+  expect(shareUrlForTrack({ id: 'dQw4w9WgXcQ', source: 'preview', title: '日'.repeat(256), artist: '日'.repeat(256), album: '日'.repeat(256) })).toBeNull();
+});

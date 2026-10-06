@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2ai incoming public song intents",
+  "source_revision_at_asset_prepare": "9450752c",
+  "dirty_at_asset_prepare": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "files": 204,
+      "tests": 1595,
+      "typescript": "passed",
+      "log": "/tmp/soundsible-s2ai-incoming-full-ui.log"
+    },
+    "android": {
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "instrumentation_seconds": 29.504,
+      "log": "/tmp/soundsible-s2ai-incoming-recreate-native.log",
+      "scope": "Incoming2 + Share2 HTTP/TLS; actual cold VIEW, warm VIEW/SEND and Activity recreation; outgoing chooser intercepted"
+    },
+    "normal_apk_test_unit_lint": "APK/test APK/JVM54/lint passed without ephemeral CA"
+  },
+  "proves": [
+    "pending public selection before login without account connection or autoplay",
+    "warm intents preserve native current KEY position and pause",
+    "older acknowledgement cannot dismiss newer intent",
+    "unsupported mixed connection/song intent rejected",
+    "explicit Play accepts validated preview identity and consumes pending selection",
+    "recreation does not replay consumed initial intent",
+    "UI late listener cleanup and warm event wins delayed initial read"
+  ],
+  "diagnostics": [
+    "incoming-native.log: test nullable compile failure corrected",
+    "incoming-native-fixed.log: 4/2 revealed Capacitor initial intent replay; corrected in SharePlugin"
+  ],
+  "limits": [
+    "HTTPS verified App Links and public bridge app-opening integration remain pending",
+    "incoming playback currently requires online account; offline cached-match acceptance pending",
+    "invites and multi-device parity remain pending",
+    "AVD is not physical device or browser-to-app acceptance",
+    "full current principal regression and browser4 still pending",
+    "no alpha release or complete parity"
+  ]
+}

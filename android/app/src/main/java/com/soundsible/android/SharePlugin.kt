@@ -11,6 +11,22 @@ import com.getcapacitor.annotation.CapacitorPlugin
 /** Explicit share-sheet launch. Account credentials and private stream addresses never become attachments. */
 @CapacitorPlugin(name = "SoundsibleShare")
 class SharePlugin : Plugin() {
+    private var initialDispatch = true
+    override fun handleOnNewIntent(intent: Intent) {
+        // BridgeActivity.load dispatches getIntent even on recreation. Consume
+        // that initial dispatch once; later OS intents remain independent.
+        if (initialDispatch) {
+            initialDispatch = false
+            if ((activity as? MainActivity)?.restoredInstance == true) return
+        }
+        IncomingTrackState.accept(context, intent)?.let { notifyListeners("incomingTrack", it) }
+    }
+    @PluginMethod fun incoming(call: PluginCall) { call.resolve(JSObject().put("incoming", IncomingTrackState.pending(context))) }
+    @PluginMethod fun dismiss(call: PluginCall) {
+        val token = call.getString("token")
+        if (token.isNullOrBlank() || token.length > 64) { call.reject("Incoming link identity is required.", "INVALID_INCOMING"); return }
+        call.resolve(JSObject().put("dismissed", IncomingTrackState.dismiss(context, token)))
+    }
     @PluginMethod
     fun open(call: PluginCall) {
         val epoch = call.getInt("generation")?.toLong() ?: call.getLong("generation") ?: -1L

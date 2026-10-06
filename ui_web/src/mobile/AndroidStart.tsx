@@ -24,6 +24,8 @@ import { ApiError, request, setUnauthorizedHandler } from '../lib/http';
 import type { User } from '../lib/session';
 import { nativeCopy } from './clipboard';
 import { nativeShareTrack } from './share';
+import { createIncomingTrack } from './incoming';
+import IncomingSong from './IncomingSong';
 import { engine, useEngine, watchEngine } from './engine';
 import NativeDownloads from './Downloads';
 import NativeMigrate from './Migrate';
@@ -86,6 +88,15 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   const [savedEntries, setSavedEntries] = createSignal<SavedEntry[]>([]);
   const [downloadItems, setDownloadItems] = createSignal<DownloadQueueItem[]>([]);
   const [savedEntities, setSavedEntities] = createSignal<SavedEntity[]>([]);
+  const incoming = createIncomingTrack();
+  const incomingSong = (): Track | null => {
+    const capsule = incoming.selection()?.capsule;
+    if (!capsule) return null;
+    return snapshot()?.tracks.find(track => !isPodcastTrack(track) && (track.youtube_id === capsule.yt || track.source === 'preview' && track.id === capsule.yt)) ?? {
+      id: capsule.yt, source: 'preview', youtube_id: capsule.yt, title: capsule.title, artist: capsule.artist,
+      album: capsule.album, duration: capsule.duration ?? 0,
+    } as Track;
+  };
   function entityMenu(entry: SavedEntity, event?: MouseEvent) {
     const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
     openContextMenu({ title: entry.name, subtitle: entry.artist, actions: [nativeEntityMark(entry, savedEntities, current, sync, () => { if (current()) setError(t('savedEntities.failed')); })] }, event);
@@ -348,6 +359,13 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
         <button type="submit" disabled={busy()}>{t('android.login')}</button>
       </form></Show>
     </Show>
+    <IncomingSong incoming={incoming} track={incomingSong} disabled={!user() || stale() || programPending() || !program()?.ready}
+      onMenu={songMenu} onPlay={async track => {
+        const captured = epoch; const queue = mixedProgram([track], 0);
+        if (!user() || stale() || queue.index < 0) throw new Error('Playback unavailable');
+        await runtime.execute({ action: 'queue', tracks: queue.tracks, index: queue.index });
+        if (captured !== epoch) throw new Error('Account changed');
+      }} />
     <Show when={error()}><p role="alert">{error()}</p></Show>
     <Show when={busy()}><p role="status">{t('common.loading')}</p></Show>
     <Show when={stale() && !user()}><p role="status">{t('library.unreachable')} <button disabled={busy()} onClick={() => void refresh()}>{t('common.retry')}</button></p></Show>

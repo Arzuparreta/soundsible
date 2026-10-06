@@ -167,7 +167,7 @@ Ver [S2ah](SLICE_2AH.md). Recepción/deep links/invites y multidispositivo pendi
 Clone `/tmp/soundsible-android-next`, rama `feat/android-phone-continuation` sobre
 `1eec3df3`: sharing ya copiado al principal; no volver a copiar archivos viejos.
 Parser incomingTrack nuevo en desarrollo para cápsulas públicas/URL nativa open;
-sin conexión automática ni autoplay. Native recepción aún no implementada.
+sin conexión automática ni autoplay. Native recepción implementada, en validación S2ai. Ver SLICE_2AI.md. UI204/1595 + TS pasan. Incoming2 + Share2 sobre 9450752c dirty compila; primer bloque4/2 detecta replay al recrear: BridgeActivity.load redespacha getIntent. Corregido en SharePlugin con descarte del despacho inicial restaurado; repetición en /tmp/soundsible-s2ai-incoming-recreate-native.log, no declarar aceptada hasta exit0 y build normal. Primer compile falló por nullable sólo en test, ya corregido. Fuentes congeladas durante runner. IncomingTrackTest limpia preferencias públicas pendientes al inicio/final.
 Network viejo preservado en stash del clone; no aplicarlo sobre fuentes nuevas.
 
 Android Auto: browse draft en ProgramCarLibrary, requiere integración, selección,
@@ -208,3 +208,12 @@ avances, fallos y comandos antiguos; consultar sólo el bloque relevante.
   sin micrófono y recepción independiente antes de integrar salas/claim de emisión.
   Fuentes consultadas: [ADM upstream](https://webrtc.googlesource.com/src/+/main/modules/audio_device/g3doc/audio_device_module.md),
   [JavaAudioDeviceModule GetStream](https://github.com/GetStream/webrtc-android/blob/main/stream-webrtc-android/src/main/java/org/webrtc/audio/JavaAudioDeviceModule.java).
+
+S2ai recepción validada sobre9450752c dirty: Incoming2 + Share2,4/0 HTTP/TLS,
+29.504s, normal APK/test APK/JVM54/lint sin CA pasa (runner exit0).
+Log /tmp/soundsible-s2ai-incoming-recreate-native.log. UI204/1595 + TS.
+Recreate no reejecuta intent consumido; nuevos VIEW/SEND conservan KEY/posición/pausa
+hasta Play explícito. Primer compile nullable y siguiente4/2 replay corregidos,
+no contar esos runs como verdes. SLICE_2AI/evidence/s2ai.json guardan límites:
+puente público/App Links, offline cached-match, invites/multidispositivo pendientes.
+Congelación levantada. Siguiente DJ: ambas entradas indisponibles en Recovery.

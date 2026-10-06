@@ -15,7 +15,9 @@ import java.util.concurrent.TimeUnit
 
 @androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 class MainActivity : BridgeActivity() {
+    var restoredInstance = false; private set
     override fun onCreate(savedInstanceState: Bundle?) {
+        restoredInstance = savedInstanceState != null
         registerPlugin(AppearancePlugin::class.java)
         registerPlugin(FeedbackPlugin::class.java)
         registerPlugin(ClipboardPlugin::class.java)
