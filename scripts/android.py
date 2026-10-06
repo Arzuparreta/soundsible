@@ -229,6 +229,12 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False) 
                         "-r",
                         str(ANDROID / "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"),
                     )
+                    # These direct instrumentation phases do not use FixtureIsolationListener.
+                    # Permission-choice acceptance has its own fresh-install tests;
+                    # restart acceptance must not wait for an unanswered system dialog.
+                    api_level = int(run(binary, "shell", "getprop", "ro.build.version.sdk", capture=True).strip())
+                    if api_level >= 33:
+                        adb("shell", "pm", "grant", "com.soundsible.android.dev", "android.permission.POST_NOTIFICATIONS")
                     metadata = json.loads((ANDROID / "build-info.json").read_text())
                     protocols = []
                     if not live_restart_only:

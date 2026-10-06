@@ -66,7 +66,10 @@ Estado vigente y forma de trabajar. Lo superado está en
       error visible sin cuelgue, misma ocurrencia y recuperación con reintento explícito.
 - [x] Negativos Auto: el socket del coche quedaba muerto al agotar reintentos (fallo real, corregido con
       enfriamiento de 30 s como S2aq). Etiquetas del programa activo: `CarDjTest`/`CarEventsTest`.
-- [ ] Regresión final: principal nativa completa HTTP+TLS, restart offline/Live, browser4 (AGENTS).
+- [x] Regresión local Core (1792), UI (1660), browser4 completos y restart offline/Live (4 fases).
+- [ ] Suite principal final en CI: la ejecución local completa (211 casos) descubrió fallos de fixture
+      y reloj compartido; corregidos y revalidados por radio de impacto (EVIDENCE).
+      La PR debe quedar con todos los checks verdes antes del cierre de la entrega.
 - [ ] PR con una etiqueta de impacto, base `origin/main` verificada.
 - [ ] Requiere al usuario, no bloquea la PR: clave de firma permanente y canal de
       publicación (RELEASE_GATES 4–8).
