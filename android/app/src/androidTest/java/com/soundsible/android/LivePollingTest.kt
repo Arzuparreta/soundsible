@@ -11,7 +11,7 @@ import org.junit.Test
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-/** A quiet, polling-only room must survive the real 25-second server ping interval. */
+/** A quiet, polling-only room must survive the real 20-second server ping interval. */
 class LivePollingTest {
     @Test fun pollingSurvivesQuietRoom() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

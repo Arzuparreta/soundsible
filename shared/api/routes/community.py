@@ -216,7 +216,13 @@ def update_session(session_id: str):
 @community_bp.delete("/api/community/sessions/<session_id>")
 @rate_limit("community_end", limit=30, window_sec=60)
 def end_session(session_id: str):
-    return _remote("DELETE", f"/v1/sessions/{session_id}")
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid session condition"}), 400
+    token = data.get("if_host_token")
+    if token is not None and (not isinstance(token, str) or not 1 <= len(token) <= 512):
+        return jsonify({"error": "Invalid session condition"}), 400
+    return _remote("DELETE", f"/v1/sessions/{session_id}", {"if_host_token": token} if token is not None else None)
 
 
 @community_bp.get("/api/community/open")

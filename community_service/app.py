@@ -19,6 +19,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -69,6 +70,48 @@ _nonces: dict[str, float] = {}
 _programs: dict[str, dict[str, Any]] = {}
 _connections: dict[str, dict[str, Any]] = {}
 _host_generation: dict[str, int] = {}
+_resume_lock = threading.Lock()
+
+
+def _retire_publisher(stream_path: str) -> None:
+    """Retire only this signed owner's WHIP publisher through the private relay API."""
+    if not STREAM_RE.fullmatch(stream_path):
+        raise ValueError("Invalid stream path")
+    health = urllib.parse.urlsplit(MEDIA_HEALTH_URL)
+    suffix = "/v3/config/global/get"
+    if health.scheme not in ("http", "https") or not health.netloc or not health.path.endswith(suffix) or health.query or health.fragment:
+        raise ValueError("Media control API must share the configured health origin")
+    root = urllib.parse.urlunsplit((health.scheme, health.netloc, health.path[:-len(suffix)], "", ""))
+
+    def control(path: str, method: str = "GET") -> dict[str, Any]:
+        try:
+            with urllib.request.urlopen(urllib.request.Request(root + path, method=method), timeout=2) as response:
+                raw = response.read(65537)
+                if len(raw) > 65536:
+                    raise ValueError("Media control response too large")
+                payload = json.loads(raw) if raw else {}
+                if not isinstance(payload, dict):
+                    raise ValueError("Invalid media control response")
+                return payload
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return {}
+            raise
+
+    source = control("/v3/paths/get/" + urllib.parse.quote(stream_path, safe="")).get("source")
+    if not source:
+        return
+    if not isinstance(source, dict):
+        raise ValueError("Invalid media source")
+    peer_id = source.get("id")
+    if source.get("type") != "webRTCSession" or not isinstance(peer_id, str) or not re.fullmatch(r"[a-f0-9-]{36}", peer_id):
+        raise ValueError("Unexpected media publisher")
+    peer = control("/v3/webrtcsessions/get/" + peer_id)
+    if not peer:
+        return
+    if peer.get("path") != stream_path or peer.get("state") != "publish":
+        raise ValueError("Media publisher ownership changed")
+    control("/v3/webrtcsessions/kick/" + peer_id, "POST")
 
 
 def _now() -> int:
@@ -457,16 +500,31 @@ def resume_session(session_id: str):
     host_token = secrets.token_urlsafe(32)
     publish_token = secrets.token_urlsafe(32)
     next_status = "live" if session_id in _programs else "waiting"
-    with db() as conn:
-        conn.execute(
-            """
-            UPDATE sessions SET status = ?, host_token_hash = ?,
-                publish_token_hash = ?, updated_at = ? WHERE id = ?
-            """,
-            (next_status, _token_hash(host_token), _token_hash(publish_token), _now(), session_id),
-        )
+    with _resume_lock:
+        latest = _require_session_owner(verified, session_id)
+        if latest is None:
+            return jsonify({"error": "Session not found"}), 404
+        if latest["host_token_hash"] != row["host_token_hash"]:
+            return jsonify({"error": "Session already resumed", "code": "session_owner_changed"}), 409
+        try:
+            _retire_publisher(row["stream_path"])
+        except (OSError, ValueError):
+            return jsonify({"error": "Media relay unavailable", "code": "media_unavailable"}), 503
+        with db() as conn:
+            conn.execute(
+                """
+                UPDATE sessions SET status = ?, host_token_hash = ?,
+                    publish_token_hash = ?, updated_at = ? WHERE id = ?
+                """,
+                (next_status, _token_hash(host_token), _token_hash(publish_token), _now(), session_id),
+            )
+        _host_generation[session_id] = _host_generation.get(session_id, 0) + 1
+        for sid, connection in list(_connections.items()):
+            if connection["session_id"] == session_id and connection["host"]:
+                socketio.server.disconnect(sid, namespace="/")
     resumed = _session_row(session_id)
-    assert resumed is not None
+    if resumed is None:
+        return jsonify({"error": "Session expired"}), 410
     return jsonify({"session": _access_payload(resumed, host_token, publish_token)})
 
 
@@ -524,10 +582,17 @@ def end_session(session_id: str):
     if error:
         return error
     assert verified is not None
-    if _require_session_owner(verified, session_id) is None:
+    owned = _require_session_owner(verified, session_id)
+    if owned is None:
         return jsonify({"error": "Session not found"}), 404
+    conditional = verified["body"].get("if_host_token")
+    if conditional is not None and (not isinstance(conditional, str) or not secrets.compare_digest(_token_hash(conditional), owned["host_token_hash"])):
+        return jsonify({"error": "Session owner changed", "code": "session_owner_changed"}), 409
     with db() as conn:
-        conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        deleted = conn.execute("DELETE FROM sessions WHERE id = ?" + (" AND host_token_hash = ?" if conditional is not None else ""),
+                               (session_id, owned["host_token_hash"]) if conditional is not None else (session_id,))
+        if deleted.rowcount == 0:
+            return jsonify({"error": "Session owner changed", "code": "session_owner_changed"}), 409
     _purge_artwork(session_id)
     _programs.pop(session_id, None)
     _host_generation.pop(session_id, None)

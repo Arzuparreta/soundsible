@@ -151,6 +151,19 @@ def main():
         for sid in selected:
             socketio.server.disconnect(sid, namespace="/")
         return jsonify(disconnected=len(selected))
+
+    @app.get("/__fixture/relay-state")
+    def relay_state():
+        if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
+            return jsonify(error="fixture only"), 403
+        from community_service.app import _session_row
+        room = _session_row(request.args.get("session_id", ""))
+        if room is None:
+            return jsonify(error="invalid isolated resource"), 400
+        with urlopen("http://127.0.0.1:59997/v3/webrtcsessions/list", timeout=2) as response:
+            peers = json.load(response)["items"]
+        selected = [peer for peer in peers if peer["path"] == room["stream_path"]]
+        return jsonify(publishers=sum(peer["state"] == "publish" for peer in selected), readers=sum(peer["state"] == "read" for peer in selected))
     internal = WSGIServer(("127.0.0.1", 58080), app, handler_class=WebSocketHandler)
     internal.start()
     WSGIServer(("127.0.0.1", 58443), app, handler_class=WebSocketHandler,

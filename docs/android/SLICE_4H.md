@@ -15,7 +15,7 @@ no debe decodificar PCM. Después escucha la sala correcta y ejecuta los control
 y la recuperación anteriores. Host y guest pierden sus sockets con Activity
 cerrada; el audio Live termina, el host conserva el programa local y Community
 retira la sala dentro de su gracia. Un test polling-only deja35s de silencio y
-exige cero desconexiones, incluyendo el ping real del servidor a25s.
+exige cero desconexiones, incluyendo el ping real del servidor a20s.
 
 Validación: Host4/Listener2 pasan en el combinado9/2; los fallos fueron una
 carrera del test UI al enviar chat antes de terminar el cambio de título y su

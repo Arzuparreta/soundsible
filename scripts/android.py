@@ -95,10 +95,10 @@ def adb(*args: str, serial: str | None = None) -> None:
     run(str(binary), *(["-s", serial] if serial else []), *args)
 
 
-def integration(*, restart_only: bool = False) -> None:
+def integration(*, restart_only: bool = False, live_restart_only: bool = False) -> None:
     """Own three disposable engines and run real native account integration on an AVD."""
     doctor()
-    if restart_only and os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
+    if (restart_only or live_restart_only) and os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
         raise RuntimeError("Restart protocol cannot be combined with a single-class instrumentation filter")
     binary = str(sdk() / "platform-tools/adb")
     devices = [
@@ -124,7 +124,7 @@ def integration(*, restart_only: bool = False) -> None:
             try:
                 ca_path, certificate, key = create_fixture_tls(Path(temporary))
                 test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class", "")
-                if not restart_only and (not test_filter or any(name in test_filter for name in ("LiveRelayTest", "LiveHostTest", "LiveListenerTest", "LiveUiTest", "LiveHandshakeTest", "LivePollingTest")) or os.environ.get("SOUNDSIBLE_ANDROID_LIVE_FIXTURE") == "1"):
+                if not restart_only and (not test_filter or any(name in test_filter for name in ("LiveRelayTest", "LiveHostTest", "LiveListenerTest", "LiveUiTest", "LiveHandshakeTest", "LivePollingTest", "LiveResumeTest")) or os.environ.get("SOUNDSIBLE_ANDROID_LIVE_FIXTURE") == "1"):
                     from android_live_fixture import LiveFixture
                     live_fixture = LiveFixture(Path(temporary) / "live", ca_path, certificate, key, log)
                     live_fixture.start()
@@ -199,10 +199,10 @@ def integration(*, restart_only: bool = False) -> None:
                             if time.monotonic() >= deadline:
                                 raise RuntimeError("Fixture startup timed out; see android/build/fixture.log") from None
                             time.sleep(0.2)
-                if not restart_only:
+                if not restart_only and not live_restart_only:
                     gradle(
                         ":app:connectedDebugAndroidTest",
-                        "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest",
+                        "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest,com.soundsible.android.LiveRestartTest",
                         "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
                         "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
                         "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
@@ -230,41 +230,51 @@ def integration(*, restart_only: bool = False) -> None:
                         str(ANDROID / "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"),
                     )
                     metadata = json.loads((ANDROID / "build-info.json").read_text())
-                    for phase in ("prepare", "offline"):
-                        if phase == "offline":
-                            adb("shell", "am", "force-stop", "com.soundsible.android.dev")
-                        output = run(
-                            binary,
-                            "shell",
-                            "am",
-                            "instrument",
-                            "-w",
-                            "-e",
-                            "class",
-                            "com.soundsible.android.OfflineRestartTest",
-                            "-e",
-                            "offlinePhase",
-                            phase,
-                            "-e",
-                            "fixtureOrigin",
-                            "http://10.0.2.2:5097",
-                            "-e",
-                            "expectedVersion",
-                            metadata["version"],
-                            "com.soundsible.android.dev.test/androidx.test.runner.AndroidJUnitRunner",
-                            capture=True,
-                        )
-                        result = ANDROID / f"build/integration-results/restart-{phase}"
-                        shutil.rmtree(result, ignore_errors=True)
-                        result.mkdir(parents=True)
-                        (result / "instrumentation.txt").write_text(output)
-                        print(output)
-                        if not re.search(r"OK \(1 test\)", output) or "FAILURES!!!" in output:
-                            raise RuntimeError(f"Offline restart phase {phase} failed; see {result}")
-                        (result / "result.json").write_text(
-                            json.dumps({"phase": phase, "tests": 1, "failures": 0, "errors": 0, "skipped": 0}, indent=2)
-                            + "\n"
-                        )
+                    protocols = []
+                    if not live_restart_only:
+                        protocols.append(("OfflineRestartTest", "offlinePhase", ("prepare", "offline"), "restart"))
+                    if not restart_only:
+                        protocols.append(("LiveRestartTest", "livePhase", ("prepare", "resume"), "live-restart"))
+                    for test_class, phase_key, phases, prefix in protocols:
+                        for phase in phases:
+                            if phase != "prepare":
+                                adb("shell", "am", "force-stop", "com.soundsible.android.dev")
+                            output = run(
+                                binary,
+                                "shell",
+                                "am",
+                                "instrument",
+                                "-w",
+                                "-e",
+                                "class",
+                                "com.soundsible.android." + test_class,
+                                "-e",
+                                phase_key,
+                                phase,
+                                "-e",
+                                "fixtureOrigin",
+                                "http://10.0.2.2:5097",
+                                "-e",
+                                "tlsOrigin",
+                                "https://10.0.2.2:5099",
+                                "-e",
+                                "expectedVersion",
+                                metadata["version"],
+                                "com.soundsible.android.dev.test/androidx.test.runner.AndroidJUnitRunner",
+                                capture=True,
+                            )
+                            root = "build/integration-live-restart" if live_restart_only else "build/integration-results"
+                            result = ANDROID / f"{root}/{prefix}-{phase}"
+                            shutil.rmtree(result, ignore_errors=True)
+                            result.mkdir(parents=True)
+                            (result / "instrumentation.txt").write_text(output)
+                            print(output)
+                            if not re.search(r"OK \(1 test\)", output) or "FAILURES!!!" in output:
+                                raise RuntimeError(f"{test_class} phase {phase} failed; see {result}")
+                            (result / "result.json").write_text(
+                                json.dumps({"phase": phase, "tests": 1, "failures": 0, "errors": 0, "skipped": 0}, indent=2)
+                                + "\n"
+                            )
                 adb("pull", "/sdcard/Download/soundsible-s1-library.png", str(ANDROID / "build/library.png"))
                 adb("pull", "/sdcard/Download/soundsible-s2-program.png", str(ANDROID / "build/program.png"))
             finally:
@@ -288,14 +298,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("doctor", "prepare", "build", "install", "smoke", "integration"))
     parser.add_argument("--serial", help="adb device serial (or set ANDROID_SERIAL)")
-    parser.add_argument(
+    restart = parser.add_mutually_exclusive_group()
+    restart.add_argument(
         "--offline-restart-only",
         action="store_true",
         help="integration: run only the prepare/force-stop/offline protocol; does not validate the main suite",
     )
+    restart.add_argument("--live-restart-only", action="store_true",
+                         help="integration: run only Live prepare/force-stop/resume on the isolated relay")
     args = parser.parse_args()
-    if args.offline_restart_only and args.command != "integration":
-        parser.error("--offline-restart-only requires integration")
+    if (args.offline_restart_only or args.live_restart_only) and args.command != "integration":
+        parser.error("restart-only flags require integration")
     if args.serial:
         os.environ["ANDROID_SERIAL"] = args.serial
     try:
@@ -317,7 +330,7 @@ def main() -> int:
                 serial=args.serial,
             )
         elif args.command == "integration":
-            integration(restart_only=args.offline_restart_only)
+            integration(restart_only=args.offline_restart_only, live_restart_only=args.live_restart_only)
         else:
             # Tests install/run the packaged APK and exercise App.getInfo through
             # the real bridge, including offline reopening and locale persistence.

@@ -36,11 +36,12 @@
     "Wrong room with valid WHEP decodes no PCM",
     "Host/guest real server disconnect with Activity closed retires Live after10s",
     "Local programme preserved after host lease loss",
-    "Polling-only quiet room35s has no disconnect/error across server ping25s"
+    "Polling-only quiet room35s has no disconnect/error across server ping20s"
   ],
   "limits": [
     "Acceptance split across9/2 and corrected3/0; not whole9/0 rerun",
     "Process death/resume and retry exhaustion still pending",
     "No whole principal/browser4 or physical device claim"
-  ]
+  ],
+  "documentation_correction": "Community ping_interval20s, ping_timeout25s. The accepted35s quiet test spans ping20, previously described as25."
 }

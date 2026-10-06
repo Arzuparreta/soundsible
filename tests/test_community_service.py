@@ -239,7 +239,9 @@ def test_signed_resume_rotates_media_credentials(tmp_path, monkeypatch):
     resume_body = {"profile": {"display_name": "DJ Test"}}
     path = f"/v1/sessions/{original['id']}/resume"
     encoded, headers = _headers("POST", path, resume_body)
-    resumed = client.post(path, data=encoded, headers=headers)
+    old_host = module.socketio.test_client(module.app, auth={"session_id": original["id"], "host_token": original["host_token"]})
+    with patch.object(module.urllib.request, "urlopen", return_value=io.BytesIO(b'{"source":null}')):
+        resumed = client.post(path, data=encoded, headers=headers)
 
     assert resumed.status_code == 200
     session = resumed.get_json()["session"]
@@ -247,6 +249,70 @@ def test_signed_resume_rotates_media_credentials(tmp_path, monkeypatch):
     assert session["host_token"] != original["host_token"]
     assert session["publish_token"] != original["publish_token"]
     assert session["reconnect_grace_seconds"] == 15
+    assert not old_host.is_connected()
+    delete_path = f"/v1/sessions/{original['id']}"
+    stale_body = {"profile": {"display_name": "DJ Test"}, "if_host_token": original["host_token"]}
+    encoded, headers = _headers("DELETE", delete_path, stale_body)
+    assert client.delete(delete_path, data=encoded, headers=headers).status_code == 409
+    assert client.get(delete_path).status_code == 200
+    current_body = {**stale_body, "if_host_token": session["host_token"]}
+    encoded, headers = _headers("DELETE", delete_path, current_body)
+    assert client.delete(delete_path, data=encoded, headers=headers).status_code == 204
+
+
+def test_resume_preserves_credentials_if_relay_cannot_retire_publisher(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMMUNITY_DB_PATH", str(tmp_path / "community.db"))
+    monkeypatch.setenv("COMMUNITY_ARTWORK_DIR", str(tmp_path / "artwork"))
+    monkeypatch.setenv("COMMUNITY_SOCKET_ASYNC_MODE", "threading")
+    import community_service.app as module
+    module = importlib.reload(module)
+    client = module.app.test_client()
+    body = {"title": "Keep current media", "profile": {"display_name": "DJ Test"}}
+    encoded, headers = _headers("POST", "/v1/sessions", body)
+    original = client.post("/v1/sessions", data=encoded, headers=headers).get_json()["session"]
+    encoded, headers = _headers("POST", f"/v1/sessions/{original['id']}/resume", body)
+    with patch.object(module.urllib.request, "urlopen", side_effect=OSError("relay unavailable")):
+        response = client.post(f"/v1/sessions/{original['id']}/resume", data=encoded, headers=headers)
+    assert response.status_code == 503
+    assert response.get_json()["code"] == "media_unavailable"
+    assert client.post("/internal/media-auth", json={"action": "publish", "path": original["stream_path"], "token": original["publish_token"]}).status_code == 204
+
+
+def test_retire_publisher_uses_exact_private_path_and_role(monkeypatch):
+    import community_service.app as module
+    monkeypatch.setattr(module, "MEDIA_HEALTH_URL", "http://relay.internal:9997/v3/config/global/get")
+    path = "live_" + "a" * 18
+    peer_id = "00000000-0000-0000-0000-000000000001"
+    calls = []
+    def control(request, timeout):
+        calls.append((request.full_url, request.get_method()))
+        if "/paths/get/" in request.full_url:
+            payload = {"source": {"type": "webRTCSession", "id": peer_id}}
+        elif "/webrtcsessions/get/" in request.full_url:
+            payload = {"path": path, "state": "publish"}
+        else:
+            payload = {"status": "ok"}
+        assert timeout == 2
+        assert not request.has_header("Cookie")
+        return io.BytesIO(json.dumps(payload).encode())
+    with patch.object(module.urllib.request, "urlopen", side_effect=control):
+        module._retire_publisher(path)
+    assert calls == [(f"http://relay.internal:9997/v3/paths/get/{path}", "GET"),
+                     (f"http://relay.internal:9997/v3/webrtcsessions/get/{peer_id}", "GET"),
+                     (f"http://relay.internal:9997/v3/webrtcsessions/kick/{peer_id}", "POST")]
+
+
+def test_retire_publisher_rejects_changed_path_without_kicking(monkeypatch):
+    import community_service.app as module
+    monkeypatch.setattr(module, "MEDIA_HEALTH_URL", "http://relay.internal:9997/v3/config/global/get")
+    peer_id = "00000000-0000-0000-0000-000000000001"
+    responses = [io.BytesIO(json.dumps({"source": {"type": "webRTCSession", "id": peer_id}}).encode()),
+                 io.BytesIO(json.dumps({"path": "live_foreign", "state": "publish"}).encode())]
+    with patch.object(module.urllib.request, "urlopen", side_effect=responses) as control:
+        import pytest
+        with pytest.raises(ValueError, match="ownership changed"):
+            module._retire_publisher("live_" + "a" * 18)
+        assert control.call_count == 2
 
 
 def test_health_checks_sqlite_and_mediamtx(tmp_path, monkeypatch):

@@ -199,6 +199,24 @@ def test_station_bridge_accepts_empty_delete_response(monkeypatch):
     assert response.data == b""
 
 
+def test_station_bridge_signs_conditional_cleanup(monkeypatch):
+    monkeypatch.setattr(routes, "current_user_id_from_request", lambda: TEST_USER_ID)
+    monkeypatch.setattr(routes, "current_user", lambda: {"display_name": "DJ"})
+    sent = []
+    def remote(*args, **kwargs):
+        sent.append(json.loads(kwargs["data"]))
+        return _EmptyResponse()
+    monkeypatch.setattr(routes.requests, "request", remote)
+    app = Flask(__name__)
+    app.register_blueprint(routes.community_bp)
+    client = app.test_client()
+    assert client.delete("/api/community/sessions/session-test", json={"if_host_token": "private-host-token"}).status_code == 204
+    assert sent[0]["if_host_token"] == "private-host-token"
+    assert sent[0]["profile"]["display_name"] == "DJ"
+    assert client.delete("/api/community/sessions/session-test", json={"if_host_token": {"invalid": True}}).status_code == 400
+    assert len(sent) == 1
+
+
 def test_station_bridge_rejects_invalid_success_payload(monkeypatch):
     monkeypatch.setattr(routes, "current_user_id_from_request", lambda: TEST_USER_ID)
     monkeypatch.setattr(routes, "current_user", lambda: {"display_name": "DJ"})

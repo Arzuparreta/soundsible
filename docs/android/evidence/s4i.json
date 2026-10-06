@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4i",
+  "channel": "development",
+  "base_revision": "3da54284",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/NativeLiveHost.kt": "fcfed19068c205d19222415e551667bf8727f5d42287de5e1560517ada94aa26",
+    "community_service/app.py": "d9c50d0da29c573e23ab94e22187ad85b6b37c3196f71c2e537b8b4ccdec2549",
+    "shared/api/routes/community.py": "917f359fb9946c5dbfd5439571f8d2d5fbd12dd93551d931cd4ecbad115af7e2",
+    "scripts/android.py": "1cc5ed2b8cdb5ca7d9094565b0582e5d75541a58e9f04fdf22416087bdcfdb70",
+    "scripts/android_live_fixture.py": "533402a439825529d0fa50a78762a5dd2f2feaa9099dbd3ca7f7916a64b1f73f",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveResumeTest.kt": "d465991667aeb0071c2c867707d02ec44d1cfca63ed5de166d085881be0d8317",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveRestartTest.kt": "4a827ead9b674df08351c18ba644c4c45f61d59001a15bcc53b821b9bd96a277",
+    "tests/test_community_service.py": "142bcefaedd5c22af4dc0f8a888155b8b38768ffa229ce611bd2631fdb980d66",
+    "tests/test_community_routes.py": "acd4f8012684d00c223b9359c2f50b90de018e45e9c29943fd3861b86843117f"
+  },
+  "core": {
+    "tests": 19,
+    "failures": 0,
+    "log": "/tmp/soundsible-live-resume-core.log"
+  },
+  "relay_resume": {
+    "tests": 2,
+    "failures": 0,
+    "seconds": 16.256,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-resume-fixed-native.log"
+  },
+  "process_restart": {
+    "prepare": {
+      "tests": 1,
+      "failures": 0,
+      "seconds": 5.935
+    },
+    "resume": {
+      "tests": 1,
+      "failures": 0,
+      "seconds": 5.277
+    },
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-process-restart-native.log"
+  },
+  "normal_build": "Both runners: APK/test APK/JVM56/lint pass after temporary CA removal",
+  "coverage": [
+    "Signed owner retires only matching real MediaMTX publisher before token rotation",
+    "Relay unavailable preserves old credentials",
+    "Old conditional DELETE cannot remove resumed room",
+    "Native 409 resume preserves room and advances sequence",
+    "Force-stop/new PID preserves encrypted Core cookie; explicit restart emits independent WHEP PCM"
+  ],
+  "limits": [
+    "No whole principal/browser suite claim",
+    "Retry exhaustion/account reset/focus acceptance pending",
+    "No physical device or Google Auto acceptance"
+  ]
+}

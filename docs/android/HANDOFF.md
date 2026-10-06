@@ -214,9 +214,22 @@ Producto idéntico entre runs. Ver SLICE_4H/evidence/s4h.json, logs
 /tmp/soundsible-live-leases-native.log y /tmp/soundsible-live-leases-ui-fixed-native.log.
 Host/guest esperan autorización Socket antes de WHIP/WHEP; rechazo sala con
 WHEP real no produce PCM. Lease perdida en background retira Live tras10s,
-conservando local; polling-only35s sobre ping25s estable. No suite activa tras
+conservando local; polling-only35s sobre ping20s estable. No suite activa tras
 31747. AVD5554 sigue. Siguiente: proceso/resume409 y agotamiento/reset. El
 publisher muerto puede seguir ocupando MediaMTX aunque Core rote tokens;
 continuidad debe retirar sólo la resource del owner firmado y probarse en relay
 real, no basta POST resume. Sources vigentes root. PR no creada aún (ghprview
 verificado). No final de checkpoint, no merge/automerge/release.
+
+S4i validado: resume firmado retira publisher real antes de rotar credenciales,
+conserva sala/programa y protege DELETE tardío con if_host_token. Native crea o
+reanuda409 y continúa seq. Core19/0; LiveResume HTTP/TLS2/0,16.256s;
+LiveRestart prepare1/0,5.935s + force-stop + resume1/0,5.277s: PID distinto,
+cookie cifrada conservada, misma sala, seq creciente y PCM WHEP independiente.
+Ambos runners exit0 + APK/test APK/JVM56/lint normales sin CA temporal.
+Logs /tmp/soundsible-live-resume-fixed-native.log y
+/tmp/soundsible-live-process-restart-native.log. Ver SLICE_4I/evidence/s4i.json.
+No regresión principal/browser completa en este bloque. AVD5554 sigue, ninguna
+suite activa. Siguiente: agotamiento/reset/foco Live, después restantes teléfono/
+DJ/Auto/firma y regresión final. PR abierta para review manual cuando paridad;
+no merge, automerge ni release. Ping Community20s/timeout25s corregido en docs.

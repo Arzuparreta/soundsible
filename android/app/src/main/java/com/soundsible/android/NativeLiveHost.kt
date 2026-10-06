@@ -149,13 +149,25 @@ internal class NativeLiveHost(
     private val reset: () -> Unit = { main.post { stop(false) } }
     init { connection.resetListeners.add(reset) }
     private fun current(token: Long) = !closed && revision.get() == token && epoch == connection.generation
+    private class CoreFailure(val status: Int, val payload: JSONObject) : java.io.IOException("LIVE_CORE_$status")
     private fun core(path: String, method: String, body: JSONObject? = null): JSONObject =
-        connection.execute(path, method, body?.toString()?.toRequestBody("application/json".toMediaType()), emptyMap(), epoch, "live-host-${System.nanoTime()}", 15000).use {
+        connection.execute(path, method, (body ?: if (method == "POST") JSONObject() else null)?.toString()?.toRequestBody("application/json".toMediaType()), emptyMap(), epoch, "live-host-${System.nanoTime()}", 15000).use {
             if (it.code == 401) { connection.clearSession(false); throw NativeLiveAuthenticationExpired() }
-            check(it.isSuccessful) { "LIVE_CORE_${it.code}" }
-            val text = it.body?.string().orEmpty()
-            if (text.isBlank()) JSONObject() else JSONObject(text)
+            val bytes = it.peekBody(65537).bytes(); require(bytes.size <= 65536)
+            val text = String(bytes, Charsets.UTF_8)
+            val payload = if (text.isBlank()) JSONObject() else JSONObject(text)
+            if (!it.isSuccessful) throw CoreFailure(it.code, payload)
+            payload
         }
+    private fun createOrResume(title: String): JSONObject {
+        try { return core("/api/community/sessions", "POST", JSONObject().put("title", title.take(160))).getJSONObject("session") }
+        catch (error: CoreFailure) {
+            if (error.status != 409 || error.payload.optString("code") != "session_already_active") throw error
+            val id = error.payload.getString("session_id")
+            require(Regex("^[A-Za-z0-9_-]{12,64}$").matches(id))
+            return core("/api/community/sessions/$id/resume", "POST").getJSONObject("session")
+        }
+    }
     private fun publicRoom(value: JSONObject): JSONObject = JSONObject(value.toString()).apply {
         for (key in listOf("host_token", "publish_token", "whip_url", "socket_url", "stream_path")) remove(key)
     }
@@ -173,8 +185,9 @@ internal class NativeLiveHost(
             try {
                 val config = core("/api/community/config", "GET")
                 require(config.optString("state") == "available") { "LIVE_UNAVAILABLE" }
-                val created = core("/api/community/sessions", "POST", JSONObject().put("title", title.take(160))).getJSONObject("session")
+                val created = createOrResume(title)
                 room = created
+                sequence = maxOf(0, created.optJSONObject("program")?.optLong("seq", 0) ?: 0)
                 check(current(token)) { "STALE_LIVE" }
                 publicArtwork = LiveArtwork(created.getString("socket_url"), created.getString("id"))
                 val endpoint = created.getString("socket_url").toHttpUrl()
@@ -288,7 +301,9 @@ internal class NativeLiveHost(
         socket?.off(); socket?.disconnect(); socket = null
         peer?.close(); peer = null
         val previous = room; room = null; connected = false
-        if (endRoom && previous != null && epoch == connection.generation) runCatching { core("/api/community/sessions/${previous.getString("id")}", "DELETE") }
+        if (endRoom && previous != null && epoch == connection.generation) runCatching {
+            core("/api/community/sessions/${previous.getString("id")}", "DELETE", JSONObject().put("if_host_token", previous.getString("host_token")))
+        }
         transport?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll(); it.dispatcher.executorService.shutdown() }; transport = null
         sequence = 0; pausedSince = null
         main.post { messages = JSONArray(); programme = null; thumbnails.clear(); pendingArtwork.clear(); artworkFailures.clear() }

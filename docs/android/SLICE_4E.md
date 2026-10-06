@@ -20,7 +20,7 @@ como acciones de canción; la selección canónica sigue devolviendo a NORMAL.
 Los extras y respuestas a JS eliminan tokens de host/publicación. Un401 observado
 por acciones Core de Live devuelve autenticación expirada y limpia sesión/perfil;
 la UI vuelve al login y retira biblioteca/panel. Los transportes Socket.IO permiten
-long polling de25s sin el timeout de10/20s anterior; queda pendiente soak dirigido.
+long polling de20s sin el timeout de10/20s anterior; queda pendiente soak dirigido.
 
 Ver `evidence/s4e.json` para pruebas/logs finales y procedencia de las fuentes.
 El bloque combina aceptación Native Host/Guest/Relay/Input con UI real HTTP/TLS.
