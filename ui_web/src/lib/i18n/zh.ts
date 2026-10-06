@@ -734,6 +734,7 @@ export const zh: Dict = {
     pairNote: '扫描二维码配对手机，即可远程控制和播放。',
     connection: '连接',
     engineLabel: '引擎',
+    engineVersion: '服务器版本',
     about: '关于',
     version: 'Beta · Solid 界面',
     viewDesign: '查看设计系统',

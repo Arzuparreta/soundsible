@@ -16,7 +16,8 @@ afterEach(() => { cleanup(); preference.dispose(); feedback.dispose(); });
 it('returns from appearance/accessibility to account before leaving Settings', async () => {
   render(() => <NativeSettings user={{ id: 'member', username: 'member', display_name: 'Member', role: 'member', has_password: true }}
     identity={() => 1} available={() => false} signal={new AbortController().signal} history={createSearchHistoryStorage(key => key)}
-    appearance={preference} feedback={feedback} playback={{ state: null, pending: false, available: false, command: vi.fn() }} onUser={vi.fn()} onLogout={vi.fn()} />);
+    appearance={preference} feedback={feedback} playback={{ state: null, pending: false, available: false, command: vi.fn() }} onUser={vi.fn()} onLogout={vi.fn()}
+    library={{ trackCount: () => 0, sync: vi.fn(), onImport: vi.fn() }} online={() => false} />);
   await fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
   await fireEvent.click(screen.getByRole('radio', { name: 'Pure black' }));
   expect(document.documentElement.dataset.theme).toBe('pure-black');
@@ -38,7 +39,8 @@ it('passes the latest native preference through Settings without an optimistic a
   const command = vi.fn().mockResolvedValue(undefined);
   render(() => <NativeSettings user={{ id: 'member', username: 'member', display_name: 'Member', role: 'member', has_password: true }}
     identity={() => 1} available={() => true} signal={new AbortController().signal} history={createSearchHistoryStorage(key => key)}
-    appearance={preference} feedback={feedback} playback={{ state: state(), pending: false, available: true, command }} onUser={vi.fn()} onLogout={vi.fn()} />);
+    appearance={preference} feedback={feedback} playback={{ state: state(), pending: false, available: true, command }} onUser={vi.fn()} onLogout={vi.fn()}
+    library={{ trackCount: () => 0, sync: vi.fn(), onImport: vi.fn() }} online={() => false} />);
   await fireEvent.click(screen.getByRole('button', { name: 'Playback' }));
   expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
   setState({ ready: true, autoplay: { enabled: true, settingsPhase: 'ready', active: false, phase: 'idle' } });

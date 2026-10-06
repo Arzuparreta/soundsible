@@ -17,6 +17,9 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
     private val main: Handler, private val snapshot: () -> JSONObject?,
     private val command: (String, JSONObject) -> Unit, private val publish: (JSONObject) -> Unit) : AutoCloseable {
     private val prefs = context.getSharedPreferences("soundsible-device", Context.MODE_PRIVATE)
+    /** What the phone calls itself (Settings → About phone), so other devices see a recognisable name until the user picks one. */
+    private val systemName = runCatching { android.provider.Settings.Global.getString(context.contentResolver, "device_name") }.getOrNull()
+        ?.trim()?.takeIf(::validName) ?: android.os.Build.MODEL?.trim()?.takeIf(::validName) ?: "Soundsible Android"
     private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "soundsible-device-session").apply { isDaemon = true } }
     private var socket: Socket? = null
     private var client: okhttp3.OkHttpClient? = null
@@ -51,7 +54,16 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
     init { connection.resetListeners.add(resetListener); main.post(tick) }
     private fun owns(): Boolean = !closed && identity != null && epoch == connection.generation &&
         runCatching { connection.sessionIdentity(epoch) == identity && connection.offline.profileKey(epoch) == profile }.getOrDefault(false)
-    fun state(): JSONObject = JSONObject().put("generation", connection.generation)
+    fun name(): String = prefs.getString("device_name", null)?.takeIf(::validName) ?: systemName
+    /** A per-install name; a connected session re-registers at once so peers and Core see it without reconnecting. */
+    fun rename(value: String): Boolean {
+        val next = value.trim()
+        if (!validName(next)) return false
+        prefs.edit().putString("device_name", next).apply()
+        if (owns() && socket?.connected() == true) { socket?.emit("playback_register", registration()); changed() } else publish(state())
+        return true
+    }
+    fun state(): JSONObject = JSONObject().put("generation", connection.generation).put("device_name", name())
         .put("device_id", if (owns()) deviceId else JSONObject.NULL).put("connected", owns() && socket?.connected() == true)
         .put("retrying", retryAfter > android.os.SystemClock.elapsedRealtime())
         .put("can_handoff", owns() && socket?.connected() == true && handoffFuture == null && snapshot() != null)
@@ -123,7 +135,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
             }
         }
     }
-    private fun registration() = JSONObject().put("device_id", deviceId).put("device_name", "Soundsible Android").put("device_type", "android")
+    private fun registration() = JSONObject().put("device_id", deviceId).put("device_name", name()).put("device_type", "android")
     fun changed() { dirty = true; publish(state()); report() }
     private fun report() {
         if (!owns() || socket?.connected() != true || publishing || handoffFuture != null) return
@@ -135,7 +147,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         if (!dirty && content == lastBody && (!body.optBoolean("is_playing") || now - lastPositionPing < 15000)) return
         // Position advances continuously; throttle periodic updates but publish actual transport/queue changes immediately.
         if (!dirty && now - lastPositionPing < 15000) return
-        body.put("device_id", deviceId).put("device_name", "Soundsible Android").put("device_type", "android")
+        body.put("device_id", deviceId).put("device_name", name()).put("device_type", "android")
         val generation = epoch; val owner = identity; val token = serial
         val requestId = "device-state-" + java.util.UUID.randomUUID()
         stateRequest = requestId
@@ -192,7 +204,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
             }.getOrDefault(false)
             main.post {
                 if (!unchanged() || !ready) { finish(false); return@post }
-                val body = snapshot()!!.put("device_id", deviceId).put("device_name", "Soundsible Android").put("device_type", "android")
+                val body = snapshot()!!.put("device_id", deviceId).put("device_name", name()).put("device_type", "android")
                 worker.execute {
                     val stored = runCatching { request("/api/playback/state", "PUT", body); true }.getOrDefault(false)
                     main.post {
@@ -225,3 +237,5 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
         closed = true; main.removeCallbacks(tick); connection.resetListeners.remove(resetListener); reset(); worker.shutdown()
     }
 }
+
+private fun validName(value: String): Boolean = value.length in 1..64 && value.none { it.isISOControl() }

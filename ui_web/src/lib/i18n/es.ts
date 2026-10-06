@@ -737,6 +737,7 @@ export const es: Dict = {
       'Vincula tu teléfono escaneando un QR para controlarlo y reproducir en remoto.',
     connection: 'Conexión',
     engineLabel: 'Engine',
+    engineVersion: 'Versión del servidor',
     about: 'Acerca de',
     version: 'Beta · UI Solid',
     viewDesign: 'Ver design system',

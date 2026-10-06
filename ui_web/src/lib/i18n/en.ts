@@ -740,6 +740,7 @@ export const en = {
     pairNote: 'Pair your phone by scanning a QR to control it and play remotely.',
     connection: 'Connection',
     engineLabel: 'Engine',
+    engineVersion: 'Server version',
     about: 'About',
     version: 'Beta · Solid UI',
     viewDesign: 'View design system',

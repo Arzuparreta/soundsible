@@ -29,17 +29,18 @@ import {
 import { DevicesPanel } from './DeviceSheet';
 import { PairedDevicesPanel } from './PairDevice';
 import { DisplayPreferences } from './DisplayPreferences';
+import { LibrarySettingsView } from './LibrarySettingsView';
+import { DownloadsSettingsView, type DownloadQuality } from './DownloadsSettingsView';
+import { CommunitySettingsView } from './CommunitySettingsView';
+import { AboutSettingsView } from './AboutSettingsView';
 import { UsersPanel } from './UsersPanel';
 import { SubsonicAccessPanel } from './SubsonicAccessPanel';
 import {
   ActionRow,
   InputRow,
   NavRow,
-  SegmentedRow,
-  SettingRow,
   SettingsGroup,
   SwitchRow,
-  ValueRow,
 } from './SettingsRows';
 import styles from './SettingsSections.module.css';
 
@@ -377,59 +378,27 @@ function LibrarySection() {
   };
 
   return (
-    <>
-      <SettingsGroup>
-        <ValueRow anchor="track-count" label={t('settings.tracks')} value={String(state.library.length)} />
-        <NavRow
-          anchor="import"
-          href="/import"
-          label={t('settings.importFrom')}
-          hint={t('settings.importNote')}
-        />
-      </SettingsGroup>
-
-      <SettingsGroup label={t('settings.group.sync')} note={t('settings.note.sync')}>
-        <ActionRow anchor="reload" label={t('settings.reload')} onClick={reload} disabled={busy()} />
-        <ActionRow anchor="rescan" label={t('settings.rescan')} onClick={rescan} disabled={busy()} />
-        <Show when={isAdmin()}>
-          <ActionRow anchor="cloud-sync" label={t('settings.sync')} onClick={cloudSync} />
-        </Show>
-      </SettingsGroup>
-
-      <SettingsGroup label={t('settings.group.maintenance')} note={t('settings.note.maintenance')}>
-        <ActionRow anchor="repair" label={t('settings.repair')} onClick={repair} />
-        <ActionRow anchor="purge-missing" label={t('settings.purgeFiles')} onClick={purge} />
-        <Show when={isAdmin()}>
-          <ActionRow anchor="empty-library" label={t('settings.emptyLibrary')} onClick={wipe} danger warn />
-        </Show>
-      </SettingsGroup>
-    </>
+    <LibrarySettingsView trackCount={state.library.length} admin={isAdmin()} busy={busy()}
+      importRow={<NavRow anchor="import" href="/import" label={t('settings.importFrom')} hint={t('settings.importNote')} />}
+      onReload={reload} onRescan={rescan} onCloudSync={cloudSync} onRepair={repair} onPurge={purge} onWipe={wipe} />
   );
 }
 
 /* ── Downloads ────────────────────────────────────────────────────────── */
 
-const QUALITY_OPTIONS = ['low', 'normal', 'high'] as const;
-
-function qualityLabel(q: (typeof QUALITY_OPTIONS)[number]): string {
-  if (q === 'low') return t('settings.qualityLow');
-  if (q === 'normal') return t('settings.qualityNormal');
-  return t('settings.qualityHigh');
-}
-
 function DownloadsSection() {
-  const [quality, setQuality] = createSignal<(typeof QUALITY_OPTIONS)[number]>('high');
+  const [quality, setQuality] = createSignal<DownloadQuality>('high');
   const [autoUpdateYtdlp, setAutoUpdateYtdlp] = createSignal(false);
   const [autoUpdateCurlCffi, setAutoUpdateCurlCffi] = createSignal(false);
 
   const load = async () => {
     const c = await api.getDownloaderConfig();
-    if (c.quality) setQuality(c.quality as (typeof QUALITY_OPTIONS)[number]);
+    if (c.quality) setQuality(c.quality as DownloadQuality);
     if (typeof c.auto_update_ytdlp === 'boolean') setAutoUpdateYtdlp(c.auto_update_ytdlp);
     if (typeof c.auto_update_curl_cffi === 'boolean') setAutoUpdateCurlCffi(c.auto_update_curl_cffi);
   };
 
-  const changeQuality = async (q: (typeof QUALITY_OPTIONS)[number]) => {
+  const changeQuality = async (q: DownloadQuality) => {
     const previous = quality();
     setQuality(q);
     try {
@@ -465,31 +434,8 @@ function DownloadsSection() {
 
   return (
     <SettingsLoad load={load}>
-      <SettingsGroup>
-        <SegmentedRow
-          anchor="quality"
-          label={t('settings.quality')}
-          hint={t('settings.note.quality')}
-          options={QUALITY_OPTIONS.map((q) => ({ value: q, label: qualityLabel(q) }))}
-          value={quality()}
-          onChange={changeQuality}
-        />
-      </SettingsGroup>
-
-      <SettingsGroup label={t('settings.group.updates')} note={t('settings.note.updates')}>
-        <SwitchRow
-          anchor="auto-update-ytdlp"
-          label={t('settings.autoUpdateYtdlp')}
-          checked={autoUpdateYtdlp()}
-          onChange={toggleAutoYtdlp}
-        />
-        <SwitchRow
-          anchor="auto-update-curl-cffi"
-          label={t('settings.autoUpdateCurlCffi')}
-          checked={autoUpdateCurlCffi()}
-          onChange={toggleAutoCurlCffi}
-        />
-      </SettingsGroup>
+      <DownloadsSettingsView quality={quality()} autoUpdateYtdlp={autoUpdateYtdlp()} autoUpdateCurlCffi={autoUpdateCurlCffi()}
+        onQuality={changeQuality} onToggleYtdlp={toggleAutoYtdlp} onToggleCurlCffi={toggleAutoCurlCffi} />
     </SettingsLoad>
   );
 }
@@ -543,56 +489,16 @@ function CommunitySection() {
   };
   onMount(() => void refresh().catch(() => {}));
 
-  const source = () => {
-    const value = communityConfig();
-    if (!value) return t('common.loading');
-    return t(`settings.communitySource.${value.source}`);
-  };
-  const status = () => {
-    const value = communityConfig();
-    if (!value) return loading() ? t('common.loading') : t('settings.communityState.unavailable');
-    return t(`settings.communityState.${value.state}`);
-  };
-
-  return (
-    <SettingsGroup note={t('settings.note.community')}>
-      <ValueRow anchor="community-service" label={t('settings.communityService')} value={source()} />
-      <ValueRow anchor="community-status" label={t('settings.communityStatus')} value={status()} />
-      <Show when={communityConfig()?.source === 'custom' && communityConfig()?.api_url}>
-        <ValueRow
-          label={t('settings.communityRelay')}
-          value={<span class={styles.mono}>{communityConfig()!.api_url}</span>}
-        />
-      </Show>
-      <Show when={!loading() && communityConfig()?.state === 'unavailable'}>
-        <ActionRow label={t('common.retry')} onClick={refresh} />
-      </Show>
-    </SettingsGroup>
-  );
+  return <CommunitySettingsView config={communityConfig()} loading={loading()} onRetry={() => void refresh().catch(() => {})} />;
 }
 
 /* ── About ────────────────────────────────────────────────────────────── */
 
 function AboutSection() {
   return (
-    <SettingsGroup>
-      <SettingRow anchor="engine-status" label={t('settings.engineLabel')}>
-        <span class={styles.status}>
-          <span
-            class={styles.statusDot}
-            classList={{ [styles.statusOn]: state.online, [styles.statusOff]: !state.online }}
-            aria-hidden="true"
-          />
-          {state.online ? t('common.online') : t('common.offline')}
-        </span>
-      </SettingRow>
-      <ValueRow
-        anchor="version"
-        label={t('brand.soundsible')}
-        value={<span class={styles.mono}>{t('settings.version')}</span>}
-      />
+    <AboutSettingsView online={state.online} version={<span class={styles.mono}>{t('settings.version')}</span>}>
       <NavRow anchor="design-system" href="/preview" label={t('settings.viewDesign')} />
-    </SettingsGroup>
+    </AboutSettingsView>
   );
 }
 

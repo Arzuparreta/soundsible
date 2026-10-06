@@ -446,6 +446,10 @@ class PlaybackService : MediaLibraryService() {
             }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand.customAction != ProgramQueue.command.customAction || controller.uid != android.os.Process.myUid()) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+                if (args.getString("action") == "deviceRename") {
+                    if (args.getLong("generation", -1) != connection.generation) return Futures.immediateFuture(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
+                    return Futures.immediateFuture(SessionResult(if (deviceSession.rename(args.getString("name").orEmpty())) SessionResult.RESULT_SUCCESS else SessionError.ERROR_BAD_VALUE))
+                }
                 if (args.getString("action") == "deviceHandoff") {
                     if (args.getLong("generation", -1) != connection.generation) return Futures.immediateFuture(SessionResult(SessionError.ERROR_SESSION_DISCONNECTED))
                     return deviceSession.handoff(args.getString("device_id").orEmpty())

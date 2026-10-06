@@ -105,6 +105,21 @@ class PlaybackPlugin : Plugin() {
             }, { task -> main.post(task) })
         } catch (_: Exception) { call.reject("Device handoff unavailable", "DEVICE_HANDOFF") }
     } }
+    @PluginMethod fun deviceRename(call: PluginCall) { main.post {
+        try {
+            val connection = EngineConnection.shared(context)
+            val generation = call.getInt("generation")?.toLong() ?: -1L
+            require(generation == connection.generation)
+            val active = controller ?: error("NOT_READY")
+            val future = active.sendCustomCommand(ProgramQueue.command, Bundle().apply {
+                putString("action", "deviceRename"); putLong("generation", generation); putString("name", call.getString("name") ?: error("NO_NAME"))
+            })
+            future.addListener({
+                try { require(alive && generation == connection.generation && future.get().resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS); call.resolve(deviceSnapshot()) }
+                catch (_: Exception) { call.reject("Device name rejected or session changed", "DEVICE_RENAME") }
+            }, { task -> main.post(task) })
+        } catch (_: Exception) { call.reject("Device rename unavailable", "DEVICE_RENAME") }
+    } }
     private fun publish() { if (alive && visible) { notifyListeners("playbackState", snapshot()); notifyListeners("nativeLiveState", liveSnapshot()); notifyListeners("nativeDeviceState", deviceSnapshot()) } }
     @PluginMethod fun liveDirectory(call: PluginCall) {
         val connection = EngineConnection.shared(context)

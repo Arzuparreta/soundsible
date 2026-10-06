@@ -234,6 +234,7 @@ export function SegmentedRow<T extends string>(props: {
   options: SegmentOption<T>[];
   value: T | undefined;
   onChange: (value: T) => void;
+  disabled?: boolean;
   anchor?: SettingAnchor;
 }) {
   return (
@@ -248,6 +249,7 @@ export function SegmentedRow<T extends string>(props: {
               classList={{ [styles.segOn]: props.value === option.value }}
               aria-label={option.aria}
               aria-pressed={props.value === option.value}
+              disabled={props.disabled}
               onClick={() => props.onChange(option.value)}
               data-pressable
             >

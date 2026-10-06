@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2au",
+  "channel": "development",
+  "base_revision": "0cd7c5f3",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/NativeDeviceSession.kt": "11a6027bde4907adc84b6980d1f0ee9dafa5002b0285634675e756e684e32195",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "cd0de4a4ec5e4bf6160534cafb71c4a06780d57ab3c47d81fba08f8d5650cf4f",
+    "android/app/src/main/java/com/soundsible/android/PlaybackPlugin.kt": "c8659caa881f5e76994f4c29c1b73601ea9596a01830a7b816cb8dc01bd6fe30",
+    "ui_web/src/components/LibrarySettingsView.tsx": "d91cff2b2d07a36c0208a16502456df9f3677a787a80b2592c91cdcde8a16076",
+    "ui_web/src/components/DownloadsSettingsView.tsx": "022fefe4fcb14a77712999933d028e5920de58b4fd3b2eed4d00a1c02ccb733d",
+    "ui_web/src/components/CommunitySettingsView.tsx": "37e7d504ffc312bfde37523fba1772e398b5beb284325e0b9323348fa620a015",
+    "ui_web/src/components/AboutSettingsView.tsx": "74b318e9d97041c1f2fcc964c268070d022bad457bcc07b08bdc3be5d771c0e8",
+    "ui_web/src/components/SettingsSections.tsx": "16726631bd1a6d040035f771ee670fc68f737b24b9b71fd26c8c32ac0d68ae37",
+    "ui_web/src/mobile/librarySettings.ts": "2596f2d82b96c4fb58d3fe7bb76ce7bd589d452314e99667d7a7a43d197a9fe3",
+    "ui_web/src/mobile/downloaderSettings.ts": "83b17f66ad2ec9ec654759bb3c7027cfaf4c2e3bd079b72a304a0d01b1e1cebd",
+    "ui_web/src/mobile/Settings.tsx": "64d1a3b29493a1a11a9b7c86e9422f8496a7ce13623c1b09be58b834d45c7ae9",
+    "ui_web/src/mobile/Devices.tsx": "138cc779673e78156b679a41fcf3e63f151a73c8fc18d36c2c4ccb80d68b2fa1",
+    "ui_web/src/mobile/SettingsAbout.tsx": "1f7ef1eccbbb2ef44c9045eface9871e9fc65c26fa376c545860a875aab4fe55",
+    "ui_web/src/mobile/SettingsCommunity.tsx": "32754b80463933b2706de0a261f7d93a6344b78e602a612563eaed3ae6b41166",
+    "android/app/src/androidTest/java/com/soundsible/android/SettingsServerTest.kt": "92ac8c03f939ba2185996ce5e2c185aba97ad1dd8a08589f008ea878584ba418"
+  },
+  "native": {
+    "tests": 22,
+    "failures": 0,
+    "seconds": 280.499,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-settings-block-native.log",
+    "classes": [
+      "SettingsServerTest",
+      "DevicesUiTest",
+      "DeviceSessionTest",
+      "UsersTest",
+      "AccountSettingsTest",
+      "AppearanceSettingsTest",
+      "RecommendationSettingsTest",
+      "SubsonicSettingsTest",
+      "FeedbackSettingsTest",
+      "ConnectionTest"
+    ]
+  },
+  "ui": {
+    "files": 213,
+    "tests": 1631,
+    "typecheck": "pass"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Library count, real rescan on throwaway admin account, real purge (metadata only), empty-library double confirmation refuses wrong count without request",
+    "Downloads (admin) shows stored quality and changes it only through Core; restored afterwards",
+    "Community state and About app/server versions match Core",
+    "Device rename re-registers over the live socket; Core /api/devices shows it; restored",
+    "Paired devices panel reachable from native Devices",
+    "Existing Settings/Devices/Connection native tests unchanged and passing"
+  ],
+  "limits": [
+    "No real empty-library run (would retire shared fixture audio)",
+    "Cloud sync row presence only; no provider configured in fixture",
+    "Claim-side QR pairing for this phone not implemented (no web equivalent; user decision)",
+    "No physical or final principal/browser coverage"
+  ]
+}

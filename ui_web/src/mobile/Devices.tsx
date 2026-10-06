@@ -3,6 +3,9 @@ import { request } from '../lib/http';
 import type { Device, RemoteCommand } from '../lib/api';
 import { nativeDevices, type NativeDeviceState } from './devices';
 import { t } from '../lib/i18n';
+import { promptDialog } from '../lib/prompt';
+import { PairedDevicesPanel } from '../components/PairDevice';
+import { ActionRow, SettingsGroup } from '../components/SettingsRows';
 import styles from '../components/DeviceSheet.module.css';
 
 /** Account HTTP transport and service identity; importing web playback would create another device. */
@@ -39,6 +42,17 @@ export default function NativeDevices(props: { generation: () => number; current
     catch { if (current()) setError(true); }
     finally { if (current()) setBusy(false); }
   }
+  async function rename() {
+    const previous = self()?.device_name;
+    if (!current() || busy() || !previous) return;
+    const name = await promptDialog({ title: t('settings.deviceName'), message: t('settings.note.device'), inputLabel: t('settings.deviceName'),
+      initial: previous, confirmLabel: t('common.save') }, current);
+    if (!name?.trim() || name.trim() === previous || !current()) return;
+    setBusy(true); setError(false);
+    try { accept(await nativeDevices.deviceRename({ generation, name: name.trim() })); if (current()) await refresh(); }
+    catch { if (current()) setError(true); }
+    finally { if (current()) setBusy(false); }
+  }
   onMount(() => {
     void nativeDevices.deviceState().then(accept).catch(() => { if (current()) setError(true); });
     void nativeDevices.addListener('nativeDeviceState', accept).then(handle => { if (alive) listener = handle; else void handle.remove(); }).catch(() => { if (current()) setError(true); });
@@ -46,6 +60,13 @@ export default function NativeDevices(props: { generation: () => number; current
   });
   onCleanup(() => { alive = false; abort.abort(); window.clearInterval(timer); void listener?.remove(); });
   return <section data-testid="android-settings-devices">
+    <SettingsGroup label={t('settings.group.thisDevice')}>
+      <ActionRow anchor="device-name" label={t('settings.deviceName')} hint={self()?.device_name} disabled={!current() || busy() || !self()?.device_name} onClick={() => void rename()} />
+    </SettingsGroup>
+    <SettingsGroup anchor="paired-devices" label={t('settings.pairedDevices')} note={t('settings.pairNote')}>
+      <PairedDevicesPanel />
+    </SettingsGroup>
+    <h3>{t('settings.group.network')}</h3>
     <Show when={error()}><p role="status">{t('deviceSheet.failed')}</p></Show>
     <button disabled={!current() || busy()} onClick={() => void refresh()}>{t('android.refresh')}</button>
     <Show when={!loading()}><Show when={devices().length} fallback={<p>{t('deviceSheet.empty')}</p>}>

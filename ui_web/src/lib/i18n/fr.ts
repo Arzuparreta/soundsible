@@ -741,6 +741,7 @@ export const fr: Dict = {
       'Associez votre téléphone en scannant un QR pour le contrôler et lire à distance.',
     connection: 'Connexion',
     engineLabel: 'Engine',
+    engineVersion: 'Version du serveur',
     about: 'À propos',
     version: 'Beta · UI Solid',
     viewDesign: 'Voir le design system',

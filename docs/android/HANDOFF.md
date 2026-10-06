@@ -394,3 +394,12 @@ evidence/s2at.json. Paridad = funciones: si la web usa un apaño por limitación
 del navegador, Android lo hace de la mejor manera nativa. Siguiente: puente
 público/App Links (VIEW https), negativos DJ/Auto, firma/distribución y
 regresión final principal/browser4. PR manual, no merge/automerge/publicación.
+
+S2au validado: Settings nativo con Biblioteca, Descargas (admin), Comunidad,
+Acerca de y Dispositivos (nombre por instalación + emparejados). Vistas extraídas
+de SettingsSections y compartidas con la web. Nombre por defecto del sistema y
+re-registro inmediato. Bloque22/0 HTTP/TLS,280.499s + normal; UI213/1631+TS.
+SLICE_2AU/evidence/s2au.json. Pendiente de decisión del usuario: emparejar este
+teléfono por QR (lado reclamante, no existe en web). Siguiente: inventario de
+paridad restante (biblioteca/búsqueda/cola/podcasts), negativos DJ/Auto, firma y
+regresión final principal/browser4. PR manual, no merge/automerge/publicación.
