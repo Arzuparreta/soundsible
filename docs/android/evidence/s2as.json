@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2as",
+  "channel": "development",
+  "base_revision": "457f6fae",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "074d0874bfe273416617f90aa5fdb8f694efc6939ed343496959345847b624d7",
+    "android/app/src/androidTest/java/com/soundsible/android/DeviceCatalogSessionTest.kt": "b00d465ffcf43465efcf062b6350fc3fd33f5443c01f568f8533f42c4c27ddb9",
+    "scripts/android_catalog_fixture.py": "33a48e34b563c3510d118eb4343785a7c6b162a333f0198fb2bb917a0a903fa3",
+    "ui_web/src/lib/program/libraryMenu.ts": "8114de140e6ab4c3f5f3b52a737f753eb1d1350f8735a69c8754f0ac0d646b1d"
+  },
+  "native": {
+    "tests": 2,
+    "failures": 0,
+    "seconds": 51.339,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-catalog-recovery-native.log"
+  },
+  "ui": {
+    "files": 210,
+    "tests": 1617,
+    "typecheck": "pass"
+  },
+  "core": {
+    "tests": 1,
+    "seconds": 22.89
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Matcher404 removes only missing occurrence and continues native PCM",
+    "Two matcher503 recover automatically, three failures exhaust; no requests after exhausted",
+    "Explicit prepare/play recovers retained pending occurrence",
+    "Reset during slow matcher prevents late mutation"
+  ],
+  "limits": [
+    "Pending queue row action presentation still requires guard before generic acquired-track menus",
+    "No physical or final principal/browser coverage"
+  ]
+}

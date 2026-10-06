@@ -77,6 +77,32 @@ class DeviceCatalogSessionTest {
             await("Resolved occurrence retry lost PCM") { pcm.get() && main { active.isPlaying && active.currentMediaItem?.mediaId == "C1111111111" } }
             val stats = core("/api/android-fixture/catalog-stats").getJSONArray("calls")
             assertEquals(1, (0 until stats.length()).count { stats.getJSONObject(it).optString("provider") == "resolution" && stats.getJSONObject(it).optString("title") == "fixture resolved song" })
+            // A matcher404 removes only its occurrence and continues to the next playable song.
+            val continuation = JSONArray().put(pending("deezer:track:missing", "unmatched fixture song"))
+                .put(JSONObject().put("id", "member-track").put("title", "After unmatched").put("queueId", "after").put("queueLane", "manual").put("queueSource", "library"))
+            pcm.set(false); handoff(continuation, 0)
+            await("Unmatched catalogue entry stopped the collection") { main { active.mediaItemCount == 1 && active.currentMediaItem?.mediaId == "member-track" && active.isPlaying } && pcm.get() }
+            fun control(status: Int, failures: Int) {
+                val body = JSONObject().put("resolve_status", status).put("resolve_failures", failures).toString().toRequestBody("application/json".toMediaType())
+                connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/catalog").header("X-Android-Fixture", "isolated").post(body).build()).execute().use { assertEquals(200, it.code) }
+            }
+            // Two temporary matcher errors retry natively without dropping the row or reopening Activity.
+            val initialFailures = core("/api/android-fixture/catalog-stats").getJSONArray("requests").let { rows -> (0 until rows.length()).count { rows.getJSONObject(it).optString("path") == "/api/catalog/resolve" && rows.getJSONObject(it).optInt("status") == 503 } }
+            control(503, 2)
+            pcm.set(false); handoff(JSONArray().put(pending("deezer:track:retry", "fixture resolved song")), 0)
+            await("Temporary matcher errors did not recover native PCM") { main { active.mediaItemCount == 1 && active.currentMediaItem?.mediaId == "C1111111111" && active.isPlaying } && pcm.get() }
+            control(503, -1)
+            handoff(JSONArray().put(pending("deezer:track:exhaust", "fixture resolved song")), 0)
+            await("Matcher retry did not exhaust") { main { active.playerError != null } }
+            assertEquals(1, main { active.mediaItemCount })
+            assertNotNull(main { active.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.PENDING) })
+            val failuresBefore = core("/api/android-fixture/catalog-stats").getJSONArray("requests").let { rows -> (0 until rows.length()).count { rows.getJSONObject(it).optString("path") == "/api/catalog/resolve" && rows.getJSONObject(it).optInt("status") == 503 } }
+            assertEquals(initialFailures + 5, failuresBefore)
+            Thread.sleep(2500)
+            val failuresAfter = core("/api/android-fixture/catalog-stats").getJSONArray("requests").let { rows -> (0 until rows.length()).count { rows.getJSONObject(it).optString("path") == "/api/catalog/resolve" && rows.getJSONObject(it).optInt("status") == 503 } }
+            assertEquals(failuresBefore, failuresAfter)
+            control(0, 0); pcm.set(false); main { active.prepare(); active.play() }
+            await("Explicit retry did not recover exhausted matcher") { pcm.get() && main { active.isPlaying && active.currentMediaItem?.mediaId == "C1111111111" } }
             // Reset while a real delayed matcher is in flight cannot populate the cleared programme.
             val delayed = JSONArray().put(pending("deezer:track:999999", "fixture review song cancel"))
             handoff(delayed, 0)
@@ -85,6 +111,8 @@ class DeviceCatalogSessionTest {
             main { connection.clearSession(false) }
             Thread.sleep(6000)
             assertEquals(0, main { active.mediaItemCount }); assertFalse(NativeProgramOutput.playing)
-        } finally { capture?.close(); main { browser?.release() }; scenario?.close(); connection.clearSession(true) }
+        } finally {
+            runCatching { connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/catalog").header("X-Android-Fixture", "isolated").post("{\"resolve_status\":0,\"resolve_failures\":0}".toRequestBody("application/json".toMediaType())).build()).execute().close() }
+            capture?.close(); main { browser?.release() }; scenario?.close(); connection.clearSession(true) }
     }
 }

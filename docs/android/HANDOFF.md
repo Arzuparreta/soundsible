@@ -376,3 +376,11 @@ Siguiente inmediato: matcher404 debe continuar colección; retry temporal acotad
 menús DJ/Radio no deben convertir pendientes en source local. Luego OS invites/
 pairing, negativos DJ/Auto, firma/distribución y principal/browser4 final.
 PR manual, no merge/automerge/publicación.
+
+S2as validado: matcher404 continúa hacia siguiente canción; dos retries503
+recuperan PCM y tres intentos agotan estable; Retry explícito conserva fila y
+recupera. HTTP/TLS2/0,51.339s + runner exit0 y normal APK/test APK/JVM56/lint.
+WholeUI210/1617+TS; Core fixture1/0. SLICE_2AS/evidence/s2as.json.
+Siguiente: guard del menú de ocurrencia pendiente (AndroidStart reconstruye
+actualmente fallback sin pendingResolve), e invites VIEW/SEND con acción explícita
+sin cambiar cuenta/origen al recibirlos. Luego pairing/negativos/firma/final.

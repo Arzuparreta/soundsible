@@ -9,7 +9,7 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
   execute: (command: ProgramCommand) => Promise<void>, place?: (track: ProgramTrack) => void): ActionMenuOptions {
   const captured = state();
   const candidate = programTrack(track);
-  const disabled = !captured?.ready || pending() || captured.items.length >= 1000 || !candidate || captured.dj?.active === true && candidate.mediaKind === 'podcast_episode';
+  const disabled = !captured?.ready || pending() || captured.items.length >= 1000 || !candidate || captured.dj?.active === true && (candidate.mediaKind === 'podcast_episode' || candidate.source === 'pending');
   const tracks = candidate ? [candidate] : [];
   const select = (action: 'append' | 'insertAfter') => {
     // A deferred sheet selection must never migrate to a different logged-in account.
@@ -24,7 +24,7 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
   return { title: track.title, subtitle: track.artist, actions: [
     { label: t('android.insertAfter'), disabled, onSelect: () => select('insertAfter') },
     { label: t('trackActions.addToQueue'), disabled, onSelect: () => select('append') },
-    ...(candidate && candidate.mediaKind !== 'podcast_episode' ? [{
+    ...(candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' ? [{
       label: t(captured?.items[captured.index]?.id === candidate.id ? 'musicExplorer.startDjFromCurrent' : 'musicExplorer.startDjFromSong'),
       disabled: disabled || captured?.items[captured.index]?.mediaKind === 'podcast_episode',
       onSelect: () => {
@@ -36,7 +36,7 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
           programToken: captured.programToken, key: captured.items[captured.index]?.key }).catch(() => {});
       },
     }] : []),
-    ...(captured?.dj?.active && candidate && candidate.mediaKind !== 'podcast_episode' ? [{
+    ...(captured?.dj?.active && candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' ? [{
       label: t('musicExplorer.reference'),
       selected: captured.dj.sources?.some(source => source.tracks.length === 1 && source.tracks[0].id === candidate.id && (source.tracks[0].source ?? 'local') === candidate.source),
       disabled: disabled || (captured.dj.sources?.length ?? 0) >= 64 || captured.dj.sources?.some(source => source.tracks.length === 1 && source.tracks[0].id === candidate.id && (source.tracks[0].source ?? 'local') === candidate.source),
@@ -52,7 +52,7 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
         }] }).catch(() => {});
       },
     }] : []),
-    ...(captured?.dj?.active && captured.programToken && candidate?.mediaKind !== 'podcast_episode' ? [{
+    ...(captured?.dj?.active && captured.programToken && candidate?.source !== 'pending' && candidate?.mediaKind !== 'podcast_episode' ? [{
       label: t('autoMode.dj.routeAction'), disabled,
       onSelect: () => {
         const observed = state();
@@ -61,7 +61,7 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
         else void execute({ action: 'djRequest', tracks, programToken: captured.programToken!, queueToken: captured.queueToken }).catch(() => {});
       },
     }] : []),
-    ...(candidate && candidate.mediaKind !== 'podcast_episode' && captured?.items[captured.index]?.id === candidate.id ? [{
+    ...(candidate && candidate.source !== 'pending' && candidate.mediaKind !== 'podcast_episode' && captured?.items[captured.index]?.id === candidate.id ? [{
       label: t(captured.radio?.active ? 'nowPlaying.stopRadioConfirm' : 'trackActions.startRadio'), disabled: !captured.ready || pending(),
       onSelect: () => {
         if (!captured.ready || pending() || state()?.generation !== captured.generation) return;

@@ -9,7 +9,7 @@ def install(app):
     from shared.api.routes import catalog
     from shared.downloader.youtube_downloader import YouTubeDownloader
 
-    controls = {"partial": True, "delay": False, "status": 0}
+    controls = {"partial": True, "delay": False, "status": 0, "resolve_status": 0, "resolve_failures": 0}
     calls = []
     requests = []
     review_albums = {"choose": "920002", "skip": "920003", "retry": "920004", "cancel": "920005"}
@@ -131,6 +131,10 @@ def install(app):
 
     @app.before_request
     def failure():
+        if request.path == "/api/catalog/resolve" and controls["resolve_status"] and controls["resolve_failures"]:
+            if controls["resolve_failures"] > 0:
+                controls["resolve_failures"] -= 1
+            return jsonify({"error": "synthetic matcher failure"}), controls["resolve_status"], {"Retry-After": "1"}
         if request.path == "/api/catalog/search" and controls["status"]:
             return jsonify({"error": "synthetic catalog failure"}), controls["status"]
 

@@ -126,3 +126,17 @@ it('delegates route placement to the native chooser after checking the captured 
   expect(execute).not.toHaveBeenCalled(); state = { ...state, programToken: 'other' }; action.onSelect();
   expect(place).toHaveBeenCalledTimes(1);
 });
+
+it('allows deferred recordings in NORMAL but never converts them into DJ references', () => {
+  const song = { ...track, pendingResolve: { catalogItemId: track.id, title: track.title, artist: 'Artist' } };
+  const execute = vi.fn(async () => {});
+  const normal = programLibraryMenu(song, () => initial, () => false, execute);
+  normal.actions!.find(action => action.label === 'trackActions.addToQueue')!.onSelect();
+  expect(execute).toHaveBeenCalledWith(expect.objectContaining({ tracks: [expect.objectContaining({ source: 'pending' })] }));
+  expect(normal.actions!.some(action => action.label === 'musicExplorer.startDjFromSong')).toBe(false);
+  execute.mockClear();
+  const dj = { ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } } as ProgramState;
+  const menu = programLibraryMenu(song, () => dj, () => false, execute);
+  expect(menu.actions!.every(action => action.disabled)).toBe(true);
+  menu.actions!.forEach(action => action.onSelect()); expect(execute).not.toHaveBeenCalled();
+});

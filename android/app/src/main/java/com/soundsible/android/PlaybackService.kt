@@ -219,7 +219,18 @@ class PlaybackService : MediaLibraryService() {
                         } }, catalogCache)
                     }
                     return androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(pendingFactory, PreviewExtractors())
-                        .setLoadErrorHandlingPolicy(previews.policy(extras?.getString(ProgramQueue.KEY) ?: "", epoch)).createMediaSource(item)
+                        .setLoadErrorHandlingPolicy(object : androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy(2) {
+                            private val retry = PreviewRetry(android.os.SystemClock::elapsedRealtime, System::currentTimeMillis)
+                            override fun getRetryDelayMsFor(info: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                                if (epoch != connection.generation || runCatching { connection.sessionIdentity(epoch) }.getOrNull() != identity) return C.TIME_UNSET
+                                val error = generateSequence(info.exception as Throwable) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()
+                                return if (error != null) {
+                                    val header = error.headerFields.entries.firstOrNull { it.key.equals("Retry-After", true) }?.value?.firstOrNull()
+                                    retry.delay(if (error.responseCode in 500..599) 503 else error.responseCode, header) ?: C.TIME_UNSET
+                                } else if (info.errorCount <= 2 && generateSequence(info.exception as Throwable) { it.cause }.none { it is javax.net.ssl.SSLException } &&
+                                    generateSequence(info.exception as Throwable) { it.cause }.any { it is java.net.SocketException || it is java.net.SocketTimeoutException }) (info.errorCount * 2000L) else C.TIME_UNSET
+                            }
+                        }).createMediaSource(item)
                 }
                 if (extras?.getString(ProgramQueue.SOURCE) == "podcast") {
                     val podcastFactory = androidx.media3.datasource.DataSource.Factory { run { val key = extras.getString(ProgramQueue.KEY) ?: ""; lateinit var source: PodcastDataSource
@@ -286,6 +297,27 @@ class PlaybackService : MediaLibraryService() {
         djRefiner = ProgramDjRefiner(connection, main, { dj }, djPlanner)
         djRouteEditor = ProgramDjRouteEditor(connection, main, { dj }, djPlanner) { phase, code -> publishDj(phase, djPlanner.profile, code) }
         player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                // Only matcher 400/404 means this retained recording cannot be played.
+                // Authentication, TLS and temporary failures keep the occurrence for Retry.
+                if (dj != null || player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.PENDING) == null) return
+                val status = generateSequence(error as Throwable) { it.cause }.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
+                if (status != 400 && status != 404) return
+                val epoch = connection.generation
+                val key = ProgramQueue.key(player, player.currentMediaItemIndex)
+                main.post {
+                    if (epoch != connection.generation || dj != null || player.currentMediaItemIndex < 0 || ProgramQueue.key(player, player.currentMediaItemIndex) != key || player.playerError !== error) return@post
+                    val at = player.currentMediaItemIndex
+                    val next = player.nextMediaItemIndex
+                    val resume = player.playWhenReady
+                    player.removeMediaItem(at)
+                    if (next != C.INDEX_UNSET && next != at && player.mediaItemCount > 0) {
+                        player.seekTo(if (next > at) next - 1 else next, 0)
+                        player.prepare()
+                        if (resume) player.play() else player.pause()
+                    } else player.stop()
+                }
+            }
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
                 if (item?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) == "preview") artwork.clear()
                 previews.sync()
