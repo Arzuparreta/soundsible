@@ -31,6 +31,10 @@ SHUTDOWN_TIMEOUT_SEC = 30
 
 
 def _runtime_env(tmp_path: Path) -> dict[str, str]:
+    # Existing isolated directories prevent first-launch migration from copying
+    # the developer's real profile/cache (including multi-GB Android toolchains).
+    for name in ("cfg", "data", "cache", "logs"):
+        (tmp_path / name).mkdir(parents=True, exist_ok=True)
     return {
         "SOUNDSIBLE_CONFIG_DIR": str(tmp_path / "cfg"),
         "SOUNDSIBLE_DATA_DIR": str(tmp_path / "data"),
