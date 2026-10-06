@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js';
 import { request } from './api';
 import type { PodcastSearchResult } from '../types/podcast';
+import { podcastRecommendations, type RawPodcastRow } from './podcastRecommendations';
 import { user, userKey } from './session';
 
 /**
@@ -70,20 +71,6 @@ interface RawSaved {
   youtube_id?: string;
   cover?: string;
 }
-interface RawPodcastRow {
-  title?: string;
-  author?: string;
-  feed_url?: string;
-  rss_url?: string;
-  image_url?: string;
-  itunes_collection_id?: string;
-  collectionId?: number | string;
-  external_ids?: { rss_url?: string; itunes_collection_id?: string };
-  recommendation_identity?: string;
-  reason?: string;
-  reason_code?: string;
-}
-
 let inFlight: Promise<void> | null = null;
 let generation = 0;
 
@@ -123,21 +110,7 @@ async function revalidate(): Promise<void> {
     const podcasts = request<{ items?: RawPodcastRow[] }>('/api/discovery/podcasts/recommendations?limit=20', { timeoutMs: 20000 })
       .then((d) => {
         if (!current()) return;
-        const rows: PodcastSearchResult[] = (d.items ?? [])
-          .map((r) => ({
-            title: r.title ?? '',
-            author: r.author,
-            feed_url: r.feed_url ?? r.rss_url ?? r.external_ids?.rss_url ?? '',
-            image_url: r.image_url,
-            itunes_collection_id:
-              r.itunes_collection_id ??
-              r.external_ids?.itunes_collection_id ??
-              (r.collectionId != null ? String(r.collectionId) : undefined),
-            recommendation_identity: r.recommendation_identity,
-            reason: r.reason,
-            reason_code: r.reason_code,
-          }))
-          .filter((r) => r.feed_url);
+        const rows = podcastRecommendations(d.items);
         setTopPodcasts(rows);
         writeCache(KEY.podcasts, rows);
       })

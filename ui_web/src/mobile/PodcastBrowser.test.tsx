@@ -35,7 +35,9 @@ it('keeps loaded episodes while paginating and deduplicates enclosure identity',
   expect(view.getAllByText(episode.title)).toHaveLength(1); expect(mocks.request.mock.calls.some(([path]) => path.includes('&after=1'))).toBe(true);
 });
 it('offers explicit retry after a failed feed fetch', async () => {
-  mocks.request.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ episodes: [episode] });
+  let failed = false;
+  mocks.request.mockImplementation((path: string) => path.includes('recommendations') ? Promise.resolve({ items: [] })
+    : path.includes('/episodes') && !failed ? (failed = true, Promise.reject(new Error('offline'))) : Promise.resolve({ episodes: [episode] }));
   const view = render(() => <PodcastBrowser generation={1} subscriptions={[show]} acquired={[]} onPlay={vi.fn()} />);
   fireEvent.click(view.getByText(show.title)); await waitFor(() => expect(view.getByRole('alert')).toBeTruthy());
   fireEvent.click(view.getByText('Retry')); await waitFor(() => expect(view.getByText(episode.title)).toBeTruthy());
@@ -103,4 +105,17 @@ it('system Back cancels the show request before returning to the directory', asy
   expect(view.queryByText(episode.title)).toBeNull();
   expect(dispatchNavigationBack()).toBe(false);
   view.unmount(); expect(dispatchNavigationBack()).toBe(false);
+});
+
+it('shows only downloaded episodes when asked, and forgets the filter for the next show', async () => {
+  const acquired = { id: 'acquired', title: episode.title, artist: show.title, media_kind: 'podcast_episode', podcast_episode_guid: episode.guid, podcast_feed_id: show.id } as Track;
+  mocks.request.mockImplementation((path: string) => Promise.resolve(path.includes('/queue/status') ? { queue: [] } : path.includes('recommendations') ? { items: [] }
+    : { episodes: [episode, { ...episode, guid: 'streamed', title: 'Streamed only', enclosure_url: 'https://example.com/streamed' }], next: null }));
+  const view = render(() => <PodcastBrowser generation={1} subscriptions={[show]} acquired={[acquired]} onPlay={vi.fn()} />);
+  fireEvent.click(view.getByText(show.title)); await waitFor(() => expect(view.getByText('Streamed only')).toBeTruthy());
+  fireEvent.click(view.getByRole('button', { name: 'Downloaded only' }));
+  expect(view.queryByText('Streamed only')).toBeNull(); expect(view.getByText(episode.title)).toBeTruthy();
+  fireEvent.click(view.getByRole('button', { name: 'Back' })); fireEvent.click(view.getByText(show.title));
+  await waitFor(() => expect(view.getByText('Streamed only')).toBeTruthy());
+  expect(view.getByRole('button', { name: 'Downloaded only' })).toHaveAttribute('aria-pressed', 'false');
 });

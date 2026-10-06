@@ -76,7 +76,7 @@ public class PodcastTest {
             command(web,scenario,"action:'seek',positionMs:120000");
             api(connection,origin,"/__fixture/podcast","{\"acquire_episode\":true}");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('header button')).find(b=>b.textContent==='Refresh').click()");
-            waitFor(web,scenario,"document.querySelector('[data-testid=android-podcasts]').innerText.includes('Downloaded')");
+            waitFor(web,scenario,"Array.from(document.querySelectorAll('[data-testid=android-podcasts] [data-music-list-row]')).some(r=>r.textContent.includes('member fixture episode')&&r.textContent.includes('Downloaded'))");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-podcasts] [data-row-main]')).find(b=>b.textContent==='member fixture episode').click()");
             waitFor(web,scenario,"window.__pod?.id==='member-podcast-acquired' && window.__pod.playing && window.__pod.positionMs>=119000 && window.__pod.positionMs<125000 && window.__pod.items[0]?.mediaKind==='podcast_episode'");
             JSONObject stats=api(connection,origin,"/api/android-fixture/podcast-stats",null);

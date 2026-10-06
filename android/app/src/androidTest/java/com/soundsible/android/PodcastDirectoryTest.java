@@ -65,7 +65,7 @@ public class PodcastDirectoryTest {
             waitFor(web,scenario,"document.querySelector('[data-testid=android-podcasts]').innerText.includes('Could not load')");
             api(connection,origin,"/__fixture/podcast","{\"enclosure_status\":0}");
             menu(web,scenario,"[data-testid=android-podcasts] [data-row-menu]","Retry");
-            waitFor(web,scenario,"document.querySelector('[data-testid=android-podcasts]').innerText.includes('Downloaded')");
+            waitFor(web,scenario,"Array.from(document.querySelectorAll('[data-testid=android-podcasts] [data-music-list-row]')).some(r=>r.textContent.includes('fixture directory episode')&&r.textContent.includes('Downloaded'))");
             var tracks=api(connection,origin,"/api/library",null).getJSONArray("tracks");JSONObject acquired=null;
             for(int i=0;i<tracks.length();i++)if(tracks.getJSONObject(i).optString("podcast_episode_guid").equals("directory-episode-guid"))acquired=tracks.getJSONObject(i);
             assertNotNull(acquired);String id=acquired.getString("id");assertEquals("podcast_episode",acquired.getString("media_kind"));

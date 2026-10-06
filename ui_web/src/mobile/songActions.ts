@@ -7,6 +7,7 @@ import { musicLinks, type MusicMetadata } from '../lib/musicLinks';
 import { toast } from '../lib/toast';
 import { isPodcastTrack } from '../lib/track';
 import type { CatalogItem, RecommendationContext, Track } from '../types/music';
+import type { PodcastSearchResult } from '../types/podcast';
 
 /** "Go to artist" per performer, then "Open album": the same entries and order as the web song menu. */
 export function nativeMusicLinkActions(meta: MusicMetadata, open: (path: string) => void, disabled: boolean): MenuAction[] {
@@ -27,7 +28,15 @@ export function catalogFeedback(item: CatalogItem): { recommendation: Recommenda
 }
 
 /** The reason a recommendation was made, then "Not interested" with an undo, scoped to the account that sent it. */
-export function nativeFeedbackActions(feedback: ReturnType<typeof catalogFeedback>, current: () => boolean): MenuAction[] {
+/** A recommended show: "not interested" teaches the engine about the feed, not an episode. */
+export function podcastFeedback(show: PodcastSearchResult): Feedback | null {
+  if (!show.recommendation_identity) return null;
+  return { recommendation: { reason: show.reason }, item: { media_type: 'podcast_show', podcast_feed_id: show.feed_url,
+    podcast_show_title: show.title, podcast_author: show.author, itunes_collection_id: show.itunes_collection_id, source: 'podcast' } };
+}
+
+type Feedback = { recommendation: { reason?: string }; item: Record<string, unknown> };
+export function nativeFeedbackActions(feedback: Feedback | null, current: () => boolean): MenuAction[] {
   if (!feedback) return [];
   return [
     ...(feedback.recommendation.reason ? [{ label: feedback.recommendation.reason, disabled: true, onSelect: () => {} }] : []),

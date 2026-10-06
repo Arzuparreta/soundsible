@@ -93,6 +93,18 @@ export default function PodcastBrowser(props: { generation: number; subscription
     } catch { if (job === actionEpoch && generation === props.generation && !controller.signal.aborted) setError(true); }
     finally { if (job === actionEpoch && generation === props.generation) setMutation(false); }
   }
+  /** Subscribing from the directory, without opening the show; confirmed by the engine before the list changes. */
+  async function subscribe(item: PodcastShowInfo) {
+    const generation = props.generation;
+    if (props.disconnected || disposed) throw new Error('Unavailable');
+    const answer = await request<{ subscription?: PodcastSubscription }>('/api/podcasts/subscribe', { method: 'POST', timeoutMs: 20000,
+      body: { rss_url: item.rss_url, title: item.title, author: item.author, image_url: item.image_url, itunes_collection_id: item.itunes_collection_id } });
+    if (disposed || generation !== props.generation) return;
+    if (!answer.subscription) throw new Error('Invalid subscription confirmation');
+    await props.onChanged?.();
+  }
+  const [downloadedOnly, setDownloadedOnly] = createSignal(false);
+  const shownEpisodes = () => downloadedOnly() ? episodes().filter(episode => track(episode).source !== 'preview') : episodes();
   async function acquire(episode: PodcastEpisode, action: 'enqueue' | 'retry' | 'remove' = 'enqueue', existing?: EpisodeJob) {
     const item = selected(); if (!item || props.disconnected || mutation()) return;
     const job = ++actionEpoch; const generation = props.generation; const controller = new AbortController(); actionAbort = controller;
@@ -125,16 +137,17 @@ export default function PodcastBrowser(props: { generation: number; subscription
     const generation = props.generation; const url = item.rss_url; const remove = Boolean(followed()); const id = followed()?.id;
     openContextMenu({ title: item.title, actions: [{ label: t(remove ? 'podcastShow.unsubscribe' : 'podcasts.subscribe'), disabled: mutation() || props.disconnected, onSelect: () => { if (generation === props.generation && show()?.rss_url === url && !disposed && (remove ? followed()?.id === id : !followed())) void follow(remove); } }] }, event);
   }
-  const closeShow = () => { reset(); setShow(null); };
+  const closeShow = () => { reset(); setDownloadedOnly(false); setShow(null); };
   registerNativeBack(() => { if (!selected()) return false; closeShow(); return true; });
   return <section data-testid="android-podcasts">
-    <Show when={selected()} fallback={<><PodcastDirectory generation={props.generation} disconnected={props.disconnected} onOpen={open} /><h2>{t('podcasts.yourShows')}</h2><For each={props.subscriptions} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}>{item => <MusicListRowView title={item.title} subtitle={item.author ?? ''} seed={item.id} disabled={props.disconnected} onActivate={() => open(item)} />}</For></>}>
+    <Show when={selected()} fallback={<><PodcastDirectory generation={props.generation} disconnected={props.disconnected} onOpen={open} subscribed={feed => props.subscriptions.some(row => row.rss_url === feed)} onSubscribe={subscribe} /><h2>{t('podcasts.yourShows')}</h2><For each={props.subscriptions} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}>{item => <MusicListRowView title={item.title} subtitle={item.author ?? ''} seed={item.id} disabled={props.disconnected} onActivate={() => open(item)} />}</For></>}>
       {selected => <><button onClick={closeShow}>{t('common.back')}</button><h2>{selected().title}</h2><button data-podcast-show-menu aria-label={t('songRow.ariaMore')} disabled={mutation()} onClick={showMenu}>⋯</button>
         <button disabled={busy() || props.disconnected} onClick={() => void load(selected(), false, true)}>{t('podcastShow.refresh')}</button>
+        <button data-podcast-downloaded-only aria-pressed={downloadedOnly()} onClick={() => setDownloadedOnly(value => !value)}>{t('podcastShow.downloadedOnly')}</button>
         <Show when={error()}><p role="alert">{t('common.loadFailed')}</p><button disabled={busy() || props.disconnected} onClick={() => void load(selected())}>{t('common.retry')}</button></Show>
         <Show when={queueError()}><p role="status">{t('common.loadFailed')} <button onClick={() => void loadQueue()}>{t('common.retry')}</button></p></Show>
         <Show when={busy()}><p role="status">{t('common.loading')}</p></Show>
-        <For each={episodes()} fallback={<Show when={!busy() && !error()}><EmptyState>{t('podcastShow.empty')}</EmptyState></Show>}>{episode => <MusicListRowView title={episode.title} subtitle={episode.published ?? ''} seed={episode.guid || episode.enclosure_url}
+        <For each={shownEpisodes()} fallback={<Show when={!busy() && !error()}><EmptyState>{t('podcastShow.empty')}</EmptyState></Show>}>{episode => <MusicListRowView title={episode.title} subtitle={episode.published ?? ''} seed={episode.guid || episode.enclosure_url}
           annotation={track(episode).source !== 'preview' ? t('podcastShow.ariaDownloaded') : episodeJob(episode)?.status === 'failed' || episodeJob(episode)?.status === 'interrupted' ? t('common.loadFailed') : episodeJob(episode) ? t('collection.downloading') : undefined} downloading={episodeJob(episode)?.status === 'pending' || episodeJob(episode)?.status === 'downloading'} busy={mutation()} onMenu={event => episodeMenu(episode, event)} active={props.activeId === track(episode).id} disabled={props.disconnected} onActivate={() => void props.onPlay(track(episode)).catch(() => setError(true))} />}</For>
         <Show when={next() !== null}><button disabled={busy() || props.disconnected} onClick={() => void load(selected(), true)}>{t('podcastShow.loadMore')}</button></Show>
       </>}

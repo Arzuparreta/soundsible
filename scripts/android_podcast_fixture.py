@@ -96,8 +96,12 @@ def install(app, root: Path, accounts):
     upstream_get = requests.get
 
     def get(url, **kwargs):
+        if isinstance(url, str) and url.startswith("https://rss.itunes.apple.com/"):
+            # The Apple chart is never reached; the engine falls back to its search mix below.
+            raise requests.ConnectionError("synthetic chart unavailable")
         if isinstance(url, str) and url.startswith("https://itunes.apple.com/"):
-            term = kwargs.get("params", {}).get("term", "")
+            params = kwargs.get("params", {})
+            term = params.get("term", "")
             rows = (
                 [
                     {
@@ -108,6 +112,16 @@ def install(app, root: Path, accounts):
                     }
                 ]
                 if "fixture" in term
+                # Top-podcast fallback (the only caller that sends `explicit`): one recommendable show.
+                else [
+                    {
+                        "collectionId": 900003,
+                        "collectionName": "fixture top podcast",
+                        "artistName": "fixture top host",
+                        "feedUrl": external + "/directory/feed.xml",
+                    }
+                ]
+                if "explicit" in params and term == "podcast"
                 else []
             )
             response = requests.Response()

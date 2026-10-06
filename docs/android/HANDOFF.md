@@ -46,7 +46,7 @@ Estado vigente y forma de trabajar. Lo superado está en
 ## Huecos de paridad pendientes (inventario 2026-10-06)
 
 - [x] S2aw Menú de canción: ir a artista/álbum, «No me interesa» con motivo, reproducir en otro dispositivo.
-- [ ] Podcasts: sección Top/recomendados con suscribir y «No me interesa»; filtro «sólo descargados» en el programa.
+- [x] Podcasts: sección Top/recomendados con suscribir y «No me interesa»; filtro «sólo descargados» en el programa.
 - [ ] Biblioteca: ordenar (A–Z, recientes, favoritos primero), filtro descargados, álbumes por género/año.
 - [ ] Cola: vaciar la cola manual; aviso de reanudar sesión de otro dispositivo (ResumeBanner).
 - [ ] Reproductor: silenciar; búsqueda: elegir versión; DJ: «pedir todas» de una colección.
