@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2ak",
+  "channel": "development",
+  "base_revision": "6ce24d77",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "ui_web/src/components/UsersPanel.tsx": "e5dbec5c7c222564f7fb671b930075025563fa4f7a60587b4f1f78323dc300de",
+    "ui_web/src/components/UsersPanel.test.tsx": "e91bfd880986386d649406fc65f8c74d5dff8958859c4f3dd3883bb42c513f6e",
+    "ui_web/src/mobile/Settings.tsx": "a402e6f1f717b70f69482d95c1eddef32fdba3595ee0a4f556065f58a6d77175",
+    "android/app/src/androidTest/java/com/soundsible/android/UsersTest.kt": "1ce6dbc46ed3c18c333c594f6d4e296e6e33040a820c50f183a9ef4c8efcb2cf"
+  },
+  "ui": {
+    "files": 209,
+    "tests": 1610,
+    "failures": 0,
+    "typescript": "pass",
+    "log": "/tmp/soundsible-people-unit.log"
+  },
+  "native": {
+    "tests": 2,
+    "failures": 0,
+    "seconds": 25.67,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-people-native.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Explicit native admin identity uses shared People panel and native transport",
+    "Real invite and member creation with confirmed password",
+    "User disabled in UI and verified by Core",
+    "Member has no People navigation and Core denies /api/users403",
+    "Late confirmation and invite cannot act or copy after account ownership changes"
+  ],
+  "limits": [
+    "Password reset/delete use shared actions with ownership unit guards; not all actions driven in this native acceptance",
+    "Cross-device media controls and handoff remain pending",
+    "Principal/browser4 and physical acceptance pending"
+  ]
+}

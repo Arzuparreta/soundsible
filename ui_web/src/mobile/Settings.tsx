@@ -1,4 +1,5 @@
 import { createSignal, Show } from 'solid-js';
+import { UsersPanel } from '../components/UsersPanel';
 import NativeSettingsAccount from './SettingsAccount';
 import NativeSettingsRecommendations from './SettingsRecommendations';
 import NativeSettingsPlayback from './SettingsPlayback';
@@ -19,7 +20,9 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
   playback: ComponentProps<typeof NativeSettingsPlayback>;
   subsonic?: ComponentProps<typeof NativeSettingsSubsonic>;
 }) {
-  const [section, setSection] = createSignal<'account' | 'appearance' | 'accessibility' | 'recommendations' | 'playback' | 'subsonic'>('account');
+  const [section, setSection] = createSignal<'account' | 'appearance' | 'accessibility' | 'recommendations' | 'playback' | 'subsonic' | 'users'>('account');
+  const captured = props.identity();
+  const current = () => captured === props.identity() && props.available();
   registerNativeBack(() => { if (section() === 'account') return false; setSection('account'); return true; });
   return <section class={styles.library} data-testid="android-settings">
     <nav class={styles.tabs} aria-label={t('nav.settings')}>
@@ -28,8 +31,12 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
       <button data-android-settings-accessibility aria-pressed={section() === 'accessibility'} onClick={() => setSection('accessibility')}>{t('accessibility.title')}</button>
       <button data-android-settings-recommendations aria-pressed={section() === 'recommendations'} onClick={() => setSection('recommendations')}>{t('settings.group.recommendations')}</button>
       <button data-android-settings-playback aria-pressed={section() === 'playback'} onClick={() => setSection('playback')}>{t('settings.playback')}</button>
+      <Show when={props.user.role === 'admin'}><button data-android-settings-users aria-pressed={section() === 'users'} disabled={!props.available()} onClick={() => setSection('users')}>{t('users.title')}</button></Show>
       <Show when={props.subsonic}><button data-android-settings-subsonic aria-pressed={section() === 'subsonic'} onClick={() => setSection('subsonic')}>Subsonic</button></Show>
     </nav>
+    <Show when={section() === 'users' && props.user.role === 'admin'}><section data-testid="android-settings-users">
+      <h2>{t('users.title')}</h2><fieldset disabled={!current() || props.busy}><UsersPanel account={() => props.user} current={current} /></fieldset>
+    </section></Show>
     <Show when={section() === 'account'}><NativeSettingsAccount {...props} /></Show>
     <Show when={section() === 'recommendations'}><NativeSettingsRecommendations identity={props.identity} available={props.available} /></Show>
     <Show when={section() === 'playback'}><NativeSettingsPlayback {...props.playback} /></Show>

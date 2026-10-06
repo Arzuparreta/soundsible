@@ -272,3 +272,14 @@ TypeScript pasan. SLICE_2AJ/evidence/s2aj.json, log
 Siguiente: admin y controles/handoff entre dispositivos, negativos DJ/Auto,
 distribución y regresión final. No OS invite intent probado aún. PR manual;
 no merge/automerge/release. Sources vigentes root.
+
+S2ak validado: Settings Personas sólo admin reutiliza panel web con account/current
+y guards tras diálogos/respuestas/copiar; cleanup invalida. WholeUI209/1610 +
+TypeScript pasan; UsersTest HTTP/TLS2/0,25.67s, runner53270 exit0 + APK/test APK/
+JVM56/lint normales. Admin crea cuenta/invite y desactiva confirmado Core; miembro
+sin menú ni acceso /api/users403. SLICE_2AK/evidence/s2ak.json, log
+/tmp/soundsible-people-native.log. Ninguna suite activa, AVD5554 sigue. Siguiente
+multidispositivo: dueño/socket en PlaybackService con playback_register, eventos
+playback_*_requested y estado/handoff Core; no activar audio/store web.
+ProgramCarSubscriptions sólo al suscribir Auto, no dueño remoto general. Faltan
+negativos DJ/Auto, firma/distribución y principal/browser4 final. PR manual.
