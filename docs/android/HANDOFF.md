@@ -185,3 +185,12 @@ UI prueba emisión/título/chat/fin y directorio/escucha PCM/pausa/volumen/chat/
 además401 real→login/biblioteca/panel retirados. Ver SLICE_4E/evidence/s4e.json.
 Siguiente Live: DJ/transition metadata + artwork públicos; recovery de media/red/
 lease y handshake/reset/proceso. No suite activa tras exec29062. AVD5554 sigue.
+
+S4f validado: Host4/Listener2,6/0,76.723s,runner exit0 + normal APK/test APK/JVM54/lint
+sin CA. DJ real al relay con dos pistas/ganancias/progreso de mezcla, NORMAL
+publica carátula privada y guest recibe thumbnail público en MediaSession.
+Cliente HTTPS separado sin cookies Core, origen/sala/bytes/dimensiones acotados.
+Fix cierre TLS sólo en worker; seed DJ determinista desde current. Ver SLICE_4F
+y evidence/s4f.json. Log /tmp/soundsible-live-s4f-corrected-native.log. No suite
+activa tras58980. AVD5554 sigue. Siguiente: recovery media/red/lease y handshake/
+reset/proceso; después regresión conjunta Live. No paridad, merge ni release.

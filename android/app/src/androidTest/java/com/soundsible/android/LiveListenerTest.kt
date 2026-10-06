@@ -97,12 +97,18 @@ class LiveListenerTest {
                 instrumentation.runOnMainSync { playing.set(active.isPlaying && active.currentMediaItem?.mediaId == "soundsible:live:$sessionId" && !active.isCommandAvailable(androidx.media3.common.Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) }
                 playing.get()
             }
+            val thumb = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.RED) }
+            val artworkUrl = LiveArtwork(room.getString("socket_url"), sessionId!!).use { it.upload(thumb, room.getString("host_token"), "remote-track") }
+            thumb.recycle()
             hostSocket.emit("program_event", JSONObject().put("v", 1).put("seq", 1).put("emitted_at", System.currentTimeMillis())
                 .put("program_time", 1).put("transport", "playing").put("paused_since", JSONObject.NULL)
-                .put("primary", JSONObject().put("id", "remote-track").put("title", "Remote native song").put("artist", "Remote artist").put("position", 0).put("duration", 600).put("gain", 1))
+                .put("primary", JSONObject().put("id", "remote-track").put("title", "Remote native song").put("artist", "Remote artist").put("artwork_url", artworkUrl).put("position", 0).put("duration", 600).put("gain", 1))
                 .put("secondary", JSONObject.NULL).put("transition", JSONObject.NULL))
             await("Guest metadata did not reach MediaSession") {
                 instrumentation.runOnMainSync { playing.set(active.mediaMetadata.title?.toString() == "Remote native song") }; playing.get()
+            }
+            await("Guest public artwork did not reach MediaSession") {
+                instrumentation.runOnMainSync { playing.set(active.mediaMetadata.artworkData?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)?.width == 64 } == true) }; playing.get()
             }
             val chat = call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
                 putString("action", "liveChat"); putString("text", "Native guest message"); putLong("generation", epoch)

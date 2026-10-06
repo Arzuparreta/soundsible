@@ -286,7 +286,7 @@ class PlaybackService : MediaLibraryService() {
                 podcastSources.entries.filter { it.value !in keys }.forEach { it.key.cancel() }
             }
         })
-        liveHost = NativeLiveHost(this, connection, main, { player }) { state ->
+        liveHost = NativeLiveHost(this, connection, main, { player }, artwork, { dj?.liveSnapshot() }) { state ->
             session?.let { active -> active.setSessionExtras(Bundle(active.sessionExtras).apply { putString("nativeLiveHost", state.toString()) }) }
         }
         carArt = ProgramCarArtwork(this, connection)

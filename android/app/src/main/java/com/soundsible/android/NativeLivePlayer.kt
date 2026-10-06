@@ -43,6 +43,10 @@ internal class NativeLivePlayer(
     private var failure: PlaybackException? = null
     private var reason = Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
     private var startedAt = 0L
+    private val artWorker = java.util.concurrent.ThreadPoolExecutor(1, 1, 0, java.util.concurrent.TimeUnit.MILLISECONDS, java.util.concurrent.ArrayBlockingQueue<Runnable>(1))
+    private val publicArtwork = LiveArtwork(room.optString("api_url").ifBlank { room.getString("socket_url") }, room.getString("id"))
+    private var artworkUrl: String? = null
+    private var artworkRevision = 0L
     private val attributes = AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build()
     private val focus = ProgramAudioFocus(context, main, ::focusChanged) { setRequested(false, Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY) }
     private val reset: () -> Unit = { main.post { if (!closed) stopOutput() } }
@@ -83,6 +87,24 @@ internal class NativeLivePlayer(
             "session_ended" -> { if (payload.optString("session_id") == room.getString("id")) stopOutput(); return }
         }
         val primary = programme?.optJSONObject("primary")
+        val nextArtwork = primary?.optString("artwork_url")?.takeIf { it.startsWith("https://") }
+        if (nextArtwork != artworkUrl) {
+            artworkUrl = nextArtwork
+            val revision = ++artworkRevision
+            item = item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkData(null, MediaMetadata.PICTURE_TYPE_FRONT_COVER).build()).build()
+            if (nextArtwork != null) try {
+                artWorker.queue.clear()
+                artWorker.execute {
+                    val bytes = runCatching { publicArtwork.download(nextArtwork) }.getOrNull()
+                    main.post {
+                        if (current() && artworkRevision == revision && bytes != null) {
+                            item = item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER).build()).build()
+                            invalidateState()
+                        }
+                    }
+                }
+            } catch (_: java.util.concurrent.RejectedExecutionException) { /* A newer artwork observation supersedes this one. */ }
+        }
         item = item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon()
             .setTitle(primary?.optString("title")?.takeIf { it.isNotBlank() } ?: room.optString("title"))
             .setArtist(primary?.optString("artist")?.takeIf { it.isNotBlank() } ?: room.optJSONObject("host")?.optString("display_name").orEmpty()).build()).build()
@@ -164,6 +186,7 @@ internal class NativeLivePlayer(
     }
     override fun handleSetVolume(volume: Float): ListenableFuture<*> { volumeValue = volume; gain(); changed(snapshot()); invalidateState(); return Futures.immediateVoidFuture() }
     private fun stopOutput() {
+        ++artworkRevision; artWorker.queue.clear()
         setRequested(false, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
         state = Player.STATE_IDLE
         val previous = peer; peer = null
@@ -180,6 +203,8 @@ internal class NativeLivePlayer(
         stopOutput(); closed = true
         changed(JSONObject().put("generation", epoch).put("session", JSONObject.NULL).put("connected", false).put("messages", JSONArray()).put("program", JSONObject.NULL))
         connection.resetListeners.remove(reset); focus.close(); main.removeCallbacksAndMessages(null); worker.shutdown()
+        artWorker.shutdownNow()
+        java.util.concurrent.CompletableFuture.runAsync { publicArtwork.close() }
         return Futures.immediateVoidFuture()
     }
     companion object {

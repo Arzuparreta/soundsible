@@ -175,6 +175,22 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     }
     fun error(): Throwable? = synchronized(lock) { failure }
     fun transition(): ProgramMixWindow? = synchronized(lock) { window }
+    data class LiveView(val primary: Int, val secondary: Int?, val progress: Double,
+        val incomingDominant: Boolean, val technique: String, val phase: String,
+        val gains: List<Double>)
+    /** One hardware-clock observation keeps both deck labels and gains coherent. */
+    fun liveView(): LiveView = synchronized(lock) {
+        val played = positionUs() * (config?.sampleRate ?: 0) / 1000000
+        val current = window?.takeIf { it.epoch == outputEpoch && played < it.start + it.length }
+        val primary = restoration?.takeIf { played >= it.first }?.second ?: current?.dominant(played) ?: active
+        if (current == null) return@synchronized LiveView(primary, null, 0.0, false,
+            technique.name.lowercase(java.util.Locale.ROOT), "idle", List(2) { if (it == primary) 1.0 else 0.0 })
+        val progress = if (current.length == 0L) 1.0 else ((played - current.start).toDouble() / current.length).coerceIn(0.0, 1.0)
+        val curve = ProgramMixCurve.at(technique, progress)
+        LiveView(primary, 1 - primary, progress, primary == current.incoming,
+            technique.name.lowercase(java.util.Locale.ROOT), if (played < current.start) "prerolling" else "crossfading",
+            List(2) { if (it == current.outgoing) curve.outgoing else curve.incoming })
+    }
     fun dominantInput(): Int = synchronized(lock) {
         val current = window?.takeIf { it.epoch == outputEpoch }
         val played = positionUs() * (config?.sampleRate ?: 0) / 1000000

@@ -19,8 +19,10 @@ import kotlin.math.sqrt
 class LiveHostTest {
     @Test fun httpCoreRelay() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin")!!)
     @Test fun tlsCoreRelay() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin")!!)
+    @Test fun httpDjRelay() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin")!!, true)
+    @Test fun tlsDjRelay() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin")!!, true)
     @androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
-    private fun run(origin: String) {
+    private fun run(origin: String, dj: Boolean = false) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val connection = EngineConnection.shared(context)
@@ -68,6 +70,27 @@ class LiveHostTest {
             val song = songs.single { it.mediaId == "soundsible:track:member-track" }
             instrumentation.runOnMainSync { active.setMediaItem(song); active.prepare(); active.play() }
             await("Native programme not playing") { NativeProgramOutput.playing }
+            if (dj) {
+                connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/loudness-facts").header("X-Android-Fixture", "isolated")
+                    .post("{\"album\":true,\"firstFrequency\":440,\"firstDuration\":20,\"secondFrequency\":880,\"secondRate\":48000,\"secondChannels\":2}".toRequestBody("application/json".toMediaType())).build())
+                    .execute().use { assertEquals(200, it.code) }
+                assertEquals(0, call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
+                    putString("action", "mixing"); putBoolean("enabled", true); putLong("generation", epoch)
+                }) }.resultCode)
+                assertEquals(0, call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
+                    putString("action", "queue"); putLong("generation", epoch); putInt("index", 0)
+                    putString("tracks", "[{\"source\":\"local\",\"id\":\"member-pcm-soft\",\"title\":\"DJ outgoing\",\"duration\":20}]")
+                }) }.resultCode)
+                val queueReady = AtomicReference(false)
+                await("DJ seed not playing") { instrumentation.runOnMainSync { queueReady.set(active.isPlaying && active.currentMediaItem?.mediaId == "member-pcm-soft") }; queueReady.get() }
+                assertEquals(0, call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
+                    putString("action", "dj"); putBoolean("fromCurrent", true); putString("profile", "adaptive"); putLong("generation", epoch)
+                    putString("queueToken", ProgramQueue.token(active)); putString("key", ProgramQueue.key(active, active.currentMediaItemIndex))
+                    putString("sources", "[{\"id\":\"pcm\",\"label\":\"PCM\",\"activation\":0,\"tracks\":[{\"id\":\"member-pcm-soft\",\"title\":\"DJ outgoing\",\"duration\":20},{\"id\":\"member-pcm-loud\",\"title\":\"DJ incoming\",\"duration\":60}]}]")
+                }) }.resultCode)
+                val ready = AtomicReference(false)
+                await("DJ route did not start") { instrumentation.runOnMainSync { ready.set(active.isPlaying && active.mediaItemCount > 1 && active.currentMediaItem?.mediaId == "member-pcm-soft") }; ready.get() }
+            }
             val programmeKey = AtomicReference<String>()
             instrumentation.runOnMainSync { programmeKey.set(ProgramQueue.key(active, active.currentMediaItemIndex)) }
             assertFalse(programmeKey.get().isBlank())
@@ -88,7 +111,28 @@ class LiveHostTest {
             await("Relay did not decode programme") { rms.get() > 500 }
             await("Host did not publish authoritative metadata") {
                 val programme = publicRoom().optJSONObject("program")
-                programme?.optJSONObject("primary")?.optString("id") == "member-track" && programme.optString("transport") == "playing"
+                programme?.optJSONObject("primary")?.optString("id") == (if (dj) "member-pcm-soft" else "member-track") && programme.optString("transport") == "playing"
+            }
+            if (dj) {
+                await("DJ overlap metadata missing") {
+                    val programme = publicRoom().optJSONObject("program")
+                    val transition = programme?.optJSONObject("transition")
+                    val secondary = programme?.optJSONObject("secondary")
+                    transition?.optString("phase") == "crossfading" && transition.optDouble("progress") in 0.01..0.99 && secondary != null && secondary.optString("id") != programme.optJSONObject("primary")?.optString("id")
+                }
+                assertTrue("DJ overlap lost decoded relay PCM", rms.get() > 500)
+            }
+            if (!dj) {
+            await("Private thumbnail was not published for the room") {
+                publicRoom().optJSONObject("program")?.optJSONObject("primary")?.optString("artwork_url")?.startsWith("https://10.0.2.2:58443/v1/artwork/$sessionId/") == true
+            }
+            val publicArt = publicRoom().getJSONObject("program").getJSONObject("primary").getString("artwork_url")
+            LiveArtwork("https://10.0.2.2:58443", sessionId!!).use { art ->
+                val bytes = art.download(publicArt)
+                assertNotNull("Public thumbnail is not decodable", android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+                assertTrue("Foreign artwork origin accepted", runCatching { art.download("https://127.0.0.1:58443/v1/artwork/$sessionId/foreign.jpg") }.isFailure)
+                assertTrue("Another room artwork accepted", runCatching { art.download("https://10.0.2.2:58443/v1/artwork/foreign/thumbnail.jpg") }.isFailure)
+            }
             }
             val previousSequence = publicRoom().getJSONObject("program").getLong("seq")
             val title = call { active.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply {
@@ -127,7 +171,8 @@ class LiveHostTest {
             publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/v1/sessions/$sessionId").build()).execute().use { assertEquals(404, it.code) }
             val stillPlaying = AtomicReference(false)
             instrumentation.runOnMainSync { stillPlaying.set(active.isPlaying && ProgramQueue.key(active, active.currentMediaItemIndex) == programmeKey.get()) }
-            assertTrue("Ending Live stopped local programme", stillPlaying.get())
+            if (!dj) assertTrue("Ending Live stopped local programme", stillPlaying.get())
+            else assertTrue("Ending Live stopped DJ programme", NativeProgramOutput.playing)
             publicClient.connectionPool.evictAll(); publicClient.dispatcher.executorService.shutdown()
         } finally {
             receiver?.close()

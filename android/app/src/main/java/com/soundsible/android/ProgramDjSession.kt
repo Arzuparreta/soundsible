@@ -26,6 +26,17 @@ internal class ProgramDjSession(private val context: Context, private val genera
         val ownerKey: String? get() = item.mediaMetadata.extras?.getString(ProgramQueue.BRIDGE_OWNER)
     }
     data class RouteSnapshot(val epoch: Long, val revision: Long, val floor: Int, val rows: List<Row>)
+    data class LiveDeck(val item: MediaItem, val positionMs: Long, val durationMs: Long, val gain: Double)
+    data class LiveSnapshot(val primary: LiveDeck?, val secondary: LiveDeck?, val mix: ProgramMixOutput.LiveView)
+    fun liveSnapshot(): LiveSnapshot? {
+        check(Looper.myLooper() == main.looper)
+        if (!owns()) return null
+        val mix = output.liveView()
+        fun deck(slot: Int): LiveDeck? = route.getOrNull(indices[slot])?.let {
+            LiveDeck(it.item, decks[slot].currentPosition, decks[slot].duration.coerceAtLeast(0), mix.gains[slot])
+        }
+        return LiveSnapshot(deck(mix.primary), mix.secondary?.let(::deck), mix)
+    }
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var closed = false
     private var route = initial.toList()
