@@ -270,6 +270,7 @@ class PlaybackService : MediaLibraryService() {
             }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { leveling.shuffle = shuffleModeEnabled }
             override fun onEvents(player: Player, events: Player.Events) {
+                NativeProgramOutput.playbackChanged(player.isPlaying)
                 pendingCarRadio?.let { key ->
                     if (player.currentMediaItem?.mediaMetadata?.extras?.getString(ProgramQueue.KEY) == key) {
                         pendingCarRadio = null; autoplay.suspend(); radio.start("balanced")

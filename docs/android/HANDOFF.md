@@ -118,8 +118,18 @@ S5h validado: CarExternal2/0 HTTP/TLS + normal APK/test/JVM54/lint sin CA.
 Externo playFromMediaId observa ID canónico/playing y PCM; URI reabre antes de
 logout y se deniega después. Ver SLICE_5H/evidence/s5h.json. Sin suite activa tras75392.
 
-Siguiente: labels del programa durante DJ; luego negativos DJ, Live/teléfono/firma
-y regresión final/browser4. Host Google Auto sigue sin ejecutarse. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
+Prioridad corregida por coste/tiempo del usuario: detener ampliaciones granulares
+Auto por ahora y completar Live, el hueco funcional mayor. Luego cerrar pendientes
+teléfono/DJ/Auto, firma y regresión final/browser4. Host Google Auto no ejecutado.
+
+S4a validado: LiveInputTest3/0,12.817s (NORMAL Core HTTP/TLS + PCM sintético),
+runner exit0 y normal APK/test/JVM54/lint sin CA. WebRTC/Opus real entre peers,
+mono16k→stereo48k, mute local conserva emisión, pause=ceros y resume recupera PCM.
+Sin AudioRecord ni permiso de micrófono; entrada nativa post-DSP/pre-volumen.
+Ver SLICE_4A/evidence/s4a.json. Dependency SHA fijo, recorder Java JNI reemplazado,
+resto SDK/binarios intactos y licencias en assets; Python2/0, normal recheck notices.
+Siguiente: WHIP/WHEP con relay aislado, luego sala/chat/background/UI. No Live
+completo ni paridad. Sin suite activa tras63622/74578. No copiar clone Auto viejo sobre root; fuente vigente es root. Actualizar árbol no prueba labels
 actualizadas del programa activo. Luego UID externo, negativos DJ, Live/teléfono/
 firma y regresión final/browser4. Clone /tmp/soundsible-auto-next ya se trasladó;
 no copiarlo sobre root actual. No aplicar stash/clone viejo. No merge/automerge/release.

@@ -56,6 +56,8 @@ def doctor() -> None:
 
 
 def prepare() -> None:
+    from android_webrtc import prepare_webrtc
+    prepare_webrtc(ROOT)
     version = run(sys.executable, "scripts/version_sync.py", "--print", capture=True)
     revision = run("git", "rev-parse", "HEAD", capture=True)
     dirty = bool(run("git", "status", "--porcelain", capture=True))

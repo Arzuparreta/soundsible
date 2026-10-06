@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4a",
+  "channel": "development",
+  "base_revision": "c32b8fcc",
+  "dirty_at_asset_prepare": true,
+  "source_hashes": {
+    "scripts/android_webrtc.py": "4b2540ff9681ea0d70a122b3b7740d3202e93e6ab29f8f2b823833c59bab0fdd",
+    "scripts/android.py": "1809a509b5c52d0bb1f3dc1d883a6ec76e614038d0381f6aaa75a9f96f942c71",
+    "android/app/build.gradle": "7755a74b792555388a765daeaff51caaacba1f20f5ac5bb3420b01064410d926",
+    "android/app/src/main/java/org/webrtc/audio/WebRtcAudioRecord.java": "78f12df9923dd8a618a00e6c646f5bc3b5d40fcc5018147efb07b44e2399a01a",
+    "android/app/src/main/java/com/soundsible/android/LiveProgramInput.kt": "fa1193c65f48d9c934104e53af0a9a54e02a2d9a36f392003ddf1852210f3f1a",
+    "android/app/src/main/java/com/soundsible/android/NativeProgramOutput.kt": "8ede7303bbc29f464b68f39d83ae2031b04de5958a53a68a3d186703a08616b3",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "9255c4e7f29145049f29aca23306857a9e859576e20ddeaad3cfcb6eeff4fc2c",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveInputTest.kt": "6625fc8078ee84608e44cf842c70df8f671d1b0f29f14c4ff07c63a051ce4530"
+  },
+  "tests": 3,
+  "failures": 0,
+  "seconds": 12.817,
+  "runner_exit": 0,
+  "log": "/tmp/soundsible-live-programme-fixed-native.log",
+  "normal_build": "APK/test APK/JVM54/lint without temporary CA pass; repeated after adding dependency license assets",
+  "normal_packaging_log": "/tmp/soundsible-live-notices-normal.log",
+  "python_dependency_tests": "2/0; checksum rejection, preserved native library/classes and deterministic offline cached rebuild",
+  "proves": [
+    "Two real WebRTC peers encode/decode externally supplied PCM through Opus without microphone permission",
+    "Actual authenticated Core HTTP/TLS NORMAL programme feeds native post-DSP tap into sender and independent peer AudioTrackSink",
+    "Mono16k synthetic Core music resamples to stereo48k; local programme volume0 leaves decoded receiver RMS>500",
+    "Native pause encodes silence RMS<20; resume restores PCM",
+    "Publisher source is native, no WebView PCM transfer or per-audio JS callbacks"
+  ],
+  "limits": [
+    "Local peer-to-peer SDP in AVD; no WHIP/WHEP relay, room UI, chat, background host lease or network recovery yet",
+    "No DJ-to-receiver or received-Live exclusion acceptance yet",
+    "Not physical listening, whole principal regression, full Live or parity"
+  ],
+  "provenance_note": "After asset prepare, a test-only deprecated OkHttp call was corrected before the accepted run. Native production sources unchanged. Dependency build later adds only license assets; normal packaging rechecked without rerunning identical native code."
+}

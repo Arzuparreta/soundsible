@@ -53,6 +53,7 @@ repositories {
 }
 
 dependencies {
+    implementation(name: "soundsible-webrtc", ext: "aar")
     implementation "androidx.media3:media3-exoplayer:1.11.1"
     implementation "androidx.media3:media3-session:1.11.1"
     implementation "androidx.media3:media3-datasource-okhttp:1.11.1"
