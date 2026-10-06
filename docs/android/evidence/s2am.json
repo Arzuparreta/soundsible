@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2am",
+  "channel": "development",
+  "base_revision": "cc459fff",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/PlaybackPlugin.kt": "c786943eb9d9ee0253f6f89749d15a17fe509821a8155093c12488bb86e07f26",
+    "android/app/src/androidTest/java/com/soundsible/android/DevicesUiTest.kt": "21e7f84b7a9e48378f16efe30eee1e8b17cd8cf68950e2a9aa2c78adb135fb2c",
+    "ui_web/src/mobile/Devices.tsx": "9ca2f9e505158d0bd45b848884a6819022ea0296f3ed6473ed9b2e40924bf390",
+    "ui_web/src/mobile/devices.ts": "e7c6174f6c52ec76bc99b55a63f507227a9db68640009025c34a6070c754e728",
+    "ui_web/src/mobile/Devices.test.tsx": "b060b960a46079e52b17def29007337acbd059600849a0286ed22f7d74ba0f1b",
+    "ui_web/src/mobile/Settings.tsx": "f49f1ba478f3d8ef085cc117c9417c2fe52eea1fe2462d173662152566ac044a",
+    "ui_web/src/mobile/AndroidStart.tsx": "01b4029b1cb55a2e109dccb42d367ba3d5be566e56214b1c79bbfd3e45871e51",
+    "shared/api/routes/playback.py": "d27f23f92caee32852fbd79406d9829fcd8688849986298de569409e90b57252",
+    "tests/test_playback_car_commands.py": "a109ec4df931b6f7f2eaed66eba479eb4e0be0d051cd73f63a95f03164a66e79"
+  },
+  "ui": {
+    "files": 210,
+    "tests": 1613,
+    "failures": 0,
+    "typescript": "pass",
+    "log": "/tmp/soundsible-devices-unit.log"
+  },
+  "core": {
+    "tests": 15,
+    "failures": 0
+  },
+  "native": {
+    "tests": 4,
+    "failures": 0,
+    "seconds": 31.097,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-devices-final-native.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Native service identifies this device; no second web playback owner",
+    "Real WebView pause/play reaches peer Core socket HTTP/TLS",
+    "Remote NORMAL background controls/handoff regression",
+    "UI rejects late list/account changes and disposes listeners",
+    "Core provides shared socket_active property"
+  ],
+  "limits": [
+    "Outgoing handoff and DJ/Radio workspace restore pending",
+    "No Google Auto/physical-device acceptance"
+  ]
+}

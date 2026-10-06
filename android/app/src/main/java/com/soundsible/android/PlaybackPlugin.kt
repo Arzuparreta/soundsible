@@ -81,7 +81,15 @@ class PlaybackPlugin : Plugin() {
         return JSObject().put("generation", generation).put("ready", controller != null)
             .put("host", scoped("nativeLiveHost")).put("listener", scoped("nativeLiveListener"))
     }
-    private fun publish() { if (alive && visible) { notifyListeners("playbackState", snapshot()); notifyListeners("nativeLiveState", liveSnapshot()) } }
+    private fun deviceSnapshot(): JSObject {
+        val generation = EngineConnection.shared(context).generation
+        val state = controller?.sessionExtras?.getString("nativeDevice")?.let {
+            runCatching { JSObject(it).takeIf { value -> value.optLong("generation", -1) == generation } }.getOrNull()
+        }
+        return state ?: JSObject().put("generation", generation).put("device_id", org.json.JSONObject.NULL).put("connected", false)
+    }
+    @PluginMethod fun deviceState(call: PluginCall) { main.post { call.resolve(deviceSnapshot()) } }
+    private fun publish() { if (alive && visible) { notifyListeners("playbackState", snapshot()); notifyListeners("nativeLiveState", liveSnapshot()); notifyListeners("nativeDeviceState", deviceSnapshot()) } }
     @PluginMethod fun liveDirectory(call: PluginCall) {
         val connection = EngineConnection.shared(context)
         val generation = call.getInt("generation")?.toLong() ?: -1L

@@ -164,3 +164,12 @@ def test_remote_pause_then_resume_preserves_track_position_and_session(tmp_path,
     assert paused['is_playing'] is False
     assert client.post('/api/playback/remote-command', json={'device_id': 'ios-car-client', 'command': 'play'}).status_code == 200
     assert socket.events[-1]['payload']['state']['session'] == original['session']
+
+
+def test_device_list_exposes_live_socket_flag_for_shared_clients(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    response = _make_app().test_client().get('/api/devices')
+    assert response.status_code == 200
+    assert response.get_json()['devices'][0]['socket_active'] is True

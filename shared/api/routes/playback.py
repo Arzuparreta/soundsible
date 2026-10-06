@@ -279,7 +279,10 @@ def register_playback_device():
 def list_playback_devices():
     api = _get_api()
     scope = api["get_scope_from_request"]()
-    return jsonify({"devices": api["list_registered_devices"](scope)})
+    return jsonify({"devices": [
+        {**device, "socket_active": bool(device.get("active_sid"))}
+        for device in api["list_registered_devices"](scope)
+    ]})
 
 
 @playback_bp.route("/api/static/stream/<track_id>", methods=["GET"])

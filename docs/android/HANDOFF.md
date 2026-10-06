@@ -296,3 +296,14 @@ Next device-list UI/outgoing handoff, DJ/Radio workspace and pending catalog
 restoration; then remaining pairing/public links, DJ/Auto negatives, distribution
 and final principal/browser4. Do not claim full multidispositivo parity yet.
 Never merge/automerge/release; final PR stays open for manual review.
+
+S2am accepted: Settings Devices reads native service identity, lists account-scoped
+Core devices and sends controls through authenticated native HTTP. UI210/1613+TS;
+DevicesUi + DeviceSession4/0 HTTP/TLS,31.097s, runner exit0 + normal APK/test
+APK/JVM56/lint. Core15/0; /api/devices now exposes socket_active from active_sid
+for shared web/native UI. Earlier UI test failure was API contract mismatch,
+not registration overwriting SID; latter was an incorrect intermediate diagnosis.
+See SLICE_2AM/evidence/s2am.json. Next outgoing handoff must publish exact fresh
+native state then call Core handoff with same-account/generation checks. Full DJ/
+Radio/pending catalog restore, public invite intents/pairing, negative coverage,
+distribution and final full suites remain. Continue; PR manual, no release/merge.
