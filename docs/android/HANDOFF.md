@@ -54,7 +54,17 @@ Estado vigente y forma de trabajar. Lo superado está en
 - [x] Ajustes: buscador de ajustes (índice web filtrado a lo que Android dibuja).
 - [—] Silenciar: no se porta. En Android volumen y silencio son del sistema (teclas, controles); el botón web
       existe porque el navegador no los tiene.
-- [?] DJ «Pedir todas» de una colección: **decisión del usuario pendiente**. El servicio nativo sólo admite
+- [ ] DJ «Pedir todas» (el usuario decidió implementarlo, 2026-10-06). **EN CURSO, sin commit ni pruebas:**
+      `ProgramQueue.ROUTE/requestGroup`, `ProgramDjSession.addRequestedGroup` + `replaceFuture`/`changeContext`
+      descartan grupos, `ProgramDjRouteEditor.placeGroup` (Core `dj-place` con `requests`), `djRequest` 1..50.
+      Falta: comprobar formato de respuesta de Core (`v` en cada colocación), acción UI en `djSources.ts`
+      («musicExplorer.requestAll» → `djRequest` con las canciones), unit tests y prueba nativa (grupo se va al
+      «Cambiar sesión», petición suelta sobrevive).
+- [ ] POST_NOTIFICATIONS: declarar y pedir al preparar la primera copia offline (Android 13+).
+- [ ] Después: regresión principal completa (se interrumpió a 13/210 a propósito), pytest completo, browser4,
+      fetch + ancestro, PR `impact:minor` sin automerge con trailer `Co-authored-by: emrothenberg
+      <187884098+emrothenberg@users.noreply.github.com>` (pedido por el usuario). Borrador del cuerpo: ver
+      descripción en la sesión (Native Android app…). El servicio nativo sólo admite
       peticiones de una canción y no tiene grupos que se vayan al cambiar de sesión; sin eso repetiría el fallo
       de las 38 favoritas que sobrevivían a los cambios de sesión. Opciones: implementarlo con grupos nativos o
       dejarlo fuera de Android.
