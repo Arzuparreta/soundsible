@@ -87,7 +87,19 @@ class ProgramDjBlocksTest {
             }
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
             while (!pcm.get() && System.nanoTime() < deadline) Thread.sleep(50)
-            assertTrue("Retained decoder did not produce PCM after route block edits", pcm.get())
+            if (!pcm.get()) {
+                // The failing state is the evidence: audio focus, decoder error or an idle output.
+                val state = StringBuilder()
+                instrumentation.runOnMainSync {
+                    val owner = session!!
+                    val player = owner.player
+                    state.append("playWhenReady=${player.playWhenReady} state=${player.playbackState} suppression=${player.playbackSuppressionReason} error=${player.playerError} position=${player.currentPosition} items=${owner.items().size}")
+                    @Suppress("UNCHECKED_CAST")
+                    val decks = ProgramDjSession::class.java.getDeclaredField("decks").apply { isAccessible = true }.get(owner) as Array<androidx.media3.exoplayer.ExoPlayer>
+                    decks.forEachIndexed { slot, deck -> state.append(" deck$slot[item=${deck.currentMediaItem?.mediaId} state=${deck.playbackState} playWhenReady=${deck.playWhenReady} error=${deck.playerError}]") }
+                }
+                fail("Retained decoder did not produce PCM after route block edits: $state")
+            }
             assertFalse(capture.failed.get())
         } finally {
             instrumentation.runOnMainSync { session?.close() }; capture.close(); tap.close()
