@@ -92,10 +92,14 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   const incomingSong = (): Track | null => {
     const capsule = incoming.selection()?.capsule;
     if (!capsule) return null;
-    return snapshot()?.tracks.find(track => !isPodcastTrack(track) && (track.youtube_id === capsule.yt || track.source === 'preview' && track.id === capsule.yt)) ?? {
+    return (stale() ? availableLibrary(offlineState() ?? { user: null, items: [], playlists: {}, usedBytes: 0, limitBytes: 0 }).tracks : snapshot()?.tracks ?? []).find(track => !isPodcastTrack(track) && (track.youtube_id === capsule.yt || track.source === 'preview' && track.id === capsule.yt)) ?? {
       id: capsule.yt, source: 'preview', youtube_id: capsule.yt, title: capsule.title, artist: capsule.artist,
       album: capsule.album, duration: capsule.duration ?? 0,
     } as Track;
+  };
+  const incomingPlayable = () => {
+    const track = incomingSong();
+    return !!track && (!stale() || !!offlineState() && availableProgram([track], 0, offlineState()!).index === 0);
   };
   function entityMenu(entry: SavedEntity, event?: MouseEvent) {
     const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
@@ -359,10 +363,12 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
         <button type="submit" disabled={busy()}>{t('android.login')}</button>
       </form></Show>
     </Show>
-    <IncomingSong incoming={incoming} track={incomingSong} disabled={!user() || stale() || programPending() || !program()?.ready}
+    <IncomingSong incoming={incoming} track={incomingSong} disabled={!user() || !incomingPlayable() || programPending() || !program()?.ready}
       onMenu={songMenu} onPlay={async track => {
-        const captured = epoch; const queue = mixedProgram([track], 0);
-        if (!user() || stale() || queue.index < 0) throw new Error('Playback unavailable');
+        const captured = epoch;
+        const available = stale() && offlineState() ? availableProgram([track], 0, offlineState()!) : { tracks: [track], index: 0 };
+        const queue = mixedProgram(available.tracks, available.index);
+        if (!user() || !incomingPlayable() || queue.index < 0) throw new Error('Playback unavailable');
         await runtime.execute({ action: 'queue', tracks: queue.tracks, index: queue.index });
         if (captured !== epoch) throw new Error('Account changed');
       }} />

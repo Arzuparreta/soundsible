@@ -90,6 +90,11 @@ class OfflineStore private constructor(private val context: Context) {
             for (key in listOf("title", "artist", "album", "album_artist", "album_id", "artist_id")) {
                 val value = if(row.isNull(key)) "" else row.optString(key, ""); require(value.length <= 4096); result.put(key, value)
             }
+            // Public recording identity allows an incoming capsule to resolve
+            // to the acquired copy while offline; never persist an external URL.
+            if (!row.isNull("youtube_id")) row.optString("youtube_id").takeIf {
+                it.matches(Regex("^[A-Za-z0-9_-]{11}$"))
+            }?.let { result.put("youtube_id", it) }
             result.put("duration", row.optDouble("duration", 0.0).takeIf { it.isFinite() && it >= 0 } ?: 0.0)
             // Keep facts with the copied recording; later metadata refreshes may describe different bytes.
             for (key in listOf("loudness_lufs", "loudness_peak_dbtp")) {

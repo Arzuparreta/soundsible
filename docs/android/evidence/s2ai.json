@@ -37,10 +37,28 @@
   ],
   "limits": [
     "HTTPS verified App Links and public bridge app-opening integration remain pending",
-    "incoming playback currently requires online account; offline cached-match acceptance pending",
     "invites and multi-device parity remain pending",
     "AVD is not physical device or browser-to-app acceptance",
     "full current principal regression and browser4 still pending",
     "no alpha release or complete parity"
-  ]
+  ],
+  "offline_followup": {
+    "source_base_revision": "f0e02058",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "instrumentation_seconds": 19.214,
+    "log": "/tmp/soundsible-s2ai-incoming-offline-confirmed-native.log",
+    "normal_build": "APK/test APK/JVM54/lint passed without temporary CA",
+    "ui": "204 files/1595 tests + TypeScript passed; /tmp/soundsible-s2ai-incoming-offline-ui.log",
+    "proves": [
+      "New explicit copies retain validated public video identity",
+      "Incoming identity resolves to account-owned complete local copy after recreation with APIs returning503",
+      "Explicit Play uses local member-track and consumes selection"
+    ],
+    "limits": [
+      "Older copies without video identity require re-preparation to gain incoming matching",
+      "No automatic acquisition or preview offline"
+    ]
+  }
 }

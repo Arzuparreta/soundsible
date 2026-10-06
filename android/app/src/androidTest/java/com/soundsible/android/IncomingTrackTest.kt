@@ -5,6 +5,8 @@ import android.net.Uri
 import android.util.Base64
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeNotNull
@@ -78,6 +80,26 @@ class IncomingTrackTest {
                 waitFor("!!document.querySelector('[data-testid=android-library]')")
                 assertEquals("false", web.evaluate(scenario, "!!document.querySelector('[data-testid=android-shared-song]')"))
                 assertNull(IncomingTrackState.pending(context))
+                // Keep the video's canonical acquired identity in the explicit copy.
+                web.evaluate(scenario, "window.__copyReady=false;Capacitor.Plugins.SoundsibleOffline.command({generation:${connection.generation},action:'prepare',tracks:[{id:'member-track',title:'Offline song',artist:'Artist',youtube_id:'A1111111111'}],playlists:{}}).then(()=>window.__copyReady=true)")
+                waitFor("window.__copyReady")
+                val copyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(40)
+                while (connection.offline.local("member-track", connection.generation) == null && System.nanoTime() < copyDeadline) Thread.sleep(100)
+                assertNotNull(connection.offline.local("member-track", connection.generation))
+                fun failure(enabled: Boolean) {
+                    connection.client.newCall(okhttp3.Request.Builder().url(origin + "/__fixture/connection-failure").header("X-Android-Fixture", "isolated")
+                        .post("{\"enabled\":$enabled,\"status\":503}".toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+                }
+                failure(true)
+                try {
+                    context.startActivity(view("Offline incoming").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    waitFor("document.querySelector('[data-testid=android-shared-song]')?.textContent.includes('Offline incoming')===true")
+                    scenario.recreate()
+                    waitFor("document.querySelector('[data-testid=android-shared-song]')?.textContent.includes('Offline incoming')===true && !document.querySelector('[data-shared-play]').disabled")
+                    web.evaluate(scenario, "window.__offlineIncomingTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__offlineIncoming=s),100);document.querySelector('[data-shared-play]').click()")
+                    waitFor("!document.querySelector('[data-testid=android-shared-song]') && window.__offlineIncoming?.items[window.__offlineIncoming.index]?.id==='member-track' && window.__offlineIncoming.playing")
+                    web.evaluate(scenario, "clearInterval(window.__offlineIncomingTimer)")
+                } finally { failure(false) }
             }
         } finally { clearPending(); connection.clearSession(true) }
     }

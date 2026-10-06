@@ -29,3 +29,9 @@ La repetición4/0 conserva los intents posteriores. Ver [evidencia](evidence/s2a
 Invitaciones, controles multidispositivo y aceptación real del puente público
 siguen pendientes. AVD no acredita navegador/aplicación destinataria o dispositivo
 físico. El canal continúa development y no es una alpha pública.
+
+Seguimiento offline sobref0e02058 dirty: Incoming2/0 HTTP/TLS,19.214s,
+normal APK/test APK/JVM54/lint sin CA y UI204/1595 + TS pasan. Copias nuevas
+conservan youtube_id público validado; con APIs503 y Activity recreada, Play
+resuelve member-track adquirido, sin preview ni adquisición automática. Copias
+anteriores sin esa identidad necesitan preparación de nuevo para reconocer el enlace.

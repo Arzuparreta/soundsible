@@ -224,3 +224,12 @@ DJ ambas entradas PCM: Recovery2/0 HTTP/TLS sobre450b207d dirty,
 >2s: ninguna retirada sin contraparte sana; al volver outgoing hay recuperación,
 PCM48k no silencioso y epoch/reloj retenidos. No prueba fallo permanente de ambas
 fuentes de red. Pendientes negativos Core y cola1000 en servicio/controller.
+
+S2ai offline terminado: sobref0e02058 dirty Incoming2/0 HTTP/TLS,19.214s;
+normal APK/test APK/JVM54/lint sin CA pasa, UI204/1595 + TS.
+/tmp/soundsible-s2ai-incoming-offline-confirmed-native.log. Copias nuevas guardan
+youtube_id validado y recepción resuelve copia completa con APIs503. Copias viejas
+sin identidad deben prepararse de nuevo para matching. Intentos previos sin AVD
+y compile del test por API OkHttp obsoleta no son evidencia funcional; corregidos.
+Fuentes descongeladas; AVD reiniciado headless sigue conectado. Próximo cola1000
+DJ mediante servicio/controller; después negativos Core y regresión actual.
