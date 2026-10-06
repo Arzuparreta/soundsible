@@ -347,6 +347,7 @@ export const es: Dict = {
       already: '«{title}» ya forma parte de la sesión',
     },
     route: {
+      djPlacement: 'Que el DJ decida',
       pinned: 'Fijada', actions: 'Acciones para {title}', useAsSource: 'Mezclar con la sesión',
       add: 'Añadir', insertBefore: 'Insertar una canción antes de {title}', fixed: 'Fijada', placed: 'Colocada', bridge: 'Puente',
       remove: 'Quitar de la ruta', avoidSession: 'Evitar durante esta sesión',

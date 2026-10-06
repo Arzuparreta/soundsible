@@ -347,6 +347,7 @@ export const zh: Dict = {
       already: '《{title}》已经是你的来源之一',
     },
     route: {
+      djPlacement: '让 DJ 选择',
       pinned: '已固定', actions: '{title} 的操作', useAsSource: '融入当前会话',
       add: '添加', insertBefore: '在 {title} 前插入歌曲', fixed: '固定', placed: '已放置', bridge: '过渡',
       remove: '从路线移除', avoidSession: '本次会话中避开',

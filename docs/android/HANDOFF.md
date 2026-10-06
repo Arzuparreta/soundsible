@@ -140,8 +140,15 @@ Menús de ruta/cola con acciones de canción compartidas validados: Context2/0
 HTTP/TLS, normal APK/test/JVM52/lint,19.962s instrumentados,
 `/tmp/soundsible-s3b-route-menu-native.log` sobre `4f75ba17` dirty.
 Eliminación por KEY preserva actual/posición/pausa; source existente seleccionado
-y disabled. UI198/1570 + TS. Siguiente DJ: placement fijo, negativos restantes y
-límite largo en servicio.
+y disabled. UI198/1570 + TS.
+Placement fijo desde menú Add to route: Context2/0 HTTP/TLS, Core real coloca
+ante KEY destino18 (más allá de horizon16), conserva KEY/posición/pausa.
+Normal APK/test/JVM52/lint;22.075s instrumentados,
+`/tmp/soundsible-s3b-fixed-placement-native.log` sobre `182a8dff` dirty.
+UI199/1576 + TS. Selector sigue orden vigente del mismo programa; bloquea
+destino retirado/comprometido y cambio de cuenta/programa.
+Siguiente DJ: gestión de fuentes, ownership de bridges al mover/retirar requests,
+negativos restantes y límite largo en servicio.
 Android Auto: browse draft en ProgramCarLibrary, requiere integración, selección,
 Radio, covers/offline y aceptación de host. Live y firma siguen pendientes.
 

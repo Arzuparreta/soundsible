@@ -501,5 +501,35 @@
       "fixed placement picker",
       "complete DJ parity"
     ]
+  },
+  "dj_fixed_placement": {
+    "source_base_revision": "182a8dff",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 22.075,
+    "log": "/tmp/soundsible-s3b-fixed-placement-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "ui": {
+      "files": 199,
+      "tests": 1576,
+      "typescript": "pass",
+      "log": "/tmp/soundsible-s3b-fixed-placement-full-ui.log"
+    },
+    "proves": [
+      "library Add to route opens destination picker with automatic or fixed occurrence key",
+      "real Core fixed placement before destination18 beyond musical16-item horizon over HTTP/TLS",
+      "new requested occurrence immediately precedes selected key",
+      "paused current key and position retained",
+      "chooser follows latest order within same programme and blocks removed or committed destinations and account/programme changes"
+    ],
+    "does_not_prove": [
+      "all bridge ownership remove/move variants",
+      "all endpoint negatives",
+      "complete DJ parity",
+      "physical acceptance"
+    ]
   }
 }

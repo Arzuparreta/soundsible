@@ -2,11 +2,11 @@ import { programTrack } from './tracks';
 import type { ActionMenuOptions } from '../../components/ActionMenu';
 import { t } from '../i18n';
 import type { Track } from '../../types/music';
-import type { ProgramCommand, ProgramState } from './runtime';
+import type { ProgramCommand, ProgramState, ProgramTrack } from './runtime';
 
 /** Capture the occurrence when opening the menu. Native guards reject a stale order/anchor. */
 export function programLibraryMenu(track: Track, state: () => ProgramState | null, pending: () => boolean,
-  execute: (command: ProgramCommand) => Promise<void>): ActionMenuOptions {
+  execute: (command: ProgramCommand) => Promise<void>, place?: (track: ProgramTrack) => void): ActionMenuOptions {
   const captured = state();
   const candidate = programTrack(track);
   const disabled = !captured?.ready || pending() || captured.items.length >= 1000 || !candidate || captured.dj?.active === true && candidate.mediaKind === 'podcast_episode';
@@ -57,7 +57,8 @@ export function programLibraryMenu(track: Track, state: () => ProgramState | nul
       onSelect: () => {
         const observed = state();
         if (disabled || pending() || observed?.generation !== captured.generation || observed.programToken !== captured.programToken || !observed.dj?.active || observed.queueToken !== captured.queueToken) return;
-        void execute({ action: 'djRequest', tracks, programToken: captured.programToken!, queueToken: captured.queueToken }).catch(() => {});
+        if (place && candidate) place(candidate);
+        else void execute({ action: 'djRequest', tracks, programToken: captured.programToken!, queueToken: captured.queueToken }).catch(() => {});
       },
     }] : []),
     ...(candidate && candidate.mediaKind !== 'podcast_episode' && captured?.items[captured.index]?.id === candidate.id ? [{

@@ -347,6 +347,7 @@ export const en = {
       already: '“{title}” is already in the session',
     },
     route: {
+      djPlacement: 'Let the DJ choose',
       pinned: 'Pinned', actions: 'Actions for {title}', useAsSource: 'Mix into session',
       add: 'Add', insertBefore: 'Insert a track before {title}', fixed: 'Fixed', placed: 'Placed', bridge: 'Bridge',
       remove: 'Remove from route', avoidSession: 'Avoid during this session',

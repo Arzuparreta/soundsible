@@ -347,6 +347,7 @@ export const fr: Dict = {
       already: '« {title} » fait déjà partie de vos sources',
     },
     route: {
+      djPlacement: 'Laisser le DJ choisir',
       pinned: 'Épinglé', actions: 'Actions pour {title}', useAsSource: 'Mélanger à la session',
       add: 'Ajouter', insertBefore: 'Insérer un morceau avant {title}', fixed: 'Fixé', placed: 'Placé', bridge: 'Transition',
       remove: 'Retirer du parcours', avoidSession: 'Éviter pendant cette session',

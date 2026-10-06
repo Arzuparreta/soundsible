@@ -89,6 +89,15 @@ class DjContextTest {
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Remove from queue').click()")
                 waitFor("!window.__dj.items.some(i=>i.key===" + request + ")")
                 retained()
+                command("action:'append',tracks:Array.from({length:20},(_,i)=>({source:'local',id:'member-pcm-soft',title:'Future '+i,artist:'member artist',duration:20}))")
+                waitFor("window.__dj.items.length>=21")
+                web.evaluate(scenario, "window.__fixedTarget=window.__dj.items[18].key;window.__fixedBefore=window.__dj.items.map(i=>i.key);window.__fixedRevision=window.__dj.dj.editRevision")
+                menu("member louder PCM song", "Add to route")
+                waitFor("!!document.querySelector('[data-testid=android-dj-placement] select')")
+                web.evaluate(scenario, "let select=document.querySelector('[data-testid=android-dj-placement] select');select.value=window.__fixedTarget;select.dispatchEvent(new Event('change',{bubbles:true}));select.form.requestSubmit()")
+                waitFor("window.__dj.dj.editRevision>window.__fixedRevision && window.__dj.dj.editOutcome==='placed'")
+                assertEquals("true", web.evaluate(scenario, "(()=>{let target=window.__dj.items.findIndex(i=>i.key===window.__fixedTarget);let placed=window.__dj.items[target-1];return target>0 && placed.id==='member-pcm-loud' && !window.__fixedBefore.includes(placed.key)})()"))
+                retained()
             } finally {
                 web.evaluate(scenario, "clearInterval(window.__djTimer)")
                 val generation = connection.generation

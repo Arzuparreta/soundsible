@@ -117,3 +117,12 @@ it('keeps duplicate sources and podcasts out of context actions', () => {
   expect(action.disabled).toBe(true); action.onSelect();
   expect(execute).not.toHaveBeenCalled();
 });
+
+it('delegates route placement to the native chooser after checking the captured programme', () => {
+  let state = { ...initial, programToken: 'dj-owner', dj: { active: true, phase: 'ready', profile: 'adaptive' } } as ProgramState;
+  const execute = vi.fn(async () => {}); const place = vi.fn();
+  const action = programLibraryMenu(track, () => state, () => false, execute, place).actions!.find(action => action.label === 'autoMode.dj.routeAction')!;
+  action.onSelect(); expect(place).toHaveBeenCalledExactlyOnceWith({ ...track, source: 'local' });
+  expect(execute).not.toHaveBeenCalled(); state = { ...state, programToken: 'other' }; action.onSelect();
+  expect(place).toHaveBeenCalledTimes(1);
+});

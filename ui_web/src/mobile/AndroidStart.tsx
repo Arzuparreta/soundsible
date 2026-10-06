@@ -13,6 +13,7 @@ import { nativeEntityMark } from './entityMarks';
 import { createAccountRefresh } from './accountRefresh';
 import type { SavedEntity } from '../lib/savedEntityIdentity';
 import { openNativePlaylistPicker } from './PlaylistPicker';
+import { openNativeDjPlacement } from './DjPlacement';
 import { openNativeLyrics } from './Lyrics';
 import { openNativeMetadataEditor } from './metadataEditor';
 import { nativePlaylistActions, nativePlaylistOccurrenceActions, createNativePlaylist } from './playlistActions';
@@ -287,7 +288,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
   }
   function songMenu(track: Track, event?: MouseEvent, context?: { playlist: string; index: number }, catalogActions: MenuAction[] = []) {
             const captured = epoch; const current = () => captured === epoch && !!user() && !stale();
-            const menu = programLibraryMenu(track, program, programPending, runtime.execute);
+            const menu = programLibraryMenu(track, program, programPending, runtime.execute, candidate => openNativeDjPlacement(candidate, program, programPending, runtime.execute));
             openContextMenu({ ...menu, actions: [...catalogActions, ...(menu.actions ?? []),
               ...(track.source === 'preview' ? [{ label: t('collectionControl.download'), disabled: !current() || acquisition.busy(track.id), onSelect: () => { if (current()) void acquisition.add(track).catch(() => { if (current()) setError(t('collectionControl.failed')); }); } }] : []),
               songMarkAction(track, savedEntries, () => epoch, () => !current(), sync, () => { if (current()) setError(t('common.loadFailed')); }),
