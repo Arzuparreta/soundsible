@@ -194,3 +194,15 @@ Fix cierre TLS sólo en worker; seed DJ determinista desde current. Ver SLICE_4F
 y evidence/s4f.json. Log /tmp/soundsible-live-s4f-corrected-native.log. No suite
 activa tras58980. AVD5554 sigue. Siguiente: recovery media/red/lease y handshake/
 reset/proceso; después regresión conjunta Live. No paridad, merge ni release.
+
+S4g validado: Live combinado14/0,148.745s, runner exit0 + normal APK/test APK/
+JVM56/lint sin CA temporal. Host4/Listener2/UI2/Relay2/Input3/Handshake1: cortar
+publisher real conserva sala y recupera PCM; cortar listener real conserva pausa,
+volumen e identidad. OPTIONS TLS lento10s se cancela desde main en menos3s.
+LivePeer.cancel + DELETE2s + Location/media; retries1/2/4s deadline30s; watchdog
+lease10s implementado pero agotamiento/lease aún sin aceptación dirigida.
+Ver SLICE_4G/evidence/s4g.json, log /tmp/soundsible-live-recovery-native.log.
+No suite activa tras13061. AVD5554 sigue. Siguiente: autorización guest antes de
+WHEP (hoy Socket y media arrancan en paralelo), lease/polling y process death/
+resume409; reset de servicio durante handshake. Luego negativos DJ, teléfono/
+Auto/firma y regresión final. No paridad, merge, automerge ni release.

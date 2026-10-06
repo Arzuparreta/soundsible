@@ -131,6 +131,13 @@ class LiveListenerTest {
             await("MediaSession pause was ignored") {
                 instrumentation.runOnMainSync { playing.set(!active.playWhenReady && !active.isPlaying && active.volume == .4f) }; playing.get()
             }
+            okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build().newCall(okhttp3.Request.Builder()
+                .url("https://10.0.2.2:58443/__fixture/relay-kick").header("X-Android-Fixture", "isolated")
+                .post(JSONObject().put("session_id", sessionId).put("role", "read").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+            await("Relay cut was not observed") { instrumentation.runOnMainSync { playing.set(active.playbackState == androidx.media3.common.Player.STATE_BUFFERING) }; playing.get() }
+            await("Automatic listener recovery failed") {
+                instrumentation.runOnMainSync { playing.set(active.playbackState == androidx.media3.common.Player.STATE_READY && !active.playWhenReady && active.volume == .4f && active.currentMediaItem?.mediaId == "soundsible:live:$sessionId") }; playing.get()
+            }
             instrumentation.runOnMainSync { active.play() }
             await("MediaSession resume was ignored") { instrumentation.runOnMainSync { playing.set(active.isPlaying) }; playing.get() }
             scenario.close(); scenario = null

@@ -105,6 +105,37 @@ def main():
     from gevent.pywsgi import WSGIServer
     from geventwebsocket.handler import WebSocketHandler
     from community_service.app import app
+    from flask import request, jsonify
+    from urllib.request import Request
+    import json
+
+    @app.route("/__fixture/slow-handshake", methods=["OPTIONS"])
+    def slow_handshake():
+        if request.remote_addr != "127.0.0.1" or request.headers.get("Authorization") != "Bearer isolated":
+            return jsonify(error="fixture only"), 403
+        from gevent import sleep
+        sleep(10)
+        return "", 204
+
+    @app.post("/__fixture/relay-kick")
+    def relay_kick():
+        if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
+            return jsonify(error="fixture only"), 403
+        from community_service.app import _session_row
+        body = request.get_json(silent=True) or {}
+        room = _session_row(str(body.get("session_id", "")))
+        role = body.get("role")
+        if room is None or role not in ("publish", "read"):
+            return jsonify(error="invalid isolated resource"), 400
+        with urlopen("http://127.0.0.1:59997/v3/webrtcsessions/list", timeout=2) as response:
+            peers = json.load(response)["items"]
+        selected = [peer for peer in peers if peer["path"] == room["stream_path"] and peer["state"] == role]
+        if not selected:
+            return jsonify(error="no matching relay peer"), 404
+        for peer in selected:
+            with urlopen(Request("http://127.0.0.1:59997/v3/webrtcsessions/kick/" + peer["id"], method="POST"), timeout=2):
+                pass
+        return jsonify(kicked=len(selected))
     internal = WSGIServer(("127.0.0.1", 58080), app, handler_class=WebSocketHandler)
     internal.start()
     WSGIServer(("127.0.0.1", 58443), app, handler_class=WebSocketHandler,

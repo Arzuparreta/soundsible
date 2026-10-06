@@ -43,6 +43,13 @@ internal class NativeLivePlayer(
     private var failure: PlaybackException? = null
     private var reason = Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
     private var startedAt = 0L
+    private val reconnect = LiveReconnect(main, { current() && peer != null }, {
+        restartOutput()
+    }, {
+        stopOutput()
+        failure = PlaybackException("Live recovery exhausted", null, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
+        changed(snapshot()); invalidateState()
+    })
     private val artWorker = java.util.concurrent.ThreadPoolExecutor(1, 1, 0, java.util.concurrent.TimeUnit.MILLISECONDS, java.util.concurrent.ArrayBlockingQueue<Runnable>(1))
     private val publicArtwork = LiveArtwork(room.optString("api_url").ifBlank { room.getString("socket_url") }, room.getString("id"))
     private var artworkUrl: String? = null
@@ -136,7 +143,12 @@ internal class NativeLivePlayer(
     }
     override fun handlePrepare(): ListenableFuture<*> {
         if (!current() || peer != null && failure == null) return Futures.immediateVoidFuture()
+        reconnect.cancel()
+        return restartOutput()
+    }
+    private fun restartOutput(): ListenableFuture<*> {
         val previous = peer; peer = null
+        previous?.cancel()
         val previousSocket = socket; socket = null
         if (previous != null || previousSocket != null) worker.execute {
             previousSocket?.close()
@@ -151,12 +163,8 @@ internal class NativeLivePlayer(
         next = LivePeer(context, connection, room.getString("whep_url"), null, false, { phase -> main.post {
             if (current() && peer === next) {
                 when (phase) {
-                    PeerConnection.PeerConnectionState.CONNECTED -> state = Player.STATE_READY
-                    PeerConnection.PeerConnectionState.DISCONNECTED -> state = Player.STATE_BUFFERING
-                    PeerConnection.PeerConnectionState.FAILED -> {
-                        failure = PlaybackException("Live disconnected", null, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
-                        state = Player.STATE_IDLE; setRequested(false, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
-                    }
+                    PeerConnection.PeerConnectionState.CONNECTED -> { reconnect.connected(); state = Player.STATE_READY }
+                    PeerConnection.PeerConnectionState.DISCONNECTED, PeerConnection.PeerConnectionState.FAILED -> { state = Player.STATE_BUFFERING; reconnect.lost() }
                     else -> Unit
                 }
                 gain(); changed(snapshot()); invalidateState()
@@ -174,8 +182,7 @@ internal class NativeLivePlayer(
                 next.start()
             }
             catch (error: Exception) { main.post { if (current() && peer === next) {
-                failure = PlaybackException("Live unavailable", error, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
-                state = Player.STATE_IDLE; setRequested(false, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST); invalidateState()
+                state = Player.STATE_BUFFERING; reconnect.lost(); changed(snapshot()); invalidateState()
             } } }
         }
         invalidateState(); return Futures.immediateVoidFuture()
@@ -186,10 +193,12 @@ internal class NativeLivePlayer(
     }
     override fun handleSetVolume(volume: Float): ListenableFuture<*> { volumeValue = volume; gain(); changed(snapshot()); invalidateState(); return Futures.immediateVoidFuture() }
     private fun stopOutput() {
-        ++artworkRevision; artWorker.queue.clear()
+        reconnect.cancel()
+        ++artworkRevision; artworkUrl = null; artWorker.queue.clear()
         setRequested(false, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
         state = Player.STATE_IDLE
         val previous = peer; peer = null
+        previous?.cancel()
         val previousSocket = socket; socket = null
         if (previous != null || previousSocket != null) worker.execute {
             previousSocket?.close()

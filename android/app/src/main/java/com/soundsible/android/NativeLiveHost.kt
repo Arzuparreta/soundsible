@@ -40,13 +40,42 @@ internal class NativeLiveHost(
     @Volatile private var connected = false
     @Volatile private var room: JSONObject? = null
     @Volatile private var epoch = -1L
-    private var peer: LivePeer? = null
+    @Volatile private var peer: LivePeer? = null
     private var socket: Socket? = null
     private var transport: OkHttpClient? = null
     private var messages = JSONArray()
     private var programme: JSONObject? = null
     private var sequence = 0L
     private var pausedSince: Long? = null
+    private val reconnect = LiveReconnect(main, { !closed && room != null && epoch == connection.generation }, ::retryMedia, { stop(false) })
+    private val leaseExpired = Runnable { if (!closed && room != null && socket?.connected() != true) stop(false) }
+    private fun publisher(selected: JSONObject, token: Long): LivePeer {
+        lateinit var next: LivePeer
+        next = LivePeer(context, connection, selected.getString("whip_url"), selected.getString("publish_token"), true, { state -> main.post {
+            if (current(token) && peer === next) {
+                connected = state == PeerConnection.PeerConnectionState.CONNECTED
+                when (state) {
+                    PeerConnection.PeerConnectionState.CONNECTED -> reconnect.connected()
+                    PeerConnection.PeerConnectionState.DISCONNECTED, PeerConnection.PeerConnectionState.FAILED -> reconnect.lost()
+                    else -> Unit
+                }
+                publish(snapshot())
+            }
+        } })
+        return next
+    }
+    private fun retryMedia() {
+        val selected = room ?: return
+        val token = revision.get()
+        val previous = peer; peer = null; previous?.cancel(); connected = false
+        worker.execute {
+            previous?.close()
+            if (!current(token)) return@execute
+            val next = publisher(selected, token); peer = next
+            try { check(current(token)); next.start() }
+            catch (_: Exception) { main.post { if (current(token) && peer === next) reconnect.lost() } }
+        }
+    }
     private val artWorker = java.util.concurrent.ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, java.util.concurrent.ArrayBlockingQueue<Runnable>(4))
     private val thumbnails = linkedMapOf<String, String>()
     private val pendingArtwork = mutableSetOf<String>()
@@ -81,11 +110,11 @@ internal class NativeLiveHost(
     private val tick = object : Runnable {
         override fun run() {
             if (closed || room == null || epoch != connection.generation) return
-            if (connected && socket?.connected() == true) {
+            if (socket?.connected() == true) {
                 val active = player()
                 val now = System.currentTimeMillis()
                 val item = active.currentMediaItem
-                val playing = active.isPlaying && item?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) != "live"
+                val playing = connected && active.isPlaying && item?.mediaMetadata?.extras?.getString(ProgramQueue.SOURCE) != "live"
                 if (playing) pausedSince = null else if (pausedSince == null) pausedSince = now
                 val mix = djSnapshot()
                 fun deck(it: androidx.media3.common.MediaItem, position: Long, duration: Long, gain: Double): JSONObject =
@@ -130,7 +159,7 @@ internal class NativeLiveHost(
         for (key in listOf("host_token", "publish_token", "whip_url", "socket_url", "stream_path")) remove(key)
     }
     fun snapshot(): JSONObject = JSONObject().put("session", room?.let(::publicRoom) ?: JSONObject.NULL)
-        .put("connected", connected).put("generation", epoch).put("messages", messages).put("program", programme ?: JSONObject.NULL)
+        .put("connected", connected && socket?.connected() == true).put("generation", epoch).put("messages", messages).put("program", programme ?: JSONObject.NULL)
 
     /** On player looper. Credentials remain inside the service. */
     fun start(title: String): ListenableFuture<SessionResult> {
@@ -164,7 +193,8 @@ internal class NativeLiveHost(
                 }
                 val next = IO.socket(endpoint.toString(), options)
                 socket = next
-                next.on(Socket.EVENT_CONNECT) { main.post { if (current(token)) { main.removeCallbacks(tick); main.post(tick) } } }
+                next.on(Socket.EVENT_CONNECT) { main.post { if (current(token)) { main.removeCallbacks(leaseExpired); main.removeCallbacks(tick); main.post(tick) } } }
+                next.on(Socket.EVENT_DISCONNECT) { main.post { if (current(token)) { main.removeCallbacks(leaseExpired); main.postDelayed(leaseExpired, 10000) } } }
                 for (event in listOf("session_snapshot", "session_updated")) next.on(event) { arguments ->
                     val update = (arguments.firstOrNull() as? JSONObject)?.optJSONObject("session")
                     main.post {
@@ -192,10 +222,9 @@ internal class NativeLiveHost(
                 }
                 next.on("session_ended") { main.post { if (current(token)) stop(false) } }
                 next.connect()
-                val publisher = LivePeer(context, connection, created.getString("whip_url"), created.getString("publish_token"), true, { state ->
-                    main.post { if (current(token)) { connected = state == PeerConnection.PeerConnectionState.CONNECTED; publish(snapshot()) } }
-                })
+                val publisher = publisher(created, token)
                 peer = publisher
+                check(current(token)) { "STALE_LIVE" }
                 publisher.start()
                 check(current(token)) { "STALE_LIVE" }
                 main.post {
@@ -205,13 +234,15 @@ internal class NativeLiveHost(
                 }
             } catch (error: Exception) {
                 release(true)
-                main.post { starting = false; publish(snapshot()); result.set(SessionResult(if (error is NativeLiveAuthenticationExpired) SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED else SessionError.ERROR_IO)) }
+                main.post { reconnect.cancel(); main.removeCallbacks(leaseExpired); starting = false; publish(snapshot()); result.set(SessionResult(if (error is NativeLiveAuthenticationExpired) SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED else SessionError.ERROR_IO)) }
             }
         }
         return result
     }
     fun stop(endRoom: Boolean = true): ListenableFuture<SessionResult> {
         revision.incrementAndGet(); connected = false; main.removeCallbacks(tick)
+        reconnect.cancel(); main.removeCallbacks(leaseExpired)
+        peer?.cancel()
         thumbnails.clear(); pendingArtwork.clear(); artworkFailures.clear()
         val result = SettableFuture.create<SessionResult>()
         worker.execute {
@@ -258,6 +289,8 @@ internal class NativeLiveHost(
     override fun close() {
         if (closed) return
         closed = true; revision.incrementAndGet(); connection.resetListeners.remove(reset); main.removeCallbacks(tick)
+        reconnect.cancel(); main.removeCallbacks(leaseExpired)
+        peer?.cancel()
         artWorker.shutdownNow()
         worker.execute { release(true) }; worker.shutdown()
     }

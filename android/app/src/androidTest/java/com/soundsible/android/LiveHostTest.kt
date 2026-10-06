@@ -150,6 +150,22 @@ class LiveHostTest {
                 val messages = observed.get()?.let { JSONObject(it).optJSONArray("messages") }
                 messages != null && (0 until messages.length()).any { messages.getJSONObject(it).optString("text") == "Native host message" }
             }
+            if (!dj) {
+                receiver?.close(); receiver = null
+                publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/__fixture/relay-kick").header("X-Android-Fixture", "isolated")
+                    .post(JSONObject().put("session_id", sessionId).put("role", "publish").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }
+                fun hostConnected(): Boolean {
+                    val observed = AtomicReference<String>()
+                    instrumentation.runOnMainSync { observed.set(active.sessionExtras.getString("nativeLiveHost")) }
+                    return observed.get()?.let { JSONObject(it).optBoolean("connected") } == true
+                }
+                await("Publisher relay cut was not observed") { !hostConnected() }
+                await("Automatic publisher recovery failed") { hostConnected() }
+                receiver = LivePeer(context, connection, room.getString("whep_url"), null, false, {}, sink)
+                receiver!!.start(); rms.set(0.0)
+                await("Recovered publisher has no relay PCM") { rms.get() > 500 }
+                assertEquals("Recovery changed room identity", sessionId, publicRoom().getString("id"))
+            }
             instrumentation.runOnMainSync { active.volume = 0f }
             Thread.sleep(500)
             await("Local mute silenced Live") { rms.get() > 500 }

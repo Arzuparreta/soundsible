@@ -32,6 +32,9 @@ internal class LivePeer(
 ) : AutoCloseable {
     private val epoch = connection.generation
     private val closed = AtomicBoolean()
+    private val cancelled = AtomicBoolean()
+    private val pendingSdp = AtomicReference<CompletableFuture<*>?>()
+    private val gathered = CountDownLatch(1)
     private var input: WebRtcAudioRecord.ProgramInput? = null
     @Volatile private var volume = 1.0
     private var adm: JavaAudioDeviceModule? = null
@@ -49,7 +52,7 @@ internal class LivePeer(
             // This transport has no cookie jar, Core authentication or redirects.
             chain.proceed(chain.request())
         }.build()
-    private fun owns() = !closed.get() && epoch == connection.generation
+    private fun owns() = !closed.get() && !cancelled.get() && epoch == connection.generation
     private fun request(url: HttpUrl, method: String, sdp: String? = null): okhttp3.Response {
         val builder = Request.Builder().url(url).method(method, sdp?.toRequestBody("application/sdp".toMediaType()))
         token?.let { builder.header("Authorization", "Bearer $it") }
@@ -78,7 +81,6 @@ internal class LivePeer(
             }
             val owner = PeerConnectionFactory.builder().setAudioDeviceModule(module).createPeerConnectionFactory()
             factory = owner
-            val gathered = CountDownLatch(1)
             val config = PeerConnection.RTCConfiguration(ice).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN }
             val next = owner.createPeerConnection(config, object : PeerConnection.Observer {
                 override fun onSignalingChange(state: PeerConnection.SignalingState) {}
@@ -93,6 +95,7 @@ internal class LivePeer(
                 override fun onRenegotiationNeeded() {}
                 override fun onConnectionChange(state: PeerConnection.PeerConnectionState) { if (owns()) onState(state) }
                 override fun onTrack(transceiver: RtpTransceiver) {
+                    if (!owns()) return
                     (transceiver.receiver.track() as? AudioTrack)?.let { track -> incoming = track; track.setVolume(volume); onAudio?.let(track::addSink) }
                 }
             }) ?: error("LIVE_PEER_FAILED")
@@ -128,15 +131,26 @@ internal class LivePeer(
         } catch (failure: Exception) { close(); throw failure }
     }
     fun setVolume(volume: Double) { require(volume in 0.0..1.0); this.volume = volume; incoming?.setVolume(volume) }
+    /** Safe on the player looper: invalidation is immediate, socket teardown stays off-main. */
+    fun cancel() {
+        if (!cancelled.compareAndSet(false, true)) return
+        gathered.countDown(); pendingSdp.get()?.cancel(false)
+        CompletableFuture.runAsync { client.dispatcher.cancelAll() }
+    }
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        cancelled.set(true); gathered.countDown(); pendingSdp.get()?.cancel(false)
         incoming?.let { track -> onAudio?.let(track::removeSink) }
         peer?.close(); peer?.dispose(); peer = null
         outgoing?.dispose(); source?.dispose(); outgoing = null; source = null
         factory?.dispose(); factory = null; adm?.release(); adm = null
         input?.let { WebRtcAudioRecord.detach(it); (it as? AutoCloseable)?.close() }; input = null
         publisher.compareAndSet(this, null)
-        resource?.let { url -> runCatching { request(url, "DELETE").close() } }; resource = null
+        resource?.let { url -> runCatching {
+            val builder = Request.Builder().url(url).delete()
+            token?.let { builder.header("Authorization", "Bearer $it") }
+            client.newBuilder().callTimeout(2, TimeUnit.SECONDS).build().newCall(builder.build()).execute().close()
+        } }; resource = null
         client.dispatcher.cancelAll(); client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown()
     }
     companion object {
@@ -146,8 +160,8 @@ internal class LivePeer(
             if (!initialized) { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(context.applicationContext).createInitializationOptions()); initialized = true }
         }
         internal fun location(endpoint: HttpUrl, value: String): HttpUrl {
-            val target = endpoint.resolve(if (value.startsWith('/') && endpoint.encodedPath.startsWith("/media/")) "/media$value" else value) ?: error("LIVE_RESOURCE_INVALID")
-            require(target.scheme == endpoint.scheme && target.host == endpoint.host && target.port == endpoint.port && target.username.isEmpty() && target.password.isEmpty()) { "LIVE_RESOURCE_ORIGIN" }
+            val target = endpoint.resolve(if (value.startsWith('/') && !value.startsWith("/media/") && endpoint.encodedPath.startsWith("/media/")) "/media$value" else value) ?: error("LIVE_RESOURCE_INVALID")
+            require(target.scheme == endpoint.scheme && target.host == endpoint.host && target.port == endpoint.port && target.username.isEmpty() && target.password.isEmpty() && target.fragment == null) { "LIVE_RESOURCE_ORIGIN" }
             return target
         }
         internal fun iceServers(header: String): List<PeerConnection.IceServer> = header.split(Regex(",(?=\\s*<)"))
@@ -168,25 +182,27 @@ internal class LivePeer(
             return if (pattern.containsMatchIn(sdp)) pattern.replace(sdp) { "a=fmtp:$payload ${it.groupValues[1]};$options${it.groupValues[2]}" }
                 else sdp.replace("a=rtpmap:$payload opus/48000/2", "a=rtpmap:$payload opus/48000/2\r\na=fmtp:$payload $options")
         }
+    }
         private fun description(action: (SdpObserver) -> Unit): SessionDescription {
             val result = CompletableFuture<SessionDescription>()
+            pendingSdp.set(result); check(owns())
             action(object : SdpObserver {
                 override fun onCreateSuccess(value: SessionDescription) { result.complete(value) }
                 override fun onCreateFailure(error: String) { result.completeExceptionally(IllegalStateException(error)) }
                 override fun onSetSuccess() {}
                 override fun onSetFailure(error: String) { result.completeExceptionally(IllegalStateException(error)) }
             })
-            return result.get(20, TimeUnit.SECONDS)
+            return try { result.get(20, TimeUnit.SECONDS) } finally { pendingSdp.compareAndSet(result, null) }
         }
         private fun set(action: (SdpObserver) -> Unit) {
             val result = CompletableFuture<Boolean>()
+            pendingSdp.set(result); check(owns())
             action(object : SdpObserver {
                 override fun onCreateSuccess(value: SessionDescription) {}
                 override fun onCreateFailure(error: String) { result.completeExceptionally(IllegalStateException(error)) }
                 override fun onSetSuccess() { result.complete(true) }
                 override fun onSetFailure(error: String) { result.completeExceptionally(IllegalStateException(error)) }
             })
-            result.get(20, TimeUnit.SECONDS)
+            try { result.get(20, TimeUnit.SECONDS) } finally { pendingSdp.compareAndSet(result, null) }
         }
-    }
 }
