@@ -99,8 +99,12 @@ a car and every accessory are not required to participate.
 | Android Auto, si está disponible / Android Auto, if available | Biblioteca, selección, controles y metadata correctos; probar con el coche estacionado / Correct browsing, playback, controls and metadata; test while parked |
 | Actualización cuando exista otra alpha / Upgrade when another alpha is available | Instalar encima conserva cuenta, ajustes y copias / Installing over the previous alpha preserves account, settings and copies |
 
-Copia este formato en el reporte; añade pasos reproducibles cuando algo falle.
-Copy this report format and include reproduction steps for failures.
+Copia los datos del dispositivo una vez y repite el bloque de prueba para cada
+comprobación, incluidas las no probadas. Separa NORMAL, DJ y Live, y los distintos
+accesorios o redes si sus resultados difieren. Añade pasos reproducibles para fallos.
+Copy device details once and repeat the check block for every check, including
+untested ones. Report NORMAL, DJ and Live separately, and separate accessories or
+networks when results differ. Include reproduction steps for failures.
 
 ```text
 Build/commit (android-release.json):
@@ -108,7 +112,10 @@ Teléfono / Phone:
 Android y WebView / Android and WebView:
 Servidor Soundsible / Soundsible server build:
 Auriculares/Bluetooth/coche usados / Headphones/Bluetooth/car used:
-Prueba / Check: OK | Fallo / Failed | No probado / Not tested
+
+Repetir por prueba / Repeat for each check:
+Prueba y modo / Check and mode:
+Resultado / Result: OK | Fallo / Failed | No probado / Not tested
 Pasos y duración / Steps and duration:
 Esperado y observado / Expected and observed:
 Red: Wi-Fi / datos / sin conexión — Network: Wi-Fi / mobile data / offline
