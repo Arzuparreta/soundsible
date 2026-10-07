@@ -7,6 +7,14 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import java.util.List;
+import java.util.TreeMap;
+import java.util.ArrayList;
+import java.io.File;
+import java.io.FileInputStream;
+import java.util.function.Function;
+import org.json.JSONObject;
 import org.junit.Test;
 
 /** Runs before/after an actual PackageManager update, without uninstalling or clearing data. */
@@ -21,6 +29,43 @@ public class ReleaseUpdateTest {
     }
     private String digest(String value) throws Exception {
         return java.util.Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+    }
+    static Map<String, String> readyCopies(JSONObject state, Function<String, File> local) throws Exception {
+        Map<String, String> copies = new TreeMap<>();
+        var items = state.getJSONArray("items");
+        for (int i = 0; i < items.length(); i++) {
+            var item = items.getJSONObject(i);
+            String id = item.getJSONObject("track").getString("id");
+            assertEquals("Retained copy is not ready: " + id, "ready", item.getString("state"));
+            File file = local.apply(id);
+            assertNotNull("Retained copy is unavailable: " + id, file);
+            var hash = MessageDigest.getInstance("SHA-256");
+            try (var input = new FileInputStream(file)) {
+                byte[] buffer = new byte[65536];
+                int count;
+                while ((count = input.read(buffer)) != -1) hash.update(buffer, 0, count);
+            }
+            assertNull("Duplicate copy identity: " + id,
+                copies.put(id, java.util.Base64.getEncoder().encodeToString(hash.digest())));
+        }
+        return copies;
+    }
+    static Map<String, String> copyDigests(JSONObject snapshot) throws Exception {
+        Map<String, String> copies = new TreeMap<>();
+        var keys = snapshot.keys();
+        while (keys.hasNext()) { String key = keys.next(); copies.put(key, snapshot.getString(key)); }
+        return copies;
+    }
+    static Map<String, List<String>> playlistContents(JSONObject snapshot) throws Exception {
+        Map<String, List<String>> playlists = new TreeMap<>();
+        var keys = snapshot.keys();
+        while (keys.hasNext()) {
+            String key = keys.next(); var items = snapshot.getJSONArray(key);
+            List<String> ids = new ArrayList<>();
+            for (int i = 0; i < items.length(); i++) ids.add(items.getString(i));
+            playlists.put(key, ids);
+        }
+        return playlists;
     }
     @Test public void retainedAccountAndCopies() throws Exception {
         var args = InstrumentationRegistry.getArguments();
@@ -50,13 +95,21 @@ public class ReleaseUpdateTest {
                 scenario.recreate();
                 waitFor(web, scenario, "document.documentElement.lang==='es' && document.documentElement.dataset.theme==='dark' && !!document.querySelector('[data-row-main]')");
                 assertTrue(prefs.edit().putString("cookie", digest(connection.cookieHeader(connection.getGeneration())))
-                    .putString("offline", connection.getOffline().state(connection.getGeneration()).toString()).commit());
+                    .putString("offline-copies", new JSONObject(readyCopies(
+                        connection.getOffline().state(connection.getGeneration()),
+                        id -> connection.getOffline().local(id, connection.getGeneration()))).toString())
+                    .putString("offline-playlists", connection.getOffline().state(connection.getGeneration())
+                        .getJSONObject("playlists").toString()).commit());
             } else {
                 assertEquals("verify", args.getString("updatePhase"));
                 assertEquals(prefs.getString("cookie", null), digest(connection.cookieHeader(connection.getGeneration())));
-                assertEquals(prefs.getString("offline", null), connection.getOffline().state(connection.getGeneration()).toString());
-                assertEquals("\"es\"", web.evaluate(scenario, "localStorage.getItem('lang')"));
-                assertEquals("\"dark\"", web.evaluate(scenario, "localStorage.getItem('theme')"));
+                assertEquals(copyDigests(new JSONObject(prefs.getString("offline-copies", null))),
+                    readyCopies(connection.getOffline().state(connection.getGeneration()),
+                        id -> connection.getOffline().local(id, connection.getGeneration())));
+                assertEquals(playlistContents(new JSONObject(prefs.getString("offline-playlists", null))),
+                    playlistContents(connection.getOffline().state(connection.getGeneration()).getJSONObject("playlists")));
+                assertEquals("\"es\"", web.evaluate(scenario, "document.documentElement.lang"));
+                assertEquals("\"dark\"", web.evaluate(scenario, "document.documentElement.dataset.theme"));
             }
         }
     }
