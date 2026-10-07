@@ -41,3 +41,30 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   tardías (prueba determinista de llamada/respuesta de permiso tras destroy);
   IncomingTrack espera posición estable sin ampliar la tolerancia. Regresión
   completa del head corregido pendiente de los checks de la PR.
+
+## Preparación de distribución (2026-10-07)
+
+- PR #300 integrada; ejecución Android de `main` 37601072712: build/JVM/lint y
+  cuatro shards aprobados. El run anterior falló en la posición pausada de
+  DjContextTest; ahora la referencia se toma de una conexión nueva al servicio,
+  no del estado optimista del controller previo. Tolerancia conservada (150 ms).
+- Tooling de release y versionado: 35 tests aprobados. Pruebas adicionales
+  comprueban gates incompletos, reserva de códigos de drafts fallidos, checks
+  nativos completos, inmutabilidad y rechazo de recibos de otra APK.
+- Clave permanente/backup: exportaciones idénticas del certificado desde dos
+  discos físicos; SHA-256 público en SIGNING.json. Secrets restringidos a main.
+- App Links: PR Arzuparreta.github.io #11 integrada; endpoint HTTPS devuelve
+  200 y application/json, con asociación al package/certificado permanente.
+- DjContextTest con referencia confirmada por el servicio: HTTP/TLS 2/0,
+  APK/JVM/lint normales aprobados; log /tmp/soundsible-alpha-dj-confirmed.log.
+- APK pública local del commit 1a7332fb: firma permanente y cuatro ABIs verificadas;
+  StartupTest release 1/0; actualización desde baseline firmada con la misma clave
+  conserva cookie cifrada, cuenta, idioma/tema y metadata/copias offline. Offline
+  prepare/seed/update/PCM 4/0; downgrade, firma distinta y APK truncada rechazados.
+  App Links: dominio verificado por Android, apertura fría/caliente por resolución
+  HTTPS real y rutas ajenas no reclamadas. Recibo en android/build/alpha/release-acceptance.json;
+  log /tmp/soundsible-alpha-release-acceptance4.log. Publicación desde main requiere
+  repetir la aceptación sobre su APK exacta en el workflow de release.
+- Web pública: PR soundsible.github.io #14 integrada/desplegada; 84 tests de lógica,
+  build Astro/check de 114 páginas y browser/accessibility 24/0 en imagen CI.
+  No se muestran enlaces Android mientras no exista prerelease con todos los assets.

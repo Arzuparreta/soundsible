@@ -1,0 +1,13 @@
+{
+  "channel": "alpha",
+  "offline_decision": "B",
+  "offline_approved": true,
+  "evidence": "docs/android/EVIDENCE.md",
+  "required_capabilities": ["phone", "account", "library", "acquisition", "normal", "podcasts", "radio", "dj", "live-listen", "live-publish", "android-auto", "offline"],
+  "automated": ["phone", "account", "library", "acquisition", "normal", "podcasts", "radio", "dj", "live-listen", "live-publish", "android-auto", "offline"],
+  "physical_acceptance": "pending-beta",
+  "min_sdk": 24,
+  "target_sdk": 36,
+  "min_webview": 120,
+  "validated_api": [36]
+}

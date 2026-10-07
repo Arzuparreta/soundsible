@@ -55,7 +55,7 @@ def doctor() -> None:
     print(f"SDK: {sdk()}")
 
 
-def prepare() -> None:
+def prepare(*, channel: str = "development", version_code: int | None = None) -> None:
     from android_webrtc import prepare_webrtc
     prepare_webrtc(ROOT)
     version = run(sys.executable, "scripts/version_sync.py", "--print", capture=True)
@@ -63,7 +63,11 @@ def prepare() -> None:
     dirty = bool(run("git", "status", "--porcelain", capture=True))
     # Development build counter only. Public versionCode allocation is a
     # separate release gate; counters from different workflows cannot be mixed.
-    code = int(os.getenv("SOUNDSIBLE_ANDROID_BUILD_NUMBER", "1"))
+    if channel not in ("development", "alpha"):
+        raise RuntimeError("Unsupported Android channel")
+    if channel != "development" and (dirty or version_code is None):
+        raise RuntimeError("Public Android builds require clean sources and an allocated versionCode")
+    code = version_code if version_code is not None else int(os.getenv("SOUNDSIBLE_ANDROID_BUILD_NUMBER", "1"))
     if not 0 < code <= 2_100_000_000:
         raise RuntimeError("SOUNDSIBLE_ANDROID_BUILD_NUMBER must be a positive Android build code")
     (ANDROID / "build-info.json").write_text(
@@ -73,7 +77,7 @@ def prepare() -> None:
                 "version_code": code,
                 "source_revision": revision,
                 "dirty": dirty,
-                "channel": "development",
+                "channel": channel,
             },
             indent=2,
         )
@@ -104,7 +108,8 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
     """
     doctor()
     first = shard is None or shard[0] == 0
-    if (restart_only or live_restart_only) and os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
+    test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class", "")
+    if (restart_only or live_restart_only) and test_filter:
         raise RuntimeError("Restart protocol cannot be combined with a single-class instrumentation filter")
     binary = str(sdk() / "platform-tools/adb")
     devices = [
@@ -129,7 +134,6 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
         with (ANDROID / "build/fixture.log").open("w") as log:
             try:
                 ca_path, certificate, key = create_fixture_tls(Path(temporary))
-                test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class", "")
                 if not restart_only and (not test_filter or any(name in test_filter for name in ("LiveRelayTest", "LiveHostTest", "LiveListenerTest", "LiveUiTest", "LiveHandshakeTest", "LivePollingTest", "LiveResumeTest", "LiveRecoveryTest")) or os.environ.get("SOUNDSIBLE_ANDROID_LIVE_FIXTURE") == "1"):
                     from android_live_fixture import LiveFixture
                     live_fixture = LiveFixture(Path(temporary) / "live", ca_path, certificate, key, log)
@@ -209,7 +213,7 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                 if not restart_only and not live_restart_only:
                     gradle(
                         ":app:connectedDebugAndroidTest",
-                        "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest,com.soundsible.android.LiveRestartTest",
+                        "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest,com.soundsible.android.LiveRestartTest,com.soundsible.android.ReleaseUpdateTest",
                         "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
                         "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
                         "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
@@ -223,7 +227,6 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                             else ()
                         ),
                     )
-                    test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class")
                     results = (
                         ANDROID / "build/integration-targeted" / re.sub(r"[^A-Za-z0-9_.-]", "_", test_filter)[:100]
                         if test_filter
@@ -296,13 +299,14 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                                 json.dumps({"phase": phase, "tests": 1, "failures": 0, "errors": 0, "skipped": 0}, indent=2)
                                 + "\n"
                             )
-                for screenshot, target in (("soundsible-s1-library.png", "library.png"), ("soundsible-s2-program.png", "program.png")):
-                    try:
-                        adb("pull", f"/sdcard/Download/{screenshot}", str(ANDROID / "build" / target))
-                    except subprocess.CalledProcessError:
-                        # Another shard's test produces this screenshot.
-                        if not shard:
-                            raise
+                if not restart_only and not live_restart_only:
+                    for screenshot, target in (("soundsible-s1-library.png", "library.png"), ("soundsible-s2-program.png", "program.png")):
+                        try:
+                            adb("pull", f"/sdcard/Download/{screenshot}", str(ANDROID / "build" / target))
+                        except subprocess.CalledProcessError:
+                            # Another shard's test produces this screenshot.
+                            if not shard and not test_filter:
+                                raise
             finally:
                 for process in processes:
                     process.terminate()

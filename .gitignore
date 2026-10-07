@@ -120,6 +120,7 @@ android/app/capacitor.build.gradle
 android/capacitor.settings.gradle
 *.jks
 *.keystore
+*.p12
 android/build-info.json
 
 # Temporary public CA/trust resources generated ONLY during Android integration.

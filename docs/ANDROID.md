@@ -1,6 +1,8 @@
 # Soundsible para Android: desarrollo del port
 
-**Estado: cliente Android de desarrollo, preparado para revisión de la alpha; no hay release pública.**
+**Estado: cliente Android alpha con distribución APK independiente.**
+Las descargas públicas sólo aparecen después de aprobar los gates del canal;
+consulta las prereleases Android en GitHub Releases.
 La APK conecta a tu servidor Soundsible y usa tu cuenta. Incluye biblioteca,
 búsqueda y adquisición, playlists/favoritos/metadatos, podcasts, Radio/Autoplay,
 cola NORMAL, DJ con mezcla nativa y Live (escuchar y emitir), además de Android
@@ -11,7 +13,8 @@ La validación automatizada y sus límites están en [EVIDENCE](android/EVIDENCE
 El emulador verifica servicios, PCM, transporte y controles; no acredita escucha,
 Bluetooth ni funcionamiento en un coche físico. Firma permanente, actualización,
 App Links verificados y publicación siguen sujetos a
-[RELEASE_GATES](android/RELEASE_GATES.md). La PR se revisa manualmente, sin automerge.
+[RELEASE_GATES](android/RELEASE_GATES.md). El usuario autorizó preparar y publicar la alpha el 2026-10-07 tras cerrar los gates.
+La instalación pública y sus límites se describen en [ALPHA](android/ALPHA.md).
 
 ## Retomar el trabajo
 
@@ -171,15 +174,16 @@ público los artifacts pueden ser descargables: son builds de desarrollo, no una
 alpha publicada ni un canal de actualización. El workflow sólo tiene lectura,
 no usa claves de firma públicas y no publica releases ni tags.
 
-La futura distribución será APK firmada por GitHub Releases; no requiere Google
+La distribución pública usa APK firmada en prereleases Android de GitHub Releases; no requiere Google
 Play. No habrá actualización silenciosa por el mero hecho de compartir código.
 Ver [los requisitos de publicación](android/RELEASE_GATES.md).
 
 
 ## Uso y revisión de la alpha
 
-1. Instalar la APK de desarrollo de la PR o compilarla con los comandos anteriores.
-   Su package `.dev` y firma debug corresponden a pruebas, no a distribución pública.
+1. Para la alpha pública, seguir [ALPHA](android/ALPHA.md) e instalar la APK firmada
+   de su prerelease Android. La APK debug y su package `.dev` siguen siendo de
+   desarrollo y no migran sus datos a la identidad pública.
 2. Conectar con dirección y contraseña, o escanear el QR que otra sesión de tu
    cuenta muestra en Ajustes → Dispositivos. También puedes escribir su código.
    El QR inicia una sesión completa de esa cuenta, revocable desde Dispositivos.
@@ -203,8 +207,8 @@ Ver [los requisitos de publicación](android/RELEASE_GATES.md).
    placeholder. Cerrar sesión elimina las copias del perfil.
 
 Los enlaces recibidos por Compartir (SEND) requieren una acción explícita antes
-de cambiar cuenta/servidor. La apertura automática de enlaces https requiere la
-firma y asociación de dominio pendientes de publicación. El volumen de escucha
+de cambiar cuenta/servidor. La apertura automática de enlaces https usa la firma permanente y asociación
+de dominio verificadas durante la aceptación de cada APK pública. El volumen de escucha
 se controla con Android y no cambia el programa que se emite por Live.
 
 ## Contribuciones

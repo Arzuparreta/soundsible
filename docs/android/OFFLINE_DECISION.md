@@ -55,6 +55,7 @@ sin declarar disponibilidad ni reanudar red por sorpresa al arrancar.
 Validar ruta real, preparación UI, persistencia, arranque con motor inaccesible,
 reproducción/seek/background, lote/duplicados/cancelación, fallo parcial, espacio,
 integridad, aislamiento y logout. Registrar evidencia en HANDOFF al cerrar.
-Offline aprobado no cierra la matriz restante de teléfono/DJ/Live/Android Auto.
-La alpha sigue bloqueada por paridad; aceptación física de coche/sonido conserva
-sus gates. iOS es referencia de código, no aceptación de dispositivo.
+La aprobación offline no sustituye la aceptación de teléfono/DJ/Live/Android Auto.
+La paridad se integró mediante PR #300; firma, actualización y publicación se
+cierran con RELEASE_GATES. La aceptación física de coche/sonido corresponde a
+beta. iOS es referencia de código, no aceptación de dispositivo.

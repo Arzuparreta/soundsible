@@ -9,6 +9,19 @@ if (!metadataFile.exists()) throw new GradleException('Run python scripts/androi
 def metadata = new JsonSlurper().parse(metadataFile)
 
 android {
+    testBuildType = System.getenv('SOUNDSIBLE_ANDROID_TEST_RELEASE') == '1' ? 'release' : 'debug'
+    signingConfigs {
+        distribution {
+            def keyPath = System.getenv('ANDROID_KEYSTORE')
+            def passwordPath = System.getenv('ANDROID_KEYSTORE_PASSWORD_FILE')
+            if (keyPath && passwordPath) {
+                storeFile file(keyPath)
+                storePassword file(passwordPath).text.trim()
+                keyAlias 'soundsible-android'
+                keyPassword storePassword
+            }
+        }
+    }
     sourceSets { test.resources.srcDir('../../shared/contracts') }
     namespace = "com.soundsible.android"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -40,9 +53,17 @@ android {
             resValue "string", "title_activity_main", "Soundsible Dev"
         }
         release {
+            signingConfig signingConfigs.distribution
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.name == 'packageRelease' } &&
+        (!System.getenv('ANDROID_KEYSTORE') || !System.getenv('ANDROID_KEYSTORE_PASSWORD_FILE'))) {
+        throw new GradleException('Release signing requires ANDROID_KEYSTORE and ANDROID_KEYSTORE_PASSWORD_FILE')
     }
 }
 
