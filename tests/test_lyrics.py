@@ -654,15 +654,14 @@ def test_an_upgrade_lookup_never_loses_lyrics_already_held(monkeypatch, answer):
     client = _make_app().test_client()
     url = "/api/library/tracks/video-track/lyrics"
 
-    # Reads serve the held lines while the lookup runs; read until one has
-    # collected its answer (the coordinator forgets a job once collected).
+    # One read serves the held lines and starts the lookup, which settles the
+    # row by itself and leaves nothing behind for anyone to collect.
     body = client.get(url).get_json()
-    for _ in range(200):
+    for _ in range(500):
         if fetch.call_count and not lyrics_module._LOOKUPS._jobs:
             break
-        body = client.get(url).get_json()
-        time.sleep(0.001)
-    assert fetch.call_count >= 1
+        time.sleep(0.002)
+    assert fetch.call_count == 1 and not lyrics_module._LOOKUPS._jobs
     assert body["status"] == "ready" and body["synced"] == "[00:01.00] line"
     held = instance_db().get_lyrics("video-track")
     assert held["synced"] == "[00:01.00] line"

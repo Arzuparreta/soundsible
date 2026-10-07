@@ -19,7 +19,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from difflib import SequenceMatcher
 from statistics import median
 from functools import partial
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import requests
 
@@ -431,7 +431,9 @@ class _LyricsLookupCoordinator:
         finally:
             self._slots.release()
 
-    def poll_or_start(self, key: str, fn) -> tuple[str, Optional[Dict[str, Any]]]:
+    def poll_or_start(self, key: str, fn, *, forget_when_done: bool = False) -> tuple[str, Optional[Dict[str, Any]]]:
+        """``forget_when_done`` is for a lookup that reports its own result:
+        nobody comes back to collect it, so it must not stay held here."""
         with self._lock:
             job = self._jobs.get(key)
             if job is not None:
@@ -452,7 +454,15 @@ class _LyricsLookupCoordinator:
                 self._slots.release()
                 raise
             self._jobs[key] = future
-            return "pending", None
+        # Outside the lock: a lookup already finished runs its callback here.
+        if forget_when_done:
+            future.add_done_callback(partial(self._forget, key))
+        return "pending", None
+
+    def _forget(self, key: str, future: Future) -> None:
+        with self._lock:
+            if self._jobs.get(key) is future:
+                del self._jobs[key]
 
     def clear_for_tests(self) -> None:
         with self._lock:
@@ -496,14 +506,28 @@ def poll_lyrics(
     title: str,
     album: Optional[str] = None,
     duration: Optional[int] = None,
+    on_complete: Optional[Callable[[Optional[Dict[str, Any]]], Any]] = None,
 ) -> tuple[str, Optional[Dict[str, Any]]]:
     """Poll/start a bounded background lookup.
 
     Status is ``complete``, ``pending``, or ``busy``. Busy means both dedicated
-    workers are active; no server-side task was buffered.
+    workers are active; no server-side task was buffered. ``on_complete``, if
+    this call starts the lookup, receives its record on the worker as soon as
+    it lands — for a caller that will not come back to collect it.
     """
     key = _lookup_key(artist, title, album, duration)
-    return _LOOKUPS.poll_or_start(key, partial(fetch_lyrics, artist, title, album, duration))
+    lookup = partial(fetch_lyrics, artist, title, album, duration)
+    if on_complete is not None:
+        def lookup_and_report(fetch=lookup):
+            record = fetch()
+            try:
+                on_complete(record)
+            except Exception as exc:
+                logger.warning("Lyrics completion callback failed: %s", exc)
+            return record
+
+        return _LOOKUPS.poll_or_start(key, lookup_and_report, forget_when_done=True)
+    return _LOOKUPS.poll_or_start(key, lookup)
 
 
 _LRC_TIMESTAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")

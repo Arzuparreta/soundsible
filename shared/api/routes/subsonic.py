@@ -762,9 +762,12 @@ def get_lyrics_by_song_id():
         return {"lyricsList": {}}
     # The same once-only upgrade the player's route runs, so a listener who
     # only uses a Subsonic client gets lines whose length is known too. The
-    # first call starts it; a later one collects it; the held lines serve both.
+    # held lines serve this call; the lookup settles the row when it lands.
     if predates_timing_length(cached):
-        status, record = poll_lyrics(track.artist, track.title, track.album, track.duration)
+        def settle(found, held=cached):
+            if found is not None:
+                settle_upgrade(db, track.id, held, found)
+        status, record = poll_lyrics(track.artist, track.title, track.album, track.duration, on_complete=settle)
         if status == "complete" and record is not None:
             cached = settle_upgrade(db, track.id, cached, record)
 
