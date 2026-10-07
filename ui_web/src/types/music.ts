@@ -17,7 +17,6 @@ export interface Track {
   artists?: string[] | null;
   album?: string;
   album_artist?: string | null;
-  track_number?: number | null;
   disc_number?: number | null;
   disc_total?: number | null;
   is_compilation?: boolean;

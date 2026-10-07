@@ -155,13 +155,9 @@ export async function resolveCatalogTrack(item: CatalogItem, signal?: AbortSigna
   if (signal?.aborted || !resolved.video_id) return null;
   actions.linkCatalogItem(item.id, resolved.video_id);
   const music = catalogMusic(item);
-  const position = (value: unknown) => (typeof value === 'number' && value > 0 ? value : undefined);
   return {
     id: resolved.video_id, title: item.title, artist, album: item.album, artist_is_channel: false,
     artists: item.raw?.artists, album_artist: item.raw?.album_artist,
-    // Where the song sits on its record, for a download to file it there.
-    track_number: position(item.raw?.track_number), disc_number: position(item.raw?.disc_number),
-    year: position(item.raw?.year),
     deezer_artist_id: music.deezerArtistId, deezer_album_id: music.deezerAlbumId,
     duration: item.duration, cover: item.cover, source: 'preview', originKeys: catalogItemKeys(item),
     recommendation: item.raw?.recommendation,
