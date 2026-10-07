@@ -71,7 +71,8 @@ def digest(path: Path) -> str:
 
 
 def releases() -> list[dict]:
-    return gh("api", "--paginate", "--slurp", "repos/{owner}/{repo}/releases?per_page=100", "--jq", "add")
+    pages = gh("api", "--paginate", "--slurp", "repos/{owner}/{repo}/releases?per_page=100")
+    return [item for page in pages for item in page]
 
 
 def allocate(items: list[dict], version: str, revision: str) -> dict:
@@ -121,14 +122,13 @@ def clean() -> str:
 
 
 def checks(revision: str) -> list[dict]:
-    rows = gh(
+    pages = gh(
         "api",
         "--paginate",
         "--slurp",
         f"repos/{{owner}}/{{repo}}/commits/{revision}/check-runs?per_page=100",
-        "--jq",
-        "[.[].check_runs[]]",
     )
+    rows = [row for page in pages for row in page["check_runs"]]
     latest = {}
     for row in sorted(rows, key=lambda row: row["id"]):
         latest[row["name"]] = row

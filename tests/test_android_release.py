@@ -135,7 +135,7 @@ def test_checks_require_full_android_and_shared_regression(monkeypatch):
         {"id": i, "name": name, "conclusion": "success", "html_url": "https://github.com/check"}
         for i, name in enumerate(release.CHECKS)
     ]
-    monkeypatch.setattr(release, "gh", lambda *args: rows)
+    monkeypatch.setattr(release, "gh", lambda *args: [{"check_runs": rows}])
     assert len(release.checks("a" * 40)) == len(release.CHECKS)
     rows.append({"id": 100, "name": "Emulator shard 2/4 (API 36)", "conclusion": "failure"})
     with pytest.raises(RuntimeError, match="unsuccessful"):
