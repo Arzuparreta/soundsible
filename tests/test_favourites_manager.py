@@ -264,3 +264,29 @@ def test_explicit_unmark_does_not_recreate_a_song_removed_by_another_client(mana
     assert manager.set_favourite(entry, True, save_if_missing=False) is True
     assert manager.set_favourite(entry, True, save_if_missing=False) is True
     assert len(manager.get_entries()) == 1
+
+
+def test_a_saved_song_keeps_its_place_on_its_record(manager):
+    """A saved stream is downloaded later from its entry alone, so the entry is
+    what files it under its record."""
+    manager.toggle_saved({
+        "keys": ["yt:vid"], "title": "Song", "artist": "Artist", "album": "Album",
+        "album_artist": "Artist", "track_number": 3, "disc_number": 2, "year": 2001,
+    })
+    entry = manager.get_entries()[0]
+    assert (entry["album_artist"], entry["track_number"], entry["disc_number"], entry["year"]) == ("Artist", 3, 2, 2001)
+
+
+def test_a_saved_songs_place_is_bounded_like_a_catalog_save(manager):
+    # An upload date read as a year, a zero, a fraction, a flag, text.
+    manager.toggle_saved({"keys": ["yt:vid"], "year": 20101012, "track_number": 0, "disc_number": 1.5})
+    manager.toggle_saved({"keys": ["yt:other"], "track_number": True, "disc_number": "2"})
+    for entry in manager.get_entries():
+        assert not {"track_number", "disc_number", "year"} & set(entry)
+
+
+def test_marking_a_bare_save_fills_in_its_place_on_the_record(manager):
+    manager.toggle_saved({"keys": ["yt:vid"]})
+    manager.set_favourite({"keys": ["yt:vid"], "album": "Album", "track_number": 4, "year": 1999})
+    entry = manager.get_entries()[0]
+    assert (entry["track_number"], entry["year"]) == (4, 1999)

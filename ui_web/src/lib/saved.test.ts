@@ -71,6 +71,22 @@ describe('building a favourite', () => {
     expect(entry.thumbnail).toBe('https://example.invalid/thumb.jpg');
   });
 
+  it('keeps where a streamed song sits on its record, for its download', () => {
+    const preview: Track = { id: VIDEO_ID, title: 'Song', artist: 'Artist', album: 'Album', source: 'preview',
+      album_artist: 'Artist', track_number: 3, disc_number: 2, year: 2001 };
+    const entry = savedFromTrack(preview);
+    expect(entry).toMatchObject({ album_artist: 'Artist', track_number: 3, disc_number: 2, year: 2001 });
+    expect(savedToTrack(entry, new Map())).toMatchObject({ album_artist: 'Artist', track_number: 3, disc_number: 2, year: 2001 });
+    // A year that is an upload date is not kept.
+    expect(savedFromTrack({ ...preview, year: 20101012 }).year).toBeUndefined();
+  });
+
+  it('keeps a catalog row\'s place on its record', () => {
+    const item: CatalogItem = { id: 'deezer:track:1', source: 'deezer', type: 'track', title: 'Song', artist: 'Artist', album: 'Album',
+      raw: { album_artist: 'Artist', track_number: 3, disc_number: 1, year: 2001 } };
+    expect(savedFromCatalogItem(item)).toMatchObject({ album_artist: 'Artist', track_number: 3, disc_number: 1, year: 2001 });
+  });
+
   it('does not snapshot artwork for owned tracks — the engine serves it', () => {
     expect(savedFromTrack(ownedTrack).thumbnail).toBeUndefined();
   });

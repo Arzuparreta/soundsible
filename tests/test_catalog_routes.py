@@ -1446,8 +1446,9 @@ def test_album_profile_lists_every_track_with_its_disc_and_position(monkeypatch)
     assert last["album"] == "Discovery"
     assert last["cover"] == "http://x/discovery.jpg"
     assert last["raw"]["deezer_album_id"] == "302127"
-    # When the record came out, which no track row of its listing names.
+    # When the record came out and whose it is, which no track row names.
     assert last["raw"]["year"] == 2001
+    assert last["raw"]["album_artist"] == "Daft Punk"
     assert [params["index"] for path, params in calls if path.endswith("/tracks")] == [0, 20, 40]
 
 

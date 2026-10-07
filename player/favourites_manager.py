@@ -74,7 +74,12 @@ LIB_PREFIX = "lib:"
 
 #: Snapshot fields kept alongside the keys, so a saved song that is not
 #: downloaded is still renderable and playable.
-_TEXT_FIELDS = ("title", "artist", "album", "thumbnail")
+_TEXT_FIELDS = ("title", "artist", "album", "album_artist", "thumbnail")
+
+#: Where the song sits on its record, and when the record came out: what a
+#: download of a saved song that is not a file yet is filed under. Bounded as
+#: `/api/catalog/save` bounds them; anything else is dropped.
+_RELEASE_FIELDS = (("track_number", 1, 999), ("disc_number", 1, 99), ("year", 1000, 9999))
 
 #: Dates the engine decides. A client payload never sets them; a stored entry
 #: keeps whatever it was written with.
@@ -230,8 +235,9 @@ class FavouritesManager:
             for field in _TEXT_FIELDS:
                 if field in entry and not existing.get(field):
                     existing[field] = entry[field]
-            if "duration" in entry and not existing.get("duration"):
-                existing["duration"] = entry["duration"]
+            for field in ("duration", *(name for name, _, _ in _RELEASE_FIELDS)):
+                if field in entry and not existing.get(field):
+                    existing[field] = entry[field]
             self._persist()
             return resolved
 
@@ -569,6 +575,10 @@ def _normalise_entry(raw: Any, default_favourite: bool = False) -> Optional[Dict
         duration = None
     if isinstance(duration, (int, float)) and duration > 0:
         entry["duration"] = int(duration)
+    for field, low, high in _RELEASE_FIELDS:
+        value = raw.get(field)
+        if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high:
+            entry[field] = value
     return entry
 
 

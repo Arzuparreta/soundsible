@@ -83,6 +83,12 @@ export interface SavedEntry {
   title?: string;
   artist?: string;
   album?: string;
+  /** The record the song is on, and its place there: what a download of a
+   * saved song that is not a file yet is filed under. */
+  album_artist?: string;
+  track_number?: number;
+  disc_number?: number;
+  year?: number;
   duration?: number;
   thumbnail?: string;
   favourite?: boolean;

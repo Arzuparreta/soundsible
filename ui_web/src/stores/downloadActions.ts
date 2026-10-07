@@ -70,6 +70,11 @@ export function createDownloadActions(ports: DownloadActionsPorts, lifetime: Run
         title: entry.title ?? '',
         artist: entry.artist ?? '',
         album: entry.album,
+        // The record it was saved from, so the download is filed there.
+        album_artist: entry.album_artist,
+        track_number: entry.track_number,
+        disc_number: entry.disc_number,
+        year: entry.year,
         duration: entry.duration,
         cover: entry.thumbnail,
         source: 'preview',

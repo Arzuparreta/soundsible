@@ -1591,12 +1591,16 @@ def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | 
         position = _positive_int(row.get(field), 999)
         if position:
             raw[key] = position
-    # And when the record came out, where the row was listed from one (an
-    # album page or a discography). A search row's album names no date, and
-    # a download keeps no year rather than the upload's.
+    # And when the record came out and whose record it is, where the row was
+    # listed from one (an album page or a discography). A search row's album
+    # names neither, and a download keeps none rather than the upload's.
     year = _extract_year(album_row.get("release_date"))
     if year and 1000 <= year <= 9999:
         raw["year"] = year
+    album_artist_row = album_row.get("artist") if isinstance(album_row.get("artist"), dict) else {}
+    album_artist = _clean(album_artist_row.get("name"))
+    if album_artist:
+        raw["album_artist"] = album_artist
     return _catalog_item(
         item_id=f"deezer:track:{deezer_id}",
         item_type="track",
@@ -1737,6 +1741,7 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
         "cover_big": data.get("cover_big"),
         "cover_medium": data.get("cover_medium"),
         "release_date": data.get("release_date"),
+        "artist": artist_row,
     }
     tracklist: list[dict[str, Any]] = []
     for row in _deezer_album_tracks(album_id, embedded):
@@ -1829,6 +1834,9 @@ def _deezer_artist_discography(artist_id: str) -> dict[str, Any]:
             "title": release["title"],
             "cover_xl": release["cover"],
             "release_date": release.get("year"),
+            # The discography is this artist's own records: albums, singles
+            # and EPs, never a compilation.
+            "artist": {"name": name},
         }
         songs: list[dict[str, Any]] = []
         for row in rows:
