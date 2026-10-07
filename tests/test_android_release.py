@@ -175,3 +175,28 @@ def test_receipt_from_a_different_apk_cannot_publish(monkeypatch, tmp_path):
     monkeypatch.setattr(release, "verify_apk", lambda *args: {})
     with pytest.raises(RuntimeError, match="acceptance is incomplete"):
         release.publish(plan, apk, {"source_revision": revision, "version_code": 2, "apk_sha256": "another artifact"})
+
+
+def test_main_advancing_during_upload_leaves_release_private(monkeypatch, tmp_path):
+    revision = "a" * 40
+    apk = tmp_path / "candidate.apk"
+    apk.write_bytes(b"candidate")
+    (tmp_path / release.SEED_HARNESS).write_bytes(b"matching harness")
+    plan = {"source_revision": revision, "version_code": 2, "tag": "fixture"}
+    receipt = {"source_revision": revision, "version_code": 2, "apk_sha256": release.digest(apk)}
+    for key in ("update_preserves_account_settings_offline", "downgrade_rejected", "wrong_signature_rejected",
+                "corrupt_apk_rejected", "release_startup", "offline_pcm", "app_links_verified"):
+        receipt[key] = True
+    monkeypatch.setattr(release, "OUT", tmp_path)
+    monkeypatch.setattr(release, "clean", lambda: revision)
+    monkeypatch.setattr(release, "verify_apk", lambda *args: {})
+    monkeypatch.setattr(release, "verify_harness", lambda *args: None)
+    monkeypatch.setattr(release, "checks", lambda *args: [])
+    monkeypatch.setattr(release, "releases", lambda: [{"tag_name": "fixture", "draft": True, "body": "marker"}])
+    heads = iter([revision, "b" * 40])
+    monkeypatch.setattr(release, "gh", lambda *args: {"commit": {"sha": next(heads)}})
+    operations = []
+    monkeypatch.setattr(release, "command", lambda *args: operations.append(args))
+    with pytest.raises(RuntimeError, match="advanced during upload"):
+        release.publish(plan, apk, receipt)
+    assert len(operations) == 1 and operations[0][:3] == ("gh", "release", "upload")

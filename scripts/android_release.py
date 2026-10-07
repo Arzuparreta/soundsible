@@ -573,6 +573,8 @@ def publish(plan: dict, apk: Path, receipt: dict) -> None:
             str(OUT / "release-acceptance.json"),
             str(OUT / "SHA256SUMS"),
         )
+        if gh("api", "repos/{owner}/{repo}/branches/main")["commit"]["sha"] != plan["source_revision"]:
+            raise RuntimeError("Main advanced during upload; leaving release as a draft")
         command(
             "gh",
             "release",
