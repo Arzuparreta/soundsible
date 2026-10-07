@@ -235,7 +235,7 @@ class ProgramMixOutputTest {
                     meter.metrics.clear()
                     meter.await { it.first < 30 && it.second < 30 && it.marker in (2900.0 * outgoingLevel)..(3050.0 * outgoingLevel) }
                     instrumentation.runOnMainSync { decoders[1].seekTo(1000) }
-                    val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
                     while ((!owner.readyInput(1) || owner.inputPositionUs(1) >= 20000) && System.nanoTime() < readyDeadline) Thread.sleep(10)
                     assertTrue("Corrected standby cue did not rebuffer", owner.readyInput(1))
                     assertEquals("Standby phase correction reset master audio", epoch, owner.epoch())

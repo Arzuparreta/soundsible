@@ -68,8 +68,13 @@ public class PlannerRetirementTest {
             String owner = web.evaluate(scenario, "window.__retirementState.programToken");
             // Seeding does not notify the app: refresh until the rows exist, so the UI steps below
             // cannot spend the delayed plan's window waiting for the list.
-            web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Refresh')?.click()");
-            waitFor(scenario, "!!document.querySelector('[data-browse-track-id=\"member-radio-0\"]')");
+            // A refresh already running ignores another click, so ask again until the rows are there.
+            long rowsUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(40);
+            while (!"true".equals(web.evaluate(scenario, "!!document.querySelector('[data-browse-track-id=\"member-radio-0\"]')"))) {
+                assertTrue("Seeded rows never reached the library list", System.nanoTime() < rowsUntil);
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Refresh')?.click()");
+                Thread.sleep(2000);
+            }
             int delivered = api(connection, origin, null, "/__fixture/radio-stats", "GET", null).getInt("delivered");
             api(connection, origin, null, "/__fixture/radio-delay", "POST", new JSONObject().put("seconds", 12)); // Deleting through the UI must fit inside the delay on a loaded runner.
             command(scenario, mode.equals("radio") ? "action:'radio',enabled:true,profile:'balanced'" : "action:'autoplay',enabled:true");
