@@ -12,6 +12,13 @@ import org.junit.Test;
 /** Runs before/after an actual PackageManager update, without uninstalling or clearing data. */
 @androidx.media3.common.util.UnstableApi
 public class ReleaseUpdateTest {
+    private void waitFor(StartupTest web, ActivityScenario<MainActivity> scenario, String condition) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (!"true".equals(web.evaluate(scenario, condition))) {
+            assertTrue("Release update precondition: " + condition, System.nanoTime() < deadline);
+            Thread.sleep(100);
+        }
+    }
     private String digest(String value) throws Exception {
         return java.util.Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
     }
@@ -33,7 +40,15 @@ public class ReleaseUpdateTest {
                 assertTrue("Offline library did not open", System.nanoTime() < deadline); Thread.sleep(100);
             }
             if ("seed".equals(args.getString("updatePhase"))) {
-                web.evaluate(scenario, "localStorage.setItem('lang','es');localStorage.setItem('theme','dark')");
+                // Exercise real preference controls and await their asynchronous locale load.
+                web.evaluate(scenario, "document.querySelector('[data-android-settings]').click()");
+                waitFor(web, scenario, "!!document.querySelector('[data-android-settings-appearance]')");
+                web.evaluate(scenario, "document.querySelector('[data-android-settings-appearance]').click()");
+                waitFor(web, scenario, "!!document.querySelector('[data-setting=language] select')");
+                web.evaluate(scenario, "document.querySelector('[data-setting=theme] input[value=dark]').click();let language=document.querySelector('[data-setting=language] select');language.value='es';language.dispatchEvent(new Event('change',{bubbles:true}))");
+                waitFor(web, scenario, "document.documentElement.lang==='es' && document.documentElement.dataset.theme==='dark'");
+                scenario.recreate();
+                waitFor(web, scenario, "document.documentElement.lang==='es' && document.documentElement.dataset.theme==='dark' && !!document.querySelector('[data-row-main]')");
                 assertTrue(prefs.edit().putString("cookie", digest(connection.cookieHeader(connection.getGeneration())))
                     .putString("offline", connection.getOffline().state(connection.getGeneration()).toString()).commit());
             } else {
