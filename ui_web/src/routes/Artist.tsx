@@ -21,7 +21,7 @@ import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMo
 import { t } from '../lib/i18n';
 import type { ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
-import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve } from '../lib/catalogItem';
+import { useCatalogCollection, itemArtist, playCatalogItem, cancelCatalogResolve, catalogReleaseEvidence } from '../lib/catalogItem';
 import { tracksByIds } from '../lib/catalogTracks';
 import styles from './Artist.module.css';
 import { coverGradient } from '../lib/cover';
@@ -191,6 +191,7 @@ export default function Artist() {
         cover: item.cover,
         external_ids: item.external_ids,
         identity_keys: catalogItemKeys(item),
+        ...catalogReleaseEvidence(item),
       });
       if (response.status === 'queued') {
         toast.success(t('search.addedToDownloads'));

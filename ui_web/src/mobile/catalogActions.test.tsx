@@ -131,3 +131,27 @@ it('reports a refused download', async () => {
   await actions.act(remote, 'acquire');
   expect(actions.error()).toBe('Could not save');
 });
+
+it('files a download from an album row where the song sits on the record', async () => {
+  mocks.catalogSave.mockResolvedValue({ status: 'queued', video_id: 'A1111111111' });
+  const { actions } = acquiring();
+  await actions.act({ ...remote, album: 'Discovery', raw: { album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 } }, 'acquire');
+  expect(mocks.catalogSave).toHaveBeenCalledWith(expect.objectContaining({
+    album: 'Discovery', album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001,
+  }));
+});
+
+it('plays an album with every song carrying its place on the record', async () => {
+  mocks.resolve.mockResolvedValue({ video_id: 'A1111111111' });
+  const play = vi.fn().mockResolvedValue(undefined);
+  let actions!: ReturnType<typeof createNativeCatalogActions>;
+  render(() => { actions = createNativeCatalogActions({ generation: () => 1, disconnected: () => false, saved: () => [], tracks: () => [],
+    onPlay: vi.fn(), onPlayCollection: play, onChanged: vi.fn() }); return null; });
+  const row = (id: string, position: number): CatalogItem => ({ id, source: 'deezer', type: 'track', title: id, artist: 'Artist', album: 'Discovery',
+    raw: { album_artist: 'Daft Punk', track_number: position, disc_number: 1, year: 2001 } });
+  await actions.playCollection([row('first', 1), row('second', 2)], 1);
+  expect(play).toHaveBeenCalledWith([
+    expect.objectContaining({ id: 'first', track_number: 1, disc_number: 1, year: 2001, album_artist: 'Daft Punk', pendingResolve: expect.anything() }),
+    expect.objectContaining({ id: 'A1111111111', source: 'preview', track_number: 2, disc_number: 1, year: 2001, album_artist: 'Daft Punk' }),
+  ], 1);
+});

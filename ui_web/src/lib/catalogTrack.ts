@@ -50,3 +50,29 @@ export function catalogTrack(item: CatalogItem, library: readonly Track[]): Trac
   }
   return null;
 }
+
+/** Where a catalog song sits on its record and when the record came out —
+ * what a download files it under. Only rows listed from a record carry them. */
+export function releasePosition(item: CatalogItem): Pick<Track, 'track_number' | 'disc_number' | 'year'> {
+  const whole = (value: unknown) => (typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined);
+  return { track_number: whole(item.raw?.track_number), disc_number: whole(item.raw?.disc_number), year: whole(item.raw?.year) };
+}
+
+/** The record a catalog song is saved from, for `/api/catalog/save` to file
+ * the download under: every surface that saves a row sends the same facts.
+ * Nothing without an album; the engine bounds the rest. */
+export function catalogReleaseEvidence(item: CatalogItem): {
+  album?: string; album_artist?: string; track_number?: number; disc_number?: number; year?: number;
+} {
+  const album = item.album?.trim();
+  if (!album) return {};
+  const albumArtist = typeof item.raw?.album_artist === 'string' ? item.raw.album_artist.trim() : '';
+  const position = releasePosition(item);
+  return {
+    album,
+    ...(albumArtist ? { album_artist: albumArtist } : {}),
+    ...(position.track_number ? { track_number: position.track_number } : {}),
+    ...(position.disc_number ? { disc_number: position.disc_number } : {}),
+    ...(position.year ? { year: position.year } : {}),
+  };
+}

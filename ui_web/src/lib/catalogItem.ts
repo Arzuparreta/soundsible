@@ -1,4 +1,5 @@
-import { catalogTrack, itemArtist } from './catalogTrack';
+import { catalogTrack, itemArtist, releasePosition } from './catalogTrack';
+export { catalogReleaseEvidence, releasePosition } from './catalogTrack';
 import { catalogMusic } from './musicNavigation';
 import { createSignal } from 'solid-js';
 import { api } from './api';
@@ -92,13 +93,6 @@ export async function playCatalogItem(
  * reference in its place that the player matches before reaching it. Rows that
  * name no song at all — no artist, no title — cannot become either.
  */
-/** Where a catalog song sits on its record and when the record came out —
- * what a download files it under. Only rows listed from a record carry them. */
-function releasePosition(item: CatalogItem): Pick<Track, 'track_number' | 'disc_number' | 'year'> {
-  const whole = (value: unknown) => (typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined);
-  return { track_number: whole(item.raw?.track_number), disc_number: whole(item.raw?.disc_number), year: whole(item.raw?.year) };
-}
-
 export function catalogContextTrack(item: CatalogItem): ContextTrack | null {
   const playable = itemToTrack(item);
   if (playable) return playable;

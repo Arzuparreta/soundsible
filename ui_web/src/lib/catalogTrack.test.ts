@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogItem, Track } from '../types/music';
-import { catalogTrack } from './catalogTrack';
+import { catalogReleaseEvidence, catalogTrack } from './catalogTrack';
 
 const row = (extra: Partial<CatalogItem>): CatalogItem => ({ id: 'catalog:track', source: 'deezer', type: 'track', title: 'Song', artist: 'Artist', ...extra });
 describe('catalog tracks shared by web and native programs', () => {
@@ -18,5 +18,17 @@ describe('catalog tracks shared by web and native programs', () => {
   it('requires resolution when a recording has no owned or provider identity', () => {
     expect(catalogTrack(row({}), [])).toBeNull();
     expect(catalogTrack(row({ source: 'deezer', raw: { id: 'A1111111111' } }), [])).toBeNull();
+  });
+});
+
+describe('catalogReleaseEvidence', () => {
+  const row = { id: 'deezer:track:1', source: 'deezer', type: 'track', title: 'Song', artist: 'Artist' } as const;
+  it('names the record a row was listed from, and its place on it', () => {
+    expect(catalogReleaseEvidence({ ...row, album: 'Discovery', raw: { album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 } }))
+      .toEqual({ album: 'Discovery', album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 });
+  });
+  it('sends nothing without an album, and makes nothing up', () => {
+    expect(catalogReleaseEvidence({ ...row, raw: { track_number: 3 } })).toEqual({});
+    expect(catalogReleaseEvidence({ ...row, album: 'Single', raw: {} })).toEqual({ album: 'Single' });
   });
 });
