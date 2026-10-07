@@ -72,3 +72,47 @@ contraseñas, códigos QR, cookies ni música privada.
 For a bug report include version/build/commit from `android-release.json`, device,
 Android and WebView versions, reproduction steps and online/offline state. Do not
 include passwords, pairing codes, cookies or private music.
+
+
+## Pruebas de la comunidad / Community testing
+
+La aceptación en dispositivos reales corresponde a la comunidad: el mantenedor
+no dispone de un Android. Ayuda probando la alpha en tu teléfono y publicando
+resultados, incluidos los correctos, en [GitHub Issues](https://github.com/Arzuparreta/soundsible/issues).
+Estas pruebas reúnen la evidencia necesaria para beta. Marca como «No probado»
+lo que no puedas comprobar; no necesitas disponer de coche ni de todos los accesorios.
+
+Physical-device acceptance comes from the community: the maintainer does not
+own an Android device. Test the alpha on your phone and report results, including
+successful checks, in [GitHub Issues](https://github.com/Arzuparreta/soundsible/issues).
+This provides beta acceptance evidence. Mark unavailable checks as “Not tested”;
+a car and every accessory are not required to participate.
+
+| Prueba / Check | Resultado esperado / Expected result |
+| --- | --- |
+| Escucha NORMAL, DJ y Live / NORMAL, DJ and Live listening | Audio y controles correctos, sin cortes inesperados; Live recibido audible / Correct audio and controls, no unexpected gaps; received Live audio audible |
+| Pantalla apagada y otra app / Screen off and another app | Continúa el programa y funcionan controles multimedia / Programme continues and media controls work |
+| Llamada o interrupción de audio / Call or audio interruption | Pausa o reduce según el foco y recupera sin audio duplicado / Pauses or ducks according to focus and recovers without duplicate audio |
+| Auriculares y Bluetooth / Headphones and Bluetooth | Controles correctos y desconexión sin reproducción inesperada por altavoz / Correct controls and no unexpected speaker playback on disconnection |
+| Wi-Fi, datos y pérdida de red / Wi-Fi, mobile data and network loss | Estado de error visible y recuperación; sin bloqueo / Visible failure state and recovery; no hang |
+| Copias listas, modo avión y reinicio / Ready copies, airplane mode and restart | Música preparada audible sin conexión después de reabrir / Prepared music plays offline after reopening |
+| Android Auto, si está disponible / Android Auto, if available | Biblioteca, selección, controles y metadata correctos; probar con el coche estacionado / Correct browsing, playback, controls and metadata; test while parked |
+| Actualización cuando exista otra alpha / Upgrade when another alpha is available | Instalar encima conserva cuenta, ajustes y copias / Installing over the previous alpha preserves account, settings and copies |
+
+Copia este formato en el reporte; añade pasos reproducibles cuando algo falle.
+Copy this report format and include reproduction steps for failures.
+
+```text
+Build/commit (android-release.json):
+Teléfono / Phone:
+Android y WebView / Android and WebView:
+Servidor Soundsible / Soundsible server build:
+Auriculares/Bluetooth/coche usados / Headphones/Bluetooth/car used:
+Prueba / Check: OK | Fallo / Failed | No probado / Not tested
+Pasos y duración / Steps and duration:
+Esperado y observado / Expected and observed:
+Red: Wi-Fi / datos / sin conexión — Network: Wi-Fi / mobile data / offline
+```
+
+No compartas credenciales, QR de sesión, cookies ni música privada.
+Do not share credentials, session QR codes, cookies or private music.
