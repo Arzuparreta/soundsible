@@ -38,3 +38,14 @@ export function activeLineIndex(lines: LyricLine[], positionSec: number): number
   }
   return idx;
 }
+
+/** Seconds a recording may differ from the one its lyrics were timed for
+ * (the engine's `TIMING_TOLERANCE_SEC`). */
+const TIMING_TOLERANCE_SEC = 3;
+
+/** Whether timed lines can follow a recording of this length. Unknown on
+ * either side is not evidence of a mismatch. */
+export function timingFits(audioSec: number | null | undefined, syncedSec: number | null | undefined): boolean {
+  if (!audioSec || !syncedSec || !Number.isFinite(audioSec) || !Number.isFinite(syncedSec)) return true;
+  return Math.abs(audioSec - syncedSec) <= TIMING_TOLERANCE_SEC;
+}

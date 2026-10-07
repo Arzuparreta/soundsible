@@ -106,7 +106,13 @@ export interface LyricsResponse {
   instrumental: boolean;
   cached: boolean;
   pending?: boolean;
+  /** The timed lines can be followed as they are: the upload's timeline is the
+   * album's, and the recording is as long as the one they were timed for. */
   timing_safe?: boolean;
+  /** Seconds of the recording the timed lines were written against. */
+  synced_duration?: number | null;
+  /** A listener's correction: the lines sit this much later in this audio. */
+  offset_ms?: number | null;
 }
 
 export interface SearchResult {

@@ -1,5 +1,6 @@
 import type { SavedEntity } from './savedEntities';
 import { request } from './http';
+import type { DownloadEvidence } from './track';
 export { request, setUnauthorizedHandler, ApiError } from './http';
 import type {
   CatalogAlbum,
@@ -84,7 +85,7 @@ export interface DownloadItem {
   display_artist?: string;
   thumbnail_url?: string;
   duration_sec?: number;
-  metadata_evidence?: null;
+  metadata_evidence?: DownloadEvidence | null;
   /** Identity keys of the song being downloaded (see `lib/playbackIdentity.ts`).
    * A saved song carries its entry's keys, so the file joins that song — and
    * keeps the day it was saved — rather than arriving as a new one. */
@@ -829,6 +830,15 @@ export const api = {
     if (p.refresh) params.set('refresh', '1');
     return request<LyricsResponse>(`/api/lyrics?${params.toString()}`, { signal: options.signal, timeoutMs: 15000 });
   },
+
+  /** Line a recording's lyrics up by hand; `offsetMs: null` forgets it. A
+   * library track is named by id, a stream by its video. */
+  setLyricsOffset: (p: { trackId?: string; youtubeId?: string; offsetMs: number | null }) =>
+    request<{ offset_ms: number | null }>('/api/lyrics/offset', {
+      method: 'PUT',
+      body: { track_id: p.trackId, youtube_id: p.youtubeId, offset_ms: p.offsetMs },
+      timeoutMs: 15000,
+    }),
 
   // ── Track metadata + cover (engine rewrites the file's tags) ──
   updateTrackMetadata: (

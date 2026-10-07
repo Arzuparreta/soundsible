@@ -361,3 +361,22 @@ def test_warm_endpoint_auto_selects_when_no_seeds_given(monkeypatch):
     assert res.status_code == 200
     assert body["warmed"] == -1
     called.assert_called_once()
+
+
+def test_seed_resolution_records_the_running_time_it_was_made_for(monkeypatch):
+    """A seed resolved for its track's running time says so, so a later caller
+    after another cut cannot take the row away from the discovery graph."""
+    track = _track("t1", "Song A", "Artist A", youtube_id=None)
+    track.duration = 235
+    api, mock_dl, _ = _mock_api(LibraryMetadata(version=1, tracks=[track], playlists={}, settings={}))
+    mock_dl.downloader.search_match_candidates.return_value = [
+        {"id": _VID4, "title": "Artist A - Song A (Audio)", "channel": "Artist A", "duration": 236},
+    ]
+    monkeypatch.setattr(_disc_graph, "_get_api", lambda: api)
+    mock_db = MagicMock()
+    mock_db.get_cached_resolution.return_value = None
+    monkeypatch.setattr(_disc_graph, "instance_db", lambda: mock_db)
+
+    assert _disc_graph._resolve_seed_yt_id(track) == _VID4
+    stored = mock_db.set_cached_resolution.call_args.args[2]
+    assert stored["id"] == _VID4 and stored["requested_duration"] == 235

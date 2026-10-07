@@ -49,3 +49,33 @@ export function podcastEpisodeToTrack(
     podcast_feed_id: feedId,
   };
 }
+
+/** What a download is told about a preview beyond its title and artist. */
+export interface DownloadEvidence {
+  album: string;
+  album_artist?: string;
+  musicbrainz_id?: string;
+}
+
+/**
+ * The release a preview names, for the engine to tag the file with.
+ *
+ * A song chosen from the catalog knows its album, but the download used to
+ * send nothing and the file was tagged from the upload instead, with no album.
+ * The title and artist travel separately as the item's display fields. Nothing
+ * is invented — without an album there is no evidence to send.
+ *
+ * Only the release travels, not where the song sits on it or when it came out:
+ * every preview path (a played context queue, Android's program queue) carries
+ * the album, but none carries the track number, disc number or year yet, so a
+ * file still takes those from the upload.
+ */
+export function downloadEvidence(track: Track): DownloadEvidence | null {
+  const album = track.album?.trim();
+  if (!album) return null;
+  const evidence: DownloadEvidence = { album };
+  const albumArtist = track.album_artist?.trim();
+  if (albumArtist) evidence.album_artist = albumArtist;
+  if (track.musicbrainz_id) evidence.musicbrainz_id = track.musicbrainz_id;
+  return evidence;
+}

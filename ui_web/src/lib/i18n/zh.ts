@@ -1086,6 +1086,12 @@ export const zh: Dict = {
     retry: '重试',
     instrumental: '纯音乐。',
     notFound: '未找到这首歌的歌词。',
+    alignHint: '这份歌词的时间轴可能对应这首歌的另一个版本。点按正在唱的那一行即可对齐。',
+    adjustHint: '点按此刻正在唱的那一行。',
+    adjust: '调整同步',
+    cancelAdjust: '取消',
+    resetTiming: '重置同步',
+    timingSaveFailed: '无法保存同步设置。',
   },
   discoverNodes: {
     title: '推荐',

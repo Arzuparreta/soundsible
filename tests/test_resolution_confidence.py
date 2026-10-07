@@ -157,3 +157,79 @@ def test_upsert_updates_confidence():
     cached = db.get_cached_resolution("ArtistC", "TrackC")
     assert cached["id"] == "new_vid"
     assert cached["confidence"] == pytest.approx(0.88)
+
+
+# ─── Re-ranking a cached resolution ──────────────────────────────────────────
+
+def _video_and_audio_cache() -> dict:
+    """A resolution made without a running time: the music video, whose intro
+    makes it 16 s longer than the album cut, beat the artist's audio upload."""
+    candidates = [
+        {"id": "video", "title": "Artist - Song", "channel": "Artist", "duration": 251},
+        {"id": "audio", "title": "Artist - Song (Audio)", "channel": "ArtistVEVO", "duration": 236},
+        {"id": "lyrics", "title": "Artist - Song (Lyrics)", "channel": "Some Fan", "duration": 236},
+    ]
+    return {"id": "video", "confidence": 0.67, "confidence_reason": "title_artist", "candidates": candidates}
+
+
+def test_rerank_picks_the_cut_that_matches_a_running_time_the_cache_lacked():
+    from shared.resolution_confidence import rerank_cached_resolution
+
+    reranked = rerank_cached_resolution("Artist", "Song", 235, _video_and_audio_cache())
+    assert reranked["id"] == "audio"
+    assert reranked["confidence_reason"] == "title_artist_duration"
+    assert classify_confidence(reranked["confidence"]) == "high"
+    assert {c["id"] for c in reranked["candidates"]} == {"video", "audio", "lyrics"}
+
+
+def test_rerank_changes_nothing_without_a_running_time():
+    from shared.resolution_confidence import rerank_cached_resolution
+
+    assert rerank_cached_resolution("Artist", "Song", None, _video_and_audio_cache()) is None
+
+
+def test_rerank_rescores_a_winner_the_running_time_confirms():
+    from shared.resolution_confidence import rerank_cached_resolution
+
+    # The video stays the answer for its own 251 s, but now on duration evidence.
+    reranked = rerank_cached_resolution("Artist", "Song", 251, _video_and_audio_cache())
+    assert reranked["id"] == "video"
+    assert reranked["confidence_reason"] == "title_artist_duration"
+    assert reranked["confidence"] > 0.67
+    # Asking again with the same time changes nothing more.
+    assert rerank_cached_resolution("Artist", "Song", 251, {**_video_and_audio_cache(), **reranked}) is None
+
+
+def test_rerank_leaves_a_winner_that_was_chosen_outside_the_candidates_alone():
+    from shared.resolution_confidence import rerank_cached_resolution
+
+    cached = {**_video_and_audio_cache(), "id": "picked-by-hand"}
+    assert rerank_cached_resolution("Artist", "Song", 235, cached) is None
+
+
+def test_cached_resolution_writes_the_correction_back():
+    from shared.api.routes.catalog import cached_resolution
+
+    db = _make_db()
+    cached = _video_and_audio_cache()
+    db.set_cached_resolution("Artist", "Song", cached)
+
+    assert cached_resolution(db, "Artist", "Song", None)["id"] == "video"
+    assert cached_resolution(db, "Artist", "Song", 235)["id"] == "audio"
+    # Callers that know no running time now get the corrected answer too.
+    stored = db.get_cached_resolution("Artist", "Song")
+    assert stored["id"] == "audio" and stored["requested_duration"] == 235
+
+
+def test_a_resolution_made_for_a_running_time_is_not_rewritten_by_another():
+    from shared.api.routes.catalog import cached_resolution
+
+    db = _make_db()
+    # Resolved for the 251 s cut: the video is the right answer for that.
+    db.set_cached_resolution("Artist", "Song", {**_video_and_audio_cache(), "requested_duration": 251})
+
+    # A caller after the album cut gets the album cut...
+    assert cached_resolution(db, "Artist", "Song", 235)["id"] == "audio"
+    # ...without taking the stored answer away from everyone else.
+    stored = db.get_cached_resolution("Artist", "Song")
+    assert stored["id"] == "video" and stored["requested_duration"] == 251

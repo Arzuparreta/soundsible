@@ -55,8 +55,11 @@ def _resolve_seed_yt_id(track) -> str:
     title = (getattr(track, "title", "") or "").strip()
     if not artist or not title:
         return ""
+    from shared.api.routes.catalog import cached_resolution
+
     db = instance_db()
-    cached = db.get_cached_resolution(artist, title)
+    duration = getattr(track, "duration", None) or None
+    cached = cached_resolution(db, artist, title, duration)
     if cached and cached.get("id"):
         return str(cached["id"])
     # Note: Cold resolve — candidate search + best_candidate, then cache forever.
@@ -70,9 +73,7 @@ def _resolve_seed_yt_id(track) -> str:
             })
             return ""
         from shared.resolution_confidence import best_candidate
-        best, _score, _reason, _ranked = best_candidate(
-            artist, title, getattr(track, "duration", None), raw
-        )
+        best, _score, _reason, _ranked = best_candidate(artist, title, duration, raw)
         vid = str(best.get("id", "") or "")
         db.set_cached_resolution(artist, title, {
             "id": vid,
@@ -83,6 +84,7 @@ def _resolve_seed_yt_id(track) -> str:
             "confidence": _score,
             "confidence_reason": _reason,
             "candidates": _ranked,
+            "requested_duration": duration,
         })
         return vid
     except Exception as exc:

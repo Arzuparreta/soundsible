@@ -18,7 +18,8 @@ import unicodedata
 from concurrent.futures import Future, ThreadPoolExecutor
 from difflib import SequenceMatcher
 from functools import partial
-from typing import Any, Dict, Optional
+from statistics import median
+from typing import Any, Callable, Dict, Optional
 
 import requests
 
@@ -39,7 +40,7 @@ _MIN_FALLBACK_BUDGET_SEC = 1.0
 _MIN_MATCH_SCORE = 0.72
 _MIN_TITLE_SCORE = 0.68
 
-RESOLVER_SOURCE = "lrclib:v4"
+RESOLVER_SOURCE = "lrclib:v5"
 
 _LOOKUP_WORKERS = 2
 
@@ -129,13 +130,129 @@ def _candidate_score(
     return max(0.0, score), title_score
 
 
-def _result_to_record(item: Dict[str, Any]) -> Dict[str, Any]:
+#: How far a recording's length may sit from the one its lyrics were timed
+#: against before the timing is doubted. LRCLIB itself matches within two
+#: seconds; a cut with an intro or a coda is off by ten or more.
+TIMING_TOLERANCE_SEC = 3
+
+
+def _synced_duration(item: Dict[str, Any], results: Any) -> Optional[int]:
+    """The running time the chosen timed lines were written against, if LRCLIB agrees on one.
+
+    LRCLIB's durations are typed in by whoever uploads the lyrics, and the same
+    timing is uploaded again and again, once per compilation it appeared on.
+    Those copies vote. A length shorter than the last timed line cannot be the
+    recording's, and is thrown out; of the rest, the tightest cluster speaks
+    for the timing only when most of them sit in it. Copies scattered from 30 s
+    to seven minutes say nothing, and nothing is better than a wrong length:
+    it would mark the very recording these lines were timed for as another cut.
+    """
+    synced = item.get("syncedLyrics")
+    if not synced:
+        return None
+    stamps = parse_lrc(synced)
+    last_line_sec = stamps[-1][0] / 1000 if stamps else 0.0
+    rows = results if isinstance(results, list) else [item]
+    votes: list[float] = []
+    for row in rows:
+        if isinstance(row, dict) and row.get("syncedLyrics") == synced:
+            try:
+                value = float(row.get("duration"))
+            except (TypeError, ValueError):
+                continue
+            if value >= last_line_sec and value > 0:
+                votes.append(value)
+    if not votes:
+        return None
+    votes.sort()
+    cluster: list[float] = []
+    for start, low in enumerate(votes):
+        window = [value for value in votes[start:] if value - low <= 2 * TIMING_TOLERANCE_SEC]
+        if len(window) > len(cluster):
+            cluster = window
+    if len(cluster) * 2 <= len(votes):
+        return None
+    return int(round(median(cluster)))
+
+
+def _result_to_record(item: Dict[str, Any], results: Any = None) -> Dict[str, Any]:
     return {
         "synced": item.get("syncedLyrics") or None,
         "plain": item.get("plainLyrics") or None,
         "instrumental": bool(item.get("instrumental")),
         "source": RESOLVER_SOURCE,
+        "synced_duration": _synced_duration(item, results),
     }
+
+
+def audio_key(youtube_id: Optional[str] = None, track_id: Optional[str] = None) -> Optional[str]:
+    """What a listener's lyrics offset belongs to: the audio's timeline.
+
+    A file downloaded from a video plays the video's timeline, so both share
+    the video's key and an offset set while streaming survives the download.
+    """
+    from shared.url_utils import validate_youtube_video_id
+
+    if youtube_id and validate_youtube_video_id(str(youtube_id)):
+        return f"yt:{youtube_id}"
+    return f"lib:{track_id}" if track_id else None
+
+
+def has_text(record: Optional[Dict[str, Any]]) -> bool:
+    """Whether a lyrics record holds anything to show."""
+    return bool(record and (record.get("synced") or record.get("plain") or record.get("instrumental")))
+
+
+def predates_timing_length(record: Optional[Dict[str, Any]]) -> bool:
+    """Timed lines cached by a resolver that did not record their length.
+
+    They are looked up once more, so the length can be checked; until that
+    lookup lands, and if it finds nothing, the lines already held are kept.
+    """
+    return bool(record and record.get("synced") and record.get("source") != RESOLVER_SOURCE)
+
+
+def store(db: Any, key: str, record: Dict[str, Any]) -> None:
+    """Cache a resolved record under a track id or a metadata key."""
+    db.set_lyrics(
+        key,
+        synced=record["synced"],
+        plain=record["plain"],
+        instrumental=record["instrumental"],
+        source=record["source"],
+        synced_duration=record.get("synced_duration"),
+    )
+
+
+def settle_upgrade(db: Any, key: str, held: Dict[str, Any], found: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Store the answer to a once-only upgrade lookup; returns what to serve.
+
+    A record with something in it replaces what was held. An empty one keeps
+    the held lines but marks them looked up, so a song the provider no longer
+    knows is not looked up again on every play.
+    """
+    if has_text(found):
+        store(db, key, found)
+        return found
+    kept = {**held, "source": RESOLVER_SOURCE, "synced_duration": None}
+    store(db, key, kept)
+    return kept
+
+
+def synced_timing_fits(audio_duration: Any, synced_duration: Any) -> bool:
+    """Whether timed lines can follow a recording of this length.
+
+    The same song is published in cuts of different lengths — a music video
+    with a spoken intro, a radio edit — and LRCLIB's timing belongs to one of
+    them. Unknown on either side is not evidence of a mismatch.
+    """
+    try:
+        audio, synced = float(audio_duration or 0), float(synced_duration or 0)
+    except (TypeError, ValueError):
+        return True
+    if audio <= 0 or synced <= 0:
+        return True
+    return abs(audio - synced) <= TIMING_TOLERANCE_SEC
 
 
 def _remaining(deadline: float, maximum: float) -> float:
@@ -163,7 +280,10 @@ def _lrclib_get(path: str, params: Dict[str, Any], timeout_sec: float = _LRCLIB_
 
 
 def _deezer_search(artist: str, title: str, timeout_sec: float) -> list[Dict[str, Any]]:
-    query = f'artist:"{artist}" track:"{title}"'
+    # A plain query: Deezer's field syntax (`artist:"…" track:"…"`) now
+    # answers nothing for songs it holds, which left this fallback silent.
+    # The rows are scored against artist and title before anything is used.
+    query = f"{artist} {title}"
     resp = requests.get(
         f"{_DEEZER_HOST}/search",
         params={"q": query, "limit": 5},
@@ -241,7 +361,7 @@ def fetch_lyrics(
         results = _lrclib_search(clean_artist, clean_title, album, deadline)
         best = _pick_best(results, clean_artist, clean_title, album, duration)
         if best:
-            return _result_to_record(best)
+            return _result_to_record(best, results)
 
         # Deezer is deliberately not on the hot path. It only canonicalizes a
         # real LRCLIB miss and has a small timeout, so lyrics cannot monopolize
@@ -273,7 +393,7 @@ def fetch_lyrics(
             canonical_duration,
         )
         if rescored:
-            return _result_to_record(rescored)
+            return _result_to_record(rescored, results)
 
         old_query = _fold(f"{clean_artist} {clean_title}")
         canonical_query = _fold(f"{canonical_artist} {canonical_title}")
@@ -293,7 +413,7 @@ def fetch_lyrics(
             canonical_duration,
         )
         if retry_best:
-            return _result_to_record(retry_best)
+            return _result_to_record(retry_best, retry_results)
         return {"synced": None, "plain": None, "instrumental": False, "source": RESOLVER_SOURCE}
     except requests.RequestException as exc:
         logger.warning("Lyrics provider request failed for %s - %s: %s", artist, title, exc)
@@ -324,7 +444,9 @@ class _LyricsLookupCoordinator:
         finally:
             self._slots.release()
 
-    def poll_or_start(self, key: str, fn) -> tuple[str, Optional[Dict[str, Any]]]:
+    def poll_or_start(self, key: str, fn, *, forget_when_done: bool = False) -> tuple[str, Optional[Dict[str, Any]]]:
+        """``forget_when_done`` is for a lookup that reports its own result:
+        nobody comes back to collect it, so it must not stay held here."""
         with self._lock:
             job = self._jobs.get(key)
             if job is not None:
@@ -345,7 +467,15 @@ class _LyricsLookupCoordinator:
                 self._slots.release()
                 raise
             self._jobs[key] = future
-            return "pending", None
+        # Outside the lock: a lookup already finished runs its callback here.
+        if forget_when_done:
+            future.add_done_callback(partial(self._forget, key))
+        return "pending", None
+
+    def _forget(self, key: str, future: Future) -> None:
+        with self._lock:
+            if self._jobs.get(key) is future:
+                del self._jobs[key]
 
     def clear_for_tests(self) -> None:
         with self._lock:
@@ -389,14 +519,28 @@ def poll_lyrics(
     title: str,
     album: Optional[str] = None,
     duration: Optional[int] = None,
+    on_complete: Optional[Callable[[Optional[Dict[str, Any]]], Any]] = None,
 ) -> tuple[str, Optional[Dict[str, Any]]]:
     """Poll/start a bounded background lookup.
 
     Status is ``complete``, ``pending``, or ``busy``. Busy means both dedicated
-    workers are active; no server-side task was buffered.
+    workers are active; no server-side task was buffered. ``on_complete``, if
+    this call starts the lookup, receives its record on the worker as soon as
+    it lands — for a caller that will not come back to collect it.
     """
     key = _lookup_key(artist, title, album, duration)
-    return _LOOKUPS.poll_or_start(key, partial(fetch_lyrics, artist, title, album, duration))
+    lookup = partial(fetch_lyrics, artist, title, album, duration)
+    if on_complete is not None:
+        def lookup_and_report(fetch=lookup):
+            record = fetch()
+            try:
+                on_complete(record)
+            except Exception as exc:
+                logger.warning("Lyrics completion callback failed: %s", exc)
+            return record
+
+        return _LOOKUPS.poll_or_start(key, lookup_and_report, forget_when_done=True)
+    return _LOOKUPS.poll_or_start(key, lookup)
 
 
 _LRC_TIMESTAMP = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")

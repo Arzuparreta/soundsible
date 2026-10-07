@@ -28,7 +28,7 @@ from shared.musicbrainz import normalize_recording_mbid
 from shared.music_identity import youtube_music_metadata
 from shared.providers import deezer
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
-from shared.resolution_confidence import best_candidate, classify_confidence
+from shared.resolution_confidence import best_candidate, classify_confidence, rerank_cached_resolution
 from shared.text_utils import (
     collapse_text,
     fold_text,
@@ -1261,12 +1261,33 @@ def _resolve_candidates(artist: str, title: str, duration_s: int | None = None) 
     their own.
     """
     db = instance_db()
-    cached = db.get_cached_resolution(artist, title)
+    cached = cached_resolution(db, artist, title, duration_s)
     if cached and cached.get("id"):
         return cached, cached.get("candidates") or [cached]
 
     key = f"{_norm(artist)}|{_norm(title)}|{duration_s or ''}"
     return _resolve_memo.resolve(key, lambda: _resolve_candidates_uncached(artist, title, duration_s))
+
+
+def cached_resolution(db: DatabaseManager, artist: str, title: str, duration_s: int | None) -> dict[str, Any] | None:
+    """The stored resolution for a song, re-ranked for this caller's running time.
+
+    See `rerank_cached_resolution`. A row resolved without a running time is
+    corrected for everyone, so callers that know none stop getting the answer
+    that ignored one. A row resolved for a running time keeps it: another time
+    is another cut of the same title — a radio edit, a stale client — and gets
+    its own answer without overwriting the one stored.
+    """
+    cached = db.get_cached_resolution(artist, title)
+    if not cached:
+        return None
+    reranked = rerank_cached_resolution(artist, title, duration_s, cached)
+    if not reranked:
+        return cached
+    if cached.get("requested_duration"):
+        return {**cached, **reranked}
+    db.set_cached_resolution(artist, title, {**reranked, "requested_duration": duration_s})
+    return db.get_cached_resolution(artist, title) or cached
 
 
 def _resolve_candidates_uncached(
@@ -1293,6 +1314,7 @@ def _resolve_candidates_uncached(
             "confidence": score,
             "confidence_reason": reason,
             "candidates": ranked,
+            "requested_duration": duration_s,
         },
     )
 

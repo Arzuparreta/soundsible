@@ -23,28 +23,48 @@ logger = logging.getLogger(__name__)
 library_bp = Blueprint("library", __name__, url_prefix="")
 
 
-def _lyrics_payload(record=None, *, cached=False, status=None, source_kind=None):
+def _lyrics_payload(
+    record=None,
+    *,
+    cached=False,
+    status=None,
+    source_kind=None,
+    audio_duration=None,
+    offset_ms=None,
+):
+    """What a player needs to show lyrics, and whether their timing can be trusted.
+
+    ``timing_safe`` says whether timed lines can be followed as they are: the
+    upload is a class whose timeline matches the album's, and the recording is
+    as long as the one the lines were written for.
+
+    The two failures are answered differently. An upload whose class does not
+    vouch for its timeline (a lyric video, anything unverified) is no evidence
+    of a mismatch, only of not knowing, so its timed lines are withheld and the
+    plain text shows — asking every such stream to be aligned by hand would be
+    noise. A recording of another length *is* evidence, so its lines are sent,
+    flagged, for the listener to line up with a tap. ``offset_ms`` is that
+    correction, if one was made.
+    """
+    from shared.lyrics import has_text, synced_timing_fits
     from shared.music_identity import synced_lyrics_safe
 
     if status is None:
-        status = (
-            "ready"
-            if record and (record.get("synced") or record.get("plain") or record.get("instrumental"))
-            else "not_found"
-        )
-    synced = record.get("synced") if record else None
-    timing_safe = source_kind is None or synced_lyrics_safe(str(source_kind))
-    payload = {
+        status = "ready" if has_text(record) else "not_found"
+    synced_duration = record.get("synced_duration") if record else None
+    vouched = source_kind is None or synced_lyrics_safe(str(source_kind))
+    timing_safe = vouched and synced_timing_fits(audio_duration, synced_duration)
+    return {
         "status": status,
-        "synced": synced if timing_safe else None,
+        "synced": record.get("synced") if record and vouched else None,
         "plain": record.get("plain") if record else None,
         "instrumental": bool(record and record.get("instrumental")),
         "cached": cached,
         "pending": status == "pending",
+        "timing_safe": timing_safe,
+        "synced_duration": synced_duration,
+        "offset_ms": offset_ms,
     }
-    if source_kind is not None:
-        payload["timing_safe"] = timing_safe
-    return payload
 
 
 def _playlist_mutation_response(metadata, status: str = "success"):
@@ -380,7 +400,7 @@ def get_track_lyrics(track_id):
     """Lyrics for a library track: served from the local cache when present,
     otherwise fetched from LRCLIB and cached (including not-found results)."""
     from shared.database import instance_db
-    from shared.lyrics import poll_lyrics
+    from shared.lyrics import audio_key, poll_lyrics, predates_timing_length, settle_upgrade, store
 
     api = _get_api()
     lib, _, _ = api["get_core"]()
@@ -389,26 +409,40 @@ def get_track_lyrics(track_id):
         return jsonify({"error": "Track not found"}), 404
 
     db = instance_db()
-    refresh = request.args.get("refresh") in ("1", "true")
-    if not refresh:
-        cached = db.get_lyrics(track_id)
-        if cached:
-            return jsonify(_lyrics_payload(cached, cached=True))
+    offset_ms = db.get_lyrics_offset(audio_key(getattr(track, "youtube_id", None), track.id))
 
-    lookup_status, record = poll_lyrics(track.artist, track.title, track.album, track.duration)
+    def payload(record, cached=False):
+        return jsonify(_lyrics_payload(record, cached=cached, audio_duration=track.duration, offset_ms=offset_ms))
+
+    refresh = request.args.get("refresh") in ("1", "true")
+    cached = None if refresh else db.get_lyrics(track_id)
+    if cached and not predates_timing_length(cached):
+        return payload(cached, cached=True)
+
+    # Lines that predate the timing length are looked up once more. They are
+    # served while that runs, and whenever the provider cannot answer; the
+    # player therefore does not come back for the answer, so the lookup
+    # settles the row itself when it lands.
+    settle = None
+    if cached:
+        def settle(found, held=cached):
+            if found is not None:
+                settle_upgrade(db, track_id, held, found)
+    lookup_status, record = poll_lyrics(track.artist, track.title, track.album, track.duration, on_complete=settle)
     if lookup_status != "complete":
+        if cached:
+            return payload(cached, cached=True)
         return jsonify(_lyrics_payload(status="pending")), 202
     if record is None:
+        if cached:
+            return payload(cached, cached=True)
         # Provider unreachable: don't cache, let a later request retry.
         return jsonify(_lyrics_payload(status="unavailable"))
-    db.set_lyrics(
-        track_id,
-        synced=record["synced"],
-        plain=record["plain"],
-        instrumental=record["instrumental"],
-        source=record["source"],
-    )
-    return jsonify(_lyrics_payload(record))
+    if cached:
+        served = settle_upgrade(db, track_id, cached, record)
+        return payload(served, cached=served is not record)
+    store(db, track_id, record)
+    return payload(record)
 
 
 @library_bp.route("/api/lyrics", methods=["GET"])
@@ -418,12 +452,13 @@ def get_lyrics_by_metadata():
     Saved previews may opt into a persistent cache keyed by their normalized
     metadata; cold provider work runs through the bounded coordinator."""
     from shared.database import instance_db
-    from shared.lyrics import metadata_cache_key, poll_lyrics
+    from shared.lyrics import audio_key, metadata_cache_key, poll_lyrics, store
 
     artist = (request.args.get("artist") or "").strip()
     title = (request.args.get("title") or "").strip()
     album = (request.args.get("album") or "").strip() or None
     source_kind = (request.args.get("source_kind") or "").strip() or None
+    youtube_id = (request.args.get("youtube_id") or "").strip() or None
     try:
         duration = int(request.args.get("duration") or 0) or None
     except ValueError:
@@ -434,11 +469,18 @@ def get_lyrics_by_metadata():
     persist = request.args.get("persist") in ("1", "true")
     refresh = request.args.get("refresh") in ("1", "true")
     db = instance_db()
+    offset_ms = db.get_lyrics_offset(audio_key(youtube_id))
+
+    def payload(record, cached=False):
+        return jsonify(_lyrics_payload(
+            record, cached=cached, source_kind=source_kind, audio_duration=duration, offset_ms=offset_ms,
+        ))
+
     cache_key = metadata_cache_key(artist, title, album, duration)
     if persist and not refresh:
         cached = db.get_lyrics(cache_key)
         if cached:
-            return jsonify(_lyrics_payload(cached, cached=True, source_kind=source_kind))
+            return payload(cached, cached=True)
 
     lookup_status, record = poll_lyrics(artist, title, album, duration)
     if lookup_status != "complete":
@@ -446,14 +488,52 @@ def get_lyrics_by_metadata():
     if record is None:
         return jsonify(_lyrics_payload(status="unavailable"))
     if persist:
-        db.set_lyrics(
-            cache_key,
-            synced=record["synced"],
-            plain=record["plain"],
-            instrumental=record["instrumental"],
-            source=record["source"],
-        )
-    return jsonify(_lyrics_payload(record, source_kind=source_kind))
+        store(db, cache_key, record)
+    return payload(record)
+
+
+#: Further than any intro or coda a cut adds; anything beyond is a typo.
+_MAX_LYRICS_OFFSET_MS = 10 * 60 * 1000
+
+
+@library_bp.route("/api/lyrics/offset", methods=["PUT"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("lyrics_offset", limit=60, window_sec=60)
+def set_lyrics_offset():
+    """Line a recording's lyrics up by hand: ``offset_ms`` later (or earlier,
+    negative) than their timing says. ``null`` forgets the correction.
+
+    Names the audio by ``track_id`` (a library track) or ``youtube_id`` (a
+    stream). The offset belongs to that audio for everyone on this engine:
+    it is a fact about the recording, not a preference.
+    """
+    from shared.database import instance_db
+    from shared.lyrics import audio_key
+
+    data = request.get_json(silent=True) or {}
+    raw = data.get("offset_ms")
+    if raw is None:
+        offset_ms = None
+    elif isinstance(raw, bool) or not isinstance(raw, (int, float)) or abs(raw) > _MAX_LYRICS_OFFSET_MS:
+        return jsonify({"error": "offset_ms must be milliseconds within ten minutes, or null"}), 400
+    else:
+        offset_ms = int(round(raw))
+
+    track_id = str(data.get("track_id") or "").strip()
+    if track_id:
+        api = _get_api()
+        lib, _, _ = api["get_core"]()
+        track = api["get_track_by_id"](lib, track_id)
+        if not track:
+            return jsonify({"error": "Track not found"}), 404
+        key = audio_key(getattr(track, "youtube_id", None), track.id)
+    else:
+        key = audio_key(str(data.get("youtube_id") or "").strip() or None)
+    if not key:
+        return jsonify({"error": "track_id or a valid youtube_id is required"}), 400
+
+    instance_db().set_lyrics_offset(key, offset_ms)
+    return jsonify({"offset_ms": offset_ms})
 
 
 @library_bp.route("/api/library/track-labels/<track_id>/metadata", methods=["POST"])

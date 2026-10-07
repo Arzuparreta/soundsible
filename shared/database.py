@@ -117,6 +117,9 @@ _YT_CACHE_COLUMNS = {
     "candidates_json": "TEXT",
     "failure_state": "TEXT",
     "verified_at": "TIMESTAMP",
+    # The running time the resolution was made for. None: made without one,
+    # so a caller that knows it may correct the row for everyone.
+    "requested_duration": "INTEGER",
 }
 
 _PAIRING_COLUMNS = {
@@ -722,6 +725,23 @@ class DatabaseManager:
                 instrumental INTEGER NOT NULL DEFAULT 0,
                 source TEXT,
                 checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(track_lyrics)")}
+        if "synced_duration" not in columns:
+            # The running time the timed lines were written against, so a
+            # recording of another length can be told apart from the one they
+            # fit. Older rows have none and are re-resolved when next read.
+            conn.execute("ALTER TABLE track_lyrics ADD COLUMN synced_duration INTEGER")
+        # How far a recording's timeline sits from its lyrics' timing, set by a
+        # listener. Keyed by the audio (a video, or a file with no video), not by
+        # the lyrics row, so a refreshed lookup keeps it and every copy of the
+        # same upload shares it.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS lyrics_offsets (
+                audio_key TEXT PRIMARY KEY,
+                offset_ms INTEGER NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
@@ -2201,7 +2221,8 @@ class DatabaseManager:
             conn.row_factory = sqlite3.Row
             row = conn.execute("""
                 SELECT youtube_id as id, duration, thumbnail, webpage_url, channel, artist, title,
-                       confidence, confidence_reason, candidates_json, failure_state, verified_at
+                       confidence, confidence_reason, candidates_json, failure_state, verified_at,
+                       requested_duration
                 FROM youtube_resolution_cache
                 WHERE artist = ? AND title = ?
             """, (artist, title)).fetchone()
@@ -2234,9 +2255,9 @@ class DatabaseManager:
                 conn.execute("""
                     INSERT INTO youtube_resolution_cache
                     (artist, title, youtube_id, duration, thumbnail, webpage_url, channel,
-                     confidence, confidence_reason, candidates_json, failure_state, verified_at,
-                     last_updated)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                     confidence, confidence_reason, candidates_json, failure_state, requested_duration,
+                     verified_at, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     ON CONFLICT(artist, title) DO UPDATE SET
                     youtube_id=excluded.youtube_id,
                     duration=excluded.duration,
@@ -2247,6 +2268,7 @@ class DatabaseManager:
                     confidence_reason=excluded.confidence_reason,
                     candidates_json=excluded.candidates_json,
                     failure_state=excluded.failure_state,
+                    requested_duration=excluded.requested_duration,
                     verified_at=excluded.verified_at,
                     last_updated=CURRENT_TIMESTAMP
                 """, (
@@ -2261,6 +2283,7 @@ class DatabaseManager:
                     result.get("confidence_reason"),
                     candidates_json,
                     result.get("failure_state"),
+                    result.get("requested_duration"),
                 ))
                 conn.execute("COMMIT")
             except Exception as e:
@@ -2355,7 +2378,7 @@ class DatabaseManager:
     # Note: Lyrics cache
 
     _LYRICS_NEGATIVE_TTL_SEC = 7 * 24 * 3600
-    _LYRICS_RESOLVER_SOURCE = "lrclib:v4"
+    _LYRICS_RESOLVER_SOURCE = "lrclib:v5"
 
     def get_lyrics(self, track_id: str) -> Optional[Dict[str, Any]]:
         """Return the cached lyrics record for a track, or None if missing.
@@ -2366,7 +2389,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
-                "SELECT synced, plain, instrumental, source, checked_at FROM track_lyrics WHERE track_id = ?",
+                "SELECT synced, plain, instrumental, source, synced_duration, checked_at FROM track_lyrics WHERE track_id = ?",
                 (track_id,),
             ).fetchone()
             if not row:
@@ -2400,6 +2423,7 @@ class DatabaseManager:
         plain: Optional[str] = None,
         instrumental: bool = False,
         source: Optional[str] = None,
+        synced_duration: Optional[int] = None,
     ) -> None:
         """Upsert the lyrics record for a track (also used for negative caching)."""
         if not track_id:
@@ -2409,21 +2433,51 @@ class DatabaseManager:
             try:
                 conn.execute(
                     """
-                    INSERT INTO track_lyrics (track_id, synced, plain, instrumental, source, checked_at)
-                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO track_lyrics (track_id, synced, plain, instrumental, source, synced_duration, checked_at)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(track_id) DO UPDATE SET
                         synced=excluded.synced,
                         plain=excluded.plain,
                         instrumental=excluded.instrumental,
                         source=excluded.source,
+                        synced_duration=excluded.synced_duration,
                         checked_at=CURRENT_TIMESTAMP
                     """,
-                    (track_id, synced, plain, 1 if instrumental else 0, source),
+                    (track_id, synced, plain, 1 if instrumental else 0, source, synced_duration),
                 )
                 conn.execute("COMMIT")
             except Exception as e:
                 conn.execute("ROLLBACK")
                 logger.warning("Error caching lyrics: %s", e)
+
+    def get_lyrics_offset(self, audio_key: str) -> Optional[int]:
+        """The listener's lyrics offset for this audio, in milliseconds."""
+        if not audio_key:
+            return None
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT offset_ms FROM lyrics_offsets WHERE audio_key = ?", (audio_key,)
+            ).fetchone()
+            return int(row[0]) if row else None
+
+    def set_lyrics_offset(self, audio_key: str, offset_ms: Optional[int]) -> None:
+        """Store an offset for this audio, or forget it with None."""
+        if not audio_key:
+            return
+        with self._get_connection() as conn:
+            if offset_ms is None:
+                conn.execute("DELETE FROM lyrics_offsets WHERE audio_key = ?", (audio_key,))
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO lyrics_offsets (audio_key, offset_ms, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(audio_key) DO UPDATE SET
+                        offset_ms=excluded.offset_ms,
+                        updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (audio_key, int(offset_ms)),
+                )
 
     # Note: Agent token storage
 

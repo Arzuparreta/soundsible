@@ -10,5 +10,6 @@ export function LyricsPanel(props: { scrollRef?: (element: HTMLDivElement) => vo
     inLibrary: track => state.library.some(row => row.id === track.id),
     saved: track => { const keys = new Set(trackKeys(track)); return state.saved.some(entry => entry.keys.some(key => keys.has(key))); },
     seek: seconds => actions.seek(seconds),
+    mediaDuration: () => state.playback.duration || undefined,
   }} />;
 }
