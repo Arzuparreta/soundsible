@@ -1,3 +1,13 @@
+/* The panel's slot in its surface: the scrolling lines, and over their foot
+   the timing notice when it is up. */
+.frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .body {
   position: relative;
   flex: 1;
@@ -136,20 +146,27 @@
 }
 }
 
-/* Asking for a tap on the line being sung. Sticky, because "Adjust timing"
-   is reached at the end of the lines and the line being sung is elsewhere. */
+/* Asking for a tap on the line being sung. It floats over the foot of the
+   panel, outside the scroller, so it stays put wherever the sung line is
+   scrolled to and whatever padding a variant gives the lines — the top corner
+   belongs to the cover/lyrics toggle. Opaque, because the lines pass under it;
+   the list's bottom room lets the last of them scroll clear of it. */
 .timing {
-  position: sticky;
-  top: 0;
+  position: absolute;
+  right: var(--space-md);
+  bottom: var(--space-md);
+  left: var(--space-md);
   z-index: 1;
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  margin: 0 0 var(--space-md);
+  max-width: 560px;
+  margin-inline: auto;
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--stage-line-strong);
   border-radius: var(--radius-md);
-  background: var(--surface-raised);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-pop);
   color: var(--ink-primary);
   font-size: var(--text-caption);
 }
@@ -180,9 +197,4 @@
   align-self: flex-start;
   margin-top: var(--space-lg);
   color: var(--ink-secondary);
-}
-
-.stage .timing {
-  max-width: 920px;
-  margin-inline: auto;
 }

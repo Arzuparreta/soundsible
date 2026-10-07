@@ -271,92 +271,94 @@ export function LyricsPanelView(props: {
   });
 
   return (
-    <div
-      classList={{ [styles.body]: true, [styles.stage]: props.variant === 'stage' }}
-      data-lyrics-scroll=""
-      ref={(element) => {
-        bodyEl = element;
-        props.scrollRef?.(element);
-      }}
-      onScroll={onScroll}
-    >
-      <Show when={current()} fallback={<p class={styles.hint}>{t('lyricsPanel.noTrack')}</p>}>
-        <Show when={!lyrics.loading} fallback={<div class={styles.loading} aria-label={t('lyricsPanel.loading')} />}>
-          <Show when={!lyrics.error} fallback={<p class={styles.hint}>{t('lyricsPanel.error')}</p>}>
-            <Show
-              when={lyrics()?.status !== 'unavailable'}
-              fallback={
-                <div class={styles.unavailable} role="status">
-                  <p class={styles.hint}>{t('lyricsPanel.unavailable')}</p>
-                  <button type="button" onClick={() => void refetch()}>
-                    {t('lyricsPanel.retry')}
-                  </button>
-                </div>
-              }
-            >
-              <Show when={!lyrics()?.instrumental} fallback={<p class={styles.hint}>{t('lyricsPanel.instrumental')}</p>}>
-                <Show when={!empty()} fallback={<p class={styles.hint}>{t('lyricsPanel.notFound')}</p>}>
-                  <Show
-                    when={parsed().length > 0}
-                    fallback={<pre class={styles.plain}>{lyrics()?.plain ?? ''}</pre>}
-                  >
-                    <Show when={aligning()}>
-                      <div class={styles.timing} role="status" data-lyrics-timing="">
-                        <p>{timingTrusted() ? t('lyricsPanel.adjustHint') : t('lyricsPanel.alignHint')}</p>
-                        <Show when={adjusting() || offsetMs() !== null}>
-                          <div class={styles.timingActions}>
-                            <Show when={adjusting()}>
-                              <button type="button" onClick={() => setAdjusting(false)}>{t('lyricsPanel.cancelAdjust')}</button>
-                            </Show>
-                            <Show when={offsetMs() !== null}>
-                              <button type="button" onClick={() => void saveOffset(null)}>{t('lyricsPanel.resetTiming')}</button>
-                            </Show>
-                          </div>
+    <div class={styles.frame}>
+      <div
+        classList={{ [styles.body]: true, [styles.stage]: props.variant === 'stage' }}
+        data-lyrics-scroll=""
+        ref={(element) => {
+          bodyEl = element;
+          props.scrollRef?.(element);
+        }}
+        onScroll={onScroll}
+      >
+        <Show when={current()} fallback={<p class={styles.hint}>{t('lyricsPanel.noTrack')}</p>}>
+          <Show when={!lyrics.loading} fallback={<div class={styles.loading} aria-label={t('lyricsPanel.loading')} />}>
+            <Show when={!lyrics.error} fallback={<p class={styles.hint}>{t('lyricsPanel.error')}</p>}>
+              <Show
+                when={lyrics()?.status !== 'unavailable'}
+                fallback={
+                  <div class={styles.unavailable} role="status">
+                    <p class={styles.hint}>{t('lyricsPanel.unavailable')}</p>
+                    <button type="button" onClick={() => void refetch()}>
+                      {t('lyricsPanel.retry')}
+                    </button>
+                  </div>
+                }
+              >
+                <Show when={!lyrics()?.instrumental} fallback={<p class={styles.hint}>{t('lyricsPanel.instrumental')}</p>}>
+                  <Show when={!empty()} fallback={<p class={styles.hint}>{t('lyricsPanel.notFound')}</p>}>
+                    <Show
+                      when={parsed().length > 0}
+                      fallback={<pre class={styles.plain}>{lyrics()?.plain ?? ''}</pre>}
+                    >
+                      <div class={styles.synced}>
+                        <For each={parsed()}>
+                          {(line, i) => {
+                            const tap = createResponsiveTap({
+                              onTap: () => {
+                                // The tap that seeks also set a touch hold; drop it
+                                // so the view follows the new position immediately.
+                                holdUntil = 0;
+                                if (aligning()) void alignTo(line.time);
+                                else props.playback.seek(line.time + shift());
+                              },
+                            });
+                            return (
+                              <button
+                                type="button"
+                                aria-current={i() === activeIdx() ? 'true' : undefined}
+                                data-line={i()}
+                                data-pressable
+                                classList={{
+                                  [styles.line]: true,
+                                  [styles.lineActive]: i() === activeIdx(),
+                                  [styles.linePast]: i() < activeIdx(),
+                                }}
+                                {...tap}
+                              >
+                                {line.text || '♪'}
+                              </button>
+                            );
+                          }}
+                        </For>
+                        <Show when={!aligning()}>
+                          <button type="button" class={styles.adjust} onClick={() => setAdjusting(true)}>
+                            {t('lyricsPanel.adjust')}
+                          </button>
                         </Show>
                       </div>
                     </Show>
-                    <div class={styles.synced}>
-                      <For each={parsed()}>
-                        {(line, i) => {
-                          const tap = createResponsiveTap({
-                            onTap: () => {
-                              // The tap that seeks also set a touch hold; drop it
-                              // so the view follows the new position immediately.
-                              holdUntil = 0;
-                              if (aligning()) void alignTo(line.time);
-                              else props.playback.seek(line.time + shift());
-                            },
-                          });
-                          return (
-                            <button
-                              type="button"
-                              aria-current={i() === activeIdx() ? 'true' : undefined}
-                              data-line={i()}
-                              data-pressable
-                              classList={{
-                                [styles.line]: true,
-                                [styles.lineActive]: i() === activeIdx(),
-                                [styles.linePast]: i() < activeIdx(),
-                              }}
-                              {...tap}
-                            >
-                              {line.text || '♪'}
-                            </button>
-                          );
-                        }}
-                      </For>
-                      <Show when={!aligning()}>
-                        <button type="button" class={styles.adjust} onClick={() => setAdjusting(true)}>
-                          {t('lyricsPanel.adjust')}
-                        </button>
-                      </Show>
-                    </div>
                   </Show>
                 </Show>
               </Show>
             </Show>
           </Show>
         </Show>
+      </div>
+      <Show when={aligning()}>
+        <div class={styles.timing} role="status" data-lyrics-timing="">
+          <p>{timingTrusted() ? t('lyricsPanel.adjustHint') : t('lyricsPanel.alignHint')}</p>
+          <Show when={adjusting() || offsetMs() !== null}>
+            <div class={styles.timingActions}>
+              <Show when={adjusting()}>
+                <button type="button" onClick={() => setAdjusting(false)}>{t('lyricsPanel.cancelAdjust')}</button>
+              </Show>
+              <Show when={offsetMs() !== null}>
+                <button type="button" onClick={() => void saveOffset(null)}>{t('lyricsPanel.resetTiming')}</button>
+              </Show>
+            </div>
+          </Show>
+        </div>
       </Show>
     </div>
   );
