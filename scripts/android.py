@@ -108,7 +108,8 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
     """
     doctor()
     first = shard is None or shard[0] == 0
-    if (restart_only or live_restart_only) and os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class"):
+    test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class", "")
+    if (restart_only or live_restart_only) and test_filter:
         raise RuntimeError("Restart protocol cannot be combined with a single-class instrumentation filter")
     binary = str(sdk() / "platform-tools/adb")
     devices = [
@@ -133,7 +134,6 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
         with (ANDROID / "build/fixture.log").open("w") as log:
             try:
                 ca_path, certificate, key = create_fixture_tls(Path(temporary))
-                test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class", "")
                 if not restart_only and (not test_filter or any(name in test_filter for name in ("LiveRelayTest", "LiveHostTest", "LiveListenerTest", "LiveUiTest", "LiveHandshakeTest", "LivePollingTest", "LiveResumeTest", "LiveRecoveryTest")) or os.environ.get("SOUNDSIBLE_ANDROID_LIVE_FIXTURE") == "1"):
                     from android_live_fixture import LiveFixture
                     live_fixture = LiveFixture(Path(temporary) / "live", ca_path, certificate, key, log)
@@ -227,7 +227,6 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                             else ()
                         ),
                     )
-                    test_filter = os.getenv("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class")
                     results = (
                         ANDROID / "build/integration-targeted" / re.sub(r"[^A-Za-z0-9_.-]", "_", test_filter)[:100]
                         if test_filter
@@ -300,13 +299,14 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                                 json.dumps({"phase": phase, "tests": 1, "failures": 0, "errors": 0, "skipped": 0}, indent=2)
                                 + "\n"
                             )
-                for screenshot, target in (("soundsible-s1-library.png", "library.png"), ("soundsible-s2-program.png", "program.png")):
-                    try:
-                        adb("pull", f"/sdcard/Download/{screenshot}", str(ANDROID / "build" / target))
-                    except subprocess.CalledProcessError:
-                        # Another shard's test produces this screenshot.
-                        if not shard and not test_filter:
-                            raise
+                if not restart_only and not live_restart_only:
+                    for screenshot, target in (("soundsible-s1-library.png", "library.png"), ("soundsible-s2-program.png", "program.png")):
+                        try:
+                            adb("pull", f"/sdcard/Download/{screenshot}", str(ANDROID / "build" / target))
+                        except subprocess.CalledProcessError:
+                            # Another shard's test produces this screenshot.
+                            if not shard and not test_filter:
+                                raise
             finally:
                 for process in processes:
                     process.terminate()
