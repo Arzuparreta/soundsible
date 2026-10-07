@@ -8,7 +8,7 @@ Estado vigente y forma de trabajar. Lo superado está en
 ## Decisiones vigentes
 
 - Paridad integrada en `main` mediante PR #300, con checks completos aprobados.
-  Preparación de distribución en `feat/android-alpha-release`. El 2026-10-07 el
+  Distribución integrada mediante PR #304 y alpha publicada. El 2026-10-07 el
   usuario autorizó clave nueva y merge/publicación tras cerrar todos los gates.
   No publicar si la APK firmada o la aceptación final fallan.
 - Paridad = paridad de **funciones** con la webapp (alpha). Si la web usa un apaño
@@ -61,28 +61,30 @@ Estado vigente y forma de trabajar. Lo superado está en
 - [x] POST_NOTIFICATIONS: declarado; primera preparación offline pide permiso en Android 13+.
       Conceder/denegar continúa la copia; no se insiste después de denegar.
 - [→] Puente público/App Links: movido a RELEASE_GATES (punto 9). Necesita clave permanente, `assetlinks.json`
-      en la raíz `Arzuparreta.github.io` y APK pública; hoy el puente no pasa nada a Android. Las invitaciones
+      en la raíz `Arzuparreta.github.io` y APK pública; el puente público ofrece apertura Android con la cápsula compartida. Las invitaciones
       viven en el dominio de cada servidor (no verificable): su camino es SEND, ya aceptado (S2at).
 - [x] Negativos DJ: el fallo persistente de los streams (503 en todos, ambos platos) ya está en `DjNetworkTest`:
       error visible sin cuelgue, misma ocurrencia y recuperación con reintento explícito.
 - [x] Negativos Auto: el socket del coche quedaba muerto al agotar reintentos (fallo real, corregido con
       enfriamiento de 30 s como S2aq). Etiquetas del programa activo: `CarDjTest`/`CarEventsTest`.
 - [x] Regresión local Core (1792), UI (1660), browser4 completos y restart offline/Live (4 fases).
-- [→] Suite principal final en CI: la ejecución local completa (211 casos) descubrió fallos de fixture
+- [x] Suite principal final en CI: la ejecución local completa (211 casos) descubrió fallos de fixture
       y reloj compartido; corregidos y revalidados por radio de impacto (EVIDENCE).
-      El resultado vigente se consulta en los checks de la PR; debe quedar en verde antes de cerrar la entrega.
-- [x] [PR #300](https://github.com/Arzuparreta/soundsible/pull/300) abierta con `impact:minor`,
-      base `origin/main` verificada y head remoto coincidente; sin automerge ni merge.
+      CI de la PR #304 y del main publicado (88033c20) aprobada: build/JVM/lint y cuatro shards.
+- [x] [PR #300](https://github.com/Arzuparreta/soundsible/pull/300) integrada con `impact:minor`,
+      base `origin/main` verificada y checks aprobados.
       Crédito `Co-authored-by` a emrothenberg en el commit de implementación y en la PR.
 - [x] Clave permanente creada fuera de Git, backup en disco independiente probado;
       secrets en entorno `android-release`, restringido a `main`.
 - [x] Distribución implementada y aceptada localmente: APK release firmada,
       actualización conservando cuenta/ajustes/offline, negativos de instalación,
       arranque/PCM offline y App Links fríos/calientes. Evidencia en EVIDENCE.
-- [ ] Publicación: integrar la PR #304 con checks completos y ejecutar
-      `Android alpha release` desde main. El workflow repite aceptación de su APK
-      exacta y publica sólo si todos los gates pasan. Estado público: canal
-      `android-alpha/*` en GitHub Releases, nunca artifacts debug ni latest global.
+- [x] Publicación: [primera alpha pública](https://github.com/Arzuparreta/soundsible/releases/tag/android-alpha/0.20.0-2-88033c20e895).
+      Workflow de release 37623396866 aprobado sobre main `88033c20`; APK exacta
+      instalada y aceptada antes de publicar. Canal `android-alpha/*` independiente,
+      prerelease, latest global conservado. Descarga pública en la web ES/EN.
+      Actualización desde esa APK pública ensayada localmente con candidato privado;
+      cuenta/ajustes/copias offline conservados. Evidencia en EVIDENCE.
 - [x] Asociación de dominio publicada por PR Arzuparreta.github.io #11;
       comprobada respuesta HTTPS 200/application-json con el certificado correcto.
 

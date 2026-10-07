@@ -5,7 +5,7 @@
 `android-build.yml` sólo produce artifacts debug y evidencia. No crea GitHub
 Releases, tags, APK firmada de distribución, actualizador ni una ficha Google
 Play. No cambiar esto como efecto secundario de completar conexión o audio.
-El package debug `.dev` evita reemplazar una futura instalación pública.
+El package debug `.dev` evita reemplazar la instalación pública.
 
 El público puede acceder a artifacts de un repositorio público; su etiqueta de
 desarrollo y caducidad no equivalen a privacidad. Las pruebas usan fixtures y
@@ -28,6 +28,13 @@ desde `main` y en el entorno restringido `android-release`. El tooling
 aceptación de actualización/offline/App Links antes de publicar. La referencia
 pública de firma es [SIGNING.json](SIGNING.json); capacidades y límites:
 [CAPABILITIES.json](CAPABILITIES.json). Instrucciones: [ALPHA](ALPHA.md).
+
+## Estado público (2026-10-07)
+
+La [primera alpha](https://github.com/Arzuparreta/soundsible/releases/tag/android-alpha/0.20.0-2-88033c20e895)
+está publicada como prerelease independiente. CI completa y aceptación de su APK
+exacta aprobadas; latest global conservado. Instalación y límites: [ALPHA](ALPHA.md).
+La aceptación en teléfono, Bluetooth y coche sigue pendiente para beta.
 
 ## Primera alpha
 
