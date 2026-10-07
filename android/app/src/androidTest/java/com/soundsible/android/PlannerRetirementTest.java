@@ -68,15 +68,16 @@ public class PlannerRetirementTest {
             String owner = web.evaluate(scenario, "window.__retirementState.programToken");
             // Seeding does not notify the app: refresh until the rows exist, so the UI steps below
             // cannot spend the delayed plan's window waiting for the list.
+            // The library remembers its last tab between cases and the track rows only exist on Songs.
             // A refresh already running ignores another click, so ask again until the rows are there.
             long rowsUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(40);
             while (!"true".equals(web.evaluate(scenario, "!!document.querySelector('[data-browse-track-id=\"member-radio-0\"]')"))) {
                 assertTrue("Seeded rows never reached the library list", System.nanoTime() < rowsUntil);
-                web.evaluate(scenario, "Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Refresh')?.click()");
+                web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] nav button')).find(b=>b.textContent==='Songs')?.click();Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Refresh')?.click()");
                 Thread.sleep(2000);
             }
             int delivered = api(connection, origin, null, "/__fixture/radio-stats", "GET", null).getInt("delivered");
-            api(connection, origin, null, "/__fixture/radio-delay", "POST", new JSONObject().put("seconds", 12)); // Deleting through the UI must fit inside the delay on a loaded runner.
+            api(connection, origin, null, "/__fixture/radio-delay", "POST", new JSONObject().put("seconds", 5));
             command(scenario, mode.equals("radio") ? "action:'radio',enabled:true,profile:'balanced'" : "action:'autoplay',enabled:true");
             JSONObject stats; long planSeen = System.nanoTime(); long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
             do {
@@ -125,7 +126,7 @@ public class PlannerRetirementTest {
             try {
                 api(connection, origin, null, "/__fixture/radio-delay", "POST", new JSONObject().put("seconds", 0));
                 if (cookie != null && previous != null) api(connection, origin, cookie, "/api/discovery/settings", "PATCH", new JSONObject().put("autoplay_enabled", previous));
-                long cleanupUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+                long cleanupUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
                 while (api(connection, origin, null, "/__fixture/radio-stats", "GET", null).getInt("pending") > 0) {
                     assertTrue("Fixture delayed response must drain before next case", System.nanoTime() < cleanupUntil); Thread.sleep(50);
                 }
