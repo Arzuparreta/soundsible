@@ -19,11 +19,20 @@ class EnginePlugin : Plugin() {
     private val namespace = java.util.UUID.randomUUID().toString()
     private val ownedRequests = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val executor = Executors.newFixedThreadPool(4)
+    @Volatile private var closed = false
     private var socket: Socket? = null
 
     override fun load() {
         connection = EngineConnection.shared(context)
         connection.onReset = { stopSocket() }
+    }
+    /** Runs `work` off the bridge thread. The WebView can still deliver a call
+     * after `handleOnDestroy` shut the pool down; executing it then threw
+     * RejectedExecutionException on the bridge thread and crashed the app. */
+    private fun dispatch(call: PluginCall, work: () -> Unit): Boolean {
+        if (!closed) try { executor.execute { work() }; return true } catch (_: java.util.concurrent.RejectedExecutionException) {}
+        call.reject("The engine bridge is closed.", "ENGINE_CLOSED")
+        return false
     }
     private fun result() = JSObject().put("origin", connection.origin).put("generation", connection.generation)
     @PluginMethod fun state(call: PluginCall) { call.resolve(result()) }
@@ -46,7 +55,7 @@ class EnginePlugin : Plugin() {
         }
     }
     @PluginMethod fun configure(call: PluginCall) {
-        executor.execute {
+        dispatch(call) {
             try { connection.configure(call.getString("origin") ?: ""); call.resolve(result()) }
             catch (_: Exception) { call.reject("Use an HTTPS origin or HTTP on a private network, without path or credentials.", "INVALID_SERVER") }
         }
@@ -60,7 +69,7 @@ class EnginePlugin : Plugin() {
         val epoch = call.getInt("generation")?.toLong() ?: call.getLong("generation") ?: -1L
         val id = namespace + ":" + (call.getString("id") ?: "")
         ownedRequests.add(id)
-        executor.execute {
+        val queued = dispatch(call) {
             try {
                 val method = call.getString("method") ?: "GET"
                 val headersObj = call.getObject("headers") ?: JSObject()
@@ -99,6 +108,7 @@ class EnginePlugin : Plugin() {
             } catch (_: Exception) { call.reject("The server could not be reached or the session changed.", "NETWORK_OR_STALE") }
             finally { ImportFiles.finish(id); ownedRequests.remove(id) }
         }
+        if (!queued) ownedRequests.remove(id)
     }
     @PluginMethod fun events(call: PluginCall) {
         val epoch = call.getInt("generation")?.toLong() ?: call.getLong("generation") ?: -1L
@@ -129,6 +139,7 @@ class EnginePlugin : Plugin() {
     @PluginMethod fun stopEvents(call: PluginCall) { stopSocket(); call.resolve() }
     @Synchronized private fun stopSocket() { socket?.off(); socket?.disconnect(); socket = null }
     override fun handleOnDestroy() {
+        closed = true
         stopSocket(); connection.onReset = {}
         ownedRequests.forEach { ImportFiles.cancel(it); connection.cancel(it); ImportFiles.finish(it) }; ownedRequests.clear(); executor.shutdownNow()
     }
