@@ -498,7 +498,8 @@ def publish(plan: dict, apk: Path, receipt: dict) -> None:
         )
     )
     notes = ROOT / "docs/android/ALPHA.md"
-    body = notes.read_text() + "\n\nBuild metadata: `android-release.json`. SHA-256: `SHA256SUMS`.\n"
+    marker = (item.get("body") or "").splitlines()[0]
+    body = marker + "\n" + notes.read_text() + "\n\nBuild metadata: `android-release.json`. SHA-256: `SHA256SUMS`.\n"
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md") as file:
         file.write(body)
         file.flush()
@@ -507,6 +508,7 @@ def publish(plan: dict, apk: Path, receipt: dict) -> None:
             "release",
             "upload",
             plan["tag"],
+            "--clobber",
             str(apk),
             str(OUT / "android-release.json"),
             str(OUT / "release-acceptance.json"),
