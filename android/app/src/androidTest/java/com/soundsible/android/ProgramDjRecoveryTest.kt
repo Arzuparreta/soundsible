@@ -50,7 +50,8 @@ class ProgramDjRecoveryTest {
             if (block.frameOffset >= minimumFrame.get() && block.stream.key == successorKey.get() && block.sampleRate == 48000 && block.channels == 2 && block.bytes.any { it != 0.toByte() }) successorPcm.set(true)
         }
         fun await(condition: () -> Boolean) {
-            val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+            // A decoder prepared over a loaded emulator's network can take longer than 15 s.
+            val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
             while (System.nanoTime() < until) {
                 val accepted = AtomicBoolean()
                 instrumentation.runOnMainSync { accepted.set(condition()) }

@@ -58,6 +58,8 @@ class DjContextTest {
                 waitFor("window.__dj.playing")
                 command("action:'pause'")
                 waitFor("!window.__dj.playWhenReady")
+                // The decoders apply a pause asynchronously: the retained position is the settled one.
+                waitFor("(()=>{const p=window.__dj.positionMs;if(p!==window.__pausedPosition){window.__pausedPosition=p;window.__pausedSince=Date.now()}return Date.now()-window.__pausedSince>=400})()")
                 val key = web.evaluate(scenario, "window.__dj.items[window.__dj.index].key")
                 val position = web.evaluate(scenario, "window.__dj.positionMs").toDouble()
                 fun retained() {

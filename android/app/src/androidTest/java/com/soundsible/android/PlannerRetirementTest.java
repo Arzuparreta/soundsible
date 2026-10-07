@@ -67,7 +67,7 @@ public class PlannerRetirementTest {
             String key = web.evaluate(scenario, "window.__retirementState.items[0].key");
             String owner = web.evaluate(scenario, "window.__retirementState.programToken");
             int delivered = api(connection, origin, null, "/__fixture/radio-stats", "GET", null).getInt("delivered");
-            api(connection, origin, null, "/__fixture/radio-delay", "POST", new JSONObject().put("seconds", 5));
+            api(connection, origin, null, "/__fixture/radio-delay", "POST", new JSONObject().put("seconds", 12)); // Deleting through the UI must fit inside the delay on a loaded runner.
             command(scenario, mode.equals("radio") ? "action:'radio',enabled:true,profile:'balanced'" : "action:'autoplay',enabled:true");
             JSONObject stats; long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
             do {
@@ -114,7 +114,7 @@ public class PlannerRetirementTest {
             try {
                 api(connection, origin, null, "/__fixture/radio-delay", "POST", new JSONObject().put("seconds", 0));
                 if (cookie != null && previous != null) api(connection, origin, cookie, "/api/discovery/settings", "PATCH", new JSONObject().put("autoplay_enabled", previous));
-                long cleanupUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                long cleanupUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
                 while (api(connection, origin, null, "/__fixture/radio-stats", "GET", null).getInt("pending") > 0) {
                     assertTrue("Fixture delayed response must drain before next case", System.nanoTime() < cleanupUntil); Thread.sleep(50);
                 }

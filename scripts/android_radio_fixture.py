@@ -54,8 +54,8 @@ def install(app, root, accounts):
         if request.remote_addr != "127.0.0.1" or request.headers.get("X-Android-Fixture") != "isolated":
             return jsonify(error="fixture only"), 403
         value = (request.get_json(silent=True) or {}).get("seconds", 0)
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 5:
-            return jsonify(error="delay must be between zero and five seconds"), 400
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 15:
+            return jsonify(error="delay must be between zero and fifteen seconds"), 400
         with lock:
             control["delay_next"] = float(value)
         return jsonify(ok=True)

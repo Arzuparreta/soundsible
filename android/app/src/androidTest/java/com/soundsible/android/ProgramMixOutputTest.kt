@@ -128,6 +128,7 @@ class ProgramMixOutputTest {
         var rateReturn: ProgramRateReturn? = null
         var audioClient: okhttp3.OkHttpClient? = null
         var fixtureCleaned = false
+        var failed = false
         val playbackFailure = AtomicReference<PlaybackException?>()
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -382,11 +383,16 @@ class ProgramMixOutputTest {
                 assertTrue("Revoked output clock moved", abs(revokedPosition - owner.positionUs()) <= 2000L)
                 assertEquals("false", web.evaluate(scenario, "!!document.querySelector('audio')"))
             }
+        } catch (error: Throwable) {
+            failed = true; throw error
         } finally {
             instrumentation.runOnMainSync { rateReturn?.close(); decoders.forEach { it.release() } }; mix?.close()
             audioClient?.let { it.dispatcher.cancelAll(); it.connectionPool.evictAll(); it.dispatcher.executorService.shutdown() }
             try {
                 if (!fixtureCleaned) cleanFixture(connection, origin)
+            } catch (cleanup: Throwable) {
+                // A cleanup failure must not replace the failure that made cleanup necessary.
+                if (!failed) throw cleanup else println("Fixture cleanup failed after a failing run: $cleanup")
             } finally { connection.clearSession(true) }
         }
     }
