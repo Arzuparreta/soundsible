@@ -195,7 +195,7 @@ export function CollectionControl(props: { entity: SavedEntity; deezerId?: strin
           <Match when={step() === 'downloading'}>
             <button type="button" class={styles.step} data-step="downloading" onClick={details}
               aria-label={t('collectionControl.downloading', { done: arrived(), total: job()?.selected_track_count ?? total() })}>
-              <Spinner size={18} />
+              <Spinner size={18} tone="download" />
               <span class={styles.label}>{arrived()}/{job()?.selected_track_count ?? total()}</span>
             </button>
           </Match>
