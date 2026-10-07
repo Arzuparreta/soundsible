@@ -91,6 +91,7 @@ a car and every accessory are not required to participate.
 | Prueba / Check | Resultado esperado / Expected result |
 | --- | --- |
 | Escucha NORMAL, DJ y Live / NORMAL, DJ and Live listening | Audio y controles correctos, sin cortes inesperados; Live recibido audible / Correct audio and controls, no unexpected gaps; received Live audio audible |
+| Emisión Live desde Android a un oyente remoto / Live publishing from Android to a remote listener | El oyente recibe audio NORMAL y DJ, incluidas transiciones; el volumen local del emisor no altera la emisión / Listener hears NORMAL and DJ audio, including transitions; publisher local volume does not change the broadcast |
 | Pantalla apagada y otra app / Screen off and another app | Continúa el programa y funcionan controles multimedia / Programme continues and media controls work |
 | Llamada o interrupción de audio / Call or audio interruption | Pausa o reduce según el foco y recupera sin audio duplicado / Pauses or ducks according to focus and recovers without duplicate audio |
 | Auriculares y Bluetooth / Headphones and Bluetooth | Controles correctos y desconexión sin reproducción inesperada por altavoz / Correct controls and no unexpected speaker playback on disconnection |
@@ -100,10 +101,10 @@ a car and every accessory are not required to participate.
 | Actualización cuando exista otra alpha / Upgrade when another alpha is available | Instalar encima conserva cuenta, ajustes y copias / Installing over the previous alpha preserves account, settings and copies |
 
 Copia los datos del dispositivo una vez y repite el bloque de prueba para cada
-comprobación, incluidas las no probadas. Separa NORMAL, DJ y Live, y los distintos
+comprobación, incluidas las no probadas. Separa NORMAL, DJ, escucha Live y emisión Live, y los distintos
 accesorios o redes si sus resultados difieren. Añade pasos reproducibles para fallos.
 Copy device details once and repeat the check block for every check, including
-untested ones. Report NORMAL, DJ and Live separately, and separate accessories or
+untested ones. Report NORMAL, DJ, Live listening and Live publishing separately, and separate accessories or
 networks when results differ. Include reproduction steps for failures.
 
 ```text
