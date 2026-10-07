@@ -266,7 +266,6 @@ export function AutoMode(props: {
       surfaceOpen={props.surfaceOpen}
       dragHandle={dragHandle}
       onOpenList={() => props.onPanelChange('route')}
-      listActive={props.panel === 'route'}
       listLabel={t('autoMode.mobile.route')}
       onTrackDragStart={(event, track) => writeAutoTrackTransfer(event, { track })}
       onCarryTrack={(track) => setCarriedTrack({ track })}

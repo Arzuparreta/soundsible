@@ -50,7 +50,6 @@ export function PlayerStage(props: {
   dragHandle?: JSX.Element;
   onCloseSurface?: () => void;
   onOpenList?: () => void;
-  listActive?: boolean;
   listLabel?: string;
   onTrackDragStart?: (event: DragEvent, track: Track) => void;
   onCarryTrack?: (track: Track) => void;
@@ -406,14 +405,9 @@ export function PlayerStage(props: {
                 <div class={styles.actionsBar} data-lyrics-morph="">
                   <Show when={props.onOpenList && state.playback.queue.length > 1}>
                     <button
-                      classList={{
-                        [styles.actBtn]: true,
-                        [styles.mobileQueueToggle]: true,
-                        [styles.actOn]: props.listActive,
-                      }}
+                      classList={{ [styles.actBtn]: true, [styles.mobileQueueToggle]: true }}
                       type="button"
                       aria-label={props.listLabel ?? t('nowPlaying.queue')}
-                      aria-pressed={props.listActive}
                       onClick={props.onOpenList}
                     >
                       <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

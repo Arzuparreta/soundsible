@@ -468,7 +468,13 @@
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+  transition:
+    color var(--dur-short) var(--ease-out),
+    background var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+.actBtn:active {
+  transform: scale(0.92);
 }
 @media (hover: hover) and (pointer: fine) {
 .actBtn:hover {

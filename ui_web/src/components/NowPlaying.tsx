@@ -310,7 +310,6 @@ export function NowPlaying(props: {
                 dragHandle={dragHandle}
                 onCloseSurface={props.onCloseSurface}
                 onOpenList={() => props.onMobilePanelChange('queue')}
-                listActive={props.mobilePanel === 'queue'}
                 listLabel={t('nowPlaying.queue')}
               />
             );
