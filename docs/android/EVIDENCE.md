@@ -84,7 +84,7 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   [CI compartida](https://github.com/Arzuparreta/soundsible/actions/runs/37620771136)
   aprobada, incluyendo tests, lint, seguridad, UI/browser y consistencia de versión.
 - [Workflow de publicación](https://github.com/Arzuparreta/soundsible/actions/runs/37623396866)
-  aprobado. [Alpha pública](https://github.com/Arzuparreta/soundsible/releases/tag/android-alpha/0.20.0-2-88033c20e895),
+  aprobado. [Metadata inmutable de la alpha pública](https://api.github.com/repos/Arzuparreta/soundsible/releases/405757139),
   código público 2, source main `88033c20`, firma permanente y cuatro ABIs.
   SHA-256 APK: `2e243da454af6f6457085a274376e9b955cce0d7e77b3ce5316322cd14d0d4f8`.
   Todos los assets descargados pasan SHA256SUMS. El recibo público confirma

@@ -79,7 +79,7 @@ Estado vigente y forma de trabajar. Lo superado está en
 - [x] Distribución implementada y aceptada localmente: APK release firmada,
       actualización conservando cuenta/ajustes/offline, negativos de instalación,
       arranque/PCM offline y App Links fríos/calientes. Evidencia en EVIDENCE.
-- [x] Publicación: [primera alpha pública](https://github.com/Arzuparreta/soundsible/releases/tag/android-alpha/0.20.0-2-88033c20e895).
+- [x] Publicación: [primera alpha pública](https://arzuparreta.github.io/soundsible.github.io/es/start/#android-title).
       Workflow de release 37623396866 aprobado sobre main `88033c20`; APK exacta
       instalada y aceptada antes de publicar. Canal `android-alpha/*` independiente,
       prerelease, latest global conservado. Descarga pública en la web ES/EN.

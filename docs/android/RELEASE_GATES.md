@@ -31,7 +31,7 @@ pública de firma es [SIGNING.json](SIGNING.json); capacidades y límites:
 
 ## Estado público (2026-10-07)
 
-La [primera alpha](https://github.com/Arzuparreta/soundsible/releases/tag/android-alpha/0.20.0-2-88033c20e895)
+La [primera alpha](https://arzuparreta.github.io/soundsible.github.io/es/start/#android-title)
 está publicada como prerelease independiente. CI completa y aceptación de su APK
 exacta aprobadas; latest global conservado. Instalación y límites: [ALPHA](ALPHA.md).
 La aceptación en teléfono, Bluetooth y coche sigue pendiente para beta.
