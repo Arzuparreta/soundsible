@@ -137,27 +137,42 @@ TIMING_TOLERANCE_SEC = 3
 
 
 def _synced_duration(item: Dict[str, Any], results: Any) -> Optional[int]:
-    """The running time the chosen timed lines were written against.
+    """The running time the chosen timed lines were written against, if LRCLIB agrees on one.
 
-    LRCLIB's durations are typed in by whoever uploads the lyrics, and one row
-    can be off: the same timing is often uploaded once per compilation it
-    appeared on, under a dozen albums. Every row carrying exactly these lines
-    votes, and the median outvotes the odd one out.
+    LRCLIB's durations are typed in by whoever uploads the lyrics, and the same
+    timing is uploaded again and again, once per compilation it appeared on.
+    Those copies vote. A length shorter than the last timed line cannot be the
+    recording's, and is thrown out; of the rest, the tightest cluster speaks
+    for the timing only when most of them sit in it. Copies scattered from 30 s
+    to seven minutes say nothing, and nothing is better than a wrong length:
+    it would mark the very recording these lines were timed for as another cut.
     """
     synced = item.get("syncedLyrics")
     if not synced:
         return None
+    stamps = parse_lrc(synced)
+    last_line_sec = stamps[-1][0] / 1000 if stamps else 0.0
     rows = results if isinstance(results, list) else [item]
-    durations: list[float] = []
+    votes: list[float] = []
     for row in rows:
         if isinstance(row, dict) and row.get("syncedLyrics") == synced:
             try:
                 value = float(row.get("duration"))
             except (TypeError, ValueError):
                 continue
-            if value > 0:
-                durations.append(value)
-    return int(round(median(durations))) if durations else None
+            if value >= last_line_sec and value > 0:
+                votes.append(value)
+    if not votes:
+        return None
+    votes.sort()
+    cluster: list[float] = []
+    for start, low in enumerate(votes):
+        window = [value for value in votes[start:] if value - low <= 2 * TIMING_TOLERANCE_SEC]
+        if len(window) > len(cluster):
+            cluster = window
+    if len(cluster) * 2 <= len(votes):
+        return None
+    return int(round(median(cluster)))
 
 
 def _result_to_record(item: Dict[str, Any], results: Any = None) -> Dict[str, Any]:

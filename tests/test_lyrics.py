@@ -506,17 +506,31 @@ def _album_timed_record():
     }
 
 
-def test_synced_duration_is_the_median_of_rows_carrying_the_same_timing():
+def test_synced_duration_is_where_most_copies_of_the_timing_agree():
     rows = [
-        {"syncedLyrics": "[00:01.00] a", "duration": 235},
-        {"syncedLyrics": "[00:01.00] a", "duration": 236},
+        {"syncedLyrics": "[00:01.00] a\n[03:46.00] z", "duration": 235},
+        {"syncedLyrics": "[00:01.00] a\n[03:46.00] z", "duration": 236},
+        {"syncedLyrics": "[00:01.00] a\n[03:46.00] z", "duration": 236},
         # One uploader typed the length of the music video.
-        {"syncedLyrics": "[00:01.00] a", "duration": 254},
+        {"syncedLyrics": "[00:01.00] a\n[03:46.00] z", "duration": 254},
         {"syncedLyrics": "[00:02.00] other timing", "duration": 300},
     ]
-    record = lyrics_module._result_to_record(rows[2], rows)
+    record = lyrics_module._result_to_record(rows[3], rows)
     assert record["synced_duration"] == 236
     assert lyrics_module._result_to_record({"plainLyrics": "a", "duration": 200}, rows)["synced_duration"] is None
+
+
+def test_synced_duration_is_unknown_when_the_copies_disagree():
+    # The same timing, uploaded with lengths from a ringtone to a mix.
+    lrc = "[00:01.00] a\n[03:46.00] z"
+    rows = [{"syncedLyrics": lrc, "duration": d} for d in (60, 226, 73, 212, 245.4, 193, 251, 439.6, 384.4, 237.2, 240.4, 29.8, 222.9, 232.3, 179)]
+    assert lyrics_module._result_to_record(rows[0], rows)["synced_duration"] is None
+
+
+def test_a_length_shorter_than_the_last_line_cannot_vote():
+    lrc = "[00:01.00] a\n[03:46.00] z"
+    rows = [{"syncedLyrics": lrc, "duration": d} for d in (60, 73, 179, 235)]
+    assert lyrics_module._result_to_record(rows[0], rows)["synced_duration"] == 235
 
 
 def test_synced_timing_fits_only_a_recording_of_the_same_length():
