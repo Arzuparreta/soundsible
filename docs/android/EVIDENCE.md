@@ -68,3 +68,38 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
 - Web pública: PR soundsible.github.io #14 integrada/desplegada; 84 tests de lógica,
   build Astro/check de 114 páginas y browser/accessibility 24/0 en imagen CI.
   No se muestran enlaces Android mientras no exista prerelease con todos los assets.
+
+
+## Alpha pública y revisión final (2026-10-07)
+
+- PR #304 integrada en main `88033c20e8953335e2e06ab1c973ece43f7b5968`.
+  Codex completó la revisión del head final, sin nuevos hallazgos. Se corrigieron
+  los problemas confirmados: base pública real y su harness para actualizaciones,
+  SDK histórico, guarda de main antes de publicar, comparación semántica de
+  copias offline, lint requerido, reinicios dirigidos y payload visible de App Links.
+  El supuesto UnboundLocalError se descartó al comprobar la inicialización existente.
+  Tooling release: 20 tests y Ruff aprobados; snapshot offline: 2 casos aprobados.
+- [CI Android de main](https://github.com/Arzuparreta/soundsible/actions/runs/37620771168):
+  build/JVM/lint y cuatro shards aprobados.
+  [CI compartida](https://github.com/Arzuparreta/soundsible/actions/runs/37620771136)
+  aprobada, incluyendo tests, lint, seguridad, UI/browser y consistencia de versión.
+- [Workflow de publicación](https://github.com/Arzuparreta/soundsible/actions/runs/37623396866)
+  aprobado. [Metadata inmutable de la alpha pública](https://api.github.com/repos/Arzuparreta/soundsible/releases/405757139),
+  código público 2, source main `88033c20`, firma permanente y cuatro ABIs.
+  SHA-256 APK: `2e243da454af6f6457085a274376e9b955cce0d7e77b3ce5316322cd14d0d4f8`.
+  Todos los assets descargados pasan SHA256SUMS. El recibo público confirma
+  actualización preservando cuenta/ajustes/offline, downgrade/firma distinta/APK
+  corrupta rechazados, arranque, PCM offline y App Links con payload frío/caliente.
+  Primera base sintética de código 1; releases posteriores usan la APK pública real.
+  Prerelease pública, sin mover el latest global (release ID 405574473).
+- Ensayo local posterior: candidato privado código 3, sin reserva ni publicación,
+  instalado sobre la APK pública código 2 descargada y sembrada con su propio
+  harness. Todos los flags de aceptación aprobados, incluida conservación de
+  cuenta/ajustes/offline. Logs /tmp/soundsible-alpha-published-upgrade-{plan,build,acceptance}.log.
+- [Web desplegada](https://github.com/Arzuparreta/soundsible.github.io/actions/runs/37624949108):
+  comprobación browser live de descargas/checksums ES/EN, botón nativo Android,
+  cápsula preservada al enviar al reproductor web guardado y cápsula inválida sin
+  acción Android. Capturas /tmp/soundsible-alpha-download-{en,es}.png y
+  /tmp/soundsible-alpha-android-sharing.png.
+- Sin teléfono físico: escucha, Bluetooth, coche y proveedores reales siguen
+  pendientes para beta; esta evidencia automatizada no los sustituye.
