@@ -9,7 +9,20 @@ import org.json.JSONObject
  * is left unset rather than guessed.
  */
 data class ProgramRelease(val albumArtist: String?, val trackNumber: Int?, val discNumber: Int?, val year: Int?) {
+    /** Writes what is known into a queue row or a session track, and nothing else. */
+    fun writeTo(row: JSONObject): JSONObject = row.apply {
+        albumArtist?.let { put("album_artist", it) }
+        trackNumber?.let { put("track_number", it) }
+        discNumber?.let { put("disc_number", it) }
+        year?.let { put("year", it) }
+    }
+
     companion object {
+        /** What a queued item already carries, through Media3's own fields. */
+        fun of(metadata: androidx.media3.common.MediaMetadata) = ProgramRelease(
+            metadata.albumArtist?.toString(), metadata.trackNumber, metadata.discNumber, metadata.releaseYear,
+        )
+
         fun read(row: JSONObject): ProgramRelease {
             val albumArtist = if (row.has("album_artist") && !row.isNull("album_artist")) row.getString("album_artist") else null
             require(albumArtist == null || albumArtist.length <= 4096)

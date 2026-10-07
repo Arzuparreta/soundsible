@@ -27,4 +27,11 @@ class ProgramReleaseTest {
     @Test(expected = IllegalArgumentException::class) fun refusesAnOversizedAlbumArtist() {
         ProgramRelease.read(JSONObject().put("album_artist", "x".repeat(4097)))
     }
+
+    @Test fun travelsThroughADeviceHandoffUnchanged() {
+        val sent = ProgramRelease("Daft Punk", 3, 1, 2001).writeTo(JSONObject().put("id", "A1111111111"))
+        assertEquals(ProgramRelease("Daft Punk", 3, 1, 2001), ProgramRelease.read(JSONObject(sent.toString())))
+        // Nothing known, nothing written: a handoff from an older device reads the same.
+        assertEquals(listOf("id"), ProgramRelease(null, null, null, null).writeTo(JSONObject().put("id", "x")).keys().asSequence().toList())
+    }
 }
