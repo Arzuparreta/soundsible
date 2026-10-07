@@ -71,8 +71,8 @@ public class PlannerRetirementTest {
             // The library remembers its last tab between cases and the track rows only exist on Songs.
             // A refresh already running ignores another click, so ask again until the rows are there.
             long rowsUntil = System.nanoTime() + TimeUnit.SECONDS.toNanos(40);
-            while (!"true".equals(web.evaluate(scenario, "!!document.querySelector('[data-browse-track-id=\"member-radio-0\"]')"))) {
-                assertTrue("Seeded rows never reached the library list", System.nanoTime() < rowsUntil);
+            while (!"true".equals(web.evaluate(scenario, "!!document.querySelector('[data-browse-track-id^=\"member-radio-\"]')"))) {
+                assertTrue("Seeded rows never reached the library list: " + web.evaluate(scenario, "document.body.innerText"), System.nanoTime() < rowsUntil);
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[data-testid=android-library] nav button')).find(b=>b.textContent==='Songs')?.click();Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Refresh')?.click()");
                 Thread.sleep(2000);
             }
