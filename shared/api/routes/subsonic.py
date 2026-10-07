@@ -753,7 +753,7 @@ def get_lyrics():
 def get_lyrics_by_song_id():
     from shared.database import instance_db
 
-    from shared.lyrics import has_text, poll_lyrics, predates_timing_length, store, synced_timing_fits
+    from shared.lyrics import poll_lyrics, predates_timing_length, settle_upgrade, synced_timing_fits
 
     track = _track_or_404(_required("id"))
     db = instance_db()
@@ -765,9 +765,8 @@ def get_lyrics_by_song_id():
     # first call starts it; a later one collects it; the held lines serve both.
     if predates_timing_length(cached):
         status, record = poll_lyrics(track.artist, track.title, track.album, track.duration)
-        if status == "complete" and has_text(record):
-            store(db, track.id, record)
-            cached = record
+        if status == "complete" and record is not None:
+            cached = settle_upgrade(db, track.id, cached, record)
 
     # The listener's correction is applied here rather than sent as the
     # structured `offset`, whose sign clients have read both ways. Without one,

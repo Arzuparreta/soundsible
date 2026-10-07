@@ -361,15 +361,24 @@ def rerank_cached_resolution(
     first caller could not compute.
 
     Returns the record to store in place of `cached`, or None when the time
-    changes nothing. A winner the stored candidates do not include was chosen
-    some other way — by a person, say — and is left alone.
+    changes nothing. The same winner can come back with another confidence —
+    a medium match the time confirms, a high one the time contradicts — and
+    that is a change too: it decides whether a save goes ahead unasked. A
+    winner the stored candidates do not include was chosen some other way —
+    by a person, say — and is left alone.
     """
     candidates = cached.get("candidates") or []
     winner = cached.get("id")
     if not duration_s or not winner or not any(c.get("id") == winner for c in candidates):
         return None
     best, score, reason, ranked = best_candidate(artist, title, duration_s, candidates)
-    if not best or best.get("id") == winner:
+    if not best:
+        return None
+    try:
+        same_score = abs(float(cached.get("confidence")) - score) < 0.001
+    except (TypeError, ValueError):
+        same_score = False
+    if best.get("id") == winner and same_score and cached.get("confidence_reason") == reason:
         return None
     best_id = best.get("id", "")
     return {

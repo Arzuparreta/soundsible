@@ -649,12 +649,32 @@ def test_an_upgrade_lookup_never_loses_lyrics_already_held(monkeypatch, answer):
     instance_db().set_lyrics(
         "video-track", synced="[00:01.00] line", plain="line", instrumental=False, source="lrclib:v4"
     )
-    monkeypatch.setattr(lyrics_module, "fetch_lyrics", MagicMock(return_value=answer))
+    fetch = MagicMock(return_value=answer)
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
+    client = _make_app().test_client()
+    url = "/api/library/tracks/video-track/lyrics"
 
-    body = _get_until_ready(_make_app().test_client(), "/api/library/tracks/video-track/lyrics").get_json()
-    assert body["status"] == "ready"
-    assert body["synced"] == "[00:01.00] line"
-    assert instance_db().get_lyrics("video-track")["synced"] == "[00:01.00] line"
+    # Reads serve the held lines while the lookup runs; read until one has
+    # collected its answer (the coordinator forgets a job once collected).
+    body = client.get(url).get_json()
+    for _ in range(200):
+        if fetch.call_count and not lyrics_module._LOOKUPS._jobs:
+            break
+        body = client.get(url).get_json()
+        time.sleep(0.001)
+    assert fetch.call_count >= 1
+    assert body["status"] == "ready" and body["synced"] == "[00:01.00] line"
+    held = instance_db().get_lyrics("video-track")
+    assert held["synced"] == "[00:01.00] line"
+    if answer is None:
+        # An outage settles nothing: a later read asks again.
+        assert held["source"] == "lrclib:v4"
+    else:
+        # A provider that no longer knows the song is not asked on every play.
+        assert held["source"] == lyrics_module.RESOLVER_SOURCE
+        calls = fetch.call_count
+        client.get(url)
+        assert fetch.call_count == calls
 
 
 def test_deezer_fallback_searches_with_a_plain_query(monkeypatch):

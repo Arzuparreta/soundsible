@@ -182,11 +182,22 @@ def test_rerank_picks_the_cut_that_matches_a_running_time_the_cache_lacked():
     assert {c["id"] for c in reranked["candidates"]} == {"video", "audio", "lyrics"}
 
 
-def test_rerank_changes_nothing_without_a_running_time_or_when_the_winner_stands():
+def test_rerank_changes_nothing_without_a_running_time():
     from shared.resolution_confidence import rerank_cached_resolution
 
     assert rerank_cached_resolution("Artist", "Song", None, _video_and_audio_cache()) is None
-    assert rerank_cached_resolution("Artist", "Song", 251, _video_and_audio_cache()) is None
+
+
+def test_rerank_rescores_a_winner_the_running_time_confirms():
+    from shared.resolution_confidence import rerank_cached_resolution
+
+    # The video stays the answer for its own 251 s, but now on duration evidence.
+    reranked = rerank_cached_resolution("Artist", "Song", 251, _video_and_audio_cache())
+    assert reranked["id"] == "video"
+    assert reranked["confidence_reason"] == "title_artist_duration"
+    assert reranked["confidence"] > 0.67
+    # Asking again with the same time changes nothing more.
+    assert rerank_cached_resolution("Artist", "Song", 251, {**_video_and_audio_cache(), **reranked}) is None
 
 
 def test_rerank_leaves_a_winner_that_was_chosen_outside_the_candidates_alone():

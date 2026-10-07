@@ -211,6 +211,21 @@ def store(db: Any, key: str, record: Dict[str, Any]) -> None:
     )
 
 
+def settle_upgrade(db: Any, key: str, held: Dict[str, Any], found: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Store the answer to a once-only upgrade lookup; returns what to serve.
+
+    A record with something in it replaces what was held. An empty one keeps
+    the held lines but marks them looked up, so a song the provider no longer
+    knows is not looked up again on every play.
+    """
+    if has_text(found):
+        store(db, key, found)
+        return found
+    kept = {**held, "source": RESOLVER_SOURCE, "synced_duration": None}
+    store(db, key, kept)
+    return kept
+
+
 def synced_timing_fits(audio_duration: Any, synced_duration: Any) -> bool:
     """Whether timed lines can follow a recording of this length.
 

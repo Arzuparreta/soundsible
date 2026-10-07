@@ -412,7 +412,7 @@ def get_track_lyrics(track_id):
     """Lyrics for a library track: served from the local cache when present,
     otherwise fetched from LRCLIB and cached (including not-found results)."""
     from shared.database import instance_db
-    from shared.lyrics import has_text, poll_lyrics, predates_timing_length, store
+    from shared.lyrics import poll_lyrics, predates_timing_length, settle_upgrade, store
 
     api = _get_api()
     lib, _, _ = api["get_core"]()
@@ -444,8 +444,9 @@ def get_track_lyrics(track_id):
             return payload(cached, cached=True)
         # Provider unreachable: don't cache, let a later request retry.
         return jsonify(_lyrics_payload(status="unavailable"))
-    if cached and not has_text(record):
-        return payload(cached, cached=True)
+    if cached:
+        served = settle_upgrade(db, track_id, cached, record)
+        return payload(served, cached=served is not record)
     store(db, track_id, record)
     return payload(record)
 
