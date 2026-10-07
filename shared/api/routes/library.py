@@ -79,10 +79,6 @@ def _lyrics_audio_key(youtube_id=None, track_id=None):
     return f"lib:{track_id}" if track_id else None
 
 
-def _lyrics_record_has_text(record):
-    return bool(record and (record.get("synced") or record.get("plain") or record.get("instrumental")))
-
-
 def _playlist_mutation_response(metadata, status: str = "success"):
     """Stable shape for web client: playlists plus library settings (e.g. playlist_covers)."""
     return jsonify({"status": status, "playlists": metadata.playlists, "settings": metadata.settings})
@@ -416,7 +412,7 @@ def get_track_lyrics(track_id):
     """Lyrics for a library track: served from the local cache when present,
     otherwise fetched from LRCLIB and cached (including not-found results)."""
     from shared.database import instance_db
-    from shared.lyrics import RESOLVER_SOURCE, poll_lyrics
+    from shared.lyrics import has_text, poll_lyrics, predates_timing_length, store
 
     api = _get_api()
     lib, _, _ = api["get_core"]()
@@ -432,11 +428,10 @@ def get_track_lyrics(track_id):
 
     refresh = request.args.get("refresh") in ("1", "true")
     cached = None if refresh else db.get_lyrics(track_id)
-    # Timed lines cached by an older resolver do not say what length they were
-    # timed for. They are looked up again in the background; until a later read
-    # collects the answer, and whenever the provider cannot give one, the lines
-    # already held are what this read serves.
-    if cached and (not cached.get("synced") or cached.get("source") == RESOLVER_SOURCE):
+    # Lines that predate the timing length are looked up again in the
+    # background; until a later read collects the answer, and whenever the
+    # provider cannot give one, the lines already held are what this serves.
+    if cached and not predates_timing_length(cached):
         return payload(cached, cached=True)
 
     lookup_status, record = poll_lyrics(track.artist, track.title, track.album, track.duration)
@@ -449,16 +444,9 @@ def get_track_lyrics(track_id):
             return payload(cached, cached=True)
         # Provider unreachable: don't cache, let a later request retry.
         return jsonify(_lyrics_payload(status="unavailable"))
-    if cached and not _lyrics_record_has_text(record):
+    if cached and not has_text(record):
         return payload(cached, cached=True)
-    db.set_lyrics(
-        track_id,
-        synced=record["synced"],
-        plain=record["plain"],
-        instrumental=record["instrumental"],
-        source=record["source"],
-        synced_duration=record.get("synced_duration"),
-    )
+    store(db, track_id, record)
     return payload(record)
 
 
@@ -469,7 +457,7 @@ def get_lyrics_by_metadata():
     Saved previews may opt into a persistent cache keyed by their normalized
     metadata; cold provider work runs through the bounded coordinator."""
     from shared.database import instance_db
-    from shared.lyrics import metadata_cache_key, poll_lyrics
+    from shared.lyrics import metadata_cache_key, poll_lyrics, store
 
     artist = (request.args.get("artist") or "").strip()
     title = (request.args.get("title") or "").strip()
@@ -505,14 +493,7 @@ def get_lyrics_by_metadata():
     if record is None:
         return jsonify(_lyrics_payload(status="unavailable"))
     if persist:
-        db.set_lyrics(
-            cache_key,
-            synced=record["synced"],
-            plain=record["plain"],
-            instrumental=record["instrumental"],
-            source=record["source"],
-            synced_duration=record.get("synced_duration"),
-        )
+        store(db, cache_key, record)
     return payload(record)
 
 

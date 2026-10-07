@@ -117,6 +117,9 @@ _YT_CACHE_COLUMNS = {
     "candidates_json": "TEXT",
     "failure_state": "TEXT",
     "verified_at": "TIMESTAMP",
+    # The running time the resolution was made for. None: made without one,
+    # so a caller that knows it may correct the row for everyone.
+    "requested_duration": "INTEGER",
 }
 
 _PAIRING_COLUMNS = {
@@ -2218,7 +2221,8 @@ class DatabaseManager:
             conn.row_factory = sqlite3.Row
             row = conn.execute("""
                 SELECT youtube_id as id, duration, thumbnail, webpage_url, channel, artist, title,
-                       confidence, confidence_reason, candidates_json, failure_state, verified_at
+                       confidence, confidence_reason, candidates_json, failure_state, verified_at,
+                       requested_duration
                 FROM youtube_resolution_cache
                 WHERE artist = ? AND title = ?
             """, (artist, title)).fetchone()
@@ -2251,9 +2255,9 @@ class DatabaseManager:
                 conn.execute("""
                     INSERT INTO youtube_resolution_cache
                     (artist, title, youtube_id, duration, thumbnail, webpage_url, channel,
-                     confidence, confidence_reason, candidates_json, failure_state, verified_at,
-                     last_updated)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                     confidence, confidence_reason, candidates_json, failure_state, requested_duration,
+                     verified_at, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     ON CONFLICT(artist, title) DO UPDATE SET
                     youtube_id=excluded.youtube_id,
                     duration=excluded.duration,
@@ -2264,6 +2268,7 @@ class DatabaseManager:
                     confidence_reason=excluded.confidence_reason,
                     candidates_json=excluded.candidates_json,
                     failure_state=excluded.failure_state,
+                    requested_duration=excluded.requested_duration,
                     verified_at=excluded.verified_at,
                     last_updated=CURRENT_TIMESTAMP
                 """, (
@@ -2278,6 +2283,7 @@ class DatabaseManager:
                     result.get("confidence_reason"),
                     candidates_json,
                     result.get("failure_state"),
+                    result.get("requested_duration"),
                 ))
                 conn.execute("COMMIT")
             except Exception as e:

@@ -185,6 +185,32 @@ def _result_to_record(item: Dict[str, Any], results: Any = None) -> Dict[str, An
     }
 
 
+def has_text(record: Optional[Dict[str, Any]]) -> bool:
+    """Whether a lyrics record holds anything to show."""
+    return bool(record and (record.get("synced") or record.get("plain") or record.get("instrumental")))
+
+
+def predates_timing_length(record: Optional[Dict[str, Any]]) -> bool:
+    """Timed lines cached by a resolver that did not record their length.
+
+    They are looked up once more, so the length can be checked; until that
+    lookup lands, and if it finds nothing, the lines already held are kept.
+    """
+    return bool(record and record.get("synced") and record.get("source") != RESOLVER_SOURCE)
+
+
+def store(db: Any, key: str, record: Dict[str, Any]) -> None:
+    """Cache a resolved record under a track id or a metadata key."""
+    db.set_lyrics(
+        key,
+        synced=record["synced"],
+        plain=record["plain"],
+        instrumental=record["instrumental"],
+        source=record["source"],
+        synced_duration=record.get("synced_duration"),
+    )
+
+
 def synced_timing_fits(audio_duration: Any, synced_duration: Any) -> bool:
     """Whether timed lines can follow a recording of this length.
 

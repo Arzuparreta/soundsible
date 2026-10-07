@@ -248,6 +248,7 @@ def discovery_save():
         "confidence": score,
         "confidence_reason": reason,
         "candidates": ranked,
+        "requested_duration": duration_s,
     })
 
     level = classify_confidence(score)

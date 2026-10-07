@@ -232,3 +232,34 @@ def test_a_listeners_offset_moves_every_timed_line(tmp_path, monkeypatch):
     structured = harness.ok("getLyricsBySongId", id="tr-t1")["lyricsList"]["structuredLyrics"][0]
     assert structured["synced"] is True
     assert [line["start"] for line in structured["line"]] == [17000, 21000]
+
+
+def test_subsonic_lyrics_from_an_older_resolver_are_looked_up_again(tmp_path, monkeypatch):
+    import time
+    from unittest.mock import MagicMock
+
+    import shared.lyrics as lyrics_module
+    from shared.database import instance_db
+
+    harness = build(tmp_path, monkeypatch, [track("t1", duration=180)])
+    instance_db().set_lyrics(
+        "t1", synced="[00:01.00]First\n[00:05.00]Second", plain=None, instrumental=False, source="lrclib:v4",
+    )
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", MagicMock(return_value={
+        "synced": "[00:01.00]First\n[00:05.00]Second", "plain": None, "instrumental": False,
+        "source": lyrics_module.RESOLVER_SOURCE, "synced_duration": 200,
+    }))
+    lyrics_module._reset_lyrics_jobs_for_tests()
+
+    # Held lines answer at once, still timed: nothing is known against them yet.
+    first = harness.ok("getLyricsBySongId", id="tr-t1")["lyricsList"]["structuredLyrics"][0]
+    assert first["synced"] is True
+    for _ in range(200):
+        if instance_db().get_lyrics("t1")["source"] == lyrics_module.RESOLVER_SOURCE:
+            break
+        harness.ok("getLyricsBySongId", id="tr-t1")
+        time.sleep(0.005)
+    # The refreshed row knows the lines were timed for 200 s, not this 180 s file.
+    later = harness.ok("getLyricsBySongId", id="tr-t1")["lyricsList"]["structuredLyrics"][0]
+    assert later["synced"] is False
+    lyrics_module._reset_lyrics_jobs_for_tests()

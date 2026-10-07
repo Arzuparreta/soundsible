@@ -1270,10 +1270,13 @@ def _resolve_candidates(artist: str, title: str, duration_s: int | None = None) 
 
 
 def cached_resolution(db: DatabaseManager, artist: str, title: str, duration_s: int | None) -> dict[str, Any] | None:
-    """The stored resolution for a song, corrected for a running time it lacked.
+    """The stored resolution for a song, re-ranked for this caller's running time.
 
-    See `rerank_cached_resolution`. A correction is written back, so callers
-    that know no running time stop getting the answer that ignored one.
+    See `rerank_cached_resolution`. A row resolved without a running time is
+    corrected for everyone, so callers that know none stop getting the answer
+    that ignored one. A row resolved for a running time keeps it: another time
+    is another cut of the same title — a radio edit, a stale client — and gets
+    its own answer without overwriting the one stored.
     """
     cached = db.get_cached_resolution(artist, title)
     if not cached:
@@ -1281,7 +1284,9 @@ def cached_resolution(db: DatabaseManager, artist: str, title: str, duration_s: 
     reranked = rerank_cached_resolution(artist, title, duration_s, cached)
     if not reranked:
         return cached
-    db.set_cached_resolution(artist, title, reranked)
+    if cached.get("requested_duration"):
+        return {**cached, **reranked}
+    db.set_cached_resolution(artist, title, {**reranked, "requested_duration": duration_s})
     return db.get_cached_resolution(artist, title) or cached
 
 
@@ -1309,6 +1314,7 @@ def _resolve_candidates_uncached(
             "confidence": score,
             "confidence_reason": reason,
             "candidates": ranked,
+            "requested_duration": duration_s,
         },
     )
 

@@ -206,4 +206,19 @@ def test_cached_resolution_writes_the_correction_back():
     assert cached_resolution(db, "Artist", "Song", None)["id"] == "video"
     assert cached_resolution(db, "Artist", "Song", 235)["id"] == "audio"
     # Callers that know no running time now get the corrected answer too.
-    assert db.get_cached_resolution("Artist", "Song")["id"] == "audio"
+    stored = db.get_cached_resolution("Artist", "Song")
+    assert stored["id"] == "audio" and stored["requested_duration"] == 235
+
+
+def test_a_resolution_made_for_a_running_time_is_not_rewritten_by_another():
+    from shared.api.routes.catalog import cached_resolution
+
+    db = _make_db()
+    # Resolved for the 251 s cut: the video is the right answer for that.
+    db.set_cached_resolution("Artist", "Song", {**_video_and_audio_cache(), "requested_duration": 251})
+
+    # A caller after the album cut gets the album cut...
+    assert cached_resolution(db, "Artist", "Song", 235)["id"] == "audio"
+    # ...without taking the stored answer away from everyone else.
+    stored = db.get_cached_resolution("Artist", "Song")
+    assert stored["id"] == "video" and stored["requested_duration"] == 251
