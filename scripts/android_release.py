@@ -355,7 +355,7 @@ def acceptance(plan: dict, apk: Path) -> dict:
                     sys.executable,
                     str(ROOT / "scripts/android_fixture.py"),
                     "--root",
-                    directory,
+                    str(Path(directory) / "engine"),
                     "--port",
                     "5097",
                     "--run-id",
