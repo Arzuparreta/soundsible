@@ -599,7 +599,7 @@ def test_lyrics_offset_rejects_what_it_cannot_place(monkeypatch):
     assert client.put("/api/lyrics/offset", json={"youtube_id": "AbCdEfGhIjK", "offset_ms": 11 * 60_000}).status_code == 400
 
 
-def test_lyrics_cached_by_an_older_resolver_are_looked_up_again_once(monkeypatch):
+def test_lyrics_cached_by_an_older_resolver_stay_visible_while_they_are_looked_up_again(monkeypatch):
     monkeypatch.setattr(library_routes, "_get_api", lambda: _fake_api(_music_video_track()))
     instance_db().set_lyrics(
         "video-track", synced="[00:01.00] line", plain="line", instrumental=False, source="lrclib:v4"
@@ -608,11 +608,39 @@ def test_lyrics_cached_by_an_older_resolver_are_looked_up_again_once(monkeypatch
     monkeypatch.setattr(lyrics_module, "fetch_lyrics", fetch)
     client = _make_app().test_client()
 
-    body = _get_until_ready(client, "/api/library/tracks/video-track/lyrics").get_json()
+    # The first read never waits on the provider: it shows what is held.
+    first = client.get("/api/library/tracks/video-track/lyrics")
+    assert first.status_code == 200
+    assert first.get_json()["synced"] == "[00:01.00] line"
+    assert first.get_json()["cached"] is True
+
+    # A later read collects the refreshed record, which knows its length.
+    for _ in range(100):
+        body = client.get("/api/library/tracks/video-track/lyrics").get_json()
+        if body["synced_duration"] is not None:
+            break
+        time.sleep(0.001)
     assert body["timing_safe"] is False and body["synced_duration"] == 236
-    body = _get_until_ready(client, "/api/library/tracks/video-track/lyrics").get_json()
-    assert body["cached"] is True
+    body = client.get("/api/library/tracks/video-track/lyrics").get_json()
+    assert body["cached"] is True and body["synced_duration"] == 236
     assert fetch.call_count == 1
+
+
+def test_saved_previews_cached_by_an_older_resolver_are_not_served(monkeypatch):
+    # A saved preview's cache key names the resolver, so an upgrade looks again.
+    current_key = lyrics_module.metadata_cache_key("Artist", "Song", None, 251)
+    monkeypatch.setattr(lyrics_module, "RESOLVER_SOURCE", "lrclib:v4")
+    legacy_key = lyrics_module.metadata_cache_key("Artist", "Song", None, 251)
+    monkeypatch.undo()
+    assert legacy_key != current_key
+    instance_db().set_lyrics(legacy_key, synced="[00:01.00] old", plain="old", instrumental=False, source="lrclib:v4")
+    monkeypatch.setattr(lyrics_module, "fetch_lyrics", MagicMock(return_value=_album_timed_record()))
+
+    body = _get_until_ready(
+        _make_app().test_client(), "/api/lyrics?artist=Artist&title=Song&duration=251&persist=1"
+    ).get_json()
+    assert body["synced"] == "[00:01.00] line"
+    assert body["synced_duration"] == 236 and body["timing_safe"] is False
 
 
 @pytest.mark.parametrize("answer", [None, {"synced": None, "plain": None, "instrumental": False, "source": "x"}])

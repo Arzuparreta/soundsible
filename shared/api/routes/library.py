@@ -433,13 +433,16 @@ def get_track_lyrics(track_id):
     refresh = request.args.get("refresh") in ("1", "true")
     cached = None if refresh else db.get_lyrics(track_id)
     # Timed lines cached by an older resolver do not say what length they were
-    # timed for. They are looked up again once; until then, and whenever the
-    # provider cannot answer, the lines already held are still served.
+    # timed for. They are looked up again in the background; until a later read
+    # collects the answer, and whenever the provider cannot give one, the lines
+    # already held are what this read serves.
     if cached and (not cached.get("synced") or cached.get("source") == RESOLVER_SOURCE):
         return payload(cached, cached=True)
 
     lookup_status, record = poll_lyrics(track.artist, track.title, track.album, track.duration)
     if lookup_status != "complete":
+        if cached:
+            return payload(cached, cached=True)
         return jsonify(_lyrics_payload(status="pending")), 202
     if record is None:
         if cached:
