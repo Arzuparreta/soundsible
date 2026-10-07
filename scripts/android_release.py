@@ -46,6 +46,7 @@ CHECKS = {
     "Build, lint and unit tests",
     *(f"Emulator shard {i}/4 (API 36)" for i in range(4)),
     "tests",
+    "lint",
     "ui_build",
     "ui_accessibility",
     "version_consistency",
