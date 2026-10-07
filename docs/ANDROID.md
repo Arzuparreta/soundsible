@@ -11,7 +11,8 @@ La validación automatizada y sus límites están en [EVIDENCE](android/EVIDENCE
 El emulador verifica servicios, PCM, transporte y controles; no acredita escucha,
 Bluetooth ni funcionamiento en un coche físico. Firma permanente, actualización,
 App Links verificados y publicación siguen sujetos a
-[RELEASE_GATES](android/RELEASE_GATES.md). La PR se revisa manualmente, sin automerge.
+[RELEASE_GATES](android/RELEASE_GATES.md). El usuario autorizó preparar y publicar la alpha el 2026-10-07 tras cerrar los gates.
+La instalación pública y sus límites se describen en [ALPHA](android/ALPHA.md).
 
 ## Retomar el trabajo
 

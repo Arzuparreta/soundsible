@@ -16,12 +16,18 @@ comprobarse con una clave permanente.
 
 ## Revisión manual antes de publicación
 
-Instrucción del usuario actualizada el 2026-10-05: continuar hasta paridad completa
-con commit/push y dejar la PR abierta con los checks pasando. No hacer merge ni
-activar automerge. Preparar la documentación e instrucciones de alpha; la release
-queda pendiente de revisión manual del usuario y del merge. La autorización
-anterior de integrar/publicar queda revocada; cumplir los gates técnicos no
-habilita por sí solo el merge ni la publicación.
+La entrega de paridad (PR #300) fue revisada e integrada en `main` el
+2026-10-07. Ese día el usuario autorizó preparar la distribución, crear una clave
+permanente y completar merge/publicación cuando todos los gates estén en verde.
+Esta autorización sustituye la espera de revisión manual del 2026-10-05 para
+este trabajo de release; no permite saltar checks ni publicar artifacts debug.
+
+El canal independiente se ejecuta manualmente con `android-release.yml`, sólo
+desde `main` y en el entorno restringido `android-release`. El tooling
+`scripts/android_release.py` reserva códigos en drafts, valida la APK y exige
+aceptación de actualización/offline/App Links antes de publicar. La referencia
+pública de firma es [SIGNING.json](SIGNING.json); capacidades y límites:
+[CAPABILITIES.json](CAPABILITIES.json). Instrucciones: [ALPHA](ALPHA.md).
 
 ## Primera alpha
 

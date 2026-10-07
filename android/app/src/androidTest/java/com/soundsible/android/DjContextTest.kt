@@ -61,7 +61,24 @@ class DjContextTest {
                 // The decoders apply a pause asynchronously: the retained position is the settled one.
                 waitFor("(()=>{const p=window.__dj.positionMs;if(p!==window.__pausedPosition){window.__pausedPosition=p;window.__pausedSince=Date.now()}return Date.now()-window.__pausedSince>=400})()")
                 val key = web.evaluate(scenario, "window.__dj.items[window.__dj.index].key")
-                val position = web.evaluate(scenario, "window.__dj.positionMs").toDouble()
+                // The existing controller optimistically acknowledges pause before the service handles it.
+                // A fresh connection observes the service's settled position rather than that local estimate.
+                val instrumentation = InstrumentationRegistry.getInstrumentation()
+                val fresh = java.util.concurrent.atomic.AtomicReference<com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>>()
+                instrumentation.runOnMainSync {
+                    fresh.set(androidx.media3.session.MediaController.Builder(instrumentation.targetContext,
+                        androidx.media3.session.SessionToken(instrumentation.targetContext,
+                            android.content.ComponentName(instrumentation.targetContext, PlaybackService::class.java))).buildAsync())
+                }
+                val confirmed = fresh.get().get(15, TimeUnit.SECONDS)
+                var position = 0.0
+                try {
+                    instrumentation.runOnMainSync {
+                        assertFalse("Service has not paused", confirmed.playWhenReady)
+                        position = confirmed.currentPosition.toDouble()
+                    }
+                } finally { instrumentation.runOnMainSync { confirmed.release() } }
+                waitFor("!window.__dj.playWhenReady && Math.abs(window.__dj.positionMs-$position)<=150")
                 fun retained() {
                     assertEquals(key, web.evaluate(scenario, "window.__dj.items[window.__dj.index].key"))
                     assertEquals("false", web.evaluate(scenario, "window.__dj.playWhenReady"))

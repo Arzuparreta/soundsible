@@ -43,7 +43,7 @@ public class StartupTest {
             String version = InstrumentationRegistry.getArguments().getString("expectedVersion");
             assertNotNull(version);
             assertEquals("\"" + version + "\"", evaluate(scenario, "document.getElementById('app').dataset.nativeVersion"));
-            assertEquals("\"com.soundsible.android.dev\"", evaluate(scenario, "document.getElementById('app').dataset.nativeApplication"));
+            assertEquals("\"" + BuildConfig.APPLICATION_ID + "\"", evaluate(scenario, "document.getElementById('app').dataset.nativeApplication"));
             assertEquals("\"" + BuildConfig.SOURCE_REVISION + "\"", evaluate(scenario, "document.getElementById('app').dataset.nativeRevision"));
             assertEquals("false", evaluate(scenario, "performance.getEntriesByType('resource').some(e => /\\/api\\/|\\/socket.io\\//.test(e.name))"));
             assertEquals("false", evaluate(scenario, "!!navigator.serviceWorker?.controller"));

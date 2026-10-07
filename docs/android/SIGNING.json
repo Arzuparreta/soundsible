@@ -1,0 +1,7 @@
+{
+  "application_id": "com.soundsible.android",
+  "certificate_sha256": "41:C5:73:24:F7:FC:9A:B7:E6:2B:0A:4A:E1:CA:53:5B:F2:BA:1E:B8:6C:22:C3:4B:D2:DE:58:5C:A3:FF:C1:10",
+  "key_alias": "soundsible-android",
+  "backup_verified": true,
+  "backup_verification": "Independent physical disks; both keystores exported identical public certificates on 2026-10-07."
+}

@@ -55,7 +55,7 @@ def doctor() -> None:
     print(f"SDK: {sdk()}")
 
 
-def prepare() -> None:
+def prepare(*, channel: str = "development", version_code: int | None = None) -> None:
     from android_webrtc import prepare_webrtc
     prepare_webrtc(ROOT)
     version = run(sys.executable, "scripts/version_sync.py", "--print", capture=True)
@@ -63,7 +63,11 @@ def prepare() -> None:
     dirty = bool(run("git", "status", "--porcelain", capture=True))
     # Development build counter only. Public versionCode allocation is a
     # separate release gate; counters from different workflows cannot be mixed.
-    code = int(os.getenv("SOUNDSIBLE_ANDROID_BUILD_NUMBER", "1"))
+    if channel not in ("development", "alpha"):
+        raise RuntimeError("Unsupported Android channel")
+    if channel != "development" and (dirty or version_code is None):
+        raise RuntimeError("Public Android builds require clean sources and an allocated versionCode")
+    code = version_code if version_code is not None else int(os.getenv("SOUNDSIBLE_ANDROID_BUILD_NUMBER", "1"))
     if not 0 < code <= 2_100_000_000:
         raise RuntimeError("SOUNDSIBLE_ANDROID_BUILD_NUMBER must be a positive Android build code")
     (ANDROID / "build-info.json").write_text(
@@ -73,7 +77,7 @@ def prepare() -> None:
                 "version_code": code,
                 "source_revision": revision,
                 "dirty": dirty,
-                "channel": "development",
+                "channel": channel,
             },
             indent=2,
         )
@@ -209,7 +213,7 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                 if not restart_only and not live_restart_only:
                     gradle(
                         ":app:connectedDebugAndroidTest",
-                        "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest,com.soundsible.android.LiveRestartTest",
+                        "-Pandroid.testInstrumentationRunnerArguments.notClass=com.soundsible.android.OfflineRestartTest,com.soundsible.android.LiveRestartTest,com.soundsible.android.ReleaseUpdateTest",
                         "-Pandroid.testInstrumentationRunnerArguments.fixtureOrigin=http://10.0.2.2:5097",
                         "-Pandroid.testInstrumentationRunnerArguments.passwordlessOrigin=http://10.0.2.2:5098",
                         "-Pandroid.testInstrumentationRunnerArguments.tlsOrigin=https://10.0.2.2:5099",
@@ -301,7 +305,7 @@ def integration(*, restart_only: bool = False, live_restart_only: bool = False, 
                         adb("pull", f"/sdcard/Download/{screenshot}", str(ANDROID / "build" / target))
                     except subprocess.CalledProcessError:
                         # Another shard's test produces this screenshot.
-                        if not shard:
+                        if not shard and not test_filter:
                             raise
             finally:
                 for process in processes:
