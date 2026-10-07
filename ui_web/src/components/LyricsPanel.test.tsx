@@ -295,6 +295,29 @@ describe('LyricsPanel', () => {
       expect(screen.getByRole('button', { name: 'Second line' })).not.toHaveAttribute('aria-current');
     });
 
+    it('sends timing saves in order, and an older failure never undoes a newer one', async () => {
+      timed({ timing_safe: false, synced_duration: 236 });
+      let failFirst!: (error: Error) => void;
+      api.setLyricsOffset
+        .mockImplementationOnce(() => new Promise((_, reject) => { failFirst = reject; }))
+        .mockResolvedValueOnce({ offset_ms: 2_750 });
+      state.playback.currentTime = 21;
+      render(() => <LyricsPanel />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Second line' }));
+      fireEvent.click(screen.getByRole('button', { name: 'lyricsPanel.adjust' }));
+      state.playback.currentTime = 8;
+      fireEvent.click(screen.getByRole('button', { name: 'Second line' }));
+      // The second save waits for the first to settle.
+      expect(api.setLyricsOffset).toHaveBeenCalledTimes(1);
+
+      failFirst(new Error('offline'));
+      await vi.waitFor(() => expect(api.setLyricsOffset).toHaveBeenCalledTimes(2));
+      expect(api.setLyricsOffset).toHaveBeenLastCalledWith({ trackId: 'song', offsetMs: 2_750 });
+      expect(screen.queryByText('lyricsPanel.alignHint')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Second line' })).toHaveAttribute('aria-current', 'true');
+    });
+
     it('forgets a saved offset on request', async () => {
       timed({ timing_safe: true, synced_duration: 236, offset_ms: 2_000 });
       render(() => <LyricsPanel />);

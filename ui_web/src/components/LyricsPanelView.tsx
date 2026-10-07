@@ -113,25 +113,35 @@ export function LyricsPanelView(props: {
   /** Seconds the lines sit later in this recording than their timing says. */
   const shift = () => (offsetMs() ?? 0) / 1000;
 
-  const saveOffset = async (value: number | null) => {
+  // Saves go out one after another, so the engine keeps the last one made;
+  // only the latest may undo itself, so an older failure cannot bring back a
+  // timing a newer save has already replaced.
+  let saveGeneration = 0;
+  let saveQueue: Promise<unknown> | null = null;
+  const saveOffset = (value: number | null): Promise<void> => {
     const key = lyricsKey();
+    const generation = ++saveGeneration;
     const previous = { offset: offsetMs(), adjusting: adjusting() };
     setOffsetMs(value);
     setAdjusting(false);
     const target = !key ? null : key.inLibrary ? { trackId: key.id } : key.youtubeId ? { youtubeId: key.youtubeId } : null;
     // Without an audio to keep it for, the correction lasts while this plays.
-    if (!target) return;
-    try {
-      await api.setLyricsOffset({ ...target, offsetMs: value });
-    } catch {
+    if (!target) return Promise.resolve();
+    const send = () => api.setLyricsOffset({ ...target, offsetMs: value });
+    const request = saveQueue ? saveQueue.then(send) : send();
+    const settled: Promise<unknown> = request.catch(() => {}).finally(() => {
+      if (saveQueue === settled) saveQueue = null;
+    });
+    saveQueue = settled;
+    return request.then(() => {}, () => {
       // Not saved, so not applied: the panel must not show a timing the engine
-      // will not give back — unless the listener has moved on to another song.
-      if (lyricsKey() === key) {
+      // will not give back — unless something newer has happened since.
+      if (generation === saveGeneration && lyricsKey() === key) {
         setOffsetMs(previous.offset);
         setAdjusting(previous.adjusting);
       }
       toast.error(t('lyricsPanel.timingSaveFailed'));
-    }
+    });
   };
   const alignTo = (lineTime: number) =>
     saveOffset(Math.round((props.playback.currentTime() - lineTime) * 1000) - TAP_REACTION_MS);
