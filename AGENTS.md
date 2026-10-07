@@ -13,6 +13,11 @@
   explicitly asks to include other working-tree changes.
 - All work in Soundsible reaches `main` through a pull request from a branch —
   never commit to `main` directly.
+- Before merging a PR, request `@codex review` if the automatic Codex review
+  does not cover its current head. Wait for completion, inspect both review
+  bodies and inline comments, evaluate each finding, and fix confirmed problems
+  with appropriate validation. Record the disposition of dismissed findings.
+  Repeat after fixes; a green CI run alone does not close the review gate.
 - Before opening any pull request, fetch its target branch from GitHub and
   verify that the working branch contains that latest remote base. For the
   usual `main` target, run `git fetch origin` followed by

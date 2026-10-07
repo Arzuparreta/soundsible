@@ -12,6 +12,46 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import android_release as release
 
 
+def test_predecessor_is_latest_published_alpha_not_a_failed_draft():
+    def tag(code):
+        return f"android-alpha/{release.declared_version()}-{code}-{'b' * 12}"
+    old = {"tag_name": tag(2), "draft": False}
+    latest = {"tag_name": tag(4), "draft": False}
+    assert release.published_predecessor(
+        [old, latest, {"tag_name": tag(5), "draft": True}, {"tag_name": "v-other", "draft": False}], 6
+    ) == latest
+    assert release.published_predecessor([{"tag_name": tag(3), "draft": True}], 4) is None
+    with pytest.raises(RuntimeError, match="not older"):
+        release.published_predecessor([latest], 4)
+
+
+def test_public_upgrade_downloads_exact_old_apk_without_recompiling(monkeypatch, tmp_path):
+    tag = f"android-alpha/{release.declared_version()}-2-{'b' * 12}"
+    monkeypatch.setattr(release, "OUT", tmp_path)
+    monkeypatch.setattr(release, "releases", lambda: [{"tag_name": tag, "draft": False}])
+    monkeypatch.setattr(release, "compile_apk", lambda *args: pytest.fail("Recompiled public predecessor"))
+    checked = []
+    monkeypatch.setattr(release, "verify_apk", lambda apk, metadata: checked.append(apk.read_bytes()))
+
+    def download(*args):
+        assert args[:4] == ("gh", "release", "download", tag)
+        directory = tmp_path / "published-predecessor"
+        apk = directory / "Soundsible-Android-alpha.apk"
+        apk.write_bytes(b"actual published binary")
+        (directory / "android-release.json").write_text(json.dumps(
+            {"tag": tag, "version_code": 2, "sha256": release.digest(apk)}
+        ))
+    monkeypatch.setattr(release, "command", download)
+    apk, evidence = release.upgrade_baseline({"version_code": 4})
+    assert checked == [b"actual published binary"]
+    assert evidence["kind"] == "published" and evidence["version_code"] == 2
+    metadata = apk.parent / "android-release.json"
+    monkeypatch.setattr(release, "command", lambda *args: None)
+    metadata.write_text(json.dumps({"tag": tag, "version_code": 2, "sha256": "tampered"}))
+    with pytest.raises(RuntimeError, match="disagree"):
+        release.upgrade_baseline({"version_code": 4})
+
+
 def test_allocation_counts_failed_drafts_and_leaves_other_channels_alone():
     version = release.declared_version()
     revision = "a" * 40

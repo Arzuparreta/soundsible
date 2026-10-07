@@ -331,8 +331,46 @@ def app_links() -> None:
     raise RuntimeError("Android did not verify the public App Links domain")
 
 
+def published_predecessor(items: list[dict], code: int) -> dict | None:
+    public = [item for item in items if TAG.fullmatch(item["tag_name"]) and not item["draft"]]
+    if not public:
+        return None
+    item = max(public, key=lambda row: int(TAG.fullmatch(row["tag_name"])[2]))
+    if int(TAG.fullmatch(item["tag_name"])[2]) >= code:
+        raise RuntimeError("Published predecessor is not older than candidate")
+    return item
+
+
+def upgrade_baseline(plan: dict) -> tuple[Path, dict]:
+    item = published_predecessor(releases(), plan["version_code"])
+    if item is None:
+        baseline = {**plan, "version_code": plan["version_code"] - 1}
+        apk = OUT / "update-baseline.apk"
+        compile_apk(baseline, apk)
+        verify_apk(apk, baseline)
+        return apk, {"kind": "synthetic-first-release", "version_code": baseline["version_code"]}
+    directory = OUT / "published-predecessor"
+    directory.mkdir(parents=True, exist_ok=True)
+    command(
+        "gh", "release", "download", item["tag_name"], "--dir", str(directory), "--clobber",
+        "--pattern", "Soundsible-Android-alpha.apk", "--pattern", "android-release.json",
+    )
+    metadata = json.loads((directory / "android-release.json").read_text())
+    apk = directory / "Soundsible-Android-alpha.apk"
+    match = TAG.fullmatch(item["tag_name"])
+    if (
+        metadata.get("tag") != item["tag_name"]
+        or metadata.get("version_code") != int(match[2])
+        or metadata.get("sha256") != digest(apk)
+    ):
+        raise RuntimeError("Published predecessor metadata/APK disagree")
+    verify_apk(apk, metadata)
+    return apk, {"kind": "published", "tag": item["tag_name"], "version_code": metadata["version_code"],
+                 "apk_sha256": digest(apk)}
+
+
 def acceptance(plan: dict, apk: Path) -> dict:
-    """Private predecessor -> exact candidate, against one owned disposable HTTP engine."""
+    """Published predecessor -> exact candidate, against a disposable HTTP engine."""
     build.doctor()
     devices = [line for line in adb("devices").splitlines()[1:] if line.strip()]
     if len(devices) != 1 or adb("shell", "getprop", "ro.kernel.qemu") != "1":
@@ -341,10 +379,7 @@ def acceptance(plan: dict, apk: Path) -> dict:
         probe.bind(("127.0.0.1", 5097))
     adb("shell", "am", "force-stop", PACKAGE)
     OUT.mkdir(parents=True, exist_ok=True)
-    baseline = {**plan, "version_code": plan["version_code"] - 1}
-    baseline_apk = OUT / "update-baseline.apk"
-    compile_apk(baseline, baseline_apk)
-    verify_apk(baseline_apk, baseline)
+    baseline_apk, baseline_evidence = upgrade_baseline(plan)
     # Release test APK is signed with the permanent key; the production target stays non-debuggable.
     harness = ROOT / "android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk"
     origin = "http://10.0.2.2:5097"
@@ -444,6 +479,7 @@ def acceptance(plan: dict, apk: Path) -> dict:
                     "source_revision": plan["source_revision"],
                     "version_code": plan["version_code"],
                     "apk_sha256": digest(apk),
+                    "upgrade_baseline": baseline_evidence,
                     "update_preserves_account_settings_offline": True,
                     "downgrade_rejected": True,
                     "wrong_signature_rejected": True,

@@ -47,6 +47,9 @@ Antes de habilitar el workflow de publicación deben cumplirse:
 5. APK de release instalada y actualización sobre una anterior firmada con la
    misma clave; conservar cuenta/configuración y datos aprobados, sin migración
    destructiva. Probar downgrade rechazado y APK corrupta/firma distinta.
+   Desde la segunda alpha, instalar la última APK pública descargada sin
+   recompilarla; sólo la primera publicación admite una base sintética. El
+   recibo de aceptación registra cuál se utilizó.
 6. Versión procedente de `shared/version.py` y `scripts/version_sync.py`;
    `versionCode` monotónico para el canal público, validado contra el último
    publicado. No reutilizar counters de distintos workflows como si fueran uno.
