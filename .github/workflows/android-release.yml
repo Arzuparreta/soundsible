@@ -96,6 +96,7 @@ jobs:
           path: |
             android/build/alpha/*.json
             android/build/alpha/*.txt
+            android/build/alpha/app-links-*.xml
             android/app/build/reports/
       - name: Remove signing files
         if: always()

@@ -18,6 +18,7 @@ import tempfile
 import time
 from urllib.request import urlopen
 from zipfile import ZipFile
+import xml.etree.ElementTree as ET
 
 import android as build
 from version_sync import declared_version, sync
@@ -264,6 +265,30 @@ def rejected(apk: Path, reason: str) -> None:
         raise RuntimeError(f"Android did not reject {apk.name} with {reason}")
 
 
+def rendered_link_payload(xml: str, title: str, artist: str) -> bool:
+    labels = "\n".join(
+        node.get("text", "") + "\n" + node.get("content-desc", "")
+        for node in ET.fromstring(xml).iter("node") if node.get("package") == PACKAGE
+    )
+    return title in labels and artist in labels
+
+
+def await_link_payload(phase: str, title: str, artist: str) -> None:
+    remote = "/sdcard/Download/soundsible-release-app-link.xml"
+    deadline = time.monotonic() + 45
+    while time.monotonic() < deadline:
+        try:
+            adb("shell", "uiautomator", "dump", remote)
+            xml = adb("shell", "cat", remote)
+            (OUT / f"app-links-{phase}.xml").write_text(xml + "\n")
+            if rendered_link_payload(xml, title, artist):
+                return
+        except (subprocess.CalledProcessError, ET.ParseError):
+            pass
+        time.sleep(1)
+    raise RuntimeError(f"App Link {phase} payload was not rendered by the release APK")
+
+
 def app_links() -> None:
     _, signing = gates()
     url = f"https://{HOST}/.well-known/assetlinks.json"
@@ -282,24 +307,25 @@ def app_links() -> None:
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
         if re.search(rf"{re.escape(HOST)}:\s+verified", adb("shell", "pm", "get-app-links", PACKAGE)):
-            capsule = (
-                base64.urlsafe_b64encode(
-                    json.dumps(
-                        {
-                            "v": 1,
-                            "kind": "music",
-                            "yt": "abcdefghijk",
-                            "title": "Release link test",
-                            "artist": "Fixture",
-                        }
-                    ).encode()
-                )
-                .decode()
-                .rstrip("=")
-            )
-            link = f"https://{HOST}/soundsible.github.io/open/#t={capsule}"
             adb("shell", "am", "force-stop", PACKAGE)
-            for _ in range(2):
+            for phase in ("cold", "warm"):
+                title, artist = f"Release link {phase}", f"Fixture {phase}"
+                capsule = (
+                    base64.urlsafe_b64encode(
+                        json.dumps(
+                            {
+                                "v": 1,
+                                "kind": "music",
+                                "yt": "abcdefghijk",
+                                "title": title,
+                                "artist": artist,
+                            }
+                        ).encode()
+                    )
+                    .decode()
+                    .rstrip("=")
+                )
+                link = f"https://{HOST}/soundsible.github.io/open/#t={capsule}"
                 opened = adb(
                     "shell",
                     "am",
@@ -317,6 +343,7 @@ def app_links() -> None:
                     opened,
                 ):
                     raise RuntimeError("Verified public link did not open the release APK")
+                await_link_payload(phase, title, artist)
             unrelated = adb(
                 "shell",
                 "cmd",
@@ -507,6 +534,7 @@ def acceptance(plan: dict, apk: Path) -> dict:
                     "release_startup": True,
                     "offline_pcm": True,
                     "app_links_verified": True,
+                    "app_links_payload_delivered": True,
                 }
             finally:
                 process.terminate()
@@ -536,6 +564,7 @@ def publish(plan: dict, apk: Path, receipt: dict) -> None:
             "release_startup",
             "offline_pcm",
             "app_links_verified",
+            "app_links_payload_delivered",
         )
     ):
         raise RuntimeError("Release APK acceptance is incomplete or belongs to another APK")

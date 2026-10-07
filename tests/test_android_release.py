@@ -6,11 +6,25 @@ import json
 from pathlib import Path
 import sys
 from zipfile import ZipFile
+import xml.etree.ElementTree as ET
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import android_release as release
+
+
+@pytest.mark.parametrize("package,title,artist,accepted", [
+    (release.PACKAGE, "Release link warm", "Fixture warm", True),
+    ("browser.example", "Release link warm", "Fixture warm", False),
+    (release.PACKAGE, "Release link cold", "Fixture cold", False),
+    (release.PACKAGE, "Release link warm", "", False),
+])
+def test_app_link_requires_current_rendered_payload_in_the_public_app(package, title, artist, accepted):
+    root = ET.Element("hierarchy")
+    ET.SubElement(root, "node", package=package, text=title + "\n" + artist)
+    assert release.rendered_link_payload(ET.tostring(root, encoding="unicode"),
+                                         "Release link warm", "Fixture warm") is accepted
 
 
 def test_predecessor_sdk_policy_comes_from_its_published_metadata(monkeypatch, tmp_path):
@@ -186,7 +200,8 @@ def test_main_advancing_during_upload_leaves_release_private(monkeypatch, tmp_pa
     plan = {"source_revision": revision, "version_code": 2, "tag": "fixture"}
     receipt = {"source_revision": revision, "version_code": 2, "apk_sha256": release.digest(apk)}
     for key in ("update_preserves_account_settings_offline", "downgrade_rejected", "wrong_signature_rejected",
-                "corrupt_apk_rejected", "release_startup", "offline_pcm", "app_links_verified"):
+                "corrupt_apk_rejected", "release_startup", "offline_pcm", "app_links_verified",
+                "app_links_payload_delivered"):
         receipt[key] = True
     monkeypatch.setattr(release, "OUT", tmp_path)
     monkeypatch.setattr(release, "clean", lambda: revision)
