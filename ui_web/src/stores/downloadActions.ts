@@ -1,7 +1,7 @@
 import type { RuntimeLifetime } from '../lib/runtimeLifetime';
 import { api } from "../lib/api";
 import { toast } from "../lib/toast";
-import { isPodcastTrack } from "../lib/track";
+import { downloadEvidence, isPodcastTrack } from "../lib/track";
 import { savedVideoId } from "../lib/saved";
 import { trackKeys } from "../lib/playbackIdentity";
 import { t as tr } from "../lib/i18n";
@@ -40,7 +40,7 @@ export function createDownloadActions(ports: DownloadActionsPorts, lifetime: Run
           display_artist: track.artist,
           thumbnail_url: track.cover,
           duration_sec: track.duration,
-          metadata_evidence: null,
+          metadata_evidence: downloadEvidence(track),
           // Everything this song answers to, including the saved entry it was
           // opened from: the file joins that song instead of arriving as new.
           identity_keys: trackKeys(track)

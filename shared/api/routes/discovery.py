@@ -169,6 +169,7 @@ def discovery_save():
       {status: "needs_review", confidence, confidence_level, candidates: [...]}
       {status: "failed",       reason, candidates: [...]}
     """
+    from shared.api.routes.catalog import cached_resolution
     from shared.resolution_confidence import best_candidate, classify_confidence
     from shared.database import instance_db
 
@@ -200,7 +201,7 @@ def discovery_save():
 
     # — Check resolution cache —
     db = instance_db()
-    cached = db.get_cached_resolution(artist, title)
+    cached = cached_resolution(db, artist, title, duration_s)
     if cached and cached.get("confidence") is not None:
         score = cached["confidence"]
         level = classify_confidence(score)

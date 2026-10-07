@@ -1,6 +1,6 @@
 import { request } from '../lib/http';
 import { trackKeys } from '../lib/playbackIdentity';
-import { isPodcastTrack } from '../lib/track';
+import { downloadEvidence, isPodcastTrack } from '../lib/track';
 import type { Track } from '../types/music';
 import type { DownloadQueueItem } from '../types/download';
 
@@ -20,7 +20,7 @@ export function createMusicAcquisition(identity: () => number, ready: () => bool
       const reply = await request<{ status: string; accepted: { index: number; id: string }[]; rejected: unknown[] }>('/api/downloader/queue', {
         method: 'POST', signal: signal(), timeoutMs: 15000, body: { items: [{ source_type: 'youtube_url', song_str: `https://www.youtube.com/watch?v=${track.id}`,
           video_id: track.id, display_title: track.title, display_artist: track.artist, thumbnail_url: track.cover, duration_sec: track.duration,
-          metadata_evidence: null, identity_keys: trackKeys(track) }] },
+          metadata_evidence: downloadEvidence(track), identity_keys: trackKeys(track) }] },
       });
       if (!current()) return;
       if (reply.status !== 'queued' || !Array.isArray(reply.accepted) || reply.accepted.length !== 1 || reply.accepted[0].index !== 0 || !reply.accepted[0].id || !Array.isArray(reply.rejected) || reply.rejected.length) throw new Error('Missing acquisition confirmation');

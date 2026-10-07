@@ -343,3 +343,42 @@ def best_candidate(
         })
 
     return best, round(best_score, 3), best_reason, ranked
+
+
+def rerank_cached_resolution(
+    artist: str,
+    title: str,
+    duration_s: int | float | None,
+    cached: dict,
+) -> dict | None:
+    """The cached resolution re-ranked for a running time, if that changes it.
+
+    The cache is keyed by artist and title alone, so whoever resolves a song
+    first decides it for everyone after — and a caller that knew no running
+    time lets a music video, with its spoken intro and its coda, beat the
+    album audio from the same artist. A later caller that does know the time
+    re-ranks the candidates already stored: no search, just the score the
+    first caller could not compute.
+
+    Returns the record to store in place of `cached`, or None when the time
+    changes nothing. A winner the stored candidates do not include was chosen
+    some other way — by a person, say — and is left alone.
+    """
+    candidates = cached.get("candidates") or []
+    winner = cached.get("id")
+    if not duration_s or not winner or not any(c.get("id") == winner for c in candidates):
+        return None
+    best, score, reason, ranked = best_candidate(artist, title, duration_s, candidates)
+    if not best or best.get("id") == winner:
+        return None
+    best_id = best.get("id", "")
+    return {
+        "id": best_id,
+        "duration": best.get("duration"),
+        "thumbnail": best.get("thumbnail") or f"https://img.youtube.com/vi/{best_id}/mqdefault.jpg",
+        "webpage_url": best.get("webpage_url") or f"https://www.youtube.com/watch?v={best_id}",
+        "channel": best.get("channel") or best.get("uploader") or "",
+        "confidence": score,
+        "confidence_reason": reason,
+        "candidates": ranked,
+    }

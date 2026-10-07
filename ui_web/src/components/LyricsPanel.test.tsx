@@ -10,6 +10,7 @@ const { actions, api, state } = vi.hoisted(() => ({
   api: {
     getTrackLyrics: vi.fn(),
     getLyricsByMetadata: vi.fn(),
+    setLyricsOffset: vi.fn(),
   },
   state: {
     library: [] as Track[],
@@ -17,6 +18,7 @@ const { actions, api, state } = vi.hoisted(() => ({
     playback: {
       currentTrack: null as Track | null,
       currentTime: 0,
+      duration: 0,
     },
   },
 }));
@@ -37,6 +39,8 @@ describe('LyricsPanel', () => {
     state.saved = [];
     state.playback.currentTrack = track;
     state.playback.currentTime = 0;
+    state.playback.duration = 0;
+    api.setLyricsOffset.mockResolvedValue({ offset_ms: null });
     api.getTrackLyrics.mockResolvedValue({
       status: 'ready',
       synced: '[00:00.00]First line\n[00:05.00]Second line',
@@ -220,5 +224,73 @@ describe('LyricsPanel', () => {
     expect(screen.queryByText('lyricsPanel.notFound')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'lyricsPanel.retry' }));
     await vi.waitFor(() => expect(api.getLyricsByMetadata).toHaveBeenCalledTimes(2));
+  });
+
+  describe('timing', () => {
+    const timed = (extra: Record<string, unknown>) => api.getTrackLyrics.mockResolvedValue({
+      status: 'ready',
+      synced: '[00:00.00]First line\n[00:05.00]Second line',
+      plain: null,
+      instrumental: false,
+      cached: true,
+      ...extra,
+    });
+
+    it('asks for a tap instead of following lines timed for another cut', async () => {
+      timed({ timing_safe: false, synced_duration: 236 });
+      state.playback.currentTime = 21;
+      render(() => <LyricsPanel />);
+
+      expect(await screen.findByText('lyricsPanel.alignHint')).toBeInTheDocument();
+      const second = screen.getByRole('button', { name: 'Second line' });
+      expect(second).not.toHaveAttribute('aria-current');
+
+      // Heard at 21 s, timed at 5 s: the lines sit 16 s later, less the tap's reaction.
+      fireEvent.click(second);
+      expect(actions.seek).not.toHaveBeenCalled();
+      expect(api.setLyricsOffset).toHaveBeenCalledWith({ trackId: 'song', offsetMs: 15_750 });
+      expect(screen.queryByText('lyricsPanel.alignHint')).not.toBeInTheDocument();
+      expect(second).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('follows a saved offset, for highlighting and for seeking', async () => {
+      timed({ timing_safe: false, synced_duration: 236, offset_ms: 16_000 });
+      state.playback.currentTime = 17;
+      render(() => <LyricsPanel />);
+
+      const first = await screen.findByRole('button', { name: 'First line' });
+      expect(first).toHaveAttribute('aria-current', 'true');
+      expect(screen.queryByText('lyricsPanel.alignHint')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Second line' }));
+      expect(actions.seek).toHaveBeenCalledWith(21);
+    });
+
+    it('doubts the timing when the audio playing is longer than the lines were timed for', async () => {
+      timed({ timing_safe: true, synced_duration: 236 });
+      state.playback.duration = 251;
+      render(() => <LyricsPanel />);
+      expect(await screen.findByText('lyricsPanel.alignHint')).toBeInTheDocument();
+    });
+
+    it('lets the listener re-align lines that do follow, and back out', async () => {
+      timed({ timing_safe: true, synced_duration: 236 });
+      state.playback.duration = 236;
+      render(() => <LyricsPanel />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'lyricsPanel.adjust' }));
+      expect(screen.getByText('lyricsPanel.adjustHint')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'lyricsPanel.cancelAdjust' }));
+      expect(screen.queryByText('lyricsPanel.adjustHint')).not.toBeInTheDocument();
+      expect(api.setLyricsOffset).not.toHaveBeenCalled();
+    });
+
+    it('forgets a saved offset on request', async () => {
+      timed({ timing_safe: true, synced_duration: 236, offset_ms: 2_000 });
+      render(() => <LyricsPanel />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'lyricsPanel.adjust' }));
+      fireEvent.click(screen.getByRole('button', { name: 'lyricsPanel.resetTiming' }));
+      expect(api.setLyricsOffset).toHaveBeenCalledWith({ trackId: 'song', offsetMs: null });
+    });
   });
 });

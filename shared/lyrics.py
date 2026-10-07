@@ -17,6 +17,7 @@ import time
 import unicodedata
 from concurrent.futures import Future, ThreadPoolExecutor
 from difflib import SequenceMatcher
+from statistics import median
 from functools import partial
 from typing import Any, Dict, Optional
 
@@ -39,7 +40,7 @@ _MIN_FALLBACK_BUDGET_SEC = 1.0
 _MIN_MATCH_SCORE = 0.72
 _MIN_TITLE_SCORE = 0.68
 
-RESOLVER_SOURCE = "lrclib:v4"
+RESOLVER_SOURCE = "lrclib:v5"
 
 _LOOKUP_WORKERS = 2
 
@@ -129,13 +130,60 @@ def _candidate_score(
     return max(0.0, score), title_score
 
 
-def _result_to_record(item: Dict[str, Any]) -> Dict[str, Any]:
+#: How far a recording's length may sit from the one its lyrics were timed
+#: against before the timing is doubted. LRCLIB itself matches within two
+#: seconds; a cut with an intro or a coda is off by ten or more.
+TIMING_TOLERANCE_SEC = 3
+
+
+def _synced_duration(item: Dict[str, Any], results: Any) -> Optional[int]:
+    """The running time the chosen timed lines were written against.
+
+    LRCLIB's durations are typed in by whoever uploads the lyrics, and one row
+    can be off: the same timing is often uploaded once per compilation it
+    appeared on, under a dozen albums. Every row carrying exactly these lines
+    votes, and the median outvotes the odd one out.
+    """
+    synced = item.get("syncedLyrics")
+    if not synced:
+        return None
+    rows = results if isinstance(results, list) else [item]
+    durations: list[float] = []
+    for row in rows:
+        if isinstance(row, dict) and row.get("syncedLyrics") == synced:
+            try:
+                value = float(row.get("duration"))
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                durations.append(value)
+    return int(round(median(durations))) if durations else None
+
+
+def _result_to_record(item: Dict[str, Any], results: Any = None) -> Dict[str, Any]:
     return {
         "synced": item.get("syncedLyrics") or None,
         "plain": item.get("plainLyrics") or None,
         "instrumental": bool(item.get("instrumental")),
         "source": RESOLVER_SOURCE,
+        "synced_duration": _synced_duration(item, results),
     }
+
+
+def synced_timing_fits(audio_duration: Any, synced_duration: Any) -> bool:
+    """Whether timed lines can follow a recording of this length.
+
+    The same song is published in cuts of different lengths — a music video
+    with a spoken intro, a radio edit — and LRCLIB's timing belongs to one of
+    them. Unknown on either side is not evidence of a mismatch.
+    """
+    try:
+        audio, synced = float(audio_duration or 0), float(synced_duration or 0)
+    except (TypeError, ValueError):
+        return True
+    if audio <= 0 or synced <= 0:
+        return True
+    return abs(audio - synced) <= TIMING_TOLERANCE_SEC
 
 
 def _remaining(deadline: float, maximum: float) -> float:
@@ -163,7 +211,10 @@ def _lrclib_get(path: str, params: Dict[str, Any], timeout_sec: float = _LRCLIB_
 
 
 def _deezer_search(artist: str, title: str, timeout_sec: float) -> list[Dict[str, Any]]:
-    query = f'artist:"{artist}" track:"{title}"'
+    # A plain query: Deezer's field syntax (`artist:"…" track:"…"`) now
+    # answers nothing for songs it holds, which left this fallback silent.
+    # The rows are scored against artist and title before anything is used.
+    query = f"{artist} {title}"
     resp = requests.get(
         f"{_DEEZER_HOST}/search",
         params={"q": query, "limit": 5},
@@ -241,7 +292,7 @@ def fetch_lyrics(
         results = _lrclib_search(clean_artist, clean_title, album, deadline)
         best = _pick_best(results, clean_artist, clean_title, album, duration)
         if best:
-            return _result_to_record(best)
+            return _result_to_record(best, results)
 
         # Deezer is deliberately not on the hot path. It only canonicalizes a
         # real LRCLIB miss and has a small timeout, so lyrics cannot monopolize
@@ -273,7 +324,7 @@ def fetch_lyrics(
             canonical_duration,
         )
         if rescored:
-            return _result_to_record(rescored)
+            return _result_to_record(rescored, results)
 
         old_query = _fold(f"{clean_artist} {clean_title}")
         canonical_query = _fold(f"{canonical_artist} {canonical_title}")
@@ -293,7 +344,7 @@ def fetch_lyrics(
             canonical_duration,
         )
         if retry_best:
-            return _result_to_record(retry_best)
+            return _result_to_record(retry_best, retry_results)
         return {"synced": None, "plain": None, "instrumental": False, "source": RESOLVER_SOURCE}
     except requests.RequestException as exc:
         logger.warning("Lyrics provider request failed for %s - %s: %s", artist, title, exc)

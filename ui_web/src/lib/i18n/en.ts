@@ -1098,6 +1098,12 @@ export const en = {
     retry: 'Try again',
     instrumental: 'Instrumental track.',
     notFound: 'No lyrics found for this track.',
+    alignHint: 'These lyrics were timed for another version of this song. Tap the line being sung to line them up.',
+    adjustHint: 'Tap the line being sung right now.',
+    adjust: 'Adjust timing',
+    cancelAdjust: 'Cancel',
+    resetTiming: 'Reset timing',
+    timingSaveFailed: 'The timing could not be saved.',
   },
   discoverNodes: {
     title: 'Recommendations',

@@ -1,10 +1,11 @@
-import { createEffect, createMemo, createResource, For, on, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js';
 import { api } from '../lib/api';
 import { pageVisible } from '../lib/pageVisibility';
-import { activeLineIndex, parseLrc } from '../lib/lrc';
+import { activeLineIndex, parseLrc, timingFits } from '../lib/lrc';
 import { isPodcastTrack } from '../lib/track';
 import { createResponsiveTap } from '../lib/responsiveTap';
 import { t } from '../lib/i18n';
+import { toast } from '../lib/toast';
 import type { Track, LyricsResponse } from '../types/music';
 import styles from './LyricsPanel.module.css';
 
@@ -14,6 +15,12 @@ import styles from './LyricsPanel.module.css';
  * YouTube) are looked up by metadata. When synced (LRC) lyrics exist the
  * current line is highlighted and kept centred as the song advances; a tap on
  * any line seeks there. Plain lyrics render as a static scrollable text.
+ *
+ * Timed lines belong to one cut of a song. When the recording playing is
+ * another — a music video with an intro, say — following them would run ahead
+ * of the singer, so the panel shows them unhighlighted and asks for a tap on
+ * the line being sung. That tap is the recording's offset, kept by the engine
+ * for this audio; "Adjust timing" asks for it again on lines that do follow.
  */
 export interface LyricsPlayback {
   currentTrack(): Track | null;
@@ -21,7 +28,12 @@ export interface LyricsPlayback {
   inLibrary(track: Track): boolean;
   saved(track: Track): boolean;
   seek(seconds: number): void;
+  /** Seconds of the audio actually playing, once the player knows them. */
+  mediaDuration?(): number | undefined;
 }
+
+/** How long a listener takes to tap the line they hear begin. */
+const TAP_REACTION_MS = 250;
 export function LyricsPanelView(props: {
   playback: LyricsPlayback;
   scrollRef?: (element: HTMLDivElement) => void;
@@ -83,8 +95,42 @@ export function LyricsPanelView(props: {
     const synced = lyrics()?.synced;
     return synced ? parseLrc(synced) : [];
   });
-  const activeIdx = createMemo<number>((previous) => pageVisible()
-    ? activeLineIndex(parsed(), props.playback.currentTime()) : previous ?? -1);
+
+  // ── Timing: follow the lines, or have the listener line them up ──
+  const [offsetMs, setOffsetMs] = createSignal<number | null>(null);
+  const [adjusting, setAdjusting] = createSignal(false);
+  createEffect(on(() => lyrics(), (res) => {
+    setOffsetMs(res?.offset_ms ?? null);
+    setAdjusting(false);
+  }));
+  const timingTrusted = createMemo(() => {
+    if (offsetMs() !== null) return true;
+    const res = lyrics();
+    if (!res || res.timing_safe === false) return false;
+    return timingFits(props.playback.mediaDuration?.(), res.synced_duration);
+  });
+  const aligning = createMemo(() => parsed().length > 0 && (adjusting() || !timingTrusted()));
+  /** Seconds the lines sit later in this recording than their timing says. */
+  const shift = () => (offsetMs() ?? 0) / 1000;
+
+  const saveOffset = async (value: number | null) => {
+    const key = lyricsKey();
+    setOffsetMs(value);
+    setAdjusting(false);
+    const target = !key ? null : key.inLibrary ? { trackId: key.id } : key.youtubeId ? { youtubeId: key.youtubeId } : null;
+    // Without an audio to keep it for, the correction lasts while this plays.
+    if (!target) return;
+    try {
+      await api.setLyricsOffset({ ...target, offsetMs: value });
+    } catch {
+      toast.error(t('lyricsPanel.timingSaveFailed'));
+    }
+  };
+  const alignTo = (lineTime: number) =>
+    saveOffset(Math.round((props.playback.currentTime() - lineTime) * 1000) - TAP_REACTION_MS);
+
+  const activeIdx = createMemo<number>((previous) => aligning() ? -1 : pageVisible()
+    ? activeLineIndex(parsed(), props.playback.currentTime() - shift()) : previous ?? -1);
 
   // ── Auto-scroll: keep the active line centred, but yield to the user ──
   //
@@ -237,6 +283,21 @@ export function LyricsPanelView(props: {
                     when={parsed().length > 0}
                     fallback={<pre class={styles.plain}>{lyrics()?.plain ?? ''}</pre>}
                   >
+                    <Show when={aligning()}>
+                      <div class={styles.timing} role="status" data-lyrics-timing="">
+                        <p>{timingTrusted() ? t('lyricsPanel.adjustHint') : t('lyricsPanel.alignHint')}</p>
+                        <Show when={adjusting() || offsetMs() !== null}>
+                          <div class={styles.timingActions}>
+                            <Show when={adjusting()}>
+                              <button type="button" onClick={() => setAdjusting(false)}>{t('lyricsPanel.cancelAdjust')}</button>
+                            </Show>
+                            <Show when={offsetMs() !== null}>
+                              <button type="button" onClick={() => void saveOffset(null)}>{t('lyricsPanel.resetTiming')}</button>
+                            </Show>
+                          </div>
+                        </Show>
+                      </div>
+                    </Show>
                     <div class={styles.synced}>
                       <For each={parsed()}>
                         {(line, i) => {
@@ -245,7 +306,8 @@ export function LyricsPanelView(props: {
                               // The tap that seeks also set a touch hold; drop it
                               // so the view follows the new position immediately.
                               holdUntil = 0;
-                              props.playback.seek(line.time);
+                              if (aligning()) void alignTo(line.time);
+                              else props.playback.seek(line.time + shift());
                             },
                           });
                           return (
@@ -266,6 +328,11 @@ export function LyricsPanelView(props: {
                           );
                         }}
                       </For>
+                      <Show when={!aligning()}>
+                        <button type="button" class={styles.adjust} onClick={() => setAdjusting(true)}>
+                          {t('lyricsPanel.adjust')}
+                        </button>
+                      </Show>
                     </div>
                   </Show>
                 </Show>

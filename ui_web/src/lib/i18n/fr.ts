@@ -1108,6 +1108,12 @@ export const fr: Dict = {
     retry: 'Réessayer',
     instrumental: 'Titre instrumental.',
     notFound: 'Aucunes paroles trouvées pour ce titre.',
+    alignHint: 'Ces paroles sont synchronisées sur une autre version de ce titre. Touchez la ligne chantée pour les caler.',
+    adjustHint: 'Touchez la ligne chantée en ce moment.',
+    adjust: 'Ajuster la synchro',
+    cancelAdjust: 'Annuler',
+    resetTiming: 'Réinitialiser la synchro',
+    timingSaveFailed: 'Impossible d’enregistrer la synchro.',
   },
   discoverNodes: {
     title: 'Recommandations',

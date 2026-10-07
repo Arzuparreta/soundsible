@@ -28,7 +28,7 @@ from shared.musicbrainz import normalize_recording_mbid
 from shared.music_identity import youtube_music_metadata
 from shared.providers import deezer
 from shared.hardening import SCOPE_LIBRARY_WRITE, rate_limit, require_scope
-from shared.resolution_confidence import best_candidate, classify_confidence
+from shared.resolution_confidence import best_candidate, classify_confidence, rerank_cached_resolution
 from shared.text_utils import (
     collapse_text,
     fold_text,
@@ -1261,12 +1261,28 @@ def _resolve_candidates(artist: str, title: str, duration_s: int | None = None) 
     their own.
     """
     db = instance_db()
-    cached = db.get_cached_resolution(artist, title)
+    cached = cached_resolution(db, artist, title, duration_s)
     if cached and cached.get("id"):
         return cached, cached.get("candidates") or [cached]
 
     key = f"{_norm(artist)}|{_norm(title)}|{duration_s or ''}"
     return _resolve_memo.resolve(key, lambda: _resolve_candidates_uncached(artist, title, duration_s))
+
+
+def cached_resolution(db: DatabaseManager, artist: str, title: str, duration_s: int | None) -> dict[str, Any] | None:
+    """The stored resolution for a song, corrected for a running time it lacked.
+
+    See `rerank_cached_resolution`. A correction is written back, so callers
+    that know no running time stop getting the answer that ignored one.
+    """
+    cached = db.get_cached_resolution(artist, title)
+    if not cached:
+        return None
+    reranked = rerank_cached_resolution(artist, title, duration_s, cached)
+    if not reranked:
+        return cached
+    db.set_cached_resolution(artist, title, reranked)
+    return db.get_cached_resolution(artist, title) or cached
 
 
 def _resolve_candidates_uncached(

@@ -25,6 +25,7 @@ export function openNativeLyrics(program: () => ProgramState | null, library: ()
       <LyricsPanelView playback={{ currentTrack: track, currentTime: () => (program()?.positionMs ?? 0) / 1000,
         inLibrary: row => library().some(entry => entry.id === row.id && entry.source !== 'preview'),
         saved: row => { const keys = new Set(trackKeys(row)); return saved().some(entry => entry.keys.some(key => keys.has(key))); },
+        mediaDuration: () => { const ms = program()?.durationMs ?? 0; return ms > 0 ? ms / 1000 : undefined; },
         seek: seconds => { if (current() && program()?.seekable !== false && Number.isFinite(seconds)) void execute({ action: 'seek', positionMs: Math.round(seconds * 1000) }).catch(() => {}); },
       }} />
     </section>;

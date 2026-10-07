@@ -753,18 +753,33 @@ def get_lyrics():
 def get_lyrics_by_song_id():
     from shared.database import instance_db
 
+    from shared.lyrics import synced_timing_fits
+
     track = _track_or_404(_required("id"))
-    cached = instance_db().get_lyrics(track.id)
+    db = instance_db()
+    cached = db.get_lyrics(track.id)
     if not cached:
         return {"lyricsList": {}}
 
-    lines = _synced_lines(cached.get("synced"))
+    # The listener's correction is applied here rather than sent as the
+    # structured `offset`, whose sign clients have read both ways. Without one,
+    # lines timed for a recording of another length are served untimed: a
+    # client that follows them would be ahead of (or behind) the song.
+    youtube_id = getattr(track, "youtube_id", None)
+    offset_ms = db.get_lyrics_offset(f"yt:{youtube_id}" if youtube_id else f"lib:{track.id}")
+    timed = offset_ms is not None or synced_timing_fits(track.duration, cached.get("synced_duration"))
+    lines = _synced_lines(cached.get("synced"), offset_ms or 0) if timed else []
     if lines:
         structured = {"synced": True, "line": lines}
     elif cached.get("plain"):
         structured = {
             "synced": False,
             "line": [{TEXT_KEY: line} for line in str(cached["plain"]).splitlines() if line.strip()],
+        }
+    elif cached.get("synced"):
+        structured = {
+            "synced": False,
+            "line": [{TEXT_KEY: line[TEXT_KEY]} for line in _synced_lines(cached["synced"])],
         }
     else:
         return {"lyricsList": {}}
@@ -773,8 +788,9 @@ def get_lyrics_by_song_id():
     return {"lyricsList": {"structuredLyrics": [structured]}}
 
 
-def _synced_lines(synced: Any) -> list[dict[str, Any]]:
-    """LRC text as the timed lines OpenSubsonic asks for, milliseconds and all."""
+def _synced_lines(synced: Any, shift_ms: int = 0) -> list[dict[str, Any]]:
+    """LRC text as the timed lines OpenSubsonic asks for, milliseconds and all,
+    each moved `shift_ms` later in the recording."""
     if not synced or not isinstance(synced, str):
         return []
     from shared.lyrics import parse_lrc
@@ -782,7 +798,7 @@ def _synced_lines(synced: Any) -> list[dict[str, Any]]:
     lines = []
     for offset_ms, text in parse_lrc(synced):
         if text.strip():
-            lines.append({"start": int(offset_ms), TEXT_KEY: text})
+            lines.append({"start": max(0, int(offset_ms) + shift_ms), TEXT_KEY: text})
     return lines
 
 
