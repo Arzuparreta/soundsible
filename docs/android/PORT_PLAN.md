@@ -32,8 +32,9 @@ Offline B está aprobado (2026-10-03): copias explícitas de música adquirida,
 «Disponible sin conexión» dentro de menús. Su implementación y aceptación se
 adelantan en el corte S6a; no sustituyen la paridad restante ni habilitan alpha.
 El usuario autoriza continuar autónomamente hasta paridad completa y subir avances.
-La PR final debe quedar abierta con checks pasando para revisión manual; no merge,
-automerge ni publicación antes de revisión/merge del usuario.
+La PR #300 fue revisada e integrada el 2026-10-07. El usuario autorizó después
+preparar la firma/canal y completar merge/publicación al cerrar los gates de
+RELEASE_GATES. La aceptación física permanece como requisito de beta.
 
 ## Inventario de capacidades y aceptación
 

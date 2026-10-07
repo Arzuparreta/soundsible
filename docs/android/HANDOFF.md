@@ -76,8 +76,13 @@ Estado vigente y forma de trabajar. Lo superado está en
       Crédito `Co-authored-by` a emrothenberg en el commit de implementación y en la PR.
 - [x] Clave permanente creada fuera de Git, backup en disco independiente probado;
       secrets en entorno `android-release`, restringido a `main`.
-- [ ] Distribución: tooling y workflow implementados; APK release, conservación
-      de datos al actualizar y publicación pendientes de aceptación final.
+- [x] Distribución implementada y aceptada localmente: APK release firmada,
+      actualización conservando cuenta/ajustes/offline, negativos de instalación,
+      arranque/PCM offline y App Links fríos/calientes. Evidencia en EVIDENCE.
+- [ ] Publicación: integrar la PR #304 con checks completos y ejecutar
+      `Android alpha release` desde main. El workflow repite aceptación de su APK
+      exacta y publica sólo si todos los gates pasan. Estado público: canal
+      `android-alpha/*` en GitHub Releases, nunca artifacts debug ni latest global.
 - [x] Asociación de dominio publicada por PR Arzuparreta.github.io #11;
       comprobada respuesta HTTPS 200/application-json con el certificado correcto.
 
@@ -86,7 +91,7 @@ Estado vigente y forma de trabajar. Lo superado está en
 - JDK21 `/home/arsu/.cache/soundsible/android-toolchain/jdk`, SDK
   `/home/arsu/.cache/soundsible/android-toolchain/sdk`: exportar `JAVA_HOME`,
   `ANDROID_HOME` y sus `bin` en `PATH` para `prepare` e `integration`.
-- AVD `soundsible-api36`: `emulator -avd soundsible-api36 -no-window -no-audio -no-boot-anim -port 5554`.
+- AVD local `soundsible-alpha-api36`: `emulator -avd soundsible-alpha-api36 -no-window -no-audio -no-boot-anim -port 5554`.
 - `.venv/bin/python scripts/android.py prepare` y después
   `env 'ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class=com.soundsible.android.A,com.soundsible.android.B' .venv/bin/python scripts/android.py integration`
   (zsh no acepta el nombre con puntos sin `env`). El runner levanta los fixtures

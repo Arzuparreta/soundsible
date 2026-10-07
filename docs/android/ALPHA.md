@@ -45,14 +45,16 @@ validate all public providers. A Soundsible server is required.
 
 ## Permisos / Permissions
 
-Internet conecta al servidor; servicios multimedia y wake lock permiten audio
+Internet conecta al servidor y el estado de red permite detectar la conexión;
+servicios multimedia y wake lock permiten audio
 en segundo plano. Un servicio dataSync prepara las copias solicitadas. En Android
 13+ se pide permiso de notificaciones al preparar la primera copia: denegarlo
 no bloquea las copias. La cámara sólo se solicita para escanear el QR. Live emite
 el programa nativo y no usa micrófono. No se solicitan permisos de archivos
 generales: las copias se guardan en el espacio privado de la app.
 
-Internet connects to your server. Media services and wake lock support background
+Internet connects to your server; network-state access detects connectivity.
+Media services and wake lock support background
 audio; a dataSync service prepares requested offline copies. Notification permission
 is requested for the first preparation on Android 13+; denial does not block
 copies. Camera access is requested only for QR pairing. Live publishes the native

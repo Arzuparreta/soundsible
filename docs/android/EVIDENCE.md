@@ -57,5 +57,14 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   200 y application/json, con asociación al package/certificado permanente.
 - DjContextTest con referencia confirmada por el servicio: HTTP/TLS 2/0,
   APK/JVM/lint normales aprobados; log /tmp/soundsible-alpha-dj-confirmed.log.
-- APK firmada, actualización y aceptación final: pendientes; no presentar
-  la implementación del workflow como una release ejecutada.
+- APK pública local del commit 1a7332fb: firma permanente y cuatro ABIs verificadas;
+  StartupTest release 1/0; actualización desde baseline firmada con la misma clave
+  conserva cookie cifrada, cuenta, idioma/tema y metadata/copias offline. Offline
+  prepare/seed/update/PCM 4/0; downgrade, firma distinta y APK truncada rechazados.
+  App Links: dominio verificado por Android, apertura fría/caliente por resolución
+  HTTPS real y rutas ajenas no reclamadas. Recibo en android/build/alpha/release-acceptance.json;
+  log /tmp/soundsible-alpha-release-acceptance4.log. Publicación desde main requiere
+  repetir la aceptación sobre su APK exacta en el workflow de release.
+- Web pública: PR soundsible.github.io #14 integrada/desplegada; 84 tests de lógica,
+  build Astro/check de 114 páginas y browser/accessibility 24/0 en imagen CI.
+  No se muestran enlaces Android mientras no exista prerelease con todos los assets.
