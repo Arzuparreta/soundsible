@@ -5,11 +5,33 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+from zipfile import ZipFile
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import android_release as release
+
+
+def test_predecessor_sdk_policy_comes_from_its_published_metadata(monkeypatch, tmp_path):
+    capabilities, signing = release.gates()
+    old_policy = {**capabilities, "min_sdk": capabilities["min_sdk"] - 1,
+                  "target_sdk": capabilities["target_sdk"] - 1}
+    apk = tmp_path / "old.apk"
+    with ZipFile(apk, "w") as archive:
+        for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
+            archive.writestr(f"lib/{abi}/fixture.so", b"fixture")
+    plan = {"version": release.declared_version(), "version_code": 2, "capabilities": old_policy}
+    monkeypatch.setattr(release.build, "sdk", lambda: tmp_path)
+    def inspect(*args):
+        if "apksigner" in args[0]:
+            return "Signer #1 certificate SHA-256 digest: " + signing["certificate_sha256"].replace(":", "").lower()
+        return (f"package: name='{release.PACKAGE}' versionCode='2' versionName='{plan['version']}'\n"
+                f"sdkVersion:'{old_policy['min_sdk']}'\ntargetSdkVersion:'{old_policy['target_sdk']}'")
+    monkeypatch.setattr(release, "command", inspect)
+    assert release.verify_apk(apk, plan, published=True)["capabilities"] == old_policy
+    with pytest.raises(RuntimeError, match="SDK differs"):
+        release.verify_apk(apk, plan)
 
 
 def test_predecessor_is_latest_published_alpha_not_a_failed_draft():
@@ -31,19 +53,24 @@ def test_public_upgrade_downloads_exact_old_apk_without_recompiling(monkeypatch,
     monkeypatch.setattr(release, "releases", lambda: [{"tag_name": tag, "draft": False}])
     monkeypatch.setattr(release, "compile_apk", lambda *args: pytest.fail("Recompiled public predecessor"))
     checked = []
-    monkeypatch.setattr(release, "verify_apk", lambda apk, metadata: checked.append(apk.read_bytes()))
+    monkeypatch.setattr(release, "verify_apk", lambda apk, metadata, **kwargs: checked.append((apk.read_bytes(), kwargs)))
+    monkeypatch.setattr(release, "verify_harness", lambda harness: None)
 
     def download(*args):
         assert args[:4] == ("gh", "release", "download", tag)
         directory = tmp_path / "published-predecessor"
         apk = directory / "Soundsible-Android-alpha.apk"
         apk.write_bytes(b"actual published binary")
+        harness = directory / release.SEED_HARNESS
+        harness.write_bytes(b"old matching tests")
         (directory / "android-release.json").write_text(json.dumps(
-            {"tag": tag, "version_code": 2, "sha256": release.digest(apk)}
+            {"tag": tag, "version_code": 2, "sha256": release.digest(apk),
+             "upgrade_seed_harness": {"apk": release.SEED_HARNESS, "sha256": release.digest(harness)}}
         ))
     monkeypatch.setattr(release, "command", download)
-    apk, evidence = release.upgrade_baseline({"version_code": 4})
-    assert checked == [b"actual published binary"]
+    apk, harness, evidence = release.upgrade_baseline({"version_code": 4})
+    assert checked == [(b"actual published binary", {"published": True})]
+    assert harness.read_bytes() == b"old matching tests"
     assert evidence["kind"] == "published" and evidence["version_code"] == 2
     metadata = apk.parent / "android-release.json"
     monkeypatch.setattr(release, "command", lambda *args: None)

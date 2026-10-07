@@ -26,6 +26,7 @@ ROOT = build.ROOT
 OUT = ROOT / "android/build/alpha"
 PACKAGE = "com.soundsible.android"
 HOST = "arzuparreta.github.io"
+SEED_HARNESS = "upgrade-seed-androidTest.apk"
 TAG = re.compile(r"^android-alpha/(.+)-(\d+)-([0-9a-f]{12})$")
 CAPABILITIES = {
     "phone",
@@ -189,8 +190,10 @@ def compile_apk(plan: dict, destination: Path) -> None:
     shutil.copy2(ROOT / "android/app/build/outputs/apk/release/app-release.apk", destination)
 
 
-def verify_apk(apk: Path, plan: dict) -> dict:
+def verify_apk(apk: Path, plan: dict, *, published: bool = False) -> dict:
     capabilities, signing = gates()
+    if published:
+        capabilities = plan["capabilities"]
     tools = build.sdk() / "build-tools/36.0.0"
     signature = command(str(tools / "apksigner"), "verify", "--verbose", "--print-certs", str(apk))
     match = re.search(r"Signer #1 certificate SHA-256 digest: ([0-9a-f]+)", signature)
@@ -341,19 +344,21 @@ def published_predecessor(items: list[dict], code: int) -> dict | None:
     return item
 
 
-def upgrade_baseline(plan: dict) -> tuple[Path, dict]:
+def upgrade_baseline(plan: dict) -> tuple[Path, Path, dict]:
     item = published_predecessor(releases(), plan["version_code"])
     if item is None:
         baseline = {**plan, "version_code": plan["version_code"] - 1}
         apk = OUT / "update-baseline.apk"
         compile_apk(baseline, apk)
         verify_apk(apk, baseline)
-        return apk, {"kind": "synthetic-first-release", "version_code": baseline["version_code"]}
+        harness = ROOT / "android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk"
+        return apk, harness, {"kind": "synthetic-first-release", "version_code": baseline["version_code"]}
     directory = OUT / "published-predecessor"
     directory.mkdir(parents=True, exist_ok=True)
     command(
         "gh", "release", "download", item["tag_name"], "--dir", str(directory), "--clobber",
         "--pattern", "Soundsible-Android-alpha.apk", "--pattern", "android-release.json",
+        "--pattern", SEED_HARNESS,
     )
     metadata = json.loads((directory / "android-release.json").read_text())
     apk = directory / "Soundsible-Android-alpha.apk"
@@ -364,9 +369,21 @@ def upgrade_baseline(plan: dict) -> tuple[Path, dict]:
         or metadata.get("sha256") != digest(apk)
     ):
         raise RuntimeError("Published predecessor metadata/APK disagree")
-    verify_apk(apk, metadata)
-    return apk, {"kind": "published", "tag": item["tag_name"], "version_code": metadata["version_code"],
+    verify_apk(apk, metadata, published=True)
+    harness = directory / SEED_HARNESS
+    if metadata.get("upgrade_seed_harness") != {"apk": SEED_HARNESS, "sha256": digest(harness)}:
+        raise RuntimeError("Published predecessor seed harness differs from its metadata")
+    verify_harness(harness)
+    return apk, harness, {"kind": "published", "tag": item["tag_name"], "version_code": metadata["version_code"],
                  "apk_sha256": digest(apk)}
+
+
+def verify_harness(harness: Path) -> None:
+    _, signing = gates()
+    signature = command(str(build.sdk() / "build-tools/36.0.0/apksigner"), "verify", "--print-certs", str(harness))
+    match = re.search(r"Signer #1 certificate SHA-256 digest: ([0-9a-f]+)", signature)
+    if not match or match[1].upper() != signing["certificate_sha256"].replace(":", ""):
+        raise RuntimeError("Upgrade seed harness does not carry the permanent certificate")
 
 
 def acceptance(plan: dict, apk: Path) -> dict:
@@ -379,9 +396,10 @@ def acceptance(plan: dict, apk: Path) -> dict:
         probe.bind(("127.0.0.1", 5097))
     adb("shell", "am", "force-stop", PACKAGE)
     OUT.mkdir(parents=True, exist_ok=True)
-    baseline_apk, baseline_evidence = upgrade_baseline(plan)
+    candidate_harness = OUT / SEED_HARNESS
+    verify_harness(candidate_harness)
+    baseline_apk, seed_harness, baseline_evidence = upgrade_baseline(plan)
     # Release test APK is signed with the permanent key; the production target stays non-debuggable.
-    harness = ROOT / "android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk"
     origin = "http://10.0.2.2:5097"
     with tempfile.TemporaryDirectory(prefix="soundsible-release-fixture-") as directory:
         with (OUT / "fixture.log").open("w") as log:
@@ -417,7 +435,7 @@ def acceptance(plan: dict, apk: Path) -> dict:
                 subprocess.run([str(build.sdk() / "platform-tools/adb"), "uninstall", PACKAGE], capture_output=True)
                 adb("shell", "svc", "wifi", "enable")
                 adb("install", str(baseline_apk))
-                adb("install", "-r", str(harness))
+                adb("install", "-r", str(seed_harness))
                 adb("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
                 instrument(
                     "OfflineRestartTest", OUT / "update-prepare.txt", offlinePhase="prepare", fixtureOrigin=origin
@@ -425,6 +443,7 @@ def acceptance(plan: dict, apk: Path) -> dict:
                 instrument("ReleaseUpdateTest", OUT / "update-seed.txt", updatePhase="seed", fixtureOrigin=origin)
                 adb("shell", "am", "force-stop", PACKAGE)
                 adb("install", "-r", str(apk))
+                adb("install", "-r", str(candidate_harness))
                 instrument("ReleaseUpdateTest", OUT / "update-verify.txt", updatePhase="verify", fixtureOrigin=origin)
                 rejected(baseline_apk, "INSTALL_FAILED_VERSION_DOWNGRADE")
                 with tempfile.TemporaryDirectory() as scratch:
@@ -519,6 +538,9 @@ def publish(plan: dict, apk: Path, receipt: dict) -> None:
         )
     ):
         raise RuntimeError("Release APK acceptance is incomplete or belongs to another APK")
+    harness = OUT / SEED_HARNESS
+    verify_harness(harness)
+    metadata["upgrade_seed_harness"] = {"apk": SEED_HARNESS, "sha256": digest(harness)}
     metadata["checks"] = checks(plan["source_revision"])
     item = next(row for row in releases() if row["tag_name"] == plan["tag"])
     if not item["draft"]:
@@ -530,7 +552,7 @@ def publish(plan: dict, apk: Path, receipt: dict) -> None:
     (OUT / "SHA256SUMS").write_text(
         "".join(
             f"{digest(path)}  {path.name}\n"
-            for path in (apk, OUT / "android-release.json", OUT / "release-acceptance.json")
+            for path in (apk, harness, OUT / "android-release.json", OUT / "release-acceptance.json")
         )
     )
     notes = ROOT / "docs/android/ALPHA.md"
@@ -546,6 +568,7 @@ def publish(plan: dict, apk: Path, receipt: dict) -> None:
             plan["tag"],
             "--clobber",
             str(apk),
+            str(harness),
             str(OUT / "android-release.json"),
             str(OUT / "release-acceptance.json"),
             str(OUT / "SHA256SUMS"),
@@ -581,6 +604,10 @@ def main() -> int:
         apk = OUT / "Soundsible-Android-alpha.apk"
         if args.command == "build":
             compile_apk(plan, apk)
+            shutil.copy2(
+                ROOT / "android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk",
+                OUT / SEED_HARNESS,
+            )
         elif args.command == "verify":
             write(OUT / "android-release.json", verify_apk(apk, plan))
         elif args.command == "acceptance":

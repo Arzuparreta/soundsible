@@ -50,6 +50,9 @@ Antes de habilitar el workflow de publicación deben cumplirse:
    Desde la segunda alpha, instalar la última APK pública descargada sin
    recompilarla; sólo la primera publicación admite una base sintética. El
    recibo de aceptación registra cuál se utilizó.
+   Preparar esa base con su propio `upgrade-seed-androidTest.apk`, conservado
+   con checksum en sus assets, y verificar sus SDK contra su metadata original.
+   Tras actualizar, sustituir el harness por el del candidato para verificarlo.
 6. Versión procedente de `shared/version.py` y `scripts/version_sync.py`;
    `versionCode` monotónico para el canal público, validado contra el último
    publicado. No reutilizar counters de distintos workflows como si fueran uno.

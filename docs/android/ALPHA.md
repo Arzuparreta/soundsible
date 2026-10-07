@@ -17,6 +17,11 @@ from your browser or file manager when Android asks. Install over an earlier
 alpha to keep your account, settings and offline copies; do not uninstall first.
 Soundsible Dev is a separate app; its data is not migrated. Updates are manual.
 
+`upgrade-seed-androidTest.apk` es evidencia auxiliar para las pruebas automáticas
+de actualización; instala únicamente `Soundsible-Android-alpha.apk`.
+`upgrade-seed-androidTest.apk` supports automated upgrade testing; install only
+`Soundsible-Android-alpha.apk`.
+
 Conecta con la dirección de tu servidor y tu cuenta, o escanea el QR de
 Ajustes → Dispositivos de una sesión existente. El QR inicia una sesión completa
 de esa cuenta y puede revocarse desde Dispositivos. Para escuchar sin conexión,
