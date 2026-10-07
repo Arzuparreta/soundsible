@@ -489,6 +489,7 @@
 }
 
 .cardRemove,
+.cardExpand,
 .cardMenu {
   display: grid;
   width: 34px;
@@ -502,11 +503,12 @@
   cursor: pointer;
 }
 
-.cardRemove svg {
+.cardRemove svg, .cardExpand svg {
   width: 17px;
   height: 17px;
 }
 
+.cardExpand:focus-visible,
 .cardRemove:focus-visible,
 .cardMenu:focus-visible,
 .switch:focus-visible {
@@ -615,7 +617,7 @@
     background: var(--stage-row-hover);
   }
 
-  .card:has([data-card-open]):hover {
+  .card:has([data-card-expand]):hover {
     background: var(--stage-row-hover);
   }
 
@@ -675,3 +677,9 @@
   width: 44px;
   height: 44px;
 }
+
+.collection { min-width: 0; }
+.cardSongs { display: flex; flex-direction: column; min-height: 0; max-height: min(45vh, 360px); margin-top: 4px; border-left: 2px solid var(--stage-line-soft); }
+.cardSongs .sectionRows { padding-bottom: 0; }
+.cardEmpty { padding: 12px; color: var(--ink-secondary); font-size: var(--text-caption); }
+.card[data-mobile] .cardExpand, .card[data-mobile] .cardRemove { width: 44px; height: 44px; }

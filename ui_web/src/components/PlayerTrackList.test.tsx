@@ -15,8 +15,7 @@ const contextCard = (over: Partial<PlayerTrackListCard> = {}): PlayerTrackListCa
   title: 'Record',
   detail: 'Album · 8 tracks',
   seed: 'album:record',
-  onOpen: vi.fn(),
-  openLabel: 'Open Record',
+  entries: [{ id: 'next', title: 'Next', artist: 'Artist', onActivate: vi.fn() }],
   menu: () => [{ label: 'Remove', onSelect: () => {} }],
   remove: { label: 'Remove Record from the queue', onSelect: vi.fn() },
   ...over,
@@ -27,30 +26,36 @@ const list = (sections: () => PlayerTrackListSection[]) => render(() => (
 ));
 
 describe('continuation cards', () => {
-  it('opens the collection, removes it, and never counts as a song', () => {
+  it('expands on the card, collapses on the chevron, and keeps navigation in the menu', () => {
     const card = contextCard();
     const { container } = list(() => [{ id: 'continuation', label: 'Then', entries: [], cards: [card] }]);
-    expect(screen.queryByText('Nothing')).toBeNull();
     expect(container.querySelector('[data-drag-row]')).toBeNull();
-    expect(container.querySelector('[data-section-rows]')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open Record' }));
-    expect(card.onOpen).toHaveBeenCalledOnce();
+    fireEvent.click(container.querySelector('[data-card-expand]')!);
+    expect(container.querySelector('[data-card-expand]')).toHaveAttribute('aria-expanded', 'true');
+    expect(container.querySelector('[data-card-songs]')).toBeInTheDocument();
+    const controls = container.querySelectorAll('[aria-expanded]');
+    fireEvent.click(controls[1]);
+    expect(container.querySelector('[data-card-songs]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Record from the queue' }));
     expect(card.remove!.onSelect).toHaveBeenCalledOnce();
-
     fireEvent.contextMenu(container.querySelector('[data-queue-card="context"]')!);
-    expect(menu.open).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Record', subtitle: 'Album · 8 tracks' }),
-      expect.anything(),
-    );
+    expect(menu.open).toHaveBeenCalledWith(expect.objectContaining({ title: 'Record' }), expect.anything());
   });
 
-  it('names a collection with no page without pretending to open it', () => {
-    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [contextCard({ onOpen: undefined, openLabel: undefined })] }]);
-    expect(container.querySelector('[data-card-open]')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Open Record' })).toBeNull();
-    expect(screen.getByText('Record')).toBeInTheDocument();
+  it('keeps an empty finite collection expandable and explains the empty pass', () => {
+    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [contextCard({ entries: [] })] }]);
+    fireEvent.click(container.querySelector('[data-card-expand]')!);
+    expect(screen.getByText('nowPlaying.contextNoUpcoming')).toBeInTheDocument();
+  });
+
+  it('retains expansion when the same collection receives rebuilt queue entries', () => {
+    const [card, setCard] = createSignal(contextCard({ entries: [] }));
+    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [card()] }]);
+    fireEvent.click(container.querySelector('[data-card-expand]')!);
+    setCard(contextCard({ entries: [] }));
+    expect(container.querySelector('[data-card-expand]')).toHaveAttribute('aria-expanded', 'true');
+    setCard(contextCard({ seed: 'other', entries: [] }));
+    expect(container.querySelector('[data-card-expand]')).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('keeps a switched-off card quiet but fully operable', () => {
@@ -69,6 +74,7 @@ describe('continuation cards', () => {
       }],
     }]);
     const card = container.querySelector('[data-queue-card="autoplay"]')!;
+    expect(card.querySelector('[aria-expanded]')).toBeNull();
     const toggle = screen.getByRole('switch', { name: 'Autoplay' });
     expect(card).toHaveAttribute('data-dimmed');
     expect(toggle).toHaveAttribute('aria-checked', 'false');
@@ -86,7 +92,7 @@ describe('continuation cards', () => {
     layout.mobile = true;
     const card = contextCard();
     list(() => [{ id: 'continuation', entries: [], cards: [card] }]);
-    expect(screen.queryByRole('button', { name: 'Remove Record from the queue' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove Record from the queue' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'songRow.ariaMore: Record' }));
     expect(menu.open).toHaveBeenCalledWith(expect.objectContaining({ title: 'Record' }), undefined);
   });

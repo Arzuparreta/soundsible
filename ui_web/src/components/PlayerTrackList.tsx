@@ -9,7 +9,7 @@ import { t } from '../lib/i18n';
 import type { MenuAction } from './ActionMenu';
 import { MoreIcon, menuIcons } from './icons';
 import type { SavedEntry } from '../types/music';
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, type JSX } from 'solid-js';
 import { createResponsiveTap, responsiveTapConstants } from '../lib/responsiveTap';
 import { claimHoldGesture, clearTextSelection } from '../lib/holdGesture';
 import {
@@ -46,6 +46,7 @@ export interface PlayerTrackListEntry {
   canMoveDown?: boolean;
   draggable?: boolean;
   onDragStart?: (event: DragEvent) => void;
+  onDragEnd?: (event: DragEvent) => void;
   onDragOver?: (event: DragEvent) => void;
   onDrop?: (event: DragEvent) => void;
   before?: JSX.Element;
@@ -58,7 +59,7 @@ export interface PlayerTrackListEntry {
  *
  * Drawn in the rows' language (artwork, a name, what it is, a menu) so it reads
  * as part of the same list, but it is never numbered, reordered or played as a
- * row: activating it opens what it stands for.
+ * row: activating a finite collection expands its upcoming songs.
  */
 export interface PlayerTrackListCard {
   id: string;
@@ -72,8 +73,8 @@ export interface PlayerTrackListCard {
   /** Present but switched off: drawn quieter, and every control on it still
    * works exactly as it does when it is on. */
   dimmed?: boolean;
-  onOpen?: () => void;
-  openLabel?: string;
+  /** Undefined for generators such as Autoplay; [] is an empty finite collection. */
+  entries?: PlayerTrackListEntry[];
   menu?: () => MenuAction[];
   remove?: { label: string; onSelect: () => void };
   toggle?: { label: string; checked: boolean; onChange: () => void };
@@ -139,10 +140,19 @@ export function PlayerTrackList(props: {
   const [dragging, setDragging] = createSignal(false);
   // Sections rebuild their entry objects when the queue moves. Editing belongs
   // to the occurrence, not to a row instance that disappears after one nudge.
+  const [expandedCards, setExpandedCards] = createSignal<Set<string>>(new Set());
+  const cardKey = (card: PlayerTrackListCard) => `${card.id}:${card.seed}`;
+  const toggleCard = (card: PlayerTrackListCard) => setExpandedCards(before => {
+    const after = new Set(before);
+    const key = cardKey(card);
+    if (after.has(key)) after.delete(key);
+    else after.add(key);
+    return after;
+  });
   const [editingId, setEditingId] = createSignal<string | null>(null);
   let rowsEl: HTMLDivElement | undefined;
   createEffect(() => {
-    if (editingId() && !props.sections.some((section) => section.entries.some((entry) =>
+    if (editingId() && !props.sections.some((section) => [...section.entries, ...(section.cards ?? []).flatMap(card => card.entries ?? [])].some((entry) =>
       entry.id === editingId() && !entry.current && !entry.locked))) setEditingId(null);
   });
   const focusRowControl = (id: string, command?: string) => queueMicrotask(() => {
@@ -292,7 +302,11 @@ export function PlayerTrackList(props: {
                     </>}
                   </PlayerLane>}>
                     <div class={styles.sectionCards} data-section-cards>
-                      <For each={section.cards}>{(card) => <PlayerTrackListCardRow card={card} />}</For>
+                      <For each={section.cards}>{(card) => <PlayerTrackListCardRow card={card} expanded={expandedCards().has(cardKey(card))}
+                        onToggle={() => toggleCard(card)}
+                        editingId={editingId()}
+                        onEditingChange={(id, editing) => { setEditingId(editing ? id : null); focusRowControl(id); }}
+                        onMove={(row, direction) => { row.onMove?.(direction); focusRowControl(row.id, direction < 0 ? 'up' : 'down'); }} />}</For>
                     </div>
                   </Show>
                 </section>
@@ -325,10 +339,15 @@ function PlayerLane(props: {
   </div>;
 }
 
-function PlayerTrackListCardRow(props: { card: PlayerTrackListCard }) {
+function PlayerTrackListCardRow(props: { card: PlayerTrackListCard; expanded: boolean; onToggle: () => void;
+  editingId: string | null; onEditingChange: (id: string, editing: boolean) => void;
+  onMove: (entry: PlayerTrackListEntry, direction: -1 | 1) => void }) {
+  const contentsId = createUniqueId();
+  const expandable = () => props.card.entries !== undefined;
+  const label = () => t(props.expanded ? 'nowPlaying.contextCollapse' : 'nowPlaying.contextExpand', { name: props.card.title });
   const tap = createResponsiveTap({
-    disabled: () => !props.card.onOpen,
-    onTap: () => props.card.onOpen?.(),
+    disabled: () => !expandable(),
+    onTap: () => props.onToggle(),
   });
   const openMenu = (event?: MouseEvent) => {
     const actions = props.card.menu?.() ?? [];
@@ -336,6 +355,7 @@ function PlayerTrackListCardRow(props: { card: PlayerTrackListCard }) {
   };
   const menuTap = createResponsiveTap({ onTap: (event) => { event.stopPropagation(); openMenu(); } });
   return (
+    <div class={styles.collection}>
     <div
       class={styles.card}
       data-queue-card={props.card.id}
@@ -348,12 +368,14 @@ function PlayerTrackListCardRow(props: { card: PlayerTrackListCard }) {
       }}
     >
       <div class={styles.cardMain}>
-        <Show when={props.card.onOpen}>
+        <Show when={expandable()}>
           <button
             class={styles.playButton}
             type="button"
-            aria-label={props.card.openLabel ?? props.card.title}
-            data-card-open
+            aria-label={label()}
+            aria-expanded={props.expanded}
+            aria-controls={contentsId}
+            data-card-expand
             data-pressable
             onKeyDown={(event) => {
               if (props.card.menu && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
@@ -396,7 +418,12 @@ function PlayerTrackListCardRow(props: { card: PlayerTrackListCard }) {
             </svg>
           </button>
         </Show>
-        <Show when={!mobileListLayout() && props.card.remove}>
+        <Show when={expandable()}>
+          <button class={styles.cardExpand} type="button" aria-label={label()} aria-expanded={props.expanded} aria-controls={contentsId} onClick={props.onToggle}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style={{ transform: props.expanded ? 'rotate(180deg)' : undefined }}><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+        </Show>
+        <Show when={props.card.remove}>
           {(remove) => (
             <button class={styles.cardRemove} type="button" aria-label={remove().label} onClick={() => remove().onSelect()}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -406,6 +433,17 @@ function PlayerTrackListCardRow(props: { card: PlayerTrackListCard }) {
           )}
         </Show>
       </span>
+    </div>
+    <Show when={expandable() && props.expanded}>
+      <div id={contentsId} class={styles.cardSongs} role="region" aria-label={props.card.title} data-card-songs>
+        <Show when={props.card.entries?.length} fallback={<p class={styles.cardEmpty}>{t('nowPlaying.contextNoUpcoming')}</p>}>
+          <PlayerLane virtualize entries={props.card.entries ?? []} editingId={props.editingId} tail={null}>
+            {(entry) => <PlayerTrackListRow entry={entry()} editing={props.editingId === entry().id}
+              onEditingChange={editing => props.onEditingChange(entry().id, editing)} onMove={direction => props.onMove(entry(), direction)} />}
+          </PlayerLane>
+        </Show>
+      </div>
+    </Show>
     </div>
   );
 }
@@ -457,6 +495,7 @@ function PlayerTrackListRow(props: {
       data-stale={props.entry.stale ? '' : undefined}
       draggable={props.entry.draggable}
       onDragStart={props.entry.onDragStart}
+      onDragEnd={props.entry.onDragEnd}
       onDragOver={props.entry.onDragOver}
       onDrop={props.entry.onDrop}
       // Keep right-click alongside the visible menu. Mobile rows own their

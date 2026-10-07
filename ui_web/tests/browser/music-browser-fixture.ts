@@ -1,3 +1,4 @@
+import type { PlaybackContextDescriptor } from '../../src/lib/playbackQueue';
 import { expect, type Page, type BrowserContext } from '@playwright/test';
 
 export const TRACKS = Array.from({ length: 320 }, (_, index) => ({
@@ -120,11 +121,11 @@ type FixtureTrack = (typeof TRACKS)[number];
  */
 export async function restoreQueueSession(
   page: Page,
-  opts: { current: FixtureTrack; requests: FixtureTrack[]; context?: FixtureTrack[] },
+  opts: { current: FixtureTrack; requests: FixtureTrack[]; context?: FixtureTrack[]; descriptor?: PlaybackContextDescriptor },
 ): Promise<void> {
-  const library = { id: 'library', kind: 'library', label: 'Tu biblioteca', destination: '/' };
+  const library = opts.descriptor ?? { id: 'library', kind: 'library', label: 'Tu biblioteca', destination: '/' };
   const contextEntry = (track: FixtureTrack, index: number) => ({
-    ...track, queueId: `q-context-${track.id}`, queueLane: 'context', queueSource: 'library',
+    ...track, queueId: `q-context-${track.id}`, queueLane: 'context', queueSource: library.kind,
     queueContext: library, queueContextIndex: index,
   });
   const queue = [

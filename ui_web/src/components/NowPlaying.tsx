@@ -142,7 +142,7 @@ export function NowPlaying(props: {
         ...(!current ? [{ icon: menuIcons.remove(), label: t('nowPlaying.removeFromQueue'), danger: true,
           onSelect: () => actions.removeQueueEntry(entry.queueId) }] : []),
       ],
-      // Requests move among themselves; the cards below them never move.
+      // Songs move within their lane; collection headers stay in place.
       get canMoveUp() {
         const above = state.playback.queue[queueIndex() - 1];
         return !current && queueIndex() > state.playback.index + 1 && !!above && sameQueueSection(entry, above);
@@ -157,20 +157,22 @@ export function NowPlaying(props: {
       },
       draggable: !current,
       onDragStart: () => { dragFrom = queueIndex(); },
+      onDragEnd: () => { dragFrom = null; },
       onDragOver: (event) => {
-        if (!current) event.preventDefault();
+        const from = dragFrom == null ? undefined : state.playback.queue[dragFrom];
+        if (!current && from && queueIndex() > state.playback.index && sameQueueSection(from, entry)) event.preventDefault();
       },
       onDrop: (event) => {
         event.preventDefault();
         const to = queueIndex();
-        if (dragFrom != null && dragFrom !== to) actions.moveInQueue(dragFrom, to);
+        if (dragFrom != null && dragFrom > state.playback.index && to > state.playback.index && dragFrom !== to) actions.moveInQueue(dragFrom, to);
         dragFrom = null;
       },
     };
   };
 
-  /** The collection the music continues into, as one card. Opening it goes to
-   * its page; removing it stops the continuation and leaves the rest alone.
+  /** The collection the music continues into, as one card. Opening it reveals
+   * its upcoming songs; removing it stops the continuation and leaves the rest alone.
    * What only changes its wording — shuffle, repeat — is read by the card
    * itself, so flipping it does not rebuild the lanes around it. */
   const contextCard = (): PlayerTrackListCard | null => {
@@ -185,6 +187,7 @@ export function NowPlaying(props: {
     const artworkFromSongs = context.kind === 'album' || context.kind === 'playlist' || context.kind === 'artist';
     return {
       id: 'context',
+      entries: state.playback.queue.slice(state.playback.index + 1).filter(entry => entry.queueLane === 'context').map((entry, index) => queueRow(entry, index + 1)),
       title,
       get detail() {
         return [
@@ -197,8 +200,6 @@ export function NowPlaying(props: {
       seed: context.id,
       cover: context.cover || (artworkFromSongs ? trackCoverUrl(next.next, 'thumb') : undefined),
       glyph: <ContextGlyph kind={context.kind} />,
-      onOpen: open,
-      openLabel: open ? t('nowPlaying.contextOpen', { name: title }) : undefined,
       menu: () => [
         ...(open ? [{ icon: menuIcons.open(), label: t('nowPlaying.contextOpen', { name: title }), onSelect: open }] : []),
         { icon: menuIcons.remove(), label: t('nowPlaying.removeFromQueue'), danger: true, onSelect: remove.onSelect },
