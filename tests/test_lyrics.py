@@ -208,7 +208,7 @@ def test_streaming_provider_error_is_unavailable_and_never_cached(monkeypatch):
     assert fetch.call_count == 2
 
 
-def test_unverified_preview_flags_album_timed_lrc_as_untrusted(monkeypatch):
+def test_unverified_preview_keeps_plain_lyrics_but_hides_album_timed_lrc(monkeypatch):
     fetch = MagicMock(return_value={
         "synced": "[00:01.00] line",
         "plain": "line",
@@ -223,9 +223,10 @@ def test_unverified_preview_flags_album_timed_lrc_as_untrusted(monkeypatch):
         "/api/lyrics?artist=Artist&title=Song&duration=200&source_kind=third_party_lyrics",
     ).get_json()
 
-    # The lines still travel, so the listener can line them up by hand.
+    # Not knowing the upload is not evidence of a mismatch: no align prompt,
+    # just the plain text.
     assert body["status"] == "ready"
-    assert body["synced"] == "[00:01.00] line"
+    assert body["synced"] is None
     assert body["plain"] == "line"
     assert body["timing_safe"] is False
 

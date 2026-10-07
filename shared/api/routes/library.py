@@ -34,11 +34,17 @@ def _lyrics_payload(
 ):
     """What a player needs to show lyrics, and whether their timing can be trusted.
 
-    Timed lines are always sent: a listener can line them up by hand when the
-    recording is not the one they were timed against. ``timing_safe`` says
-    whether they can be followed as they are — the upload is a class whose
-    timeline matches the album's, and the recording is as long as the one the
-    lines were written for. ``offset_ms`` is the listener's correction, if any.
+    ``timing_safe`` says whether timed lines can be followed as they are: the
+    upload is a class whose timeline matches the album's, and the recording is
+    as long as the one the lines were written for.
+
+    The two failures are answered differently. An upload whose class does not
+    vouch for its timeline (a lyric video, anything unverified) is no evidence
+    of a mismatch, only of not knowing, so its timed lines are withheld and the
+    plain text shows — asking every such stream to be aligned by hand would be
+    noise. A recording of another length *is* evidence, so its lines are sent,
+    flagged, for the listener to line up with a tap. ``offset_ms`` is that
+    correction, if one was made.
     """
     from shared.lyrics import has_text, synced_timing_fits
     from shared.music_identity import synced_lyrics_safe
@@ -46,12 +52,11 @@ def _lyrics_payload(
     if status is None:
         status = "ready" if has_text(record) else "not_found"
     synced_duration = record.get("synced_duration") if record else None
-    timing_safe = (source_kind is None or synced_lyrics_safe(str(source_kind))) and synced_timing_fits(
-        audio_duration, synced_duration
-    )
+    vouched = source_kind is None or synced_lyrics_safe(str(source_kind))
+    timing_safe = vouched and synced_timing_fits(audio_duration, synced_duration)
     return {
         "status": status,
-        "synced": record.get("synced") if record else None,
+        "synced": record.get("synced") if record and vouched else None,
         "plain": record.get("plain") if record else None,
         "instrumental": bool(record and record.get("instrumental")),
         "cached": cached,
