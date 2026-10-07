@@ -81,6 +81,12 @@ Android. El nombre de madurez alpha/beta no crea otra versión comercial.
 
 ## Beta y estable
 
+La comunidad aporta la aceptación física: el mantenedor no dispone de Android.
+La guía y el formato de resultados están en
+[ALPHA](ALPHA.md#pruebas-de-la-comunidad--community-testing). Registrar también
+los resultados correctos y los casos no probados; no cerrar un gate por ausencia
+de reportes de fallos.
+
 La beta requiere aceptación física repetida de escucha, segundo plano, focus,
 Bluetooth/controles, Android Auto, redes cambiantes y actualización conservando
 perfil. La alpha no promete que todas las combinaciones de fabricante/coche estén

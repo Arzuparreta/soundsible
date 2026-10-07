@@ -20,8 +20,10 @@ Estado vigente y forma de trabajar. Lo superado está en
 - Offline B: copias explícitas de música adquirida, «Disponible sin conexión» en
   menús de tres puntos; sin adquisición implícita ni autoevicción.
 - QR de emparejamiento = sesión completa de la cuenta que lo muestra (S2av).
-- No hay teléfono físico: AVD/CI no prueban escucha, Bluetooth ni coche. La
-  aceptación física es requisito de beta, no de alpha.
+- El mantenedor no tiene dispositivo Android; no pedirle conectar uno para
+  cerrar la entrega. La comunidad realiza la aceptación física de escucha,
+  Bluetooth y coche siguiendo [ALPHA](ALPHA.md#pruebas-de-la-comunidad--community-testing).
+  AVD/CI no sustituyen esa evidencia. Es requisito de beta, no de alpha.
 
 ## Cómo se trabaja (actualizado 2026-10-06 para ir más rápido sin perder calidad)
 
