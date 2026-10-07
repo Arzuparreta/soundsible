@@ -58,6 +58,20 @@ describe('continuation cards', () => {
     expect(container.querySelector('[data-card-expand]')).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('preserves the collection DOM and scroll position when queue objects are rebuilt', () => {
+    const [card, setCard] = createSignal(contextCard());
+    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [card()] }]);
+    fireEvent.click(container.querySelector('[data-card-expand]')!);
+    const scroller = container.querySelector<HTMLElement>('[data-card-songs] [data-section-rows]')!;
+    const header = container.querySelector('[data-queue-card="context"]')!;
+    scroller.scrollTop = 500;
+    setCard(contextCard({ detail: 'Album · 7 tracks', entries: [{ id: 'other', title: 'Other', artist: 'Artist' }] }));
+    expect(container.querySelector('[data-queue-card="context"]')).toBe(header);
+    expect(container.querySelector('[data-card-songs] [data-section-rows]')).toBe(scroller);
+    expect(scroller.scrollTop).toBe(500);
+    expect(header).toHaveTextContent('Album · 7 tracks');
+  });
+
   it('keeps a switched-off card quiet but fully operable', () => {
     const [enabled, setEnabled] = createSignal(false);
     const onChange = vi.fn(() => setEnabled(!enabled()));

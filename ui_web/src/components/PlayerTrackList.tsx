@@ -9,7 +9,7 @@ import { t } from '../lib/i18n';
 import type { MenuAction } from './ActionMenu';
 import { MoreIcon, menuIcons } from './icons';
 import type { SavedEntry } from '../types/music';
-import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, createUniqueId, For, onCleanup, Show, type JSX } from 'solid-js';
 import { createResponsiveTap, responsiveTapConstants } from '../lib/responsiveTap';
 import { claimHoldGesture, clearTextSelection } from '../lib/holdGesture';
 import {
@@ -272,27 +272,27 @@ export function PlayerTrackList(props: {
         }}
       >
         <Show when={props.sections.some(sectionHasContent)} fallback={<div class={styles.empty}>{props.empty}</div>}>
-          <For each={props.sections}>
+          <KeyedItems items={props.sections} getKey={section => section.id}>
             {(section) => (
-              <Show when={sectionHasContent(section)}>
+              <Show when={sectionHasContent(section())}>
                 <section
                   class={styles.section}
-                  data-head={section.label ? '' : undefined}
-                  data-long={section.entries.length > LANE_FLOOR_ROWS ? '' : undefined}
-                  data-cards={section.cards?.length ? '' : undefined}
-                  data-section={section.id}
+                  data-head={section().label ? '' : undefined}
+                  data-long={section().entries.length > LANE_FLOOR_ROWS ? '' : undefined}
+                  data-cards={section().cards?.length ? '' : undefined}
+                  data-section={section().id}
                 >
-                  <Show when={section.label}>
-                    <div class={styles.sectionHead} title={section.hint}>
-                      <span>{section.label}</span>
-                      <Show when={section.count !== undefined}>
-                        <span class={styles.sectionCount}>{section.count}</span>
+                  <Show when={section().label}>
+                    <div class={styles.sectionHead} title={section().hint}>
+                      <span>{section().label}</span>
+                      <Show when={section().count !== undefined}>
+                        <span class={styles.sectionCount}>{section().count}</span>
                       </Show>
                     </div>
                   </Show>
-                  <Show when={section.cards?.length} fallback={
-                  <PlayerLane virtualize={props.virtualize} entries={section.entries} editingId={editingId()}
-                    tail={<Show when={slot() && slot()!.index === section.entries.length}><div class={styles.seamTail} aria-hidden="true" /></Show>}>
+                  <Show when={section().cards?.length} fallback={
+                  <PlayerLane virtualize={props.virtualize} entries={section().entries} editingId={editingId()}
+                    tail={<Show when={slot() && slot()!.index === section().entries.length}><div class={styles.seamTail} aria-hidden="true" /></Show>}>
                     {(entry, index) => <>
                       {entry().before}
                       <PlayerTrackListRow entry={entry()} seam={slot()?.index === index()}
@@ -302,21 +302,34 @@ export function PlayerTrackList(props: {
                     </>}
                   </PlayerLane>}>
                     <div class={styles.sectionCards} data-section-cards>
-                      <For each={section.cards}>{(card) => <PlayerTrackListCardRow card={card} expanded={expandedCards().has(cardKey(card))}
-                        onToggle={() => toggleCard(card)}
+                      <KeyedItems items={section().cards ?? []} getKey={cardKey}>{(card) => <PlayerTrackListCardRow card={card()} expanded={expandedCards().has(cardKey(card()))}
+                        onToggle={() => toggleCard(card())}
                         editingId={editingId()}
                         onEditingChange={(id, editing) => { setEditingId(editing ? id : null); focusRowControl(id); }}
-                        onMove={(row, direction) => { row.onMove?.(direction); focusRowControl(row.id, direction < 0 ? 'up' : 'down'); }} />}</For>
+                        onMove={(row, direction) => { row.onMove?.(direction); focusRowControl(row.id, direction < 0 ? 'up' : 'down'); }} />}</KeyedItems>
                     </div>
                   </Show>
                 </section>
               </Show>
             )}
-          </For>
+          </KeyedItems>
         </Show>
       </div>
     </div>
   );
+}
+
+/** Queue updates rebuild descriptors. Reconcile their keys, then read the
+ * latest descriptor through an accessor so headers and scrollers retain DOM identity. */
+function KeyedItems<T extends object>(props: {
+  items: readonly T[];
+  getKey: (item: T) => string;
+  children: (item: () => T) => JSX.Element;
+}) {
+  const items = createMemo(() => new Map(props.items.map(item => [props.getKey(item), item])));
+  return <For each={[...items().keys()]}>{key =>
+    <Show when={items().get(key)}>{item => props.children(item)}</Show>
+  }</For>;
 }
 
 function PlayerLane(props: {

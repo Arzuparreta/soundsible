@@ -130,6 +130,52 @@ test('a whole library stays expandable and its last upcoming song remains reacha
   expect(await lane.locator('[data-drag-row]').count()).toBeLessThan(30);
 });
 
+test('editing a scrolled collection preserves its scroller and position', async ({ page, isMobile }) => {
+  const queue = await playFromLibrary(page);
+  if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
+  await queue.locator('[data-card-expand]').click({ position: { x: 24, y: 24 } });
+  const lane = queue.locator('[data-card-songs] [data-section-rows]');
+  await expect.poll(() => lane.evaluate(node => node.scrollHeight)).toBeGreaterThan(10000);
+  await lane.evaluate(node => { node.scrollTop = 5000; });
+  await expect.poll(() => lane.evaluate(node => node.scrollTop)).toBeGreaterThan(4900);
+  const scroller = await lane.elementHandle();
+  const visibleId = () => lane.evaluate(node => {
+    const bounds = node.getBoundingClientRect();
+    return [...node.querySelectorAll<HTMLElement>('[data-drag-row]')].find(row => {
+      const rect = row.getBoundingClientRect();
+      return rect.top >= bounds.top && rect.bottom <= bounds.bottom;
+    })?.dataset.dragRow;
+  });
+  await expect.poll(visibleId).toBeTruthy();
+  const row = lane.locator(`[data-drag-row="${await visibleId()}"]`);
+  const originalIndex = await row.evaluate(node => Number((node.parentElement as HTMLElement).dataset.index));
+  if (isMobile) {
+    await row.locator('[data-row-menu]').click();
+    await page.getByRole('dialog').getByText('Mover', { exact: true }).click();
+    await row.locator('[data-edit-command="down"]').click();
+  } else {
+    const nextId = await lane.evaluate((node, id) => {
+      const rows = [...node.querySelectorAll<HTMLElement>('[data-drag-row]')];
+      return rows[rows.findIndex(row => row.dataset.dragRow === id) + 1]?.dataset.dragRow;
+    }, await visibleId());
+    await row.dragTo(lane.locator(`[data-drag-row="${nextId}"]`));
+  }
+  await expect.poll(() => row.evaluate(node => Number((node.parentElement as HTMLElement).dataset.index))).toBe(originalIndex + 1);
+  expect(await scroller!.evaluate(node => node.isConnected)).toBe(true);
+  await expect.poll(() => lane.evaluate(node => node.scrollTop)).toBeGreaterThan(4800);
+  if (isMobile) {
+    await expect(row.locator('[data-edit-command="done"]')).toBeVisible();
+    await row.locator('[data-edit-command="done"]').click();
+    await expect(row.locator('[data-row-menu]')).toBeFocused();
+  }
+  await row.locator('[data-row-menu]').click();
+  await page.getByRole('dialog').getByText('Quitar de la cola', { exact: true }).click();
+  await expect(row).toHaveCount(0);
+  expect(await scroller!.evaluate(node => node.isConnected)).toBe(true);
+  await expect.poll(() => lane.evaluate(node => node.scrollTop)).toBeGreaterThan(4800);
+  await expect(queue.locator('[data-card-expand]')).toHaveAttribute('aria-expanded', 'true');
+});
+
 for (const kind of ['album', 'artist', 'playlist'] as const) {
   test(`${kind} cards expose every song in a long collection`, async ({ page, isMobile }) => {
     await restoreQueueSession(page, { current: newest, requests: [], context: TRACKS.slice(0, 40),
