@@ -136,7 +136,7 @@ class ProgramDjRecoveryTest {
                 return
             }
             if (history) {
-                await { session!!.player.isPlaying && session!!.items().size == 4 && session!!.currentIndex() == 0 && successorPcm.get() }
+                await { session!!.player.isPlaying && session!!.items().size == 4 && session!!.currentIndex() == 0 && successorPcm.get() && session!!.heardIds().contains("member-pcm-soft") }
                 instrumentation.runOnMainSync { session!!.player.pause() }
                 Thread.sleep(300)
                 instrumentation.runOnMainSync {

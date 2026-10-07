@@ -42,8 +42,15 @@ public class EntityBookmarksTest {
     }
     private void menu(StartupTest web,ActivityScenario<MainActivity> scenario,String title,String action) throws Exception {
         waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==="+JSONObject.quote(title)+")");
-        web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==="+JSONObject.quote(title)+").closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
-        waitFor(web,scenario,"!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim().startsWith("+JSONObject.quote(action)+"))");
+        String button="!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim().startsWith("+JSONObject.quote(action)+"))";
+        // A list refresh landing after the click closes the menu: open it again.
+        for(int attempt=0;attempt<4;attempt++){
+            web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==="+JSONObject.quote(title)+")?.closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");
+            long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);
+            while(System.nanoTime()<until){if("true".equals(web.evaluate(scenario,button)))break;Thread.sleep(100);}
+            if("true".equals(web.evaluate(scenario,button)))break;
+        }
+        waitFor(web,scenario,button);
         web.evaluate(scenario,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim().startsWith("+JSONObject.quote(action)+")).click()");
     }
     @Test public void httpBookmarks() throws Exception {run(InstrumentationRegistry.getArguments().getString("fixtureOrigin"));}

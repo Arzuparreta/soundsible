@@ -22,9 +22,15 @@ public class AutoplayTest {
         web.evaluate(scenario,"window.__radioTimer=setInterval(()=>Capacitor.Plugins.SoundsiblePlayback.state().then(s=>window.__radio=s),100)");
     }
     private void command(StartupTest web, ActivityScenario<MainActivity> scenario, String fields) throws Exception {
-        web.evaluate(scenario,"window.__done=false;window.__error=null;Capacitor.Plugins.SoundsiblePlayback.state().then(fresh=>Capacitor.Plugins.SoundsiblePlayback.command({...fresh,"+fields+"})).then(()=>window.__done=true).catch(e=>window.__error=e.message)");
-        waitFor(web,scenario,"window.__done===true || !!window.__error");
-        assertEquals(web.evaluate(scenario,"window.__error+' '+JSON.stringify(window.__radio)"),"true",web.evaluate(scenario,"window.__done===true"));
+        for (int attempt = 0; ; attempt++) {
+            web.evaluate(scenario,"window.__done=false;window.__error=null;Capacitor.Plugins.SoundsiblePlayback.state().then(fresh=>Capacitor.Plugins.SoundsiblePlayback.command({...fresh,"+fields+"})).then(()=>window.__done=true).catch(e=>window.__error=e.message)");
+            waitFor(web,scenario,"window.__done===true || !!window.__error");
+            // Autoplay refills the queue asynchronously, so a snapshot can go stale; the app rejects that
+            // and a client repeats the command from the new state.
+            if (attempt < 3 && web.evaluate(scenario,"String(window.__error)").contains("Queue changed")) continue;
+            assertEquals(web.evaluate(scenario,"window.__error+' '+JSON.stringify(window.__radio)"),"true",web.evaluate(scenario,"window.__done===true"));
+            return;
+        }
     }
     private void settingsToggle(StartupTest web,ActivityScenario<MainActivity> scenario,boolean enabled) throws Exception {
         waitFor(web,scenario,"!!document.querySelector('[data-android-settings]')");
