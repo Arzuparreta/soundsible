@@ -388,6 +388,9 @@ def main() -> None:
                     with user_context(uid):
                         library = get_user_core(uid).library
                         original = next(track for track in library.metadata.tracks if track.id == f"{name}-track")
+                        # add_track only appends: an earlier case may have left (or deleted) either PCM track.
+                        while library.metadata.remove_track(f"{name}-pcm-soft"):
+                            pass
                         library.metadata.add_track(replace(original, id=f"{name}-pcm-soft", title=f"{name} softer PCM song",
                             album=f"{name} PCM album", file_hash=f"{name}-pcm-soft-hash",
                             duration=first_duration if custom else original.duration, format="wav" if custom else original.format,
@@ -422,6 +425,8 @@ def main() -> None:
                         second = encoded
                     with user_context(uid):
                         library = get_user_core(uid).library
+                        while library.metadata.remove_track(f"{name}-pcm-loud"):
+                            pass
                         library.metadata.add_track(Track(id=f"{name}-pcm-loud", title=f"{name} louder PCM song", artist=f"{name} artist",
                             album=f"{name} PCM album", duration=60, file_hash=f"{name}-pcm-loud-hash", original_filename=f"pcm-loud.{second_format}",
                             file_size=second.stat().st_size, bitrate=rate * channels * 16 // 1000, format=second_format))

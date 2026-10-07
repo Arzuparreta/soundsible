@@ -69,10 +69,10 @@ public class PlannerRetirementTest {
             int delivered = api(connection, origin, null, "/__fixture/radio-stats", "GET", null).getInt("delivered");
             api(connection, origin, null, "/__fixture/radio-delay", "POST", new JSONObject().put("seconds", 12)); // Deleting through the UI must fit inside the delay on a loaded runner.
             command(scenario, mode.equals("radio") ? "action:'radio',enabled:true,profile:'balanced'" : "action:'autoplay',enabled:true");
-            JSONObject stats; long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+            JSONObject stats; long planSeen = System.nanoTime(); long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
             do {
                 stats = api(connection, origin, null, "/__fixture/radio-stats", "GET", null);
-                if (stats.getInt("pending") > 0) break;
+                if (stats.getInt("pending") > 0) { planSeen = System.nanoTime(); break; }
                 assertTrue("Planner must compute a delayed production response", System.nanoTime() < until); Thread.sleep(50);
             } while (true);
             var planned = stats.getJSONArray("delayed_ids");
@@ -91,7 +91,9 @@ public class PlannerRetirementTest {
             waitFor(scenario, "!!document.querySelector(" + JSONObject.quote(selector) + ")");
             web.evaluate(scenario, "document.querySelector(" + JSONObject.quote(selector) + ").click()");
             click(scenario, "Delete from library");
-            assertTrue("Deletion must occur while the computed plan is still pending", api(connection, origin, null, "/__fixture/radio-stats", "GET", null).getInt("pending") > 0);
+            JSONObject beforeDelete = api(connection, origin, null, "/__fixture/radio-stats", "GET", null);
+            assertTrue("Deletion must occur while the computed plan is still pending: " + beforeDelete + " retired=" + retired
+                + " seen " + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - planSeen) + " ms ago", beforeDelete.getInt("pending") > 0);
             click(scenario, "Delete");
             waitFor(scenario, "!document.querySelector('[data-browse-track-id=" + JSONObject.quote(retired) + "]')");
             var rows = api(connection, origin, cookie, "/api/library", "GET", null).getJSONArray("tracks");
