@@ -40,15 +40,11 @@ def _lyrics_payload(
     timeline matches the album's, and the recording is as long as the one the
     lines were written for. ``offset_ms`` is the listener's correction, if any.
     """
-    from shared.lyrics import synced_timing_fits
+    from shared.lyrics import has_text, synced_timing_fits
     from shared.music_identity import synced_lyrics_safe
 
     if status is None:
-        status = (
-            "ready"
-            if record and (record.get("synced") or record.get("plain") or record.get("instrumental"))
-            else "not_found"
-        )
+        status = "ready" if has_text(record) else "not_found"
     synced_duration = record.get("synced_duration") if record else None
     timing_safe = (source_kind is None or synced_lyrics_safe(str(source_kind))) and synced_timing_fits(
         audio_duration, synced_duration
@@ -64,19 +60,6 @@ def _lyrics_payload(
         "synced_duration": synced_duration,
         "offset_ms": offset_ms,
     }
-
-
-def _lyrics_audio_key(youtube_id=None, track_id=None):
-    """What a lyrics offset belongs to: the audio's timeline.
-
-    A file downloaded from a video plays the video's timeline, so both share
-    the video's key and an offset set while streaming survives the download.
-    """
-    from shared.url_utils import validate_youtube_video_id
-
-    if youtube_id and validate_youtube_video_id(str(youtube_id)):
-        return f"yt:{youtube_id}"
-    return f"lib:{track_id}" if track_id else None
 
 
 def _playlist_mutation_response(metadata, status: str = "success"):
@@ -412,7 +395,7 @@ def get_track_lyrics(track_id):
     """Lyrics for a library track: served from the local cache when present,
     otherwise fetched from LRCLIB and cached (including not-found results)."""
     from shared.database import instance_db
-    from shared.lyrics import poll_lyrics, predates_timing_length, settle_upgrade, store
+    from shared.lyrics import audio_key, poll_lyrics, predates_timing_length, settle_upgrade, store
 
     api = _get_api()
     lib, _, _ = api["get_core"]()
@@ -421,21 +404,20 @@ def get_track_lyrics(track_id):
         return jsonify({"error": "Track not found"}), 404
 
     db = instance_db()
-    offset_ms = db.get_lyrics_offset(_lyrics_audio_key(getattr(track, "youtube_id", None), track.id))
+    offset_ms = db.get_lyrics_offset(audio_key(getattr(track, "youtube_id", None), track.id))
 
     def payload(record, cached=False):
         return jsonify(_lyrics_payload(record, cached=cached, audio_duration=track.duration, offset_ms=offset_ms))
 
     refresh = request.args.get("refresh") in ("1", "true")
     cached = None if refresh else db.get_lyrics(track_id)
-    # Lines that predate the timing length are looked up again in the
-    # background; until a later read collects the answer, and whenever the
-    # provider cannot give one, the lines already held are what this serves.
     if cached and not predates_timing_length(cached):
         return payload(cached, cached=True)
 
-    # Held lines are served at once, so the player does not come back for the
-    # answer: the lookup settles the row itself when it lands.
+    # Lines that predate the timing length are looked up once more. They are
+    # served while that runs, and whenever the provider cannot answer; the
+    # player therefore does not come back for the answer, so the lookup
+    # settles the row itself when it lands.
     settle = None
     if cached:
         def settle(found, held=cached):
@@ -465,7 +447,7 @@ def get_lyrics_by_metadata():
     Saved previews may opt into a persistent cache keyed by their normalized
     metadata; cold provider work runs through the bounded coordinator."""
     from shared.database import instance_db
-    from shared.lyrics import metadata_cache_key, poll_lyrics, store
+    from shared.lyrics import audio_key, metadata_cache_key, poll_lyrics, store
 
     artist = (request.args.get("artist") or "").strip()
     title = (request.args.get("title") or "").strip()
@@ -482,7 +464,7 @@ def get_lyrics_by_metadata():
     persist = request.args.get("persist") in ("1", "true")
     refresh = request.args.get("refresh") in ("1", "true")
     db = instance_db()
-    offset_ms = db.get_lyrics_offset(_lyrics_audio_key(youtube_id))
+    offset_ms = db.get_lyrics_offset(audio_key(youtube_id))
 
     def payload(record, cached=False):
         return jsonify(_lyrics_payload(
@@ -521,6 +503,7 @@ def set_lyrics_offset():
     it is a fact about the recording, not a preference.
     """
     from shared.database import instance_db
+    from shared.lyrics import audio_key
 
     data = request.get_json(silent=True) or {}
     raw = data.get("offset_ms")
@@ -538,9 +521,9 @@ def set_lyrics_offset():
         track = api["get_track_by_id"](lib, track_id)
         if not track:
             return jsonify({"error": "Track not found"}), 404
-        key = _lyrics_audio_key(getattr(track, "youtube_id", None), track.id)
+        key = audio_key(getattr(track, "youtube_id", None), track.id)
     else:
-        key = _lyrics_audio_key(str(data.get("youtube_id") or "").strip() or None)
+        key = audio_key(str(data.get("youtube_id") or "").strip() or None)
     if not key:
         return jsonify({"error": "track_id or a valid youtube_id is required"}), 400
 

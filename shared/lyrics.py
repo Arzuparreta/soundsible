@@ -17,8 +17,8 @@ import time
 import unicodedata
 from concurrent.futures import Future, ThreadPoolExecutor
 from difflib import SequenceMatcher
-from statistics import median
 from functools import partial
+from statistics import median
 from typing import Any, Callable, Dict, Optional
 
 import requests
@@ -183,6 +183,19 @@ def _result_to_record(item: Dict[str, Any], results: Any = None) -> Dict[str, An
         "source": RESOLVER_SOURCE,
         "synced_duration": _synced_duration(item, results),
     }
+
+
+def audio_key(youtube_id: Optional[str] = None, track_id: Optional[str] = None) -> Optional[str]:
+    """What a listener's lyrics offset belongs to: the audio's timeline.
+
+    A file downloaded from a video plays the video's timeline, so both share
+    the video's key and an offset set while streaming survives the download.
+    """
+    from shared.url_utils import validate_youtube_video_id
+
+    if youtube_id and validate_youtube_video_id(str(youtube_id)):
+        return f"yt:{youtube_id}"
+    return f"lib:{track_id}" if track_id else None
 
 
 def has_text(record: Optional[Dict[str, Any]]) -> bool:

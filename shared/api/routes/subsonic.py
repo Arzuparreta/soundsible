@@ -752,8 +752,7 @@ def get_lyrics():
 @_endpoint("getLyricsBySongId")
 def get_lyrics_by_song_id():
     from shared.database import instance_db
-
-    from shared.lyrics import poll_lyrics, predates_timing_length, settle_upgrade, synced_timing_fits
+    from shared.lyrics import audio_key, poll_lyrics, predates_timing_length, settle_upgrade, synced_timing_fits
 
     track = _track_or_404(_required("id"))
     db = instance_db()
@@ -775,8 +774,7 @@ def get_lyrics_by_song_id():
     # structured `offset`, whose sign clients have read both ways. Without one,
     # lines timed for a recording of another length are served untimed: a
     # client that follows them would be ahead of (or behind) the song.
-    youtube_id = getattr(track, "youtube_id", None)
-    offset_ms = db.get_lyrics_offset(f"yt:{youtube_id}" if youtube_id else f"lib:{track.id}")
+    offset_ms = db.get_lyrics_offset(audio_key(getattr(track, "youtube_id", None), track.id))
     timed = offset_ms is not None or synced_timing_fits(track.duration, cached.get("synced_duration"))
     lines = _synced_lines(cached.get("synced"), offset_ms or 0) if timed else []
     if lines:

@@ -1100,7 +1100,7 @@ export const es: Dict = {
     retry: 'Reintentar',
     instrumental: 'Pista instrumental.',
     notFound: 'No se encontró letra para esta canción.',
-    alignHint: 'Esta letra está sincronizada para otra versión de la canción. Toca el verso que está sonando para ajustarla.',
+    alignHint: 'Puede que esta letra esté sincronizada para otra versión de la canción. Toca el verso que está sonando para ajustarla.',
     adjustHint: 'Toca el verso que está sonando ahora.',
     adjust: 'Ajustar sincronía',
     cancelAdjust: 'Cancelar',
