@@ -58,11 +58,13 @@ class DjContextTest {
                 waitFor("window.__dj.playing")
                 command("action:'pause'")
                 waitFor("!window.__dj.playWhenReady")
-                // The decoders apply a pause asynchronously: the retained position is the settled one.
-                waitFor("(()=>{const p=window.__dj.positionMs;if(p!==window.__pausedPosition){window.__pausedPosition=p;window.__pausedSince=Date.now()}return Date.now()-window.__pausedSince>=400})()")
+                // Pause snapshots can retain Media3's pre-acknowledgement estimate until the next
+                // session event. Establish an explicit nonzero paused seek before testing context edits.
+                // A seek discontinuity also gives the service and controllers an authoritative anchor.
+                command("action:'seek',positionMs:3000")
+                waitFor("!window.__dj.playWhenReady && Math.abs(window.__dj.positionMs-3000)<=5")
                 val key = web.evaluate(scenario, "window.__dj.items[window.__dj.index].key")
-                // The existing controller optimistically acknowledges pause before the service handles it.
-                // A fresh connection observes the service's settled position rather than that local estimate.
+                // Confirm the seek through an independent controller, not the command sender's estimate.
                 val instrumentation = InstrumentationRegistry.getInstrumentation()
                 val fresh = java.util.concurrent.atomic.AtomicReference<com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>>()
                 instrumentation.runOnMainSync {
@@ -76,6 +78,7 @@ class DjContextTest {
                     instrumentation.runOnMainSync {
                         assertFalse("Service has not paused", confirmed.playWhenReady)
                         position = confirmed.currentPosition.toDouble()
+                        assertEquals("Service has not applied the paused seek", 3000.0, position, 5.0)
                     }
                 } finally { instrumentation.runOnMainSync { confirmed.release() } }
                 waitFor("!window.__dj.playWhenReady && Math.abs(window.__dj.positionMs-$position)<=150")
