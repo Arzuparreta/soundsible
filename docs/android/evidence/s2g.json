@@ -1,0 +1,91 @@
+{
+  "date": "2026-10-03",
+  "slice": "S2g private native program and media notification artwork",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "cd64221987c5774a102a34da22c2212b7a78df51",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "unit": {
+      "passed": 1350,
+      "files": 146,
+      "command": "npm test --prefix ui_web"
+    },
+    "android": {
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "api": 36,
+      "fixtures": [
+        "HTTP",
+        "verified HTTPS",
+        "passwordless HTTP"
+      ],
+      "normal_apk_and_lint": "passed"
+    },
+    "chromium": {
+      "passed": 278,
+      "skipped": 66,
+      "failures": 0,
+      "profiles": [
+        "chromium-mobile",
+        "chromium-desktop"
+      ],
+      "workers": 2
+    },
+    "webkit": {
+      "passed": 269,
+      "skipped": 75,
+      "failures": 0,
+      "profiles": [
+        "webkit-mobile",
+        "webkit-desktop"
+      ],
+      "workers": 1,
+      "readonly_mount": true
+    },
+    "other": [
+      "central version sync",
+      "native JS excludes AudioContext and mixer runtime",
+      "normal APK excludes fixture resources",
+      "ruff check/format on fixture script",
+      "git diff --check",
+      "documentation file links resolve",
+      "apksigner verify"
+    ]
+  },
+  "cases": [
+    "Native metadata artwork URI constructed from validated id and account generation, with no credentials or source URI from JS",
+    "Real private image through HTTP and verified HTTPS; duplicate native requests share only the last in-memory future",
+    "Platform MediaSession bitmap and notification large icon show the correct private account image",
+    "Other-account ids return a non-private placeholder or fail, without leaking private account colour",
+    "External URI and query rejected, no public fetch fallback",
+    "Missing image, invalid bytes and oversized body fail without clearing native login",
+    "Invalid image request while native audio is playing leaves actual playback, index and player error unchanged",
+    "Logout cancels delayed native fetch; old generation rejected and late response remains cancelled after next account loads its own cover",
+    "Existing program queue, occurrence edits, Activity recreation, focus and connection recovery checks retained"
+  ],
+  "initial_failures": [
+    "First integration: four pixel-exact checks failed because real engine thumb uses lossy JPEG (one point per channel); corrected to three-point channel tolerance.",
+    "Account artwork expectations allow the engine placeholder for unknown/other-account ids, with channel-aware private-colour exclusion.",
+    "Final integration reran after strengthened privacy assertion, cancelled-job reference cleanup and invalid-artwork-with-active-audio case."
+  ],
+  "artifacts": {
+    "queue_screenshot": "queue-artwork-s2g-api36.png",
+    "integration_xml": "android/build/integration-results/connected/debug/",
+    "apk": "android/app/build/outputs/apk/debug/app-debug.apk"
+  },
+  "limitations": [
+    "Development build, not a public alpha or release",
+    "No physical acoustic/lockscreen/Bluetooth/car acceptance",
+    "No Android Auto browse catalogue",
+    "Full authenticated routes, acquisition/previews, podcasts/radio, DJ/Live and process-death persistence still pending",
+    "Offline decision remains unresolved",
+    "Loaded native artwork does not yet invalidate on cover-edit events while the same id/generation remains the last cached URI (including duplicate occurrences)"
+  ],
+  "browser_source_changes": "All ui_web sources frozen before unit, Chromium and native APK preparation. Later changes only Kotlin, Java instrumentation and docs. WebKit starts after native integration and Chromium, with emulator stopped, read-only mount and one worker."
+}

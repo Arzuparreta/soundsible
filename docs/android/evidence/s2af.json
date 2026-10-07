@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-05",
+  "slice": "S2af confirmed native Settings and clean regression",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "46a6c3d37793c4b49f94d372e6b5e9287baed039",
+  "dirty_at_asset_prepare": false,
+  "checks": {
+    "main_android": {
+      "tests": 73,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2af-main-clean.log"
+    },
+    "restart_prepare": {
+      "tests": 1,
+      "failures": 0
+    },
+    "restart_offline": {
+      "tests": 1,
+      "failures": 0
+    },
+    "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal",
+    "jvm_tests": 20,
+    "ui": {
+      "tests": 1536,
+      "files": 192,
+      "log": "/tmp/soundsible-s2af-autoplay-gain-full-ui.log"
+    },
+    "browser_four_profiles": {
+      "chromium": {
+        "passed": 278,
+        "skipped": 66,
+        "failures": 0,
+        "log": "/tmp/soundsible-s2af-settings-chromium.log"
+      },
+      "webkit": {
+        "passed": 269,
+        "skipped": 75,
+        "failures": 0,
+        "log": "/tmp/soundsible-s2af-settings-webkit.log"
+      },
+      "scope": "Full sequential runs with one worker and readonly WebKit; later Subsonic extraction excluded."
+    }
+  },
+  "limitations": [
+    "Development APK, no public alpha or full parity",
+    "No physical haptic/acoustic/car acceptance",
+    "ProgramLoudness policy is not wired to PCM output",
+    "Later Subsonic UI requires its own native and browser acceptance"
+  ]
+}

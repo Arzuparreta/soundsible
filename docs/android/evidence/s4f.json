@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4f",
+  "channel": "development",
+  "base_revision": "4f254496",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/NativeLiveHost.kt": "3a8d2d750b14eab33e33ef8793343a80dacbcaba5b7fe14da004e17681aa8917",
+    "android/app/src/main/java/com/soundsible/android/NativeLivePlayer.kt": "4de23bf59a9afc9d729e5e34bf40d6f1cf11bfa396657a9ed673d2ad56814718",
+    "android/app/src/main/java/com/soundsible/android/LiveArtwork.kt": "40d72adf25401279c576daa80b0f47f6c86b2ab8bf06dbf7471226cd262a52e6",
+    "android/app/src/main/java/com/soundsible/android/ProgramMixOutput.kt": "f5a0bb6024284eb77d8c05bca7af36e883ea400e9ea1cf246d4cf3f50812838d",
+    "android/app/src/main/java/com/soundsible/android/ProgramDjSession.kt": "bef7709245e04ccb4bb669aff2ff61adca140d29fe9070002eac9643f0df0562",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "e0759a07de440d86848a8ab590486d64d1b4dcf01dcab7a6ae3fd875872f68e0",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveHostTest.kt": "d608101837278cf55a407992ba20a4842c0197efbf01fa0cfe9244c24f2fc69d",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveListenerTest.kt": "2ecd36813f6c70e62111feddb5d405bf333500b5c6ebfa95bd348ccac94ef6c4"
+  },
+  "acceptance": {
+    "classes": [
+      "LiveHostTest",
+      "LiveListenerTest"
+    ],
+    "tests": 6,
+    "failures": 0,
+    "seconds": 76.723,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-s4f-corrected-native.log",
+    "normal_build": "APK/test APK/JVM54/lint without temporary CA pass"
+  },
+  "initial_attempt": {
+    "log": "/tmp/soundsible-live-s4f-native.log",
+    "runner_exit": 130,
+    "reason": "Stopped after HTTPS connection cleanup ran on main; fixed worker cleanup and seeded DJ deterministically from current."
+  },
+  "limits": [
+    "No current whole principal/browser4 claim",
+    "UI/Relay/Input not rerun after final corrections; final Live regression pending",
+    "No physical device, Bluetooth or car acceptance",
+    "Recovery and process death remain pending"
+  ]
+}

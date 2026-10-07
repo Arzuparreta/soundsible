@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2ap",
+  "channel": "development",
+  "base_revision": "e20543f0",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "638df43d1d081304ff4b51f6e35ae39fcb3c884fadb1bfe9da1092f20255b813",
+    "android/app/src/main/java/com/soundsible/android/ProgramDeviceState.kt": "8a11c42ad0470e921bd3f4e0f89ee1c3286439e36d10f09b6e01ba3d38e484dd",
+    "android/app/src/main/java/com/soundsible/android/RadioProgram.kt": "22520f3d842b2072d3a822d099dff89ad78306773297f38b5343c6165b36457e",
+    "android/app/src/main/java/com/soundsible/android/AutoplayProgram.kt": "e216380866140fcd009af17712968cad4bc6ecffd3c644c7e065b6bca5bdcd5f",
+    "android/app/src/androidTest/java/com/soundsible/android/DeviceRadioSessionTest.kt": "4cecb4a8404847fc33757a8e57f68f681f825f794f0b698d1fcdd6fc8bef1222"
+  },
+  "native": {
+    "tests": 8,
+    "failures": 0,
+    "seconds": 86.694,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-radio-device-native.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Incoming Radio queue/index/PCM and native intent",
+    "Radio outgoing seed/profile/generated ownership delivered to real peer socket",
+    "Stopping Radio preserves manual future and current occurrence",
+    "Disabled receiver Autoplay removes only imported generated future",
+    "Imported context/identity/loudness metadata retained",
+    "DJ/NORMAL/visible devices regression"
+  ],
+  "limits": [
+    "Native radio profile/seed extras are not preserved by older/web peers",
+    "Outside-window seed reconstructs identity; live providers still required for refill",
+    "Deferred catalog and long reconnection pending",
+    "No physical phone/car evidence"
+  ]
+}

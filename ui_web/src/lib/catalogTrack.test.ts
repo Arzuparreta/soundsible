@@ -1,0 +1,22 @@
+import { describe, expect, it } from 'vitest';
+import type { CatalogItem, Track } from '../types/music';
+import { catalogTrack } from './catalogTrack';
+
+const row = (extra: Partial<CatalogItem>): CatalogItem => ({ id: 'catalog:track', source: 'deezer', type: 'track', title: 'Song', artist: 'Artist', ...extra });
+describe('catalog tracks shared by web and native programs', () => {
+  it('keeps an owned recording and recommendation without replacing its identity', () => {
+    const track = { id: 'owned', title: 'Recording', artist: 'Artist', duration: 120 } as Track;
+    expect(catalogTrack(row({ track_id: 'owned' }), [track])).toBe(track);
+    const recommendation: NonNullable<Track['recommendation']> = { identity: 'fixture', source: 'discover' };
+    expect(catalogTrack(row({ track_id: 'owned', raw: { recommendation } }), [track])).toEqual({ ...track, recommendation });
+  });
+  it('preserves exact provider identity and credited metadata for a preview', () => {
+    const track = catalogTrack(row({ source: 'youtube', raw: { id: 'A1111111111', title: 'Video song', artist: 'Performer', artist_is_channel: false }, external_ids: { isrc: 'ES-ABC-12-34567' } }), []);
+    expect(track).toMatchObject({ source: 'preview', id: 'A1111111111', title: 'Video song', artist: 'Performer', artist_is_channel: false });
+    expect(track?.originKeys).toContain('yt:A1111111111');
+  });
+  it('requires resolution when a recording has no owned or provider identity', () => {
+    expect(catalogTrack(row({}), [])).toBeNull();
+    expect(catalogTrack(row({ source: 'deezer', raw: { id: 'A1111111111' } }), [])).toBeNull();
+  });
+});

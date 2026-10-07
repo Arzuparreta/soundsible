@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4k",
+  "channel": "development",
+  "base_revision": "81a1ef62",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/androidTest/java/com/soundsible/android/LiveRecoveryTest.kt": "eeffa4db22eca160d3a3a47924057df9674f2f4b19c9de9a36d11bdca927bfbf",
+    "scripts/android_live_fixture.py": "fc99523b040af4b989578d0adc5415ac0cd06af7496a4ecc47e80be5fab99b46"
+  },
+  "acceptance": {
+    "tests": 2,
+    "failures": 0,
+    "seconds": 85.109,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-publisher-exhaustion.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Activity closed: three real publisher reconnect authorization failures then stable retirement",
+    "Local programme and queue occurrence survive exhaustion",
+    "Explicit Go live resumes same room after relay recovery",
+    "Reset during publisher retry cancels further attempts and leaves no MediaMTX publisher over5s"
+  ],
+  "limits": [
+    "No initial Core create POST cancellation acceptance",
+    "No whole principal/browser or physical acoustic acceptance"
+  ]
+}

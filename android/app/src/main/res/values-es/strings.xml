@@ -1,0 +1,4 @@
+<resources>
+    <string name="offline_title">Disponible sin conexión</string>
+    <string name="offline_preparing">Preparando canciones</string>
+</resources>

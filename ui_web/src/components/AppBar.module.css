@@ -96,6 +96,7 @@
 
 .titleButton {
   display: block;
+  min-height: 44px;
   max-width: 100%;
   margin: 0;
   padding: 0;

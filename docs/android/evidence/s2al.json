@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2al",
+  "channel": "development",
+  "base_revision": "ba075db7",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/NativeDeviceSession.kt": "89e160d6c113fa4ff88583c086c8e81eae944a57c30e592b3bd0cd2fedca2668",
+    "android/app/src/main/java/com/soundsible/android/ProgramDeviceState.kt": "ff7dd6184dd186b146f9ed0a847c5764983a8417f5637fbc0071592ae0c040c3",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "2931d8aa81a2de91b6028049332305939d971e89ac296f3113436d6829884d4a",
+    "android/app/src/androidTest/java/com/soundsible/android/DeviceSessionTest.kt": "b4bb6c8af7a013bdafbd6ea9f5dbc1c27619a884698c90d9cd70dcb550db8005",
+    "shared/api/__init__.py": "57cd0b201d812bbbe5277dc7874016a54307196a5c6877c007fdcf26c8a1123d",
+    "shared/api/routes/playback.py": "0b31cbe6eff460a6ac12856aefac354214bfa7874e916fd9089be216f154f45f",
+    "tests/test_socket_connect_scope.py": "0ff207a4a452fc5f446d6c7973d4569108aa463323e851e839e7841cc45e276e",
+    "tests/test_playback_car_commands.py": "6af7353a5328dedd4b7af4c1f9e371be7c0a757226b7503aac6df02f1d44717a"
+  },
+  "core": {
+    "tests": 14,
+    "failures": 0
+  },
+  "native": {
+    "tests": 2,
+    "failures": 0,
+    "seconds": 15.639,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-device-session-final-native.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Account-scoped stable native device registration",
+    "Activity-closed pause/resume/seek/next/previous with PCM",
+    "Occurrence identity retained on resume",
+    "Wrong-account remote command denied",
+    "Real Core NORMAL handoff restores queue/index/position/shuffle/repeat",
+    "Logout closes native device ownership"
+  ],
+  "limits": [
+    "DJ/Radio/pending catalog restore and outgoing UI handoff pending",
+    "No physical phone/car acceptance",
+    "Development artifact is not release"
+  ]
+}

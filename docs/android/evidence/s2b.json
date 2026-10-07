@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-02",
+  "slice": "S2b native queue modes",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "33c1e75ca649d1b4e7efe99b752b25aca046144d",
+    "dirty": false,
+    "channel": "development"
+  },
+  "checks": {
+    "instrumented": {
+      "passed": 7,
+      "skipped": 0,
+      "failures": 0,
+      "command": ".venv/bin/python scripts/android.py integration"
+    },
+    "browser": "Not rerun: no ui_web changes",
+    "normal_apk_and_lint": "passed; helper rebuilt without fixture CA",
+    "apk_signature": "apksigner verify passed"
+  },
+  "cases": [
+    "shuffle and repeat through packaged Capacitor bridge",
+    "native modes and original occurrence indices in snapshot",
+    "repeat outside 0..2 rejected without mutation",
+    "background and Activity recreation preserve service modes",
+    "restore sequential end semantics",
+    "logout resets both modes",
+    "all prior HTTP and verified TLS fixture cases retained"
+  ],
+  "limitations": [
+    "native contract only; Solid mode controls and TypeScript integration pending",
+    "no process-death persistence",
+    "emulator is not acoustic device/car acceptance",
+    "no GitHub workflow or public release"
+  ],
+  "local_reports": [
+    "android/build/integration-results/connected/debug/",
+    "android/app/build/reports/lint-results-debug.html"
+  ]
+}

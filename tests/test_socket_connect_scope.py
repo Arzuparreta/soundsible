@@ -24,3 +24,32 @@ def test_on_socket_connect_returns_its_pool_connection():
         "connect handler leaked a connection out of the pool: "
         f"{stats['created'] - stats['idle']} still checked out"
     )
+
+
+def test_playback_registration_uses_socket_account_and_restores_context():
+    from flask import request
+    from shared.api import on_playback_register
+    from shared.user_context import current_user_id
+
+    previous_user = current_user_id()
+    with app.test_request_context('/socket.io/'):
+        request.sid = 'android-socket'
+        with patch('shared.api._resolve_request_user_id', return_value='member-id'), \
+                patch('shared.api.register_device') as register, \
+                patch('shared.api.join_room') as join, \
+                patch('shared.api.mark_device_socket_active') as active:
+            on_playback_register({'device_id': 'android-device', 'device_type': 'android'})
+        register.assert_called_once_with('member-id', device_id='android-device', device_name=None, device_type='android')
+        join.assert_called_once_with('playback:member-id:android-device', sid='android-socket')
+        active.assert_called_once_with('member-id', 'android-device', 'android-socket')
+        assert current_user_id() == previous_user
+
+
+def test_playback_registration_ignores_socket_without_account():
+    from shared.api import on_playback_register
+
+    with app.test_request_context('/socket.io/'):
+        with patch('shared.api._resolve_request_user_id', return_value=None), \
+                patch('shared.api.register_device') as register:
+            on_playback_register({'device_id': 'unowned-device'})
+        register.assert_not_called()

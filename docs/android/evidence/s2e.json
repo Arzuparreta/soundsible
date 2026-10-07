@@ -1,0 +1,91 @@
+{
+  "date": "2026-10-03",
+  "slice": "S2e library insertion into native NORMAL program",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "cf8f2154c992c57238868197a440fee146057804",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "unit": {
+      "passed": 1348,
+      "files": 146,
+      "command": "npm test --prefix ui_web"
+    },
+    "chromium": {
+      "passed": 278,
+      "skipped": 66,
+      "failures": 0,
+      "profiles": [
+        "chromium-mobile",
+        "chromium-desktop"
+      ],
+      "workers": 2
+    },
+    "android": {
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "normal_apk_and_lint": "passed",
+      "fixtures": [
+        "HTTP",
+        "verified HTTPS",
+        "passwordless HTTP"
+      ],
+      "api": 36
+    },
+    "other": [
+      "central version sync",
+      "git diff --check",
+      "documentation file links resolve",
+      "normal APK excludes fixture resources",
+      "apksigner verify",
+      "native JavaScript excludes Web Audio/mixer runtime"
+    ],
+    "webkit": {
+      "passed": 269,
+      "skipped": 75,
+      "failures": 0,
+      "profiles": [
+        "webkit-mobile",
+        "webkit-desktop"
+      ],
+      "workers": 1,
+      "readonly_mount": true
+    },
+    "browser_source_changes": "No web graph source changes during either full run; WebKit sequential after Chromium with emulator stopped."
+  },
+  "cases": [
+    "library row menu appends to empty queue in pause",
+    "library row menu inserts after current without replacing previous keys",
+    "duplicate ids create distinct UUIDs",
+    "insert in middle retains original successor key",
+    "append during playback preserves current and position",
+    "insert/append preserve pause and shuffle/repeat",
+    "service rejects previous current anchor after OS navigation",
+    "service rejects stale queue order and account generation",
+    "invalid batch and remaining capacity fail atomically",
+    "empty insertAfter uses no anchor and remains paused",
+    "Activity recreation preserves inserted program",
+    "menu actions fit viewport after painted frames"
+  ],
+  "initial_failures": [
+    "HTTP test initially opened the first row by index; socket fixture added a catalog entry with no playable WAV. READY wait exposed the source error; target the actual member private song by label and retain readiness wait before seek. HTTPS passed those runs. Final HTTP and HTTPS both pass."
+  ],
+  "limitations": [
+    "development surface; full NORMAL routes and acquisition pending",
+    "shuffle insertion is after current in visible order, not guaranteed next shuffled playback",
+    "local files only; no new previews/podcasts/radio/DJ/Live/Android Auto capability",
+    "no process-death persistence or approved offline implementation",
+    "emulator does not prove acoustic physical phone/headphones/car acceptance",
+    "no PR/merge/public alpha or GitHub workflow execution"
+  ],
+  "local_reports": [
+    "android/build/integration-results/connected/debug/",
+    "android/app/build/reports/lint-results-debug.html"
+  ],
+  "screenshot": "menu-s2e-api36.png"
+}

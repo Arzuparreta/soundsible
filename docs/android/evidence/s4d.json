@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4d",
+  "channel": "development",
+  "base_revision": "25cc0eda",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "scripts/android.py": "d626ae0877c5a1b07916c012d75f459a8a2963b013d85a4164368c608f03f61a",
+    "android/app/src/main/java/com/soundsible/android/LivePeer.kt": "ae62966bdecc35de1998675d6df587393675e41a5c92f230034d39c292cc27e1",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "6472e86807d9804092037262949c971f126f4d4c450fabe66c844379164b3598",
+    "android/app/src/main/java/com/soundsible/android/NativeLivePlayer.kt": "b4494292d031b526a4f855bc9b401d4dfc92fadf9d7e996a4aca3765d2b9dd1e",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveListenerTest.kt": "1b6c22eeff13d0279329dfaa032013cdad98f937e8b6396ec479211bd1dbdda6"
+  },
+  "tests": 9,
+  "failures": 0,
+  "seconds": 54.967,
+  "runner_exit": 0,
+  "log": "/tmp/soundsible-live-listener-fixed-native.log",
+  "normal_build": "APK/test APK/JVM54/lint without temporary CA pass",
+  "proves": [
+    "Real independent publisher -> MediaMTX TLS -> native listener decoded PCM",
+    "MediaSession Live playback/pause/volume/stop/prepare and Activity close",
+    "Canonical selection returns to NORMAL through stable router",
+    "Decoded Live does not feed native programme broadcast capture",
+    "Host/Relay/Input regressions accepted in same block"
+  ],
+  "limits": [
+    "UI and guest socket/programme metadata pending",
+    "Specific Live focus/noisy, artwork, automatic media recovery and handshake reset acceptance pending",
+    "No physical listening or current whole regression"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2p radio profiles and service refill",
+  "source_revision_before_commit": "fb39dc5",
+  "dirty": true,
+  "checks": {
+    "ui": {
+      "passed": 1401,
+      "files": 159,
+      "log": "/tmp/soundsible-s2p-ui-final.log"
+    },
+    "android_scoped": {
+      "tests": 2,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2p-native-observed.log",
+      "scope": "HTTP/verified HTTPS, background runway refill, actual Explore menu, preserved occurrence/pause, stale occurrence rejection, manual priority and Stop Radio"
+    },
+    "android_main": "latest S2m 25 + restart2; repeat cumulative final head",
+    "browser": "latest S2j full four profiles; repeat final head"
+  },
+  "limits": [
+    "Development, not alpha. Autoplay, broader Radio/context actions and remaining parity/signing/update gates stay open.",
+    "No CI/provider/physical phone/car acceptance claimed."
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "date": "2026-10-05",
+  "slice": "S3a native leveling and bounded program PCM output",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "990d3163dcfba5aae2417f83b471fd7b14c0cbb7",
+  "dirty_at_asset_prepare": true,
+  "checks": {
+    "ui": {
+      "tests": 1550,
+      "files": 196,
+      "log": "/tmp/soundsible-s3a-connected-full-ui.log"
+    },
+    "pcm_wav": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-pcm-offline-program-native.log"
+    },
+    "pcm_flac": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-pcm-flac-native.log"
+    },
+    "jvm": {
+      "tests": 27,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "normal_apk_test_apk_lint": "passed after temporary CA removal",
+    "offline_process_restart": {
+      "prepare_tests": 1,
+      "offline_tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-pcm-restart-native.log",
+      "scope": "Force-stop after confirmed leveling; new service loads profile preference and copied audio; actual PCM peak1893 during Core503"
+    },
+    "generated_plan_python": {
+      "tests": 79,
+      "failures": 0,
+      "log": "/tmp/soundsible-s3a-plan-measured-python.log",
+      "scope": "Actual WAV/FLAC planner receives content-bound measurements; lookup failure retains selection"
+    },
+    "radio_autoplay_native": {
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-radio-leveling-native.log",
+      "scope": "Radio HTTP/TLS actual generated recording PCM gain; parser2; Autoplay HTTP/TLS regression; normal APK/test APK/JVM27/lint"
+    },
+    "pcm_album_radio_regression": {
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3a-pcm-isolated-album-native.log",
+      "scope": "Radio HTTP/TLS runs before PCM HTTP/TLS; separate two-recording PCM album preserves existing radio rows; normal APK/test APK/JVM27/lint pass"
+    },
+    "clean_full_regression": {
+      "source_revision": "d049f40481dc1626d2d037186241dedffe794ed7",
+      "dirty_at_asset_prepare": false,
+      "tests": 78,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "restart_prepare_tests": 1,
+      "restart_offline_tests": 1,
+      "jvm_tests": 27,
+      "normal_apk_test_apk_lint": "passed after temporary CA removal",
+      "log": "/tmp/soundsible-s3a-main-isolated-clean-native.log"
+    }
+  },
+  "scope": [
+    "Actual sole-service AudioSink samples; unity, unmeasured and actual production R128 facts",
+    "Explicit weighted album context, shuffle, next occurrence; local output volume independent",
+    "Seek, Activity recreation, background, preserved programme/session",
+    "Explicit measured offline copies; Core503 playback from Songs and album"
+  ],
+  "limitations": [
+    "Development build only; complete Android parity and manual PR review remain pending",
+    "No physical acoustic acceptance",
+    "No DJ mixing or Live broadcast; tap is an internal bounded attachment",
+    "Browser four profiles must repeat before final UI PR"
+  ],
+  "diagnostics": [
+    {
+      "log": "/tmp/soundsible-s3a-pcm-native.log",
+      "reason": "Resume Settings locator required current nodes in separate steps"
+    },
+    {
+      "log": "/tmp/soundsible-s3a-pcm-settings-native.log",
+      "reason": "Refresh needed observed new library row before replacing programme"
+    },
+    {
+      "log": "/tmp/soundsible-s3a-pcm-offline-native.log",
+      "reason": "Offline album context retained; test incorrectly expected individual gain"
+    },
+    {
+      "log": "/tmp/soundsible-s3a-pcm-offline-context-native.log",
+      "reason": "Test sampled old occurrence while replacement still pending"
+    },
+    {
+      "log": "/tmp/soundsible-s3a-main-clean-native.log",
+      "tests": 78,
+      "failures": 2,
+      "reason": "Earlier Radio cases add acquired tracks to member album; PCM test incorrectly assumed only two album tracks. Separate PCM fixture album fixes directed regression; repeat clean main required."
+    }
+  ]
+}

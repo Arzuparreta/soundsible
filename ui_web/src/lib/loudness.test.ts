@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { URL as NodeURL } from 'node:url';
 import type { Track } from '../types/music';
 import {
   ALBUM_COVERAGE,
@@ -256,4 +258,12 @@ describe('constants', () => {
     expect(TARGET_LUFS).toBe(-18);
     expect(PEAK_CEILING_DBTP).toBe(-1);
   });
+});
+
+it('keeps the browser gain rule aligned with the native contract vectors', () => {
+  const vectors = readFileSync(new NodeURL('../../../shared/contracts/loudness_gain.tsv', import.meta.url), 'utf8');
+  for (const line of vectors.split('\n').filter(line => line.trim() && !line.startsWith('#'))) {
+    const [lufs, peak, expected] = line.trim().split(/\s+/).map(Number);
+    expect(levelGainDb(lufs, peak), line).toBe(expected);
+  }
 });

@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2n favourite intentions and playlist membership",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "5446d3d7dd0696ad7130f37f2e5fe9539d9ad070",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "ui": {
+      "passed": 1396,
+      "files": 157
+    },
+    "python": {
+      "passed": 44,
+      "scope": "favourites manager, library promotion and core route contracts"
+    },
+    "android_scoped": {
+      "tests": 2,
+      "failures": 0,
+      "scope": "HTTP and verified HTTPS, favourite/unmark/filter, playlist creation and owner account isolation"
+    },
+    "normal_apk_lint": "passed after temporary CA removal",
+    "android_main": "latest full suite S2m 25 plus two restart phases; repeat combined suite before final PR",
+    "browser": "latest full four profiles S2j; repeat final cumulative PR head"
+  },
+  "limits": [
+    "Development, not alpha. Full phone/DJ/Live/Auto parity remains required.",
+    "Other playlist management, metadata, discovery, acquisition/import and actions remain pending.",
+    "No live provider, CI or physical acceptance claimed.",
+    "Favourite filter is current server-confirmed state; cold offline favourite metadata is not persisted.",
+    "Normal artifact is dirty prior HEAD; rebuild clean after final task commits."
+  ]
+}

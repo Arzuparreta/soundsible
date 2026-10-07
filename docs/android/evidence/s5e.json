@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-06",
+  "slice": "S5e",
+  "channel": "development",
+  "base_revision": "fc5be88d",
+  "dirty_at_asset_prepare": true,
+  "source_hashes": {
+    "android/app/src/androidTest/java/com/soundsible/android/CarDjTest.kt": "331ec86d653871021e687d96b20afe78791386f62952958bb08089cb9e821c5f"
+  },
+  "tests": 2,
+  "failures": 0,
+  "seconds": 48.908,
+  "runner_exit": 0,
+  "log": "/tmp/soundsible-auto-dj-fixed-native.log",
+  "normal_build": "APK/test APK/JVM54/lint without temporary CA pass",
+  "proves": [
+    "Modern and platform legacy browsers observe dominant song in actual Core DJ programme",
+    "Browsing retains DJ programme token and occurrence keys",
+    "Legacy pause and seek6000ms, modern resume with nonzero48k stereo PCM, modern pause and legacy resume retain DJ programme"
+  ],
+  "limits": [
+    "Same UID on AVD; no Google Auto host, external trust/grant or physical acceptance",
+    "No active-song label edit acceptance or network reconnect yet",
+    "Not whole current principal regression or complete parity"
+  ],
+  "diagnostic": "Initial two cases failed because tap stream.source encodes source kind, not DJ mode; corrected assertion checks PCM alongside independent programme/mode/key assertions."
+}

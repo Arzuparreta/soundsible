@@ -136,13 +136,14 @@ export function SwitchRow(props: {
   label: string;
   hint?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: () => void;
   anchor?: SettingAnchor;
 }) {
   const hintId = createUniqueId();
   // Same activation as every other row in a scroller: a flick that starts on
   // the row scrolls, it does not flip the setting.
-  const tap = createResponsiveTap({ onTap: () => props.onChange() });
+  const tap = createResponsiveTap({ disabled: () => Boolean(props.disabled), onTap: () => props.onChange() });
 
   return (
     <div class={styles.field} data-setting={props.anchor}>
@@ -150,6 +151,7 @@ export function SwitchRow(props: {
         type="button"
         class={styles.rowBtn}
         role="switch"
+        disabled={props.disabled}
         aria-checked={props.checked}
         aria-label={props.label}
         aria-describedby={props.hint ? hintId : undefined}
@@ -232,6 +234,7 @@ export function SegmentedRow<T extends string>(props: {
   options: SegmentOption<T>[];
   value: T | undefined;
   onChange: (value: T) => void;
+  disabled?: boolean;
   anchor?: SettingAnchor;
 }) {
   return (
@@ -246,6 +249,7 @@ export function SegmentedRow<T extends string>(props: {
               classList={{ [styles.segOn]: props.value === option.value }}
               aria-label={option.aria}
               aria-pressed={props.value === option.value}
+              disabled={props.disabled}
               onClick={() => props.onChange(option.value)}
               data-pressable
             >

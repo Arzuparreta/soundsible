@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
-import { apiOrigin } from '../lib/config';
+import { artworkUrl } from '../lib/config';
 import { artworkCandidates } from '../lib/media';
 
 /** Fills its positioned cover slot; observes the actual slot instead of
@@ -10,7 +10,7 @@ export function CoverImage(props: {
   alt?: string;
   variants?: { url: string; width: number }[];
 }) {
-  const source = () => props.src?.startsWith('/api/') ? `${apiOrigin()}${props.src}` : props.src;
+  const source = () => artworkUrl(props.src);
   let image: HTMLImageElement | undefined;
   const [width, setWidth] = createSignal(320);
   const [failed, setFailed] = createSignal(false);

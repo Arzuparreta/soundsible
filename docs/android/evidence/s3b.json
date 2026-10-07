@@ -1,0 +1,633 @@
+{
+  "date": "2026-10-05",
+  "slice": "S3b isolated two-decoder single-output spike",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "16ed5d83",
+  "dirty_at_asset_prepare": false,
+  "checks": {
+    "jvm": {
+      "tests": 36,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-looper-foundation.log"
+    },
+    "mix_native": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-looper-native.log",
+      "scope": "HTTP/TLS actual mono16k and stereo48k decoders normalize to stereo48k; 440/880 spectrum during equal-power, local volume independent, outgoing release leaves incoming continuous"
+    },
+    "normal_apk_test_apk_lint": "passed after temporary CA removal",
+    "pause_scope_native": {
+      "source_revision_at_asset_prepare": "4b6489ee",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-pause-native.log",
+      "scope": "HTTP/TLS physical clock stops/resumes; actual clearSession invalidates output and flushes pending audio; normal APK/test APK/JVM36/lint passes"
+    },
+    "seek_marker_native": {
+      "source_revision_at_asset_prepare": "6d0626a0",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-seek-replacement-native.log",
+      "scope": "HTTP/TLS seeks to10s in real 440->1320Hz source; master epoch/clock reset, actual1320Hz PCM then coherent two-source blend; pause/scope and normal APK/test/JVM36/lint pass"
+    },
+    "dominance_direct_native": {
+      "source_revision_at_asset_prepare": "5f762ba1",
+      "dirty_at_asset_prepare": false,
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-direct-native.log",
+      "scope": "HTTP/TLS fade and direct; hardware25/75percent metadata dominance, direct keeps incoming cue, seek/pause/session invalidation, normal APK/test/JVM38/lint pass"
+    },
+    "incoming_recovery_native": {
+      "source_revision_at_asset_prepare": "f001e95a",
+      "dirty_at_asset_prepare": false,
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-recovery-native.log",
+      "scope": "HTTP/TLS fade/direct/incoming decoder release; retained outgoing actualPCM restored with150ms ramp and playout metadata; seek/pause/scope and normal APK/test/JVM38/lint pass"
+    },
+    "late_recovery_clock_native": {
+      "source_revision_at_asset_prepare": "ca242c26",
+      "dirty_at_asset_prepare": false,
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-clock-resume-native.log",
+      "scope": "HTTP/TLS includes late95percent incoming loss, non-regressing retained clock, actual outgoingPCM recovery and metadata; normal APK/test APK/JVM41/lint pass"
+    },
+    "techniques_native": {
+      "source_revision_at_asset_prepare": "e0499c4e",
+      "dirty_at_asset_prepare": false,
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-fx-ready-native.log",
+      "scope": "All seven techniques HTTP/TLS; actual80Hz bass reduction,4400Hz filter/long blend,100Hz echo tail, structural equal-power/direct; readiness, clocks, seek/recovery/pause/scope and normal APK/test APK/JVM41/lint pass"
+    },
+    "mixed_flac_native": {
+      "source_revision_at_asset_prepare": "f5178e54",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-mix-codec-native.log",
+      "scope": "HTTP/TLS real WAV mono16k plus FLAC stereo48k through two decoders; actual mixedPCM, seek/dominance/pause/scope; normal APK/test APK/JVM41/lint pass"
+    },
+    "end_of_source_native": {
+      "source_revision_at_asset_prepare": "f180e8ea",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-eos-silence-native.log",
+      "scope": "HTTP/TLS physical PCM drain, decoder STATE_ENDED and prepared incoming direct cue; pause/scope and normal APK/test APK/JVM41/lint pass"
+    },
+    "tempo_native": {
+      "source_revision_at_asset_prepare": "b2e208b8",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-tempo-native.log",
+      "scope": "HTTP/TLS softwareSonic speed1.05 pitch1; actual1600Hz PCM retained, incoming media clock follows tempo; seek/blend/pause/scope and normal APK/test APK/JVM41/lint pass"
+    },
+    "cued_preroll_native": {
+      "source_revision_at_asset_prepare": "e7e36547",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-cue-native.log",
+      "scope": "HTTP/TLS scheduled frame cue, 500ms silent incoming preroll on shared clock, actualPCM silence before overlap and dominant metadata during blend; normal APK/test APK/JVM41/lint pass"
+    },
+    "cancelled_preroll_native": {
+      "source_revision_at_asset_prepare": "53717d2f",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-cancel-reservation-native.log",
+      "scope": "HTTP/TLS cancel uncommitted preroll, retain outgoing actualPCM, seek standby/rebuffer without master epoch reset, rearm and blend; reject cancellation after PCM commitment; normal APK/test APK/JVM41/lint pass"
+    },
+    "tempo_return_native": {
+      "source_revision_at_asset_prepare": "5b5dbed8",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-rate-return-native.log",
+      "scope": "HTTP/TLS software tempo1.05 returns to1 over8s playout; actual1600Hz PCM pitch retained, pause holds ramp; normal APK/test APK/JVM41/lint pass"
+    },
+    "complete_mix_spike_native": {
+      "source_revision_at_asset_prepare": "f2e7a921",
+      "dirty_at_asset_prepare": false,
+      "tests": 32,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-complete-spike-native.log",
+      "scope": "All32 HTTP/TLS isolated mix cases: seven techniques, WAV/FLAC, EOS, tempo/return, cue/preroll/cancel/standby seek, early/late loss, per-input levels0.5/0.75 with live ramp, physical clock/pause/scope; normal APK/test APK/JVM41/lint pass"
+    },
+    "full_core_long_blend_native": {
+      "source_revision_at_asset_prepare": "bbfcd056",
+      "dirty_at_asset_prepare": false,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-long-end-native.log",
+      "scope": "HTTP/TLS full48s LONG_BLEND, source90s/60s, actual80/4400Hz PCM at25/75percent, physical full window before releasing outgoing; normal APK/test APK/JVM48/lint pass"
+    },
+    "both_input_loss_native": {
+      "source_revision_at_asset_prepare": "b210eeb3",
+      "dirty_at_asset_prepare": false,
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s3b-outgoing-loss-native.log",
+      "scope": "HTTP/TLS early/late actual decoder release on either side; retained input PCM/clock, epoch preserved, playout metadata restored with150ms ramp; normal APK/test APK/JVM48/lint pass"
+    }
+  },
+  "diagnostics": [
+    {
+      "log": "/tmp/soundsible-s3b-mix-foundation.log",
+      "reason": "Kotlin rejects Java OkHttp constructors; fixed extension calls"
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-native.log",
+      "reason": "System JDK rejected before instrumentation; repeated with JDK21"
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-native-jdk21.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Shared AudioOutputProvider requires one playback looper; cleanup requires Looper; common owned decoder thread and onReleased await fix tested"
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-seek-native.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Media3 replaces/releases active input on seek; wrapper invalidated flush only. Idempotent release/replacement master invalidation fixes both transports."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-clock-native.log",
+      "tests": 8,
+      "failures": 2,
+      "reason": "Late incoming release pauses shared AudioTrack; recovery now resumes only while owned and not paused/fatal. Repeated8 passes."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-mix-fx-native.log",
+      "tests": 18,
+      "failures": 1,
+      "reason": "tlsStructuralFade input existed but had not delivered PCM. Buffered readiness plus bounded wait fixes full18 repeat."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-eos-diagnostic-native.log",
+      "tests": 1,
+      "failures": 1,
+      "reason": "EOS physical PCM clock retained 19632 of 24000 frames; isolated diagnostic records queue/clock only."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-eos-tail-native.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Keeping ended decoder from pausing does not overcome latency-adjusted AudioTrack underrun clock. Bounded silence drain without device stop passes repeat2."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-cancel-native.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Test attempted future cancellation after render had reserved overlap despite physical preroll. Longer silent preroll leaves real uncommitted margin; guard kept unchanged and repeated2 pass."
+    },
+    {
+      "log": "/tmp/soundsible-s3b-full-long-native.log",
+      "tests": 2,
+      "failures": 2,
+      "reason": "Test mistook attenuated outgoing80Hz for completed48s overlap and released active decoder early. Explicit full-window physical wait retains decoder and repeated2 pass."
+    }
+  ],
+  "limitations": [
+    "Isolated owner only; not connected to production service or DJ planner",
+    "No absolute Core cue/phase controller or production service/planner proof yet",
+    "No exact compressor acoustic parity or physical listening acceptance",
+    "No Live/Auto parity or public alpha; eventual PR must remain open for manual review"
+  ],
+  "production_dj_first_flow": {
+    "source_revision": "9d64d5a3",
+    "dirty": false,
+    "scope": "DjProgramTest HTTP/TLS2 and PlaybackTest NORMAL HTTP/TLS2",
+    "tests": 4,
+    "failures": 0,
+    "log": "/tmp/soundsible-s3b-dj-normal-native.log",
+    "normal_build": "APK/test APK/JVM48/lint pass without temporary CA",
+    "proves": [
+      "real Core DJ plan through bridge and service",
+      "mixed PCM while Activity is stopped",
+      "physical incoming dominance in programme metadata",
+      "pause, Activity recreation, resume, DJ stop, NORMAL restoration"
+    ],
+    "does_not_prove": [
+      "complete DJ parity",
+      "acoustic continuity when switching NORMAL to DJ",
+      "refill, direction, source editing, extended route repair",
+      "Live or Android Auto"
+    ]
+  },
+  "production_dj_starvation": {
+    "asset_prepare_revision": "0f26f348",
+    "asset_prepare_dirty": true,
+    "source_base_revision": "1ab49ea6",
+    "source_dirty": true,
+    "tests": 6,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "log": "/tmp/soundsible-s3b-starvation-ramp-fixed-native.log",
+    "normal_build": "APK/test APK/JVM49/lint pass without temporary CA",
+    "proves": [
+      "production controller recovery before overlap and on either stalled PCM input during committed blend over HTTP/TLS",
+      "pause excludes starvation timeout",
+      "retained nonzero stereo 48k PCM after recovery ramp",
+      "retained output epoch and monotonic clock"
+    ],
+    "does_not_prove": [
+      "stalled network response through bridge/service",
+      "both inputs unavailable",
+      "full native regression or complete DJ parity",
+      "physical acoustic acceptance"
+    ],
+    "diagnostic": "/tmp/soundsible-s3b-starvation-post-recovery-pcm-native.log exposed rearming before rendered recovery ended; corrected with render and playout guards"
+  },
+  "production_dj_route_repair": {
+    "source_base_revision": "be2894fc",
+    "dirty": true,
+    "tests": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "log": "/tmp/soundsible-s3b-repair-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "ui_log": "/tmp/soundsible-s3b-repair-full-ui.log",
+    "ui_files": 198,
+    "ui_tests": 1561,
+    "proves": [
+      "real Core dj-repair on native future",
+      "retained requested occurrence KEY and chosen depth",
+      "source replacement retains explicit request",
+      "retained current KEY, paused clock and programme",
+      "observed cued state in APK UI",
+      "DJ recovery regression remains green"
+    ],
+    "does_not_prove": [
+      "musical request placement",
+      "transition refinement",
+      "all stale/malformed Core response negatives",
+      "long session history pruning",
+      "full native/browser regression or complete parity"
+    ]
+  },
+  "production_dj_placement": {
+    "source_base_revision": "cebf7246",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "log": "/tmp/soundsible-s3b-placement-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "ui_log": "/tmp/soundsible-s3b-placement-full-ui.log",
+    "ui_files": 198,
+    "ui_tests": 1564,
+    "proves": [
+      "real Core dj-place with native requested occurrence retained",
+      "503 retains conservative queued request",
+      "computed response delayed after Move is discarded without reverting user intent",
+      "source replacement preserves two requested occurrences of one recording",
+      "fixture controls reject ordinary clients",
+      "existing Core repair and DJ OS/control flows remain green"
+    ],
+    "does_not_prove": [
+      "fixed placement beyond analysis horizon",
+      "all bridge variants",
+      "transition refinement",
+      "long session pruning",
+      "full native/browser regression or complete parity"
+    ]
+  },
+  "dj_history_pruning": {
+    "source_base_revision": "3c832ce9",
+    "dirty": true,
+    "tests": 8,
+    "failures": 0,
+    "log": "/tmp/soundsible-s3b-history-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "proves": [
+      "production controller prunes consumed history at queue limit",
+      "append retains current occurrence, paused position and output epoch",
+      "fresh nonzero stereo48k PCM after resume"
+    ],
+    "does_not_prove": [
+      "full service long-session refill",
+      "physical acoustic acceptance",
+      "complete DJ parity"
+    ]
+  },
+  "dj_transition_refinement": {
+    "source_base_revision": "9bed92e6",
+    "dirty": true,
+    "tests": 10,
+    "failures": 0,
+    "log": "/tmp/soundsible-s3b-refine-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "proves": [
+      "uncommitted proposal accepted",
+      "obsolete snapshot rejected",
+      "prepared decoder cue not changed",
+      "existing Core DJ and recovery flows remain green"
+    ],
+    "does_not_prove": [
+      "specific measured Core response applied end to end",
+      "all endpoint negatives",
+      "network-stalled service flow",
+      "complete DJ parity"
+    ]
+  },
+  "dj_measured_refinement": {
+    "source_base_revision": "d7167176",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "log": "/tmp/soundsible-s3b-measured-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "proves": [
+      "real Core measured analysis of synthetic audio",
+      "native refiner applies matching outCue and occurrence fromKey before playback",
+      "programme plays after refinement"
+    ],
+    "does_not_prove": [
+      "all endpoint negative responses",
+      "network-stalled service recovery",
+      "complete parity"
+    ]
+  },
+  "full_native_regression_after_refinement": {
+    "source_revision": "d7e95c44",
+    "prepared_clean": true,
+    "tests": 130,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 1835.188,
+    "log": "/tmp/soundsible-s3b-regression-native.log",
+    "restart_prepare": {
+      "tests": 1,
+      "failures": 0
+    },
+    "restart_offline": {
+      "tests": 1,
+      "failures": 0
+    },
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "does_not_prove": [
+      "complete DJ/Live/Android Auto parity",
+      "physical acoustic acceptance",
+      "later network/settings corrections"
+    ]
+  },
+  "dj_network_service_recovery": {
+    "source_base_revision": "c3d392d6",
+    "dirty": true,
+    "checkout": "/tmp/soundsible-android-next",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 63.616,
+    "log": "/tmp/soundsible-s3b-network-buffered-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "proves": [
+      "authenticated incoming HTTP/TLS body remains pending during retained outgoing playback",
+      "Range reopens share bounded transport stall",
+      "retained outgoing occurrence and advancing position",
+      "resumed nonzero stereo48k successor PCM",
+      "MediaController play prepares temporary503 error and resumes same occurrence"
+    ],
+    "related_regression": "measured2 and NORMAL2 pass individually in network-range-native, whose two network failures were fixture diagnostics",
+    "does_not_prove": [
+      "both inputs unavailable recovery",
+      "all DJ request/context actions",
+      "complete parity",
+      "physical acoustic acceptance"
+    ]
+  },
+  "dj_song_context": {
+    "source_base_revision": "acbd83d7",
+    "dirty": true,
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 123.203,
+    "log": "/tmp/soundsible-s3b-context-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA in /tmp/soundsible-s3b-context-normal-build.log; separate build after fixing lint constants only in unintegrated Auto draft; DJ sources unchanged",
+    "ui": {
+      "files": 198,
+      "tests": 1568,
+      "typescript": "pass",
+      "log": "/tmp/soundsible-s3b-context-full-ui.log"
+    },
+    "proves": [
+      "real library menus through HTTP/TLS native bridge and Core",
+      "NORMAL paused current occurrence and position retained when starting from another song",
+      "changing context removes prior context lead while retaining explicit listener request by key",
+      "adding source retains pause/current/request and does not increment placement revision",
+      "existing DjProgramTest HTTP/TLS regression passes"
+    ],
+    "does_not_prove": [
+      "all route menus and fixed placement interactions",
+      "both inputs unavailable recovery",
+      "complete DJ parity",
+      "physical acoustic continuity"
+    ]
+  },
+  "dj_route_song_menus": {
+    "source_base_revision": "4f75ba17",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 19.962,
+    "log": "/tmp/soundsible-s3b-route-menu-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "ui": {
+      "files": 198,
+      "tests": 1570,
+      "typescript": "pass",
+      "log": "/tmp/soundsible-s3b-route-menu-full-ui.log"
+    },
+    "proves": [
+      "real DJ route overflow opens shared song actions by HTTP/TLS",
+      "duplicate source action visibly selected and disabled",
+      "removal targets requested occurrence key and retains current key position and pause",
+      "web guard rejects deferred removal after account programme order changes or committed handoff"
+    ],
+    "does_not_prove": [
+      "all menu actions from a cued route row on physical device",
+      "fixed placement picker",
+      "complete DJ parity"
+    ]
+  },
+  "dj_fixed_placement": {
+    "source_base_revision": "182a8dff",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 22.075,
+    "log": "/tmp/soundsible-s3b-fixed-placement-native.log",
+    "normal_build": "APK/test APK/JVM52/lint pass without temporary CA",
+    "ui": {
+      "files": 199,
+      "tests": 1576,
+      "typescript": "pass",
+      "log": "/tmp/soundsible-s3b-fixed-placement-full-ui.log"
+    },
+    "proves": [
+      "library Add to route opens destination picker with automatic or fixed occurrence key",
+      "real Core fixed placement before destination18 beyond musical16-item horizon over HTTP/TLS",
+      "new requested occurrence immediately precedes selected key",
+      "paused current key and position retained",
+      "chooser follows latest order within same programme and blocks removed or committed destinations and account/programme changes"
+    ],
+    "does_not_prove": [
+      "all bridge ownership remove/move variants",
+      "all endpoint negatives",
+      "complete DJ parity",
+      "physical acceptance"
+    ]
+  },
+  "dj_sources_and_owned_blocks": {
+    "source_base_revision": "1eec3df3",
+    "dirty": true,
+    "tests": 18,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 332.005,
+    "log": "/tmp/soundsible-s3b-owned-block-native.log",
+    "normal_build": "APK/test APK/JVM54/lint pass without temporary CA",
+    "ui": {
+      "files": 200,
+      "tests": 1581,
+      "typescript": "pass",
+      "log": "/tmp/soundsible-s3b-block-full-ui.log"
+    },
+    "proves": [
+      "real library/route/context/fixed placement and source removal HTTP/TLS via Core and service",
+      "source removal retains explicit requested occurrence and paused playback; last source protected",
+      "controlled owned bridge rows in production session with real authenticated decoders: moving bridge or owner moves complete block",
+      "bridge or owner removal drops the complete future block; same recording in another occurrence retained",
+      "audible bridge protects dependent owner and remaining bridge block from removal and insertion",
+      "fixed destination normalizes to block start; musical fallback stays after committed block",
+      "edits retain output epoch and usable nonzero PCM; existing Recovery10, Network2 and DjProgram2 pass"
+    ],
+    "does_not_prove": [
+      "Core-generated bridge ownership across every audio-analysis combination",
+      "all malformed endpoint responses",
+      "both inputs unavailable recovery",
+      "long1000 session through service/controller",
+      "complete DJ parity",
+      "physical acoustic acceptance"
+    ]
+  },
+  "both_inputs_pcm_interruption": {
+    "source_base_revision": "450b207d",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "instrumentation_seconds": 46.949,
+    "log": "/tmp/soundsible-s3b-both-inputs-native.log",
+    "normal_build": "APK/test APK/JVM54/lint passed without temporary CA",
+    "proves": [
+      "Both private decoders paused during armed overlap for >2s; no healthy input, no retirement or output epoch reset",
+      "Resuming outgoing decoder triggers recovery retaining programme clock, requested playback and nonzero stereo48k PCM"
+    ],
+    "limits": [
+      "Controlled decoder PCM interruption; not permanent failure of both network sources",
+      "Full current regression and service/controller long1000 session pending",
+      "Not complete DJ parity"
+    ]
+  },
+  "long_route_service_controller": {
+    "source_base_revision": "6bd23fc4",
+    "dirty": true,
+    "tests": 2,
+    "failures": 0,
+    "instrumentation_seconds": 23.115,
+    "log": "/tmp/soundsible-s3b-service-history-native.log",
+    "normal_build": "APK/test APK/JVM54/lint passed without temporary CA",
+    "proves": [
+      "Real Core DJ plan and production service receives append up to1000 occurrences",
+      "MediaController sees1000 and seeks occurrence996 at6000ms",
+      "Service prunes prior996 while retaining current KEY programme token position and pause",
+      "Append after pruning accepted; MediaController resumes nonzero stereo48k PCM"
+    ],
+    "limits": [
+      "Bounded stress test with seek, not1000 naturally completed songs or multi-day soak",
+      "All malformed/stale endpoint cases and full current regression pending",
+      "Not complete DJ parity or physical acoustic acceptance"
+    ]
+  },
+  "full_native_regression_dcdd": {
+    "source_revision_at_asset_prepare": "dcdd6a3b2c317d4a800c8d69b9b8739ed01d2859",
+    "dirty_at_asset_prepare": true,
+    "tracked_sources_clean_at_asset_prepare": true,
+    "untracked_sources": [
+      "ProgramCarLibrary.kt unused draft, not connected to PlaybackService"
+    ],
+    "tests": 144,
+    "failures": 2,
+    "errors": 0,
+    "skipped": 0,
+    "instrumentation_seconds": 1984.904,
+    "runner_exit": 1,
+    "log": "/tmp/soundsible-android-dcdd-regression-native.log",
+    "failures_identified": [
+      "CatalogSearchTest.httpSearchAndExplicitSaved",
+      "CatalogSearchTest.verifiedTlsSearchAndExplicitSaved"
+    ],
+    "diagnosis": "Global More options locator selects new queue occurrence menu before Discover result; scope locator to android-catalog-search. Directed confirmation pending.",
+    "normal_build": "Skipped by runner after failed instrumentation; no claim of normal-build verification for this full run.",
+    "limits": [
+      "Failed full regression retained; directed passing tests do not replace it.",
+      "No Android Auto integration in this source revision.",
+      "No physical device or acoustic acceptance."
+    ]
+  }
+}

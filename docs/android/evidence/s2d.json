@@ -1,0 +1,81 @@
+{
+  "date": "2026-10-03",
+  "slice": "S2d native NORMAL queue occurrence editing",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "d4f186b58ea609ab1b7deafb09892a623b174478",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "unit": {
+      "passed": 1344,
+      "files": 145,
+      "command": "npm test --prefix ui_web"
+    },
+    "chromium": {
+      "passed": 278,
+      "skipped": 66,
+      "command": "all specs chromium-mobile and chromium-desktop, 2 workers"
+    },
+    "android": {
+      "passed": 7,
+      "skipped": 0,
+      "failures": 0,
+      "normal_apk_and_lint": "passed",
+      "command": "scripts/android.py build then scripts/android.py integration",
+      "geometry": "editing rows have nonoverlapping rectangles; current row and pane inside viewport before painted capture"
+    },
+    "other": [
+      "central version sync",
+      "git diff --check",
+      "changed documentation links resolve",
+      "no fixture resources in normal APK",
+      "apksigner verify passed",
+      "native JS excludes Web Audio and generated DJ queue runtime"
+    ],
+    "webkit": {
+      "passed": 269,
+      "skipped": 75,
+      "failures": 0,
+      "workers": 1,
+      "readonly_mount": true
+    },
+    "browser_source_changes": "No web dependency graph changes or HMR/reload in final Chromium run; adjusted native-only ProgramTransport seek identity (imported only by AndroidStart and unit tests), then reran unit/APK. No source changes during WebKit."
+  },
+  "cases": [
+    "three occurrences of same id carry distinct stable native UUID keys",
+    "real Solid move command preserves current metadata/position/paused state and modes",
+    "service rejects old queue fingerprint, wrong occurrence key and stale account generation",
+    "real Solid selection chooses the intended occurrence from its beginning",
+    "removing another entry preserves native position and pause",
+    "removing current entry transitions to remaining successor",
+    "removing last entry stops and clears without resetting account modes",
+    "row rectangles do not overlap in editing mode",
+    "seek drag follows occurrence key across move and clears on replacement at same index/id",
+    "stable virtual row keys retain DOM and restore focus during reorder",
+    "HTTP and verified HTTPS account/stream fixture cases retained"
+  ],
+  "initial_failures": [
+    "jsdom ResizeObserver mock missing; supplied test-only mock",
+    "native SessionResult deprecated error constants failed lint; replaced by SessionError constants",
+    "DOM reorder blurred focused edit control; restore it if same node remains and focus was lost",
+    "first functional APK integration passed but screenshot showed fixed-height virtual rows overlapped editing controls; separated controls and measureElement measures actual rows; native test asserts bounding rectangles",
+    "first Chromium run interrupted for geometry correction; final full run passed",
+    "capture refined to await instant scroll and two rendered frames, with current row and pane inside viewport"
+  ],
+  "limitations": [
+    "development surface; full AuthenticatedPlayer routes/actions still pending",
+    "1000 local-file cap; append/insert and acquisition pending",
+    "previews/podcasts/radio/artwork/DJ/Live/Android Auto not completed",
+    "no process-death persistence or approved offline implementation",
+    "emulator is not acoustic physical phone/headphones/car acceptance",
+    "no PR/merge, public alpha/release or GitHub workflow run"
+  ],
+  "local_reports": [
+    "android/build/integration-results/connected/debug/",
+    "android/app/build/reports/lint-results-debug.html"
+  ],
+  "screenshot": "queue-s2d-api36.png"
+}

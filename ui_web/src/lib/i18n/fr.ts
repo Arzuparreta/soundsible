@@ -1,6 +1,30 @@
 import type { Dict } from './en';
 
 export const fr: Dict = {
+  android: {
+    offlineAvailable: "Disponible hors connexion",
+    offlineRemove: "Retirer de cet appareil",
+    offlineCancel: "Annuler la préparation",
+    offlineManage: "Gérer la musique hors connexion",
+    offlineOnly: "Uniquement sur cet appareil",
+    offlineAll: "Tous les morceaux",
+    offlineSpace: "Limite de stockage",
+    offlineEmpty: "Aucun morceau préparé.",
+    offlineReady: "Prêts",
+    offlinePreparing: "Préparation des morceaux",
+    offlineNoSpace: "Espace insuffisant. Retirez des copies ou augmentez la limite.",
+    offlineIntegrity: "La copie est incomplète ou endommagée. Préparez-la à nouveau.",
+    offlineFailed: "La préparation a échoué. Réessayez avec une connexion.",
+    offlineRemovalFailed: "Impossible de supprimer la copie. Réessayez.",
+
+    previewPreparing: 'Préparation du morceau',
+    previewRetry: 'En attente de réessayer le morceau',
+    closeProgram: 'Fermer le lecteur',
+    playbackInterrupted: 'Lecture interrompue. La file et la position sont conservées. Réessayez quand le serveur est disponible.',
+    insertAfter: 'Ajouter après le titre actuel',
+    repeatOff: 'Désactivé',
+    repeatOne: 'Un titre',
+    repeatAll: 'Toute la file', useInvite: "Utiliser l'invitation", inviteSignsOut: "Utiliser cette invitation vous déconnecte de ce compte et arrête la lecture.", pairing: { scan: "Scanner le code d'appairage", useCode: "Utiliser un code d'appairage", code: "Code d'appairage", codeHint: "Les 8 caractères sous le QR dans Soundsible → Réglages → Appareils → Appairer un nouvel appareil. Utilise l'adresse du serveur ci-dessus.", pair: "Appairer", hint: "Pointez la caméra vers le code d'appairage affiché dans Soundsible → Réglages → Appareils", notSoundsible: "Ce n'est pas un code d'appairage Soundsible.", invalid: "Ce code d'appairage est faux ou a expiré.", used: "Ce code a déjà été utilisé. Affichez-en un nouveau.", notShowing: "Gardez le code ouvert sur votre Soundsible pendant que vous le scannez ou le saisissez.", unavailable: "Ce compte ne peut pas se connecter pour le moment.", cameraDenied: "La caméra est nécessaire pour scanner. Vous pouvez saisir le code.", cameraUnavailable: "Aucune caméra disponible. Saisissez le code.", badCode: "Un code d'appairage compte 8 lettres et chiffres.", needsServer: "Saisissez d'abord l'adresse de votre serveur." }, refresh: "Actualiser", permissionDenied: "Votre compte ne peut pas accéder à cette ressource.", title: 'Connectez votre Soundsible', unconfigured: 'Aucun serveur n’est encore connecté.', server: "Adresse du serveur", serverHint: "HTTPS à distance ; HTTP uniquement sur votre réseau privé ou Tailscale.", connect: "Connecter", username: "Utilisateur", password: "Mot de passe", login: "Se connecter", logout: "Se déconnecter", changeServer: "Changer de serveur", connectFailed: "Connexion impossible. Vérifiez adresse, réseau et certificat du serveur.", wrongLogin: "Utilisateur ou mot de passe incorrect.", browseOnly: 'Version de développement : pas encore une version publiée.', seek: 'Position de lecture', eventsPending: "Mises à jour déconnectées. Réessayez ou actualisez la bibliothèque." },
   savedEntities: {
     albums: "Albums enregistrés",
     artists: "Artistes enregistrés",
@@ -111,6 +135,7 @@ export const fr: Dict = {
     shortcuts: 'Accès rapides',
   },
   live: {
+    leave: 'Quitter la salle',
     title: 'Live',
     meta: 'Sessions de la communauté Soundsible',
     goLive: 'Diffuser en direct',
@@ -323,6 +348,7 @@ export const fr: Dict = {
       already: '« {title} » fait déjà partie de vos sources',
     },
     route: {
+      djPlacement: 'Laisser le DJ choisir',
       pinned: 'Épinglé', actions: 'Actions pour {title}', useAsSource: 'Mélanger à la session',
       add: 'Ajouter', insertBefore: 'Insérer un morceau avant {title}', fixed: 'Fixé', placed: 'Placé', bridge: 'Transition',
       remove: 'Retirer du parcours', avoidSession: 'Éviter pendant cette session',
@@ -715,6 +741,7 @@ export const fr: Dict = {
       'Associez votre téléphone en scannant un QR pour le contrôler et lire à distance.',
     connection: 'Connexion',
     engineLabel: 'Engine',
+    engineVersion: 'Version du serveur',
     about: 'À propos',
     version: 'Beta · UI Solid',
     viewDesign: 'Voir le design system',
@@ -972,6 +999,7 @@ export const fr: Dict = {
     empty: 'La liste ne contient aucun titre.',
   },
   deviceSheet: {
+    transfer: 'Transférer la lecture',
     sendingTo: 'Envoi vers {device}…',
     fallbackDevice: 'appareil',
     playingOn: 'Lecture sur l’appareil',

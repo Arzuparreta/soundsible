@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2o conditional playlist management",
+  "source_revision_before_commit": "1e1f2fe",
+  "dirty": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "passed": 1400,
+      "files": 159,
+      "log": "/tmp/soundsible-s2o-ui-timers.log"
+    },
+    "python": {
+      "passed": 149,
+      "log": "/tmp/soundsible-s2o-backend-final.log"
+    },
+    "android_scoped": {
+      "tests": 2,
+      "failures": 0,
+      "scope": "HTTP and verified HTTPS, duplicate occurrence under filtering, reorder, cover, rename, duplicate, complete playlist order and delete",
+      "log": "/tmp/soundsible-s2o-native-observed.log"
+    },
+    "android_main": "Last full S2m: 25 plus two offline restart phases; repeat cumulative head",
+    "browser": "Last full four profiles S2j; repeat before PR"
+  },
+  "limits": [
+    "Development artifact, not alpha. Full parity and signing/update gates remain.",
+    "No live provider, CI, physical phone or car acceptance claimed.",
+    "Previous targeted runs exposed stale UI observations before conditional edits; final run observes displayed state."
+  ]
+}

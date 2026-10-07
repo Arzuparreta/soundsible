@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4h",
+  "channel": "development",
+  "base_revision": "cb734c63",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/NativeCommunitySocket.kt": "8c9f970fc70a7330e6a080525dae2623f1e4fc9a93c5bdc902832057755dec7c",
+    "android/app/src/main/java/com/soundsible/android/NativeLiveHost.kt": "685bb2e79d8edd5fc2d1ff6874b13418478fb7d02bab9a5750b98de86f9e4dbf",
+    "android/app/src/main/java/com/soundsible/android/NativeLivePlayer.kt": "48ffdc0109ea4e0a5a048fd7c847e06e8cdffd29aea701b4e8b8d6582e673cf8",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveHostTest.kt": "b0d9458f28c78d5c2118a403094a8d1b6310b97865f350b29ef861b6b9d0a907",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveListenerTest.kt": "47f1c6a7a7436b890007c3908e7554cc3a9117f3e51cdd323258e0ec9a6fedc4",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveUiTest.kt": "a1f8cc33506bf9e713eec4032a885b7b6f8a195d3395d17b64da82feae6ee2c1",
+    "android/app/src/androidTest/java/com/soundsible/android/LivePollingTest.kt": "45f7d7bf869fbefa89e96cd7b9d495e1c8073ab0ea2551188e30985982a69760",
+    "scripts/android.py": "bc0ce7c2a35d2b0ef692416a67f3fb63694ba752eadb305afc35dcc780eb5af0",
+    "scripts/android_live_fixture.py": "2efd389402b4e9198502ea31a819edecf89faba36d3c263a2383104612bf069e"
+  },
+  "combined": {
+    "tests": 9,
+    "failures": 2,
+    "seconds": 205.208,
+    "log": "/tmp/soundsible-live-leases-native.log",
+    "explanation": "Host4/Listener2 and HTTP UI pass. TLS UI submitted chat while title command was pending; orphan host room then made Polling create409. Fixed UI test waits for enabled Send and always cleans its host room."
+  },
+  "final_correction": {
+    "tests": 3,
+    "failures": 0,
+    "seconds": 65.407,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-leases-ui-fixed-native.log",
+    "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+    "product_sources_unchanged_from_combined": true
+  },
+  "coverage": [
+    "Host and guest await room authorization before opening WHIP/WHEP",
+    "Wrong room with valid WHEP decodes no PCM",
+    "Host/guest real server disconnect with Activity closed retires Live after10s",
+    "Local programme preserved after host lease loss",
+    "Polling-only quiet room35s has no disconnect/error across server ping20s"
+  ],
+  "limits": [
+    "Acceptance split across9/2 and corrected3/0; not whole9/0 rerun",
+    "Process death/resume and retry exhaustion still pending",
+    "No whole principal/browser4 or physical device claim"
+  ],
+  "documentation_correction": "Community ping_interval20s, ping_timeout25s. The accepted35s quiet test spans ping20, previously described as25."
+}

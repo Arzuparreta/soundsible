@@ -1,6 +1,6 @@
 import { SkeletonRows } from './Skeleton';
 import { EmptyState } from './EmptyState';
-import { For, Show, createResource, createSignal } from 'solid-js';
+import { For, Show, createResource, createSignal, onCleanup } from 'solid-js';
 import Button from './Button';
 import { confirmDialog } from '../lib/confirm';
 import { passwordDialog } from '../lib/passwordDialog';
@@ -9,7 +9,7 @@ import { copyText } from '../lib/clipboard';
 import { t } from '../lib/i18n';
 import PasswordFields from './PasswordFields';
 import { settingAnchor } from './SettingsRows';
-import { invites, isAdmin, user, users, type Role, type User } from '../lib/session';
+import { invites, user, users, type Role, type User } from '../lib/session';
 import styles from './UsersPanel.module.css';
 
 function initials(person: User): string {
@@ -23,8 +23,16 @@ function initials(person: User): string {
  * The window supplies the title, the back affordance and the scroller, so this
  * is only the content — same contract as `DevicesPanel`.
  */
-export function UsersPanel() {
-  const [list, { refetch }] = createResource(async () => (await users.list()).users);
+export function UsersPanel(props: { account?: () => User | null; current?: () => boolean } = {}) {
+  let alive = true;
+  onCleanup(() => { alive = false; });
+  const me = () => props.account ? props.account() : user();
+  const current = () => alive && props.current?.() !== false && me()?.role === 'admin';
+  const [list, { refetch }] = createResource(async () => {
+    if (!current()) return [];
+    const result = await users.list();
+    return current() ? result.users : [];
+  });
   const [username, setUsername] = createSignal('');
   const [displayName, setDisplayName] = createSignal('');
   const [password, setPassword] = createSignal<string | null>(null);
@@ -33,12 +41,11 @@ export function UsersPanel() {
   const [busy, setBusy] = createSignal(false);
   const [inviteLink, setInviteLink] = createSignal('');
 
-  const me = () => user();
   const needsOwnPassword = () => me() != null && !me()!.has_password;
 
   const create = async (e: Event) => {
     e.preventDefault();
-    if (busy()) return;
+    if (busy() || !current()) return;
     setError('');
     setBusy(true);
     try {
@@ -48,6 +55,7 @@ export function UsersPanel() {
         display_name: displayName().trim() || undefined,
         role: role(),
       });
+      if (!current()) return;
       setPassword(null);
       setUsername('');
       setDisplayName('');
@@ -63,66 +71,76 @@ export function UsersPanel() {
   };
 
   const invite = async () => {
+    if (!current()) return;
     // The link is anonymous — no name is attached. Whoever opens it picks their
     // own. So this is one tap: generate and copy.
     try {
       const { url } = await invites.create();
+      if (!current()) return;
       setInviteLink(url);
       // Clipboard access can be refused (no secure context, no permission) —
       // the link stays on screen so it can still be selected by hand.
-      if (await copyText(url)) toast.success(t('users.inviteCopied'));
+      const copied = await copyText(url);
+      if (!current()) return;
+      if (copied) toast.success(t('users.inviteCopied'));
       else toast.info(t('users.inviteReady'));
     } catch {
-      toast.error(t('users.inviteFailed'));
+      if (current()) toast.error(t('users.inviteFailed'));
     }
   };
 
   const resetPassword = async (person: User) => {
+    if (!current()) return;
     const next = await passwordDialog({
       title: t('users.resetPasswordTitle', { name: person.display_name }),
       message: t('users.resetPasswordMsg'),
       confirmLabel: t('common.save'),
     });
-    if (!next) return;
+    if (!next || !current()) return;
     try {
       await users.setPassword(person.id, next);
+      if (!current()) return;
       toast.success(t('users.passwordUpdated'));
       void refetch();
     } catch {
-      toast.error(t('users.passwordFailed'));
+      if (current()) toast.error(t('users.passwordFailed'));
     }
   };
 
   const toggleDisabled = async (person: User) => {
+    if (!current()) return;
     try {
       await users.update(person.id, { disabled: !person.disabled });
+      if (!current()) return;
       void refetch();
     } catch {
-      toast.error(t('users.updateFailed'));
+      if (current()) toast.error(t('users.updateFailed'));
     }
   };
 
   const remove = async (person: User) => {
+    if (!current()) return;
     const ok = await confirmDialog({
       title: t('users.deleteTitle', { name: person.display_name }),
       message: t('users.deleteMsg'),
       confirmLabel: t('common.delete'),
       danger: true,
-    });
-    if (!ok) return;
+    }, current);
+    if (!ok || !current()) return;
     try {
       await users.remove(person.id);
+      if (!current()) return;
       toast.success(t('users.deleted'));
       void refetch();
     } catch {
-      toast.error(t('users.deleteFailed'));
+      if (current()) toast.error(t('users.deleteFailed'));
     }
   };
 
   return (
     <section class={styles.panel}>
       <Show
-        when={isAdmin()}
+        when={me()?.role === 'admin'}
         fallback={<p class={styles.intro}>{t('users.adminOnly')}</p>}
       >
         <p class={styles.intro}>{t('users.intro')}</p>

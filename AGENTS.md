@@ -1,5 +1,9 @@
 # Repository instructions
 
+- Android port work: read `docs/android/HANDOFF.md` before continuing.
+  Development artifacts are not releases. Public alpha requires the documented
+  parity and offline-decision gates.
+
 - Engineering resource optimization handoff: read
   `docs/audits/ENGINEERING_HANDOFF.md` before continuing this audit work.
 

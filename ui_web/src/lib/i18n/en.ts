@@ -1,5 +1,29 @@
 /** Canonical English dictionary — also the source of the `Dict` type. */
 export const en = {
+  android: {
+    offlineAvailable: "Available offline",
+    offlineRemove: "Remove from this device",
+    offlineCancel: "Cancel preparation",
+    offlineManage: "Manage offline music",
+    offlineOnly: "Only on this device",
+    offlineAll: "All songs",
+    offlineSpace: "Storage limit",
+    offlineEmpty: "No songs prepared yet.",
+    offlineReady: "Ready",
+    offlinePreparing: "Preparing songs",
+    offlineNoSpace: "Not enough space. Remove copies or increase the limit.",
+    offlineIntegrity: "The copy is incomplete or damaged. Prepare it again.",
+    offlineFailed: "Preparation failed. Retry when connected.",
+    offlineRemovalFailed: "Could not remove the copy. Try again.",
+
+    previewPreparing: 'Preparing preview',
+    previewRetry: 'Waiting to retry preview',
+    closeProgram: 'Close player',
+    playbackInterrupted: 'Playback interrupted. Your queue and position are retained. Retry when the server is available.',
+    insertAfter: 'Add after current',
+    repeatOff: 'Off',
+    repeatOne: 'One song',
+    repeatAll: 'Whole queue', useInvite: "Use invitation", inviteSignsOut: "Using this invitation signs you out of this account and stops playback.", pairing: { scan: "Scan pairing code", useCode: "Use a pairing code", code: "Pairing code", codeHint: "The 8 characters under the QR in Soundsible → Settings → Devices → Pair a new device. Uses the server address above.", pair: "Pair", hint: "Point the camera at the pairing code shown in Soundsible → Settings → Devices", notSoundsible: "That is not a Soundsible pairing code.", invalid: "That pairing code is wrong or has expired.", used: "That pairing code was already used. Show a new one.", notShowing: "Keep the pairing code open on your Soundsible while you scan or type it.", unavailable: "That account cannot sign in right now.", cameraDenied: "The camera is needed to scan. You can type the code instead.", cameraUnavailable: "No camera is available. Type the code instead.", badCode: "A pairing code has 8 letters and numbers.", needsServer: "Enter your server address above first." }, refresh: "Refresh", permissionDenied: "Your account cannot access this resource.", title: 'Connect your Soundsible', unconfigured: 'No server is connected yet.', server: "Server address", serverHint: "Paste your server address or invitation link. HTTPS for remote access; HTTP only on your private LAN or Tailscale.", connect: "Connect", username: "Username", password: "Password", login: "Sign in", logout: "Sign out", changeServer: "Change server", connectFailed: "Could not connect. Check the address, network and server certificate.", wrongLogin: "Wrong username or password.", browseOnly: 'Development build: not a release yet.', seek: 'Playback position', eventsPending: "Live updates disconnected. You can retry or refresh the library." },
   savedEntities: {
     albums: "Saved albums",
     artists: "Saved artists",
@@ -111,6 +135,7 @@ export const en = {
     shortcuts: 'Quick access',
   },
   live: {
+    leave: 'Leave room',
     title: 'Live',
     meta: 'Sessions from the Soundsible community',
     goLive: 'Go live',
@@ -323,6 +348,7 @@ export const en = {
       already: '“{title}” is already in the session',
     },
     route: {
+      djPlacement: 'Let the DJ choose',
       pinned: 'Pinned', actions: 'Actions for {title}', useAsSource: 'Mix into session',
       add: 'Add', insertBefore: 'Insert a track before {title}', fixed: 'Fixed', placed: 'Placed', bridge: 'Bridge',
       remove: 'Remove from route', avoidSession: 'Avoid during this session',
@@ -714,6 +740,7 @@ export const en = {
     pairNote: 'Pair your phone by scanning a QR to control it and play remotely.',
     connection: 'Connection',
     engineLabel: 'Engine',
+    engineVersion: 'Server version',
     about: 'About',
     version: 'Beta · Solid UI',
     viewDesign: 'View design system',
@@ -964,6 +991,7 @@ export const en = {
     empty: 'The playlist has no tracks.',
   },
   deviceSheet: {
+    transfer: 'Transfer playback',
     sendingTo: 'Sending to {device}…',
     fallbackDevice: 'device',
     playingOn: 'Playing on device',

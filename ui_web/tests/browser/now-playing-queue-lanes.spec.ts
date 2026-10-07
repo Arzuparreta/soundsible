@@ -92,7 +92,12 @@ test('opening the context card goes to the collection and leaves the music playi
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
   await page.goto('/player/#/playlists');
   const queue = await openQueuePanel(page);
-  if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
+  if (isMobile) {
+    // This tests the context action, after navigating with the actual pager.
+    // A raw scroll can race the opening alignment and leaves the queue inert.
+    await page.getByRole('navigation', { name: 'Paneles de NORMAL' }).getByRole('button', { name: 'Cola' }).tap();
+    await expect(queue).not.toHaveAttribute('inert', '');
+  }
 
   const open = queue.getByRole('button', { name: 'Abrir Tu biblioteca' });
   if (isMobile) await open.tap();

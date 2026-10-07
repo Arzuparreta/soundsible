@@ -1,0 +1,12 @@
+# lufs true_peak_dbtp expected_gain_db
+-14 -1 -4
+-24 -10 6
+-24 0 -1
+-18 -1 0
+2 5 -20
+-69 0 0
+6 0 0
+-14 13 0
+-14 -71 0
+NaN -1 0
+-14 Infinity 0

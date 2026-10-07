@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-03",
+  "slice": "S2m service-owned NORMAL Radio",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "5823c0a70c9baa84fca319569420625236fc17c3",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "ui": {
+      "passed": 1389,
+      "files": 154,
+      "scope": "Radio head before ongoing S2n UI additions"
+    },
+    "python": {
+      "passed": 14,
+      "scope": "listening planner and isolated real acquired-file fixture"
+    },
+    "android_scoped": {
+      "tests": 3,
+      "failures": 0,
+      "scope": "HTTP, verified HTTPS, background retry and bounded candidate decoding"
+    },
+    "android_main": {
+      "tests": 25,
+      "failures": 0,
+      "skipped": 0,
+      "scope": "full main suite with final manual-priority Radio assertions; before S2n APK actions"
+    },
+    "android_restart": {
+      "tests": 2,
+      "failures": 0,
+      "phases": [
+        "prepare",
+        "offline"
+      ]
+    },
+    "browser": "latest complete four profiles S2j; repeat on final cumulative PR head"
+  },
+  "limits": [
+    "Development, not release. Full parity required before main/public alpha.",
+    "No live provider, GitHub CI or physical listening/car acceptance claimed.",
+    "Radio entry on current music occurrence; broader Radio/autoplay UI and recovery remain pending.",
+    "Normal build may include concurrent S2n source scaffolding; clean final artifact must be rebuilt."
+  ]
+}

@@ -81,6 +81,12 @@ npm run dev
 
 Open `http://localhost:5173/player/` — Vite proxies `/api` and `/socket.io` to the engine. See [ui_web/README.md](ui_web/README.md) for build and verification details.
 
+### Android development
+
+See [the Android guide](docs/ANDROID.md) for the local APK build/emulator commands
+and [the handoff](docs/android/HANDOFF.md) before continuing the port. The APK is
+a development client with read-only browsing; no alpha will ship before parity and the offline decision.
+
 ### Reporting bugs & requesting features
 
 - Use the GitHub issue tracker.

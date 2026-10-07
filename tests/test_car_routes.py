@@ -174,3 +174,104 @@ def test_a_head_unit_browses_the_newest_songs_first(tmp_path, monkeypatch):
     response = _make_app().test_client().get("/api/car/items/all-tracks")
 
     assert [item["track_id"] for item in response.get_json()["items"]] == ["t2", "t1"]
+
+
+def test_car_acquired_podcast_retains_progress_identity(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    episode = _track("episode-file", "Downloaded episode")
+    episode.media_kind = "podcast_episode"
+    episode.podcast_feed_id = "private-feed"
+    episode.podcast_episode_guid = "episode-guid"
+    episode.local_path = "/private/music/episode.mp3"
+    metadata = LibraryMetadata(version=1, tracks=[episode], playlists={}, settings={})
+    _patch_api(monkeypatch, metadata)
+
+    response = _make_app().test_client().get("/api/car/items/podcasts")
+
+    assert response.status_code == 200
+    item = response.get_json()["items"][0]
+    assert item["kind"] == "podcast_episode"
+    assert item["podcast_feed_id"] == "private-feed"
+    assert item["podcast_episode_guid"] == "episode-guid"
+    assert item["stream_url"] == "/api/static/stream/episode-file"
+    assert "local_path" not in item
+
+
+def test_car_radio_excludes_podcasts_before_applying_limit(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    episodes = [_track(f"podcast-{index:03d}", "Episode") for index in range(200)]
+    for episode in episodes:
+        episode.media_kind = "podcast_episode"
+    music = _track("music", "Music seed")
+    metadata = LibraryMetadata(version=1, tracks=[music, *episodes], playlists={}, settings={})
+    _patch_api(monkeypatch, metadata)
+
+    response = _make_app().test_client().get("/api/car/items/radio")
+
+    assert response.status_code == 200
+    assert [(item["track_id"], item["kind"]) for item in response.get_json()["items"]] == [("music", "radio_seed")]
+
+
+def test_car_podcast_feed_browses_only_its_acquired_episodes(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    episode = _track("acquired", "Acquired episode")
+    episode.media_kind = "podcast_episode"
+    episode.podcast_feed_id = "feed / one"
+    episode.podcast_episode_guid = "guid-one"
+    other = _track("other", "Other episode")
+    other.media_kind = "podcast_episode"
+    other.podcast_feed_id = "other-feed"
+    metadata = LibraryMetadata(version=1, tracks=[episode, other], playlists={}, settings={})
+    metadata.podcast_subscriptions = [{"id": "feed / one", "title": "One"}, {"id": "empty", "title": "Empty"}]
+    _patch_api(monkeypatch, metadata)
+    client = _make_app().test_client()
+    home = client.get("/api/car/items/podcasts").get_json()["items"]
+    assert home[0]["id"] == "podcast:feed%20%2F%20one"
+    response = client.get("/api/car/items/" + home[0]["id"])
+    assert response.status_code == 200
+    assert [item["track_id"] for item in response.get_json()["items"]] == ["acquired"]
+    assert response.get_json()["items"][0]["podcast_episode_guid"] == "guid-one"
+    assert client.get("/api/car/items/podcast:empty").get_json()["items"] == []
+    assert client.get("/api/car/items/podcast:other-feed").status_code == 404
+
+
+def test_car_search_matches_acquired_library_before_limiting(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    old = _track("found", "Canción antigua", artist="Única artista")
+    old.added_at = "2020-01-01"
+    new = [_track(f"other-{i}", "Unrelated") for i in range(210)]
+    for track in new:
+        track.added_at = "2026-01-01"
+    metadata = LibraryMetadata(version=1, tracks=[old, *new], playlists={}, settings={})
+    _patch_api(monkeypatch, metadata)
+    client = _make_app().test_client()
+    response = client.get("/api/car/search", query_string={"q": " CANCIÓN  única "})
+    assert response.status_code == 200
+    assert [item["track_id"] for item in response.get_json()["items"]] == ["found"]
+    assert client.get("/api/car/search?q=unrelated").get_json()["items"][-1]["track_id"] == "other-199"
+    assert client.get("/api/car/search?q=missing").get_json()["items"] == []
+    assert client.get("/api/car/search?q=").status_code == 400
+    assert client.get("/api/car/search", query_string={"q": "x" * 257}).status_code == 400
+
+
+def test_large_car_collections_are_paged_without_changing_legacy_response(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[], settings={},
+        playlists={f"List {i}": [] for i in range(405)},
+        podcast_subscriptions=[{"id": f"feed-{i}", "title": f"Show {i}"} for i in range(405)])
+    _patch_api(monkeypatch, metadata)
+    client = _make_app().test_client()
+    for parent in ("playlists", "podcasts"):
+        path = f"/api/car/items/{parent}"
+        assert len(client.get(path).get_json()["items"]) == 405
+        pages = [client.get(f"{path}?page={page}&page_size=200").get_json() for page in range(4)]
+        assert [len(page["items"]) for page in pages] == [200, 200, 5, 0]
+        assert all(page["total"] == 405 for page in pages)
+        assert len({row["id"] for page in pages for row in page["items"]}) == 405
+        for query in ("page=-1", "page=bad", "page_size=201", "page_size=0"):
+            assert client.get(f"{path}?{query}").status_code == 400

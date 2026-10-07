@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2z native system Back and navigation scope cleanup",
+  "source_revision_at_asset_prepare": "8cfd77c",
+  "dirty_at_asset_prepare": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "tests": 1438,
+      "files": 168,
+      "log": "/tmp/soundsible-s2z-ui.log"
+    },
+    "android": {
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2z-native.log",
+      "scope": "HTTP/verified HTTPS real KeyEvent back: collections/tabs/menu/editor/lyrics/podcasts/Downloads/root minimize and foreground preserves paused20s keys/token/session; revocation clears open private modal and program"
+    },
+    "normal_apk_test_unit_lint": "passed after ephemeral CA removal",
+    "carousel_regression": {
+      "source_revision": "78669b6",
+      "ui_tests": 1440,
+      "ui_files": 169,
+      "ui_log": "/tmp/soundsible-s2z-carousel-ui.log",
+      "previous_source_test": {
+        "failed": 1,
+        "passed": 1,
+        "log": "/tmp/soundsible-carousel-before.log",
+        "reason": "old scroll settle supersedes requested Route with Stage before pending RAF"
+      },
+      "chromium": {
+        "passed": 278,
+        "skipped": 66,
+        "failed": 0,
+        "log": "/tmp/soundsible-s2z-chromium-fixed.log"
+      },
+      "webkit": {
+        "passed": 269,
+        "skipped": 75,
+        "failed": 0,
+        "log": "/tmp/soundsible-s2z-webkit-fixed.log",
+        "workers": 1,
+        "mount": "read-only"
+      }
+    },
+    "first_main_regression": {
+      "source_revision_at_asset_prepare": "502947d",
+      "dirty_at_asset_prepare": false,
+      "tests": 45,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2z-main-full.log",
+      "failed_case": "AutoplayTest.tlsAutoplay stop after Radio refill",
+      "archived_failure_xml": "android/build/integration-failed/s2z-main-502947d",
+      "offline_restart_phases": "not run after main failure"
+    },
+    "global_stop_regression_fix": {
+      "source_revision_at_asset_prepare": "3e86586",
+      "dirty_at_asset_prepare": true,
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2z-stop-targeted.log",
+      "scope": "Autoplay HTTP/HTTPS: obsolete pre-refill order token accepts global stop; obsolete account generation rejects without closing; row edit guards preserved",
+      "normal_apk_test_unit_lint": "passed after ephemeral CA removal",
+      "full_main_and_restart_regression": "pending",
+      "status": "superseded: generation-only guard regressed previous-program closure protection"
+    },
+    "second_main_regression": {
+      "source_revision_at_asset_prepare": "5ddc166",
+      "dirty_at_asset_prepare": false,
+      "tests": 45,
+      "failures": 2,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2z-main-fixed.log",
+      "failed_cases": [
+        "ClosureTest.verifiedTlsClosure",
+        "ClosureTest.privateHttpClosure"
+      ],
+      "archived_failure_xml": "android/build/integration-failed/s2z-main-5ddc166",
+      "offline_restart_phases": "not run after main failure"
+    },
+    "stable_program_identity": {
+      "source_revision_at_asset_prepare": "5ddc166",
+      "dirty_at_asset_prepare": true,
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2z-program-identity-native.log",
+      "scope": "Closure and Autoplay HTTP/HTTPS: old program cannot close a replacement, legacy invalid queue token rejects, identity survives refill, obsolete account rejects, actual stop closes",
+      "normal_apk_test_unit_lint": "passed after ephemeral CA removal",
+      "full_main_and_restart_regression": "pending"
+    }
+  },
+  "limits": [
+    "API36 emulator; predictive gesture, OEM and physical hardware acceptance pending.",
+    "Final native/browser regression, remaining parity and release gates pending."
+  ]
+}

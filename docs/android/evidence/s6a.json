@@ -1,0 +1,77 @@
+{
+  "date": "2026-10-03",
+  "slice": "S6a explicit acquired music offline copies",
+  "implementation_commit": "724a67f",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "ccec0f9256127903435b0827b4d2708e89bb21c8",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "unit": {
+      "passed": 1363,
+      "files": 149,
+      "command": "npm test --prefix ui_web",
+      "scope": "offline checkpoint before subsequent S2j work"
+    },
+    "native_unit": {
+      "passed": 4,
+      "failures": 0,
+      "command": "./gradlew --no-daemon :app:testDebugUnitTest"
+    },
+    "python": {
+      "passed": 59,
+      "failures": 0,
+      "scope": "preview routes/cache plus real isolated Android provider fixture"
+    },
+    "android_main": {
+      "tests": 15,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "api": 36,
+      "fixtures": [
+        "HTTP",
+        "verified HTTPS",
+        "passwordless HTTP"
+      ],
+      "command": "scripts/android.py integration",
+      "note": "Main suite passed; original restart protocol subsequently failed due to Gradle uninstall. Corrected protocol independently validated below."
+    },
+    "android_restart": {
+      "phases": [
+        "prepare",
+        "offline"
+      ],
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "command": "scripts/android.py integration --offline-restart-only",
+      "protocol": "one install, direct instrumentation, force-stop between phases",
+      "artifacts": "android/build/integration-results/restart-{prepare,offline}/{instrumentation.txt,result.json}"
+    },
+    "normal_apk_and_lint": "passed after temporary CA removal",
+    "browser": "four complete profiles required before cumulative PR; not rerun for this checkpoint",
+    "other": [
+      "ruff check/format for Android helpers",
+      "central version sync",
+      "git diff --check",
+      "normal APK excludes fixture CA",
+      "apksigner verify"
+    ]
+  },
+  "observations": [
+    "Stable preview ETag across reads; changes on atomic content/layout replacement. Legacy ranges retained without mtime validator.",
+    "One pre-header EOF repair on reused TLS socket observed in main suite; cancellation/new connection/body/HTTP errors excluded."
+  ],
+  "limits": [
+    "Development artifact, no public alpha. Full phone/DJ/Live/Android Auto parity remains required.",
+    "No physical acoustic/car acceptance, live provider or GitHub CI claimed.",
+    "Music acquired on engine only; no implicit preview/podcast/radio acquisition, no offline DJ/Live.",
+    "Prepared copies persist; native program timeline is not persisted across process death.",
+    "Instrumentation build metadata is dirty and predates the implementation commit."
+  ]
+}

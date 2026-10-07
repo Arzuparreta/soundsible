@@ -1,6 +1,30 @@
 import type { Dict } from './en';
 
 export const zh: Dict = {
+  android: {
+    offlineAvailable: "离线可用",
+    offlineRemove: "从此设备移除",
+    offlineCancel: "取消准备",
+    offlineManage: "管理离线音乐",
+    offlineOnly: "仅此设备",
+    offlineAll: "所有歌曲",
+    offlineSpace: "存储上限",
+    offlineEmpty: "尚未准备任何歌曲。",
+    offlineReady: "已就绪",
+    offlinePreparing: "正在准备歌曲",
+    offlineNoSpace: "空间不足。请移除副本或提高上限。",
+    offlineIntegrity: "副本不完整或已损坏。请重新准备。",
+    offlineFailed: "准备失败。连接后重试。",
+    offlineRemovalFailed: "无法删除副本。请重试。",
+
+    previewPreparing: '正在准备歌曲',
+    previewRetry: '等待重试歌曲',
+    closeProgram: '关闭播放器',
+    playbackInterrupted: '播放已中断。队列和进度已保留。服务器恢复后请重试。',
+    insertAfter: '加入当前曲目之后',
+    repeatOff: '关闭',
+    repeatOne: '单曲',
+    repeatAll: '整个队列', useInvite: "使用邀请", inviteSignsOut: "使用此邀请将退出当前账户并停止播放。", pairing: { scan: "扫描配对码", useCode: "使用配对码", code: "配对码", codeHint: "Soundsible → 设置 → 设备 → 配对新设备 中二维码下方的 8 个字符。使用上方的服务器地址。", pair: "配对", hint: "将相机对准 Soundsible → 设置 → 设备 中显示的配对码", notSoundsible: "这不是 Soundsible 配对码。", invalid: "配对码错误或已过期。", used: "该配对码已被使用，请显示新的配对码。", notShowing: "扫描或输入时，请保持 Soundsible 上的配对码处于打开状态。", unavailable: "该账户目前无法登录。", cameraDenied: "扫描需要相机权限，你也可以手动输入配对码。", cameraUnavailable: "没有可用的相机，请手动输入配对码。", badCode: "配对码由 8 个字母和数字组成。", needsServer: "请先在上方输入服务器地址。" }, refresh: "刷新", permissionDenied: "你的账户无权访问此资源。", title: '连接你的 Soundsible', unconfigured: '尚未连接服务器。', server: "服务器地址", serverHint: "远程连接使用 HTTPS；HTTP 仅限私人局域网或 Tailscale。", connect: "连接", username: "用户名", password: "密码", login: "登录", logout: "退出登录", changeServer: "更换服务器", connectFailed: "连接失败。请检查地址、网络和服务器证书。", wrongLogin: "用户名或密码错误。", browseOnly: '开发版本：尚未正式发布。', seek: '播放位置', eventsPending: "实时更新已断开。请重试或刷新音乐库。" },
   savedEntities: {
     albums: "已收藏专辑",
     artists: "已收藏艺人",
@@ -111,6 +135,7 @@ export const zh: Dict = {
     shortcuts: '快捷访问',
   },
   live: {
+    leave: '离开房间',
     title: '直播',
     meta: 'Soundsible 社区现场会话',
     goLive: '开始直播',
@@ -323,6 +348,7 @@ export const zh: Dict = {
       already: '《{title}》已经是你的来源之一',
     },
     route: {
+      djPlacement: '让 DJ 选择',
       pinned: '已固定', actions: '{title} 的操作', useAsSource: '融入当前会话',
       add: '添加', insertBefore: '在 {title} 前插入歌曲', fixed: '固定', placed: '已放置', bridge: '过渡',
       remove: '从路线移除', avoidSession: '本次会话中避开',
@@ -708,6 +734,7 @@ export const zh: Dict = {
     pairNote: '扫描二维码配对手机，即可远程控制和播放。',
     connection: '连接',
     engineLabel: '引擎',
+    engineVersion: '服务器版本',
     about: '关于',
     version: 'Beta · Solid 界面',
     viewDesign: '查看设计系统',
@@ -956,6 +983,7 @@ export const zh: Dict = {
     empty: '歌单中没有曲目。',
   },
   deviceSheet: {
+    transfer: '转移播放',
     sendingTo: '正在发送到 {device}…',
     fallbackDevice: '设备',
     playingOn: '正在设备上播放',

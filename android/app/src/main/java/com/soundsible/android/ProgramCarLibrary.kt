@@ -1,0 +1,255 @@
+package com.soundsible.android
+
+import android.net.Uri
+import android.os.Handler
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.SessionError
+import androidx.media3.session.MediaLibraryService.LibraryParams
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
+import org.json.JSONObject
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+
+/** Scoped Core tree; head units never supply stream addresses or credentials. */
+@UnstableApi
+internal class ProgramCarLibrary(private val connection: EngineConnection, private val main: Handler, private val offlineTitle: String) : AutoCloseable {
+    companion object { const val ROOT = "soundsible:car"; const val OFFLINE = "soundsible:offline"; private const val SEARCH = "soundsible:search:" }
+    private val worker = ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue<Runnable>(16))
+    private val rows = linkedMapOf<String, JSONObject>()
+    private val counts = linkedMapOf<String, Int>()
+    private val requests = mutableSetOf<String>()
+    private val pending = mutableMapOf<String, (Int) -> Unit>()
+    private var generation = -1L
+    private var cacheIdentity: String? = null
+    @Volatile private var closed = false
+    /** A cached verified profile authorizes only complete local copies after cookie expiry. */
+    private fun identity(epoch: Long): String? = runCatching {
+        connection.sessionIdentity(epoch) ?: if (connection.offline.canUse(epoch)) {
+            "offline:" + android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(connection.offline.profileKey(epoch).toByteArray(Charsets.UTF_8)), android.util.Base64.NO_WRAP)
+        } else null
+    }.getOrNull()
+    fun accountIdentity(epoch: Long): String? = identity(epoch)
+    fun root(params: LibraryParams?): ListenableFuture<LibraryResult<MediaItem>> {
+        val epoch = connection.generation
+        if (identity(epoch) == null) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED))
+        fun item() = LibraryResult.ofItem(MediaItem.Builder().setMediaId(ROOT).setMediaMetadata(
+            MediaMetadata.Builder().setTitle("Soundsible").setIsBrowsable(true).setIsPlayable(false).build()).build(), params)
+        if (runCatching { connection.sessionIdentity(epoch) }.getOrNull() != null) return Futures.immediateFuture(item())
+        // Integrity and ready-copy lookup run in children()'s worker, never here.
+        return Futures.transform(children(ROOT, 0, 200, params), { result ->
+            if (result!!.resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS) item()
+            else LibraryResult.ofError<MediaItem>(result.sessionError!!)
+        }, { task -> main.post(task) })
+    }
+    fun children(parent: String, page: Int, size: Int, params: LibraryParams?): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+        val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+        // Media3's legacy bridge uses this sentinel for unpaginated browse.
+        // Bound the response to the store's maximum, never allocate by caller size.
+        val unpaginated = page == 0 && size == Int.MAX_VALUE
+        val pageSize = if (unpaginated) 1000 else size
+        if (closed || parent.length > 1024 || page < 0 || (!unpaginated && size !in 1..200)) {
+            future.set(LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)); return future
+        }
+        val collectionPage = parent == "playlists" || parent == "podcasts"
+        val epoch = connection.generation
+        val identity = identity(epoch)
+        if (identity == null) { future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)); return future }
+        val offlineOnly = runCatching { connection.sessionIdentity(epoch) }.getOrNull() == null
+        if (offlineOnly && parent != ROOT && parent != OFFLINE && !parent.startsWith(SEARCH)) {
+            future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)); return future
+        }
+        if (generation != epoch || cacheIdentity != identity) { rows.clear(); counts.clear(); generation = epoch; cacheIdentity = identity }
+        val id = "car-browse:" + java.util.UUID.randomUUID()
+        requests.add(id)
+        pending[id] = { reason -> future.set(LibraryResult.ofError(reason)) }
+        try {
+            worker.execute {
+                var answer: JSONObject? = null; var code = 0
+                var copies = org.json.JSONArray()
+                try {
+                    // Initial integrity checks can hash large files; keep them
+                    // off the service/player looper.
+                    if (parent == ROOT || parent == OFFLINE || offlineOnly) copies = offlineRows(epoch)
+                    if (offlineOnly && parent == ROOT) {
+                        code = 200; answer = JSONObject().put("items", org.json.JSONArray())
+                    } else if (offlineOnly && parent.startsWith(SEARCH)) {
+                        val terms = parent.removePrefix(SEARCH).lowercase(java.util.Locale.ROOT).split(Regex("\\s+"))
+                        val matches = org.json.JSONArray()
+                        for (index in 0 until copies.length()) {
+                            val row = copies.getJSONObject(index)
+                            val text = listOf("title", "artist", "album").joinToString(" ") { row.optString(it) }.lowercase(java.util.Locale.ROOT)
+                            if (terms.all { it in text }) { matches.put(row); if (matches.length() == 200) break }
+                        }
+                        code = 200; answer = JSONObject().put("items", matches)
+                    } else if (parent == OFFLINE) {
+                        code = 200; answer = JSONObject().put("items", copies)
+                    } else {
+                    val path = when {
+                        parent == ROOT -> "/api/car/home"
+                        parent.startsWith(SEARCH) -> "/api/car/search?q=" + Uri.encode(parent.removePrefix(SEARCH))
+                        else -> "/api/car/items/" + Uri.encode(parent) + if (collectionPage) "?page=$page&page_size=${minOf(pageSize, 200)}" else ""
+                    }
+                    connection.execute(path, "GET", null, emptyMap(), epoch, id, 10000).use {
+                        code = it.code
+                        if (it.isSuccessful) {
+                            val raw = it.peekBody(262145).string(); require(raw.toByteArray().size <= 262144)
+                            answer = JSONObject(raw)
+                        }
+                    }
+                    // The legacy bridge requests an unpaged tree. Fetch bounded server
+                    // pages up to our existing 1000-row cap, preserving that contract.
+                    if (collectionPage && unpaginated && code == 200 && answer!!.has("total")) {
+                        val collected = answer!!.getJSONArray("items")
+                        val total = answer!!.getInt("total")
+                        var nextPage = 1
+                        while (collected.length() < minOf(total, 1000)) {
+                            connection.execute("/api/car/items/" + Uri.encode(parent) + "?page=$nextPage&page_size=200",
+                                "GET", null, emptyMap(), epoch, id, 10000).use {
+                                code = it.code
+                                require(it.isSuccessful)
+                                val raw = it.peekBody(262145).string(); require(raw.toByteArray().size <= 262144)
+                                val rows = JSONObject(raw).getJSONArray("items")
+                                require(rows.length() in 1..200)
+                                for (index in 0 until rows.length()) if (collected.length() < 1000) collected.put(rows.getJSONObject(index))
+                            }
+                            nextPage++
+                        }
+                    }
+                    }
+                } catch (_: Exception) { answer = null }
+                main.post {
+                    requests.remove(id); pending.remove(id)
+                    if (closed || epoch != connection.generation || identity(epoch) != identity) {
+                        future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_DISCONNECTED)); return@post
+                    }
+                    if (code == 401 || code == 403) {
+                        future.set(LibraryResult.ofError(if (code == 401) SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED else SessionError.ERROR_PERMISSION_DENIED))
+                        // Observed revocation invalidates explicit copies and the
+                        // active programme; a permission403 never switches account.
+                        if (code == 401) {
+                            reset(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)
+                            connection.clearSession(false)
+                        }
+                        return@post
+                    }
+                    try {
+                        if (offlineOnly && parent == ROOT && copies.length() == 0) {
+                            future.set(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED)); return@post
+                        }
+                        val items = answer?.getJSONArray("items") ?: if (parent == ROOT && code !in listOf(401, 403) && copies.length() > 0) org.json.JSONArray() else throw IllegalArgumentException()
+                        require(items.length() <= if (parent == OFFLINE || (collectionPage && (unpaginated || answer?.has("total") != true))) 1000 else 200)
+                        if (parent == ROOT && copies.length() > 0) items.put(JSONObject().put("id", OFFLINE).put("title", offlineTitle).put("is_browsable", true).put("is_playable", false))
+                        complete(parent, items, page, pageSize, params, future, if (collectionPage && answer?.has("total") == true) answer?.getInt("total") else null)
+                    } catch (_: Exception) { future.set(LibraryResult.ofError(if (code == 404) SessionError.ERROR_BAD_VALUE else SessionError.ERROR_IO)) }
+                }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            requests.remove(id); pending.remove(id); future.set(LibraryResult.ofError(SessionError.ERROR_IO))
+        }
+        future.addListener({ if (future.isCancelled) connection.cancel(id) }, { it.run() })
+        return future
+    }
+    private fun offlineRows(epoch: Long): org.json.JSONArray {
+        val state = connection.offline.state(epoch)
+        val result = org.json.JSONArray()
+        val items = state.getJSONArray("items")
+        for (index in 0 until items.length()) {
+            val copy = items.getJSONObject(index)
+            if (copy.optString("state") != "ready") continue
+            val track = copy.getJSONObject("track")
+            result.put(JSONObject().put("id", track.getString("id")).put("track_id", track.getString("id"))
+                .put("kind", "track").put("title", track.optString("title")).put("artist", track.optString("artist"))
+                .put("album", track.optString("album")).put("duration_sec", track.optDouble("duration", 0.0))
+                .put("is_browsable", false).put("is_playable", true))
+        }
+        return result
+    }
+    private fun complete(parent: String, items: org.json.JSONArray, page: Int, size: Int, params: LibraryParams?, future: SettableFuture<LibraryResult<ImmutableList<MediaItem>>>, total: Int? = null) {
+        require(items.length() <= 1000 && (total == null || total >= items.length()))
+        counts.remove(parent); counts[parent] = total ?: items.length()
+        while (counts.size > 500) counts.remove(counts.keys.first())
+        val offset = if (total != null) 0 else (page.toLong() * size).coerceAtMost(items.length().toLong()).toInt()
+        val parsed = (offset until minOf(offset + size, items.length())).map { index ->
+            val row = items.getJSONObject(index)
+            val key = row.getString("id"); require(key.isNotBlank() && key.length <= 1024)
+            for (field in listOf("title", "subtitle", "artist", "album")) require(row.optString(field).length <= 4096)
+            val media = mediaItem(row)
+            rows.remove(media.mediaId); rows[media.mediaId] = JSONObject(row.toString())
+            while (rows.size > 1000) rows.remove(rows.keys.first())
+            media
+        }
+        future.set(LibraryResult.ofItemList(parsed, params))
+    }
+    private fun mediaItem(row: JSONObject): MediaItem {
+        val id = row.getString("id")
+        val playable = row.optBoolean("is_playable")
+        val key = if (!playable) id else (if (row.optString("kind") == "radio_seed") "soundsible:radio:" else "soundsible:track:") + Uri.encode(id)
+        return MediaItem.Builder().setMediaId(key).setMediaMetadata(MediaMetadata.Builder()
+            .setTitle(row.optString("title")).setSubtitle(row.optString("subtitle"))
+            .setArtist(row.optString("artist")).setAlbumTitle(row.optString("album"))
+            .setIsBrowsable(row.optBoolean("is_browsable")).setIsPlayable(playable).build()).build()
+    }
+    private fun currentCache(): Boolean = !closed && generation == connection.generation && cacheIdentity != null &&
+        identity(generation) == cacheIdentity
+    fun decorate(item: MediaItem, recipient: String, artwork: ProgramCarArtwork): MediaItem {
+        val row = rows[item.mediaId] ?: return item
+        if (!currentCache() || !row.optBoolean("is_playable")) return item
+        // Offline B specifies placeholders; never attempt authenticated artwork without a cookie.
+        if (runCatching { connection.sessionIdentity(generation) }.getOrNull() == null) return item
+        val id = row.optString("track_id")
+        if (id.isBlank()) return item
+        return item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon().setArtworkUri(artwork.publish(id, recipient)).build()).build()
+    }
+    fun childCount(parent: String): Int = if (currentCache()) counts[parent] ?: 0 else 0
+    fun search(query: String, page: Int, size: Int, params: LibraryParams?): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+        val text = query.trim()
+        if (text.isEmpty() || text.length > 256) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_BAD_VALUE))
+        return children(SEARCH + text, page, size, params)
+    }
+    fun searchCount(query: String): Int = childCount(SEARCH + query.trim())
+    fun item(id: String): ListenableFuture<LibraryResult<MediaItem>> {
+        if (!currentCache()) return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED))
+        val row = rows[id] ?: return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_BAD_VALUE))
+        return Futures.immediateFuture(LibraryResult.ofItem(mediaItem(row), null))
+    }
+    data class Selection(val items: List<MediaItem>, val generation: Long, val identity: String, val radio: Boolean)
+    fun owns(selection: Selection): Boolean = selection.generation == connection.generation && identity(selection.generation) == selection.identity
+    /** Resolve IDs returned by this authenticated tree; ignore caller metadata and URI. */
+    fun select(requested: List<MediaItem>): Selection {
+        require(currentCache() && requested.size in 1..32)
+        val selected = requested.map { rows[it.mediaId] ?: error("Unknown car item") }
+        require(selected.all { it.optBoolean("is_playable") && it.optString("track_id").isNotBlank() })
+        val radio = selected.any { it.optString("kind") == "radio_seed" }
+        require(!radio || selected.size == 1 && selected.all {
+            it.isNull("podcast_episode_guid") || it.optString("podcast_episode_guid", "").isBlank()
+        })
+        val decoded = org.json.JSONArray()
+        selected.forEach { row ->
+            decoded.put(JSONObject().put("source", "local").put("id", row.getString("track_id"))
+                .put("title", row.optString("title")).put("artist", row.optString("artist"))
+                .put("album", row.optString("album")).put("duration", row.optDouble("duration_sec", 0.0)).apply {
+                    if (row.optString("kind") == "podcast_episode") {
+                        put("mediaKind", "podcast_episode")
+                        put("feedId", row.optString("podcast_feed_id", ""))
+                        put("episodeGuid", row.optString("podcast_episode_guid", ""))
+                    }
+                })
+        }
+        return Selection(ProgramQueue.items(connection, decoded), generation, cacheIdentity!!, radio)
+    }
+    fun reset(reason: Int = SessionError.ERROR_SESSION_DISCONNECTED) {
+        requests.forEach(connection::cancel); requests.clear()
+        pending.values.toList().forEach { it(reason) }; pending.clear()
+        rows.clear(); counts.clear(); generation = -1; cacheIdentity = null; worker.queue.clear()
+    }
+    // Proactive subscription updates and external host acceptance remain pending.
+    override fun close() { closed = true; reset(); worker.shutdownNow() }
+}

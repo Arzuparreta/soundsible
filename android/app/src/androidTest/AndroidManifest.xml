@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Test APK only. A separate process supplies a genuinely different Binder UID. -->
+        <service android:name="com.soundsible.android.CarExternalProbeService" android:exported="true" android:process=":car_probe" />
+        <service android:name="com.soundsible.android.CarProbeNotificationListener" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:process=":car_probe">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+        </service>
+    </application>
+</manifest>

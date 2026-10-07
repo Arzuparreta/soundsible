@@ -36,12 +36,12 @@ Vite serves the UI on `http://localhost:5173/player/` and proxies `/api` and `/s
 
 ```bash
 npm test
-npm run build
 npx playwright install chromium webkit  # first browser-test run
 npm run test:ui-scale
 ```
 
-`npm test` runs the TypeScript check and Vitest unit tests. `npm run build` typechecks and writes the production bundle to `dist/`.
+`npm test` runs the TypeScript check and Vitest unit tests. The engine builds
+`dist/` automatically; CI checks the production bundle.
 `npm run test:ui-scale` validates Compact, Normal and Large across Chromium and
 WebKit mobile/desktop projects, including overflow, target geometry, pre-login
 accessibility, key routes, edge viewports and reviewed screenshots. Only update
@@ -88,3 +88,11 @@ The API serves `ui_web/dist/index.html` at:
 | `/player/desktop/` | Same UI with owner-token bootstrap for the desktop shell |
 
 Set `SOUNDSIBLE_WEB_UI_DIST=1` to require the built bundle explicitly, or `0`/`false`/`no` to force the source tree (not useful for production — `index.html` is a Vite dev entry pointing at `/src/main.tsx`).
+
+## Android port
+
+The Android entry reuses the same Solid sources, theme, fonts and dictionaries.
+Its packaged assets are separate from the engine bundle. Follow
+[the Android guide](../docs/ANDROID.md) and
+[the handoff](../docs/android/HANDOFF.md); this is a development client with account login, shared catalogue rows and a first native local-file program, not an alpha.
+It uses asynchronous Media3 commands/snapshots; previews and the complete authenticated runtime are still pending.

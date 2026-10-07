@@ -1,4 +1,4 @@
-import { onCleanup, Show } from 'solid-js';
+import { onCleanup, createEffect, Show } from 'solid-js';
 import { openOverlay } from './overlay';
 import { t } from './i18n';
 import styles from './confirm.module.css';
@@ -16,7 +16,7 @@ export interface ConfirmOptions {
  * confirm, `false` on cancel OR scrim-dismiss — the dismissal path is caught via
  * `onCleanup`, which fires when the overlay entry's reactive scope is disposed.
  */
-export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
+export function confirmDialog(opts: ConfirmOptions, current?: () => boolean): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false;
     const settle = (value: boolean) => {
@@ -26,8 +26,9 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
     };
     openOverlay((close) => {
       onCleanup(() => settle(false));
+      createEffect(() => { if (current && !current()) { settle(false); close(); } });
       const choose = (value: boolean) => {
-        settle(value);
+        settle(value && (!current || current()));
         close();
       };
       return (

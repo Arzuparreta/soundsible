@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-02",
+  "slice": "S2c asynchronous program observation and Solid transport",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "82d46ffd9e9870444a11e303c406799297f4c8e7",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "unit": {
+      "passed": 1339,
+      "files": 144,
+      "command": "npm test --prefix ui_web"
+    },
+    "android": {
+      "instrumented_passed": 7,
+      "skipped": 0,
+      "failures": 0,
+      "normal_apk_and_lint": "passed",
+      "command": "scripts/android.py build then scripts/android.py integration",
+      "visible_after_recreation": true
+    },
+    "chromium": {
+      "passed": 278,
+      "skipped": 66
+    },
+    "other": [
+      "central version sync",
+      "git diff --check",
+      "no Web Audio runtime in packaged native JS",
+      "changed documentation links resolve"
+    ],
+    "webkit": {
+      "passed": 269,
+      "skipped": 75,
+      "failures": 0,
+      "workers": 1
+    },
+    "apk_signature": "apksigner verify passed"
+  },
+  "initial_failures": [
+    "First integration run used old packaged Solid assets because build/prepare was omitted. Failure reported missing Shuffle control. Rebuilt full Android assets/APK before rerun; no source changes to repair that case.",
+    "First screenshot captured loader while Solid DOM was already mounted. Strengthened native test to wait for loader removal and visible program before capture; full 7-case integration passed again."
+  ],
+  "cases": [
+    "generation and monotonic snapshot sequence prevent stale replies replacing recent events",
+    "serialized typed async commands; pending means acceptance, not audible output",
+    "unbind invalidates queued commands, late subscriptions and old account errors",
+    "an explicit command failure does not poison retry",
+    "seek drag survives position ticks and resets for a new occurrence of the same id",
+    "native hasNext controls last occurrence navigation under repeat-all",
+    "packaged Solid shuffle/repeat controls target the one Media3 service"
+  ],
+  "limitations": [
+    "AuthenticatedPlayer and full NORMAL routes/actions not yet adapted",
+    "temporary LibraryBrowser remains; web runtime not migrated",
+    "local files only; previews/podcasts/radio/artwork pending",
+    "no physical device or car acceptance",
+    "offline undecided; no public alpha or GitHub workflow run"
+  ],
+  "screenshot": "program-s2c-api36.png"
+}

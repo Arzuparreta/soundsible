@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type BrowserContext } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { mockMusicEngine, openMusicPlayer } from './music-browser-fixture';
 import { settledBox } from './settle';
@@ -7,12 +7,16 @@ async function activate(page: Page, link: ReturnType<Page['getByRole']>, mobile:
   if (mobile) await link.tap(); else await link.click();
 }
 
-test.beforeEach(async ({ page }) => {
-  await mockMusicEngine(page);
+async function mockArtist(page: Page | BrowserContext) {
   await page.route('**/api/catalog/artist**', (route) => route.fulfill({ json: {
     artist: 'Artista 7', resolved: true, in_library: true,
     top_tracks: [], albums: [], singles_eps: [], related_artists: [], candidates: [],
   } }));
+}
+
+test.beforeEach(async ({ page }) => {
+  await mockMusicEngine(page);
+  await mockArtist(page);
 });
 
 test('artist links navigate without playing and preserve browser history', async ({ page, isMobile }) => {
@@ -112,13 +116,21 @@ test('album cards open from their artwork, in the library and in search', async 
 
 test('desktop artist links support keyboard and a separate tab', async ({ page, isMobile, context }) => {
   test.skip(isMobile, 'Desktop keyboard and modifier behavior');
+  // The new tab needs the same authenticated engine before its scripts run.
+  await mockMusicEngine(context);
+  await mockArtist(context);
   await page.goto('/player/#/library?view=songs');
+  await expect(page.locator('html')).not.toHaveAttribute('data-booting', '');
   const link = page.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await expect(link).toBeVisible();
+  await settledBox(page, link);
   const opened = context.waitForEvent('page');
   await link.click({ modifiers: ['Control'] });
   const tab = await opened;
-  await expect(tab).toHaveURL(/#\/artist\/Artista%207\?view=library/);
+  // Ctrl-click opens a background tab; its first-paint work runs when visible.
+  await tab.bringToFront();
+  await tab.waitForURL(/#\/artist\/Artista%207\?view=library/, { waitUntil: 'domcontentloaded' });
+  await expect(tab.getByRole('heading', { name: 'Artista 7', exact: true })).toBeVisible();
   await tab.close();
   await expect(page).toHaveURL(/#\/library\?view=songs$/);
   await link.focus();

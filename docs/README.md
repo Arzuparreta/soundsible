@@ -19,6 +19,7 @@
 | [DJ](AUTO_MODE.md) | Start a set, choose influences, request songs and edit transitions. |
 | [Live](LIVE.md) | Broadcast, share a room and understand the relay and browser requirements. |
 | [OpenSubsonic](OPENSUBSONIC.md) | Connect other apps to your saved music library. |
+| [Android port](ANDROID.md) | Development client, account/browse integration and full-port acceptance gates. |
 | [iOS status](IOS.md) | Build and installation instructions, with device behaviour still unverified. |
 | [Car integration](CAR_INTEGRATION.md) | Web media controls and the unverified native car path. |
 | [Roadmap](ROADMAP.md) | Current capabilities, priorities and planned device support. |

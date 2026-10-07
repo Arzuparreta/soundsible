@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-06",
+  "slice": "S5h",
+  "channel": "development",
+  "base_revision": "b2bc95b9",
+  "dirty_at_asset_prepare": true,
+  "source_hashes": {
+    "android/app/src/androidTest/java/com/soundsible/android/CarExternalTest.kt": "5b316b40fba17f89a30cef9b7260d6e1f9f6112ea76e009ebe75201ae42f4310",
+    "android/app/src/androidTest/java/com/soundsible/android/CarExternalProbeService.java": "0ede0ee5bf733fd587c1e6923d7dcfa70c685136c00f00cf18aef8d3e95db974"
+  },
+  "tests": 2,
+  "failures": 0,
+  "seconds": 7.757,
+  "runner_exit": 0,
+  "log": "/tmp/soundsible-auto-external-control-fixed-native.log",
+  "normal_build": "APK/test APK/JVM54/lint without temporary CA pass",
+  "proves": [
+    "Authorized external UID playFromMediaId produces local PCM and platform controller observes canonical song ID with playing state",
+    "External grant can be reopened before logout; cannot be reopened after logout",
+    "Untrusted rejection/read-only image test retained"
+  ],
+  "limits": [
+    "Cannot revoke bytes already received or open descriptors; test reopens retained URI",
+    "Classic external notification listener only; not Google Auto host or physical acceptance",
+    "No external DJ/focus/handover or whole regression"
+  ],
+  "diagnostic": "Initial compile used non-existent tap stream.id; corrected to source-kind PCM plus independent platform song ID/playing assertions."
+}

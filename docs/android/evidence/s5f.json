@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-06",
+  "slice": "S5f",
+  "channel": "development",
+  "base_revision": "be714f06",
+  "dirty_at_asset_prepare": true,
+  "source_hashes": {
+    "scripts/android_fixture.py": "b154317a43d867fa84d4f02902aaa2d4556886a9a9f6848d56cca292f6d4c60f",
+    "android/app/src/androidTest/java/com/soundsible/android/CarEventsTest.kt": "985705955caa415a7f9a92d5e70dd3db5586caaabbc35dcb86f59c01a724cc91",
+    "android/app/src/main/java/com/soundsible/android/ProgramCarSubscriptions.kt": "a73aa6fbdfc1fee786d0bd891ab14841b9225c1da4ee47b118b24ae3efcc4ede"
+  },
+  "tests": 2,
+  "failures": 0,
+  "seconds": 63.303,
+  "runner_exit": 0,
+  "log": "/tmp/soundsible-auto-reconnect-final-native.log",
+  "normal_build": "APK/test APK/JVM54/lint without temporary CA pass",
+  "proves": [
+    "Existing Engine.IO transport is closed and at least one subsequent handshake receives503",
+    "Label edit while disconnected is not delivered; native reconnect refreshes missed label with Activity destroyed",
+    "NORMAL occurrence key and nonzeroPCM retained, unsubscribe stops notifications"
+  ],
+  "limits": [
+    "Fixture heartbeat2+3s accelerates loss detection; production25+20 unchanged",
+    "Does not prove recovery after exhausting all five retries, Android network handover, DJ interruption, Google Auto host or physical acceptance",
+    "Not current whole regression or complete parity"
+  ],
+  "diagnostics": [
+    "Initial tests restored before default heartbeat detected transport loss; Flask before_request cannot reject Engine.IO middleware requests",
+    "Final fixture rejects at WSGI boundary, checks existing socket and failed handshake; waits on observed rejection rather than fixed delay",
+    "Temporary connection traces removed; native production source unchanged"
+  ]
+}

@@ -344,7 +344,9 @@ def sole_passwordless_user() -> Optional[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def create_session(user_id: str, *, device_name: Optional[str] = None) -> tuple[str, dict[str, Any]]:
+def create_session(
+    user_id: str, *, device_name: Optional[str] = None, device_type: str = "web"
+) -> tuple[str, dict[str, Any]]:
     """Mint a session token for ``user_id``. Returns ``(token, record)``.
 
     The plaintext token is returned once — only its hash is stored.
@@ -363,7 +365,7 @@ def create_session(user_id: str, *, device_name: Optional[str] = None) -> tuple[
         kind=SESSION_KIND,
         scopes=scopes_for_role(row.get("role") or ROLE_MEMBER),
         name=device_name or "Soundsible session",
-        device_type="web",
+        device_type=device_type,
         expires_at=expires_at,
         user_id=user_id,
     )

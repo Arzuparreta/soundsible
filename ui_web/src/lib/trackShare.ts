@@ -106,7 +106,8 @@ export function shareUrlForTrack(track: SharedTrack): string | null {
   const base = SOUNDSIBLE_SHARE_BRIDGE.endsWith('/')
     ? SOUNDSIBLE_SHARE_BRIDGE
     : `${SOUNDSIBLE_SHARE_BRIDGE}/`;
-  return `${base}#t=${encodeTrackCapsule(capsule)}`;
+  try { return `${base}#t=${encodeTrackCapsule(capsule)}`; }
+  catch { return null; }
 }
 
 export function sharedCapsuleFromSearch(search: string): { encoded: string; capsule: TrackShareCapsuleV1 } | null {

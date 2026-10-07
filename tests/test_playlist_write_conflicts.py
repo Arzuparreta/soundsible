@@ -150,3 +150,48 @@ def test_a_refused_playlist_write_is_reported_as_a_conflict(client, monkeypatch)
 
     assert response.status_code == 409
     assert response.get_json()["code"] == "library_conflict"
+
+
+def test_captured_track_edit_rejects_a_newer_membership_without_losing_it(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    assert client.post("/api/library/playlists/Arma%20Reforger/tracks", json={"track_id": "emparedado"}).status_code == 200
+    stale = {"expected_track_ids": ["tunnel"], "track_ids": []}
+    assert client.patch("/api/library/playlists/Arma%20Reforger", json=stale).status_code == 409
+    assert client.delete("/api/library/playlists/Arma%20Reforger", json=stale).status_code == 409
+    assert client.get("/api/library").get_json()["playlists"]["Arma Reforger"] == ["tunnel", "emparedado"]
+
+
+def test_reorder_cannot_drop_a_new_playlist_and_explicit_order_survives_json(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    assert client.post("/api/library/playlists", json={"name": "Second"}).status_code == 200
+    assert client.patch("/api/library/playlists", json={"expected_order": ["Arma Reforger"], "order": ["Arma Reforger"]}).status_code == 409
+    assert client.patch("/api/library/playlists", json={"expected_order": ["Arma Reforger", "Second"], "order": ["Second"]}).status_code == 400
+    response = client.patch("/api/library/playlists", json={"expected_order": ["Arma Reforger", "Second"], "order": ["Second", "Arma Reforger"]})
+    assert response.status_code == 200
+    assert response.get_json()["settings"]["playlist_order"] == ["Second", "Arma Reforger"]
+    assert client.patch("/api/library/playlists/Second", json={"name": "Renamed", "expected_track_ids": []}).status_code == 200
+    assert client.get("/api/library").get_json()["settings"]["playlist_order"] == ["Renamed", "Arma Reforger"]
+    assert client.delete("/api/library/playlists/Renamed", json={"expected_track_ids": []}).status_code == 200
+    assert client.get("/api/library").get_json()["settings"]["playlist_order"] == ["Arma Reforger"]
+
+
+def test_invalid_combined_edit_does_not_partly_rename_shared_metadata(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    response = client.patch("/api/library/playlists/Arma%20Reforger", json={"name": "Incorrect", "track_ids": "bad"})
+    assert response.status_code == 400
+    assert client.get("/api/library").get_json()["playlists"] == {"Arma Reforger": ["tunnel"]}
+
+
+def test_new_edit_routes_require_preconditions_and_do_not_mutate_without_them(client):
+    user_id = ensure_multiuser_layout()["user_id"]
+    _seed_library(user_id)
+    assert client.patch("/api/library/playlist-edits", json={"order": []}).status_code == 400
+    assert client.patch("/api/library/playlist-edits/Arma%20Reforger", json={"name": "Unsafe"}).status_code == 400
+    assert client.delete("/api/library/playlist-edits/Arma%20Reforger").status_code == 400
+    assert client.get("/api/library").get_json()["playlists"] == {"Arma Reforger": ["tunnel"]}
+    reply = client.patch("/api/library/playlist-edits/Arma%20Reforger", json={"expected_track_ids": ["tunnel"], "track_ids": []})
+    assert reply.status_code == 200
+    assert reply.get_json()["playlists"]["Arma Reforger"] == []

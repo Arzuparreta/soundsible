@@ -17,7 +17,7 @@ import { trackCoverUrl } from '../lib/media';
 import { catalogItemKeys } from '../lib/playbackIdentity';
 import { shuffled } from '../lib/shuffle';
 import { toast } from '../lib/toast';
-import { artistKey, artistPath, albumPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
+import { artistKey, artistPath, decodeArtistName, parseViewParams, resolveViewMode } from '../lib/artistRoute';
 import { t } from '../lib/i18n';
 import type { ArtistProfile, CatalogItem, Track } from '../types/music';
 import type { PlaybackContextDescriptor } from '../lib/playbackQueue';
@@ -29,15 +29,10 @@ import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import SongRow from '../components/SongRow';
 import { CatalogResultRow } from '../components/CatalogResultRow';
+import { ArtistDiscoveryView, formatFans } from '../components/ArtistDiscoveryView';
 import { navigateBackOr, registerPrimaryScroll } from '../lib/scrollHistory';
 
 type ViewMode = 'discover' | 'library';
-
-function formatFans(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
-  return String(n);
-}
 
 /** Artist detail page with discover/library toggle.
  * Reached by tapping an artist name, badge, or card anywhere in the app. */
@@ -439,84 +434,9 @@ function DiscoverView(props: {
   onSaveItem: (item: CatalogItem) => void;
   artistName: string;
 }) {
-  return (
-    <div class={styles.discoverView}>
-      <Show when={props.topTracks.length > 0} fallback={<Show when={!props.loading}><p class={styles.sectionEmpty}>{t('artist.noTopTracks')}</p></Show>}>
-        <section class={styles.section}>
-          <h2 class={styles.sectionTitle}>{t('artist.topTracks')}</h2>
-          <div class={styles.trackList}>
-            <For each={props.topTracks.slice(0, 10)}>
-              {(item, i) => (
-                <CatalogResultRow
-                  item={item}
-                  index={i() + 1}
-                  active={isPlayingItem(item)}
-                  saving={props.saving.has(item.id)}
-                  onPlay={() => props.onPlayItem(item, props.topTracks.slice(0, 10))}
-                  onDownload={() => props.onSaveItem(item)}
-                />
-              )}
-            </For>
-          </div>
-        </section>
-      </Show>
-
-      <Show when={props.albums.length > 0} fallback={<Show when={!props.loading && props.topTracks.length > 0}><p class={styles.sectionEmpty}>{t('artist.noAlbums')}</p></Show>}>
-        <section class={styles.section}>
-          <h2 class={styles.sectionTitle}>{t('artist.albums')}</h2>
-          <div class={styles.albumRail} data-horizontal-scroll>
-            <For each={props.albums}>
-              {(al) => {
-                return (
-                  <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })} onMenu={(event) => void openSavedEntityMenu({ kind: 'album', name: al.title, artist: props.artistName, cover: al.cover, destination: albumPath(al.title, props.artistName, { view: 'discover', deezerId: al.deezer_id }) }, event)}>
-                    <span class={styles.albumCover} style={{ position: 'relative', background: coverGradient(al.title) }}><CoverImage src={al.cover} /></span>
-                    <span class={styles.albumName}>{al.title}</span>
-                    <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
-                  </MusicLink>
-                );
-              }}
-            </For>
-          </div>
-        </section>
-      </Show>
-
-      <Show when={props.singlesEps.length > 0}>
-        <section class={styles.section}>
-          <h2 class={styles.sectionTitle}>{t('artist.singlesEps')}</h2>
-          <div class={styles.albumRail} data-horizontal-scroll>
-            <For each={props.singlesEps}>
-              {(al) => {
-                return (
-                  <MusicLink class={styles.albumCard} path={albumPath(al.title, props.artistName, { view: "discover", deezerId: al.deezer_id })} onMenu={(event) => void openSavedEntityMenu({ kind: 'album', name: al.title, artist: props.artistName, cover: al.cover, destination: albumPath(al.title, props.artistName, { view: 'discover', deezerId: al.deezer_id }) }, event)}>
-                    <span class={styles.albumCover} style={{ position: 'relative', background: coverGradient(al.title) }}><CoverImage src={al.cover} /></span>
-                    <span class={styles.albumName}>{al.title}</span>
-                    <span class={styles.albumCount}>{al.year ? `${al.year}` : ''}</span>
-                  </MusicLink>
-                );
-              }}
-            </For>
-          </div>
-        </section>
-      </Show>
-
-      <Show when={props.related.length > 0} fallback={<Show when={!props.loading && props.topTracks.length === 0 && props.albums.length === 0}><p class={styles.sectionEmpty}>{t('artist.noRelated')}</p></Show>}>
-        <section class={styles.section}>
-          <h2 class={styles.sectionTitle}>{t('artist.related')}</h2>
-          <div class={styles.albumRail} data-horizontal-scroll>
-            <For each={props.related}>
-              {(artist) => {
-                return (
-                  <MusicLink class={styles.albumCard} path={artistPath(artist.name, { view: "discover", deezerId: artist.deezer_id })} onMenu={(event) => void openSavedEntityMenu({ kind: 'artist', name: artist.name, cover: artist.picture, destination: artistPath(artist.name, { view: 'discover', deezerId: artist.deezer_id }) }, event)}>
-                    <span classList={{ [styles.albumCover]: true, [styles.roundCover]: true }} style={{ position: 'relative', background: coverGradient(artist.name) }}><CoverImage src={artist.picture} /></span>
-                    <span class={styles.albumName}>{artist.name}</span>
-                    <span class={styles.albumCount}>{formatFans(artist.nb_fans)} {t('artist.fans').replace('{n}', '').trim()}</span>
-                  </MusicLink>
-                );
-              }}
-            </For>
-          </div>
-        </section>
-      </Show>
-    </div>
-  );
+  return <ArtistDiscoveryView topTracks={props.topTracks} albums={props.albums} singlesEps={props.singlesEps}
+    related={props.related} loading={props.loading} artistName={props.artistName}
+    renderSong={(item, index, queue) => <CatalogResultRow item={item} index={index} active={isPlayingItem(item)}
+      saving={props.saving.has(item.id)} onPlay={() => props.onPlayItem(item, queue)} onDownload={() => props.onSaveItem(item)} />}
+    renderLink={link => <MusicLink class={link.class} path={link.entity.destination} onMenu={event => void openSavedEntityMenu(link.entity, event)}>{link.children}</MusicLink>} />;
 }

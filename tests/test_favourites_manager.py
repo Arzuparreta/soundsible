@@ -251,3 +251,16 @@ def test_change_callbacks_fire_on_mutation(manager):
     manager.clear()
 
     assert len(calls) == 3
+
+
+def test_explicit_unmark_does_not_recreate_a_song_removed_by_another_client(manager):
+    entry = {"keys": ["yt:K3JGxj2rvAs"], "title": "Song", "artist": "Artist"}
+    manager.set_favourite(entry, True)
+    manager.set_favourite(entry, False)
+    manager.set_saved([entry], False)
+    assert manager.get_entries() == []
+    assert manager.set_favourite(entry, False, save_if_missing=False) is False
+    assert manager.get_entries() == []
+    assert manager.set_favourite(entry, True, save_if_missing=False) is True
+    assert manager.set_favourite(entry, True, save_if_missing=False) is True
+    assert len(manager.get_entries()) == 1

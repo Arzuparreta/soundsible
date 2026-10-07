@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4g",
+  "channel": "development",
+  "base_revision": "cd07630c",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/LivePeer.kt": "eb72166eea529df51ccbd4e15ecf7e47d531e70af4ca625a0513c4f2c9724d1c",
+    "android/app/src/main/java/com/soundsible/android/LiveReconnect.kt": "9e3af7c20cf3bbd9eea15c4cf9bd2b2217b8b809db02e184a28f48ee0c79480d",
+    "android/app/src/main/java/com/soundsible/android/NativeLiveHost.kt": "1966519f52833d8ab7a184f714436d0fee41358664bc47e9de8422fe0a89cc0c",
+    "android/app/src/main/java/com/soundsible/android/NativeLivePlayer.kt": "12a64a577e11c6f868da90e9bff0164b6fc1f938e76aa107e4daa24991dc03f2",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveHostTest.kt": "c8a6632541759059a3060fcb5f6def9932403a5dcf3c052e55b510b0d97db3ad",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveListenerTest.kt": "753b676613c3e6c2ac456e279052bfecfd0aa78cb4dd8c377c9a5cb0e16052b4",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveHandshakeTest.kt": "9c1dc3f0007dc15d6c6ef86d7d6dcfce1e5c0436f3870ad2d6bbe3ffa383036c",
+    "android/app/src/test/java/com/soundsible/android/LivePeerPolicyTest.kt": "03dc0823c756bc3fa76170d22d8a681865255e147811d22d8b99d56d172f3ab2",
+    "scripts/android.py": "ad4497948bea7c7eb70fd1a97a30a6d9d97d3393fc756c68a91b2f93737d00cf",
+    "scripts/android_live_fixture.py": "e09886c7dedfd093f4946b8607f9d0b838606deec7e51dd802762dac26cd377d"
+  },
+  "acceptance": {
+    "tests": 14,
+    "failures": 0,
+    "seconds": 148.745,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-recovery-native.log",
+    "normal_build": "APK/test APK/JVM56/lint without temporary CA pass"
+  },
+  "coverage": [
+    "Core HTTP/TLS Host4/Listener2/UI2/Relay2/Input3, TLS stalled handshake1",
+    "MediaMTX publisher kick preserves room and returns PCM",
+    "MediaMTX listener kick preserves pause, volume and MediaSession identity",
+    "10-second TLS OPTIONS cancellation completes within3 seconds from main",
+    "Proxy Location handling and resource origin rejection"
+  ],
+  "limits": [
+    "No whole principal/browser4 claim",
+    "Lease exhaustion and polling soak not accepted yet",
+    "Process death/resume and signup/device parity pending",
+    "Physical device and car acceptance not executed"
+  ]
+}

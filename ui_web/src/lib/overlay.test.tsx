@@ -1,6 +1,7 @@
+import { onCleanup } from 'solid-js';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library';
-import { OverlayOutlet, openOverlay } from './overlay';
+import { OverlayOutlet, openOverlay, dismissTopOverlay } from './overlay';
 import { setMediaQuery } from '../test-setup';
 
 // The reason this whole rewrite exists: overlays must leave zero orphaned DOM
@@ -227,4 +228,41 @@ describe('history-backed overlay feedback', () => {
     back.mockRestore();
     window.history.replaceState(null, '');
   });
+});
+
+describe('system Back overlay ownership', () => {
+  it('consumes a protected top modal and then closes only the top dismissable layer', async () => {
+    render(() => <OverlayOutlet />);
+    const closeWindow = openOverlay(() => <p>Underlying window</p>);
+    const closeProtected = openOverlay(() => <p>Pending confirmation</p>, { dismissable: false });
+    expect(dismissTopOverlay()).toBe(true);
+    expect(screen.getByText('Pending confirmation')).toBeInTheDocument();
+    expect(screen.getByText('Underlying window')).toBeInTheDocument();
+    closeProtected(); await Promise.resolve();
+    expect(dismissTopOverlay()).toBe(true);
+    await waitFor(() => expect(screen.queryByText('Underlying window')).toBeNull());
+    expect(dismissTopOverlay()).toBe(false); closeWindow();
+  });
+  it('uses the existing history close instead of navigating the surface underneath', async () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    try {
+      render(() => <OverlayOutlet />);
+      openOverlay(() => <p>History window</p>, { history: true });
+      expect(dismissTopOverlay()).toBe(true); expect(back).toHaveBeenCalledOnce();
+      expect(screen.queryByText('History window')).toBeNull();
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      expect(dismissTopOverlay()).toBe(false);
+    } finally { back.mockRestore(); window.history.replaceState(null, ''); }
+  });
+});
+
+it('releases modal scopes and history listeners when its single outlet unmounts', async () => {
+  const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+  const disposed = vi.fn();
+  const view = render(() => <OverlayOutlet />);
+  openOverlay(() => { onCleanup(disposed); return <p>Owned window</p>; }, { history: true, dismissable: false });
+  expect(await screen.findByText('Owned window')).toBeInTheDocument();
+  view.unmount(); expect(disposed).toHaveBeenCalledOnce(); expect(back).not.toHaveBeenCalled();
+  window.dispatchEvent(new PopStateEvent('popstate')); expect(dismissTopOverlay()).toBe(false);
+  back.mockRestore(); window.history.replaceState(null, '');
 });

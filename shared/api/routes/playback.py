@@ -245,8 +245,10 @@ def _emit_playback_stop(api, scope: str, device_id: str) -> None:
     api["socketio"].emit("playback_stop_requested", {}, room=_playback_room(scope, device_id))
 
 
-def _emit_playback_start(api, scope: str, device_id: str, state: dict, track: dict | None = None) -> None:
+def _emit_playback_start(api, scope: str, device_id: str, state: dict, track: dict | None = None, *, handoff: bool = False) -> None:
     payload = {"state": state}
+    if handoff:
+        payload["handoff"] = True
     if track:
         payload["track"] = track
     api["socketio"].emit("playback_start_requested", payload, room=_playback_room(scope, device_id))
@@ -279,7 +281,10 @@ def register_playback_device():
 def list_playback_devices():
     api = _get_api()
     scope = api["get_scope_from_request"]()
-    return jsonify({"devices": api["list_registered_devices"](scope)})
+    return jsonify({"devices": [
+        {**device, "socket_active": bool(device.get("active_sid"))}
+        for device in api["list_registered_devices"](scope)
+    ]})
 
 
 @playback_bp.route("/api/static/stream/<track_id>", methods=["GET"])
@@ -514,13 +519,21 @@ def _serve_cached_preview(
         cached_bytes = os.path.getsize(path)
     except OSError:
         pass
-    response = send_file(str(path), mimetype=content_type, conditional=True)
+    metadata = preview_cache.cached_metadata(video_id)
+    # mtime is LRU recency, not a content validator: mark_served touches it on
+    # every read. Pin If-Range to the committed layout, including atomic remuxes.
+    # Legacy entries have no validator until reacquired, but still serve ranges.
+    response = send_file(
+        str(path), mimetype=content_type, conditional=False,
+        etag=metadata.get("revision") or False,
+    )
+    response.headers.pop("Last-Modified", None)
+    response.make_conditional(request.environ, accept_ranges=True, complete_length=cached_bytes)
     preview_cache.mark_served(video_id)
     response.headers["Cache-Control"] = "private, max-age=86400"
     response.headers["X-Soundsible-Playback-Source"] = "preview"
     response.headers["X-Soundsible-Playback-Cache"] = cache_state
     response.headers["X-Soundsible-Playback-Egress"] = egress
-    metadata = preview_cache.cached_metadata(video_id)
     return _report_stream_response(
         response,
         track_id=video_id,
@@ -1291,7 +1304,7 @@ def playback_handoff():
     if not track_payload and isinstance(target_state.get("track"), dict):
         track_payload = target_state["track"]
 
-    _emit_playback_start(api, scope, to_device_id, target_state, track=track_payload)
+    _emit_playback_start(api, scope, to_device_id, target_state, track=track_payload, handoff=True)
     response = {
         "status": "sent",
         "from_device_id": from_device_id,
@@ -1337,6 +1350,7 @@ def playback_remote_command():
     if command == "pause":
         _emit_playback_stop(api, scope, device_id)
         api["put_playback_state"](scope, {
+            **(api["get_playback_state"](scope, device_id=device_id) or {}),
             "is_playing": False,
             "device_id": device_id,
             "device_name": target.get("device_name"),

@@ -252,7 +252,7 @@ Current pairing endpoints:
 - `GET /api/paired-devices`
 - `POST /api/paired-devices/<token_id>/revoke`
 
-The desktop player pairing modal now consumes this flow directly and renders a QR code from the backend `qr_text` payload.
+Settings → Devices renders the QR in the backend `qr_text` format, but with the address the sheet is open at (loopback falls back to the engine's LAN suggestion). A claim with `"credential": "session"` signs the phone in as that account while the sheet is showing; see ARCHITECTURE.
 
 ## 7. Where Soundsible keeps its files
 

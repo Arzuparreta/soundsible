@@ -71,6 +71,21 @@ function remove(id: number, afterClose?: () => void) {
   });
 }
 
+/** Account/app disposal releases scopes without traversing browser history. */
+export function discardOverlays(): void {
+  const entries = overlays();
+  setOverlays([]);
+  for (const entry of entries) entry.cleanup?.();
+}
+
+/** System navigation consumes the top modal, including non-dismissable ones. */
+export function dismissTopOverlay(): boolean {
+  const top = overlays().at(-1);
+  if (!top) return false;
+  if (top.dismissable) remove(top.id);
+  return true;
+}
+
 /**
  * The ONE place overlays (modals, sheets) mount. Returns a `close` handle.
  * Because entries live in a reactive registry rendered through a single
@@ -308,7 +323,7 @@ export const OverlayOutlet: Component = () => {
       }
     };
     window.addEventListener('keydown', onKey);
-    onCleanup(() => window.removeEventListener('keydown', onKey));
+    onCleanup(() => { window.removeEventListener('keydown', onKey); discardOverlays(); });
   });
 
   return (

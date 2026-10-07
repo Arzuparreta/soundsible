@@ -1,4 +1,4 @@
-import { onCleanup, createSignal, Show } from 'solid-js';
+import { onCleanup, createEffect, createSignal, Show } from 'solid-js';
 import { openOverlay } from './overlay';
 import { t } from './i18n';
 import styles from './prompt.module.css';
@@ -17,7 +17,7 @@ export interface PromptOptions {
 
 /** Single-line text prompt over `openOverlay`. Resolves the trimmed value, or
  * `null` on cancel/dismiss. Used for playlist create/rename and typed confirms. */
-export function promptDialog(opts: PromptOptions): Promise<string | null> {
+export function promptDialog(opts: PromptOptions, current?: () => boolean): Promise<string | null> {
   return new Promise((resolve) => {
     let settled = false;
     const settle = (v: string | null) => {
@@ -27,6 +27,7 @@ export function promptDialog(opts: PromptOptions): Promise<string | null> {
     };
     openOverlay((close) => {
       onCleanup(() => settle(null));
+      createEffect(() => { if (current && !current()) { settle(null); close(); } });
       const [val, setVal] = createSignal(opts.initial ?? '');
       const matched = () => (opts.match === undefined ? true : val().trim() === opts.match);
       const finish = (v: string | null) => {
@@ -35,7 +36,7 @@ export function promptDialog(opts: PromptOptions): Promise<string | null> {
       };
       const submit = (e: Event) => {
         e.preventDefault();
-        if (!matched()) return;
+        if (!matched() || (current && !current())) return;
         finish(val().trim() || null);
       };
       return (

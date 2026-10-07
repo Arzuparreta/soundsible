@@ -295,14 +295,18 @@ def enclosure_stream(token: str):
     req_headers = {"User-Agent": "SoundsiblePodcast/1.0", "Accept": "audio/*,*/*"}
     if range_header:
         req_headers["Range"] = range_header
+    resp = None
     try:
         resp = requests.get(url, headers=req_headers, stream=True, timeout=(5, 120), allow_redirects=True)
         resp.raise_for_status()
 
         def iter_chunks():
-            for chunk in resp.iter_content(chunk_size=65536):
-                if chunk:
-                    yield chunk
+            try:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if chunk:
+                        yield chunk
+            finally:
+                resp.close()
 
         out_headers = {}
         ct = resp.headers.get("Content-Type")
@@ -315,12 +319,16 @@ def enclosure_stream(token: str):
         if cl:
             out_headers["Content-Length"] = cl
 
-        return Response(
+        response = Response(
             stream_with_context(iter_chunks()),
             status=resp.status_code,
             headers=out_headers,
             direct_passthrough=True,
         )
+        response.call_on_close(resp.close)
+        return response
     except Exception as e:
+        if resp is not None:
+            resp.close()
         logger.warning("Podcast enclosure stream error: %s", e)
         return jsonify({"error": "Stream unavailable"}), 502

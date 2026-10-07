@@ -80,8 +80,8 @@ The Flask application lives in `shared/api/__init__.py`. It:
 - Owners complete or cancel the flow through **`POST /api/pairing/sessions/<id>/confirm`** and **`POST /api/pairing/sessions/<id>/cancel`**.
 - The shell can explicitly mark the QR sheet open or closed through **`POST /api/pairing/sessions/<id>/display-open`** and **`POST /api/pairing/sessions/<id>/display-close`**. If `auto_confirm` is enabled while display is open, a claim can complete immediately without a second owner round-trip.
 - Successful confirmation creates a scoped `paired_device` bearer token in `auth_tokens`; owners can list and revoke those tokens with **`GET /api/paired-devices`** and **`POST /api/paired-devices/<token_id>/revoke`**.
-- The engine exposes this flow, but wiring it into the SolidJS Settings view remains a
-  `new-ui` parity task before cutover.
+- A claim may instead ask for `"credential": "session"` (the Android app does): only while the owner's sheet is open with auto-confirm, it signs the phone in as the account showing the code with an ordinary session cookie — full account scopes, not the reduced paired-device set. That session is linked to the pairing record, so it is listed and revocable under the same paired-devices routes. A hidden code is refused with `pairing_display_required` and stays unused.
+- Settings → Devices draws the QR. The sheet points it at the address it is being viewed at (the Android app: its connected server), falling back to the engine's LAN suggestion only from loopback, since the engine cannot know an HTTPS or Tailscale address.
 
 **Job orchestration** (`shared/api/orchestrator.py`): a small **JobOrchestrator** serializes metadata writes and runs bounded concurrent work (e.g. downloads) so heavy tasks do not stampede the library.
 

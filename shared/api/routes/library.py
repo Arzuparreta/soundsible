@@ -68,6 +68,17 @@ def _commit_playlists(api, lib, metadata):
     return _playlist_mutation_response(metadata)
 
 
+def _playlist_precondition(metadata, name, data):
+    if "expected_track_ids" not in data:
+        return None
+    expected = data["expected_track_ids"]
+    if not isinstance(expected, list) or not all(isinstance(value, str) for value in expected):
+        return jsonify(error="expected_track_ids must be a string list"), 400
+    if expected != metadata.playlists.get(name):
+        return jsonify(error="Playlist changed; refresh before editing"), 409
+    return None
+
+
 def _get_api():
     """Lazy import from shared.api to avoid circular imports; returns a dict of core helpers and singletons."""
     from shared.api import (
@@ -445,6 +456,73 @@ def get_lyrics_by_metadata():
     return jsonify(_lyrics_payload(record, source_kind=source_kind))
 
 
+@library_bp.route("/api/library/track-labels/<track_id>/metadata", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_edit_labels", limit=60, window_sec=60)
+@serialized
+def update_track_labels(track_id):
+    """Edit library labels while keeping audio, storage identity and references."""
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    if not api["get_track_by_id"](lib, track_id):
+        return jsonify({"error": "Track not found"}), 404
+    data = request.get_json(silent=True)
+    allowed = {"title", "artist", "album", "album_artist"}
+    if not isinstance(data, dict) or not data or not set(data) <= allowed:
+        return jsonify({"error": "Invalid metadata fields"}), 400
+    if any(not (isinstance(value, str) and len(value) <= 4096)
+           and not (key == "album_artist" and value is None)
+           for key, value in data.items()):
+        return jsonify({"error": "Invalid metadata value"}), 400
+    if not api["_mark_track_metadata_updated"](lib, track_id, changes=data):
+        return jsonify({"error": "Track not found"}), 404
+    return jsonify({"status": "success", "storage": "library", "id": track_id})
+
+
+@library_bp.route("/api/library/track-labels/<track_id>/cover", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_edit_label_cover", limit=30, window_sec=60)
+@serialized
+def upload_track_label_cover(track_id):
+    """Persist a validated sidecar; never download/rewrite/re-key the audio."""
+    from shared.artwork import artwork_store, open_image, MAX_BYTES
+    from PIL import Image, UnidentifiedImageError
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    if not api["get_track_by_id"](lib, track_id):
+        return jsonify({"error": "Track not found"}), 404
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"error": "Image file required"}), 400
+    store = artwork_store()
+    data = file.stream.read(MAX_BYTES + 1)
+    try:
+        open_image(data)
+    except (ValueError, UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        return jsonify({"error": "Invalid artwork"}), 400
+    digest = store.put(data)
+    # Commit account metadata first; a failed save never publishes the new cover.
+    if not api["_mark_track_metadata_updated"](lib, track_id, cover_source="manual"):
+        return jsonify({"error": "Track not found"}), 404
+    store.bind(track_id, digest, "manual")
+    api["emit_to_user"]("library_updated", payload={"cover_changed": True})
+    return jsonify({"status": "success", "storage": "library", "id": track_id})
+
+
+@library_bp.route("/api/library/track-labels/<track_id>/cover/none", methods=["POST"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_clear_label_cover", limit=30, window_sec=60)
+@serialized
+def clear_track_label_cover(track_id):
+    api = _get_api()
+    lib, _, _ = api["get_core"]()
+    if not api["get_track_by_id"](lib, track_id):
+        return jsonify({"error": "Track not found"}), 404
+    if not api["_mark_track_metadata_updated"](lib, track_id, cover_source="none"):
+        return jsonify({"error": "Track not found"}), 404
+    return jsonify({"status": "success", "storage": "library", "id": track_id})
+
+
 @library_bp.route("/api/library/tracks/<track_id>/metadata", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_update_metadata", limit=60, window_sec=60)
@@ -488,7 +566,7 @@ def update_track_metadata(track_id):
             "title": str(new_meta.get("title", track.title) or ""),
             "artist": str(new_meta.get("artist", track.artist) or ""),
             "album": str(new_meta.get("album", track.album) or ""),
-            "album_artist": str(new_meta["album_artist"] or "") if new_meta.get("album_artist") is not None else track.album_artist,
+            "album_artist": str(new_meta["album_artist"] or "") if new_meta.get("album_artist") is not None else None,
             "metadata_modified_by_user": True,
         }
         api["_mark_track_metadata_updated"](lib, track_id, changes=changes)
@@ -685,6 +763,29 @@ def set_saved():
     return jsonify({"status": "success", "changed": len(changed)})
 
 
+@library_bp.route("/api/library/favourites", methods=["PUT"])
+@require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
+@rate_limit("library_set_favourite", limit=120, window_sec=60)
+def set_favourite():
+    """Set a captured intention without toggling another client's updated mark."""
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify(error="object body required"), 400
+    entry, marked = data.get("entry"), data.get("marked")
+    if not isinstance(entry, dict) or not isinstance(marked, bool):
+        return jsonify(error="entry and boolean marked are required"), 400
+    api = _get_api()
+    api["get_core"]()
+    try:
+        result = api["favourites_manager"].set_favourite(entry, favourite=marked, save_if_missing=False)
+    except ValueError:
+        return jsonify(error="entry needs at least one identity key"), 400
+    if result and not any(isinstance(key, str) and key.startswith("lib:") for key in entry.get("keys", [])):
+        _schedule_favourite_resolve(entry)
+    api["emit_to_user"]("favourites_updated")
+    return jsonify(is_favourite=result)
+
+
 @library_bp.route("/api/library/favourites/toggle", methods=["POST"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("library_toggle_favourite", limit=120, window_sec=60)
@@ -786,6 +887,7 @@ def create_playlist():
     return _commit_playlists(api, lib, metadata)
 
 
+@library_bp.route("/api/library/playlist-edits", methods=["PATCH"])
 @library_bp.route("/api/library/playlists", methods=["PATCH"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_reorder", limit=60, window_sec=60)
@@ -796,9 +898,20 @@ def reorder_playlists():
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
     data = request.json or {}
+    if not isinstance(data, dict):
+        return jsonify(error="object body required"), 400
+    if request.path.startswith("/api/library/playlist-edits") and "expected_order" not in data:
+        return jsonify(error="expected_order required"), 400
     order = data.get("order")
     if not isinstance(order, list):
         return jsonify({"error": "order must be a list of playlist names"}), 400
+    if "expected_order" in data:
+        if not isinstance(data["expected_order"], list) or not all(isinstance(name, str) for name in data["expected_order"]):
+            return jsonify(error="expected_order must be a string list"), 400
+        if data["expected_order"] != metadata.ordered_playlist_names():
+            return jsonify(error="Playlist order changed; refresh before editing"), 409
+        if not all(isinstance(name, str) for name in order) or len(order) != len(set(order)) or set(order) != set(metadata.playlists):
+            return jsonify(error="order must contain every playlist once"), 400
     metadata.reorder_playlists(order)
     return _commit_playlists(api, lib, metadata)
 
@@ -841,6 +954,7 @@ def remove_track_from_playlist(name, track_id):
     return _commit_playlists(api, lib, metadata)
 
 
+@library_bp.route("/api/library/playlist-edits/<path:name>", methods=["PATCH"])
 @library_bp.route("/api/library/playlists/<path:name>", methods=["PATCH"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_update", limit=80, window_sec=60)
@@ -854,6 +968,23 @@ def update_playlist(name):
     if name not in metadata.playlists:
         return jsonify({"error": "Playlist not found"}), 404
     data = request.json or {}
+    if not isinstance(data, dict):
+        return jsonify(error="object body required"), 400
+    if request.path.startswith("/api/library/playlist-edits") and "expected_track_ids" not in data:
+        return jsonify(error="expected_track_ids required"), 400
+    conflict = _playlist_precondition(metadata, name, data)
+    if conflict is not None:
+        return conflict
+    # Validate the entire edit before mutating the shared in-memory metadata.
+    proposed_ids = data.get("track_ids", metadata.playlists[name])
+    if not isinstance(proposed_ids, list) or not all(isinstance(value, str) for value in proposed_ids):
+        return jsonify(error="track_ids must be a string list"), 400
+    if "name" in data and (not isinstance(data["name"], str) or not data["name"].strip()):
+        return jsonify(error="name cannot be empty"), 400
+    if "cover_track_id" in data:
+        cover = data["cover_track_id"]
+        if cover is not None and (not isinstance(cover, str) or (cover.strip() and cover.strip() not in proposed_ids)):
+            return jsonify(error="Invalid cover_track_id (not in playlist)"), 400
     if "name" in data:
         new_name = (data.get("name") or "").strip()
         if not new_name:
@@ -876,6 +1007,7 @@ def update_playlist(name):
     return _commit_playlists(api, lib, metadata)
 
 
+@library_bp.route("/api/library/playlist-edits/<path:name>", methods=["DELETE"])
 @library_bp.route("/api/library/playlists/<path:name>", methods=["DELETE"])
 @require_scope(SCOPE_LIBRARY_WRITE, allow_trusted_network=True)
 @rate_limit("playlist_delete", limit=60, window_sec=60)
@@ -886,6 +1018,14 @@ def delete_playlist(name):
     lib, metadata = api["_ensure_lib_metadata"]()
     if not metadata:
         return jsonify({"error": "Library not loaded"}), 404
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify(error="object body required"), 400
+    if request.path.startswith("/api/library/playlist-edits") and "expected_track_ids" not in data:
+        return jsonify(error="expected_track_ids required"), 400
+    conflict = _playlist_precondition(metadata, name, data)
+    if conflict is not None:
+        return conflict
     if not metadata.delete_playlist(name):
         return jsonify({"error": "Playlist not found"}), 404
     return _commit_playlists(api, lib, metadata)

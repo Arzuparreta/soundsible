@@ -533,3 +533,21 @@ def test_downloader_youtube_search_contract(tmp_path, monkeypatch):
     assert isinstance(body["results"], list)
     if body["results"]:
         assert "id" in body["results"][0]
+
+
+def test_explicit_favourite_intention_and_invalid_payloads(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    metadata = LibraryMetadata(version=1, tracks=[_track("t1", "One")], playlists={}, settings={})
+    manager = MagicMock()
+    manager.set_favourite.return_value = False
+    client, token, emit = _favourites_client(monkeypatch, metadata, manager)
+    headers = {"Authorization": f"Bearer {token}"}
+    entry = {"keys": ["lib:t1"], "title": "One", "artist": "Artist"}
+    response = client.put("/api/library/favourites", json={"entry": entry, "marked": False}, headers=headers)
+    assert response.status_code == 200
+    assert response.get_json()["is_favourite"] is False
+    manager.set_favourite.assert_called_once_with(entry, favourite=False, save_if_missing=False)
+    emit.assert_called_with("favourites_updated")
+    for payload in ([entry], {"entry": entry, "marked": "false"}, {"entry": entry}):
+        assert client.put("/api/library/favourites", json=payload, headers=headers).status_code == 400

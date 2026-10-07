@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2q service-owned NORMAL autoplay",
+  "source_revision_before_commit": "e059b85",
+  "dirty": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "passed": 1402,
+      "files": 159,
+      "log": "/tmp/soundsible-s2q-ui-final.log"
+    },
+    "python": {
+      "passed": 4,
+      "scope": "real catalog, preview, podcast and radio engine fixtures",
+      "log": "/tmp/soundsible-s2q-fixture.log"
+    },
+    "android_scoped": {
+      "tests": 2,
+      "failures": 0,
+      "scope": "HTTP and verified HTTPS; real preference menu, manual threshold, background refill, priority, disable confirmation, repeat, Radio and close",
+      "log": "/tmp/soundsible-s2q-native-confirmed.log"
+    },
+    "android_main": {
+      "tests": 31,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2q-native-main-final.log"
+    },
+    "offline_restart": {
+      "phases": 2,
+      "passed": 2,
+      "protocol": "install once, instrument prepare and offline with force-stop"
+    },
+    "normal_apk_tests_lint": "passed after ephemeral CA removal",
+    "browser": "latest full four profiles S2j; repeat final cumulative PR head"
+  },
+  "limits": [
+    "Development, not alpha; full phone/DJ/Live/Auto and signing/update gates remain.",
+    "First autoplay vertical; pending podcast/cancellation/account during planner and extended recovery acceptance.",
+    "No live provider, CI, acoustic phone or car acceptance claimed.",
+    "S2r editor presentation sources are separate, unbundled and excluded from APK acceptance."
+  ]
+}

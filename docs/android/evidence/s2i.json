@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-03",
+  "slice": "S2i native saved previews through engine proxy",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "0428588ca76bdd3953f19537f66a82a472024cd0",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "unit": {
+      "passed": 1355,
+      "files": 146,
+      "command": "npm test --prefix ui_web"
+    },
+    "native_retry_unit": {
+      "tests": 2,
+      "failures": 0
+    },
+    "python": {
+      "passed": 57,
+      "scope": "preview routes/cache and real engine synthetic provider fixture"
+    },
+    "android": {
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "api": 36,
+      "fixtures": [
+        "HTTP",
+        "verified HTTPS",
+        "passwordless HTTP"
+      ],
+      "normal_apk_and_lint": "passed"
+    },
+    "chromium": {
+      "passed": 278,
+      "skipped": 66,
+      "failures": 0,
+      "profiles": [
+        "chromium-mobile",
+        "chromium-desktop"
+      ],
+      "workers": 2
+    },
+    "other": [
+      "ruff check/format",
+      "central version sync",
+      "git diff --check",
+      "documentation local file targets exist",
+      "normal APK excludes fixture CA",
+      "native JS excludes AudioContext",
+      "apksigner verify"
+    ],
+    "webkit": {
+      "passed": 269,
+      "skipped": 75,
+      "failures": 0,
+      "profiles": [
+        "webkit-mobile",
+        "webkit-desktop"
+      ],
+      "workers": 1,
+      "readonly_mount": true
+    }
+  },
+  "cases": [
+    "Packaged Saved row plays preview with real pending/streamable progress and native isPlaying; no HTML audio/mixer",
+    "Mixed local/preview queue retains index, duplicate occurrence UUIDs, metadata and native authority",
+    "Indexed AAC MP4 cache completes, then native seek to 120 seconds retains paused intention",
+    "WebM Opus and progressive fragmented MP4 actually play; unseekable timeline disables seek UI",
+    "Native recreation and background retain current occurrence and intention",
+    "Synthetic upstream receives no engine cookie; real proxy Range/cache routes retained",
+    "Two shared progressive readers: closing one retains the other, one upstream fill and exact cached byte range",
+    "Connection/body cut preserves queue and allows paused explicit recovery",
+    "Two bounded 503 retries preserve occurrence and latest pause intention",
+    "429 Retry-After beyond budget disables explicit Retry; Retry and Play cannot bypass cooldown or send another request",
+    "Close while retry pending prevents later requests; close progressive reader releases engine interest",
+    "403 does not retry; 401 expires account and clears program",
+    "Existing account, artwork, local queue/recovery/focus/closure tests retained"
+  ],
+  "initial_failures": [
+    "Fixture controls ran before selected origin; moved after login",
+    "Fragmented MP4 extractor read MFRA at spool EOF and timed out; progressive-only extractor avoids tail read",
+    "WebView JSON-encoded UUID and configured recreation helpers corrected without weakening assertions",
+    "Real AAC fixture encoding exceeded 20-second startup timeout; bounded timeout increased to 60 seconds",
+    "Seek before cache commit abandoned last progressive reader; test waits for actual commit, separate shared-reader Range test retained",
+    "Play prepared before cooldown guard; moved into validated service command, request-count regression assertion retained"
+  ],
+  "artifacts": {
+    "integration_xml": "android/build/integration-results/connected/debug/",
+    "apk": "android/app/build/outputs/apk/debug/app-debug.apk"
+  },
+  "source_identity": "Instrumentation build records previous commit with dirty=true. After focused commit, regenerate normal APK from clean HEAD and verify build-info source_revision and dirty=false; no self-referential artifact SHA is written into committed evidence.",
+  "limitations": [
+    "Development artifact; no public alpha/release",
+    "Synthetic provider only; live provider behavior unverified",
+    "No physical sound, headphones/Bluetooth/car/lockscreen/manufacturer acceptance",
+    "No process-death recovery or Android offline implementation; offline decision remains unresolved",
+    "Acquisition/full search, podcasts/radio, DJ/Live and Android Auto catalogue remain pending"
+  ],
+  "github_ci": "not run",
+  "browser_source_changes": "Whole Chromium and WebKit suites run sequentially on final frozen UI sources; emulator stopped before browser runs. WebKit uses read-only repository mount and one worker."
+}

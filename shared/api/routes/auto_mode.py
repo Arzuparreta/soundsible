@@ -779,6 +779,38 @@ def _planner_artist_candidates(seed_artist: str, user_id: str | None, limit: int
     return [item for _, item in resolved[:limit]]
 
 
+def _annotate_plan_loudness(metadata, items: list[dict]) -> list[dict]:
+    """Confirmed local recording facts for accepted items, without exposing hashes.
+
+    Selection and ordering are already complete. A failed measurement lookup
+    leaves the selected music playable under the client's unmeasured policy.
+    """
+    from shared.loudness import LoudnessStore
+    from shared.loudness.store import identity_for
+
+    rows = [dict(item) for item in items]
+    owned = {}
+    for index, row in enumerate(rows):
+        row.pop("loudness_lufs", None)
+        row.pop("loudness_peak_dbtp", None)
+        if row.get("source") != "library":
+            continue
+        track = _planner_track_by_id(metadata, str(row.get("track_id") or row.get("id") or ""))
+        if track is not None:
+            owned[index] = identity_for(track)
+            row["duration"] = int(track.duration or 0)
+    try:
+        measured = LoudnessStore().measured_for(owned.values()) if owned else {}
+        for index, identity in owned.items():
+            facts = measured.get(identity)
+            if facts is not None:
+                rows[index]["loudness_lufs"] = round(facts[0], 2)
+                rows[index]["loudness_peak_dbtp"] = round(facts[1], 2)
+    except Exception:
+        logger.debug("Generated plan loudness unavailable", exc_info=True)
+    return rows
+
+
 def _build_music_plan(data: dict) -> tuple[dict, int]:
     """Build one generated queue payload without binding it to a Flask route."""
     from shared.user_context import current_user_id
@@ -873,7 +905,7 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
                 if str(item.get("artist") or "").strip()
             ],
         )
-        items = _canonicalize_generated_items(items, current_user_id())
+        items = _annotate_plan_loudness(metadata, _canonicalize_generated_items(items, current_user_id()))
         return {
             "v": 1,
             "plan_id": str(uuid.uuid4()),
@@ -952,7 +984,7 @@ def _build_music_plan(data: dict) -> tuple[dict, int]:
         limit=limit,
         exclude=[str(value) for value in exclude[:200] if str(value).strip()],
     )
-    items = _canonicalize_generated_items(items, current_user_id())
+    items = _annotate_plan_loudness(metadata, _canonicalize_generated_items(items, current_user_id()))
     return {
         "v": 1,
         "plan_id": str(uuid.uuid4()),

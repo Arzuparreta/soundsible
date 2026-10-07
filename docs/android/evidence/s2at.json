@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2at",
+  "channel": "development",
+  "base_revision": "366a034c",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/IncomingTrackState.kt": "93354a000af81688164c65062f475551ea8d136cf4433da5803128f1ea6c3194",
+    "ui_web/src/mobile/AndroidStart.tsx": "50c232fb8ef1b771daf47575044c0042b39b34167b29b56047d0554b687534e4",
+    "ui_web/src/mobile/incoming.ts": "4d4346a10ba4f1cb90470de095d26afb392f4b6f8060bed3ad813a861fe7da02",
+    "ui_web/src/mobile/incomingInvite.ts": "312a9e85fe5e0c0987dfddce73847004b9c48c2a7a1995d9ee7a29418a5364cf",
+    "android/app/src/androidTest/java/com/soundsible/android/IncomingInviteTest.kt": "646c09a25e4083dd133e19718352bdaed8ef1a3cea5844a354324dc2deb81c79",
+    "android/app/src/androidTest/java/com/soundsible/android/PendingQueueMenuTest.kt": "c86665b6adfa6292f1865e6a558ff571266f5835e24ffcdb4c4c0f571189bed0"
+  },
+  "native": {
+    "tests": 8,
+    "failures": 0,
+    "seconds": 66.403,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-incoming-invite-native.log"
+  },
+  "ui": {
+    "files": 211,
+    "tests": 1620,
+    "typecheck": "pass"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Cold SEND invite while unconfigured shows origin; origin/cookie unchanged until Connect; Connect opens native invite form",
+    "Warm SEND invite while signed in keeps account; Close consumes it; Use invitation signs out, forgets server and opens invite form; account creation completes",
+    "Song and invite readers share the latest-wins store without consuming each other",
+    "Pending catalogue occurrence menu offers only removal; removal keeps current occurrence and pause",
+    "Negative check: without the guard the pending row exposed DJ/delete/offline/edit/favourite/playlist/share actions"
+  ],
+  "limits": [
+    "VIEW of https invite links needs public bridge/App Links (pending)",
+    "No physical or final principal/browser coverage"
+  ]
+}

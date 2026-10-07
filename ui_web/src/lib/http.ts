@@ -30,6 +30,11 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler;
 }
 
+export type RequestTransport = (url: string, init: RequestInit, timeoutMs: number) => Promise<Response>;
+let requestTransport: RequestTransport | null = null;
+/** Installed once by the native entry; the browser keeps its existing fetch. */
+export function setRequestTransport(transport: RequestTransport | null): void { requestTransport = transport; }
+
 /** Typed fetch wrapper over the engine REST contract. Reuses the timeout/abort
  * pattern from the legacy http.js, adds JSON + owner-token handling. */
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
@@ -55,7 +60,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   if (token) headers['X-Soundsible-Admin-Token'] = token;
 
   try {
-    const res = await fetch(`${apiOrigin()}${path}`, {
+    const res = await (requestTransport ?? ((url, init) => fetch(url, init)))(`${apiOrigin()}${path}`, {
       method,
       headers,
       // The session lives in an HttpOnly cookie, so every call has to carry it.
@@ -64,7 +69,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       signal: controller.signal,
       keepalive: opts.keepalive,
       cache: opts.cache,
-    });
+    }, timeoutMs);
     if (res.status === 401 && !path.startsWith('/api/auth/')) onUnauthorized?.();
     if (res.status === 304 && opts.ifNoneMatch) return null as T;
     if (!res.ok) {

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { CoverImage } from './CoverImage';
 import { artworkCandidates, coverUrl, registerArtworkMetadata, trackCoverUrl } from '../lib/media';
-vi.mock('../lib/config', () => ({ apiOrigin: () => '' }));
+vi.mock('../lib/config', () => ({ apiOrigin: () => '', mediaOrigin: () => '', artworkUrl: (url?: string | null) => url || undefined }));
 
 describe('responsive artwork', () => {
   it('offers density variants and caps at real cropped resolution', () => {

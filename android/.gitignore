@@ -1,0 +1,15 @@
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+*.aar
+*.class
+*.dex
+*.iml
+.cxx/
+.externalNativeBuild/
+capacitor-cordova-android-plugins/
+app/src/main/assets/
+app/src/main/res/xml/config.xml
+.kotlin/

@@ -56,6 +56,11 @@ Every returned item uses this stable shape:
 }
 ```
 
+Acquired podcast items also include `podcast_feed_id` and
+`podcast_episode_guid` when present in library metadata. Native clients use
+that identity for episode progress; `stream_url` still addresses the acquired
+file. Local filesystem paths are never part of the car response.
+
 Root collections:
 
 - `recently-played`
@@ -122,5 +127,8 @@ target would render if that ever changes:
 Avoid rich/free-form UI on the car display. Search and complex discovery should remain on the phone or desktop unless the official CarPlay templates allow the interaction safely.
 
 ## Android Target
+
+The [Android port](ANDROID.md) currently has only a development shell. Android
+Auto is required by the port plan but is not implemented or validated.
 
 The later Android app should expose the same `/api/car/*` tree through Media3 `MediaLibraryService` and `MediaSession`. Android Auto and Android Automotive OS can then render the browse/playback UI from the native Android media session.

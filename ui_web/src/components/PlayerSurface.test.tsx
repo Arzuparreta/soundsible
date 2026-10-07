@@ -39,7 +39,7 @@ vi.mock('../stores', async () => {
   };
 });
 
-vi.mock('../lib/config', () => ({ apiOrigin: () => '' }));
+vi.mock('../lib/config', () => ({ apiOrigin: () => '', mediaOrigin: () => '', artworkUrl: (url?: string | null) => url || undefined }));
 vi.mock('../lib/track', () => ({ isPodcastTrack: (track: { podcast_guid?: string }) => Boolean(track.podcast_guid) }));
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('./NowPlaying', () => ({

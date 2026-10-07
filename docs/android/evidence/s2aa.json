@@ -1,0 +1,97 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2aa confirmed acquired-source deletion and recoverable offline removal",
+  "channel": "development",
+  "source_revision_at_asset_prepare": "37d166970110cb0de346e6faf8557737184a81c1",
+  "dirty_at_asset_prepare": true,
+  "checks": {
+    "ui": {
+      "tests": 1465,
+      "files": 172,
+      "log": "/tmp/soundsible-s2aa-final-ui.log"
+    },
+    "native_jvm": {
+      "tests": 17,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2aa-native-unit.log"
+    },
+    "engine_lifecycle": {
+      "tests": 12,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2aa-lifecycle.log"
+    },
+    "base_android": {
+      "tests": 4,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2aa-recovery-native.log",
+      "source_revision_at_asset_prepare": "5ddc166",
+      "dirty_at_asset_prepare": true
+    },
+    "extended_first_android": {
+      "tests": 4,
+      "failures": 2,
+      "log": "/tmp/soundsible-s2aa-final-native.log",
+      "scope": "HTTP/TLS remote-deleted device copies pass; manager rendering fails",
+      "archive": "android/build/integration-failed/s2aa-37d1669"
+    },
+    "isolated_manager_diagnostic": {
+      "tests": 2,
+      "failures": 1,
+      "log": "/tmp/soundsible-s2aa-manager-diagnostic.log",
+      "cause": "undefined progress value throws in Android WebView before size is known"
+    },
+    "previous_source_progress_regression": {
+      "failed": 1,
+      "log": "/tmp/soundsible-s2aa-progress-before.log"
+    },
+    "final_android": {
+      "status": "passed",
+      "log": "/tmp/soundsible-s2aa-progress-native.log",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "scope": "HTTP/TLS file deletion, remote deletion preserves removable device copy, duplicate playlist/source references, preview20s and surviving keys/program, successor and closure, filesystem failure/recovery, no HTML audio"
+    },
+    "normal_apk_test_apk_jvm_lint": {
+      "status": "passed after temporary CA removal",
+      "jvm_tests": 17,
+      "failures": 0,
+      "log": "/tmp/soundsible-s2aa-progress-native.log"
+    },
+    "clean_main_regression": {
+      "source_revision_at_asset_prepare": "dc29b73fece327d782558ffb40470c94a008a128",
+      "dirty_at_asset_prepare": false,
+      "tests": 49,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "offline_restart_phases": 2,
+      "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal",
+      "jvm_tests": 17,
+      "log": "/tmp/soundsible-s2aa-main-clean.log",
+      "archive": "android/build/integration-results"
+    },
+    "online_library_recovery": {
+      "source_revision_at_asset_prepare": "4e04083f6e554e0379c530cbb91a299b59ba1635",
+      "dirty_at_asset_prepare": true,
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "combined_targeted_tests": 6,
+      "scope": "Local filesystem failure updates cached-copy state without replacing connected library or showing unreachable-station notice",
+      "log": "/tmp/soundsible-s2ab-native.log",
+      "ui_tests": 1465,
+      "ui_files": 172,
+      "ui_log": "/tmp/soundsible-s2aa-online-recovery-ui.log",
+      "normal_apk_test_apk_jvm_lint": "passed after temporary CA removal"
+    }
+  },
+  "limits": [
+    "API36 emulator only; no acoustic or hardware acceptance.",
+    "Delayed real planner response acceptance pending.",
+    "Phone, DJ, Live, Android Auto, signing/update/release parity incomplete.",
+    "Later online-library recovery fix and delayed-planner acceptance require their own prepared artifact."
+  ]
+}

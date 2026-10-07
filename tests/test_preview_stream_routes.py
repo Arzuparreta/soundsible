@@ -170,6 +170,47 @@ def test_preview_stream_cached_file_supports_range(tmp_path, monkeypatch):
     assert segments["layout"] == preview_cache.SOURCE_LAYOUT
 
 
+def test_cached_preview_if_range_survives_reads_and_changes_on_replacement(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    data = bytes(range(256)) * 4
+    _seed_cache(data, "audio/webm")
+    client = _make_app().test_client()
+    initial = client.get(f"/api/preview/stream/{VID}")
+    validator = initial.headers["ETag"]
+    assert "Last-Modified" not in initial.headers
+    preview_cache.mark_served(VID)
+    ranged = client.get(f"/api/preview/stream/{VID}", headers={"Range": "bytes=100-199", "If-Range": validator})
+    assert ranged.status_code == 206
+    assert ranged.data == data[100:200]
+    assert ranged.headers["ETag"] == validator
+    assert client.get(f"/api/preview/stream/{VID}", headers={"If-None-Match": validator}).status_code == 304
+    # Reacquisition after eviction publishes a new generation, even at equal size.
+    preview_cache._audio_path(VID).unlink()
+    _seed_cache(data[::-1], "audio/webm")
+    replaced = client.get(f"/api/preview/stream/{VID}", headers={"Range": "bytes=100-199", "If-Range": validator})
+    assert replaced.status_code == 200
+    assert replaced.data == data[::-1]
+    assert replaced.headers["ETag"] != validator
+
+
+def test_legacy_preview_has_no_recency_validator_and_still_serves_ranges(tmp_path, monkeypatch):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    _patch_api(monkeypatch)
+    data = bytes(range(256)) * 4
+    _seed_cache(data, "audio/webm")
+    metadata = preview_cache.cached_metadata(VID)
+    metadata.pop("revision")
+    preview_cache._write_meta(VID, metadata)
+    response = _make_app().test_client().get(f"/api/preview/stream/{VID}", headers={"Range": "bytes=100-199"})
+    assert response.status_code == 206
+    assert response.data == data[100:200]
+    assert "ETag" not in response.headers
+    assert "Last-Modified" not in response.headers
+
+
 def test_cold_preview_is_acquired_once_then_served_from_disk(tmp_path, monkeypatch):
     reset_runtime()
     _make_runtime(tmp_path)

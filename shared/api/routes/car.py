@@ -10,13 +10,34 @@ from __future__ import annotations
 
 from urllib.parse import quote, unquote
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from shared.hardening import SCOPE_LIBRARY_READ, require_scope
 
 car_bp = Blueprint("car", __name__, url_prefix="")
 
 MAX_CAR_ITEMS = 200
+
+
+@car_bp.route("/api/car/search", methods=["GET"])
+@require_scope(SCOPE_LIBRARY_READ, allow_trusted_network=True)
+def search_car_items():
+    query = request.args.get("q", "").strip()
+    if not query or len(query) > 256:
+        return jsonify(error="Invalid search query"), 400
+    _, metadata = _load_metadata(_get_api())
+    if not metadata:
+        return jsonify(items=[], status="library_not_loaded"), 404
+    terms = query.casefold().split()
+    tracks = sorted(getattr(metadata, "tracks", []) or [], key=lambda t: t.added_at or "", reverse=True)
+    matches = []
+    for track in tracks:
+        text = " ".join(str(getattr(track, field, "") or "") for field in ("title", "artist", "album")).casefold()
+        if all(term in text for term in terms):
+            matches.append(_track_item(track))
+            if len(matches) == MAX_CAR_ITEMS:
+                break
+    return jsonify(items=matches, status="ok")
 
 
 def _get_api():
@@ -78,6 +99,8 @@ def _track_item(track) -> dict:
     return {
         "id": track_id,
         "kind": data.get("media_kind") or "track",
+        "podcast_feed_id": data.get("podcast_feed_id"),
+        "podcast_episode_guid": data.get("podcast_episode_guid"),
         "track_id": track_id,
         "title": title,
         "subtitle": " - ".join(part for part in (artist, album) if part),
@@ -128,6 +151,22 @@ def _podcast_items(metadata) -> list[dict]:
         for track in getattr(metadata, "tracks", [])
         if getattr(track, "media_kind", None) == "podcast_episode"
     ][:MAX_CAR_ITEMS]
+
+
+def _collection_page(item_id: str, items: list[dict]):
+    # Older clients retain the unpaged response; native clients request bounded pages.
+    if "page" not in request.args and "page_size" not in request.args:
+        return jsonify({"id": item_id, "items": items, "status": "ok"})
+    try:
+        page = int(request.args.get("page", "0"))
+        size = int(request.args.get("page_size", str(MAX_CAR_ITEMS)))
+        if page < 0 or not 1 <= size <= MAX_CAR_ITEMS:
+            raise ValueError
+    except ValueError:
+        return jsonify({"error": "Invalid collection page"}), 400
+    offset = page * size
+    return jsonify({"id": item_id, "items": items[offset:offset + size],
+                    "total": len(items), "page": page, "page_size": size, "status": "ok"})
 
 
 def _home_items(metadata) -> list[dict]:
@@ -186,7 +225,7 @@ def get_car_items(item_id: str):
         return jsonify({"id": item_id, "items": [_track_item(t) for t in tracks[:MAX_CAR_ITEMS]], "status": "ok"})
 
     if item_id == "playlists":
-        return jsonify({"id": item_id, "items": _playlist_items(metadata), "status": "ok"})
+        return _collection_page(item_id, _playlist_items(metadata))
 
     if item_id.startswith("playlist:"):
         name = unquote(item_id.split(":", 1)[1])
@@ -213,10 +252,24 @@ def get_car_items(item_id: str):
         return jsonify({"id": item_id, "items": items, "playback_state": state, "status": "ok"})
 
     if item_id == "podcasts":
-        return jsonify({"id": item_id, "items": _podcast_items(metadata), "status": "ok"})
+        return _collection_page(item_id, _podcast_items(metadata))
+
+    if item_id.startswith("podcast:"):
+        feed_id = unquote(item_id.split(":", 1)[1])
+        subscriptions = getattr(metadata, "podcast_subscriptions", []) or []
+        known = any(str(sub.get("id") or sub.get("title") or "") == feed_id if isinstance(sub, dict)
+                    else str(getattr(sub, "id", "") or getattr(sub, "title", "")) == feed_id
+                    for sub in subscriptions)
+        if not known:
+            return jsonify({"error": "Podcast not found"}), 404
+        # Only acquired episodes in this account can become native sources.
+        episodes = [t for t in tracks if getattr(t, "media_kind", None) == "podcast_episode"
+                    and str(getattr(t, "podcast_feed_id", "") or "") == feed_id]
+        return jsonify({"id": item_id, "items": [_track_item(t) for t in episodes[:MAX_CAR_ITEMS]], "status": "ok"})
 
     if item_id == "radio":
-        seed_items = [_track_item(t) for t in tracks[:MAX_CAR_ITEMS]]
+        music = [t for t in tracks if getattr(t, "media_kind", None) != "podcast_episode"]
+        seed_items = [_track_item(t) for t in music[:MAX_CAR_ITEMS]]
         for item in seed_items:
             item["kind"] = "radio_seed"
             item["radio_seed_track_id"] = item.get("track_id")

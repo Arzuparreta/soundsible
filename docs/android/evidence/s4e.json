@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4e",
+  "channel": "development",
+  "base_revision": "7e8324f9",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "scripts/android.py": "cd45342a2bc6f3c93947676566fc62b6cda8ef6acc473caa9645325cac744c47",
+    "android/app/src/main/java/com/soundsible/android/NativeLiveHost.kt": "2d9d119e555279ab89310677673198a810945c8afcb28bec53b2c5f1ced369b9",
+    "android/app/src/main/java/com/soundsible/android/NativeLivePlayer.kt": "44c34a4a24068754fbd94b9ab20609083fa277d2847a6564735570f63410c54b",
+    "android/app/src/main/java/com/soundsible/android/NativeCommunitySocket.kt": "3a83bc3e0898554ba66d5b8d99d63d1c6724e22e8dce322d3009448bee57fabd",
+    "android/app/src/main/java/com/soundsible/android/NativeLiveDirectory.kt": "3256b9947ebbf994f5ee91f9a37622f83ffa97276b76cf1fe95ccf9125d1ebc5",
+    "android/app/src/main/java/com/soundsible/android/PlaybackPlugin.kt": "e9021b952aca42a7f0cb4d5aedcc049d4a201a6feb34cbbcf1a3f29c5c23b5f4",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "bb5e0e78e4c174b99bcf676ab43ccf67cacbe55199d5fffa7c62a4d4b46712cf",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveUiTest.kt": "b92c8dcc2bc3929a008619cea05f743b7acf36ac6774c3cb4f1c475950ddbfd9",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveListenerTest.kt": "25967e30623ee6b6295472b925498b252287b2abd72623353aea26f68cd1942e",
+    "ui_web/src/mobile/Live.tsx": "9864968c03520f2a1921f6b3510e6491b893fa3af2727200489d8e955814f7a7",
+    "ui_web/src/mobile/live.ts": "437c8a325b99e7c0bf04a55ffa7fe8357803e1e2f3c65bb89a064bddaed7cec4",
+    "ui_web/src/mobile/AndroidStart.tsx": "642fbc244d12133b89c32e9b73107aecd04d2e1a466f2534d03c28c934db9e39",
+    "ui_web/src/components/ProgramTransport.tsx": "fc4fafa1c3871b89d87c2e01ee3baaddcf69408231c93fd12610b84ad50ef110"
+  },
+  "final_ui_acceptance": {
+    "tests": 2,
+    "failures": 0,
+    "seconds": 20.704,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-auth-fixed-native.log",
+    "normal_build": "APK/test APK/JVM54/lint without temporary CA pass"
+  },
+  "combined_live_before_final_auth_probe": {
+    "tests": 11,
+    "failures": 0,
+    "seconds": 71.289,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-live-directory-native.log"
+  },
+  "final_source_combined_attempt": {
+    "tests": 11,
+    "failures": 2,
+    "runner_exit": 1,
+    "log": "/tmp/soundsible-live-final-native.log",
+    "detail": "Other nine cases passed. Both UI cases reached host/guest UI/PCM/chat successfully then failed at expiry fixture403 because mandatory isolated marker omitted. Corrected only test request and repeated both UI cases with final normal build; product and prepared assets unchanged."
+  },
+  "ui_tests": {
+    "files": 205,
+    "tests": 1599,
+    "failures": 0,
+    "typescript": "pass",
+    "log": "/tmp/soundsible-live-controls-unit.log"
+  },
+  "proves": [
+    "Actual UI HTTP/TLS host create/title/chat/end",
+    "Native public directory loads through selected-relay HTTPS bridge; WebView JSON policy preserved",
+    "Actual UI guest listen -> relay PCM, pause/resume/volume/chat/leave",
+    "Guest metadata and chat reach MediaSession without Activity ownership",
+    "Native state responses exclude host/publish tokens",
+    "Observed Core401 forces login, removes library and Live panel",
+    "Room panel cleanup removes observers without stopping session"
+  ],
+  "limits": [
+    "Current principal regression and Browser4 pending final PR",
+    "DJ relay/transition metadata, public artwork, media recovery/lease/handshake reset/process death pending",
+    "Specific Live focus/noisy and long polling soak acceptance pending",
+    "Not physical listening or full parity"
+  ]
+}

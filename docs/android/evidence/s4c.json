@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-06",
+  "slice": "S4c",
+  "channel": "development",
+  "base_revision": "de5aee4a",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "scripts/android.py": "c9e403bafbf37ccbfe8816fc077e45ae5ff7518a0c7e38b4b7fdaaefba5dcfdc",
+    "android/app/src/main/java/com/soundsible/android/NativeLiveHost.kt": "53bc828e3865a4398ec52217db556b9bbe53455a72694e1d9be47194398dbccc",
+    "android/app/src/main/java/com/soundsible/android/PlaybackService.kt": "e7ecd0a58b134b9b8191136d5b5aef80d588eb01974b04326ffde88f3a959ce0",
+    "android/app/src/androidTest/java/com/soundsible/android/LiveHostTest.kt": "ecdf6ab225516cbc01eb226c482558c7eeeadedde8f43f2f313cd42107569220"
+  },
+  "tests": 7,
+  "failures": 0,
+  "skips": 0,
+  "seconds": 42.984,
+  "runner_exit": 0,
+  "log": "/tmp/soundsible-live-host-controls-native.log",
+  "normal_build": "APK/test APK/JVM54/lint without temporary CA pass",
+  "proves": [
+    "Service-owned signed room + publisher + Community socket and authoritative native metadata",
+    "Title update and host chat echo through real Community",
+    "Activity close preserves heartbeat and relay decoded PCM",
+    "Explicit Live end deletes room and retains local programme occurrence and playing state",
+    "LiveInput and LiveRelay accepted together with LiveHost"
+  ],
+  "limits": [
+    "No UI adapter or native MediaSession listener yet",
+    "No DJ transition metadata, public artwork or media recovery acceptance",
+    "No current whole regression, lease soak or physical listening"
+  ]
+}

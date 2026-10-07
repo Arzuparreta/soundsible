@@ -1,0 +1,43 @@
+# Evidencia del port Android
+
+Una fila por bloque validado desde 2026-10-06. Lo anterior: `evidence/*.json` y
+`SLICE_*.md` (S0–S2av). Los logs `/tmp` no sobreviven a un reinicio; la fila y el
+commit son la referencia. «Normal» = APK normal + APK de test + JVM + lint del runner.
+
+| Fecha | Bloque | Commit | Nativo | Otras | Log |
+| --- | --- | --- | --- | --- | --- |
+| 2026-10-06 | S2at invitaciones SEND + menú de pendiente | bf9fac69 | 8/0 HTTP/TLS 66.4s + normal | UI 211/1620 | /tmp/soundsible-incoming-invite-native.log |
+| 2026-10-06 | S2au Ajustes de servidor y dispositivo | 90e9d1ef | 22/0 HTTP/TLS 280.5s + normal | UI 213/1631 | /tmp/soundsible-settings-block-native.log |
+| 2026-10-06 | S2av sesión por QR/código | 118b2389 | 20/0 HTTP/TLS 235.8s + normal (JVM 59) | Core 78, UI 215/1637 | /tmp/soundsible-pairing-block-native.log |
+| 2026-10-06 | S2aw menú de canción: artista/álbum, no me interesa, reproducir en otro dispositivo | bf30a361 | 22/0 HTTP/TLS 237.3s + normal (SongMenu + 9 clases que usan el menú) | UI 216/1643 | /tmp/soundsible-song-menu-native.log |
+| 2026-10-06 | Podcasts: Top/recomendados (suscribir, motivo, no me interesa) y «sólo descargados» | ef28dddf | PodcastTop 1/0 HTTP + Podcast/PodcastDirectory 4/0 HTTP/TLS, 52.0s + normal. Esperas de «Downloaded» en esos tests eran ambiguas con el nuevo botón: ahora miran la fila. Fixture: ranking Apple simulado (antes salía a internet) | UI 216/1646, fixture Core 1/0 | /tmp/soundsible-podcasts-native.log |
+| 2026-10-06 | Biblioteca: ordenar/filtrar canciones (preferencias compartidas con la web), álbumes por orden del motor y género/año | 72bbe127 | 12/0 en 167.4s + normal: radio de impacto (FileDeletion, OfflineRemoval, EntityBookmarks, Connection, CollectionProfile, LibraryActions, Offline); HTTP salvo clases sin variante | UI 216/1648 | /tmp/soundsible-library-native.log |
+| 2026-10-06 | Cola con carriles de la web (contexto/peticiones), «Vaciar peticiones», «Reanudar» desde otro dispositivo | 3ecf6b78 | QueueLanes 1/0 HTTP + radio de impacto 11 métodos HTTP (Playback, Radio, Autoplay, Device*, LibraryActions, DevicesUi, PlannerRetirement) 265.3s + normal; Radio/Autoplay ajustados a la regla web (la petición va tras la actual) | UI 217/1654 | /tmp/soundsible-queue-native.log, /tmp/soundsible-queue-native-2.log |
+| 2026-10-06 | Descarga de catálogo con verificación del motor y «Elegir versión», DJ «Cambiar sesión», buscador de ajustes | 02dcecff | 11/0 HTTP 140.7s + normal (Acquisition descarga por el nuevo camino, CatalogSearch, CollectionReview×4, CollectionProfile×2, DjContext, SettingsServer, DevicesUi) | UI 217/1659 | /tmp/soundsible-catalog-dj-settings-native.log |
+| 2026-10-06 | Auto: socket del coche agotado se retira y reintenta tras 30 s | c0bc6aaf | Sin la corrección CarEvents falla («Exhausted socket replaced…»); con ella CarEvents(http) + CarLibrary + CarDj 5/0 146.5s + normal | — | /tmp/soundsible-car-exhaustion-native.log |
+| 2026-10-06 | DJ «Pedir todas» en grupo, cambio de sesión y permiso offline contextual | 18edb7ed | DjContext + DeviceDjSession HTTP 2/0, 15.249s; permiso real denegar 1/0 (6.045s) y permitir 1/0 (6.424s), copias completadas; APK/JVM/lint normales | UI 217/1660 + TypeScript | /tmp/soundsible-dj-group-final3.log, /tmp/soundsible-notification-deny.log, /tmp/soundsible-notification-allow.log |
+| 2026-10-06 | Aislamiento de los smoke tests desktop | f06b0525 | — | Desktop smoke + fixture adquisición 6/0 (53.06s); carpetas de prueba vacías impiden migrar perfil/cache personales | /tmp/soundsible-core-isolation.log |
+| 2026-10-06 | Regresión UI y los cuatro perfiles browser | 18edb7ed | — | UI 217/1660 + TS; Chromium móvil/escritorio 278/0, 66 skips (8.9m); WebKit móvil/escritorio 269/0, 75 skips (8.6m), suites completas en imagen CI/1 worker. Chromium local abortó con SIGILL de la librería del navegador; contenedor limpio | /tmp/soundsible-final-ui2.log, /tmp/soundsible-final-chromium-container.log, /tmp/soundsible-final-webkit.log |
+| 2026-10-06 | Regresión Core completa | f06b0525 | — | pytest 1792/0, 788.45s; TMPDIR en disco y smoke tests aislados | /tmp/soundsible-final-core-clean.log |
+| 2026-10-06 | Regresión nativa e aislamiento de casos; reloj compartido sin reinicios redundantes | b862562e | Principal HTTP/TLS: 211 ejecutados, 7 fallos iniciales (selección/contadores del fixture y reloj intermitente). Corregidos: fila exacta para artwork, contador de replay respecto a resolución previa, retirada de un candidato real; salida compartida evita play repetido y pausa de decoder recuperable. Mezclas/recuperación/catálogo 53/54 (710.142s), único fallo de doble limpieza del fixture; corregida, repetición y Connection/PlannerRetirement/Live/Auto 18/0 + APK/JVM/lint normales. La suite principal final se comprueba de nuevo en CI | Smoke sin red 1/0; Ruff y diff-check | /tmp/soundsible-final-native.log, /tmp/soundsible-audio-recovery-final.log, /tmp/soundsible-native-final-corrections.log, /tmp/soundsible-final-smoke.log |
+| 2026-10-06 | Reinicios de proceso offline/Live | 685d7009 | Offline prepare + force-stop/offline 2/0 (6.478s + 3.246s); Live prepare + force-stop/resume 2/0 (4.998s + 4.494s). Runner concede permiso para estos protocolos sin diálogo; aceptación de permitir/denegar permanece en ensayos de instalación fresca | APK/JVM/lint normales | /tmp/soundsible-final-offline-restart2.log, /tmp/soundsible-final-live-restart.log |
+
+La ejecución completa del commit de entrega y los checks de todas las plataformas
+se consultan en la [PR #300](https://github.com/Arzuparreta/soundsible/pull/300/checks).
+Los resultados locales anteriores no sustituyen esos checks del head vigente.
+
+- Revisión PR #300: ambos P2 confirmados. Transporte REST reutilizado por origen/generación,
+  pool retirado al reset; socket de dispositivos conserva transporte de lifecycle propio.
+  Colecciones Auto paginadas en Core (máximo 200 por respuesta), total conservado;
+  bridge legacy agrega páginas hasta 1000 y mantiene compatibilidad con respuestas anteriores.
+  Core: test con 405 listas/podcasts, páginas sin solapamiento y parámetros inválidos;
+  instrumentación Connection/CarLibrary añade reutilización/reset y páginas/legacy de 405 colecciones.
+  Compilación y aceptación nativa del commit corregido se validan en CI de la PR.
+- Regresión CI posterior: el transporte TLS retirado en background ya no aborta
+  CarLibrary. La suite alcanzó 87 casos y detectó cancelación de artwork que podía
+  completarse con error antes del listener, callbacks offline tras destruir la
+  Activity y dos capturas de posición anteriores a asentarse la pausa. Artwork
+  cancela resultados de generaciones retiradas; OfflinePlugin rechaza llamadas
+  tardías (prueba determinista de llamada/respuesta de permiso tras destroy);
+  IncomingTrack espera posición estable sin ampliar la tolerancia. Regresión
+  completa del head corregido pendiente de los checks de la PR.

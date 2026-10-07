@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-06",
+  "slice": "S2aq",
+  "channel": "development",
+  "base_revision": "483f33b7",
+  "dirty_at_validation": true,
+  "source_hashes": {
+    "android/app/src/main/java/com/soundsible/android/NativeDeviceSession.kt": "2afcb94d825e3c1a4d0ea460d33cf0a96581ab888f653c40ba38fe8537b3474b",
+    "android/app/src/androidTest/java/com/soundsible/android/DeviceReconnectTest.kt": "eb8367c4a8a468c119c5da8e26fb3a08ce2e1c8296178da48da8c318da20f56b"
+  },
+  "native": {
+    "tests": 2,
+    "failures": 0,
+    "seconds": 122.449,
+    "runner_exit": 0,
+    "log": "/tmp/soundsible-device-reconnect-final-native.log"
+  },
+  "normal_build": "APK/test APK/JVM56/lint without temporary CA pass",
+  "coverage": [
+    "Real socket transport503 exhausts bounded manager retries",
+    "Closed Activity; repeating native PCM remains active",
+    "Verified automatic recovery after cooldown with same origin/account UUID",
+    "Native state republished; remote pause/resume PCM recovered"
+  ],
+  "limits": [
+    "Synthetic transport outage, no physical phone/car network acceptance",
+    "Deferred catalog and full suites pending"
+  ]
+}

@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
 import Migrate from './Migrate';
+import { MigrateView } from './MigrateView';
 import { setLocale } from '../lib/i18n';
 import type { MigrationJob } from '../lib/migrationApi';
 
@@ -196,10 +198,69 @@ describe('Migrate route', () => {
       expect(apiMock.start).toHaveBeenCalledWith('job-1', {
         include_library: true,
         playlist_ids: ['road'],
-      }),
+      }, { signal: expect.any(AbortSignal) }),
     );
     expect(await screen.findByText('Moving your music')).toBeInTheDocument();
   });
+  it('keeps the guide after cancelling the OS picker, without a web file input', async () => {
+    const choose = vi.fn().mockResolvedValue(undefined);
+    render(() => <MigrateView compact onOpenPlaylists={() => {}} chooseUpload={choose} />);
+    await fireEvent.click(await screen.findByRole('button', { name: /Spotify/ }));
+    const button = document.querySelector('[data-native-import-select]') as HTMLButtonElement;
+    expect(document.querySelector('input[type=file]')).toBeNull();
+    await fireEvent.click(button);
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(choose).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(screen.getByText('Choose the file Spotify sent you')).toBeInTheDocument();
+    expect(apiMock.upload).not.toHaveBeenCalled();
+  });
+
+  it('aborts a selected export when its view closes and ignores the late job', async () => {
+    let resolve!: (value: {job: MigrationJob; created: boolean}) => void;
+    const choose = vi.fn((_signal: AbortSignal) => new Promise<{job: MigrationJob; created: boolean}>(done => { resolve = done; }));
+    const view = render(() => <MigrateView compact onOpenPlaylists={() => {}} chooseUpload={choose} />);
+    await fireEvent.click(await screen.findByRole('button', { name: /Spotify/ }));
+    await fireEvent.click(document.querySelector('[data-native-import-select]')!);
+    const signal = choose.mock.calls[0][0] as AbortSignal;
+    view.unmount();
+    expect(signal.aborted).toBe(true);
+    resolve({ job: analyzedJob(), created: true });
+    await Promise.resolve();
+    expect(localStorage.getItem('soundsible.migration-guide')).toContain('spotify');
+  });
+
+  it('keeps a confirmed pause when an older progress poll arrives late', async () => {
+    const running = { ...analyzedJob(), state: 'running' as const };
+    const paused = { ...running, state: 'paused' as const };
+    apiMock.list.mockResolvedValue({ jobs: [running] });
+    apiMock.get.mockResolvedValueOnce({ job: running });
+    let poll!: () => Promise<void>;
+    const interval = vi.spyOn(window, 'setInterval').mockImplementation(callback => { poll = callback as () => Promise<void>; return 100 as unknown as ReturnType<typeof window.setInterval>; });
+    try {
+      render(() => <MigrateView compact onOpenPlaylists={() => {}} />);
+      await screen.findByRole('button', { name: 'Pause' });
+      let finish!: (value: {job: MigrationJob}) => void;
+      apiMock.get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+      const inFlight = poll();
+      apiMock.control.mockResolvedValueOnce({ job: paused });
+      await fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+      await screen.findByRole('button', { name: 'Resume' });
+      finish({ job: running }); await inFlight;
+      expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+    } finally { interval.mockRestore(); }
+  });
+
+  it('never reuses an invalidated account lifetime even if the view remains mounted', async () => {
+    const [current, setCurrent] = createSignal(true);
+    const choose = vi.fn().mockResolvedValue(undefined);
+    render(() => <MigrateView compact current={current} onOpenPlaylists={() => {}} chooseUpload={choose} />);
+    await fireEvent.click(await screen.findByRole('button', { name: /Spotify/ }));
+    setCurrent(false); setCurrent(true);
+    await fireEvent.click(document.querySelector('[data-native-import-select]')!);
+    expect(choose).not.toHaveBeenCalled();
+  });
+
 });
 
 vi.mock('../components/NavigationMenu', () => ({ NavigationMenuButton: () => null }));

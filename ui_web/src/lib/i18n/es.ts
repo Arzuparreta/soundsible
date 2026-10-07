@@ -1,6 +1,30 @@
 import type { Dict } from './en';
 
 export const es: Dict = {
+  android: {
+    offlineAvailable: "Disponible sin conexión",
+    offlineRemove: "Quitar de este dispositivo",
+    offlineCancel: "Cancelar preparación",
+    offlineManage: "Gestionar música sin conexión",
+    offlineOnly: "Sólo en este dispositivo",
+    offlineAll: "Todas las canciones",
+    offlineSpace: "Límite de espacio",
+    offlineEmpty: "Todavía no hay canciones preparadas.",
+    offlineReady: "Listas",
+    offlinePreparing: "Preparando canciones",
+    offlineNoSpace: "No hay espacio suficiente. Quita copias o aumenta el límite.",
+    offlineIntegrity: "La copia está incompleta o dañada. Prepárala otra vez.",
+    offlineFailed: "No se pudo preparar. Reintenta cuando haya conexión.",
+    offlineRemovalFailed: "No se pudo eliminar la copia. Inténtalo de nuevo.",
+
+    previewPreparing: 'Preparando canción',
+    previewRetry: 'Esperando para reintentar la canción',
+    closeProgram: 'Cerrar reproductor',
+    playbackInterrupted: 'Reproducción interrumpida. Se conservan cola y posición. Reintenta cuando el servidor esté disponible.',
+    insertAfter: 'Añadir después de la actual',
+    repeatOff: 'Desactivado',
+    repeatOne: 'Una canción',
+    repeatAll: 'Toda la cola', useInvite: "Usar invitación", inviteSignsOut: "Usar esta invitación cierra la sesión de esta cuenta y detiene la reproducción.", pairing: { scan: "Escanear código de emparejamiento", useCode: "Usar un código de emparejamiento", code: "Código de emparejamiento", codeHint: "Los 8 caracteres bajo el QR en Soundsible → Ajustes → Dispositivos → Emparejar un dispositivo nuevo. Usa la dirección del servidor de arriba.", pair: "Emparejar", hint: "Apunta la cámara al código de emparejamiento que muestra Soundsible → Ajustes → Dispositivos", notSoundsible: "Eso no es un código de emparejamiento de Soundsible.", invalid: "Ese código de emparejamiento es incorrecto o ha caducado.", used: "Ese código ya se usó. Muestra uno nuevo.", notShowing: "Mantén el código abierto en tu Soundsible mientras lo escaneas o lo escribes.", unavailable: "Esa cuenta no puede iniciar sesión ahora.", cameraDenied: "Hace falta la cámara para escanear. Puedes escribir el código.", cameraUnavailable: "No hay cámara disponible. Escribe el código.", badCode: "Un código de emparejamiento tiene 8 letras y números.", needsServer: "Escribe primero la dirección de tu servidor." }, refresh: "Actualizar", permissionDenied: "Tu cuenta no tiene permiso para acceder a este recurso.", title: 'Conecta tu Soundsible', unconfigured: 'Todavía no hay un servidor conectado.', server: "Dirección del servidor", serverHint: "Pega la dirección del servidor o el enlace de invitación. HTTPS para acceso remoto; HTTP sólo en tu LAN privada o Tailscale.", connect: "Conectar", username: "Usuario", password: "Contraseña", login: "Entrar", logout: "Cerrar sesión", changeServer: "Cambiar servidor", connectFailed: "No se pudo conectar. Revisa dirección, red y certificado del servidor.", wrongLogin: "Usuario o contraseña incorrectos.", browseOnly: 'Build de desarrollo: todavía no es una versión publicada.', seek: 'Posición de reproducción', eventsPending: "Actualizaciones desconectadas. Puedes reintentar o refrescar la biblioteca." },
   savedEntities: {
     albums: "Álbumes guardados",
     artists: "Artistas guardados",
@@ -111,6 +135,7 @@ export const es: Dict = {
     shortcuts: 'Accesos',
   },
   live: {
+    leave: 'Salir de la sala',
     title: 'Live',
     meta: 'Sesiones de la comunidad Soundsible',
     goLive: 'Emitir en directo',
@@ -323,6 +348,7 @@ export const es: Dict = {
       already: '«{title}» ya forma parte de la sesión',
     },
     route: {
+      djPlacement: 'Que el DJ decida',
       pinned: 'Fijada', actions: 'Acciones para {title}', useAsSource: 'Mezclar con la sesión',
       add: 'Añadir', insertBefore: 'Insertar una canción antes de {title}', fixed: 'Fijada', placed: 'Colocada', bridge: 'Puente',
       remove: 'Quitar de la ruta', avoidSession: 'Evitar durante esta sesión',
@@ -711,6 +737,7 @@ export const es: Dict = {
       'Vincula tu teléfono escaneando un QR para controlarlo y reproducir en remoto.',
     connection: 'Conexión',
     engineLabel: 'Engine',
+    engineVersion: 'Versión del servidor',
     about: 'Acerca de',
     version: 'Beta · UI Solid',
     viewDesign: 'Ver design system',
@@ -964,6 +991,7 @@ export const es: Dict = {
     empty: 'La lista no tiene pistas.',
   },
   deviceSheet: {
+    transfer: 'Transferir reproducción',
     sendingTo: 'Enviando a {device}…',
     fallbackDevice: 'dispositivo',
     playingOn: 'Reproduciendo en el dispositivo',

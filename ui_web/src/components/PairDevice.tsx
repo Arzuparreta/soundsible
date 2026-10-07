@@ -6,6 +6,7 @@ import { toast } from '../lib/toast';
 import { copyText } from '../lib/clipboard';
 import { confirmDialog } from '../lib/confirm';
 import { t } from '../lib/i18n';
+import { browserPairingOrigin, pairingQrText } from '../lib/pairingQr';
 import styles from './PairDevice.module.css';
 import { EmptyState } from './EmptyState';
 import { SkeletonRows } from './Skeleton';
@@ -35,7 +36,7 @@ function statusLabel(s: PairingSession | null): string {
  * for a phone to scan/claim, and polls until the engine reports it paired.
  * Mirrors the legacy desktop pairing flow against the same /api/pairing/* routes.
  */
-function openPairDevice(onPaired: () => void): void {
+function openPairDevice(onPaired: () => void, origin: () => string | null): void {
   openOverlay((close) => {
     const [session, setSession] = createSignal<PairingSession | null>(null);
     const [qrSrc, setQrSrc] = createSignal('');
@@ -74,7 +75,7 @@ function openPairDevice(onPaired: () => void): void {
       sessionId = s.session_id;
       lastStatus = s.status;
       setSession(s);
-      renderQr(s.connect?.qr_text);
+      renderQr(pairingQrText(s.code, s.connect, origin()));
 
       poll = window.setInterval(async () => {
         if (!sessionId) return;
@@ -187,7 +188,8 @@ function fmtWhen(value?: string | null): string {
 }
 
 /** Settings panel: paired devices list with revoke + a button to pair a new one. */
-export function PairedDevicesPanel() {
+/** `origin` is where phones reach this server; by default the address this page is open at. */
+export function PairedDevicesPanel(props: { origin?: () => string | null } = {}) {
   const [devices, setDevices] = createSignal<PairedDevice[]>([]);
   const [loading, setLoading] = createSignal(true);
 
@@ -241,7 +243,7 @@ export function PairedDevicesPanel() {
           </For>
         </Show>
       </Show>
-      <button class={styles.pairBtn} type="button" onClick={() => openPairDevice(refresh)}>
+      <button class={styles.pairBtn} type="button" onClick={() => openPairDevice(refresh, props.origin ?? (() => browserPairingOrigin()))}>
         {t('pairDevice.pairNew')}
       </button>
     </>

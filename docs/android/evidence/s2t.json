@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2t acquired entity bookmarks and confirmed account refresh",
+  "source_revision_at_asset_prepare": "1cce3ca",
+  "refresh_commit": "190c5b4",
+  "dirty": true,
+  "channel": "development",
+  "checks": {
+    "ui": {
+      "passed": 1416,
+      "files": 163,
+      "log": "/tmp/soundsible-s2t-ui-final.log"
+    },
+    "python": {
+      "passed": 15,
+      "log": "/tmp/soundsible-s2t-backend.log"
+    },
+    "android_scoped": {
+      "tests": 4,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2t-native-confirmed.log",
+      "scope": "HTTP/verified HTTPS; explicit album/artist bookmark, activity/account persistence, profile isolation, no song acquisition or queue changes; CatalogSearch regression"
+    },
+    "normal_apk_tests_lint": "passed after ephemeral CA removal",
+    "main_regression": {
+      "source_revision": "cf01599",
+      "dirty_at_prepare": false,
+      "tests": 35,
+      "failures": 0,
+      "skipped": 0,
+      "log": "/tmp/soundsible-s2t-main-isolated.log"
+    },
+    "browser": "latest full S2j; repeat final PR head",
+    "offline_restart": {
+      "phases": 2,
+      "passed": 2,
+      "protocol": "install once, prepare/offline instrumentation separated by force-stop"
+    }
+  },
+  "limits": [
+    "Acquired entity actions only; external bookmark lists and Discover navigation pending.",
+    "OS file picker still unaccepted.",
+    "No CI/live provider/physical phone/car acceptance.",
+    "Full parity/signing/update gates remain before alpha."
+  ]
+}

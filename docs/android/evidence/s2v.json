@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-04",
+  "slice": "S2v sidecar precedence over embedded artwork",
+  "source_revision_at_asset_prepare": "cf01599",
+  "dirty_at_asset_prepare": false,
+  "native_instrumentation_dirty": true,
+  "channel": "development",
+  "checks": {
+    "android": {
+      "tests": 4,
+      "failures": 0,
+      "skipped": 0,
+      "format": "flac with embedded original cover",
+      "log": "/tmp/soundsible-s2v-embedded-source.log",
+      "scope": "API 36 HTTP/verified HTTPS private URI precedence, expired generation no fallback, embedded-only fallback, actual edited platform session cover and stable audio hash"
+    },
+    "normal_apk_test_unit_lint": "passed after CA removal",
+    "python_radio_formats": {
+      "tests": 2,
+      "formats": [
+        "wav",
+        "flac"
+      ],
+      "log": "/tmp/soundsible-s2v-radio-fixture.log"
+    }
+  },
+  "limits": [
+    "No physical listening or universal decoder acceptance.",
+    "Final main regression/browser, remaining full parity and release gates pending."
+  ]
+}

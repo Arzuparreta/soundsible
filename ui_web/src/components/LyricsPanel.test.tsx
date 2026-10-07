@@ -194,7 +194,7 @@ describe('LyricsPanel', () => {
       artist: 'Artist',
       title: 'Song',
       persist: true,
-    }));
+    }), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
   it('reports a provider outage honestly and lets the listener retry', async () => {

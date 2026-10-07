@@ -259,3 +259,94 @@ def test_display_close_disables_auto_confirm(tmp_path, monkeypatch):
     )
     assert claimed.status_code == 200
     assert claimed.get_json()["status"] == "claimed"
+
+
+def _bound_app():
+    """The pairing blueprint behind the same per-request account binding as the engine."""
+    from flask import request as current_request
+    from shared.hardening import get_request_auth_context
+    from shared.user_context import bind_user
+
+    app = _make_app()
+
+    @app.before_request
+    def bind():
+        if current_request.cookies.get("sb_session"):
+            context = get_request_auth_context()
+            bind_user(context.get("user_id") if context else None)
+        else:
+            bind_user(None)
+
+    return app
+
+
+def _member_session(client):
+    from shared.users import create_session, create_user
+
+    user = create_user("pairing_member", password="pairing-test")
+    token, _ = create_session(user["id"], device_name="Browser")
+    client.set_cookie("sb_session", token)
+    return user
+
+
+def test_scanning_a_shown_code_signs_that_account_in_and_is_revocable(tmp_path):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    app = _bound_app()
+    owner, phone = app.test_client(), app.test_client()
+    db = instance_db()
+    user = _member_session(owner)
+
+    shown = owner.post("/api/pairing/sessions", json={"auto_confirm": True, "display_active": True}).get_json()
+    claimed = phone.post("/api/pairing/sessions/claim", json={
+        "code": shown["code"].lower(), "device_name": "Pixel 8", "device_type": "android", "credential": "session"})
+    assert claimed.status_code == 201
+    body = claimed.get_json()
+    assert body["user"]["id"] == user["id"] and body["session"]["status"] == "completed"
+    assert "token" not in body
+    cookie = phone.get_cookie("sb_session")
+    assert cookie is not None and cookie.http_only
+    record = db.get_auth_token_by_hash(_hash(cookie.value))
+    assert record["kind"] == "session" and record["user_id"] == user["id"] and record["device_type"] == "android"
+    assert record["name"] == "Pixel 8"
+
+    listed = owner.get("/api/paired-devices").get_json()["devices"]
+    assert [row["token_id"] for row in listed] == [record["id"]]
+    # A code is single-use, however it was claimed.
+    again = app.test_client().post("/api/pairing/sessions/claim", json={
+        "code": shown["code"], "device_name": "Other", "credential": "session"})
+    assert again.status_code == 409
+
+    revoked = owner.post(f"/api/paired-devices/{record['id']}/revoke")
+    assert revoked.status_code == 200 and revoked.get_json()["revoked_at"] is not None
+    assert db.get_auth_token(record["id"])["revoked_at"] is not None
+    assert owner.get("/api/paired-devices").get_json()["devices"] == []
+
+
+def test_signed_in_claim_requires_the_code_to_be_showing_and_never_consumes_it(tmp_path):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    app = _bound_app()
+    owner, phone = app.test_client(), app.test_client()
+    _member_session(owner)
+
+    hidden = owner.post("/api/pairing/sessions", json={"auto_confirm": True}).get_json()
+    refused = phone.post("/api/pairing/sessions/claim", json={
+        "code": hidden["code"], "device_name": "Pixel 8", "credential": "session"})
+    assert refused.status_code == 409 and refused.get_json()["code"] == "pairing_display_required"
+    assert phone.get_cookie("sb_session") is None
+    assert owner.get("/api/pairing/sessions").get_json()["sessions"][0]["status"] == "pending"
+
+    bad = phone.post("/api/pairing/sessions/claim", json={"code": hidden["code"], "device_name": "Pixel 8", "credential": "owner"})
+    assert bad.status_code == 400
+
+
+def test_sessions_not_minted_by_pairing_cannot_be_revoked_as_paired_devices(tmp_path):
+    reset_runtime()
+    _make_runtime(tmp_path)
+    app = _bound_app()
+    owner = app.test_client()
+    _member_session(owner)
+    browser = instance_db().get_auth_token_by_hash(_hash(owner.get_cookie("sb_session").value))
+    assert owner.post(f"/api/paired-devices/{browser['id']}/revoke").status_code == 404
+    assert owner.get("/api/paired-devices").get_json()["devices"] == []

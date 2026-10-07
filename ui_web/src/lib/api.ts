@@ -730,11 +730,11 @@ export const api = {
   /** Put a song in the library, or take it out. Nothing is downloaded. */
   /** Save many songs, or take them out, without flipping any — an album in
    * one act. Sent in batches the engine accepts. */
-  setSavedEntries: async (entries: SavedEntry[], saved: boolean) => {
+  setSavedEntries: async (entries: SavedEntry[], saved: boolean, options: { signal?: AbortSignal } = {}) => {
     for (let start = 0; start < entries.length; start += SAVED_BATCH) {
       await request<{ changed?: number }>('/api/library/saved/set', {
         method: 'POST',
-        body: { entries: entries.slice(start, start + SAVED_BATCH), saved },
+        body: { entries: entries.slice(start, start + SAVED_BATCH), saved }, signal: options.signal,
       });
     }
   },
@@ -805,9 +805,9 @@ export const api = {
     }),
 
   // ── Lyrics (LRCLIB via the engine; library tracks are cached server-side) ──
-  getTrackLyrics: (trackId: string) =>
+  getTrackLyrics: (trackId: string, options: { signal?: AbortSignal } = {}) =>
     request<LyricsResponse>(`/api/library/tracks/${encodeURIComponent(trackId)}/lyrics`, {
-      timeoutMs: 15000,
+      signal: options.signal, timeoutMs: 15000,
     }),
   /** Lyrics for tracks not in the library (previews), looked up by metadata. */
   getLyricsByMetadata: (p: {
@@ -819,7 +819,7 @@ export const api = {
     youtubeId?: string;
     persist?: boolean;
     refresh?: boolean;
-  }) => {
+  }, options: { signal?: AbortSignal } = {}) => {
     const params = new URLSearchParams({ artist: p.artist, title: p.title });
     if (p.album) params.set('album', p.album);
     if (p.duration) params.set('duration', String(Math.round(p.duration)));
@@ -827,7 +827,7 @@ export const api = {
     if (p.youtubeId) params.set('youtube_id', p.youtubeId);
     if (p.persist) params.set('persist', '1');
     if (p.refresh) params.set('refresh', '1');
-    return request<LyricsResponse>(`/api/lyrics?${params.toString()}`, { timeoutMs: 15000 });
+    return request<LyricsResponse>(`/api/lyrics?${params.toString()}`, { signal: options.signal, timeoutMs: 15000 });
   },
 
   // ── Track metadata + cover (engine rewrites the file's tags) ──
@@ -1210,25 +1210,25 @@ export const api = {
 
   /** Download every song on an album the library does not hold yet. The
    * engine reads the tracklist itself; this only names the record. */
-  startAlbumDownload: (deezerId: string) =>
+  startAlbumDownload: (deezerId: string, signal?: AbortSignal) =>
     request<{ job: MigrationJob }>('/api/catalog/album/download', {
       method: 'POST',
-      body: { deezer_id: deezerId },
+      body: { deezer_id: deezerId }, signal,
       timeoutMs: 30000,
     }),
-  getAlbumDownload: (deezerId: string) =>
-    request<{ job: MigrationJob | null }>(`/api/catalog/album/download?deezer_id=${encodeURIComponent(deezerId)}`),
+  getAlbumDownload: (deezerId: string, signal?: AbortSignal) =>
+    request<{ job: MigrationJob | null }>(`/api/catalog/album/download?deezer_id=${encodeURIComponent(deezerId)}`, { signal }),
   /** An artist's albums, singles and EPs as one list of songs, each once. */
-  getArtistDiscography: (deezerId: string) =>
-    request<ArtistDiscography>(`/api/catalog/artist/discography?deezer_id=${encodeURIComponent(deezerId)}`, { timeoutMs: 60000 }),
-  startArtistDownload: (deezerId: string) =>
+  getArtistDiscography: (deezerId: string, signal?: AbortSignal) =>
+    request<ArtistDiscography>(`/api/catalog/artist/discography?deezer_id=${encodeURIComponent(deezerId)}`, { timeoutMs: 60000, signal }),
+  startArtistDownload: (deezerId: string, signal?: AbortSignal) =>
     request<{ job: MigrationJob }>('/api/catalog/artist/download', {
       method: 'POST',
-      body: { deezer_id: deezerId },
+      body: { deezer_id: deezerId }, signal,
       timeoutMs: 60000,
     }),
-  getArtistDownload: (deezerId: string) =>
-    request<{ job: MigrationJob | null }>(`/api/catalog/artist/download?deezer_id=${encodeURIComponent(deezerId)}`),
+  getArtistDownload: (deezerId: string, signal?: AbortSignal) =>
+    request<{ job: MigrationJob | null }>(`/api/catalog/artist/download?deezer_id=${encodeURIComponent(deezerId)}`, { signal }),
 
   getAlbumProfile: (name: string, artist: string, deezerId?: string, signal?: AbortSignal) =>
     request<AlbumProfile>(

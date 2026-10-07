@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-03",
+  "slice": "S2j catalog song search and explicit Saved",
+  "implementation_commit": "e4186fc",
+  "build_info": {
+    "version": "0.19.1",
+    "version_code": 1,
+    "source_revision": "3ab2d88eaf7f8ff30741cbc24af26c7c17dfccb9",
+    "dirty": true,
+    "channel": "development"
+  },
+  "checks": {
+    "unit": {
+      "passed": 1373,
+      "files": 151
+    },
+    "python": {
+      "passed": 60
+    },
+    "native_unit": {
+      "passed": 4
+    },
+    "android_main": {
+      "tests": 17,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "api": 36
+    },
+    "android_restart": {
+      "phases": [
+        "prepare",
+        "offline"
+      ],
+      "tests": 2,
+      "failures": 0
+    },
+    "chromium": {
+      "passed": 278,
+      "skipped": 66,
+      "failures": 0
+    },
+    "webkit": {
+      "passed": 269,
+      "skipped": 75,
+      "failures": 0
+    },
+    "normal_apk_and_lint": "passed after temporary CA removal"
+  },
+  "observations": [
+    "Initial full instrumentation failed preview cold-cache assumptions after catalog playback warmed upcoming Saved song. Fixture-only explicit reset, rejecting active fills, restores isolation; final full run passed."
+  ],
+  "limits": [
+    "Development only; no release, full parity remains required.",
+    "No GitHub CI, live provider or physical acoustic/car acceptance claimed.",
+    "Instrumentation metadata predates implementation commit and is dirty; normal APK rebuilt after clean commit.",
+    "Entities, acquisition/import, podcasts/radio, DJ/Live, Auto and signing/update remain pending."
+  ]
+}
