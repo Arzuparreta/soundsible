@@ -3,13 +3,22 @@ import { isMusicTrack, isPodcastTrack } from '../track';
 import { coverUrl } from '../media';
 import type { ProgramTrack } from './runtime';
 
+/** The record and the song's place on it, for the native queue to show and
+ * to hand back to a download. Only what is actually known travels. */
+function release(track: Track): Pick<ProgramTrack, 'album_artist' | 'track_number' | 'disc_number' | 'year'> {
+  const whole = (value: unknown, high: number, low = 1) =>
+    typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high ? value : undefined;
+  const albumArtist = typeof track.album_artist === 'string' && track.album_artist.length <= 4096 ? track.album_artist : undefined;
+  return { album_artist: albumArtist, track_number: whole(track.track_number, 999), disc_number: whole(track.disc_number, 99), year: whole(track.year, 9999, 1000) };
+}
+
 /** The same eligibility rule drives rows, menus and queue conversion. */
 export function programTrack(track: Track): ProgramTrack | null {
   const pending = (track as import('../playbackQueue').ContextTrack).pendingResolve;
   if (pending) {
     if (isPodcastTrack(track) || !track.id || track.id.length > 512 || !pending.catalogItemId || pending.catalogItemId.length > 512 ||
       typeof pending.artist !== 'string' || pending.artist.length > 4096 || !pending.title || pending.title.length > 4096) return null;
-    return { source: 'pending', id: track.id, title: track.title, artist: track.artist, album: track.album, duration: track.duration, pendingResolve: { ...pending } };
+    return { source: 'pending', id: track.id, title: track.title, artist: track.artist, album: track.album, ...release(track), duration: track.duration, pendingResolve: { ...pending } };
   }
   if (isPodcastTrack(track)) {
     if (track.source !== undefined && track.source !== 'preview') return null;
@@ -21,7 +30,7 @@ export function programTrack(track: Track): ProgramTrack | null {
   if (!isMusicTrack(track) || typeof track.id !== 'string' || !track.id.trim() || track.id.length > 512 || (track.source !== undefined && track.source !== 'preview')) return null;
   const source = track.source === 'preview' ? 'preview' : 'local';
   if (source === 'preview' && !/^[A-Za-z0-9_-]{11}$/.test(track.id)) return null;
-  return { source, id: track.id, title: track.title, artist: track.artist, album: track.album, duration: track.duration, loudness_lufs: track.loudness_lufs, loudness_peak_dbtp: track.loudness_peak_dbtp };
+  return { source, id: track.id, title: track.title, artist: track.artist, album: track.album, ...release(track), duration: track.duration, loudness_lufs: track.loudness_lufs, loudness_peak_dbtp: track.loudness_peak_dbtp };
 }
 export const programCover = (track?: ProgramTrack): string | undefined =>
   track?.source === 'local' && !track.offline ? coverUrl(track.id, 'thumb') : undefined;

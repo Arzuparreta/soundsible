@@ -1591,6 +1591,12 @@ def _deezer_track_to_catalog_item(row: dict[str, Any], library_keys: set[str] | 
         position = _positive_int(row.get(field), 999)
         if position:
             raw[key] = position
+    # And when the record came out, where the row was listed from one (an
+    # album page or a discography). A search row's album names no date, and
+    # a download keeps no year rather than the upload's.
+    year = _extract_year(album_row.get("release_date"))
+    if year and 1000 <= year <= 9999:
+        raw["year"] = year
     return _catalog_item(
         item_id=f"deezer:track:{deezer_id}",
         item_type="track",
@@ -1730,11 +1736,14 @@ def _deezer_album_profile(album_id: str, library_keys: set[str] | None = None) -
         "cover_xl": data.get("cover_xl"),
         "cover_big": data.get("cover_big"),
         "cover_medium": data.get("cover_medium"),
+        "release_date": data.get("release_date"),
     }
     tracklist: list[dict[str, Any]] = []
     for row in _deezer_album_tracks(album_id, embedded):
-        if not isinstance(row.get("album"), dict):
-            row = {**row, "album": this_album}
+        # A row's own album fields win; this record fills what it leaves out,
+        # including the release date its listing never carries.
+        own = row.get("album") if isinstance(row.get("album"), dict) else {}
+        row = {**row, "album": {**this_album, **{k: v for k, v in own.items() if v not in (None, "")}}}
         item = _deezer_track_to_catalog_item(row, library_keys)
         if item:
             tracklist.append(item)
@@ -1815,7 +1824,12 @@ def _deezer_artist_discography(artist_id: str) -> dict[str, Any]:
         if not rows:
             failures.append(release["title"])
             continue
-        this_release = {"id": release["deezer_id"], "title": release["title"], "cover_xl": release["cover"]}
+        this_release = {
+            "id": release["deezer_id"],
+            "title": release["title"],
+            "cover_xl": release["cover"],
+            "release_date": release.get("year"),
+        }
         songs: list[dict[str, Any]] = []
         for row in rows:
             item = _deezer_track_to_catalog_item({**row, "album": this_release})

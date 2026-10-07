@@ -32,7 +32,7 @@ vi.mock('./toast', () => ({ toast: {
   loading: () => ({ dismiss: mocks.dismiss }), error: mocks.error, success: vi.fn(),
 } }));
 
-import { playCatalogItem, useCatalogCollection } from './catalogItem';
+import { catalogContextTrack, playCatalogItem, useCatalogCollection } from './catalogItem';
 
 const item = (index: number): CatalogItem => ({
   id: `catalog:${index}`, title: `Song ${index}`, artist: 'Artist', type: 'track', source: 'deezer',
@@ -161,6 +161,18 @@ it('keeps Deezer artist and album identity through audio resolution', async () =
     id: '43S_qfT6vpo', artist: 'Extremoduro', artist_is_channel: false,
     deezer_artist_id: '4163', deezer_album_id: '89128',
   }));
+});
+
+it('carries where a song sits on its record into the track it plays as', async () => {
+  const raw = { deezer_id: '707777', track_number: 3, disc_number: 2, year: 2001 };
+  mocks.resolve.mockResolvedValue({ video_id: '43S_qfT6vpo' });
+  mocks.playTrack.mockClear();
+  await playCatalogItem({ ...item(1), album: 'Discovery', raw });
+  expect(mocks.playTrack).toHaveBeenCalledWith(expect.objectContaining({ track_number: 3, disc_number: 2, year: 2001 }));
+  // A row played later in a collection is queued before it resolves; it keeps them too.
+  expect(catalogContextTrack({ ...item(2), album: 'Discovery', raw })).toMatchObject({ track_number: 3, disc_number: 2, year: 2001 });
+  // A search row knows no position: nothing is made up.
+  expect(catalogContextTrack({ ...item(3), raw: { deezer_id: '1' } })).toMatchObject({ track_number: undefined, year: undefined });
 });
 
 it('plays an adapted YouTube row directly without another provider lookup', async () => {

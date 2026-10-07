@@ -92,6 +92,13 @@ export async function playCatalogItem(
  * reference in its place that the player matches before reaching it. Rows that
  * name no song at all — no artist, no title — cannot become either.
  */
+/** Where a catalog song sits on its record and when the record came out —
+ * what a download files it under. Only rows listed from a record carry them. */
+function releasePosition(item: CatalogItem): Pick<Track, 'track_number' | 'disc_number' | 'year'> {
+  const whole = (value: unknown) => (typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined);
+  return { track_number: whole(item.raw?.track_number), disc_number: whole(item.raw?.disc_number), year: whole(item.raw?.year) };
+}
+
 export function catalogContextTrack(item: CatalogItem): ContextTrack | null {
   const playable = itemToTrack(item);
   if (playable) return playable;
@@ -105,6 +112,7 @@ export function catalogContextTrack(item: CatalogItem): ContextTrack | null {
     album: item.album,
     artists: item.raw?.artists,
     album_artist: item.raw?.album_artist,
+    ...releasePosition(item),
     deezer_artist_id: music.deezerArtistId,
     deezer_album_id: music.deezerAlbumId,
     duration: item.duration,
@@ -157,7 +165,7 @@ export async function resolveCatalogTrack(item: CatalogItem, signal?: AbortSigna
   const music = catalogMusic(item);
   return {
     id: resolved.video_id, title: item.title, artist, album: item.album, artist_is_channel: false,
-    artists: item.raw?.artists, album_artist: item.raw?.album_artist,
+    artists: item.raw?.artists, album_artist: item.raw?.album_artist, ...releasePosition(item),
     deezer_artist_id: music.deezerArtistId, deezer_album_id: music.deezerAlbumId,
     duration: item.duration, cover: item.cover, source: 'preview', originKeys: catalogItemKeys(item),
     recommendation: item.raw?.recommendation,

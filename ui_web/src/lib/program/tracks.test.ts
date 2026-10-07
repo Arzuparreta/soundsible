@@ -17,3 +17,11 @@ it('keeps an unresolved catalogue identity in the native queue until playback', 
   const invalid = { ...pending, pendingResolve: { ...pending.pendingResolve, title: '' } };
   expect(programTrack(invalid)).toBeNull();
 });
+
+it('hands the native queue the record and the place on it, and nothing that is not one', () => {
+  const song = { id: 'AbCdEfGhIjK', title: 'Song', artist: 'Artist', album: 'Album', source: 'preview' } as Track;
+  expect(programTrack({ ...song, album_artist: 'Artist', track_number: 3, disc_number: 1, year: 2001 }))
+    .toMatchObject({ album_artist: 'Artist', track_number: 3, disc_number: 1, year: 2001 });
+  expect(programTrack({ ...song, track_number: 0, disc_number: 1.5, year: 20101012 }))
+    .toMatchObject({ track_number: undefined, disc_number: undefined, year: undefined });
+});

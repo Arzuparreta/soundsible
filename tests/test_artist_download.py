@@ -70,6 +70,8 @@ def test_the_discography_is_albums_then_singles_and_eps_each_song_once(deezer):
     # Kept on the album, not the single; the compilation never counts.
     assert discography["tracklist"][0]["album"] == "Discovery"
     assert discography["tracklist"][0]["external_ids"]["isrc"] == "GBDUW0000053"
+    # Each song carries the year of the record it is kept on.
+    assert [item["raw"].get("year") for item in discography["tracklist"]] == [2001, 2001, 2003]
     assert discography["partial_failures"] == ["Lost Tapes"]
     assert discography["truncated"] is False
 

@@ -1446,6 +1446,8 @@ def test_album_profile_lists_every_track_with_its_disc_and_position(monkeypatch)
     assert last["album"] == "Discovery"
     assert last["cover"] == "http://x/discovery.jpg"
     assert last["raw"]["deezer_album_id"] == "302127"
+    # When the record came out, which no track row of its listing names.
+    assert last["raw"]["year"] == 2001
     assert [params["index"] for path, params in calls if path.endswith("/tracks")] == [0, 20, 40]
 
 
@@ -1456,6 +1458,9 @@ def test_album_profile_keeps_the_embedded_tracks_when_the_listing_fails(monkeypa
 
     assert len(profile["tracklist"]) == 25
     assert "track_number" not in profile["tracklist"][0]["raw"]
+    # The embedded rows name their album without a date; the record supplies it.
+    assert profile["tracklist"][0]["raw"]["year"] == 2001
+    assert profile["tracklist"][0]["album"] == "Discovery"
 
 
 def test_catalog_save_files_the_download_under_the_record_it_came_from(monkeypatch):
