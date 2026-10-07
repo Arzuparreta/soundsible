@@ -115,6 +115,7 @@ export function LyricsPanelView(props: {
 
   const saveOffset = async (value: number | null) => {
     const key = lyricsKey();
+    const previous = { offset: offsetMs(), adjusting: adjusting() };
     setOffsetMs(value);
     setAdjusting(false);
     const target = !key ? null : key.inLibrary ? { trackId: key.id } : key.youtubeId ? { youtubeId: key.youtubeId } : null;
@@ -123,6 +124,12 @@ export function LyricsPanelView(props: {
     try {
       await api.setLyricsOffset({ ...target, offsetMs: value });
     } catch {
+      // Not saved, so not applied: the panel must not show a timing the engine
+      // will not give back — unless the listener has moved on to another song.
+      if (lyricsKey() === key) {
+        setOffsetMs(previous.offset);
+        setAdjusting(previous.adjusting);
+      }
       toast.error(t('lyricsPanel.timingSaveFailed'));
     }
   };

@@ -284,6 +284,17 @@ describe('LyricsPanel', () => {
       expect(api.setLyricsOffset).not.toHaveBeenCalled();
     });
 
+    it('keeps the old timing when the new one cannot be saved', async () => {
+      timed({ timing_safe: false, synced_duration: 236 });
+      api.setLyricsOffset.mockRejectedValueOnce(new Error('offline'));
+      state.playback.currentTime = 21;
+      render(() => <LyricsPanel />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Second line' }));
+      expect(await screen.findByText('lyricsPanel.alignHint')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Second line' })).not.toHaveAttribute('aria-current');
+    });
+
     it('forgets a saved offset on request', async () => {
       timed({ timing_safe: true, synced_duration: 236, offset_ms: 2_000 });
       render(() => <LyricsPanel />);
