@@ -44,6 +44,8 @@
   /* ── Status ── */
   --info: #3178c6;
   --success: #34c759;
+  /* Download activity stays green independently of the theme's brand accent. */
+  --download-ink: var(--success);
   --warning: #e0a72b;
   --danger: #ff453a;
 
@@ -266,6 +268,8 @@
 
 /* Light theme: token overrides only (every surface reads these vars). */
 :root[data-theme='light'] {
+  /* A darker green keeps the small ring above 3:1 on pale surfaces. */
+  --download-ink: #16803c;
   color-scheme: light;
   --bg-base: #f6f6f7;
   --bg-raised: #ffffff;

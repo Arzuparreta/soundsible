@@ -12,6 +12,10 @@
   animation-play-state: var(--decorative-animation-state, running);
 }
 
+.download {
+  border-top-color: var(--download-ink);
+}
+
 /* On a filled accent surface the hairline ring disappears — invert it. */
 .onAccent {
   border-color: rgba(255, 255, 255, 0.35);

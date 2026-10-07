@@ -6,6 +6,8 @@ export interface SpinnerProps {
   size?: number;
   /** Invert the ring for use on top of a filled accent surface. */
   onAccent?: boolean;
+  /** Green activity indicator for an in-progress download. */
+  tone?: 'download';
   /** Screen-reader label. Omit for spinners next to text that already says it. */
   label?: string;
   class?: string;
@@ -22,6 +24,7 @@ export function Spinner(props: SpinnerProps) {
     <span
       classList={{
         [styles.spinner]: true,
+        [styles.download]: props.tone === 'download',
         [styles.onAccent]: props.onAccent,
         ...(props.class ? { [props.class]: true } : {}),
       }}

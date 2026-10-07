@@ -84,7 +84,7 @@ export function CollectionButton(props: CollectionButtonProps) {
         when={state() !== 'downloading'}
         fallback={
           <span class={slotClass()}>
-            <Spinner size={props.compact ? 17 : 20} label={t('collection.downloading')} />
+            <Spinner size={props.compact ? 17 : 20} tone="download" label={t('collection.downloading')} />
           </span>
         }
       >
