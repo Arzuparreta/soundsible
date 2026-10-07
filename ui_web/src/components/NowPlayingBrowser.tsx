@@ -1399,8 +1399,8 @@ function NavigationRow(props: { title: string; subtitle: string; music?: MusicMe
     <Show when={!mobileListLayout()} fallback={<MusicListRow title={props.title} titlePath={props.destination ?? (props.music?.album ? albumDestination(props.music) : undefined)} subtitle={props.subtitle} music={props.music} seed={props.title}
       cover={props.cover} round={props.round} onActivate={props.onClick} onMenu={props.onMenu} />}>
     <div class={styles.navRow}><Show when={props.destination ?? (props.music?.album ? albumDestination(props.music) : undefined)} fallback={<button class={styles.rowActivate} type="button" aria-label={props.title} data-pressable {...tap} />}>{(path) => <MusicLink class={styles.rowActivate} path={path()} label={props.title} onMenu={props.onMenu} />}</Show>
-      <span classList={{ [styles.round]: props.round }} style={coverStyle(props.title, props.cover)} />
-      <span><strong>{props.title}</strong><small><Show when={props.music} fallback={props.subtitle}>{(music) => <ArtistLinks music={music()} />}</Show></small></span>
+      <span class={styles.navCover} classList={{ [styles.round]: props.round }} style={coverStyle(props.title, props.cover)} />
+      <span class={styles.navText}><strong>{props.title}</strong><small><Show when={props.music} fallback={props.subtitle}>{(music) => <ArtistLinks music={music()} />}</Show></small></span>
       <ChevronIcon />
     </div>
     </Show>
