@@ -172,4 +172,6 @@ it('gives a saved stream the place of the album row it is played from', () => {
   const single = actions.trackFor({ ...song, album: 'Song (Single)', raw: { track_number: 1 } });
   expect(single).toMatchObject({ album: 'Song (Single)', track_number: 1 });
   expect(single?.year).toBeUndefined(); expect(single?.album_artist).toBeUndefined();
+  // A plain search row names an album and nothing else: too little to overrule.
+  expect(actions.trackFor({ ...song, album: 'Song (Single)' })).toMatchObject({ album: 'Discovery', year: 2001 });
 });

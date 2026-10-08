@@ -1,6 +1,7 @@
 import type { Track } from '../../types/music';
 import { isMusicTrack, isPodcastTrack } from '../track';
 import { coverUrl } from '../media';
+import { withRecord, type ReleaseRecord } from '../catalogTrack';
 import type { ProgramTrack } from './runtime';
 
 /** The record and the song's place on it, for the native queue to show and
@@ -43,11 +44,16 @@ export function mixedProgram(tracks: Track[], selectedIndex: number): { tracks: 
 
 /** The song a native queue row stands for, for its menu. The library's own
  * track wins when it holds a file; a stream takes the record it is queued
- * with — whole, so two releases never mix — since that is where its download
- * will be filed. */
+ * with as `withRecord` allows, since that is where its download is filed. */
 export function queueTrack(entry: ProgramTrack, held?: Track): Track {
-  const record = entry.album ? { album: entry.album, album_artist: entry.album_artist, track_number: entry.track_number, disc_number: entry.disc_number, year: entry.year } : {};
-  if (held) return held.source === 'preview' ? { ...held, ...record } : held;
+  const record: ReleaseRecord = entry.album ? {
+    album: entry.album,
+    ...(entry.album_artist ? { album_artist: entry.album_artist } : {}),
+    ...(entry.track_number ? { track_number: entry.track_number } : {}),
+    ...(entry.disc_number ? { disc_number: entry.disc_number } : {}),
+    ...(entry.year ? { year: entry.year } : {}),
+  } : {};
+  if (held) return held.source === 'preview' ? withRecord(held, record) : held;
   return {
     id: entry.id, title: entry.title, artist: entry.artist, album: entry.album, duration: entry.duration, ...record,
     source: entry.source === 'preview' || entry.source === 'podcast' ? 'preview' : undefined,

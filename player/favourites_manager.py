@@ -89,23 +89,26 @@ _RELEASE_KEYS = ("album", "album_artist", *(name for name, _, _ in _RELEASE_FIEL
 def _fill_release(existing: Dict[str, Any], entry: Dict[str, Any]) -> None:
     """Fill an entry's record from another snapshot of the same song.
 
-    An entry that names no album takes the other's record whole. One that
-    names the same album takes only what it lacks. One that names another
-    album keeps its own: a single's title never meets an album's position.
+    Records never mix (the client's `withRecord` follows the same rule): the
+    same album fills in what is missing; another album replaces the record
+    whole, but only when it places the song on it — an album named and
+    nothing else is too little to overrule. An entry with no album takes any.
     """
     album = entry.get("album")
     if not album:
         return
     current = existing.get("album")
-    if not current:
-        for field in _RELEASE_KEYS:
-            existing.pop(field, None)
-            if field in entry:
-                existing[field] = entry[field]
-    elif current.casefold() == album.casefold():
-        for field in _RELEASE_KEYS:
+    if current and current.casefold() == album.casefold():
+        for field in _RELEASE_KEYS[1:]:
             if field in entry and not existing.get(field):
                 existing[field] = entry[field]
+        return
+    if current and not entry.get("track_number"):
+        return
+    for field in _RELEASE_KEYS:
+        existing.pop(field, None)
+        if field in entry:
+            existing[field] = entry[field]
 
 
 #: Dates the engine decides. A client payload never sets them; a stored entry

@@ -278,12 +278,17 @@ def test_a_saved_song_keeps_its_place_on_its_record(manager):
 
 
 def test_marking_a_song_never_mixes_two_records(manager):
-    # Saved from the single, which names no position; marked from the album.
+    # Saved from the single; marked from a search row naming the album only.
     manager.toggle_saved({"keys": ["isrc:X"], "album": "Song (Single)", "year": 2010})
-    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "album_artist": "Artist", "track_number": 4, "year": 2011})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "year": 2011})
     entry = manager.get_entries()[0]
     assert (entry["album"], entry["year"]) == ("Song (Single)", 2010)
-    assert not {"album_artist", "track_number"} & set(entry)
+    manager.set_favourite({"keys": ["isrc:X"], "favourite": False}, False)
+    # Marked from the album's own row, which places it: the record is replaced whole.
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "album_artist": "Artist", "track_number": 4})
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["album_artist"], entry["track_number"]) == ("Album", "Artist", 4)
+    assert "year" not in entry
 
 
 def test_marking_fills_a_record_from_the_same_album(manager):

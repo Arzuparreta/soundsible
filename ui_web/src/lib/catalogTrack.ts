@@ -76,3 +76,23 @@ export function catalogReleaseEvidence(item: CatalogItem): {
     ...(position.year ? { year: position.year } : {}),
   };
 }
+
+/** What a row or queue entry knows about the record a song is on. */
+export type ReleaseRecord = ReturnType<typeof catalogReleaseEvidence>;
+
+/**
+ * A stream's record, given what another view of the same song knows.
+ *
+ * Records never mix: the same album fills in what is missing; another album
+ * replaces the record whole, but only when it places the song on it — a row
+ * that names an album and nothing else (a plain search result) is too little
+ * to overrule a record that does. A stream that knows no album takes any.
+ */
+export function withRecord(track: Track, record: ReleaseRecord): Track {
+  const album = record.album?.trim();
+  if (!album) return track;
+  const current = track.album?.trim();
+  if (current && current.toLowerCase() === album.toLowerCase()) return { ...track, ...record, album: track.album };
+  if (current && !record.track_number) return track;
+  return { ...track, album_artist: undefined, track_number: undefined, disc_number: undefined, year: undefined, ...record };
+}

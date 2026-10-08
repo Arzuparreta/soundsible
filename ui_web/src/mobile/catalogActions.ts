@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onCleanup } from 'solid-js';
 import { api, ApiError } from '../lib/api';
-import { catalogReleaseEvidence, catalogTrack, itemArtist, releasePosition } from '../lib/catalogTrack';
+import { catalogReleaseEvidence, catalogTrack, itemArtist, withRecord } from '../lib/catalogTrack';
 import { buildIdentityIndex, catalogItemKeys, trackKeys } from '../lib/playbackIdentity';
 import { savedFromCatalogItem, savedFromTrack, savedToTrack } from '../lib/saved';
 import { programTrack } from '../lib/program/tracks';
@@ -45,21 +45,11 @@ export function createNativeCatalogActions(props: {
   let epoch = 0;
   let controller: AbortController | undefined;
   let disposed = false;
-  /** The record a catalog row names, for the native queue to carry to a
-   * download. A record is taken whole or not at all: a row that names no
-   * album leaves a saved snapshot alone, and one that does replaces it
-   * entirely, so two releases never mix. */
-  const withRelease = (item: CatalogItem): Partial<Track> => {
-    const album = item.album?.trim();
-    if (!album) return {};
-    const albumArtist = typeof item.raw?.album_artist === 'string' ? item.raw.album_artist.trim() : '';
-    return { album, album_artist: albumArtist || undefined, ...releasePosition(item) };
-  };
   /** A stream carries its record from the row it is played from; a file the
    * library already holds keeps its own tags. */
   const trackFor = (item: CatalogItem): Track | null => {
     const found = heldTrack(item);
-    return found?.source === 'preview' ? { ...found, ...withRelease(item) } : found;
+    return found?.source === 'preview' ? withRecord(found, catalogReleaseEvidence(item)) : found;
   };
   const heldTrack = (item: CatalogItem): Track | null => {
     const immediate = catalogTrack(item, props.tracks());
@@ -107,7 +97,7 @@ export function createNativeCatalogActions(props: {
     const original = savedFromCatalogItem(item);
     const entry = { ...original, keys: [...new Set([...original.keys, `yt:${result.video_id}`])] };
     const found = savedToTrack(entry, libraryIndex());
-    const track = found?.source === 'preview' ? { ...found, ...withRelease(item) } : found;
+    const track = found?.source === 'preview' ? withRecord(found, catalogReleaseEvidence(item)) : found;
     if (track) { const linked = new Map(resolvedTracks()); linked.set(item.id, track); setResolvedTracks(linked); }
     return { entry, track };
   }
@@ -183,7 +173,7 @@ export function createNativeCatalogActions(props: {
       if (!current()) return;
       if (!selected || !programTrack(selected)) throw new Error('Selected recording unavailable');
       const tracks = items.map((item, index): import('../lib/playbackQueue').ContextTrack => index === selectedIndex ? selected : trackFor(item) ?? {
-        id: item.id, title: item.title, artist: itemArtist(item), album: item.album, duration: item.duration, cover: item.cover, ...withRelease(item),
+        id: item.id, title: item.title, artist: itemArtist(item), album: item.album, duration: item.duration, cover: item.cover, ...catalogReleaseEvidence(item),
         pendingResolve: { catalogItemId: item.id, title: item.title, artist: itemArtist(item), duration: item.duration },
       });
       if (context || shuffle) await props.onPlayCollection(tracks, selectedIndex, context, shuffle);
