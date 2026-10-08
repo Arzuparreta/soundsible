@@ -14,7 +14,7 @@ def _download(tmp_path, monkeypatch, *, tags: dict, hint: dict):
     monkeypatch.setattr("shared.audio_files.AudioProcessor.read_tags", lambda _path: dict(tags))
     monkeypatch.setattr(
         "shared.audio_files.AudioProcessor.embed_metadata",
-        lambda _path, metadata, _cover: embedded.append(dict(metadata)),
+        lambda _path, metadata, _cover, clear=(): embedded.append(dict(metadata, _cleared=sorted(clear))),
     )
     monkeypatch.setattr("shared.audio_files.AudioProcessor.calculate_hash", lambda _path: "content-hash")
 
@@ -71,4 +71,6 @@ def test_a_record_named_alone_does_not_inherit_the_uploads_place(tmp_path, monke
     assert track.album == "Discovery"
     assert (track.album_artist, track.disc_number, track.year) == (None, None, None)
     assert track.track_number == 1
-    assert not {"album_artist", "disc_number", "year"} & {key for key, value in embedded.items() if value}
+    assert not {"album_artist", "disc_number", "year"} & {key for key, value in embedded.items() if value and key != "_cleared"}
+    # ...and the file loses the upload's tags for them.
+    assert embedded["_cleared"] == ["album_artist", "disc_number", "year"]

@@ -147,15 +147,18 @@ class YouTubeDownloader:
         try:
             report({"phase": "processing", "percent": 92.0})
             duration, bitrate, _size = AudioProcessor.audio_details(str(temp_file))
+            file_tags = AudioProcessor.read_tags(str(temp_file))
             meta = video_metadata(
-                AudioProcessor.read_tags(str(temp_file)),
+                file_tags,
                 metadata_hint,
                 duration,
                 peek=lambda: search.peek_video_metadata(url, self.cookies),
             )
+            # A field the upload had and the chosen record drops leaves the file too.
+            dropped = [key for key in ("album_artist", "year", "track_number", "disc_number") if file_tags.get(key) and not meta.get(key)]
             try:
                 # No cover URL: keep the artwork yt-dlp embedded; mqdefault would replace it.
-                AudioProcessor.embed_metadata(str(temp_file), meta, None)
+                AudioProcessor.embed_metadata(str(temp_file), meta, None, clear=dropped)
             except Exception as e:
                 logger.warning("Could not re-embed metadata on downloaded file: %s", e)
             report({"phase": "processing", "percent": 97.0})

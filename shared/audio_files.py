@@ -11,7 +11,7 @@ import hashlib
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, FrozenSet, Iterable, Optional, Tuple
 
 import mutagen
 from mutagen import File as MutagenFile
@@ -32,6 +32,14 @@ from shared.musicbrainz import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: The tags each release field is read from, per format: what `clear` removes.
+_ID3_RELEASE_FRAMES = {"album_artist": ("TPE2",), "year": ("TDRC", "TYER"), "track_number": ("TRCK",), "disc_number": ("TPOS",)}
+_VORBIS_RELEASE_TAGS = {
+    "album_artist": ("albumartist", "album artist"), "year": ("date",), "track_number": ("tracknumber",),
+    "disc_number": ("discnumber", "disctotal", "totaldiscs"),
+}
+_MP4_RELEASE_TAGS = {"album_artist": ("aART",), "year": ("\xa9day",), "track_number": ("trkn",), "disc_number": ("disk",)}
 
 _TRUE_TAG_VALUES = {"1", "true", "yes"}
 
@@ -207,8 +215,17 @@ class AudioProcessor:
         return tags["duration"], tags["bitrate"], Path(file_path).stat().st_size
 
     @staticmethod
-    def embed_metadata(file_path: str, metadata: Dict[str, Any], cover_url: Optional[str] = None) -> None:
+    def embed_metadata(
+        file_path: str,
+        metadata: Dict[str, Any],
+        cover_url: Optional[str] = None,
+        clear: Iterable[str] = (),
+    ) -> None:
         """Write tags (and a cover from `cover_url`) into the file.
+
+        Writing never removes a tag on its own; `clear` names the fields
+        (`album_artist`, `year`, `track_number`, `disc_number`) whose tags are
+        removed first — what a download filed under another record drops.
 
         MP3, FLAC, MP4/M4A, Ogg Vorbis and Opus. WebM is left as it is:
         mutagen cannot write Matroska tags. Writing changes the file's hash, so
@@ -234,14 +251,15 @@ class AudioProcessor:
             except Exception:
                 pass
         suffix = Path(file_path).suffix.lower()
+        cleared = frozenset(clear)
         if suffix == ".mp3":
-            AudioProcessor._embed_mp3(file_path, metadata, cover_data)
+            AudioProcessor._embed_mp3(file_path, metadata, cover_data, cleared)
         elif suffix == ".flac":
-            AudioProcessor._embed_flac(file_path, metadata, cover_data)
+            AudioProcessor._embed_flac(file_path, metadata, cover_data, cleared)
         elif suffix in (".m4a", ".mp4"):
-            AudioProcessor._embed_mp4(file_path, metadata, cover_data)
+            AudioProcessor._embed_mp4(file_path, metadata, cover_data, cleared)
         elif suffix in (".ogg", ".opus"):
-            AudioProcessor._embed_ogg(file_path, metadata, cover_data)
+            AudioProcessor._embed_ogg(file_path, metadata, cover_data, cleared)
         if original:
             store.bind(
                 AudioProcessor.calculate_hash(file_path), original,
@@ -264,7 +282,11 @@ class AudioProcessor:
         return disc
 
     @staticmethod
-    def _write_vorbis(audio: Any, metadata: Dict[str, Any]) -> None:
+    def _write_vorbis(audio: Any, metadata: Dict[str, Any], clear: FrozenSet[str] = frozenset()) -> None:
+        for field in clear:
+            for key in _VORBIS_RELEASE_TAGS.get(field, ()):
+                if key in audio:
+                    del audio[key]
         """Vorbis comments: FLAC, Ogg Vorbis and Opus all carry these."""
         if metadata.get("title"):
             audio["title"] = metadata["title"]
@@ -301,10 +323,10 @@ class AudioProcessor:
         return image
 
     @staticmethod
-    def _embed_flac(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]) -> None:
+    def _embed_flac(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes], clear: FrozenSet[str] = frozenset()) -> None:
         try:
             audio = FLAC(file_path)
-            AudioProcessor._write_vorbis(audio, metadata)
+            AudioProcessor._write_vorbis(audio, metadata, clear)
             if cover_data:
                 try:
                     audio.add_picture(AudioProcessor._cover_picture(cover_data))
@@ -315,14 +337,14 @@ class AudioProcessor:
             logger.warning("Could not write FLAC tags to %s: %s", file_path, e)
 
     @staticmethod
-    def _embed_ogg(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]) -> None:
+    def _embed_ogg(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes], clear: FrozenSet[str] = frozenset()) -> None:
         try:
             audio = MutagenFile(file_path)
             if not isinstance(audio, (OggVorbis, OggOpus)):
                 return
             if audio.tags is None:
                 audio.add_tags()
-            AudioProcessor._write_vorbis(audio.tags, metadata)
+            AudioProcessor._write_vorbis(audio.tags, metadata, clear)
             if cover_data:
                 import base64
 
@@ -333,12 +355,16 @@ class AudioProcessor:
             logger.warning("Could not write Ogg tags to %s: %s", file_path, e)
 
     @staticmethod
-    def _embed_mp4(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]) -> None:
+    def _embed_mp4(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes], clear: FrozenSet[str] = frozenset()) -> None:
         try:
             audio = MP4(file_path)
             if audio.tags is None:
                 audio.add_tags()
             tags = audio.tags
+            for field in clear:
+                for key in _MP4_RELEASE_TAGS.get(field, ()):
+                    if key in tags:
+                        del tags[key]
             if metadata.get("title"):
                 tags["\xa9nam"] = [metadata["title"]]
             artists = metadata.get("artists")
@@ -370,13 +396,16 @@ class AudioProcessor:
             logger.warning("Could not write MP4 tags to %s: %s", file_path, e)
 
     @staticmethod
-    def _embed_mp3(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes]) -> None:
+    def _embed_mp3(file_path: str, metadata: Dict[str, Any], cover_data: Optional[bytes], clear: FrozenSet[str] = frozenset()) -> None:
         try:
             audio = MP3(file_path, ID3=ID3)
         except mutagen.MutagenError:
             audio = MP3(file_path)
             audio.add_tags()
         tags = audio.tags
+        for field in clear:
+            for frame in _ID3_RELEASE_FRAMES.get(field, ()):
+                tags.delall(frame)
         if metadata.get("title"):
             tags.add(TIT2(encoding=3, text=metadata["title"]))
         artists = metadata.get("artists")

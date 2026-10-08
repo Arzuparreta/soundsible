@@ -31,7 +31,7 @@ def test_video_acquisition_embeds_and_preserves_the_recording_mbid(tmp_path, mon
     )
     monkeypatch.setattr(
         "shared.audio_files.AudioProcessor.embed_metadata",
-        lambda _path, metadata, _cover: embedded.append(dict(metadata)),
+        lambda _path, metadata, _cover, clear=(): embedded.append(dict(metadata)),
     )
     monkeypatch.setattr(
         "shared.audio_files.AudioProcessor.calculate_hash",
