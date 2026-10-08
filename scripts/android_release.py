@@ -21,6 +21,7 @@ from zipfile import ZipFile
 import xml.etree.ElementTree as ET
 
 import android as build
+from download_retry import Rejected, fetch
 from version_sync import declared_version, sync
 
 ROOT = build.ROOT
@@ -292,10 +293,16 @@ def await_link_payload(phase: str, title: str, artist: str) -> None:
 def app_links() -> None:
     _, signing = gates()
     url = f"https://{HOST}/.well-known/assetlinks.json"
-    with urlopen(url, timeout=30) as response:
+
+    def exact(response: object, body: bytes) -> None:
         if response.geturl() != url or response.headers.get_content_type() != "application/json":
-            raise RuntimeError("assetlinks.json redirected or has the wrong content type")
-        statements = json.load(response)
+            raise Rejected("assetlinks.json redirected or has the wrong content type")
+        try:
+            json.loads(body)
+        except ValueError as error:
+            raise Rejected(f"assetlinks.json is not JSON: {error}") from error
+
+    statements = json.loads(fetch([url], max_bytes=1024 * 1024, validate=exact, timeout=30, what="assetlinks.json"))
     if not any(
         "delegate_permission/common.handle_all_urls" in row.get("relation", [])
         and row.get("target", {}).get("package_name") == PACKAGE
