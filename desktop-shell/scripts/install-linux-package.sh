@@ -23,10 +23,9 @@ case "$distro" in
     ;;
   fedora)
     dnf -y install ffmpeg-free
-    # Fedora's WebKitWebDriver ships with WebKitGTK 6.0; it drives a 4.1
-    # WebView of the same WebKit release.
+    # Fedora, like Arch, packages WebKitWebDriver only with WebKitGTK 6.0.
     dnf -y install "$packages"/*.rpm webkitgtk6.0 xorg-x11-server-Xvfb xorg-x11-xauth \
-      dbus-daemon dbus-tools pulseaudio pulseaudio-utils scrot python3 procps-ng systemd
+      dbus-daemon dbus-tools pulseaudio pulseaudio-utils scrot python3 procps-ng systemd util-linux
     ;;
   arch)
     pacman -Syu --noconfirm --needed base-devel python ffmpeg webkitgtk-6.0 \
