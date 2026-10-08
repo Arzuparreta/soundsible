@@ -139,8 +139,8 @@ jobs:
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
         run: |
           package=$(dpkg-deb -f desktop-shell/src-tauri/target/release/bundle/deb/*.deb Package)
-          app=$(dpkg -L "$package" | rg '/bin/soundsible-desktop$')
-          engine=$(dpkg -L "$package" | rg '/bin/soundsible-engine$')
+          app=$(dpkg -L "$package" | grep -E '/bin/soundsible-desktop$')
+          engine=$(dpkg -L "$package" | grep -E '/bin/soundsible-engine$')
           test -x "$app"
           test -x "$engine"
           mkdir -p "$RUNNER_TEMP/linux-ui"
