@@ -49,7 +49,7 @@ export function createNativeCatalogActions(props: {
    * library already holds keeps its own tags. */
   const trackFor = (item: CatalogItem): Track | null => {
     const found = heldTrack(item);
-    return found?.source === 'preview' ? withRecord(found, catalogReleaseEvidence(item)) : found;
+    return found?.source === 'preview' ? withRecord(found, catalogReleaseEvidence(item), item.cover) : found;
   };
   const heldTrack = (item: CatalogItem): Track | null => {
     const immediate = catalogTrack(item, props.tracks());
@@ -97,7 +97,7 @@ export function createNativeCatalogActions(props: {
     const original = savedFromCatalogItem(item);
     const entry = { ...original, keys: [...new Set([...original.keys, `yt:${result.video_id}`])] };
     const found = savedToTrack(entry, libraryIndex());
-    const track = found?.source === 'preview' ? withRecord(found, catalogReleaseEvidence(item)) : found;
+    const track = found?.source === 'preview' ? withRecord(found, catalogReleaseEvidence(item), item.cover) : found;
     if (track) { const linked = new Map(resolvedTracks()); linked.set(item.id, track); setResolvedTracks(linked); }
     return { entry, track };
   }

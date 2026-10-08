@@ -120,8 +120,8 @@ def _fill_release(existing: Dict[str, Any], entry: Dict[str, Any]) -> None:
         return
     if current and not entry.get("track_number"):
         return
-    # The cover is the record's too: a new record brings its own.
-    for field in (*_RELEASE_KEYS, *(("thumbnail",) if entry.get("thumbnail") else ())):
+    # The cover is the record's too: a new record brings its own, or none.
+    for field in (*_RELEASE_KEYS, "thumbnail"):
         existing.pop(field, None)
         if field in entry:
             existing[field] = entry[field]
@@ -279,7 +279,7 @@ class FavouritesManager:
             if bool(existing.get("favourite")) == resolved:
                 # Already marked from another device: what this one knows
                 # about the song still counts.
-                if _fill_snapshot(existing, entry):
+                if self._fill_all(entry):
                     self._persist()
                 return resolved
             if not resolved and any(k.startswith(LIB_PREFIX) for k in existing["keys"]):
@@ -293,9 +293,16 @@ class FavouritesManager:
                 return False
             existing["favourite"] = resolved
             _stamp_mark(existing)
-            _fill_snapshot(existing, entry)
+            self._fill_all(entry)
             self._persist()
             return resolved
+
+    def _fill_all(self, entry: Dict[str, Any]) -> bool:
+        """Fill every held copy of a song from `entry`. Under the lock."""
+        filled = False
+        for match in self._find_all(entry["keys"]):
+            filled = _fill_snapshot(match, entry) or filled
+        return filled
 
     def is_saved_keys(self, keys: Iterable[str]) -> bool:
         """Is any of these identities in the library (file or not)?"""

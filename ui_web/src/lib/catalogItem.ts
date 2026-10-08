@@ -1,5 +1,5 @@
 import { catalogTrack, itemArtist, releasePosition } from './catalogTrack';
-export { catalogReleaseEvidence, releasePosition } from './catalogTrack';
+export { catalogReleaseEvidence } from './catalogTrack';
 import { catalogMusic } from './musicNavigation';
 import { createSignal } from 'solid-js';
 import { api } from './api';

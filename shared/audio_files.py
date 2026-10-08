@@ -34,12 +34,18 @@ from shared.musicbrainz import (
 logger = logging.getLogger(__name__)
 
 #: The tags each release field is read from, per format: what `clear` removes.
-_ID3_RELEASE_FRAMES = {"album_artist": ("TPE2",), "year": ("TDRC", "TYER"), "track_number": ("TRCK",), "disc_number": ("TPOS",)}
+_ID3_RELEASE_FRAMES = {
+    "album_artist": ("TPE2",), "year": ("TDRC", "TYER"), "track_number": ("TRCK",), "disc_number": ("TPOS",),
+    "is_compilation": ("TCMP",),
+}
 _VORBIS_RELEASE_TAGS = {
     "album_artist": ("albumartist", "album artist"), "year": ("date",), "track_number": ("tracknumber",),
-    "disc_number": ("discnumber", "disctotal", "totaldiscs"),
+    "disc_number": ("discnumber", "disctotal", "totaldiscs"), "is_compilation": ("compilation",),
 }
-_MP4_RELEASE_TAGS = {"album_artist": ("aART",), "year": ("\xa9day",), "track_number": ("trkn",), "disc_number": ("disk",)}
+_MP4_RELEASE_TAGS = {
+    "album_artist": ("aART",), "year": ("\xa9day",), "track_number": ("trkn",), "disc_number": ("disk",),
+    "is_compilation": ("cpil",),
+}
 
 _TRUE_TAG_VALUES = {"1", "true", "yes"}
 
@@ -224,7 +230,7 @@ class AudioProcessor:
         """Write tags (and a cover from `cover_url`) into the file.
 
         Writing never removes a tag on its own; `clear` names the fields
-        (`album_artist`, `year`, `track_number`, `disc_number`) whose tags are
+        (`album_artist`, `year`, `track_number`, `disc_number`, `is_compilation`) whose tags are
         removed first — what a download filed under another record drops.
 
         MP3, FLAC, MP4/M4A, Ogg Vorbis and Opus. WebM is left as it is:

@@ -356,3 +356,16 @@ def test_adding_an_album_fills_in_every_duplicate(manager):
     manager.set_saved([{"keys": ["isrc:X", "yt:vid"], "album": "Album", "track_number": 4}], True, enriched)
     assert len(enriched) == 2
     assert all(entry.get("track_number") == 4 for entry in manager.get_entries())
+
+
+def test_a_heart_fills_in_every_duplicate(manager):
+    manager._entries = [{"keys": ["isrc:X"], "title": "Song"}, {"keys": ["yt:vid"], "title": "Song"}]
+    manager._reindex()
+    manager.set_favourite({"keys": ["isrc:X", "yt:vid"], "album": "Album", "track_number": 4}, True)
+    assert all(entry.get("track_number") == 4 for entry in manager.get_entries())
+
+
+def test_a_new_record_without_a_cover_drops_the_old_one(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Song (Single)", "thumbnail": "https://example.invalid/single.jpg"})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4}, True)
+    assert "thumbnail" not in manager.get_entries()[0]

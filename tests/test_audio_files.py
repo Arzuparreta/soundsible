@@ -126,10 +126,12 @@ def test_clearing_removes_a_records_tags_from_the_file(tmp_path, suffix):
     # A download filed under another record must not keep the upload's place.
     path = _encode(tmp_path / f"song{suffix}", "title=Song", "album=Single", "album_artist=Upload Artist",
                    "date=2014", "track=2", "disc=2")
+    AudioProcessor.embed_metadata(str(path), {"title": "Song", "is_compilation": True})
+    assert AudioProcessor.read_tags(str(path))["is_compilation"] is True
 
     AudioProcessor.embed_metadata(str(path), {"title": "Song", "album": "Album", "track_number": 1},
-                                  clear=("album_artist", "year", "disc_number"))
+                                  clear=("album_artist", "year", "disc_number", "is_compilation"))
 
     tags = AudioProcessor.read_tags(str(path))
     assert (tags["album"], tags["track_number"]) == ("Album", 1)
-    assert (tags["album_artist"], tags["year"], tags["disc_number"]) == (None, None, None)
+    assert (tags["album_artist"], tags["year"], tags["disc_number"], tags["is_compilation"]) == (None, None, None, False)

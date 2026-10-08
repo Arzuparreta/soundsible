@@ -155,7 +155,10 @@ class YouTubeDownloader:
                 peek=lambda: search.peek_video_metadata(url, self.cookies),
             )
             # A field the upload had and the chosen record drops leaves the file too.
-            dropped = [key for key in ("album_artist", "year", "track_number", "disc_number") if file_tags.get(key) and not meta.get(key)]
+            dropped = [
+                key for key in ("album_artist", "year", "track_number", "disc_number", "is_compilation")
+                if file_tags.get(key) and not meta.get(key)
+            ]
             try:
                 # No cover URL: keep the artwork yt-dlp embedded; mqdefault would replace it.
                 AudioProcessor.embed_metadata(str(temp_file), meta, None, clear=dropped)

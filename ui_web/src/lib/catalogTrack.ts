@@ -88,7 +88,7 @@ export type ReleaseRecord = ReturnType<typeof catalogReleaseEvidence>;
  * that names an album and nothing else (a plain search result) is too little
  * to overrule a record that does. A stream that knows no album takes any.
  */
-export function withRecord(track: Track, record: ReleaseRecord): Track {
+export function withRecord(track: Track, record: ReleaseRecord, cover?: string): Track {
   const album = record.album?.trim();
   if (!album) return track;
   const current = track.album?.trim();
@@ -102,5 +102,6 @@ export function withRecord(track: Track, record: ReleaseRecord): Track {
     };
   }
   if (current && !record.track_number) return track;
-  return { ...track, album_artist: undefined, track_number: undefined, disc_number: undefined, year: undefined, ...record };
+  // The cover is the record's too: a new record brings its own, or none.
+  return { ...track, album_artist: undefined, track_number: undefined, disc_number: undefined, year: undefined, cover, ...record };
 }

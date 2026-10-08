@@ -90,11 +90,12 @@ def video_metadata(
             meta["duration_sec"] = hint["duration_sec"]
         if hint.get("album") is not None:
             album = _hint_str(hint.get("album"))
-            if album.casefold() != _hint_str(meta.get("album")).casefold():
-                # Another record: the upload's place and date on its own one
-                # do not carry over. Records never mix.
+            if album and album.casefold() != _hint_str(meta.get("album")).casefold():
+                # Another record: the upload's place, date and compilation
+                # flag on its own one do not carry over. Records never mix.
                 for key in ("album_artist", "track_number", "disc_number", "year"):
                     meta.pop(key, None)
+                meta["is_compilation"] = False
             meta["album"] = album
         album_artist = _hint_str(hint.get("album_artist"))
         if album_artist:

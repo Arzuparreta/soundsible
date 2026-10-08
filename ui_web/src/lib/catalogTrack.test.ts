@@ -43,6 +43,10 @@ it('never mixes two records on one stream', () => {
   const single = withRecord(saved, { album: 'Song (Single)', track_number: 1 });
   expect(single).toMatchObject({ album: 'Song (Single)', track_number: 1 });
   expect([single.album_artist, single.year]).toEqual([undefined, undefined]);
+  // Its cover goes with the old record.
+  expect(withRecord({ ...saved, cover: 'album.jpg' }, { album: 'Song (Single)', track_number: 1 }, 'single.jpg').cover).toBe('single.jpg');
+  expect(withRecord({ ...saved, cover: 'album.jpg' }, { album: 'Song (Single)', track_number: 1 }).cover).toBeUndefined();
+  expect(withRecord({ ...saved, cover: 'album.jpg' }, { album: 'Album', disc_number: 1 }, 'other.jpg').cover).toBe('album.jpg');
   // Another album named and nothing else is too little to overrule.
   expect(withRecord(saved, { album: 'Song (Single)', year: 2010 })).toBe(saved);
   // No album named, nothing changes; a stream with no album takes any.
