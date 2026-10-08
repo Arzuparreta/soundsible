@@ -72,8 +72,7 @@ class LiveRelayTest {
             sessionId = room.getString("id")
             publisher = LivePeer(context, connection, room.getString("whip_url"), room.getString("publish_token"), true, {})
             publisher.start()
-            receiver = LivePeer(context, connection, room.getString("whep_url"), null, false, {}, sink)
-            receiver.start()
+            receiver = startLiveReader(context, connection, room.getString("whep_url"), sink)
             await("Relay did not decode programme") { rms.get() > 500 }
             // Rejected second broadcaster must not steal or close the active capture.
             val duplicate = LivePeer(context, connection, room.getString("whip_url"), room.getString("publish_token"), true, {})

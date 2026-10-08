@@ -106,8 +106,7 @@ class LiveHostTest {
             fun publicRoom(): JSONObject = publicClient.newCall(okhttp3.Request.Builder().url("https://10.0.2.2:58443/v1/sessions/$sessionId").build()).execute().use {
                 check(it.isSuccessful); JSONObject(it.body!!.string()).getJSONObject("session")
             }
-            receiver = LivePeer(context, connection, room.getString("whep_url"), null, false, {}, sink)
-            receiver.start()
+            receiver = startLiveReader(context, connection, room.getString("whep_url"), sink)
             await("Relay did not decode programme") { rms.get() > 500 }
             await("Host did not publish authoritative metadata") {
                 val programme = publicRoom().optJSONObject("program")
@@ -161,8 +160,7 @@ class LiveHostTest {
                 }
                 await("Publisher relay cut was not observed") { !hostConnected() }
                 await("Automatic publisher recovery failed") { hostConnected() }
-                receiver = LivePeer(context, connection, room.getString("whep_url"), null, false, {}, sink)
-                receiver!!.start(); rms.set(0.0)
+                receiver = startLiveReader(context, connection, room.getString("whep_url"), sink); rms.set(0.0)
                 await("Recovered publisher has no relay PCM") { rms.get() > 500 }
                 assertEquals("Recovery changed room identity", sessionId, publicRoom().getString("id"))
             }

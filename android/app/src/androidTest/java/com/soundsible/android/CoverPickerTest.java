@@ -120,8 +120,19 @@ public class CoverPickerTest {
             awaitApp();waitFor(web,scenario,"!!document.querySelector('[data-track-metadata-editor]') && !Array.from(document.querySelectorAll('[data-track-metadata-editor] button')).some(b=>b.disabled)");assertArrayEquals("Cancelling the OS picker must not write cover",original,cover(connection,origin));
             String filename="soundsible-picker-"+java.util.UUID.randomUUID()+".png";var values=new ContentValues();values.put(MediaStore.Images.Media.DISPLAY_NAME,filename);values.put(MediaStore.Images.Media.MIME_TYPE,"image/png");values.put(MediaStore.Images.Media.RELATIVE_PATH,Environment.DIRECTORY_PICTURES+"/SoundsibleFixture");values.put(MediaStore.Images.Media.DATE_TAKEN,System.currentTimeMillis());
             imageUri=context.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);assertNotNull(imageUri);var bitmap=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888);bitmap.eraseColor(0xffff00ff);var paint=new android.graphics.Paint();paint.setColor(0xff008000);new android.graphics.Canvas(bitmap).drawRect(4,4,28,28,paint);try(var output=context.getContentResolver().openOutputStream(imageUri)){assertNotNull(output);assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,output));}finally{bitmap.recycle();}
-            touch(web,scenario,upload);chooseSeededImage();awaitApp();
-            long changedUntil=System.nanoTime()+TimeUnit.SECONDS.toNanos(20);while(java.util.Arrays.equals(original,cover(connection,origin))){assertTrue("Selected image was not uploaded through the OS content grant",System.nanoTime()<changedUntil);Thread.sleep(100);}
+            // A just-inserted image can reach the picker before MediaProvider can
+            // open it ("Failed to prepare synthetic picker path"): the grant then
+            // names a URI nobody can read and nothing is uploaded. That is the
+            // platform's race with this test's seeding, so the choice is made
+            // again once, as a person would, before the upload is judged.
+            for(int attempt=0;;attempt++){
+                touch(web,scenario,upload);chooseSeededImage();awaitApp();
+                long changedUntil=System.nanoTime()+TimeUnit.SECONDS.toNanos(20);boolean changed=false;
+                while(System.nanoTime()<changedUntil&&!(changed=!java.util.Arrays.equals(original,cover(connection,origin))))Thread.sleep(100);
+                if(changed)break;
+                assertTrue("Selected image was not uploaded through the OS content grant",attempt==0);
+                waitFor(web,scenario,"!!document.querySelector('[data-track-metadata-editor]') && !Array.from(document.querySelectorAll('[data-track-metadata-editor] button')).some(b=>b.disabled)");
+            }
             waitFor(web,scenario,"!!document.querySelector('[data-track-metadata-editor]') && !Array.from(document.querySelectorAll('[data-track-metadata-editor] button')).some(b=>b.disabled)");assertEquals("null",web.evaluate(scenario,"document.querySelector('[data-track-metadata-editor] [role=alert]')"));
             try(var loader=new ProgramArtwork(connection)){var bitmapAfter=loader.loadBitmap(ProgramArtwork.Companion.uri(connection.getGeneration(),"member-track",java.util.UUID.randomUUID().toString())).get(10,TimeUnit.SECONDS);ArtworkTest.assertColor(0xff008000,bitmapAfter.getPixel(bitmapAfter.getWidth()/2,bitmapAfter.getHeight()/2));}
             assertEquals("false",web.evaluate(scenario,"!!document.querySelector('audio')"));
