@@ -93,7 +93,7 @@ def video_metadata(
             if album and album.casefold() != _hint_str(meta.get("album")).casefold():
                 # Another record: the upload's place, date and compilation
                 # flag on its own one do not carry over. Records never mix.
-                for key in ("album_artist", "track_number", "disc_number", "year"):
+                for key in ("album_artist", "track_number", "disc_number", "disc_total", "year"):
                     meta.pop(key, None)
                 meta["is_compilation"] = False
             meta["album"] = album
