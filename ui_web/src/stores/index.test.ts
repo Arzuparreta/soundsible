@@ -574,7 +574,9 @@ describe('Solid store library and playback resume', () => {
 
     await actions.syncLibrary();
     const staleSync = actions.syncLibrary();
-    await Promise.resolve();
+    // The stale request must be the one in flight before the delete, however
+    // many ticks the sync takes to ask for it.
+    await vi.waitFor(() => expect(getLibrary).toHaveBeenCalledTimes(2));
     await actions.deleteTrack('t1');
     expect(state.library.map((t) => t.id)).toEqual(['t2']);
 
