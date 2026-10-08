@@ -86,6 +86,21 @@ _RELEASE_FIELDS = (("track_number", 1, 999), ("disc_number", 1, 99), ("year", 10
 _RELEASE_KEYS = ("album", "album_artist", *(name for name, _, _ in _RELEASE_FIELDS))
 
 
+def _fill_snapshot(existing: Dict[str, Any], entry: Dict[str, Any]) -> bool:
+    """Fill a saved entry's snapshot from another one of the same song.
+
+    A song saved bare (＋ from a search row) has no snapshot worth the name;
+    the heart usually arrives from a surface that has one. Returns whether
+    anything changed.
+    """
+    before = dict(existing)
+    for field in ("title", "artist", "thumbnail", "duration"):
+        if field in entry and not existing.get(field):
+            existing[field] = entry[field]
+    _fill_release(existing, entry)
+    return existing != before
+
+
 def _fill_release(existing: Dict[str, Any], entry: Dict[str, Any]) -> None:
     """Fill an entry's record from another snapshot of the same song.
 
@@ -248,6 +263,10 @@ class FavouritesManager:
                 return entry["favourite"]
             resolved = (not existing.get("favourite")) if favourite is None else bool(favourite)
             if bool(existing.get("favourite")) == resolved:
+                # Already marked from another device: what this one knows
+                # about the song still counts.
+                if _fill_snapshot(existing, entry):
+                    self._persist()
                 return resolved
             if not resolved and any(k.startswith(LIB_PREFIX) for k in existing["keys"]):
                 # The library already holds this song as a file, so the entry was
@@ -260,12 +279,7 @@ class FavouritesManager:
                 return False
             existing["favourite"] = resolved
             _stamp_mark(existing)
-            # A song saved bare (＋ from a search row) has no snapshot worth the
-            # name; the heart usually arrives from a surface that has one.
-            for field in ("title", "artist", "thumbnail", "duration"):
-                if field in entry and not existing.get(field):
-                    existing[field] = entry[field]
-            _fill_release(existing, entry)
+            _fill_snapshot(existing, entry)
             self._persist()
             return resolved
 

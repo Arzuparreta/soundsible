@@ -319,3 +319,12 @@ def test_marking_a_bare_save_fills_in_its_place_on_the_record(manager):
     manager.set_favourite({"keys": ["yt:vid"], "album": "Album", "track_number": 4, "year": 1999})
     entry = manager.get_entries()[0]
     assert (entry["track_number"], entry["year"]) == (4, 1999)
+
+
+def test_a_mark_already_set_elsewhere_still_fills_the_record(manager):
+    # Another device marked the bare save first; this one knows the album row.
+    manager.toggle_saved({"keys": ["isrc:X"]})
+    manager.set_favourite({"keys": ["isrc:X"]}, True)
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4, "year": 2011}, True)
+    entry = manager.get_entries()[0]
+    assert (entry["favourite"], entry["album"], entry["track_number"], entry["year"]) == (True, "Album", 4, 2011)

@@ -37,6 +37,8 @@ it('never mixes two records on one stream', () => {
   const saved = { id: 'A1111111111', title: 'Song', artist: 'Artist', source: 'preview', album: 'Album', album_artist: 'Artist', track_number: 4, year: 2011 } as Track;
   // The same album fills in what is missing.
   expect(withRecord(saved, { album: 'album', disc_number: 1 })).toMatchObject({ album: 'Album', track_number: 4, disc_number: 1, year: 2011 });
+  // ...and only that: a same-named reissue's evidence never overwrites it.
+  expect(withRecord(saved, { album: 'Album', track_number: 9, year: 2020 })).toMatchObject({ track_number: 4, year: 2011 });
   // Another album that places the song replaces the record whole.
   const single = withRecord(saved, { album: 'Song (Single)', track_number: 1 });
   expect(single).toMatchObject({ album: 'Song (Single)', track_number: 1 });

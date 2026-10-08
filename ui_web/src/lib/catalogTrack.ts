@@ -92,7 +92,15 @@ export function withRecord(track: Track, record: ReleaseRecord): Track {
   const album = record.album?.trim();
   if (!album) return track;
   const current = track.album?.trim();
-  if (current && current.toLowerCase() === album.toLowerCase()) return { ...track, ...record, album: track.album };
+  if (current && current.toLowerCase() === album.toLowerCase()) {
+    return {
+      ...track,
+      album_artist: track.album_artist || record.album_artist,
+      track_number: track.track_number || record.track_number,
+      disc_number: track.disc_number || record.disc_number,
+      year: track.year || record.year,
+    };
+  }
   if (current && !record.track_number) return track;
   return { ...track, album_artist: undefined, track_number: undefined, disc_number: undefined, year: undefined, ...record };
 }
