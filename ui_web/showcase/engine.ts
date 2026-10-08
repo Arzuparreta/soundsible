@@ -39,8 +39,8 @@ const QUIET = new Set([
 ]);
 
 /** The song every screenshot is in the middle of. */
-export const NOW_PLAYING = track('Cherubs');
-export const NOW_PLAYING_AT = 107;
+export const NOW_PLAYING = track('Stickybee');
+export const NOW_PLAYING_AT = 53;
 /** What the listener asked for next, ahead of the library carrying on. */
 export const REQUESTS = ['Polygondwanaland', 'Her', 'Leaving Paradise', 'Magnolia Soul', 'Exotica', 'Earth (2009)', 'Confusion Will Pass']
   .map((album) => library.find((row) => row.album === album)!);
