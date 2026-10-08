@@ -104,7 +104,9 @@ internal class ProgramMixOutput(context: Context, private val owns: () -> Boolea
     /** Per-deck programme level; never the device/local listening volume. */
     fun setInputLevel(index: Int, value: Double) = synchronized(lock) {
         require(index in 0..1 && value.isFinite() && value in 0.05..4.0)
-        check(!closed && owns() && failure == null)
+        // The DJ session's tick can land after the mix failed, closed or changed
+        // owner; the player reports that failure, and a level has nothing to set.
+        if (closed || !owns() || failure != null) return@synchronized
         levels[index] = value
         sources[index]?.setLevel(value)
     }
