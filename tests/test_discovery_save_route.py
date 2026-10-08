@@ -487,17 +487,8 @@ def test_music_feed_uses_taste_artist_before_generic_external(tmp_path):
     )
 
     def fake_deezer(path, params=None, ttl_sec=0):
-        if path == "search":
-            return {
-                "data": [
-                    {
-                        "id": 500,
-                        "title": "Seed Search Result",
-                        "artist": {"id": 77, "name": "Taste Artist"},
-                        "album": {"title": "Seed Album"},
-                    }
-                ]
-            }
+        if path == "search/artist":
+            return {"data": [{"id": 77, "name": "Taste Artist"}]}
         if path == "artist/77/top":
             return {
                 "data": [
@@ -825,17 +816,8 @@ def test_enriched_music_feed_includes_taste_based_external_tracks_and_local_recs
     }
 
     def fake_get(url, params=None, timeout=None, headers=None):
-        if url.endswith("/search"):
-            return _FakeResponse({
-                "data": [
-                    {
-                        "id": 100,
-                        "title": "Seed Song",
-                        "artist": {"id": 77, "name": "Local Artist"},
-                        "album": {"title": "Seed Album"},
-                    }
-                ]
-            })
+        if url.endswith("/search/artist"):
+            return _FakeResponse({"data": [{"id": 77, "name": "Local Artist"}]})
         if url.endswith("/artist/77/top"):
             return _FakeResponse({
                 "data": [
@@ -1860,3 +1842,27 @@ def test_heard_relaxation_preserves_last_two_tracks(tmp_path):
         })
     assert status == 200
     assert [item['id'] for item in body['items']] == ['1']
+
+
+def test_an_artists_top_tracks_are_found_through_a_plain_artist_search():
+    asked = []
+
+    def answer(path, params=None, ttl_sec=0):
+        asked.append((path, params))
+        if path == "search/artist":
+            return {"data": [{"id": 9, "name": "Daft Punk Tribute"}, {"id": 27, "name": "Daft Punk"}]}
+        if path == "artist/27/top":
+            return {"data": [{"id": 1, "title": "One More Time", "artist": {"id": 27, "name": "Daft Punk"}}]}
+        return {"data": []}
+
+    with patch.object(_disc_feed, "_deezer_json", side_effect=answer):
+        rows = _disc_feed._deezer_artist_top_rows("daft punk", 5)
+
+    assert [row["title"] for row in rows] == ["One More Time"]
+    # No field syntax: Deezer stopped answering `artist:"…"` in October 2026.
+    assert asked[0] == ("search/artist", {"q": "daft punk", "limit": 8})
+
+
+def test_an_artist_deezer_does_not_know_has_no_top_tracks():
+    with patch.object(_disc_feed, "_deezer_json", return_value={"data": []}):
+        assert _disc_feed._deezer_artist_top_rows("Nobody", 5) == []

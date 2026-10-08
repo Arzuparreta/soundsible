@@ -2034,27 +2034,35 @@ def _library_album_keys(album_name: str, artist: str) -> set[str]:
 
 
 def _resolve_album_deezer_id(name: str, artist: str) -> str | None:
-    """Search Deezer for an album by name + artist, return best match deezer_id."""
-    q = f'album:"{name}" artist:"{artist}"' if artist else f'album:"{name}"'
-    data = _deezer_get("search", {"q": q, "limit": 5})
-    rows = data.get("data") if isinstance(data.get("data"), list) else []
-    name_folded = fold_text(name)
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
-        album_title = _clean(album_row.get("title"))
-        album_id = str(album_row.get("id") or "")
-        if album_id and fold_text(album_title) == name_folded:
-            return album_id
-    # Fuzzy: first result with an album id
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        album_row = row.get("album") if isinstance(row.get("album"), dict) else {}
-        album_id = str(album_row.get("id") or "")
-        if album_id:
-            return album_id
+    """Search Deezer for an album by name + artist, return best match deezer_id.
+
+    A plain album search: Deezer's field syntax (`album:"…" artist:"…"`)
+    stopped answering in October 2026 and returned nothing, so every album
+    looked up by name came back unresolved.
+    """
+    data = _deezer_get("search/album", {"q": f"{name} {artist}".strip(), "limit": 10})
+    rows = [row for row in (data.get("data") if isinstance(data.get("data"), list) else []) if isinstance(row, dict)]
+    name_folded, artist_folded = fold_text(name), fold_text(artist)
+
+    def album_id(row: dict) -> str:
+        return str(row.get("id") or "")
+
+    def title_matches(row: dict) -> bool:
+        return fold_text(_clean(row.get("title"))) == name_folded
+
+    def artist_matches(row: dict) -> bool:
+        artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
+        return not artist_folded or fold_text(_clean(artist_row.get("name"))) == artist_folded
+
+    for wanted in (
+        lambda row: title_matches(row) and artist_matches(row),
+        title_matches,
+        artist_matches,
+        lambda row: True,
+    ):
+        for row in rows:
+            if album_id(row) and wanted(row):
+                return album_id(row)
     return None
 
 

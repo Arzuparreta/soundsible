@@ -196,28 +196,16 @@ def _top_taste_artists(metadata, fav_ids: list[str], limit: int = _MAX_PERSONALI
 
 
 def _deezer_artist_top_rows(artist_name: str, limit: int) -> list[dict]:
-    search = _deezer_json("search", {"q": f'artist:"{artist_name}"', "limit": 8}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
-    rows = search.get("data") if isinstance(search.get("data"), list) else []
-    artist_id = ""
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
-        name = (artist_row.get("name") or "").strip()
-        if name.casefold() == artist_name.strip().casefold():
-            artist_id = str(artist_row.get("id") or "")
-            break
-    if not artist_id:
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
-            artist_id = str(artist_row.get("id") or "")
-            if artist_id:
-                break
-    if not artist_id:
-        return rows[:limit]
-    top = _deezer_json(f"artist/{artist_id}/top", {"limit": max(limit, 12)}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
+    """The artist's top tracks, found through a plain artist search: Deezer's
+    `artist:"…"` field syntax stopped answering in October 2026."""
+    search = _deezer_json("search/artist", {"q": artist_name, "limit": 8}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
+    rows = [row for row in (search.get("data") if isinstance(search.get("data"), list) else []) if isinstance(row, dict)]
+    wanted = artist_name.strip().casefold()
+    match = next((row for row in rows if (row.get("name") or "").strip().casefold() == wanted and row.get("id")), None)
+    match = match or next((row for row in rows if row.get("id")), None)
+    if not match:
+        return []
+    top = _deezer_json(f"artist/{match['id']}/top", {"limit": max(limit, 12)}, ttl_sec=_DEEZER_TRACK_CACHE_TTL_SEC)
     top_rows = top.get("data") if isinstance(top.get("data"), list) else []
     return top_rows[:limit]
 
