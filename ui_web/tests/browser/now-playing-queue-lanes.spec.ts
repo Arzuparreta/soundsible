@@ -31,9 +31,12 @@ async function playFromLibrary(page: Page) {
   return openQueuePanel(page);
 }
 
+/** A collection whose card unfolds its songs in the queue. */
+const PLAYLIST = { id: 'playlist:Viaje', kind: 'playlist', label: 'Viaje', destination: '/playlists/Viaje' } as const;
+
 /** Come back to a paused session with a long lane of requests. */
-async function restoreLongQueue(page: Page) {
-  await restoreQueueSession(page, { current: newest, requests: REQUESTS, context: TRACKS.slice(0, 5) });
+async function restoreLongQueue(page: Page, descriptor?: Parameters<typeof restoreQueueSession>[1]['descriptor']) {
+  await restoreQueueSession(page, { current: newest, requests: REQUESTS, context: TRACKS.slice(0, 5), descriptor });
   await page.goto('/player/#/library?view=songs');
   return openQueuePanel(page);
 }
@@ -88,7 +91,7 @@ test('removing the context keeps the song and hands over to Autoplay, which swit
 });
 
 test('expanding the collection keeps the player open and exposes the real queue order', async ({ page, isMobile }) => {
-  const queue = await restoreLongQueue(page);
+  const queue = await restoreLongQueue(page, PLAYLIST);
   if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
   const card = queue.locator('[data-queue-card="context"]');
   const expand = card.locator('[data-card-expand]');
@@ -118,79 +121,86 @@ test('expanding the collection keeps the player open and exposes the real queue 
   await expect(queue.locator('[data-queue-card="autoplay"] [aria-expanded]')).toHaveCount(0);
 });
 
-test('a whole library stays expandable and its last upcoming song remains reachable', async ({ page, isMobile }) => {
-  const queue = await playFromLibrary(page);
-  if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
-  await queue.locator('[data-card-expand]').click({ position: { x: 24, y: 24 } });
-  const lane = queue.locator('[data-card-songs] [data-section-rows]');
-  await expect(lane).toBeVisible();
-  await expect.poll(() => lane.evaluate(node => node.scrollHeight)).toBeGreaterThan(10000);
-  await lane.evaluate(node => { node.scrollTop = node.scrollHeight; });
-  await expect(lane).toContainText('Canción de biblioteca 1');
-  expect(await lane.locator('[data-drag-row]').count()).toBeLessThan(30);
+test('the library card opens the library and leaves the music playing', async ({ page, isMobile }) => {
+  await page.goto('/player/#/library?view=songs');
+  await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
+  await page.goto('/player/#/playlists');
+  const queue = await openQueuePanel(page);
+  if (isMobile) {
+    // This tests the context action, after navigating with the actual pager.
+    // A raw scroll can race the opening alignment and leaves the queue inert.
+    await page.getByRole('navigation', { name: 'Paneles de NORMAL' }).getByRole('button', { name: 'Cola' }).tap();
+    await expect(queue).not.toHaveAttribute('inert', '');
+  }
+  // The whole library is a tap away in the navigation: its card never unfolds it.
+  await expect(queue.locator('[data-queue-card="context"] [aria-expanded]')).toHaveCount(0);
+
+  const open = queue.getByRole('button', { name: 'Abrir Tu biblioteca' });
+  if (isMobile) await open.tap();
+  else await open.click();
+  await expect(page.locator('[data-player-surface-open]')).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  await expect(page.locator('[data-omni-player]')).toContainText('Canción de biblioteca 320');
 });
 
-test('editing a scrolled collection preserves its scroller and position', async ({ page, isMobile }) => {
-  const queue = await playFromLibrary(page);
+test('editing an expanded collection keeps it open with the songs it was showing', async ({ page, isMobile }) => {
+  await restoreQueueSession(page, { current: newest, requests: [], context: TRACKS.slice(0, 40), descriptor: PLAYLIST });
+  await page.goto('/player/#/library?view=songs');
+  const queue = await openQueuePanel(page);
   if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
-  await queue.locator('[data-card-expand]').click({ position: { x: 24, y: 24 } });
-  const lane = queue.locator('[data-card-songs] [data-section-rows]');
-  await expect.poll(() => lane.evaluate(node => node.scrollHeight)).toBeGreaterThan(10000);
-  await lane.evaluate(node => { node.scrollTop = 5000; });
-  await expect.poll(() => lane.evaluate(node => node.scrollTop)).toBeGreaterThan(4900);
-  const scroller = await lane.elementHandle();
-  const visibleId = () => lane.evaluate(node => {
-    const bounds = node.getBoundingClientRect();
-    return [...node.querySelectorAll<HTMLElement>('[data-drag-row]')].find(row => {
-      const rect = row.getBoundingClientRect();
-      return rect.top >= bounds.top && rect.bottom <= bounds.bottom;
-    })?.dataset.dragRow;
-  });
-  await expect.poll(visibleId).toBeTruthy();
-  const row = lane.locator(`[data-drag-row="${await visibleId()}"]`);
-  const originalIndex = await row.evaluate(node => Number((node.parentElement as HTMLElement).dataset.index));
+  const expand = queue.locator('[data-card-expand]');
+  await expand.click({ position: { x: 24, y: 24 } });
+  await queue.getByRole('button', { name: 'Mostrar más' }).click();
+  const rows = queue.locator('[data-card-songs] [data-drag-row]');
+  await expect(rows).toHaveCount(24);
+
+  const row = rows.nth(15);
+  const id = await row.getAttribute('data-drag-row');
+  const moved = queue.locator(`[data-card-songs] [data-drag-row="${id}"]`);
   if (isMobile) {
-    await row.locator('[data-row-menu]').click();
+    await moved.locator('[data-row-menu]').click();
     await page.getByRole('dialog').getByText('Mover', { exact: true }).click();
-    await row.locator('[data-edit-command="down"]').click();
+    await moved.locator('[data-edit-command="down"]').click();
+    await expect(moved.locator('[data-edit-command="done"]')).toBeVisible();
+    await moved.locator('[data-edit-command="done"]').click();
+    await expect(moved.locator('[data-row-menu]')).toBeFocused();
   } else {
-    const nextId = await lane.evaluate((node, id) => {
-      const rows = [...node.querySelectorAll<HTMLElement>('[data-drag-row]')];
-      return rows[rows.findIndex(row => row.dataset.dragRow === id) + 1]?.dataset.dragRow;
-    }, await visibleId());
-    await row.dragTo(lane.locator(`[data-drag-row="${nextId}"]`));
+    // Both ends in sight first: a drop target scrolled into view after the
+    // press would slide another row under the pointer before the drag starts.
+    await moved.evaluate(node => node.scrollIntoView({ block: 'center' }));
+    await moved.dragTo(rows.nth(16));
   }
-  await expect.poll(() => row.evaluate(node => Number((node.parentElement as HTMLElement).dataset.index))).toBe(originalIndex + 1);
-  expect(await scroller!.evaluate(node => node.isConnected)).toBe(true);
-  await expect.poll(() => lane.evaluate(node => node.scrollTop)).toBeGreaterThan(4800);
-  if (isMobile) {
-    await expect(row.locator('[data-edit-command="done"]')).toBeVisible();
-    await row.locator('[data-edit-command="done"]').click();
-    await expect(row.locator('[data-row-menu]')).toBeFocused();
-  }
-  await row.locator('[data-row-menu]').click();
+  await expect(rows.nth(16)).toHaveAttribute('data-drag-row', id!);
+  await expect(rows).toHaveCount(24);
+
+  await moved.locator('[data-row-menu]').click();
   await page.getByRole('dialog').getByText('Quitar de la cola', { exact: true }).click();
-  await expect(row).toHaveCount(0);
-  expect(await scroller!.evaluate(node => node.isConnected)).toBe(true);
-  await expect.poll(() => lane.evaluate(node => node.scrollTop)).toBeGreaterThan(4800);
-  await expect(queue.locator('[data-card-expand]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(moved).toHaveCount(0);
+  await expect(rows).toHaveCount(24);
+  await expect(expand).toHaveAttribute('aria-expanded', 'true');
 });
 
-for (const kind of ['album', 'artist', 'playlist'] as const) {
-  test(`${kind} cards expose every song in a long collection`, async ({ page, isMobile }) => {
+for (const kind of ['album', 'artist', 'playlist', 'favourites', 'search'] as const) {
+  test(`${kind} cards unfold a long collection twelve songs at a time`, async ({ page, isMobile }) => {
     await restoreQueueSession(page, { current: newest, requests: [], context: TRACKS.slice(0, 40),
       descriptor: { id: `fixture-${kind}`, kind, label: `Collection ${kind}` } });
     await page.goto('/player/#/library?view=songs');
     const queue = await openQueuePanel(page);
     if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
     await queue.locator('[data-card-expand]').click({ position: { x: 24, y: 24 } });
-    const lane = queue.locator('[data-card-songs] [data-section-rows]');
-    await expect(lane).toBeVisible();
-    await expect(queue.locator('[data-card-songs]')).toContainText('Canción de biblioteca 1');
-    await expect.poll(() => lane.evaluate(node => node.scrollHeight - node.clientHeight)).toBeGreaterThan(0);
-    await lane.evaluate(node => { node.scrollTop = node.scrollHeight; });
-    await expect(queue.locator('[data-card-songs]')).toContainText('Canción de biblioteca 40');
-    expect(await lane.locator('[data-drag-row]').count()).toBeLessThan(30);
+    const songs = queue.locator('[data-card-songs]');
+    const rows = songs.locator('[data-drag-row]');
+    const more = songs.getByRole('button', { name: 'Mostrar más' });
+    await expect(rows).toHaveCount(12);
+    await expect(songs).toContainText('Canción de biblioteca 1');
+    for (const shown of [24, 36, 40]) {
+      await more.click();
+      await expect(rows).toHaveCount(shown);
+    }
+    await expect(songs).toContainText('Canción de biblioteca 40');
+    await expect(more).toHaveCount(0);
+    // The last page took the button away; focus went to the first song it revealed.
+    await expect(rows.nth(36).locator('button').first()).toBeFocused();
     await expect(queue.locator('[data-card-expand]')).toHaveAttribute('aria-expanded', 'true');
   });
 }

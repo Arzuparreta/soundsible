@@ -278,6 +278,7 @@ export const en = {
     contextExpand: 'Expand {name}',
     contextCollapse: 'Collapse {name}',
     contextNoUpcoming: 'No upcoming songs remain in this pass.',
+    contextShowMore: 'Show more',
     contextOpen: 'Open {name}',
     contextRemove: 'Remove {name} from the queue',
     contextRepeats: 'repeats',

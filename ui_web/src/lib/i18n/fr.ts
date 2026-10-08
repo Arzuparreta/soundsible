@@ -278,6 +278,7 @@ export const fr: Dict = {
     contextExpand: 'Développer {name}',
     contextCollapse: 'Réduire {name}',
     contextNoUpcoming: 'Aucun morceau à venir dans ce tour.',
+    contextShowMore: 'Afficher plus',
     contextOpen: 'Ouvrir {name}',
     contextRemove: 'Retirer {name} de la file',
     contextRepeats: 'en boucle',
