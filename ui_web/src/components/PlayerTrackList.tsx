@@ -318,7 +318,16 @@ export function PlayerTrackList(props: {
                         onShowMore={() => showCardSongs(card(), (expandedCards().get(cardKey(card())) ?? 0) + CARD_PAGE)}
                         editingId={editingId()}
                         onEditingChange={(id, editing) => { setEditingId(editing ? id : null); focusRowControl(id); }}
-                        onMove={(row, direction) => { row.onMove?.(direction); focusRowControl(row.id, direction < 0 ? 'up' : 'down'); }} />}</KeyedItems>
+                        onMove={(row, direction) => {
+                          // Moving the last song shown down takes it past the page: show the
+                          // next page with it, so the song being edited stays in sight.
+                          const shown = cardRows().get(cardKey(card()));
+                          if (direction > 0 && shown?.[shown.length - 1]?.id === row.id) {
+                            showCardSongs(card(), (expandedCards().get(cardKey(card())) ?? 0) + CARD_PAGE);
+                          }
+                          row.onMove?.(direction);
+                          focusRowControl(row.id, direction < 0 ? 'up' : 'down');
+                        }} />}</KeyedItems>
                     </div>
                   </Show>
                 </section>

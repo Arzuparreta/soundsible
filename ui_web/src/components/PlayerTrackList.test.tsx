@@ -71,6 +71,23 @@ describe('continuation cards', () => {
     expect(rows()).toHaveLength(12);
   });
 
+  it('shows the next page when the last song shown is moved down past it', () => {
+    layout.mobile = true;
+    const card = contextCard({ songs: songs(30) });
+    const onMove = vi.fn();
+    const rows = card.songs!.rows;
+    card.songs!.rows = (limit) => rows(limit).map(row => ({ ...row, onMove, canMoveUp: true, canMoveDown: true }));
+    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [card] }]);
+    fireEvent.click(container.querySelector('[data-card-expand]')!);
+    fireEvent.click(screen.getByRole('button', { name: 'songRow.ariaMore: Song 12' }));
+    const [{ actions }] = menu.open.mock.lastCall!;
+    actions.find((action: { label: string }) => action.label === 'musicList.move').onSelect();
+    fireEvent.click(container.querySelector('[data-drag-row="song-12"] [data-edit-command="down"]')!);
+    expect(onMove).toHaveBeenCalledWith(1);
+    expect(container.querySelectorAll('[data-card-songs] [data-drag-row]')).toHaveLength(24);
+    expect(container.querySelector('[data-drag-row="song-12"] [data-edit-command="done"]')).toBeInTheDocument();
+  });
+
   it('opens the page of a collection that does not expand, without claiming to expand', () => {
     const onOpen = vi.fn();
     const card = contextCard({ songs: undefined, onOpen, openLabel: 'Open Library' });
