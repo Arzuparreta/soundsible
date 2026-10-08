@@ -166,6 +166,10 @@ it('gives a saved stream the place of the album row it is played from', () => {
   expect(actions.trackFor(song)).toMatchObject({ source: 'preview', year: 2001 });
   expect(actions.trackFor(song)?.track_number).toBeUndefined();
   // Played from the album, the row's place goes with it.
-  expect(actions.trackFor({ ...song, album: 'Discovery', raw: { album_artist: 'Daft Punk', track_number: 3, disc_number: 1 } }))
-    .toMatchObject({ source: 'preview', album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 });
+  expect(actions.trackFor({ ...song, album: 'Discovery', raw: { album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 } }))
+    .toMatchObject({ source: 'preview', album: 'Discovery', album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 });
+  // From another release the record is replaced whole, never mixed.
+  const single = actions.trackFor({ ...song, album: 'Song (Single)', raw: { track_number: 1 } });
+  expect(single).toMatchObject({ album: 'Song (Single)', track_number: 1 });
+  expect(single?.year).toBeUndefined(); expect(single?.album_artist).toBeUndefined();
 });

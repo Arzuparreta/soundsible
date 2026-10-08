@@ -46,15 +46,14 @@ export function createNativeCatalogActions(props: {
   let controller: AbortController | undefined;
   let disposed = false;
   /** The record a catalog row names, for the native queue to carry to a
-   * download. Only what the row knows: a gap never erases a saved snapshot's. */
+   * download. A record is taken whole or not at all: a row that names no
+   * album leaves a saved snapshot alone, and one that does replaces it
+   * entirely, so two releases never mix. */
   const withRelease = (item: CatalogItem): Partial<Track> => {
-    const position = releasePosition(item);
-    return {
-      ...(typeof item.raw?.album_artist === 'string' && item.raw.album_artist ? { album_artist: item.raw.album_artist } : {}),
-      ...(position.track_number ? { track_number: position.track_number } : {}),
-      ...(position.disc_number ? { disc_number: position.disc_number } : {}),
-      ...(position.year ? { year: position.year } : {}),
-    };
+    const album = item.album?.trim();
+    if (!album) return {};
+    const albumArtist = typeof item.raw?.album_artist === 'string' ? item.raw.album_artist.trim() : '';
+    return { album, album_artist: albumArtist || undefined, ...releasePosition(item) };
   };
   /** A stream carries its record from the row it is played from; a file the
    * library already holds keeps its own tags. */
