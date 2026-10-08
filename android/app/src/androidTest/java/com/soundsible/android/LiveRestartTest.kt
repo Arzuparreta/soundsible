@@ -83,8 +83,8 @@ class LiveRestartTest {
                             if (count > 0) rms.set(kotlin.math.sqrt(squares / count))
                         }
                     }
-                    LivePeer(context, connection, room.getString("whep_url"), null, false, {}, sink).use { receiver ->
-                        receiver.start(); await("Recovered process does not emit relay PCM") { rms.get() > 500 }
+                    startLiveReader(context, connection, room.getString("whep_url"), sink).use { _ ->
+                        await("Recovered process does not emit relay PCM") { rms.get() > 500 }
                     }
                     assertEquals(0, call { browser.sendCustomCommand(ProgramQueue.command, android.os.Bundle().apply { putString("action", "liveStop"); putLong("generation", epoch) }) }.resultCode)
                     started = false; prefs.edit().clear().commit()
