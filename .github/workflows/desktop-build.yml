@@ -56,6 +56,8 @@ jobs:
     outputs:
       artifact: ${{ steps.name.outputs.artifact }}
     steps:
+      # Python comes from deadsnakes rather than setup-python, whose builds do
+      # not run inside a job container. These are built for 22.04 too.
       - name: Install build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -64,14 +66,18 @@ jobs:
           apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
             ca-certificates curl git xz-utils file build-essential pkg-config \
             libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev \
-            libssl-dev patchelf dbus rpm lsb-release
+            libssl-dev patchelf dbus rpm software-properties-common gpg-agent
+          add-apt-repository -y ppa:deadsnakes/ppa
+          apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
+            python3.11 python3.11-dev python3.11-venv
 
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
+      # build-sidecar.sh freezes the engine with venv/bin/python3 when it exists.
+      - name: Create the Python environment
+        run: |
+          python3.11 -m venv venv
+          echo "$GITHUB_WORKSPACE/venv/bin" >> "$GITHUB_PATH"
 
       - uses: actions/setup-node@v4
         with:
