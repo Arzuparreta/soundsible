@@ -155,3 +155,17 @@ it('plays an album with every song carrying its place on the record', async () =
     expect.objectContaining({ id: 'A1111111111', source: 'preview', track_number: 2, disc_number: 1, year: 2001, album_artist: 'Daft Punk' }),
   ], 1);
 });
+
+it('gives a saved stream the place of the album row it is played from', () => {
+  const saved = [{ keys: ['deezer:7', 'yt:A1111111111'], title: 'Song', artist: 'Artist', album: 'Discovery', year: 2001 }];
+  let actions!: ReturnType<typeof createNativeCatalogActions>;
+  render(() => { actions = createNativeCatalogActions({ generation: () => 1, disconnected: () => false, saved: () => saved, tracks: () => [],
+    onPlay: vi.fn(), onPlayCollection: vi.fn(), onChanged: vi.fn() }); return null; });
+  const song: CatalogItem = { id: 'deezer:track:7', source: 'deezer', type: 'track', title: 'Song', artist: 'Artist', external_ids: { deezer_id: '7' } };
+  // Saved from a search row, which knows no position: the snapshot stands.
+  expect(actions.trackFor(song)).toMatchObject({ source: 'preview', year: 2001 });
+  expect(actions.trackFor(song)?.track_number).toBeUndefined();
+  // Played from the album, the row's place goes with it.
+  expect(actions.trackFor({ ...song, album: 'Discovery', raw: { album_artist: 'Daft Punk', track_number: 3, disc_number: 1 } }))
+    .toMatchObject({ source: 'preview', album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 });
+});

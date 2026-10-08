@@ -81,6 +81,13 @@ describe('building a favourite', () => {
     expect(savedFromTrack({ ...preview, year: 20101012 }).year).toBeUndefined();
   });
 
+  it('keeps a downloaded song\'s record for when its file is deleted', () => {
+    const entry = savedFromTrack({ ...ownedTrack, album: 'Album', album_artist: 'Artist', track_number: 4, disc_number: 1, year: 2012 });
+    expect(entry).toMatchObject({ album_artist: 'Artist', track_number: 4, disc_number: 1, year: 2012 });
+    // Once the file is gone the entry streams, and still knows where it sat.
+    expect(savedToTrack(entry, new Map())).toMatchObject({ source: 'preview', track_number: 4, disc_number: 1, year: 2012 });
+  });
+
   it('keeps a catalog row\'s place on its record', () => {
     const item: CatalogItem = { id: 'deezer:track:1', source: 'deezer', type: 'track', title: 'Song', artist: 'Artist', album: 'Album',
       raw: { album_artist: 'Artist', track_number: 3, disc_number: 1, year: 2001 } };

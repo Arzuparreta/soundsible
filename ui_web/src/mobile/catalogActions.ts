@@ -45,7 +45,24 @@ export function createNativeCatalogActions(props: {
   let epoch = 0;
   let controller: AbortController | undefined;
   let disposed = false;
+  /** The record a catalog row names, for the native queue to carry to a
+   * download. Only what the row knows: a gap never erases a saved snapshot's. */
+  const withRelease = (item: CatalogItem): Partial<Track> => {
+    const position = releasePosition(item);
+    return {
+      ...(typeof item.raw?.album_artist === 'string' && item.raw.album_artist ? { album_artist: item.raw.album_artist } : {}),
+      ...(position.track_number ? { track_number: position.track_number } : {}),
+      ...(position.disc_number ? { disc_number: position.disc_number } : {}),
+      ...(position.year ? { year: position.year } : {}),
+    };
+  };
+  /** A stream carries its record from the row it is played from; a file the
+   * library already holds keeps its own tags. */
   const trackFor = (item: CatalogItem): Track | null => {
+    const found = heldTrack(item);
+    return found?.source === 'preview' ? { ...found, ...withRelease(item) } : found;
+  };
+  const heldTrack = (item: CatalogItem): Track | null => {
     const immediate = catalogTrack(item, props.tracks());
     if (immediate && immediate.source !== 'preview') return immediate;
     for (const key of catalogItemKeys(item)) {
@@ -82,11 +99,6 @@ export function createNativeCatalogActions(props: {
     const next = new Map(collectionLinks()); next.set(job.provider, links); setCollectionLinks(next);
   }
   onCleanup(() => { disposed = true; reset(true); });
-  /** The record a catalog row names, for the native queue to carry to a download. */
-  const withRelease = (item: CatalogItem): Partial<Track> => ({
-    ...(typeof item.raw?.album_artist === 'string' && item.raw.album_artist ? { album_artist: item.raw.album_artist } : {}),
-    ...releasePosition(item),
-  });
   async function resolveRecording(item: CatalogItem, signal: AbortSignal, current: () => boolean) {
     const artist = itemArtist(item);
     if (!artist || !item.title) throw new Error('Missing recording');
@@ -96,8 +108,6 @@ export function createNativeCatalogActions(props: {
     const original = savedFromCatalogItem(item);
     const entry = { ...original, keys: [...new Set([...original.keys, `yt:${result.video_id}`])] };
     const found = savedToTrack(entry, libraryIndex());
-    // A stream carries its record from the row it was chosen from; a file
-    // the library already holds keeps its own tags.
     const track = found?.source === 'preview' ? { ...found, ...withRelease(item) } : found;
     if (track) { const linked = new Map(resolvedTracks()); linked.set(item.id, track); setResolvedTracks(linked); }
     return { entry, track };

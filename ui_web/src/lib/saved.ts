@@ -70,10 +70,12 @@ export function savedFromTrack(track: Track): SavedEntry {
   return snapshot(trackKeys(track), track.title, track.artist, {
     album: track.album,
     duration: track.duration,
-    // A library track's art and tags come from the engine and need no
-    // snapshot; a preview's are the only ones it will have until downloaded.
+    // A library track's art comes from the engine and needs no snapshot; a
+    // preview's is the only one it will have until downloaded.
     thumbnail: preview ? track.cover : undefined,
-    ...(preview ? { album_artist: track.album_artist, track_number: track.track_number, disc_number: track.disc_number, year: track.year } : {}),
+    // Its record is kept either way: deleting the file degrades the entry to
+    // a preview, and downloading that again files it where it sat.
+    album_artist: track.album_artist, track_number: track.track_number, disc_number: track.disc_number, year: track.year,
   });
 }
 
