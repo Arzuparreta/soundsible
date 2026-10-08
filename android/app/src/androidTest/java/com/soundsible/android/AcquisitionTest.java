@@ -42,18 +42,20 @@ public class AcquisitionTest {
             waitFor(web,scenario,"window.__acquisition?.id==='B1111111111' && window.__acquisition.playing && window.__acquisition.ready");clickAction(web,scenario,"Pause");waitFor(web,scenario,"!window.__acquisition.playWhenReady");
             web.evaluate(scenario,"Capacitor.Plugins.SoundsiblePlayback.state().then(s=>Capacitor.Plugins.SoundsiblePlayback.command({...s,action:'seek',positionMs:20000}))");waitFor(web,scenario,"Math.abs(window.__acquisition.positionMs-20000)<1000");
             String keys=web.evaluate(scenario,"JSON.stringify(window.__acquisition.items.map(i=>i.key))"),token=web.evaluate(scenario,"window.__acquisition.queueToken");
-            api(connection,origin,"/__fixture/acquisition","{\"failNext\":1,\"delaySeconds\":3}","POST");
+            api(connection,origin,"/__fixture/acquisition","{\"failNext\":1,\"hold\":true}","POST");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.textContent==='member saved song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");clickAction(web,scenario,"Download");
             web.evaluate(scenario,"document.querySelector('[data-android-downloads]').click()");waitFor(web,scenario,"!!document.querySelector('[data-testid=android-downloads] button[aria-label=Retry]')");
             web.evaluate(scenario,"document.querySelector('[data-testid=android-downloads] button[aria-label=Retry]').click()");
             waitFor(web,scenario,"!!document.querySelector('[data-testid=android-downloads] button[aria-label=Cancel]')");
+            // Held until seen running, then let go: no race with how fast the panel renders.
+            api(connection,origin,"/__fixture/acquisition","{\"hold\":false}","POST");
             waitFor(web,scenario,"!document.querySelector('[data-testid=android-downloads] button[aria-label=Cancel]') && !document.querySelector('[data-testid=android-downloads] button[aria-label=Retry]')");
             String acquiredId=null;var tracks=api(connection,origin,"/api/library",null,"GET").getJSONArray("tracks");for(int i=0;i<tracks.length();i++){var row=tracks.getJSONObject(i);if(row.optString("youtube_id").equals("B1111111111"))acquiredId=row.getString("id");}
             assertNotNull("Completed job must have a real acquired library source",acquiredId);assertNotEquals("B1111111111",acquiredId);
             web.evaluate(scenario,"Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='Library').click()");
             waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-library] [data-row-main]')).find(b=>b.closest('[data-browse-track-id]')?.getAttribute('data-browse-track-id')==="+JSONObject.quote(acquiredId)+" && b.getAttribute('aria-current')==='true')");
             assertEquals(keys,web.evaluate(scenario,"JSON.stringify(window.__acquisition.items.map(i=>i.key))"));assertEquals(token,web.evaluate(scenario,"window.__acquisition.queueToken"));assertEquals("true",web.evaluate(scenario,"window.__acquisition.id==='B1111111111' && window.__acquisition.items[0].source==='preview' && !window.__acquisition.playWhenReady && Math.abs(window.__acquisition.positionMs-20000)<1000"));
-            api(connection,origin,"/__fixture/acquisition","{\"delaySeconds\":5}","POST");
+            api(connection,origin,"/__fixture/acquisition","{\"hold\":true}","POST");
             web.evaluate(scenario,"document.querySelector('[data-android-discover]').click()");waitFor(web,scenario,"!!document.querySelector('[data-testid=android-catalog-search] input[type=search]')");
             web.evaluate(scenario,"const input=document.querySelector('[data-testid=android-catalog-search] input[type=search]');input.value='fixture';input.dispatchEvent(new Event('input',{bubbles:true}))");waitFor(web,scenario,"!!Array.from(document.querySelectorAll('[data-testid=android-catalog-search] [data-row-main]')).find(b=>b.textContent==='fixture resolved song')");
             web.evaluate(scenario,"Array.from(document.querySelectorAll('[data-testid=android-catalog-search] [data-row-main]')).find(b=>b.textContent==='fixture resolved song').closest('[data-music-list-row]').querySelector('[data-row-menu]').click()");clickAction(web,scenario,"Download");
@@ -62,6 +64,7 @@ public class AcquisitionTest {
             web.evaluate(scenario,"document.querySelector('[data-android-downloads]').click()");waitFor(web,scenario,"!!document.querySelector('[data-testid=android-downloads] button[aria-label=Cancel]')");
             long activeUntil=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);while(api(connection,origin,"/__fixture/acquisition",null,"GET").getInt("active")==0){assertTrue(System.nanoTime()<activeUntil);Thread.sleep(100);}
             web.evaluate(scenario,"document.querySelector('[data-testid=android-downloads] button[aria-label=Cancel]').click()");waitFor(web,scenario,"!document.querySelector('[data-testid=android-downloads] button[aria-label=Cancel]')");
+            api(connection,origin,"/__fixture/acquisition","{\"hold\":false}","POST");
             long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(15);while(api(connection,origin,"/__fixture/acquisition",null,"GET").getInt("active")>0){assertTrue(System.nanoTime()<until);Thread.sleep(100);}Thread.sleep(1000);
             tracks=api(connection,origin,"/api/library",null,"GET").getJSONArray("tracks");for(int i=0;i<tracks.length();i++)assertNotEquals("Cancelled job cannot promote a song", "C1111111111",tracks.getJSONObject(i).optString("youtube_id"));
             assertEquals(keys,web.evaluate(scenario,"JSON.stringify(window.__acquisition.items.map(i=>i.key))"));assertEquals(token,web.evaluate(scenario,"window.__acquisition.queueToken"));assertEquals("false",web.evaluate(scenario,"!!document.querySelector('audio')"));
