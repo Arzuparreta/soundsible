@@ -369,3 +369,13 @@ def test_a_new_record_without_a_cover_drops_the_old_one(manager):
     manager.toggle_saved({"keys": ["isrc:X"], "album": "Song (Single)", "thumbnail": "https://example.invalid/single.jpg"})
     manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4}, True)
     assert "thumbnail" not in manager.get_entries()[0]
+
+
+def test_a_rejected_record_does_not_lend_its_cover(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Album", "track_number": 4})
+    enriched = []
+    manager.set_saved([{"keys": ["isrc:X"], "album": "Other", "thumbnail": "https://example.invalid/other.jpg"}], True, enriched)
+    assert "thumbnail" not in manager.get_entries()[0] and enriched == []
+    # The same record's cover is welcome.
+    manager.set_saved([{"keys": ["isrc:X"], "album": "Album", "thumbnail": "https://example.invalid/album.jpg"}], True, enriched)
+    assert manager.get_entries()[0]["thumbnail"] == "https://example.invalid/album.jpg"

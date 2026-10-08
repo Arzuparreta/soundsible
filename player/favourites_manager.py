@@ -94,7 +94,7 @@ def _fill_snapshot(existing: Dict[str, Any], entry: Dict[str, Any]) -> bool:
     anything changed.
     """
     before = dict(existing)
-    for field in ("title", "artist", "thumbnail", "duration"):
+    for field in ("title", "artist", "duration"):
         if field in entry and not existing.get(field):
             existing[field] = entry[field]
     _fill_release(existing, entry)
@@ -108,13 +108,12 @@ def _fill_release(existing: Dict[str, Any], entry: Dict[str, Any]) -> None:
     same album fills in what is missing; another album replaces the record
     whole, but only when it places the song on it — an album named and
     nothing else is too little to overrule. An entry with no album takes any.
+    The cover belongs to the record and follows the same decision.
     """
     album = entry.get("album")
-    if not album:
-        return
     current = existing.get("album")
-    if current and current.casefold() == album.casefold():
-        for field in _RELEASE_KEYS[1:]:
+    if not album or (current and current.casefold() == album.casefold()):
+        for field in (*(_RELEASE_KEYS[1:] if album else ()), "thumbnail"):
             if field in entry and not existing.get(field):
                 existing[field] = entry[field]
         return
