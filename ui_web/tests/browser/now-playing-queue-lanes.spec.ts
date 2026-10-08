@@ -199,6 +199,8 @@ for (const kind of ['album', 'artist', 'playlist', 'favourites', 'search'] as co
     }
     await expect(songs).toContainText('Canción de biblioteca 40');
     await expect(more).toHaveCount(0);
+    // The last page took the button away; focus went to the first song it revealed.
+    await expect(rows.nth(36).locator('button').first()).toBeFocused();
     await expect(queue.locator('[data-card-expand]')).toHaveAttribute('aria-expanded', 'true');
   });
 }

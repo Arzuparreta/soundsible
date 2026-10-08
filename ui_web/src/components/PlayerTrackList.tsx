@@ -181,6 +181,11 @@ export function PlayerTrackList(props: {
       );
     (preferred ?? fallback)?.focus();
   });
+  const focusRowStart = (id: string) => queueMicrotask(() => {
+    [...(rowsEl?.querySelectorAll<HTMLElement>('[data-drag-row]') ?? [])]
+      .find((row) => row.dataset.dragRow === id)
+      ?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+  });
   let depth = 0;
   let scrollFrame: number | undefined;
   let scrollSpeed = 0;
@@ -315,7 +320,15 @@ export function PlayerTrackList(props: {
                     <div class={styles.sectionCards} data-section-cards>
                       <KeyedItems items={section().cards ?? []} getKey={cardKey}>{(card) => <PlayerTrackListCardRow card={card()} rows={cardRows().get(cardKey(card()))}
                         onToggle={() => showCardSongs(card(), expandedCards().has(cardKey(card())) ? null : CARD_PAGE)}
-                        onShowMore={() => showCardSongs(card(), (expandedCards().get(cardKey(card())) ?? 0) + CARD_PAGE)}
+                        onShowMore={() => {
+                          const key = cardKey(card());
+                          const before = cardRows().get(key)?.length ?? 0;
+                          showCardSongs(card(), (expandedCards().get(key) ?? 0) + CARD_PAGE);
+                          // The last page takes "Show more" away with it: focus stays in the
+                          // list, on the first song that page revealed.
+                          const rows = cardRows().get(key) ?? [];
+                          if (rows[before] && rows.length >= (card().songs?.count ?? 0)) focusRowStart(rows[before].id);
+                        }}
                         editingId={editingId()}
                         onEditingChange={(id, editing) => { setEditingId(editing ? id : null); focusRowControl(id); }}
                         onMove={(row, direction) => {

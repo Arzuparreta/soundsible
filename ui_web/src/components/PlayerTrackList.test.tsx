@@ -88,6 +88,17 @@ describe('continuation cards', () => {
     expect(container.querySelector('[data-drag-row="song-12"] [data-edit-command="done"]')).toBeInTheDocument();
   });
 
+  it('moves focus to the first revealed song when the last page takes "Show more" away', async () => {
+    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [contextCard({ songs: songs(20) })] }]);
+    fireEvent.click(container.querySelector('[data-card-expand]')!);
+    const more = screen.getByRole('button', { name: 'nowPlaying.contextShowMore' });
+    more.focus();
+    fireEvent.click(more);
+    await Promise.resolve();
+    expect(screen.queryByRole('button', { name: 'nowPlaying.contextShowMore' })).toBeNull();
+    expect(container.querySelector('[data-drag-row="song-13"]')).toContainElement(document.activeElement as HTMLElement);
+  });
+
   it('opens the page of a collection that does not expand, without claiming to expand', () => {
     const onOpen = vi.fn();
     const card = contextCard({ songs: undefined, onOpen, openLabel: 'Open Library' });
