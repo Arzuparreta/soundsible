@@ -93,6 +93,10 @@ connections so notification-driven widgets clear the previous track. Screenshots
 process measurements and logs are uploaded
 as `linux-ui-evidence`.
 
+The sidecar build generates the shared player's production bundle before
+freezing the engine. The headless sidecar smoke also fetches the packaged
+player's JavaScript, so a healthy API cannot hide a missing UI bundle.
+
 Tauri's `TAURI_WEBVIEW_AUTOMATION=true` environment enables WebKit WebDriver
 only on its first WebContext. Automated runs therefore share that context and
 use disposable XDG directories. Normal launches use the per-origin WebView

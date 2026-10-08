@@ -33,6 +33,12 @@ fi
 mkdir -p "$BIN_DIR"
 cd "$ROOT"
 
+# Freeze the production player into the engine, before PyInstaller snapshots
+# its data files. A fresh checkout has neither node_modules nor a UI bundle.
+npm --prefix "$ROOT/ui_web" ci
+"$PYTHON" -c 'from shared.ensure_ui_dist import ensure_ui_dist_cli; raise SystemExit(ensure_ui_dist_cli(["--force"]))'
+test -f "$ROOT/ui_web/dist/index.html"
+
 "$PYTHON" -m PyInstaller "$SPEC" --noconfirm --clean --distpath "$ROOT/dist" --workpath "$ROOT/build/pyinstaller-sidecar"
 
 DIST_EXE="$ROOT/dist/soundsible-engine.exe"

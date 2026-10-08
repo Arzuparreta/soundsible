@@ -123,6 +123,11 @@ def run(app, engine, artifacts):
 
         def environment(name):
             env = dict(os.environ)
+            # OUTPUT_DIR has precedence over the desktop music-dir setting.
+            # Keep portable library snapshots out of the user's default folder.
+            output = root / name / "output"
+            output.mkdir(parents=True)
+            env["OUTPUT_DIR"] = str(output)
             for key, suffix in [("CONFIG", "config"), ("DATA", "data"), ("CACHE", "cache"), ("LOG", "logs")]:
                 path = root / name / suffix
                 path.mkdir(parents=True)
@@ -147,8 +152,12 @@ def run(app, engine, artifacts):
             origin = state["base_url"]
             wait_for(lambda: http(origin + "/api/health"), "independent station health", 120)
             owner = Path(state["owner_token_file"]).read_text().strip()
-            http(origin + "/api/library/scan", {"path": str(music)}, headers={"Authorization": f"Bearer {owner}"})
+            owner_headers = {"Authorization": f"Bearer {owner}"}
+            http(origin + "/api/library/scan", {"path": str(music)}, headers=owner_headers)
+            wait_for(lambda: http(origin + "/api/library/scan", headers=owner_headers)["state"] == "completed",
+                     "completed WAV library scan", 120)
             wait_for(lambda: len(http(origin + "/api/library")["tracks"]) == 2, "real WAV library scan", 120)
+            (artifacts / "library.json").write_text(json.dumps(http(origin + "/api/library"), indent=2))
             sentinel = Path(client_env["SOUNDSIBLE_CONFIG_DIR"]) / "desktop-engine-state.json"
             sentinel_bytes = json.dumps(state).encode()
             sentinel.write_bytes(sentinel_bytes)
@@ -191,7 +200,9 @@ def run(app, engine, artifacts):
                 return play.apply(this, args);
               };
             """)
-            web.click(rows)
+            # Select the captured track by its accessible name. Library updates
+            # can reorder rows between reading them and WebDriver's click.
+            web.click(f'[data-row-main][aria-label^="Play {first_title} by "]')
             wait_for(lambda: property_value("PlaybackStatus") == 's "Playing"', "MPRIS playing")
             audio_position = "return Math.max(0, ...window.__smokeAudio.filter(a => !a.paused && a.duration > 1).map(a => a.currentTime))"
             wait_for(lambda: web.script(audio_position) > 0.2, "real HTML audio started")
