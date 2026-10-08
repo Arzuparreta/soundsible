@@ -277,6 +277,30 @@ def test_a_saved_song_keeps_its_place_on_its_record(manager):
     assert (entry["album_artist"], entry["track_number"], entry["disc_number"], entry["year"]) == ("Artist", 3, 2, 2001)
 
 
+def test_marking_a_song_never_mixes_two_records(manager):
+    # Saved from the single, which names no position; marked from the album.
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Song (Single)", "year": 2010})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "album_artist": "Artist", "track_number": 4, "year": 2011})
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["year"]) == ("Song (Single)", 2010)
+    assert not {"album_artist", "track_number"} & set(entry)
+
+
+def test_marking_fills_a_record_from_the_same_album(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Album"})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "album", "track_number": 4, "disc_number": 1, "year": 2011})
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["track_number"], entry["disc_number"], entry["year"]) == ("Album", 4, 1, 2011)
+
+
+def test_a_record_without_an_album_is_replaced_whole(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "year": 2010})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4})
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["track_number"]) == ("Album", 4)
+    assert "year" not in entry
+
+
 def test_a_saved_songs_place_is_bounded_like_a_catalog_save(manager):
     # An upload date read as a year, a zero, a fraction, a flag, text.
     manager.toggle_saved({"keys": ["yt:vid"], "year": 20101012, "track_number": 0, "disc_number": 1.5})

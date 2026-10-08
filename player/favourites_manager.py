@@ -81,6 +81,33 @@ _TEXT_FIELDS = ("title", "artist", "album", "album_artist", "thumbnail")
 #: `/api/catalog/save` bounds them; anything else is dropped.
 _RELEASE_FIELDS = (("track_number", 1, 999), ("disc_number", 1, 99), ("year", 1000, 9999))
 
+#: A record as one thing: the album and everything that places the song on
+#: it. Merged whole, never field by field, so two releases never mix.
+_RELEASE_KEYS = ("album", "album_artist", *(name for name, _, _ in _RELEASE_FIELDS))
+
+
+def _fill_release(existing: Dict[str, Any], entry: Dict[str, Any]) -> None:
+    """Fill an entry's record from another snapshot of the same song.
+
+    An entry that names no album takes the other's record whole. One that
+    names the same album takes only what it lacks. One that names another
+    album keeps its own: a single's title never meets an album's position.
+    """
+    album = entry.get("album")
+    if not album:
+        return
+    current = existing.get("album")
+    if not current:
+        for field in _RELEASE_KEYS:
+            existing.pop(field, None)
+            if field in entry:
+                existing[field] = entry[field]
+    elif current.casefold() == album.casefold():
+        for field in _RELEASE_KEYS:
+            if field in entry and not existing.get(field):
+                existing[field] = entry[field]
+
+
 #: Dates the engine decides. A client payload never sets them; a stored entry
 #: keeps whatever it was written with.
 _DATE_FIELDS = ("added_at", "favourited_at")
@@ -232,12 +259,10 @@ class FavouritesManager:
             _stamp_mark(existing)
             # A song saved bare (＋ from a search row) has no snapshot worth the
             # name; the heart usually arrives from a surface that has one.
-            for field in _TEXT_FIELDS:
+            for field in ("title", "artist", "thumbnail", "duration"):
                 if field in entry and not existing.get(field):
                     existing[field] = entry[field]
-            for field in ("duration", *(name for name, _, _ in _RELEASE_FIELDS)):
-                if field in entry and not existing.get(field):
-                    existing[field] = entry[field]
+            _fill_release(existing, entry)
             self._persist()
             return resolved
 
