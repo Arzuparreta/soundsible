@@ -50,7 +50,7 @@ def test_a_download_with_no_record_keeps_what_the_upload_says(tmp_path, monkeypa
 
 
 def test_positions_that_are_not_positions_are_ignored(tmp_path, monkeypatch):
-    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "", "track_number": 4}
+    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery", "track_number": 4}
     hint = {"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery", "track_number": "x", "disc_number": 0, "year": True}
 
     track, _embedded = _download(tmp_path, monkeypatch, tags=tags, hint=hint)
@@ -59,3 +59,16 @@ def test_positions_that_are_not_positions_are_ignored(tmp_path, monkeypatch):
     assert track.track_number == 4
     assert track.disc_number is None
     assert track.year is None
+
+
+def test_a_record_named_alone_does_not_inherit_the_uploads_place(tmp_path, monkeypatch):
+    # A plain search row names the album and nothing else.
+    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "Digital Love (Single)",
+            "album_artist": "Daft Punk Official", "track_number": 2, "disc_number": 1, "year": 2014}
+
+    track, embedded = _download(tmp_path, monkeypatch, tags=tags, hint={"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery"})
+
+    assert track.album == "Discovery"
+    assert (track.album_artist, track.disc_number, track.year) == (None, None, None)
+    assert track.track_number == 1
+    assert not {"album_artist", "disc_number", "year"} & {key for key, value in embedded.items() if value}
