@@ -73,7 +73,7 @@ def test_a_record_named_alone_does_not_inherit_the_uploads_place(tmp_path, monke
     assert track.track_number == 1
     assert not {"album_artist", "disc_number", "disc_total", "year"} & {key for key, value in embedded.items() if value and key != "_cleared"}
     # ...and the file loses the upload's tags for them.
-    assert embedded["_cleared"] == ["album_artist", "disc_number", "year"]
+    assert embedded["_cleared"] == ["album_artist", "disc_number", "disc_total", "year"]
 
 
 def test_another_record_is_not_a_compilation_because_the_upload_was(tmp_path, monkeypatch):
@@ -93,3 +93,13 @@ def test_an_import_with_no_album_keeps_the_uploads_place(tmp_path, monkeypatch):
     track, _embedded = _download(tmp_path, monkeypatch, tags=tags, hint={"title": "Digital Love", "artist": "Daft Punk", "album": ""})
 
     assert (track.track_number, track.year) == (3, 2001)
+
+
+def test_a_new_disc_number_drops_the_uploads_disc_total(tmp_path, monkeypatch):
+    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "Single", "disc_number": 2, "disc_total": 3}
+    hint = {"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery", "track_number": 3, "disc_number": 1}
+
+    track, embedded = _download(tmp_path, monkeypatch, tags=tags, hint=hint)
+
+    assert (track.disc_number, embedded.get("disc_total")) == (1, None)
+    assert "disc_total" in embedded["_cleared"]

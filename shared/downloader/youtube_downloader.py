@@ -156,7 +156,7 @@ class YouTubeDownloader:
             )
             # A field the upload had and the chosen record drops leaves the file too.
             dropped = [
-                key for key in ("album_artist", "year", "track_number", "disc_number", "is_compilation")
+                key for key in ("album_artist", "year", "track_number", "disc_number", "disc_total", "is_compilation")
                 if file_tags.get(key) and not meta.get(key)
             ]
             try:

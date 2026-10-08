@@ -40,7 +40,8 @@ _ID3_RELEASE_FRAMES = {
 }
 _VORBIS_RELEASE_TAGS = {
     "album_artist": ("albumartist", "album artist"), "year": ("date",), "track_number": ("tracknumber",),
-    "disc_number": ("discnumber", "disctotal", "totaldiscs"), "is_compilation": ("compilation",),
+    "disc_number": ("discnumber", "disctotal", "totaldiscs"), "disc_total": ("disctotal", "totaldiscs"),
+    "is_compilation": ("compilation",),
 }
 _MP4_RELEASE_TAGS = {
     "album_artist": ("aART",), "year": ("\xa9day",), "track_number": ("trkn",), "disc_number": ("disk",),
@@ -230,7 +231,8 @@ class AudioProcessor:
         """Write tags (and a cover from `cover_url`) into the file.
 
         Writing never removes a tag on its own; `clear` names the fields
-        (`album_artist`, `year`, `track_number`, `disc_number`, `is_compilation`) whose tags are
+        (`album_artist`, `year`, `track_number`, `disc_number`, `disc_total`,
+        `is_compilation`) whose tags are
         removed first — what a download filed under another record drops.
 
         MP3, FLAC, MP4/M4A, Ogg Vorbis and Opus. WebM is left as it is:

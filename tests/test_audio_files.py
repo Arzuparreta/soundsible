@@ -135,3 +135,14 @@ def test_clearing_removes_a_records_tags_from_the_file(tmp_path, suffix):
     tags = AudioProcessor.read_tags(str(path))
     assert (tags["album"], tags["track_number"]) == ("Album", 1)
     assert (tags["album_artist"], tags["year"], tags["disc_number"], tags["is_compilation"]) == (None, None, None, False)
+
+
+@pytest.mark.parametrize("suffix", [".flac", ".ogg"])
+def test_a_new_disc_number_does_not_keep_the_old_total(tmp_path, suffix):
+    path = _encode(tmp_path / f"song{suffix}", "title=Song", "disc=2", "disctotal=3")
+    assert AudioProcessor.read_tags(str(path))["disc_total"] == 3
+
+    AudioProcessor.embed_metadata(str(path), {"title": "Song", "disc_number": 1}, clear=("disc_total",))
+
+    tags = AudioProcessor.read_tags(str(path))
+    assert (tags["disc_number"], tags["disc_total"]) == (1, None)
