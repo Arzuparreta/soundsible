@@ -390,7 +390,7 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
     });
     // A seek from anywhere — our transport, the lock screen, a car button — has
     // to re-anchor the OS scrubber or it keeps counting from the old position.
-    a.addEventListener('seeked', () => ports.updatePositionState());
+    a.addEventListener('seeked', () => ports.updatePositionState('seeked'));
     a.addEventListener('ratechange', () => ports.updatePositionState());
     let hiddenSince: number | null = null;
     lifetime.listen(document, 'visibilitychange', () => {
@@ -447,6 +447,49 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       seekTo: position => ports.actions.seek(position),
       seekBackward: offset => ports.actions.seekBy(-(offset ?? ports.osSeekStep())),
       seekForward: offset => ports.actions.seekBy(offset ?? ports.osSeekStep())
+    }, {
+      snapshot: () => {
+        const snapshot = audioService.snapshot();
+        return !snapshot.hasSource && state.playback.phase === 'paused'
+          ? { ...snapshot, playing: false, position: state.playback.currentTime, duration: state.playback.duration }
+          : snapshot;
+      },
+      state: () => ({
+        volume: state.playback.muted ? 0 : state.playback.volume,
+        can_next: state.playback.index < state.playback.queue.length - 1 || state.playback.repeat === 'all' || state.autoMode.active,
+        can_previous: Boolean(state.playback.currentTrack),
+        shuffle: state.playback.shuffle, repeat: state.playback.repeat,
+      }),
+      act: command => {
+        const numeric = typeof command.value === 'number' && Number.isFinite(command.value);
+        switch (command.action) {
+          case 'play': ports.actions.resumePlayback('media_session'); break;
+          case 'pause': ports.actions.pausePlayback('media_session'); break;
+          case 'toggle': ports.actions.togglePlay(); break;
+          case 'stop': ports.actions.pausePlayback('media_session'); ports.actions.seek(0); break;
+          case 'next':
+            if (state.autoMode.active && state.playback.isPlaying) void ports.actions.autoSkip();
+            else ports.actions.next('next', true);
+            break;
+          case 'previous': ports.actions.prev(true); break;
+          case 'seek': if (numeric) ports.actions.seek(command.value!); break;
+          case 'seekBy':
+            if (numeric) {
+              const snapshot = audioService.snapshot();
+              if (snapshot.position + command.value! > snapshot.duration) ports.actions.next('next', true);
+              else ports.actions.seekBy(command.value!);
+            }
+            break;
+          case 'volume': if (numeric) ports.actions.setVolume(command.value!); break;
+          case 'shuffle': if (typeof command.enabled === 'boolean' && command.enabled !== state.playback.shuffle) ports.actions.toggleShuffle(); break;
+          case 'repeat': {
+            const repeat = ({ None: 'off', Track: 'one', Playlist: 'all' } as Record<string, string>)[command.mode ?? ''];
+            if (repeat) for (let i = 0; i < 3 && state.playback.repeat !== repeat; i++) ports.actions.cycleRepeat();
+            break;
+          }
+        }
+        ports.updateMediaSession(state.playback.currentTrack);
+      },
     });
     socket = createSocket();
     const ownedSocket = socket;

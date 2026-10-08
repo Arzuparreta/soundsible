@@ -4376,3 +4376,36 @@ it('authenticated runtime starts once, closes once, and starts a fresh socket fo
   store.disposeStore();
   expect(store.disconnect).toHaveBeenCalledTimes(2);
 });
+
+
+describe('desktop paused queue navigation', () => {
+  it('selects the next paused track without loading or sounding it, then loads it on play', async () => {
+    const { actions, state, audioService, initStore, fireDeckEvent } = await loadStore();
+    initStore();
+    actions.playFrom([t1, t2], 0);
+    fireDeckEvent('playing');
+    actions.pausePlayback();
+    fireDeckEvent('pause');
+    audioService.load.mockClear();
+    actions.next('next', true);
+    expect(state.playback.currentTrack?.id).toBe('t2');
+    expect(state.playback.isPlaying).toBe(false);
+    expect(state.playback.phase).toBe('paused');
+    expect(audioService.load).not.toHaveBeenCalled();
+    actions.resumePlayback('media_session');
+    expect(audioService.load).toHaveBeenCalled();
+  });
+  it('selects the previous paused track without starting audio', async () => {
+    const { actions, state, audioService, initStore, fireDeckEvent } = await loadStore();
+    initStore();
+    actions.playFrom([t1, t2], 1);
+    fireDeckEvent('playing');
+    actions.pausePlayback();
+    fireDeckEvent('pause');
+    audioService.load.mockClear();
+    actions.prev(true);
+    expect(state.playback.currentTrack?.id).toBe('t1');
+    expect(state.playback.isPlaying).toBe(false);
+    expect(audioService.load).not.toHaveBeenCalled();
+  });
+});

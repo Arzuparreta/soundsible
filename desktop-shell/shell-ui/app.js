@@ -26,6 +26,12 @@ function applyShellTheme(theme) {
 listen('shell://appearance', (event) => applyShellTheme(event.payload));
 invoke('get_shell_theme').then(applyShellTheme).catch(() => {});
 
+const viewConnection = document.getElementById('view-connection');
+const serverAddress = document.getElementById('server-address');
+const connectionError = document.getElementById('connection-error');
+const btnConnect = document.getElementById('btn-connect');
+let connectionMode = 'choose';
+
 const pathDisplay = document.getElementById('path-display');
 const scanPreview = document.getElementById('scan-preview');
 const btnChoose = document.getElementById('btn-choose');
@@ -44,6 +50,7 @@ let selectedPath = null;
 const scans = createScanGeneration();
 
 const focusTargets = {
+  connection: serverAddress,
   'first-run': btnChoose,
   loading: () => viewLoading.querySelector('h2'),
   error: btnRetry,
@@ -51,6 +58,7 @@ const focusTargets = {
 };
 
 function showView(name) {
+  viewConnection.classList.toggle('hidden', name !== 'connection');
   viewFirstRun.classList.toggle('hidden', name !== 'first-run');
   viewLoading.classList.toggle('hidden', name !== 'loading');
   viewError.classList.toggle('hidden', name !== 'error');
@@ -143,12 +151,13 @@ async function applyStatus(status) {
     renderLog(logError, status.log_lines.length ? status.log_lines : ['error: engine failed']);
     return;
   }
-  if (status.phase === 'idle') showView('first-run');
+  if (status.phase === 'idle') showView(connectionMode === 'local' ? 'first-run' : 'connection');
 }
 
 async function syncAutostartCheckbox() {
   try {
     chkAutostart.checked = await invoke('get_autostart');
+    document.getElementById('chk-client-autostart').checked = chkAutostart.checked;
   } catch {
     chkAutostart.checked = false;
   }
@@ -205,7 +214,8 @@ btnContinue.addEventListener('click', async () => {
 btnRetry.addEventListener('click', async () => {
   showView('loading');
   try {
-    await invoke('restart_engine');
+    if (connectionMode === 'server') await invoke('connect_server', { address: serverAddress.value });
+    else await invoke('restart_engine');
   } catch (error) {
     showView('error');
     renderLog(logError, [`error: ${errorText(error)}`]);
@@ -216,6 +226,8 @@ btnLogs.addEventListener('click', () => invoke('open_logs'));
 
 listen('engine-status', (event) => applyStatus(event.payload));
 listen('shell-view', (event) => {
+  if (event.payload === 'connection') showView('connection');
+  if (event.payload === 'local') { connectionMode = 'local'; showView('first-run'); }
   if (event.payload === 'pairing') window.shellPairing?.open();
   if (event.payload === 'pairing-unavailable') window.shellPairing?.open({ unavailable: true });
 });
@@ -231,6 +243,14 @@ async function resumeReturningUser() {
     return;
   }
 
+  connectionMode = profile.mode ?? 'local';
+  if (profile.server) serverAddress.value = profile.server;
+  if (connectionMode === 'server') {
+    await connectServer(true);
+    return;
+  }
+  if (connectionMode === 'choose') { showView('connection'); return; }
+  showView('first-run');
   if (profile.configured_but_missing) {
     setSelectionState('error', t('configuredMissing'));
     return;
@@ -254,6 +274,25 @@ async function resumeReturningUser() {
     renderLog(logError, [`error: ${errorText(error)}`]);
   }
 }
+
+async function connectServer(restoring = false) {
+  if (btnConnect.disabled) return;
+  btnConnect.disabled = true;
+  connectionError.classList.add('hidden');
+  connectionMode = 'server';
+  try {
+    if (!restoring) await invoke('set_autostart', { enabled: document.getElementById('chk-client-autostart').checked });
+    await invoke('connect_server', { address: serverAddress.value });
+  } catch (error) {
+    showView('connection');
+    connectionError.textContent = errorText(error);
+    connectionError.classList.remove('hidden');
+  } finally { btnConnect.disabled = false; }
+}
+
+document.getElementById('server-form').addEventListener('submit', event => { event.preventDefault(); void connectServer(); });
+document.getElementById('btn-local').addEventListener('click', () => { connectionMode = 'local'; showView('first-run'); });
+document.getElementById('btn-change-error').addEventListener('click', () => invoke('change_connection'));
 
 invoke('get_engine_status')
   .then(applyStatus)

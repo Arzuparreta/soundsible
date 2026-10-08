@@ -49,7 +49,7 @@ hiddenimports.extend(
 )
 
 datas = [
-    (str(REPO_ROOT / "ui_web"), "ui_web"),
+    (str(REPO_ROOT / "ui_web" / "dist"), "ui_web/dist"),
     (str(REPO_ROOT / "branding"), "branding"),
     *curl_cffi_datas,
 ]

@@ -3,7 +3,11 @@
 The desktop app packages the Station Engine, the web player, FFmpeg and ffprobe into
 one installer. You do not need Python, Git, Node.js, FFmpeg or a terminal.
 
-It serves the computer it is installed on: its engine listens on `127.0.0.1`
+The installer also offers **Connect to server** for a station you already run
+natively, in Docker or on another computer. See [Desktop client](DESKTOP_CLIENT.md)
+for connection modes and Linux media controls.
+
+In **Use this computer as server** mode, it serves the computer it is installed on: its engine listens on `127.0.0.1`
 on a random port, not on your network. To listen from a phone or another
 computer, run Soundsible as a server instead — [natively](INSTALL.md) or with
 [Docker](DOCKER.md).
@@ -16,7 +20,7 @@ Every [release](https://github.com/Arzuparreta/soundsible/releases) attaches:
 | --- | --- | --- |
 | `Soundsible_<version>_x64-setup.exe` | Windows 11 x64 | Installs, runs and uninstalls it through the real Windows UI ([below](#what-ci-proves)) |
 | `Soundsible_<version>_arm64-setup.exe` | Windows 11 ARM64 | The same, on a native ARM64 runner |
-| `Soundsible_<version>_amd64.deb` | Debian and Ubuntu, x86-64 | Builds it and smoke-tests its engine; nothing installs or drives the app |
+| `Soundsible_<version>_amd64.deb` | Debian and Ubuntu, x86-64 | Installs the bundle and drives the app, real playback and MPRIS against an independent station |
 
 There is no macOS build. On a Mac, use the [native installation](INSTALL.md)
 or Docker.
@@ -33,11 +37,12 @@ describes the desktop shell's maturity, not a separate version — see
 
 ## Using it
 
-- **First run** asks for your music folder through the system's folder dialog,
+- **First run** offers a server address or the local music-folder flow,
   and offers to start Soundsible when you log in.
 - **Closing the window** hides Soundsible in the tray and keeps playback
-  running. **Quit** in the tray menu, or `Ctrl+Alt+Q`, stops the engine and
-  exits. The other tray actions and shortcuts are listed in the
+  running. **Quit** in the tray/window menu, or `Ctrl+Alt+Q`, exits and stops only
+  the engine started by this app. External stations keep running. Without a
+  usable tray, closing exits. The other tray actions and shortcuts are listed in the
   [desktop shell README](../desktop-shell/README.md#architecture).
 - **Updating**: there is no automatic update. Install the newer release over
   the old one. Upgrading an existing installation has not had a human

@@ -58,6 +58,8 @@ export interface PlaybackAttempt {
 }
 export type ContextMatchOutcome = 'resolved' | 'unavailable' | 'gone';
 export type LoadOptions = {
+  /** Select the next track without starting audio (desktop media controls). */
+  paused?: boolean;
   restart?: boolean;
   trigger?: PlaybackTrigger;
   freshDeck?: boolean;
@@ -124,8 +126,8 @@ export interface PlayerActions {
   pausePlayback: (origin?: ProgramTransportOrigin) => void;
   dismissPlayback: () => void;
   retryCurrent: () => void;
-  next: (trigger?: PlaybackTrigger) => void;
-  prev: () => void;
+  next: (trigger?: PlaybackTrigger, preservePaused?: boolean) => void;
+  prev: (preservePaused?: boolean) => void;
   seekBy: (delta: number) => void;
   seek: (t: number) => void;
   jumpTo: (i: number) => void;

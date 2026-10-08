@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -171,6 +172,18 @@ def _run_smoke(tmp_path: Path, engine_bin: Path | None) -> None:
         player_base = payload.get("base_url") or state["base_url"]
         desktop = requests.get(f"{player_base.rstrip('/')}/player/desktop/", timeout=10)
         assert desktop.status_code == 200
+        if engine_bin is not None:
+            # Health alone does not prove a fresh checkout packaged the player.
+            # Require production JavaScript and fetch it from the frozen engine.
+            player = requests.get(f"{player_base.rstrip('/')}/player/", timeout=10)
+            player.raise_for_status()
+            assert "/src/main.tsx" not in player.text
+            scripts = re.findall(r'<script\b[^>]*\bsrc="([^"]+)"', player.text)
+            assert scripts, "Packaged player has no JavaScript entry"
+            for script in scripts:
+                asset = requests.get(requests.compat.urljoin(player.url, script), timeout=10)
+                asset.raise_for_status()
+                assert "javascript" in asset.headers.get("Content-Type", ""), asset.headers
     finally:
         if proc.poll() is None:
             if os.name == "nt":
