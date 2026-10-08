@@ -834,11 +834,12 @@ def set_saved():
     if len(entries) > _MAX_SAVED_BATCH:
         return jsonify({"error": f"at most {_MAX_SAVED_BATCH} entries at once"}), 400
 
-    changed = api["favourites_manager"].set_saved(entries, saved)
+    enriched: list = []
+    changed = api["favourites_manager"].set_saved(entries, saved, enriched)
     if saved:
         for entry in changed:
             _schedule_favourite_resolve(entry)
-    if changed:
+    if changed or enriched:
         api["emit_to_user"]("favourites_updated")
     return jsonify({"status": "success", "changed": len(changed)})
 

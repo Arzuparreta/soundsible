@@ -328,3 +328,22 @@ def test_a_mark_already_set_elsewhere_still_fills_the_record(manager):
     manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4, "year": 2011}, True)
     entry = manager.get_entries()[0]
     assert (entry["favourite"], entry["album"], entry["track_number"], entry["year"]) == (True, "Album", 4, 2011)
+
+
+def test_adding_an_album_fills_in_songs_already_saved(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "title": "Song"})
+    enriched = []
+    changed = manager.set_saved([{"keys": ["isrc:X"], "album": "Album", "track_number": 4, "year": 2011}], True, enriched)
+    assert changed == [] and len(enriched) == 1
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["track_number"], entry["year"]) == ("Album", 4, 2011)
+    # Nothing new to say: nothing reported.
+    enriched.clear()
+    manager.set_saved([{"keys": ["isrc:X"], "album": "Album", "track_number": 4}], True, enriched)
+    assert enriched == []
+
+
+def test_a_new_record_brings_its_own_cover(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Song (Single)", "thumbnail": "https://example.invalid/single.jpg"})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4, "thumbnail": "https://example.invalid/album.jpg"}, True)
+    assert manager.get_entries()[0]["thumbnail"] == "https://example.invalid/album.jpg"

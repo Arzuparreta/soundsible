@@ -120,7 +120,8 @@ def _fill_release(existing: Dict[str, Any], entry: Dict[str, Any]) -> None:
         return
     if current and not entry.get("track_number"):
         return
-    for field in _RELEASE_KEYS:
+    # The cover is the record's too: a new record brings its own.
+    for field in (*_RELEASE_KEYS, *(("thumbnail",) if entry.get("thumbnail") else ())):
         existing.pop(field, None)
         if field in entry:
             existing[field] = entry[field]
@@ -200,7 +201,12 @@ class FavouritesManager:
             return True
 
     @serialized
-    def set_saved(self, raw_entries: Iterable[Dict[str, Any]], saved: bool) -> List[Dict[str, Any]]:
+    def set_saved(
+        self,
+        raw_entries: Iterable[Dict[str, Any]],
+        saved: bool,
+        enriched: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Put many songs in the library, or take them out, in one write.
 
@@ -208,9 +214,12 @@ class FavouritesManager:
         removing skips songs that are not. Removing also keeps a song that is
         marked — the heart is a choice of its own — and one the library holds as
         a file, since unsaving a downloaded song would mean deleting it. Returns
-        the entries that changed.
+        the entries that changed. Saving a song already held still fills in its
+        snapshot from the richer one (an album's ＋ after a search row's); those
+        entries are appended to `enriched`, not returned.
         """
         changed: List[Dict[str, Any]] = []
+        filled = False
         # Newest first: saving from the end keeps a record's songs in its order.
         ordered = list(raw_entries)
         if saved:
@@ -223,6 +232,10 @@ class FavouritesManager:
                 matches = self._find_all(entry["keys"])
                 if saved:
                     if matches:
+                        if _fill_snapshot(matches[0], entry):
+                            filled = True
+                            if enriched is not None:
+                                enriched.append(dict(matches[0], keys=list(matches[0]["keys"])))
                         continue
                     entry["added_at"] = self._held_by_library(entry["keys"]) or library_dates.now()
                     _stamp_mark(entry)
@@ -236,7 +249,7 @@ class FavouritesManager:
                     self._entries.remove(match)
                     self._reindex()
                     changed.append(match)
-            if changed:
+            if changed or filled:
                 self._persist()
         return [dict(entry, keys=list(entry["keys"])) for entry in changed]
 
