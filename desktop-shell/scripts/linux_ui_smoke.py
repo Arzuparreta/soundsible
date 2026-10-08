@@ -139,6 +139,8 @@ def run(app, engine, artifacts):
                                    stdout=station_log, stderr=subprocess.STDOUT, start_new_session=True)
         driver = None
         web = None
+        monitor = None
+        monitor_log = None
         try:
             state_file = Path(station_env["SOUNDSIBLE_CONFIG_DIR"]) / "desktop-engine-state.json"
             state = wait_for(lambda: json.loads(state_file.read_text()) if state_file.exists() else None, "station state", 120)
@@ -235,6 +237,32 @@ def run(app, engine, artifacts):
                     assert executable.resolve().name != engine.name, "client spawned a station engine"
             (artifacts / "processes.txt").write_text(subprocess.check_output(["ps", "-eo", "pid,ppid,rss,pcpu,comm"], text=True))
             (artifacts / "client-status.txt").write_text(Path(f"/proc/{pid}/status").read_text())
+            # Check notification-driven widgets, not only synchronous getters:
+            # switching away must publish the transition to empty media state.
+            monitor_path = artifacts / "mpris-changes.log"
+            monitor_log = monitor_path.open("w")
+            monitor = subprocess.Popen([
+                "dbus-monitor", "--session",
+                f"type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='{OBJECT}'",
+            ], stdout=monitor_log, stderr=subprocess.STDOUT, start_new_session=True)
+            wait_for(lambda: "NameAcquired" in monitor_path.read_text(), "MPRIS signal monitor ready")
+
+            def select_shell():
+                for handle in web.call("/window/handles"):
+                    web.call("/window", {"handle": handle})
+                    if web.script("return !!document.getElementById('view-connection')"):
+                        return handle
+                return None
+
+            wait_for(select_shell, "configuration window")
+            web.async_script("""
+              const done = arguments[arguments.length - 1];
+              window.__TAURI_INTERNALS__.invoke('change_connection').then(() => done(true), error => done(String(error)));
+            """)
+            wait_for(lambda: '"PlaybackStatus"' in monitor_path.read_text()
+                     and '"Stopped"' in monitor_path.read_text()
+                     and '"Metadata"' in monitor_path.read_text(), "MPRIS clearing signals")
+            assert second_title not in property_value("Metadata")
             bus("call", MPRIS, OBJECT, "org.mpris.MediaPlayer2", "Quit")
             wait_for(lambda: bus("call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner", "s", MPRIS) == "b false", "client exited")
             wait_for(lambda: station.poll() is None and http(origin + "/api/health"), "server survives client quit")
@@ -244,6 +272,7 @@ def run(app, engine, artifacts):
                 "installed_app": str(app), "remote_acl_denial": denied, "mpris": "passed",
                 "real_audio_position": "advanced", "client_engine_spawned": False,
                 "server_survives_quit": True,
+                "connection_switch_clears_mpris_signals": True,
             }, indent=2))
             print("Linux installed-app smoke passed: real player, WAV playback, MPRIS, remote ACL and independent server lifecycle.", flush=True)
         except Exception:
@@ -276,7 +305,7 @@ def run(app, engine, artifacts):
                     web.call("", method="DELETE")
                 except (OSError, RuntimeError):
                     pass
-            for process in (driver, station):
+            for process in (monitor, driver, station):
                 if process and process.poll() is None:
                     os.killpg(process.pid, signal.SIGTERM)
                     try:
@@ -286,6 +315,8 @@ def run(app, engine, artifacts):
                         process.wait(timeout=5)
             station_log.close()
             driver_log.close()
+            if monitor_log:
+                monitor_log.close()
 
 
 if __name__ == "__main__":

@@ -265,15 +265,21 @@ pub fn dispatch(app: &AppHandle, action: serde_json::Value) -> Result<(), String
 
 pub fn close_player(app: &AppHandle) {
     let state = app.state::<DesktopState>();
-    if let Ok(mut guard) = state.session.lock() {
-        if let Some(s) = guard.take() {
-            if let Some(w) = app.get_webview_window(&s.label) {
-                let _ = w.destroy();
-            }
+    let session = state.session.lock().ok().and_then(|mut guard| guard.take());
+    #[cfg(target_os = "linux")]
+    let previous = session
+        .as_ref()
+        .map(|s| s.media.clone())
+        .unwrap_or_default();
+    // Release the session lock before dispatching native window destruction.
+    // This also avoids a tail-expression borrow on non-Linux builds.
+    if let Some(s) = session {
+        if let Some(w) = app.get_webview_window(&s.label) {
+            let _ = w.destroy();
         }
     }
     #[cfg(target_os = "linux")]
-    state.native.update(app.clone(), MediaState::default());
+    state.native.update(app.clone(), previous);
 }
 
 pub fn open_player(app: &AppHandle, value: &str) -> Result<(), String> {

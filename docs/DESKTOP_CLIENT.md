@@ -88,7 +88,9 @@ real WAV files and checks advancing audio position, MPRIS transport/volume,
 paused navigation, remote command denial, persisted connection preferences,
 absence of a client engine, and station survival after client exit. A persisted
 runtime state deliberately points at the independent station to guard against
-accidental termination. Screenshots, process measurements and logs are uploaded
+accidental termination. It also monitors MPRIS property signals when changing
+connections so notification-driven widgets clear the previous track. Screenshots,
+process measurements and logs are uploaded
 as `linux-ui-evidence`.
 
 Tauri's `TAURI_WEBVIEW_AUTOMATION=true` environment enables WebKit WebDriver

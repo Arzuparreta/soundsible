@@ -302,6 +302,9 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
                 let player_url = state.player_url();
                 {
                     let mut guard = inner.lock().expect("engine lock");
+                    if stop_flag.load(Ordering::SeqCst) || guard.phase != EnginePhase::Booting {
+                        return;
+                    }
                     guard.runtime = Some(state);
                     guard.phase = EnginePhase::Ready;
                     guard.message = "Ready".into();
@@ -324,17 +327,55 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
     }
 
     let mut guard = inner.lock().expect("engine lock");
-    if guard.phase != EnginePhase::Ready {
-        guard.phase = EnginePhase::Error;
-        guard.message = "Couldn't start".into();
-        push_log(
-            &mut guard,
-            "error: engine did not become ready within timeout".into(),
-        );
+    if !fail_boot(&mut guard, stop_flag.load(Ordering::SeqCst)) {
+        return;
     }
     drop(guard);
     let supervisor = EngineSupervisor { inner, stop_flag };
     supervisor.emit_status(&app);
+}
+
+fn fail_boot(guard: &mut SupervisorInner, cancelled: bool) -> bool {
+    if cancelled || guard.phase != EnginePhase::Booting {
+        return false;
+    }
+    guard.phase = EnginePhase::Error;
+    guard.message = "Couldn't start".into();
+    push_log(
+        guard,
+        "error: engine did not become ready within timeout".into(),
+    );
+    true
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+
+    #[test]
+    fn cancelled_boot_does_not_replace_the_connection_chooser_with_an_error() {
+        let supervisor = EngineSupervisor::new();
+        supervisor.inner.lock().unwrap().phase = EnginePhase::Booting;
+        supervisor.stop(None).unwrap();
+        let mut state = supervisor.inner.lock().unwrap();
+        assert!(!fail_boot(
+            &mut state,
+            supervisor.stop_flag.load(Ordering::SeqCst)
+        ));
+        assert_eq!(state.phase, EnginePhase::Idle);
+        assert_eq!(state.message, "Stopped");
+    }
+
+    #[test]
+    fn only_an_active_boot_timeout_becomes_an_error() {
+        let mut state = SupervisorInner::default();
+        state.phase = EnginePhase::Booting;
+        assert!(fail_boot(&mut state, false));
+        assert_eq!(state.phase, EnginePhase::Error);
+        state.phase = EnginePhase::Ready;
+        assert!(!fail_boot(&mut state, false));
+        assert_eq!(state.phase, EnginePhase::Ready);
+    }
 }
 
 fn health_watchdog(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>, app: AppHandle) {

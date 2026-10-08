@@ -53,9 +53,31 @@ jobs:
       # The mirror is only asked when the package list changes.
       - name: Install Tauri Linux dependencies
         uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        continue-on-error: true
         with:
-          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev libssl-dev patchelf webkit2gtk-driver xvfb dbus-x11 pulseaudio scrot
-          version: tauri-1
+          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev libssl-dev patchelf webkit2gtk-driver xvfb xauth dbus-x11 pulseaudio scrot
+          version: tauri-validated
+
+      # The cache action can report success after a mirror download failure and
+      # save an empty cache. Verify the actual SDK and runtime, then repair with
+      # apt's checked exit status rather than discovering missing GTK in Cargo.
+      - name: Verify and repair Linux dependencies
+        shell: bash
+        run: |
+          dependencies_ready() {
+            pkg-config --exists glib-2.0 gobject-2.0 gio-2.0 gtk+-3.0 webkit2gtk-4.1 librsvg-2.0 openssl || return 1
+            pkg-config --exists appindicator3-0.1 || pkg-config --exists ayatana-appindicator3-0.1 || return 1
+            for tool in WebKitWebDriver Xvfb xauth dbus-run-session dbus-monitor pulseaudio pactl scrot patchelf; do
+              command -v "$tool" >/dev/null || return 1
+            done
+          }
+          if ! dependencies_ready; then
+            sudo apt-get -o Acquire::Retries=3 update
+            sudo apt-get -o Acquire::Retries=3 install -y \
+              libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev \
+              libssl-dev patchelf webkit2gtk-driver xvfb xauth dbus-x11 pulseaudio scrot
+          fi
+          dependencies_ready
 
       - uses: actions/setup-python@v5
         with:
