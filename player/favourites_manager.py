@@ -74,7 +74,57 @@ LIB_PREFIX = "lib:"
 
 #: Snapshot fields kept alongside the keys, so a saved song that is not
 #: downloaded is still renderable and playable.
-_TEXT_FIELDS = ("title", "artist", "album", "thumbnail")
+_TEXT_FIELDS = ("title", "artist", "album", "album_artist", "thumbnail")
+
+#: Where the song sits on its record, and when the record came out: what a
+#: download of a saved song that is not a file yet is filed under. Bounded as
+#: `/api/catalog/save` bounds them; anything else is dropped.
+_RELEASE_FIELDS = (("track_number", 1, 999), ("disc_number", 1, 99), ("year", 1000, 9999))
+
+#: A record as one thing: the album and everything that places the song on
+#: it. Merged whole, never field by field, so two releases never mix.
+_RELEASE_KEYS = ("album", "album_artist", *(name for name, _, _ in _RELEASE_FIELDS))
+
+
+def _fill_snapshot(existing: Dict[str, Any], entry: Dict[str, Any]) -> bool:
+    """Fill a saved entry's snapshot from another one of the same song.
+
+    A song saved bare (＋ from a search row) has no snapshot worth the name;
+    the heart usually arrives from a surface that has one. Returns whether
+    anything changed.
+    """
+    before = dict(existing)
+    for field in ("title", "artist", "duration"):
+        if field in entry and not existing.get(field):
+            existing[field] = entry[field]
+    _fill_release(existing, entry)
+    return existing != before
+
+
+def _fill_release(existing: Dict[str, Any], entry: Dict[str, Any]) -> None:
+    """Fill an entry's record from another snapshot of the same song.
+
+    Records never mix (the client's `withRecord` follows the same rule): the
+    same album fills in what is missing; another album replaces the record
+    whole, but only when it places the song on it — an album named and
+    nothing else is too little to overrule. An entry with no album takes any.
+    The cover belongs to the record and follows the same decision.
+    """
+    album = entry.get("album")
+    current = existing.get("album")
+    if not album or (current and current.casefold() == album.casefold()):
+        for field in (*(_RELEASE_KEYS[1:] if album else ()), "thumbnail"):
+            if field in entry and not existing.get(field):
+                existing[field] = entry[field]
+        return
+    if current and not entry.get("track_number"):
+        return
+    # The cover is the record's too: a new record brings its own, or none.
+    for field in (*_RELEASE_KEYS, "thumbnail"):
+        existing.pop(field, None)
+        if field in entry:
+            existing[field] = entry[field]
+
 
 #: Dates the engine decides. A client payload never sets them; a stored entry
 #: keeps whatever it was written with.
@@ -150,7 +200,12 @@ class FavouritesManager:
             return True
 
     @serialized
-    def set_saved(self, raw_entries: Iterable[Dict[str, Any]], saved: bool) -> List[Dict[str, Any]]:
+    def set_saved(
+        self,
+        raw_entries: Iterable[Dict[str, Any]],
+        saved: bool,
+        enriched: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Put many songs in the library, or take them out, in one write.
 
@@ -158,9 +213,12 @@ class FavouritesManager:
         removing skips songs that are not. Removing also keeps a song that is
         marked — the heart is a choice of its own — and one the library holds as
         a file, since unsaving a downloaded song would mean deleting it. Returns
-        the entries that changed.
+        the entries that changed. Saving a song already held still fills in its
+        snapshot from the richer one (an album's ＋ after a search row's); those
+        entries are appended to `enriched`, not returned.
         """
         changed: List[Dict[str, Any]] = []
+        filled = False
         # Newest first: saving from the end keeps a record's songs in its order.
         ordered = list(raw_entries)
         if saved:
@@ -173,6 +231,11 @@ class FavouritesManager:
                 matches = self._find_all(entry["keys"])
                 if saved:
                     if matches:
+                        for match in matches:
+                            if _fill_snapshot(match, entry):
+                                filled = True
+                                if enriched is not None:
+                                    enriched.append(dict(match, keys=list(match["keys"])))
                         continue
                     entry["added_at"] = self._held_by_library(entry["keys"]) or library_dates.now()
                     _stamp_mark(entry)
@@ -186,7 +249,7 @@ class FavouritesManager:
                     self._entries.remove(match)
                     self._reindex()
                     changed.append(match)
-            if changed:
+            if changed or filled:
                 self._persist()
         return [dict(entry, keys=list(entry["keys"])) for entry in changed]
 
@@ -213,6 +276,10 @@ class FavouritesManager:
                 return entry["favourite"]
             resolved = (not existing.get("favourite")) if favourite is None else bool(favourite)
             if bool(existing.get("favourite")) == resolved:
+                # Already marked from another device: what this one knows
+                # about the song still counts.
+                if self._fill_all(entry):
+                    self._persist()
                 return resolved
             if not resolved and any(k.startswith(LIB_PREFIX) for k in existing["keys"]):
                 # The library already holds this song as a file, so the entry was
@@ -225,15 +292,16 @@ class FavouritesManager:
                 return False
             existing["favourite"] = resolved
             _stamp_mark(existing)
-            # A song saved bare (＋ from a search row) has no snapshot worth the
-            # name; the heart usually arrives from a surface that has one.
-            for field in _TEXT_FIELDS:
-                if field in entry and not existing.get(field):
-                    existing[field] = entry[field]
-            if "duration" in entry and not existing.get("duration"):
-                existing["duration"] = entry["duration"]
+            self._fill_all(entry)
             self._persist()
             return resolved
+
+    def _fill_all(self, entry: Dict[str, Any]) -> bool:
+        """Fill every held copy of a song from `entry`. Under the lock."""
+        filled = False
+        for match in self._find_all(entry["keys"]):
+            filled = _fill_snapshot(match, entry) or filled
+        return filled
 
     def is_saved_keys(self, keys: Iterable[str]) -> bool:
         """Is any of these identities in the library (file or not)?"""
@@ -569,6 +637,10 @@ def _normalise_entry(raw: Any, default_favourite: bool = False) -> Optional[Dict
         duration = None
     if isinstance(duration, (int, float)) and duration > 0:
         entry["duration"] = int(duration)
+    for field, low, high in _RELEASE_FIELDS:
+        value = raw.get(field)
+        if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high:
+            entry[field] = value
     return entry
 
 

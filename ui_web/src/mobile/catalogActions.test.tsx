@@ -131,3 +131,47 @@ it('reports a refused download', async () => {
   await actions.act(remote, 'acquire');
   expect(actions.error()).toBe('Could not save');
 });
+
+it('files a download from an album row where the song sits on the record', async () => {
+  mocks.catalogSave.mockResolvedValue({ status: 'queued', video_id: 'A1111111111' });
+  const { actions } = acquiring();
+  await actions.act({ ...remote, album: 'Discovery', raw: { album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 } }, 'acquire');
+  expect(mocks.catalogSave).toHaveBeenCalledWith(expect.objectContaining({
+    album: 'Discovery', album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001,
+  }));
+});
+
+it('plays an album with every song carrying its place on the record', async () => {
+  mocks.resolve.mockResolvedValue({ video_id: 'A1111111111' });
+  const play = vi.fn().mockResolvedValue(undefined);
+  let actions!: ReturnType<typeof createNativeCatalogActions>;
+  render(() => { actions = createNativeCatalogActions({ generation: () => 1, disconnected: () => false, saved: () => [], tracks: () => [],
+    onPlay: vi.fn(), onPlayCollection: play, onChanged: vi.fn() }); return null; });
+  const row = (id: string, position: number): CatalogItem => ({ id, source: 'deezer', type: 'track', title: id, artist: 'Artist', album: 'Discovery',
+    raw: { album_artist: 'Daft Punk', track_number: position, disc_number: 1, year: 2001 } });
+  await actions.playCollection([row('first', 1), row('second', 2)], 1);
+  expect(play).toHaveBeenCalledWith([
+    expect.objectContaining({ id: 'first', track_number: 1, disc_number: 1, year: 2001, album_artist: 'Daft Punk', pendingResolve: expect.anything() }),
+    expect.objectContaining({ id: 'A1111111111', source: 'preview', track_number: 2, disc_number: 1, year: 2001, album_artist: 'Daft Punk' }),
+  ], 1);
+});
+
+it('gives a saved stream the place of the album row it is played from', () => {
+  const saved = [{ keys: ['deezer:7', 'yt:A1111111111'], title: 'Song', artist: 'Artist', album: 'Discovery', year: 2001 }];
+  let actions!: ReturnType<typeof createNativeCatalogActions>;
+  render(() => { actions = createNativeCatalogActions({ generation: () => 1, disconnected: () => false, saved: () => saved, tracks: () => [],
+    onPlay: vi.fn(), onPlayCollection: vi.fn(), onChanged: vi.fn() }); return null; });
+  const song: CatalogItem = { id: 'deezer:track:7', source: 'deezer', type: 'track', title: 'Song', artist: 'Artist', external_ids: { deezer_id: '7' } };
+  // Saved from a search row, which knows no position: the snapshot stands.
+  expect(actions.trackFor(song)).toMatchObject({ source: 'preview', year: 2001 });
+  expect(actions.trackFor(song)?.track_number).toBeUndefined();
+  // Played from the album, the row's place goes with it.
+  expect(actions.trackFor({ ...song, album: 'Discovery', raw: { album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 } }))
+    .toMatchObject({ source: 'preview', album: 'Discovery', album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 });
+  // From another release the record is replaced whole, never mixed.
+  const single = actions.trackFor({ ...song, album: 'Song (Single)', raw: { track_number: 1 } });
+  expect(single).toMatchObject({ album: 'Song (Single)', track_number: 1 });
+  expect(single?.year).toBeUndefined(); expect(single?.album_artist).toBeUndefined();
+  // A plain search row names an album and nothing else: too little to overrule.
+  expect(actions.trackFor({ ...song, album: 'Song (Single)' })).toMatchObject({ album: 'Discovery', year: 2001 });
+});

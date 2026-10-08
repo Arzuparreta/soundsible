@@ -54,21 +54,23 @@ export function podcastEpisodeToTrack(
 export interface DownloadEvidence {
   album: string;
   album_artist?: string;
+  track_number?: number;
+  disc_number?: number;
+  year?: number;
   musicbrainz_id?: string;
 }
 
 /**
  * The release a preview names, for the engine to tag the file with.
  *
- * A song chosen from the catalog knows its album, but the download used to
- * send nothing and the file was tagged from the upload instead, with no album.
- * The title and artist travel separately as the item's display fields. Nothing
- * is invented — without an album there is no evidence to send.
+ * A song chosen from the catalog knows its record: the album, where the song
+ * sits on it and when it came out. Without them the file is tagged from the
+ * upload — no album, track 1, and the video's upload date for a year. The
+ * title and artist travel separately as the item's display fields.
  *
- * Only the release travels, not where the song sits on it or when it came out:
- * every preview path (a played context queue, Android's program queue) carries
- * the album, but none carries the track number, disc number or year yet, so a
- * file still takes those from the upload.
+ * Nothing is invented: without an album there is no evidence to send, and a
+ * position or year that is not one stays out, within the bounds
+ * `/api/catalog/save` keeps.
  */
 export function downloadEvidence(track: Track): DownloadEvidence | null {
   const album = track.album?.trim();
@@ -76,6 +78,14 @@ export function downloadEvidence(track: Track): DownloadEvidence | null {
   const evidence: DownloadEvidence = { album };
   const albumArtist = track.album_artist?.trim();
   if (albumArtist) evidence.album_artist = albumArtist;
+  const within = (value: number | null | undefined, low: number, high: number) =>
+    typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high ? value : undefined;
+  const trackNumber = within(track.track_number, 1, 999);
+  const discNumber = within(track.disc_number, 1, 99);
+  const year = within(track.year, 1000, 9999);
+  if (trackNumber) evidence.track_number = trackNumber;
+  if (discNumber) evidence.disc_number = discNumber;
+  if (year) evidence.year = year;
   if (track.musicbrainz_id) evidence.musicbrainz_id = track.musicbrainz_id;
   return evidence;
 }

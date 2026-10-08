@@ -14,7 +14,7 @@ def _download(tmp_path, monkeypatch, *, tags: dict, hint: dict):
     monkeypatch.setattr("shared.audio_files.AudioProcessor.read_tags", lambda _path: dict(tags))
     monkeypatch.setattr(
         "shared.audio_files.AudioProcessor.embed_metadata",
-        lambda _path, metadata, _cover: embedded.append(dict(metadata)),
+        lambda _path, metadata, _cover, clear=(): embedded.append(dict(metadata, _cleared=sorted(clear))),
     )
     monkeypatch.setattr("shared.audio_files.AudioProcessor.calculate_hash", lambda _path: "content-hash")
 
@@ -50,7 +50,7 @@ def test_a_download_with_no_record_keeps_what_the_upload_says(tmp_path, monkeypa
 
 
 def test_positions_that_are_not_positions_are_ignored(tmp_path, monkeypatch):
-    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "", "track_number": 4}
+    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery", "track_number": 4}
     hint = {"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery", "track_number": "x", "disc_number": 0, "year": True}
 
     track, _embedded = _download(tmp_path, monkeypatch, tags=tags, hint=hint)
@@ -59,3 +59,47 @@ def test_positions_that_are_not_positions_are_ignored(tmp_path, monkeypatch):
     assert track.track_number == 4
     assert track.disc_number is None
     assert track.year is None
+
+
+def test_a_record_named_alone_does_not_inherit_the_uploads_place(tmp_path, monkeypatch):
+    # A plain search row names the album and nothing else.
+    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "Digital Love (Single)",
+            "album_artist": "Daft Punk Official", "track_number": 2, "disc_number": 1, "disc_total": 3, "year": 2014}
+
+    track, embedded = _download(tmp_path, monkeypatch, tags=tags, hint={"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery"})
+
+    assert track.album == "Discovery"
+    assert (track.album_artist, track.disc_number, track.year) == (None, None, None)
+    assert track.track_number == 1
+    assert not {"album_artist", "disc_number", "disc_total", "year"} & {key for key, value in embedded.items() if value and key != "_cleared"}
+    # ...and the file loses the upload's tags for them.
+    assert embedded["_cleared"] == ["album_artist", "disc_number", "disc_total", "year"]
+
+
+def test_another_record_is_not_a_compilation_because_the_upload_was(tmp_path, monkeypatch):
+    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "Hits 2001", "is_compilation": True}
+
+    track, embedded = _download(tmp_path, monkeypatch, tags=tags, hint={"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery"})
+
+    assert track.album == "Discovery"
+    assert embedded["is_compilation"] is False
+    assert "is_compilation" in embedded["_cleared"]
+
+
+def test_an_import_with_no_album_keeps_the_uploads_place(tmp_path, monkeypatch):
+    # A playlist import names no album: nothing says the upload's record is wrong.
+    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery", "track_number": 3, "year": 2001}
+
+    track, _embedded = _download(tmp_path, monkeypatch, tags=tags, hint={"title": "Digital Love", "artist": "Daft Punk", "album": ""})
+
+    assert (track.track_number, track.year) == (3, 2001)
+
+
+def test_a_new_disc_number_drops_the_uploads_disc_total(tmp_path, monkeypatch):
+    tags = {"title": "Digital Love", "artist": "Daft Punk", "album": "Single", "disc_number": 2, "disc_total": 3}
+    hint = {"title": "Digital Love", "artist": "Daft Punk", "album": "Discovery", "track_number": 3, "disc_number": 1}
+
+    track, embedded = _download(tmp_path, monkeypatch, tags=tags, hint=hint)
+
+    assert (track.disc_number, embedded.get("disc_total")) == (1, None)
+    assert "disc_total" in embedded["_cleared"]

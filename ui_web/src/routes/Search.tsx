@@ -36,6 +36,7 @@ import {
   itemArtist,
   playCatalogItem,
   cancelCatalogResolve,
+  catalogReleaseEvidence,
 } from '../lib/catalogItem';
 import SearchResultRow from '../components/SearchResultRow';
 import type { CatalogItem, CatalogSaveResponse, CatalogSection, SearchResult } from '../types/music';
@@ -603,6 +604,7 @@ export default function Search() {
         cover: item.cover,
         external_ids: item.external_ids,
         identity_keys: catalogItemKeys(item),
+        ...catalogReleaseEvidence(item),
         confirm_video_id:
           confirmVideoId ||
           (item.external_ids?.youtube_id ? String(item.external_ids.youtube_id) : undefined),

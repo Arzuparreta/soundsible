@@ -1,6 +1,7 @@
 import type { CatalogItem, SavedEntry, SearchResult, Track } from '../types/music';
 import { catalogItemKeys, searchResultKeys, trackKeys } from './playbackIdentity';
 import { resultCredit } from './queueDiscovery';
+import { releasePosition } from './catalogTrack';
 
 /**
  * Your collection: every song you have claimed, downloaded or not.
@@ -42,10 +43,21 @@ const snapshot = (
   keys: string[],
   title: string,
   artist: string,
-  extra: { album?: string; duration?: number; thumbnail?: string },
+  extra: {
+    album?: string; duration?: number; thumbnail?: string;
+    album_artist?: string | null; track_number?: number | null; disc_number?: number | null; year?: number | null;
+  },
 ): SavedEntry => {
   const entry: SavedEntry = { keys, title, artist };
   if (extra.album) entry.album = extra.album;
+  if (extra.album_artist) entry.album_artist = extra.album_artist;
+  // Bounded as the engine bounds them; anything else would be dropped there.
+  const whole = (value: number | null | undefined, low: number, high: number) =>
+    typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high ? value : undefined;
+  const trackNumber = whole(extra.track_number, 1, 999), discNumber = whole(extra.disc_number, 1, 99), year = whole(extra.year, 1000, 9999);
+  if (trackNumber) entry.track_number = trackNumber;
+  if (discNumber) entry.disc_number = discNumber;
+  if (year) entry.year = year;
   if (typeof extra.duration === 'number' && Number.isFinite(extra.duration) && extra.duration > 0)
     entry.duration = Math.round(extra.duration);
   if (extra.thumbnail) entry.thumbnail = extra.thumbnail;
@@ -54,12 +66,16 @@ const snapshot = (
 
 /** An entry for a playable track — library or preview alike. */
 export function savedFromTrack(track: Track): SavedEntry {
+  const preview = track.source === 'preview';
   return snapshot(trackKeys(track), track.title, track.artist, {
     album: track.album,
     duration: track.duration,
     // A library track's art comes from the engine and needs no snapshot; a
-    // preview's thumbnail is the only artwork it will ever have.
-    thumbnail: track.source === 'preview' ? track.cover : undefined,
+    // preview's is the only one it will have until downloaded.
+    thumbnail: preview ? track.cover : undefined,
+    // Its record is kept either way: deleting the file degrades the entry to
+    // a preview, and downloading that again files it where it sat.
+    album_artist: track.album_artist, track_number: track.track_number, disc_number: track.disc_number, year: track.year,
   });
 }
 
@@ -74,6 +90,8 @@ export function savedFromCatalogItem(item: CatalogItem): SavedEntry {
     album: item.album,
     duration: item.duration,
     thumbnail: item.cover,
+    album_artist: typeof item.raw?.album_artist === 'string' ? item.raw.album_artist : undefined,
+    ...releasePosition(item),
   });
 }
 
@@ -113,6 +131,10 @@ export function savedToTrack(
     title: entry.title,
     artist: entry.artist ?? '',
     album: entry.album,
+    album_artist: entry.album_artist,
+    track_number: entry.track_number,
+    disc_number: entry.disc_number,
+    year: entry.year,
     duration: entry.duration,
     cover: entry.thumbnail,
     // The day you claimed the song, carried onto the track so a save and a

@@ -264,3 +264,118 @@ def test_explicit_unmark_does_not_recreate_a_song_removed_by_another_client(mana
     assert manager.set_favourite(entry, True, save_if_missing=False) is True
     assert manager.set_favourite(entry, True, save_if_missing=False) is True
     assert len(manager.get_entries()) == 1
+
+
+def test_a_saved_song_keeps_its_place_on_its_record(manager):
+    """A saved stream is downloaded later from its entry alone, so the entry is
+    what files it under its record."""
+    manager.toggle_saved({
+        "keys": ["yt:vid"], "title": "Song", "artist": "Artist", "album": "Album",
+        "album_artist": "Artist", "track_number": 3, "disc_number": 2, "year": 2001,
+    })
+    entry = manager.get_entries()[0]
+    assert (entry["album_artist"], entry["track_number"], entry["disc_number"], entry["year"]) == ("Artist", 3, 2, 2001)
+
+
+def test_marking_a_song_never_mixes_two_records(manager):
+    # Saved from the single; marked from a search row naming the album only.
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Song (Single)", "year": 2010})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "year": 2011})
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["year"]) == ("Song (Single)", 2010)
+    manager.set_favourite({"keys": ["isrc:X"], "favourite": False}, False)
+    # Marked from the album's own row, which places it: the record is replaced whole.
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "album_artist": "Artist", "track_number": 4})
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["album_artist"], entry["track_number"]) == ("Album", "Artist", 4)
+    assert "year" not in entry
+
+
+def test_marking_fills_a_record_from_the_same_album(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Album"})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "album", "track_number": 4, "disc_number": 1, "year": 2011})
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["track_number"], entry["disc_number"], entry["year"]) == ("Album", 4, 1, 2011)
+
+
+def test_a_record_without_an_album_is_replaced_whole(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "year": 2010})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4})
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["track_number"]) == ("Album", 4)
+    assert "year" not in entry
+
+
+def test_a_saved_songs_place_is_bounded_like_a_catalog_save(manager):
+    # An upload date read as a year, a zero, a fraction, a flag, text.
+    manager.toggle_saved({"keys": ["yt:vid"], "year": 20101012, "track_number": 0, "disc_number": 1.5})
+    manager.toggle_saved({"keys": ["yt:other"], "track_number": True, "disc_number": "2"})
+    for entry in manager.get_entries():
+        assert not {"track_number", "disc_number", "year"} & set(entry)
+
+
+def test_marking_a_bare_save_fills_in_its_place_on_the_record(manager):
+    manager.toggle_saved({"keys": ["yt:vid"]})
+    manager.set_favourite({"keys": ["yt:vid"], "album": "Album", "track_number": 4, "year": 1999})
+    entry = manager.get_entries()[0]
+    assert (entry["track_number"], entry["year"]) == (4, 1999)
+
+
+def test_a_mark_already_set_elsewhere_still_fills_the_record(manager):
+    # Another device marked the bare save first; this one knows the album row.
+    manager.toggle_saved({"keys": ["isrc:X"]})
+    manager.set_favourite({"keys": ["isrc:X"]}, True)
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4, "year": 2011}, True)
+    entry = manager.get_entries()[0]
+    assert (entry["favourite"], entry["album"], entry["track_number"], entry["year"]) == (True, "Album", 4, 2011)
+
+
+def test_adding_an_album_fills_in_songs_already_saved(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "title": "Song"})
+    enriched = []
+    changed = manager.set_saved([{"keys": ["isrc:X"], "album": "Album", "track_number": 4, "year": 2011}], True, enriched)
+    assert changed == [] and len(enriched) == 1
+    entry = manager.get_entries()[0]
+    assert (entry["album"], entry["track_number"], entry["year"]) == ("Album", 4, 2011)
+    # Nothing new to say: nothing reported.
+    enriched.clear()
+    manager.set_saved([{"keys": ["isrc:X"], "album": "Album", "track_number": 4}], True, enriched)
+    assert enriched == []
+
+
+def test_a_new_record_brings_its_own_cover(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Song (Single)", "thumbnail": "https://example.invalid/single.jpg"})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4, "thumbnail": "https://example.invalid/album.jpg"}, True)
+    assert manager.get_entries()[0]["thumbnail"] == "https://example.invalid/album.jpg"
+
+
+def test_adding_an_album_fills_in_every_duplicate(manager):
+    manager._entries = [{"keys": ["isrc:X"], "title": "Song"}, {"keys": ["yt:vid"], "title": "Song"}]
+    manager._reindex()
+    enriched = []
+    manager.set_saved([{"keys": ["isrc:X", "yt:vid"], "album": "Album", "track_number": 4}], True, enriched)
+    assert len(enriched) == 2
+    assert all(entry.get("track_number") == 4 for entry in manager.get_entries())
+
+
+def test_a_heart_fills_in_every_duplicate(manager):
+    manager._entries = [{"keys": ["isrc:X"], "title": "Song"}, {"keys": ["yt:vid"], "title": "Song"}]
+    manager._reindex()
+    manager.set_favourite({"keys": ["isrc:X", "yt:vid"], "album": "Album", "track_number": 4}, True)
+    assert all(entry.get("track_number") == 4 for entry in manager.get_entries())
+
+
+def test_a_new_record_without_a_cover_drops_the_old_one(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Song (Single)", "thumbnail": "https://example.invalid/single.jpg"})
+    manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4}, True)
+    assert "thumbnail" not in manager.get_entries()[0]
+
+
+def test_a_rejected_record_does_not_lend_its_cover(manager):
+    manager.toggle_saved({"keys": ["isrc:X"], "album": "Album", "track_number": 4})
+    enriched = []
+    manager.set_saved([{"keys": ["isrc:X"], "album": "Other", "thumbnail": "https://example.invalid/other.jpg"}], True, enriched)
+    assert "thumbnail" not in manager.get_entries()[0] and enriched == []
+    # The same record's cover is welcome.
+    manager.set_saved([{"keys": ["isrc:X"], "album": "Album", "thumbnail": "https://example.invalid/album.jpg"}], True, enriched)
+    assert manager.get_entries()[0]["thumbnail"] == "https://example.invalid/album.jpg"

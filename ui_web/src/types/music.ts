@@ -17,6 +17,8 @@ export interface Track {
   artists?: string[] | null;
   album?: string;
   album_artist?: string | null;
+  /** Where the song sits on its record. */
+  track_number?: number | null;
   disc_number?: number | null;
   disc_total?: number | null;
   is_compilation?: boolean;
@@ -81,6 +83,12 @@ export interface SavedEntry {
   title?: string;
   artist?: string;
   album?: string;
+  /** The record the song is on, and its place there: what a download of a
+   * saved song that is not a file yet is filed under. */
+  album_artist?: string;
+  track_number?: number;
+  disc_number?: number;
+  year?: number;
   duration?: number;
   thumbnail?: string;
   favourite?: boolean;

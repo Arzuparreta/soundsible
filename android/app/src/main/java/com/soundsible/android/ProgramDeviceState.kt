@@ -24,6 +24,9 @@ internal object ProgramDeviceState {
         return JSONObject().put("id", id).put("title", item.mediaMetadata.title?.toString().orEmpty())
             .put("artist", item.mediaMetadata.artist?.toString().orEmpty()).put("album", item.mediaMetadata.albumTitle?.toString().orEmpty())
             .put("duration", extras?.getDouble(ProgramPcmProcessor.DURATION, 0.0) ?: 0.0).apply {
+                // The record and the place on it travel with the queue, so the
+                // device it lands on can still file a download correctly.
+                ProgramRelease.of(item.mediaMetadata).writeTo(this)
                 extras?.getString(ProgramQueue.PENDING)?.let { put("pendingResolve", JSONObject(it)) }
                 if (source == "preview" || source == "podcast") put("source", "preview")
                 if (source == "preview") put("youtube_id", id)
@@ -135,6 +138,7 @@ internal object ProgramDeviceState {
         val source = if (pending != null) "pending" else if (track.optString("source") == "preview") { if (podcast) "podcast" else "preview" } else "local"
         return JSONObject().put("source", source).put("id", track.getString("id")).put("title", track.optString("title"))
             .put("artist", track.optString("artist")).put("album", track.optString("album")).put("duration", track.optDouble("duration", 0.0)).apply {
+                ProgramRelease.read(track).writeTo(this)
                 if (pending != null) put("pendingResolve", JSONObject(pending.toString()))
                 for (name in listOf("loudness_lufs", "loudness_peak_dbtp")) track.optDouble(name, Double.NaN).takeIf { it.isFinite() }?.let { put(name, it) }
                 if (podcast) { put("mediaKind", "podcast_episode"); put("enclosure", track.optString("podcast_enclosure_url"))

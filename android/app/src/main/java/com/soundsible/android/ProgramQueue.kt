@@ -82,13 +82,15 @@ object ProgramQueue {
             }
             val title = row.optString("title"); val artist = row.optString("artist"); val album = row.optString("album")
             require(listOf(title, artist, album).all { it.length <= 4096 })
+            val release = ProgramRelease.read(row)
             val key = java.util.UUID.randomUUID().toString()
             val offline = source == "local" && connection.offline.canUse(connection.generation) && connection.offline.local(id,connection.generation) != null
             require(connection.cookieHeader(connection.generation) != null || offline)
             val path = if (source == "pending") "/api/native-pending/" else if (source == "preview") "/api/preview/stream/" else if (source == "podcast") "/api/android-podcast/" else "/api/static/stream/"
             MediaItem.Builder().setMediaId(id)
                 .setUri(connection.origin + path + android.net.Uri.encode(id) + "?android_generation=" + connection.generation + "&android_occurrence=" + key)
-                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).setArtworkUri(if (source == "local" && !offline) ProgramArtwork.uri(connection.generation, id) else null)
+                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album)
+                    .setAlbumArtist(release.albumArtist).setTrackNumber(release.trackNumber).setDiscNumber(release.discNumber).setReleaseYear(release.year).setArtworkUri(if (source == "local" && !offline) ProgramArtwork.uri(connection.generation, id) else null)
                     .setExtras(Bundle().apply {
                         putLong(ProgramPcmProcessor.GENERATION, connection.generation)
                         number(row, "loudness_lufs")?.let { putDouble(ProgramPcmProcessor.LUFS, it) }

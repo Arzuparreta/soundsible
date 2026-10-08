@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onCleanup } from 'solid-js';
 import { api, ApiError } from '../lib/api';
-import { catalogTrack, itemArtist } from '../lib/catalogTrack';
+import { catalogReleaseEvidence, catalogTrack, itemArtist, withRecord } from '../lib/catalogTrack';
 import { buildIdentityIndex, catalogItemKeys, trackKeys } from '../lib/playbackIdentity';
 import { savedFromCatalogItem, savedFromTrack, savedToTrack } from '../lib/saved';
 import { programTrack } from '../lib/program/tracks';
@@ -45,7 +45,13 @@ export function createNativeCatalogActions(props: {
   let epoch = 0;
   let controller: AbortController | undefined;
   let disposed = false;
+  /** A stream carries its record from the row it is played from; a file the
+   * library already holds keeps its own tags. */
   const trackFor = (item: CatalogItem): Track | null => {
+    const found = heldTrack(item);
+    return found?.source === 'preview' ? withRecord(found, catalogReleaseEvidence(item), item.cover) : found;
+  };
+  const heldTrack = (item: CatalogItem): Track | null => {
     const immediate = catalogTrack(item, props.tracks());
     if (immediate && immediate.source !== 'preview') return immediate;
     for (const key of catalogItemKeys(item)) {
@@ -90,7 +96,8 @@ export function createNativeCatalogActions(props: {
     if (!result.video_id || !/^[A-Za-z0-9_-]{11}$/.test(result.video_id)) throw new Error('No preview');
     const original = savedFromCatalogItem(item);
     const entry = { ...original, keys: [...new Set([...original.keys, `yt:${result.video_id}`])] };
-    const track = savedToTrack(entry, libraryIndex());
+    const found = savedToTrack(entry, libraryIndex());
+    const track = found?.source === 'preview' ? withRecord(found, catalogReleaseEvidence(item), item.cover) : found;
     if (track) { const linked = new Map(resolvedTracks()); linked.set(item.id, track); setResolvedTracks(linked); }
     return { entry, track };
   }
@@ -134,7 +141,7 @@ export function createNativeCatalogActions(props: {
     const artist = itemArtist(item);
     if (!artist || !item.title) throw new Error('Missing recording');
     const response = await api.saveCatalogItem({ catalog_item_id: item.id, source: item.source, artist, title: item.title, duration: item.duration,
-      cover: item.cover, external_ids: item.external_ids, identity_keys: catalogItemKeys(item),
+      cover: item.cover, external_ids: item.external_ids, identity_keys: catalogItemKeys(item), ...catalogReleaseEvidence(item),
       confirm_video_id: confirm || (item.external_ids?.youtube_id ? String(item.external_ids.youtube_id) : undefined) });
     if (!current()) return;
     if (response.status === 'queued') { toast.success(t('search.addedToDownloads')); await props.onChanged(); return; }
@@ -166,7 +173,7 @@ export function createNativeCatalogActions(props: {
       if (!current()) return;
       if (!selected || !programTrack(selected)) throw new Error('Selected recording unavailable');
       const tracks = items.map((item, index): import('../lib/playbackQueue').ContextTrack => index === selectedIndex ? selected : trackFor(item) ?? {
-        id: item.id, title: item.title, artist: itemArtist(item), album: item.album, duration: item.duration, cover: item.cover,
+        id: item.id, title: item.title, artist: itemArtist(item), album: item.album, duration: item.duration, cover: item.cover, ...catalogReleaseEvidence(item),
         pendingResolve: { catalogItemId: item.id, title: item.title, artist: itemArtist(item), duration: item.duration },
       });
       if (context || shuffle) await props.onPlayCollection(tracks, selectedIndex, context, shuffle);
