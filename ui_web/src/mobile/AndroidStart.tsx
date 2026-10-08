@@ -59,6 +59,7 @@ import { openContextMenu, ContextMenuOutlet, dismissContextMenu } from '../lib/c
 import { OverlayOutlet, discardOverlays } from '../lib/overlay';
 import { ToastOutlet } from '../lib/toast';
 import { programLibraryMenu } from '../lib/program/libraryMenu';
+import { queueTrack } from '../lib/program/tracks';
 import ProgramQueue from '../components/ProgramQueue';
 import { offline, availableLibrary, availableProgram, type OfflineState, type OfflineCommand } from './offline';
 import { offlineActions, openOfflineManager } from './OfflineManager';
@@ -499,13 +500,7 @@ export default function AndroidStart(props: { appearance: ReturnType<typeof crea
         openContextMenu({ title: entry.title, subtitle: entry.artist, actions }, event);
         return;
       }
-      const track = snapshot()?.tracks.find(track => track.id === entry.id && (track.source ?? 'local') === entry.source) ?? {
-        id: entry.id, title: entry.title, artist: entry.artist, album: entry.album, duration: entry.duration,
-        album_artist: entry.album_artist, track_number: entry.track_number, disc_number: entry.disc_number, year: entry.year,
-        source: entry.source === 'preview' || entry.source === 'podcast' ? 'preview' as const : undefined,
-        ...(entry.mediaKind === 'podcast_episode' ? { media_kind: 'podcast_episode' as const, podcast_feed_id: entry.feedId,
-          podcast_episode_guid: entry.episodeGuid, podcast_enclosure_url: entry.enclosure } : {}),
-      } as Track;
+      const track = queueTrack(entry, snapshot()?.tracks.find(track => track.id === entry.id && (track.source ?? 'local') === entry.source));
       songMenu(track, event, undefined, actions);
     }} /></Show></>}</Show>
     <Show when={user()}>

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { programTrack } from './tracks';
+import { programTrack, queueTrack } from './tracks';
 import type { Track } from '../../types/music';
 const episode = { id: 'episode-guid', title: 'Episode', artist: 'Show', media_kind: 'podcast_episode', source: 'preview', podcast_enclosure_url: 'https://example.com/episode' } as Track;
 it('distinguishes podcast proxy identity from preview video identity', () => {
@@ -24,4 +24,18 @@ it('hands the native queue the record and the place on it, and nothing that is n
     .toMatchObject({ album_artist: 'Artist', track_number: 3, disc_number: 1, year: 2001 });
   expect(programTrack({ ...song, track_number: 0, disc_number: 1.5, year: 20101012 }))
     .toMatchObject({ track_number: undefined, disc_number: undefined, year: undefined });
+});
+
+it('files a queued stream under the record it was queued with', () => {
+  const entry = { source: 'preview', id: 'A1111111111', title: 'Song', artist: 'Artist', album: 'Discovery',
+    album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 } as const;
+  // A stream saved from search knows another release; the queue's wins, whole.
+  const saved = { id: 'A1111111111', title: 'Song', artist: 'Artist', album: 'Song (Single)', track_number: 1, source: 'preview' } as Track;
+  expect(queueTrack(entry, saved)).toMatchObject({ album: 'Discovery', album_artist: 'Daft Punk', track_number: 3, disc_number: 1, year: 2001 });
+  // Queued without a record, the saved one stands.
+  expect(queueTrack({ ...entry, album: undefined }, saved)).toMatchObject({ album: 'Song (Single)', track_number: 1 });
+  // A file the library holds keeps its own tags.
+  const owned = { id: 'abc', title: 'Song', artist: 'Artist', album: 'Other', track_number: 7 } as Track;
+  expect(queueTrack({ ...entry, source: 'local', id: 'abc' }, owned)).toBe(owned);
+  expect(queueTrack(entry)).toMatchObject({ id: 'A1111111111', source: 'preview', album: 'Discovery', track_number: 3 });
 });

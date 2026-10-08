@@ -40,3 +40,18 @@ export function mixedProgram(tracks: Track[], selectedIndex: number): { tracks: 
   return { tracks: converted.filter((track): track is ProgramTrack => track !== null),
     index: converted[selectedIndex] ? converted.slice(0, selectedIndex).filter(Boolean).length : -1 };
 }
+
+/** The song a native queue row stands for, for its menu. The library's own
+ * track wins when it holds a file; a stream takes the record it is queued
+ * with — whole, so two releases never mix — since that is where its download
+ * will be filed. */
+export function queueTrack(entry: ProgramTrack, held?: Track): Track {
+  const record = entry.album ? { album: entry.album, album_artist: entry.album_artist, track_number: entry.track_number, disc_number: entry.disc_number, year: entry.year } : {};
+  if (held) return held.source === 'preview' ? { ...held, ...record } : held;
+  return {
+    id: entry.id, title: entry.title, artist: entry.artist, album: entry.album, duration: entry.duration, ...record,
+    source: entry.source === 'preview' || entry.source === 'podcast' ? 'preview' : undefined,
+    ...(entry.mediaKind === 'podcast_episode' ? { media_kind: 'podcast_episode' as const, podcast_feed_id: entry.feedId,
+      podcast_episode_guid: entry.episodeGuid, podcast_enclosure_url: entry.enclosure } : {}),
+  } as Track;
+}
