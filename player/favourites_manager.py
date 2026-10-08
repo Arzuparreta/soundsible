@@ -232,10 +232,11 @@ class FavouritesManager:
                 matches = self._find_all(entry["keys"])
                 if saved:
                     if matches:
-                        if _fill_snapshot(matches[0], entry):
-                            filled = True
-                            if enriched is not None:
-                                enriched.append(dict(matches[0], keys=list(matches[0]["keys"])))
+                        for match in matches:
+                            if _fill_snapshot(match, entry):
+                                filled = True
+                                if enriched is not None:
+                                    enriched.append(dict(match, keys=list(match["keys"])))
                         continue
                     entry["added_at"] = self._held_by_library(entry["keys"]) or library_dates.now()
                     _stamp_mark(entry)

@@ -347,3 +347,12 @@ def test_a_new_record_brings_its_own_cover(manager):
     manager.toggle_saved({"keys": ["isrc:X"], "album": "Song (Single)", "thumbnail": "https://example.invalid/single.jpg"})
     manager.set_favourite({"keys": ["isrc:X"], "album": "Album", "track_number": 4, "thumbnail": "https://example.invalid/album.jpg"}, True)
     assert manager.get_entries()[0]["thumbnail"] == "https://example.invalid/album.jpg"
+
+
+def test_adding_an_album_fills_in_every_duplicate(manager):
+    manager._entries = [{"keys": ["isrc:X"], "title": "Song"}, {"keys": ["yt:vid"], "title": "Song"}]
+    manager._reindex()
+    enriched = []
+    manager.set_saved([{"keys": ["isrc:X", "yt:vid"], "album": "Album", "track_number": 4}], True, enriched)
+    assert len(enriched) == 2
+    assert all(entry.get("track_number") == 4 for entry in manager.get_entries())
