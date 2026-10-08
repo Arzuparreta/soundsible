@@ -12,7 +12,9 @@ def install(app, root):
     from shared.downloader.youtube.ids import video_id_from_url
 
     lock = threading.Lock()
-    control = {"fail_next": 0, "delay": 2.0, "attempts": 0, "active": 0}
+    # `hold` keeps a started download running until the test lets it go, so a
+    # test can see the running state however slowly the runner renders it.
+    control = {"fail_next": 0, "delay": 2.0, "hold": False, "attempts": 0, "active": 0}
 
     @app.route("/__fixture/acquisition", methods=["GET", "POST"])
     def acquisition_control():
@@ -23,6 +25,7 @@ def install(app, root):
                 payload = request.get_json(silent=True) or {}
                 control["fail_next"] = max(0, min(5, int(payload.get("failNext", 0))))
                 control["delay"] = max(0, min(5, float(payload.get("delaySeconds", 2))))
+                control["hold"] = bool(payload.get("hold", False))
             return jsonify(control)
 
     def synthetic_audio(self, url, progress_callback=None):
@@ -43,6 +46,12 @@ def install(app, root):
         try:
             if fail:
                 raise RuntimeError("Synthetic acquisition failure; retry remains a real queue action")
+            released_by = time.monotonic() + 60
+            while time.monotonic() < released_by:
+                with lock:
+                    if not control["hold"]:
+                        break
+                time.sleep(0.05)
             total = source.stat().st_size
             with source.open("rb") as input_file, target.open("wb") as output:
                 done = 0
