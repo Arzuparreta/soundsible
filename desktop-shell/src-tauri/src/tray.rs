@@ -183,6 +183,11 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 focus_main_window(tray.app_handle());
             }
         });
+    #[cfg(target_os = "linux")]
+    let builder = match crate::flatpak::tray_icon_dir() {
+        Some(dir) => builder.temp_dir_path(dir),
+        None => builder,
+    };
     builder.build(app)?;
     Ok(())
 }

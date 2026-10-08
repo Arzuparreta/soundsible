@@ -2,6 +2,8 @@ mod client;
 mod desktop;
 mod engine;
 #[cfg(target_os = "linux")]
+mod flatpak;
+#[cfg(target_os = "linux")]
 mod linux_media;
 mod pairing;
 mod state;
@@ -118,7 +120,11 @@ fn stop_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String>
 }
 
 #[tauri::command]
-fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+async fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if flatpak::sandboxed() {
+        return flatpak::set_autostart(enabled).await;
+    }
     use tauri_plugin_autostart::ManagerExt;
     if enabled {
         app.autolaunch().enable().map_err(|e| e.to_string())
@@ -129,6 +135,10 @@ fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
 
 #[tauri::command]
 fn get_autostart(app: AppHandle) -> Result<bool, String> {
+    #[cfg(target_os = "linux")]
+    if flatpak::sandboxed() {
+        return Ok(flatpak::autostart_enabled());
+    }
     use tauri_plugin_autostart::ManagerExt;
     app.autolaunch().is_enabled().map_err(|e| e.to_string())
 }
@@ -482,15 +492,28 @@ fn handle_deep_link(app: &AppHandle, value: &str, start_if_idle: bool) {
     tray::focus_main_window(app);
 }
 
+#[cfg(desktop)]
+fn single_instance() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    let builder = tauri_plugin_single_instance::Builder::new().callback(|app, _argv, _cwd| {
+        tray::focus_main_window(app);
+    });
+    // The plugin's bus name defaults to the Tauri identifier, and Flatpak only
+    // lets an app own names under its own ID.
+    #[cfg(target_os = "linux")]
+    let builder = match flatpak::app_id() {
+        Some(id) => builder.dbus_id(id),
+        None => builder,
+    };
+    builder.build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(desktop)]
     let builder = builder
         // Must be first so a second protocol launch is forwarded to this process.
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            tray::focus_main_window(app);
-        }))
+        .plugin(single_instance())
         .plugin(tauri_plugin_deep_link::init());
 
     builder

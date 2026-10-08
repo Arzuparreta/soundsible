@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Release entries and screenshot URLs are added per version by
+     scripts/linux_packages.py; nothing in this file names a version. -->
+<component type="desktop-application">
+  <id>io.github.Arzuparreta.Soundsible</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Soundsible</name>
+  <summary>All-in-one music streaming service</summary>
+  <developer id="io.github.arzuparreta">
+    <name>Arzuparreta</name>
+  </developer>
+  <description>
+    <p>Search the whole internet, then listen, save, download and manage everything in one place.</p>
+    <p>The desktop app runs a private Soundsible station on this computer, or connects to one you already run on a server.</p>
+    <ul>
+      <li>Search the YouTube Music catalogue or paste a link; listen, save without downloading, or download</li>
+      <li>Browse your music by artist, album, genre or year, with playlists and favourites</li>
+      <li>Endless playback, radio, autoplay and an automatic DJ that mixes between songs</li>
+      <li>Synced lyrics, podcasts, and imports from Spotify and Apple Music exports</li>
+      <li>Media keys and desktop media controls through MPRIS</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.Arzuparreta.Soundsible.desktop</launchable>
+  <url type="homepage">https://github.com/Arzuparreta/soundsible</url>
+  <url type="bugtracker">https://github.com/Arzuparreta/soundsible/issues</url>
+  <url type="vcs-browser">https://github.com/Arzuparreta/soundsible</url>
+  <provides>
+    <binary>soundsible-desktop</binary>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">640</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <branding>
+    <color type="primary" scheme_preference="light">#f97a12</color>
+    <color type="primary" scheme_preference="dark">#0c0c0e</color>
+  </branding>
+</component>

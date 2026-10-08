@@ -18,6 +18,7 @@ on:
       - 'tests/test_desktop_bootstrap.py'
       - 'tests/test_desktop_engine_entry.py'
       - 'requirements.txt'
+      - 'scripts/linux_packages.py'
       - '.github/workflows/desktop-build.yml'
   pull_request:
     branches: [main, dev]
@@ -42,42 +43,30 @@ concurrency:
 # installer this job has already produced.
 
 jobs:
+  # A Linux binary runs on the glibc it was linked against and on newer ones,
+  # never on older. Built on ubuntu-latest, v0.21.1's engine needed glibc 2.38
+  # and did not start on Debian 12 or Ubuntu 22.04, two of the releases its
+  # download table named. The packages are built on the oldest release they
+  # support. That is a container rather than the ubuntu-22.04 runner image,
+  # which GitHub is retiring.
   build-linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    container: ubuntu:22.04
+    timeout-minutes: 60
+    outputs:
+      artifact: ${{ steps.name.outputs.artifact }}
     steps:
-      - uses: actions/checkout@v4
-
-      # Restored from the Actions cache instead of Ubuntu's mirror, which some
-      # days crawls (this step has taken 7.5 minutes for ~0.8 of a usual run).
-      # The mirror is only asked when the package list changes.
-      - name: Install Tauri Linux dependencies
-        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
-        continue-on-error: true
-        with:
-          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev libssl-dev patchelf webkit2gtk-driver xvfb xauth dbus-x11 pulseaudio scrot
-          version: tauri-validated
-
-      # The cache action can report success after a mirror download failure and
-      # save an empty cache. Verify the actual SDK and runtime, then repair with
-      # apt's checked exit status rather than discovering missing GTK in Cargo.
-      - name: Verify and repair Linux dependencies
-        shell: bash
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          dependencies_ready() {
-            pkg-config --exists glib-2.0 gobject-2.0 gio-2.0 gtk+-3.0 webkit2gtk-4.1 librsvg-2.0 openssl || return 1
-            pkg-config --exists appindicator3-0.1 || pkg-config --exists ayatana-appindicator3-0.1 || return 1
-            for tool in WebKitWebDriver Xvfb xauth dbus-run-session dbus-monitor pulseaudio pactl scrot patchelf; do
-              command -v "$tool" >/dev/null || return 1
-            done
-          }
-          if ! dependencies_ready; then
-            sudo apt-get -o Acquire::Retries=3 update
-            sudo apt-get -o Acquire::Retries=3 install -y \
-              libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev \
-              libssl-dev patchelf webkit2gtk-driver xvfb xauth dbus-x11 pulseaudio scrot
-          fi
-          dependencies_ready
+          apt-get -o Acquire::Retries=3 update
+          apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
+            ca-certificates curl git xz-utils file build-essential pkg-config \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev \
+            libssl-dev patchelf dbus rpm
+
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
@@ -118,60 +107,256 @@ jobs:
           SOUNDSIBLE_REPO_ROOT: ${{ github.workspace }}
         run: |
           npm ci
-          # AppImage/RPM are slow and often look hung on CI; keep Linux delivery to .deb.
-          npm run tauri build -- --bundles deb
+          npm run tauri build -- --bundles deb,rpm
 
       - name: Rust desktop and isolated D-Bus tests
         working-directory: desktop-shell/src-tauri
         run: dbus-run-session -- cargo test --locked -- --include-ignored
 
-      - name: Install Linux bundle and WebDriver
+      - name: Show what the packages declare
         shell: bash
         run: |
-          cargo install tauri-driver --locked
-          bundles=(desktop-shell/src-tauri/target/release/bundle/deb/*.deb)
-          test -f "${bundles[0]}"
-          sudo apt-get install -y "$(realpath "${bundles[0]}")"
+          bundle=desktop-shell/src-tauri/target/release/bundle
+          dpkg-deb --info "$bundle"/deb/*.deb
+          rpm -qp --info --requires "$bundle"/rpm/*.rpm
 
-      - name: Exercise installed Linux desktop against an independent station
-        shell: bash
-        env:
-          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
-        run: |
-          package=$(dpkg-deb -f desktop-shell/src-tauri/target/release/bundle/deb/*.deb Package)
-          app=$(dpkg -L "$package" | grep -E '/bin/soundsible-desktop$')
-          engine=$(dpkg -L "$package" | grep -E '/bin/soundsible-engine$')
-          test -x "$app"
-          test -x "$engine"
-          mkdir -p "$RUNNER_TEMP/linux-ui"
-          xvfb-run -a dbus-run-session -- bash -c '
-            pulseaudio --start --exit-idle-time=-1
-            pactl load-module module-null-sink sink_name=soundsible_test
-            python desktop-shell/scripts/linux_ui_smoke.py --app "$1" --engine "$2" --artifacts "$3"
-          ' smoke "$app" "$engine" "$RUNNER_TEMP/linux-ui"
+      # Every smoke below drives the app through tauri-driver. Built once here,
+      # on the oldest glibc, it runs on all of them.
+      - name: Build tauri-driver
+        run: cargo install tauri-driver --locked --root "$RUNNER_TEMP/tauri-driver"
 
-      - name: Upload Linux UI evidence
-        if: always()
+      - name: Upload tauri-driver
         uses: actions/upload-artifact@v4
         with:
-          name: linux-ui-evidence
-          path: ${{ runner.temp }}/linux-ui
-          if-no-files-found: ignore
+          name: ci-tauri-driver
+          path: ${{ runner.temp }}/tauri-driver/bin/tauri-driver
+          if-no-files-found: error
+          retention-days: 1
 
       # actions/upload-artifact@v4 rejects '/' in artifact names. On
       # pull_request events github.ref_name is "<PR>/merge" (e.g. "22/merge"),
       # so sanitise the ref into a slash-free suffix.
       - name: Compute artifact name
+        id: name
         shell: bash
-        run: echo "ARTIFACT_NAME=soundsible-desktop-linux-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+        run: echo "artifact=soundsible-desktop-linux-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Upload Linux bundles
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}
+          name: ${{ steps.name.outputs.artifact }}
           path: |
             desktop-shell/src-tauri/target/release/bundle/deb/*.deb
+            desktop-shell/src-tauri/target/release/bundle/rpm/*.rpm
           if-no-files-found: error
+
+  # The newest Ubuntu, on the runner itself, with the isolation a desktop has.
+  smoke-linux-ubuntu:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-linux.outputs.artifact }}
+          path: packages
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-tauri-driver
+          path: ${{ runner.temp }}/tauri-driver
+
+      - name: Install the package next to the distribution's FFmpeg
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y ffmpeg
+          sudo apt-get -o Acquire::Retries=3 install -y "$(realpath packages/deb/*.deb)" \
+            webkit2gtk-driver xvfb xauth dbus-x11 pulseaudio pulseaudio-utils scrot
+          chmod +x "$RUNNER_TEMP/tauri-driver/tauri-driver"
+
+      - name: Exercise installed Linux desktop against an independent station
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+        run: |
+          package=$(dpkg-deb -f packages/deb/*.deb Package)
+          app=$(dpkg -L "$package" | grep -E '/bin/soundsible-desktop$')
+          engine=$(dpkg -L "$package" | grep -E '/bin/soundsible-engine$')
+          PATH="$RUNNER_TEMP/tauri-driver:$PATH" \
+            desktop-shell/scripts/run-linux-ui-smoke.sh "$RUNNER_TEMP/linux-ui" --app "$app" --engine "$engine"
+
+      - name: Upload Linux UI evidence
+        if: ${{ always() && !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-ui-evidence-ubuntu
+          path: ${{ runner.temp }}/linux-ui
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The oldest release the .deb claims, and the two other package formats on
+  # the distributions they are for: installed by the package manager, next to
+  # the distribution's own FFmpeg, and driven exactly as on Ubuntu.
+  smoke-linux-distros:
+    name: smoke-linux-${{ matrix.distro }}
+    needs: build-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: debian
+            image: debian:12
+          - distro: fedora
+            image: fedora:44
+          - distro: arch
+            image: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-linux.outputs.artifact }}
+          path: packages
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-tauri-driver
+          path: /opt/tauri-driver
+
+      - name: Install the package
+        shell: bash
+        run: |
+          case "${{ matrix.distro }}" in
+            debian) dir=packages/deb ;;
+            fedora) dir=packages/rpm ;;
+            arch) dir=packages/deb ;;
+          esac
+          desktop-shell/scripts/install-linux-package.sh "${{ matrix.distro }}" "$dir"
+          chmod 755 /opt/tauri-driver/tauri-driver
+
+      # As a normal user, as on a desktop: PulseAudio refuses to run as root.
+      # Unprivileged containers cannot create the user namespaces WebKit's
+      # own process sandbox is made of, so that sandbox is off here; the
+      # Ubuntu smoke runs with it.
+      - name: Exercise installed Linux desktop against an independent station
+        shell: bash
+        run: |
+          useradd -m tester
+          install -d -o tester /tmp/linux-ui
+          runuser -u tester -- env \
+            PATH="/opt/tauri-driver:$PATH" \
+            WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+            WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
+            desktop-shell/scripts/run-linux-ui-smoke.sh /tmp/linux-ui \
+              --app /usr/bin/soundsible-desktop --engine /usr/bin/soundsible-engine
+
+      - name: Upload Linux UI evidence
+        if: ${{ always() && !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-ui-evidence-${{ matrix.distro }}
+          path: /tmp/linux-ui
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The Flatpak repackages the .deb above rather than building the app a
+  # second time, so it ships the binaries these smokes drove.
+  build-flatpak:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    outputs:
+      artifact: ${{ steps.name.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-linux.outputs.artifact }}
+          path: packages
+
+      - name: Prepare the Flatpak build directory
+        run: python3 scripts/linux_packages.py flatpak --deb packages/deb/Soundsible_*_amd64.deb --out flatpak-build
+
+      - name: Validate the metainfo
+        run: flatpak-builder-lint appstream flatpak-build/io.github.Arzuparreta.Soundsible.metainfo.xml
+
+      - name: Build the Flatpak
+        run: |
+          flatpak-builder --disable-rofiles-fuse --force-clean --repo=repo build \
+            flatpak-build/io.github.Arzuparreta.Soundsible.yml
+          version=$(python3 scripts/version_sync.py --print)
+          mkdir -p bundle
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            repo "bundle/Soundsible_${version}_x86_64.flatpak" io.github.Arzuparreta.Soundsible
+
+      - name: Compute artifact name
+        id: name
+        shell: bash
+        run: echo "artifact=soundsible-desktop-flatpak-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Flatpak
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.artifact }}
+          path: bundle/*.flatpak
+          if-no-files-found: error
+
+  smoke-flatpak:
+    needs: [build-linux, build-flatpak]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-flatpak.outputs.artifact }}
+          path: flatpak
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-tauri-driver
+          path: ${{ runner.temp }}/tauri-driver
+
+      # Ubuntu only lets AppArmor-profiled programs create user namespaces,
+      # and Flatpak's sandbox is made of them.
+      - name: Install Flatpak and the bundle
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y flatpak xvfb xauth dbus-x11 pulseaudio pulseaudio-utils scrot
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak --user install -y --noninteractive --bundle flatpak/*.flatpak
+          chmod +x "$RUNNER_TEMP/tauri-driver/tauri-driver"
+
+      # WebKit's sandbox inside Flatpak's is a sub-sandbox the runner's
+      # session has no portal for; Flatpak's own sandbox is what this checks.
+      - name: Exercise the installed Flatpak against an independent station
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
+        run: |
+          PATH="$RUNNER_TEMP/tauri-driver:$PATH" \
+            desktop-shell/scripts/run-linux-ui-smoke.sh "$RUNNER_TEMP/linux-ui" \
+              --flatpak io.github.Arzuparreta.Soundsible \
+              --app /app/bin/soundsible-desktop --engine soundsible-engine
+
+      - name: Upload Flatpak UI evidence
+        if: ${{ always() && !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-ui-evidence-flatpak
+          path: ${{ runner.temp }}/linux-ui
+          if-no-files-found: ignore
+          retention-days: 14
 
   build-windows:
     name: build-windows-${{ matrix.arch }}

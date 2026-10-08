@@ -12,6 +12,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import signal
 import struct
 import subprocess
@@ -108,7 +109,29 @@ def player_call(name, *signature_and_values):
     return bus("call", MPRIS, OBJECT, PLAYER, name, *signature_and_values)
 
 
-def run(app, engine, artifacts):
+def sandboxed(flatpak, command, *extra):
+    """Run `command` inside the installed Flatpak, sharing /tmp, where every
+    path this smoke hands the app lives."""
+    if not flatpak:
+        return [str(command)]
+    return ["flatpak", "run", "--filesystem=/tmp", *extra, f"--command={command}", flatpak]
+
+
+def client_pid(flatpak):
+    if not flatpak:
+        return int(bus("call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                       "GetConnectionUnixProcessID", "s", MPRIS).split()[-1])
+    # Through Flatpak the bus sees xdg-dbus-proxy, not the app.
+    for entry in Path("/proc").iterdir():
+        try:
+            if entry.name.isdigit() and os.readlink(entry / "exe").endswith("/soundsible-desktop"):
+                return int(entry.name)
+        except OSError:
+            continue
+    raise RuntimeError("no soundsible-desktop process")
+
+
+def run(app, engine, artifacts, flatpak=None):
     artifacts.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="soundsible-linux-smoke-") as temporary:
         root = Path(temporary)
@@ -140,7 +163,7 @@ def run(app, engine, artifacts):
         client_env = environment("client")
         station_log = (artifacts / "station.log").open("w")
         driver_log = (artifacts / "driver.log").open("w")
-        station = subprocess.Popen([str(engine), "--music-dir", str(music)], env=station_env,
+        station = subprocess.Popen([*sandboxed(flatpak, engine), "--music-dir", str(music)], env=station_env,
                                    stdout=station_log, stderr=subprocess.STDOUT, start_new_session=True)
         driver = None
         web = None
@@ -162,7 +185,11 @@ def run(app, engine, artifacts):
             sentinel_bytes = json.dumps(state).encode()
             sentinel.write_bytes(sentinel_bytes)
             initial_config = (Path(station_env["SOUNDSIBLE_CONFIG_DIR"]) / "config.json").read_bytes()
-            driver = subprocess.Popen(["tauri-driver"], env=client_env, stdout=driver_log,
+            # Inside a Flatpak the driver has to run in the sandbox too: it
+            # starts the runtime's WebKitWebDriver, which starts the app.
+            tauri_driver = Path(shutil.which("tauri-driver") or "tauri-driver")
+            driver = subprocess.Popen(sandboxed(flatpak, tauri_driver, f"--filesystem={tauri_driver.parent}:ro"),
+                                      env=client_env, stdout=driver_log,
                                       stderr=subprocess.STDOUT, start_new_session=True)
             wait_for(lambda: http("http://127.0.0.1:4444/status"), "tauri-driver")
             web = WebDriver(app)
@@ -233,7 +260,7 @@ def run(app, engine, artifacts):
             preferences = json.loads((Path(client_env["SOUNDSIBLE_CONFIG_DIR"]) / "desktop-client.json").read_text())
             assert preferences == {"mode": "server", "server": origin}
             # Capture a lightweight resource baseline for this exact runtime.
-            pid = int(bus("call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "GetConnectionUnixProcessID", "s", MPRIS).split()[-1])
+            pid = client_pid(flatpak)
             children = subprocess.check_output(["ps", "-eo", "pid=,ppid="], text=True)
             owned = {pid}
             pairs = [tuple(map(int, line.split())) for line in children.splitlines()]
@@ -335,5 +362,10 @@ if __name__ == "__main__":
     parser.add_argument("--app", type=Path, required=True)
     parser.add_argument("--engine", type=Path, required=True)
     parser.add_argument("--artifacts", type=Path, required=True)
+    parser.add_argument("--flatpak", metavar="APP_ID",
+                        help="run the app and engine from this installed Flatpak; --app and --engine are then paths inside it")
     args = parser.parse_args()
-    run(args.app.resolve(), args.engine.resolve(), args.artifacts.resolve())
+    if args.flatpak:
+        run(args.app, args.engine, args.artifacts.resolve(), args.flatpak)
+    else:
+        run(args.app.resolve(), args.engine.resolve(), args.artifacts.resolve())
