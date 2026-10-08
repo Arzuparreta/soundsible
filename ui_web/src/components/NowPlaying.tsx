@@ -38,10 +38,10 @@ import styles from './NowPlaying.module.css';
 export type NowPlayingMobilePanel = NowPlayingPanelId;
 
 /** Collections whose card unfolds its upcoming songs in the queue, a page at
- * a time. The library and favourites — the listener's whole collection, a tap
- * away in the navigation — open their page instead; a single song or episode
- * has nothing further to show. */
-const EXPANDING_CONTEXTS: ReadonlySet<PlaybackContextKind> = new Set(['album', 'artist', 'playlist', 'search']);
+ * a time. The library — the listener's whole collection, a tap away in the
+ * navigation — opens its page instead; a single song or episode has nothing
+ * further to show. */
+const EXPANDING_CONTEXTS: ReadonlySet<PlaybackContextKind> = new Set(['album', 'artist', 'playlist', 'favourites', 'search']);
 
 export function NowPlaying(props: {
   mobilePanel: NowPlayingMobilePanel;
@@ -178,8 +178,8 @@ export function NowPlaying(props: {
   };
 
   /** The collection the music continues into, as one card. Opening it reveals
-   * its upcoming songs — or, for a collection that is the listener's own and
-   * a tap away (the library, favourites), goes to its page instead. Removing
+   * its upcoming songs — or, for the library, the listener's whole collection
+   * and a tap away, goes to its page instead. Removing
    * it stops the continuation and leaves the rest alone.
    * What only changes its wording — shuffle, repeat — is read by the card
    * itself, so flipping it does not rebuild the lanes around it. */

@@ -143,17 +143,6 @@ test('the library card opens the library and leaves the music playing', async ({
   await expect(page.locator('[data-omni-player]')).toContainText('Canción de biblioteca 320');
 });
 
-test('favourites open their page rather than unfolding', async ({ page, isMobile }) => {
-  await restoreQueueSession(page, { current: newest, requests: [], context: TRACKS.slice(0, 40),
-    descriptor: { id: 'favourites', kind: 'favourites', label: 'Favoritos', destination: '/favourites' } });
-  await page.goto('/player/#/library?view=songs');
-  const queue = await openQueuePanel(page);
-  if (isMobile) await snapPlayerCarousel(page, 'now-playing', 'queue');
-  const card = queue.locator('[data-queue-card="context"]');
-  await expect(card.getByRole('button', { name: 'Abrir Favoritos' })).toHaveCount(1);
-  await expect(card.locator('[aria-expanded]')).toHaveCount(0);
-});
-
 test('editing an expanded collection keeps it open with the songs it was showing', async ({ page, isMobile }) => {
   await restoreQueueSession(page, { current: newest, requests: [], context: TRACKS.slice(0, 40), descriptor: PLAYLIST });
   await page.goto('/player/#/library?view=songs');
@@ -191,7 +180,7 @@ test('editing an expanded collection keeps it open with the songs it was showing
   await expect(expand).toHaveAttribute('aria-expanded', 'true');
 });
 
-for (const kind of ['album', 'artist', 'playlist', 'search'] as const) {
+for (const kind of ['album', 'artist', 'playlist', 'favourites', 'search'] as const) {
   test(`${kind} cards unfold a long collection twelve songs at a time`, async ({ page, isMobile }) => {
     await restoreQueueSession(page, { current: newest, requests: [], context: TRACKS.slice(0, 40),
       descriptor: { id: `fixture-${kind}`, kind, label: `Collection ${kind}` } });
