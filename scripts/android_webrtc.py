@@ -4,10 +4,20 @@ from __future__ import annotations
 import hashlib
 from io import BytesIO
 from pathlib import Path
-from urllib.request import urlopen
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 
-SDK_URL = "https://repo.maven.apache.org/maven2/io/getstream/stream-webrtc-android/1.3.10/stream-webrtc-android-1.3.10.aar"
+from download_retry import fetch
+
+SDK_PATH = "io/getstream/stream-webrtc-android/1.3.10/stream-webrtc-android-1.3.10.aar"
+#: Maven Central and two of its official mirrors; the checksum pins the bytes.
+SDK_URLS = tuple(
+    base + SDK_PATH
+    for base in (
+        "https://repo.maven.apache.org/maven2/",
+        "https://repo1.maven.org/maven2/",
+        "https://maven-central.storage-download.googleapis.com/maven2/",
+    )
+)
 SDK_SHA256 = "afa3b0feaa2902f6ece10e67ce3b7e6d9def18a86b73f0c6a524209cb938aa96"
 
 
@@ -16,11 +26,10 @@ def prepare_webrtc(root: Path) -> None:
     output = root / "android/app/libs/soundsible-webrtc.aar"
     cache.parent.mkdir(parents=True, exist_ok=True)
     if not cache.exists():
-        with urlopen(SDK_URL, timeout=60) as response:
-            raw = response.read(64 * 1024 * 1024 + 1)
-        if len(raw) > 64 * 1024 * 1024 or hashlib.sha256(raw).hexdigest() != SDK_SHA256:
-            raise RuntimeError("WebRTC dependency checksum mismatch")
-        cache.write_bytes(raw)
+        raw = fetch(SDK_URLS, max_bytes=64 * 1024 * 1024, sha256=SDK_SHA256, what="WebRTC dependency")
+        partial = cache.with_suffix(".part")
+        partial.write_bytes(raw)
+        partial.replace(cache)
     raw = cache.read_bytes()
     if hashlib.sha256(raw).hexdigest() != SDK_SHA256:
         raise RuntimeError("Cached WebRTC dependency checksum mismatch")

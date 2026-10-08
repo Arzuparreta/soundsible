@@ -23,6 +23,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       SOUNDSIBLE_ANDROID_TEST_RELEASE: '1'
+      NPM_CONFIG_FETCH_RETRIES: '5'
+      PIP_RETRIES: '10'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,11 +45,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Install build and fixture dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
-          npm ci --prefix ui_web
-          python -m pip install -r requirements.txt
+          scripts/ci_retry.sh -- sudo apt-get -o Acquire::Retries=5 update
+          scripts/ci_retry.sh -- sudo apt-get -o Acquire::Retries=5 install -y ffmpeg
+          scripts/ci_retry.sh -- sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+          scripts/ci_retry.sh -- npm ci --prefix ui_web
+          scripts/ci_retry.sh -- python -m pip install -r requirements.txt
       - name: Verify gates and reserve channel build
         run: python scripts/android_release.py reserve
       - name: Restore permanent signing identity
@@ -72,6 +74,11 @@ jobs:
         run: |
           python scripts/android_release.py build
           python scripts/android_release.py verify
+      - name: Install emulator and system image
+        run: |
+          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          scripts/ci_retry.sh --cleanup "rm -rf '$sdk/system-images/android-36/google_apis/x86_64' '$sdk/emulator' '$sdk/.temp' ~/.android/cache" \
+            -- sdkmanager --install emulator 'system-images;android-36;google_apis;x86_64' --channel=0
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
