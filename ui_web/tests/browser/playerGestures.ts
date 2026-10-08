@@ -6,11 +6,19 @@ export async function snapCarousel(page: Page, panel: 'queue' | 'stage' | 'brows
     const target = carousel.querySelector<HTMLElement>(`[data-now-playing-tile="${destination}"]`)!;
     const previousBehavior = carousel.style.scrollBehavior;
     carousel.style.scrollBehavior = 'auto';
-    // Measured off the rects, like the component does: `offsetLeft` is relative
-    // to the positioned workspace, not to the scroller, so it carries padding.
-    carousel.scrollLeft += target.getBoundingClientRect().left - carousel.getBoundingClientRect().left;
-    carousel.dispatchEvent(new Event('scroll'));
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    // A surface that has just opened can still centre itself on the stage and
+    // undo a snap made meanwhile; snap again until the panel is the active one.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      // Measured off the rects, like the component does: `offsetLeft` is relative
+      // to the positioned workspace, not to the scroller, so it carries padding.
+      carousel.scrollLeft += target.getBoundingClientRect().left - carousel.getBoundingClientRect().left;
+      carousel.dispatchEvent(new Event('scroll'));
+      await frame();
+      await frame();
+      if (!target.hasAttribute('inert')) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
     carousel.style.scrollBehavior = previousBehavior;
   }, panel);
 }

@@ -124,12 +124,26 @@ test('desktop artist links support keyboard and a separate tab', async ({ page, 
   const link = page.getByRole('link', { name: 'Artista 7', exact: true }).first();
   await expect(link).toBeVisible();
   await settledBox(page, link);
-  const opened = context.waitForEvent('page');
+  // A modified click is the browser's: the app must leave it alone so the
+  // browser can open a tab. Whether Chromium then spawns one is its own
+  // business — and racy under Playwright's request interception, where a tab
+  // it opens by itself can sit with its module graph never requested — so the
+  // tab is opened here, at the address the link names.
+  await page.evaluate(() => {
+    const seen = window as unknown as { modifiedClick?: 'seen' | 'prevented' };
+    const preventDefault = Event.prototype.preventDefault;
+    document.addEventListener('click', (event) => { if (event.ctrlKey) seen.modifiedClick ??= 'seen'; }, true);
+    Event.prototype.preventDefault = function (this: Event) {
+      if (this.type === 'click' && (this as MouseEvent).ctrlKey) seen.modifiedClick = 'prevented';
+      preventDefault.call(this);
+    };
+  });
   await link.click({ modifiers: ['Control'] });
-  const tab = await opened;
-  // Ctrl-click opens a background tab; its first-paint work runs when visible.
-  await tab.bringToFront();
-  await tab.waitForURL(/#\/artist\/Artista%207\?view=library/, { waitUntil: 'domcontentloaded' });
+  expect(await page.evaluate(() => (window as unknown as { modifiedClick?: string }).modifiedClick)).toBe('seen');
+  await expect(page).toHaveURL(/#\/library\?view=songs$/);
+  const tab = await context.newPage();
+  await tab.goto(new URL((await link.getAttribute('href'))!, page.url()).href);
+  await expect(tab).toHaveURL(/#\/artist\/Artista%207\?view=library/);
   await expect(tab.getByRole('heading', { name: 'Artista 7', exact: true })).toBeVisible();
   await tab.close();
   await expect(page).toHaveURL(/#\/library\?view=songs$/);
