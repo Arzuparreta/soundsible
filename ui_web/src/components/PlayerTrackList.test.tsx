@@ -2,6 +2,7 @@ import { createSignal } from 'solid-js';
 import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlayerTrackList, type PlayerTrackListCard, type PlayerTrackListSection } from './PlayerTrackList';
+import { responsiveTapConstants } from '../lib/responsiveTap';
 
 const layout = vi.hoisted(() => ({ mobile: false }));
 vi.mock('../lib/listLayout', () => ({ mobileListLayout: () => layout.mobile }));
@@ -10,12 +11,17 @@ const menu = vi.hoisted(() => ({ open: vi.fn() }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: menu.open }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); layout.mobile = false; });
 
+const songs = (count: number) => {
+  const entries = Array.from({ length: count }, (_, index) => ({ id: `song-${index + 1}`, title: `Song ${index + 1}`, artist: 'Artist', onActivate: vi.fn() }));
+  return { count, rows: vi.fn((limit: number) => entries.slice(0, limit)) };
+};
+
 const contextCard = (over: Partial<PlayerTrackListCard> = {}): PlayerTrackListCard => ({
   id: 'context',
   title: 'Record',
   detail: 'Album · 8 tracks',
   seed: 'album:record',
-  entries: [{ id: 'next', title: 'Next', artist: 'Artist', onActivate: vi.fn() }],
+  songs: songs(1),
   menu: () => [{ label: 'Remove', onSelect: () => {} }],
   remove: { label: 'Remove Record from the queue', onSelect: vi.fn() },
   ...over,
@@ -25,11 +31,18 @@ const list = (sections: () => PlayerTrackListSection[]) => render(() => (
   <PlayerTrackList title="Queue" count={0} sections={sections()} empty="Nothing" />
 ));
 
+function touch(node: Element, type: string) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.assign(event, { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: 20, clientY: 20, button: 0 });
+  fireEvent(node, event);
+}
+
 describe('continuation cards', () => {
   it('expands on the card, collapses on the chevron, and keeps navigation in the menu', () => {
     const card = contextCard();
     const { container } = list(() => [{ id: 'continuation', label: 'Then', entries: [], cards: [card] }]);
     expect(container.querySelector('[data-drag-row]')).toBeNull();
+    expect(card.songs!.rows).not.toHaveBeenCalled();
     fireEvent.click(container.querySelector('[data-card-expand]')!);
     expect(container.querySelector('[data-card-expand]')).toHaveAttribute('aria-expanded', 'true');
     expect(container.querySelector('[data-card-songs]')).toBeInTheDocument();
@@ -42,34 +55,51 @@ describe('continuation cards', () => {
     expect(menu.open).toHaveBeenCalledWith(expect.objectContaining({ title: 'Record' }), expect.anything());
   });
 
+  it('shows twelve songs at a time and starts over when collapsed', () => {
+    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [contextCard({ songs: songs(30) })] }]);
+    const rows = () => container.querySelectorAll('[data-card-songs] [data-drag-row]');
+    const expand = container.querySelector('[data-card-expand]')!;
+    fireEvent.click(expand);
+    expect(rows()).toHaveLength(12);
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.contextShowMore' }));
+    expect(rows()).toHaveLength(24);
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.contextShowMore' }));
+    expect(rows()).toHaveLength(30);
+    expect(screen.queryByRole('button', { name: 'nowPlaying.contextShowMore' })).toBeNull();
+    fireEvent.click(expand);
+    fireEvent.click(expand);
+    expect(rows()).toHaveLength(12);
+  });
+
+  it('opens the page of a collection that does not expand, without claiming to expand', () => {
+    const onOpen = vi.fn();
+    const card = contextCard({ songs: undefined, onOpen, openLabel: 'Open Library' });
+    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [card] }]);
+    expect(container.querySelector('[aria-expanded]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Library' }));
+    expect(onOpen).toHaveBeenCalledOnce();
+    expect(container.querySelector('[data-card-songs]')).toBeNull();
+  });
+
   it('keeps an empty finite collection expandable and explains the empty pass', () => {
-    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [contextCard({ entries: [] })] }]);
+    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [contextCard({ songs: songs(0) })] }]);
     fireEvent.click(container.querySelector('[data-card-expand]')!);
     expect(screen.getByText('nowPlaying.contextNoUpcoming')).toBeInTheDocument();
   });
 
-  it('retains expansion when the same collection receives rebuilt queue entries', () => {
-    const [card, setCard] = createSignal(contextCard({ entries: [] }));
+  it('keeps expansion and the songs shown when the same collection is rebuilt', () => {
+    const [card, setCard] = createSignal(contextCard({ songs: songs(30) }));
     const { container } = list(() => [{ id: 'continuation', entries: [], cards: [card()] }]);
     fireEvent.click(container.querySelector('[data-card-expand]')!);
-    setCard(contextCard({ entries: [] }));
-    expect(container.querySelector('[data-card-expand]')).toHaveAttribute('aria-expanded', 'true');
-    setCard(contextCard({ seed: 'other', entries: [] }));
-    expect(container.querySelector('[data-card-expand]')).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('preserves the collection DOM and scroll position when queue objects are rebuilt', () => {
-    const [card, setCard] = createSignal(contextCard());
-    const { container } = list(() => [{ id: 'continuation', entries: [], cards: [card()] }]);
-    fireEvent.click(container.querySelector('[data-card-expand]')!);
-    const scroller = container.querySelector<HTMLElement>('[data-card-songs] [data-section-rows]')!;
+    fireEvent.click(screen.getByRole('button', { name: 'nowPlaying.contextShowMore' }));
     const header = container.querySelector('[data-queue-card="context"]')!;
-    scroller.scrollTop = 500;
-    setCard(contextCard({ detail: 'Album · 7 tracks', entries: [{ id: 'other', title: 'Other', artist: 'Artist' }] }));
+    setCard(contextCard({ detail: 'Album · 29 tracks', songs: songs(29) }));
     expect(container.querySelector('[data-queue-card="context"]')).toBe(header);
-    expect(container.querySelector('[data-card-songs] [data-section-rows]')).toBe(scroller);
-    expect(scroller.scrollTop).toBe(500);
-    expect(header).toHaveTextContent('Album · 7 tracks');
+    expect(header).toHaveTextContent('Album · 29 tracks');
+    expect(container.querySelector('[data-card-expand]')).toHaveAttribute('aria-expanded', 'true');
+    expect(container.querySelectorAll('[data-card-songs] [data-drag-row]')).toHaveLength(24);
+    setCard(contextCard({ seed: 'other', songs: songs(30) }));
+    expect(container.querySelector('[data-card-expand]')).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('keeps a switched-off card quiet but fully operable', () => {
@@ -102,13 +132,23 @@ describe('continuation cards', () => {
     expect(screen.getByText('On')).toBeInTheDocument();
   });
 
-  it('gives the phone row its menu button, the way song rows carry one', () => {
-    layout.mobile = true;
-    const card = contextCard();
-    list(() => [{ id: 'continuation', entries: [], cards: [card] }]);
-    expect(screen.getByRole('button', { name: 'Remove Record from the queue' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'songRow.ariaMore: Record' }));
-    expect(menu.open).toHaveBeenCalledWith(expect.objectContaining({ title: 'Record' }), undefined);
+  it('leaves the phone row its name: holding the card opens its menu', () => {
+    vi.useFakeTimers();
+    try {
+      layout.mobile = true;
+      const card = contextCard();
+      const { container } = list(() => [{ id: 'continuation', entries: [], cards: [card] }]);
+      expect(screen.getByRole('button', { name: 'Remove Record from the queue' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'songRow.ariaMore: Record' })).toBeNull();
+      const target = container.querySelector('[data-card-expand]')!;
+      touch(target, 'pointerdown');
+      vi.advanceTimersByTime(responsiveTapConstants.LONG_PRESS_MS);
+      touch(target, 'pointerup');
+      expect(menu.open).toHaveBeenCalledWith(expect.objectContaining({ title: 'Record' }), undefined);
+      expect(target).toHaveAttribute('aria-expanded', 'false');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -278,6 +278,7 @@ export const es: Dict = {
     contextExpand: 'Desplegar {name}',
     contextCollapse: 'Contraer {name}',
     contextNoUpcoming: 'No quedan canciones pendientes en esta vuelta.',
+    contextShowMore: 'Mostrar más',
     contextOpen: 'Abrir {name}',
     contextRemove: 'Quitar {name} de la cola',
     contextRepeats: 'se repite',

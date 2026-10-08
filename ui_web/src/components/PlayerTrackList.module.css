@@ -489,8 +489,7 @@
 }
 
 .cardRemove,
-.cardExpand,
-.cardMenu {
+.cardExpand {
   display: grid;
   width: 34px;
   height: 34px;
@@ -510,7 +509,6 @@
 
 .cardExpand:focus-visible,
 .cardRemove:focus-visible,
-.cardMenu:focus-visible,
 .switch:focus-visible {
   outline: 2px solid var(--accent-ink);
   outline-offset: 2px;
@@ -590,12 +588,6 @@
   padding-right: 0;
 }
 
-.card[data-mobile] .cardMenu {
-  width: max(44px, var(--control-h, 44px));
-  height: max(44px, var(--control-h, 44px));
-  color: var(--ink-secondary);
-}
-
 .card[data-mobile] .cardCover {
   order: 3;
   flex: none;
@@ -617,12 +609,11 @@
     background: var(--stage-row-hover);
   }
 
-  .card:has([data-card-expand]):hover {
+  .card:has(.playButton):hover {
     background: var(--stage-row-hover);
   }
 
-  .cardRemove:hover,
-  .cardMenu:hover {
+  .cardRemove:hover {
     color: var(--ink-primary);
     background: var(--stage-material-hover);
   }
@@ -679,7 +670,8 @@
 }
 
 .collection { min-width: 0; }
-.cardSongs { display: flex; flex-direction: column; min-height: 0; max-height: min(45vh, 360px); margin-top: 4px; border-left: 2px solid var(--stage-line-soft); }
-.cardSongs .sectionRows { padding-bottom: 0; }
+.cardSongs { margin-top: 4px; border-left: 2px solid var(--stage-line-soft); }
+.cardSongs .sectionRows { padding-bottom: 0; overflow: visible; }
+.cardMore { display: flex; justify-content: center; padding: 8px 12px 4px; }
 .cardEmpty { padding: 12px; color: var(--ink-secondary); font-size: var(--text-caption); }
 .card[data-mobile] .cardExpand, .card[data-mobile] .cardRemove { width: 44px; height: 44px; }

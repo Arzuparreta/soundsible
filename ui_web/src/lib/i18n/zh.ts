@@ -278,6 +278,7 @@ export const zh: Dict = {
     contextExpand: '展开{name}',
     contextCollapse: '折叠{name}',
     contextNoUpcoming: '本轮没有待播放的歌曲。',
+    contextShowMore: '显示更多',
     contextOpen: '打开{name}',
     contextRemove: '从队列中移除{name}',
     contextRepeats: '循环',
