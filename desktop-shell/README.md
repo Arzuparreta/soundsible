@@ -2,7 +2,8 @@
 
 Tauri consumer wrapper for Soundsible. It uses the official native folder
 dialog, supervises the bundled engine, exposes tray controls, and hands the
-webview to `/player/desktop/`.
+webview to `/player/desktop/`. It also connects to an existing station at
+`/player/` without starting a local engine; see [Desktop client](../docs/DESKTOP_CLIENT.md).
 
 ## Dev workflow
 
@@ -44,8 +45,8 @@ Tray: Open | Pair phone… | Restart engine | Stop engine | Quit
 
 Left-click tray icon also focuses the window. Right-click opens the tray menu (platform convention).
 
-Closing the window hides Soundsible in the tray and keeps playback running.
-Use **Quit** or `Ctrl+Alt+Q` to stop the engine and exit.
+Closing the window hides Soundsible when a usable tray is available and keeps playback running; otherwise it exits.
+Use **Quit** or `Ctrl+Alt+Q` to exit and stop only the engine owned by this app. External stations keep running.
 
 ## Accessibility
 

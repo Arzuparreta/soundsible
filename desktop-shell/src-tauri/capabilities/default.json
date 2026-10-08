@@ -2,7 +2,9 @@
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "default",
   "description": "Soundsible consumer desktop shell capabilities",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-show",
@@ -20,6 +22,32 @@
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
-    "deep-link:default"
+    "deep-link:default",
+    "allow-connect-server",
+    "allow-change-connection",
+    "allow-quit-desktop",
+    "allow-get-startup-profile",
+    "allow-get-shell-theme",
+    "allow-start-configured-engine",
+    "allow-stop-engine",
+    "allow-set-autostart",
+    "allow-get-autostart",
+    "allow-get-engine-status",
+    "allow-get-selected-folder",
+    "allow-preview-music-folder",
+    "allow-log-shell-event",
+    "allow-start-engine",
+    "allow-start-engine-with-path",
+    "allow-restart-engine",
+    "allow-open-logs",
+    "allow-open-player",
+    "allow-open-pairing",
+    "allow-pairing-create-session",
+    "allow-pairing-list-sessions",
+    "allow-pairing-display-close",
+    "allow-pairing-cancel-session",
+    "allow-pairing-list-devices",
+    "allow-pairing-revoke-device",
+    "allow-pairing-qr-data-url"
   ]
 }

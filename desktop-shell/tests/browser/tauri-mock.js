@@ -24,7 +24,8 @@ export async function mockTauri(page, overrides = {}) {
       runCallback(id, payload) {
         callbacks.get(id)?.(payload);
       },
-      async invoke(command) {
+      async invoke(command, args) {
+        (window.__commands ??= []).push({ command, args });
         if (command in responses) return responses[command];
         if (command === 'plugin:event|listen') return callbackId;
         if (command === 'get_engine_status') {
@@ -34,6 +35,8 @@ export async function mockTauri(page, overrides = {}) {
         if (command === 'get_shell_theme') return 'dark';
         if (command === 'get_startup_profile') {
           return {
+            mode: "local",
+            server: null,
             returning_user: false,
             music_dir: null,
             auto_start: false,

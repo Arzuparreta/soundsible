@@ -12,6 +12,22 @@
 </head>
 <body>
   <div id="app" data-view="first-run">
+    <section id="view-connection" class="shell-stage hidden">
+      <div class="shell-hero">
+        <h1 tabindex="-1" data-i18n="connectionHeading">Where is your music?</h1>
+        <p data-i18n="connectionLead">Connect to your Soundsible server or use this computer.</p>
+      </div>
+      <div class="shell-card">
+        <form id="server-form">
+          <label for="server-address" data-i18n="serverAddress">Server address</label>
+          <input id="server-address" class="server-address" type="url" placeholder="http://localhost:5005" required autocomplete="url" spellcheck="false">
+          <button id="btn-connect" type="submit" class="btn btn-primary" data-i18n="connectServer">Connect to server</button>
+        </form>
+        <p id="connection-error" role="alert" class="pairing-warning hidden"></p>
+        <button id="btn-local" type="button" class="btn btn-secondary" data-i18n="useLocal">Use this computer as server</button>
+        <label class="autostart-row"><input id="chk-client-autostart" type="checkbox"><span data-i18n="autostart">Start Soundsible when I log in</span></label>
+      </div>
+    </section>
     <section id="view-first-run" class="shell-stage">
       <div class="shell-hero">
         <div class="beta" data-i18n="rc">Release candidate</div>
@@ -42,6 +58,7 @@
       <div id="log-error" class="log-tail"></div>
       <div class="actions">
         <button type="button" id="btn-retry" class="btn btn-primary" data-i18n="tryAgain">Try again</button>
+        <button type="button" id="btn-change-error" class="btn btn-secondary" data-i18n="changeConnection">Change connection</button>
         <button type="button" id="btn-logs" class="btn btn-secondary" data-i18n="openLogs">Open logs</button>
       </div>
     </section>

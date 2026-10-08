@@ -1,3 +1,4 @@
+import { desktopBridge, DesktopMediaSession, type DesktopControls } from './desktopMedia';
 import { trackCoverUrl } from './media';
 import { recordPlaybackDiagnostic } from './playbackDiagnostics';
 import type { ProgramPlaybackSnapshot } from './audio';
@@ -8,6 +9,7 @@ export type MediaSessionSyncReason =
   | 'playing'
   | 'paused'
   | 'position'
+  | 'seeked'
   | 'handoff_dominant'
   | 'handoff_settled'
   | 'visibility_resume'
@@ -38,6 +40,7 @@ export interface MediaSessionActions {
 
 /** One atomic projection of Soundsible's programme into the platform session. */
 export class ProgramMediaSession {
+  private desktop: DesktopMediaSession | null = null;
   private trackKey = '';
   private revision = 0;
   private reporter: ((event: MediaSessionSyncEvent) => void) | null = null;
@@ -46,7 +49,15 @@ export class ProgramMediaSession {
     this.reporter = reporter;
   }
 
-  installActions(actions: MediaSessionActions): void {
+  installActions(actions: MediaSessionActions, desktopControls?: DesktopControls): void {
+    const bridge = desktopBridge();
+    if (bridge && desktopControls) {
+      this.desktop?.dispose();
+      this.desktop = new DesktopMediaSession(bridge, desktopControls, () => {
+        this.clearBrowserActions();
+        if (hasMediaSession()) { navigator.mediaSession.metadata = null; navigator.mediaSession.playbackState = 'none'; }
+      });
+    }
     if (!hasMediaSession()) return;
     const session = navigator.mediaSession;
     const invoke = (action: string, handler: () => void) => () => {
@@ -65,6 +76,12 @@ export class ProgramMediaSession {
   }
 
   uninstallActions(): void {
+    this.desktop?.dispose();
+    this.desktop = null;
+    this.clearBrowserActions();
+  }
+
+  private clearBrowserActions(): void {
     if (!hasMediaSession()) return;
     const session = navigator.mediaSession;
     for (const action of ['play', 'pause', 'nexttrack', 'previoustrack', 'seekto', 'seekbackward', 'seekforward'] as MediaSessionAction[]) {
@@ -78,7 +95,8 @@ export class ProgramMediaSession {
     reason: MediaSessionSyncReason,
     forceMetadata = false,
   ): void {
-    if (!hasMediaSession()) return;
+    this.desktop?.sync(track, snapshot, reason === 'seeked');
+    if (this.desktop?.active || !hasMediaSession()) return;
     recordPlaybackDiagnostic('media_session.before_sync', { reason });
     const session = navigator.mediaSession;
     if (!track) {

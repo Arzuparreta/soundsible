@@ -50,7 +50,7 @@ def main_window(pid: int, timeout: float = 30.0):
             (
                 window
                 for window in desktop.windows(process=pid)
-                if window.window_text() == "Soundsible"
+                if window.window_text() == "Soundsible" and window.is_visible()
             ),
             None,
         ),
@@ -326,6 +326,7 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
 
     try:
         window = main_window(process.pid)
+        control(window, "Use this computer as server").click_input()
         control(window, "Choose folder")
         dump_tree(window, artifact_path / "onboarding-tree.txt")
         screenshot(artifact_path / "onboarding.png")
@@ -342,6 +343,7 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
 
         state = wait_for_engine_state(state_file)
         assert_healthy(state)
+        window = main_window(process.pid)
         screenshot(artifact_path / "player-ready.png")
 
         # A second launch must bypass onboarding and reuse the saved folder.
@@ -359,6 +361,7 @@ def run_smoke(app_path: Path, artifact_path: Path) -> None:
         window = main_window(process.pid)
         state = wait_for_engine_state(state_file)
         assert_healthy(state)
+        window = main_window(process.pid)
         screenshot(artifact_path / "returning-user.png")
 
         # Closing the native window hides to tray. Ctrl+Alt+O restores it.

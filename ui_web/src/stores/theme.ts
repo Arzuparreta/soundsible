@@ -1,3 +1,4 @@
+import { desktopBridge } from '../lib/desktopMedia';
 /**
  * Appearance: the stored preference, what it resolves to, and keeping the
  * document in sync with the OS while it is `system`.
@@ -113,6 +114,8 @@ function applyResolvedTheme(resolved: ResolvedTheme, animate = false): void {
  * splash screen, not a reason to refuse the theme the listener just chose.
  */
 export function announceTheme(theme: Theme): void {
+  const bridge = desktopBridge();
+  if (bridge) { void bridge.appearance(theme, THEME_COLORS).catch(() => {}); return; }
   if (!ownerToken()) return;
   void api.setDesktopAppearance(theme, THEME_COLORS).catch(() => {});
 }

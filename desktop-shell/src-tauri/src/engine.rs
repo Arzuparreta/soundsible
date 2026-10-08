@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 const HEALTH_INTERVAL: Duration = Duration::from_secs(5);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
@@ -92,7 +92,10 @@ impl EngineSupervisor {
             guard.phase = EnginePhase::Booting;
             guard.message = "Starting Soundsible…".into();
             guard.log_lines.clear();
-            push_log(&mut guard, format!("engine: music_dir={}", music_dir.display()));
+            push_log(
+                &mut guard,
+                format!("engine: music_dir={}", music_dir.display()),
+            );
         }
         self.emit_status(&app);
 
@@ -145,12 +148,9 @@ impl EngineSupervisor {
         let mut guard = self.inner.lock().expect("engine lock");
         if let Some(mut child) = guard.child.take() {
             terminate_child_process(&mut child);
-        } else if let Some(runtime) = guard.runtime.as_ref() {
-            terminate_pid(runtime.pid);
-        } else if let Some(state) = load_runtime_state() {
-            terminate_pid(state.pid);
-            let _ = std::fs::remove_file(state_file_path());
         }
+        // A persisted PID may belong to an independently launched station (or
+        // may have been reused). Only our retained Child establishes ownership.
         guard.runtime = None;
         guard.health_failures = 0;
         Ok(())
@@ -185,8 +185,13 @@ fn bootstrap_config(music_dir: &PathBuf) -> Result<(), String> {
 
     let root = repo_root();
     let python = python_executable(&root);
-    if !root.join("shared/desktop_bootstrap.py").exists() && !root.join("shared").join("desktop_bootstrap.py").exists() {
-        return Err(format!("Missing shared/desktop_bootstrap.py under {}", root.display()));
+    if !root.join("shared/desktop_bootstrap.py").exists()
+        && !root.join("shared").join("desktop_bootstrap.py").exists()
+    {
+        return Err(format!(
+            "Missing shared/desktop_bootstrap.py under {}",
+            root.display()
+        ));
     }
     let output = Command::new(&python)
         .current_dir(&root)
@@ -204,7 +209,10 @@ fn bootstrap_config(music_dir: &PathBuf) -> Result<(), String> {
 fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Child, String> {
     let root = repo_root();
     let mut command = if let Some(sidecar) = sidecar_binary() {
-        push_log(guard, format!("engine: spawning sidecar {}", sidecar.display()));
+        push_log(
+            guard,
+            format!("engine: spawning sidecar {}", sidecar.display()),
+        );
         let mut cmd = Command::new(sidecar);
         cmd.arg("--music-dir").arg(music_dir);
         cmd
@@ -301,10 +309,8 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
                 }
                 let target_url = crate::take_pending_player_url(&app, &player_url);
                 let _ = app.emit("engine-ready", target_url.clone());
-                if let Some(window) = app.get_webview_window("main") {
-                    if let Ok(parsed) = target_url.parse() {
-                        let _ = window.navigate(parsed);
-                    }
+                if let Err(error) = crate::desktop::open_player(&app, &target_url) {
+                    eprintln!("Could not open desktop player: {error}");
                 }
                 let supervisor = EngineSupervisor {
                     inner: Arc::clone(&inner),
@@ -327,10 +333,7 @@ fn wait_for_ready(inner: Arc<Mutex<SupervisorInner>>, stop_flag: Arc<AtomicBool>
         );
     }
     drop(guard);
-    let supervisor = EngineSupervisor {
-        inner,
-        stop_flag,
-    };
+    let supervisor = EngineSupervisor { inner, stop_flag };
     supervisor.emit_status(&app);
 }
 

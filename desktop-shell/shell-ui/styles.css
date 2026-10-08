@@ -540,3 +540,6 @@ body {
 .pairing-footer {
   margin-top: 24px;
 }
+
+.server-address { display: block; width: 100%; box-sizing: border-box; margin: 12px 0 20px; padding: 12px; font: inherit; color: var(--ink-primary); background: var(--bg-base); border: 1px solid var(--hairline); border-radius: 8px; }
+#server-form { width: 100%; }

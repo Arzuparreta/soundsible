@@ -54,7 +54,7 @@ jobs:
       - name: Install Tauri Linux dependencies
         uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
         with:
-          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev libssl-dev patchelf
+          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev libssl-dev patchelf webkit2gtk-driver xvfb dbus-x11 pulseaudio scrot
           version: tauri-1
 
       - uses: actions/setup-python@v5
@@ -98,6 +98,43 @@ jobs:
           npm ci
           # AppImage/RPM are slow and often look hung on CI; keep Linux delivery to .deb.
           npm run tauri build -- --bundles deb
+
+      - name: Rust desktop and isolated D-Bus tests
+        working-directory: desktop-shell/src-tauri
+        run: dbus-run-session -- cargo test --locked -- --include-ignored
+
+      - name: Install Linux bundle and WebDriver
+        shell: bash
+        run: |
+          cargo install tauri-driver --locked
+          bundles=(desktop-shell/src-tauri/target/release/bundle/deb/*.deb)
+          test -f "${bundles[0]}"
+          sudo apt-get install -y "$(realpath "${bundles[0]}")"
+
+      - name: Exercise installed Linux desktop against an independent station
+        shell: bash
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+        run: |
+          package=$(dpkg-deb -f desktop-shell/src-tauri/target/release/bundle/deb/*.deb Package)
+          app=$(dpkg -L "$package" | rg '/bin/soundsible-desktop$')
+          engine=$(dpkg -L "$package" | rg '/bin/soundsible-engine$')
+          test -x "$app"
+          test -x "$engine"
+          mkdir -p "$RUNNER_TEMP/linux-ui"
+          xvfb-run -a dbus-run-session -- bash -c '
+            pulseaudio --start --exit-idle-time=-1
+            pactl load-module module-null-sink sink_name=soundsible_test
+            python desktop-shell/scripts/linux_ui_smoke.py --app "$1" --engine "$2" --artifacts "$3"
+          ' smoke "$app" "$engine" "$RUNNER_TEMP/linux-ui"
+
+      - name: Upload Linux UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-ui-evidence
+          path: ${{ runner.temp }}/linux-ui
+          if-no-files-found: ignore
 
       # actions/upload-artifact@v4 rejects '/' in artifact names. On
       # pull_request events github.ref_name is "<PR>/merge" (e.g. "22/merge"),

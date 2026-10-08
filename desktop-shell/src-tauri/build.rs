@@ -1,3 +1,36 @@
 fn main() {
-    tauri_build::build()
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "connect_server",
+            "change_connection",
+            "quit_desktop",
+            "desktop_handshake",
+            "desktop_snapshot",
+            "desktop_appearance",
+            "get_startup_profile",
+            "get_shell_theme",
+            "start_configured_engine",
+            "stop_engine",
+            "set_autostart",
+            "get_autostart",
+            "get_engine_status",
+            "get_selected_folder",
+            "preview_music_folder",
+            "log_shell_event",
+            "start_engine",
+            "start_engine_with_path",
+            "restart_engine",
+            "open_logs",
+            "open_player",
+            "open_pairing",
+            "pairing_create_session",
+            "pairing_list_sessions",
+            "pairing_display_close",
+            "pairing_cancel_session",
+            "pairing_list_devices",
+            "pairing_revoke_device",
+            "pairing_qr_data_url",
+        ]),
+    ))
+    .expect("desktop build failed");
 }
