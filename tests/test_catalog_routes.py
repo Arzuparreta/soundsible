@@ -1217,6 +1217,17 @@ def test_resolve_album_id_prefers_the_artists_own_album(monkeypatch):
     assert catalog_routes._resolve_album_deezer_id("Loud", "") == "7"
 
 
+def test_resolve_album_id_takes_the_artists_edition_over_a_tribute(monkeypatch):
+    rows = [
+        {"id": 1, "title": "Abbey Road (Remastered 2009)", "artist": {"name": "The Beatles"}},
+        {"id": 2, "title": "Abbey Road (2019 Mix)", "artist": {"name": "The Beatles"}},
+        {"id": 3, "title": "Abbey Road", "artist": {"name": "The Beatles Complete On Ukulele"}},
+    ]
+    monkeypatch.setattr(catalog_routes, "_deezer_get", lambda path, params=None, timeout=8: {"data": rows})
+
+    assert catalog_routes._resolve_album_deezer_id("Abbey Road", "The Beatles") == "1"
+
+
 # ── Owned-track key lookups ────────────────────────────────────────────────
 #
 # These used to walk the whole library per call, and a single /api/catalog/artist

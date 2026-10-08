@@ -2050,14 +2050,22 @@ def _resolve_album_deezer_id(name: str, artist: str) -> str | None:
     def title_matches(row: dict) -> bool:
         return fold_text(_clean(row.get("title"))) == name_folded
 
+    def edition_of(row: dict) -> bool:
+        # "Abbey Road (Remastered 2009)" is still Abbey Road.
+        bare = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]", "", _clean(row.get("title")))
+        return fold_text(bare) == name_folded
+
     def artist_matches(row: dict) -> bool:
         artist_row = row.get("artist") if isinstance(row.get("artist"), dict) else {}
         return not artist_folded or fold_text(_clean(artist_row.get("name"))) == artist_folded
 
+    # The artist asked for outranks a title: another artist's exact title is
+    # a cover or a tribute, the artist's own edition is the record.
     for wanted in (
         lambda row: title_matches(row) and artist_matches(row),
-        title_matches,
+        lambda row: edition_of(row) and artist_matches(row),
         artist_matches,
+        title_matches,
         lambda row: True,
     ):
         for row in rows:
