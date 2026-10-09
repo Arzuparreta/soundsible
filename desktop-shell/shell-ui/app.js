@@ -281,7 +281,15 @@ async function connectServer(restoring = false) {
   connectionError.classList.add('hidden');
   connectionMode = 'server';
   try {
-    if (!restoring) await invoke('set_autostart', { enabled: document.getElementById('chk-client-autostart').checked });
+    if (!restoring) {
+      try {
+        await invoke('set_autostart', { enabled: document.getElementById('chk-client-autostart').checked });
+      } catch {
+        // As in applyAutostartPreference: a desktop that refuses autostart
+        // (or, in a Flatpak, has no Background portal) must not stop the
+        // connection.
+      }
+    }
     await invoke('connect_server', { address: serverAddress.value });
   } catch (error) {
     showView('connection');

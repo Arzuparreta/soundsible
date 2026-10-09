@@ -59,6 +59,12 @@ pub fn autostart_enabled() -> bool {
 }
 
 pub async fn set_autostart(enabled: bool) -> Result<(), String> {
+    // The shell sends its checkbox on every connection. Unchecked and never
+    // enabled is nothing to ask the desktop about, and desktops without the
+    // Background portal would answer it with an error.
+    if !enabled && !autostart_enabled() {
+        return Ok(());
+    }
     let applied = request_background(enabled)
         .await
         .map_err(|error| format!("Background portal unavailable: {error}"))?;
