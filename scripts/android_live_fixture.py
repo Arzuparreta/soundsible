@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import io
 import os
 from pathlib import Path
@@ -15,9 +14,13 @@ import time
 from urllib.request import urlopen
 import ssl
 
-# The relay binary from MediaMTX's GitHub release, pinned by checksum. It used
-# to be the Docker Hub image of the same version, and a Docker Hub pull that
-# failed (exit 125) took every Android shard down with it before any test ran.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from download_retry import fetch  # noqa: E402
+
+# The relay binary from MediaMTX's GitHub release, pinned by checksum and
+# fetched with download_retry. It used to be the Docker Hub image of the same
+# version, and a Docker Hub pull that failed (exit 125) took every Android
+# shard down with it before any test ran.
 MEDIAMTX_VERSION = "v1.19.3"
 MEDIAMTX_ARCHIVE = f"mediamtx_{MEDIAMTX_VERSION}_linux_amd64.tar.gz"
 MEDIAMTX_SHA256 = "a7ba21268fccda3ebc43fdad76b87fddb85ce77e725b5cb637bca724b5394fbe"
@@ -30,18 +33,7 @@ def mediamtx() -> Path:
     binary = cache / "mediamtx"
     if binary.exists():
         return binary
-    for attempt in range(3):
-        try:
-            with urlopen(MEDIAMTX_URL, timeout=60) as response:
-                archive = response.read()
-            break
-        except OSError:
-            if attempt == 2:
-                raise
-            time.sleep(5 * (attempt + 1))
-    digest = hashlib.sha256(archive).hexdigest()
-    if digest != MEDIAMTX_SHA256:
-        raise RuntimeError(f"{MEDIAMTX_ARCHIVE} has sha256 {digest}, expected {MEDIAMTX_SHA256}")
+    archive = fetch([MEDIAMTX_URL], max_bytes=64 * 1024 * 1024, sha256=MEDIAMTX_SHA256, what=MEDIAMTX_ARCHIVE)
     cache.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
         member = bundle.extractfile("mediamtx")
