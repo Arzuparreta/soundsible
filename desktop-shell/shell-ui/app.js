@@ -160,6 +160,7 @@ async function syncAutostartCheckbox() {
     document.getElementById('chk-client-autostart').checked = chkAutostart.checked;
   } catch {
     chkAutostart.checked = false;
+    document.getElementById('chk-client-autostart').checked = false;
   }
 }
 
@@ -168,6 +169,7 @@ async function applyAutostartPreference() {
     await invoke('set_autostart', { enabled: chkAutostart.checked });
   } catch {
     // Autostart is non-fatal on restricted Windows installations.
+    await syncAutostartCheckbox();
   }
 }
 
@@ -287,7 +289,8 @@ async function connectServer(restoring = false) {
       } catch {
         // As in applyAutostartPreference: a desktop that refuses autostart
         // (or, in a Flatpak, has no Background portal) must not stop the
-        // connection.
+        // connection. The checkboxes go back to what is really set.
+        await syncAutostartCheckbox();
       }
     }
     await invoke('connect_server', { address: serverAddress.value });

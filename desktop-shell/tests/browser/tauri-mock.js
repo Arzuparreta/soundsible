@@ -3,7 +3,8 @@
  *
  * Shared by the browser specs because both need the same four commands to get
  * the first-run view on screen at all; `overrides` is for the one command a
- * given test actually cares about.
+ * given test actually cares about, or `{ reject: message }` for a command that
+ * fails.
  */
 export async function mockTauri(page, overrides = {}) {
   await page.addInitScript((responses) => {
@@ -26,7 +27,11 @@ export async function mockTauri(page, overrides = {}) {
       },
       async invoke(command, args) {
         (window.__commands ??= []).push({ command, args });
-        if (command in responses) return responses[command];
+        if (command in responses) {
+          // `{ reject: message }` makes the command fail the way Tauri does.
+          if (responses[command]?.reject) throw responses[command].reject;
+          return responses[command];
+        }
         if (command === 'plugin:event|listen') return callbackId;
         if (command === 'get_engine_status') {
           return { phase: 'idle', log_lines: [] };
