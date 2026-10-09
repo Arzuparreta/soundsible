@@ -19,7 +19,8 @@ class SharePlugin : Plugin() {
             initialDispatch = false
             if ((activity as? MainActivity)?.restoredInstance == true) return
         }
-        IncomingTrackState.accept(context, intent)?.let { notifyListeners("incomingTrack", it) }
+        // Listeners live on Capacitor's thread; see PlaybackPlugin.publish.
+        IncomingTrackState.accept(context, intent)?.let { bridge.execute { notifyListeners("incomingTrack", it) } }
     }
     @PluginMethod fun incoming(call: PluginCall) { call.resolve(JSObject().put("incoming", IncomingTrackState.pending(context))) }
     @PluginMethod fun dismiss(call: PluginCall) {
