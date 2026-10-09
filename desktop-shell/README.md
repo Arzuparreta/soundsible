@@ -7,8 +7,8 @@ webview to `/player/desktop/`. It also connects to an existing station at
 
 ## Dev workflow
 
-**Linux deps (once):** `webkit2gtk-4.1`, `gtk3`, `libappindicator-gtk3`, `librsvg`, `base-devel`  
-Arch: `sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg base-devel`
+**Linux deps (once):** `webkit2gtk-4.1`, `gtk3`, `libayatana-appindicator`, `librsvg`, `base-devel`  
+Arch: `sudo pacman -S webkit2gtk-4.1 gtk3 libayatana-appindicator librsvg base-devel`
 
 From repo root, ensure Python deps are installed (`venv/` exists).
 

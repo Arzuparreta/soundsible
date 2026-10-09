@@ -1,0 +1,34 @@
+# Maintainer: Arzuparreta <https://github.com/Arzuparreta>
+#
+# Generated from desktop-shell/packaging/linux/aur/PKGBUILD.in in
+# https://github.com/Arzuparreta/soundsible by scripts/linux_packages.py, which
+# fills in the release and its checksums. Changes belong in that template; the
+# next release overwrites this file.
+
+pkgname=soundsible-bin
+pkgver=@PKGVER@
+_version=@VERSION@
+pkgrel=1
+pkgdesc='All-in-one music streaming service (desktop app)'
+arch=('x86_64')
+url='https://github.com/Arzuparreta/soundsible'
+license=('MIT')
+# WebKitGTK plays the audio through GStreamer, and Arch leaves its plugins
+# optional: without them the player is silent. good brings the audio output,
+# WAV, MP3, FLAC and MP4; base Ogg and Opus; libav AAC, which M4A holds.
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'hicolor-icon-theme'
+         'gst-plugins-base' 'gst-plugins-good' 'gst-libav')
+provides=('soundsible')
+conflicts=('soundsible')
+# The engine is a PyInstaller executable whose Python archive is appended to
+# the ELF file. Stripping cuts the archive off.
+options=('!strip' '!debug')
+source=("Soundsible_${_version}_amd64.deb::${url}/releases/download/v${_version}/Soundsible_${_version}_amd64.deb"
+        "LICENSE-${_version}::https://raw.githubusercontent.com/Arzuparreta/soundsible/v${_version}/LICENSE")
+sha256sums=('@DEB_SHA256@'
+            '@LICENSE_SHA256@')
+
+package() {
+  bsdtar -xf data.tar.* -C "$pkgdir"
+  install -Dm644 "LICENSE-${_version}" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

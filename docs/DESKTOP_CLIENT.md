@@ -82,7 +82,8 @@ inhibition compile only on Linux.
 
 ## Validation and remaining physical checks
 
-Desktop Build installs the actual Linux `.deb` and drives it with Tauri's
+Desktop Build installs the actual Linux packages — the `.deb`, the `.rpm`,
+the AUR package and the Flatpak — and drives each with Tauri's
 WebKit WebDriver against an independent packaged station. The smoke test plays
 real WAV files and checks advancing audio position, MPRIS transport/volume,
 paused navigation, remote command denial, persisted connection preferences,
@@ -91,7 +92,7 @@ runtime state deliberately points at the independent station to guard against
 accidental termination. It also monitors MPRIS property signals when changing
 connections so notification-driven widgets clear the previous track. Screenshots,
 process measurements and logs are uploaded
-as `linux-ui-evidence`.
+as `linux-ui-evidence-<distribution>`.
 
 The sidecar build generates the shared player's production bundle before
 freezing the engine. The headless sidecar smoke also fetches the packaged

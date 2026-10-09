@@ -26,3 +26,17 @@ test('a remembered server reconnects without changing autostart or starting an e
   expect(calls).toContainEqual({ command: 'connect_server', args: { address: 'https://music.example' } });
   expect(calls.some(c => c.command === 'set_autostart' || c.command === 'start_configured_engine')).toBe(false);
 });
+test('a desktop that refuses autostart still connects, and the box says so', async ({ page }) => {
+  await mockTauri(page, {
+    get_startup_profile: choose,
+    set_autostart: { reject: 'Background portal unavailable' },
+  });
+  await page.goto('/');
+  await page.getByRole('textbox', { name: 'Server address' }).fill('http://localhost:5005');
+  const autostart = page.locator('#chk-client-autostart');
+  await autostart.check();
+  await page.getByRole('button', { name: 'Connect to server', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__commands.some(c => c.command === 'connect_server'))).toBe(true);
+  await expect(autostart).not.toBeChecked();
+  await expect(page.locator('#connection-error')).toBeHidden();
+});

@@ -41,6 +41,7 @@ tokio = { version = "1", features = ["time", "sync"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "5", default-features = false, features = ["tokio"] }
+futures-lite = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }

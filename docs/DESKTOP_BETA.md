@@ -20,7 +20,13 @@ Every [release](https://github.com/Arzuparreta/soundsible/releases) attaches:
 | --- | --- | --- |
 | `Soundsible_<version>_x64-setup.exe` | Windows 11 x64 | Installs, runs and uninstalls it through the real Windows UI ([below](#what-ci-proves)) |
 | `Soundsible_<version>_arm64-setup.exe` | Windows 11 ARM64 | The same, on a native ARM64 runner |
-| `Soundsible_<version>_amd64.deb` | Debian and Ubuntu, x86-64 | Installs the bundle and drives the app, real playback and MPRIS against an independent station |
+| `Soundsible_<version>_amd64.deb` | Debian 12+, Ubuntu 22.04+ and Mint, x86-64 | Installed with apt on Ubuntu 24.04 and Debian 12, then driven: real playback and MPRIS against an independent station |
+| `soundsible-<version>-1.x86_64.rpm` | Fedora and openSUSE, x86-64 | Installed with dnf on Fedora and driven the same way; openSUSE is not tested |
+| `Soundsible_<version>_x86_64.flatpak` | Any distribution with Flatpak, x86-64 | Installed with `flatpak install` and driven the same way, inside its sandbox |
+| `soundsible-bin` in the AUR (once [publishing is set up](LINUX_PACKAGES.md#setting-up-publishing-once)) | Arch and derivatives, x86-64 | Built from the generated PKGBUILD with makepkg, installed with pacman and driven the same way |
+
+How each Linux package is made, what the Flatpak can reach, and how the AUR
+package is published: [Linux packages](LINUX_PACKAGES.md).
 
 There is no macOS build. On a Mac, use the [native installation](INSTALL.md)
 or Docker.
@@ -80,8 +86,9 @@ Windows architectures through the Windows UI Automation backend in
 `verify-pe-architecture.ps1` checks the machine field of the app, engine and
 FFmpeg. ARM64 artifacts may not silently fall back to x64 emulation.
 
-On Linux, CI builds the PyInstaller sidecar and the Tauri shell and runs the
-engine smoke test; the `.deb` itself is not installed or driven.
+On Linux, CI builds the packages on Ubuntu 22.04 and installs each one on the
+distributions it is for, then drives the installed app — see
+[Linux packages](LINUX_PACKAGES.md#what-ci-proves).
 
 The browser-level shell suite separately checks cancellation, localization,
 minimum-window layout and 200% zoom without overlap. The shared player keeps
@@ -121,7 +128,7 @@ npm run build
 ```
 
 The release workflow builds the Windows x64 and ARM64 installers and the Linux
-`.deb`, emits SHA-256 manifests, adds GitHub build-provenance attestations to
+`.deb`, `.rpm` and `.flatpak`, updates the AUR package, emits SHA-256 manifests, adds GitHub build-provenance attestations to
 the Windows installers, and publishes them on a `v*` tag alongside the server
 images. A release candidate — `vX.Y.Z-rc.N` — is marked as a prerelease and
 never moves the `latest` container tag. See [RELEASING.md](RELEASING.md).

@@ -1,0 +1,37 @@
+# Built by scripts/linux_packages.py rpm, which fills in the version and the
+# file list from the .deb Desktop Build produced. Tauri can bundle an RPM
+# itself, but its bundler took 45 minutes over the frozen engine on CI, where
+# rpmbuild takes seconds.
+Name:           soundsible
+Version:        @RPMVERSION@
+Release:        1
+Summary:        All-in-one music streaming service
+License:        MIT
+URL:            https://github.com/Arzuparreta/soundsible
+BuildArch:      x86_64
+# Libraries rather than package names: Fedora and openSUSE name the packages
+# differently and resolve these on both. The tray library is loaded at run
+# time, so nothing would discover that one automatically.
+Requires:       libwebkit2gtk-4.1.so.0()(64bit)
+Requires:       libgtk-3.so.0()(64bit)
+Requires:       libayatana-appindicator3.so.1()(64bit)
+AutoReqProv:    no
+
+# The engine is a PyInstaller executable whose Python archive is appended to
+# the ELF file. Stripping, or any of RPM's other post-install rewrites, cuts
+# it off.
+%global __os_install_post %{nil}
+%global debug_package %{nil}
+%global _build_id_links none
+
+%description
+Search the whole internet, then listen, save, download and manage everything
+in one place. The desktop app runs a private Soundsible station on this
+computer, or connects to one you already have.
+
+%install
+cp -a %{_sourcedir}/root/. %{buildroot}/
+
+%files
+%defattr(-,root,root,-)
+@FILES@
