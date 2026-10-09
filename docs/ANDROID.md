@@ -2,7 +2,7 @@
 
 **Estado: cliente Android alpha con distribución APK independiente.**
 Las descargas públicas sólo aparecen después de aprobar los gates del canal;
-consulta las prereleases Android en GitHub Releases.
+la APK alpha va adjunta a cada release de GitHub, junto al resto de plataformas.
 La APK conecta a tu servidor Soundsible y usa tu cuenta. Incluye biblioteca,
 búsqueda y adquisición, playlists/favoritos/metadatos, podcasts, Radio/Autoplay,
 cola NORMAL, DJ con mezcla nativa y Live (escuchar y emitir), además de Android
@@ -174,7 +174,7 @@ público los artifacts pueden ser descargables: son builds de desarrollo, no una
 alpha publicada ni un canal de actualización. El workflow sólo tiene lectura,
 no usa claves de firma públicas y no publica releases ni tags.
 
-La distribución pública usa APK firmada en prereleases Android de GitHub Releases; no requiere Google
+La distribución pública usa la APK firmada adjunta a cada release de GitHub; no requiere Google
 Play. No habrá actualización silenciosa por el mero hecho de compartir código.
 Ver [los requisitos de publicación](android/RELEASE_GATES.md).
 
@@ -182,7 +182,7 @@ Ver [los requisitos de publicación](android/RELEASE_GATES.md).
 ## Uso y revisión de la alpha
 
 1. Para la alpha pública, seguir [ALPHA](android/ALPHA.md) e instalar la APK firmada
-   de su prerelease Android. La APK debug y su package `.dev` siguen siendo de
+   de la release de la versión. La APK debug y su package `.dev` siguen siendo de
    desarrollo y no migran sus datos a la identidad pública.
 2. Conectar con dirección y contraseña, o escanear el QR que otra sesión de tu
    cuenta muestra en Ajustes → Dispositivos. También puedes escribir su código.

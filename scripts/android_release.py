@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Independent signed Android alpha channel. Never creates a global v* tag."""
+"""Signed Android alpha, built for and attached to the version's own release.
+
+Until 0.21.1 the APK went out as an independent `android-alpha/*` prerelease,
+allocating its versionCode through draft reservations. Every artefact of a
+version now ships in that version's `v*` release, so the code is derived from
+the version itself and the APK is staged here for release.yml to attach. The
+published `android-alpha/*` prereleases stay as upgrade predecessors.
+"""
 
 from __future__ import annotations
 
@@ -29,7 +36,13 @@ OUT = ROOT / "android/build/alpha"
 PACKAGE = "com.soundsible.android"
 HOST = "arzuparreta.github.io"
 SEED_HARNESS = "upgrade-seed-androidTest.apk"
-TAG = re.compile(r"^android-alpha/(.+)-(\d+)-([0-9a-f]{12})$")
+LEGACY_TAG = re.compile(r"^android-alpha/(.+)-(\d+)-([0-9a-f]{12})$")
+RELEASE_TAG = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$")
+APK = "Soundsible-Android-alpha.apk"
+SUMS = "SHA256SUMS-android.txt"
+# How long `stage` waits for the tagged commit's own CI before giving up. The
+# tag is pushed on the release merge commit, so its checks run beside this job.
+CHECKS_TIMEOUT = 90 * 60
 CAPABILITIES = {
     "phone",
     "account",
@@ -78,19 +91,48 @@ def releases() -> list[dict]:
     return [item for page in pages for item in page]
 
 
-def allocate(items: list[dict], version: str, revision: str) -> dict:
-    codes = [int(match[2]) for item in items if (match := TAG.fullmatch(item["tag_name"]))]
-    # Reserve code 1 for the private first-update baseline; first public code is 2.
-    code = max(codes, default=1) + 1
+def version_code(version: str) -> int:
+    """versionCode for a release, ordered exactly as the versions are.
+
+    MAJOR.MINOR.PATCH gives MMMmmpp99; `-rc.N` replaces the final 99 with N, so
+    a candidate installs below its release and the release updates it. The
+    first value, 220099 for 0.22.0, is far above the four codes the old
+    allocator handed out.
+    """
+    match = RELEASE_TAG.fullmatch(f"v{version}")
+    if not match:
+        raise RuntimeError(f"{version} is not a release version")
+    major, minor, patch = (int(part) for part in match.groups()[:3])
+    candidate = match[4]
+    if minor > 99 or patch > 99 or (candidate is not None and not 1 <= int(candidate) <= 98):
+        raise RuntimeError(f"{version} does not fit the versionCode layout")
+    code = ((major * 100 + minor) * 100 + patch) * 100 + (int(candidate) if candidate else 99)
     if code > 2_100_000_000:
         raise RuntimeError("Android versionCode exhausted")
+    return code
+
+
+def plan_for(version: str, revision: str) -> dict:
     return {
         "version": version,
-        "version_code": code,
+        "version_code": version_code(version),
         "source_revision": revision,
         "channel": "alpha",
-        "tag": f"android-alpha/{version}-{code}-{revision[:12]}",
+        "tag": f"v{version}",
     }
+
+
+def release_code(item: dict) -> int | None:
+    """The versionCode a published release carries, or None if it has no APK."""
+    if item.get("draft"):
+        return None
+    if legacy := LEGACY_TAG.fullmatch(item["tag_name"]):
+        return int(legacy[2])
+    if RELEASE_TAG.fullmatch(item["tag_name"]) and any(
+        asset.get("name") == APK for asset in item.get("assets", [])
+    ):
+        return version_code(item["tag_name"][1:])
+    return None
 
 
 def gates(root: Path = ROOT) -> tuple[dict, dict]:
@@ -124,63 +166,49 @@ def clean() -> str:
     return revision
 
 
-def checks(revision: str) -> list[dict]:
-    pages = gh(
-        "api",
-        "--paginate",
-        "--slurp",
-        f"repos/{{owner}}/{{repo}}/commits/{revision}/check-runs?per_page=100",
-    )
-    rows = [row for page in pages for row in page["check_runs"]]
-    latest = {}
-    for row in sorted(rows, key=lambda row: row["id"]):
-        latest[row["name"]] = row
-    missing = CHECKS - latest.keys()
-    failed = {name for name in CHECKS & latest.keys() if latest[name]["conclusion"] != "success"}
-    if missing or failed:
-        raise RuntimeError(f"Release checks not green; missing={sorted(missing)}, unsuccessful={sorted(failed)}")
-    return [{"name": name, "url": latest[name]["html_url"], "conclusion": "success"} for name in sorted(CHECKS)]
+def checks(revision: str, *, wait: float = 0) -> list[dict]:
+    """The required checks on ``revision``, all green.
 
-
-def reserve() -> dict:
-    revision = clean()
-    remote = gh("api", "repos/{owner}/{repo}/branches/main")["commit"]["sha"]
-    if revision != remote:
-        raise RuntimeError("Only the current remote main may reserve a public release")
-    checks(revision)
-    run_id = os.getenv("GITHUB_RUN_ID")
-    items = releases()
-    # Workflow reruns reuse their own draft reservation; published releases stay immutable.
-    if run_id:
-        marker = f"<!-- android-run:{run_id} -->"
-        for item in items:
-            if TAG.fullmatch(item["tag_name"]) and marker in (item.get("body") or ""):
-                if not item["draft"]:
-                    raise RuntimeError("This run has already published; refusing to replace it")
-                plan = json.loads((item["body"].split("```json\n", 1)[1]).split("\n```", 1)[0])
-                if plan["source_revision"] != revision:
-                    raise RuntimeError("Reservation does not match checkout")
-                return plan
-    else:
-        marker = "<!-- android-local-reservation -->"
-    plan = allocate(items, declared_version(), revision)
-    body = marker + "\nPrivate build reservation. Not a published APK.\n```json\n" + json.dumps(plan) + "\n```"
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as request:
-        json.dump(
-            {
-                "tag_name": plan["tag"],
-                "target_commitish": revision,
-                "name": f"Soundsible Android alpha · {plan['version']} · build {plan['version_code']}",
-                "body": body,
-                "draft": True,
-                "prerelease": True,
-                "make_latest": "false",
-            },
-            request,
+    With ``wait`` it polls until every one has finished, for the tag's own CI
+    that is still running when the release job reaches this point."""
+    deadline = time.monotonic() + wait
+    while True:
+        pages = gh(
+            "api",
+            "--paginate",
+            "--slurp",
+            f"repos/{{owner}}/{{repo}}/commits/{revision}/check-runs?per_page=100",
         )
-        request.flush()
-        gh("api", "repos/{owner}/{repo}/releases", "--method", "POST", "--input", request.name)
-    return plan
+        rows = [row for page in pages for row in page["check_runs"]]
+        latest = {}
+        for row in sorted(rows, key=lambda row: row["id"]):
+            latest[row["name"]] = row
+        missing = CHECKS - latest.keys()
+        running = {name for name in CHECKS & latest.keys() if latest[name]["status"] != "completed"}
+        if (missing or running) and time.monotonic() < deadline:
+            time.sleep(60)
+            continue
+        failed = {
+            name for name in CHECKS & latest.keys()
+            if latest[name]["status"] == "completed" and latest[name]["conclusion"] != "success"
+        }
+        if missing or running or failed:
+            raise RuntimeError(
+                f"Release checks not green; missing={sorted(missing)}, running={sorted(running)}, "
+                f"unsuccessful={sorted(failed)}"
+            )
+        return [{"name": name, "url": latest[name]["html_url"], "conclusion": "success"} for name in sorted(CHECKS)]
+
+
+def plan_build() -> dict:
+    """The build this checkout is: a tag's own release, or a dry run on main."""
+    revision = clean()
+    if os.getenv("GITHUB_REF_TYPE") == "tag":
+        if os.getenv("GITHUB_REF_NAME") != f"v{declared_version()}":
+            raise RuntimeError("Tag and declared version differ")
+    elif os.getenv("GITHUB_ACTIONS") and os.getenv("GITHUB_REF") != "refs/heads/main":
+        raise RuntimeError("Only a release tag, or main as a dry run, builds the public APK")
+    return plan_for(declared_version(), revision)
 
 
 def compile_apk(plan: dict, destination: Path) -> None:
@@ -370,11 +398,11 @@ def app_links() -> None:
 
 
 def published_predecessor(items: list[dict], code: int) -> dict | None:
-    public = [item for item in items if TAG.fullmatch(item["tag_name"]) and not item["draft"]]
+    public = [item for item in items if release_code(item) is not None]
     if not public:
         return None
-    item = max(public, key=lambda row: int(TAG.fullmatch(row["tag_name"])[2]))
-    if int(TAG.fullmatch(item["tag_name"])[2]) >= code:
+    item = max(public, key=release_code)
+    if release_code(item) >= code:
         raise RuntimeError("Published predecessor is not older than candidate")
     return item
 
@@ -392,15 +420,14 @@ def upgrade_baseline(plan: dict) -> tuple[Path, Path, dict]:
     directory.mkdir(parents=True, exist_ok=True)
     command(
         "gh", "release", "download", item["tag_name"], "--dir", str(directory), "--clobber",
-        "--pattern", "Soundsible-Android-alpha.apk", "--pattern", "android-release.json",
+        "--pattern", APK, "--pattern", "android-release.json",
         "--pattern", SEED_HARNESS,
     )
     metadata = json.loads((directory / "android-release.json").read_text())
-    apk = directory / "Soundsible-Android-alpha.apk"
-    match = TAG.fullmatch(item["tag_name"])
+    apk = directory / APK
     if (
         metadata.get("tag") != item["tag_name"]
-        or metadata.get("version_code") != int(match[2])
+        or metadata.get("version_code") != release_code(item)
         or metadata.get("sha256") != digest(apk)
     ):
         raise RuntimeError("Published predecessor metadata/APK disagree")
@@ -552,9 +579,14 @@ def acceptance(plan: dict, apk: Path) -> dict:
                     process.wait()
 
 
-def publish(plan: dict, apk: Path, receipt: dict) -> None:
+def stage(plan: dict, apk: Path, receipt: dict) -> Path:
+    """Gather what release.yml attaches to the version's release.
+
+    Nothing is published here: the release job uploads the directory as an
+    artifact and the release's own publish step attaches it beside the other
+    platforms, so a version is out everywhere or nowhere."""
     if clean() != plan["source_revision"]:
-        raise RuntimeError("Checkout differs from release reservation")
+        raise RuntimeError("Checkout differs from the planned build")
     metadata = verify_apk(apk, plan)
     expected = {
         "source_revision": plan["source_revision"],
@@ -578,81 +610,51 @@ def publish(plan: dict, apk: Path, receipt: dict) -> None:
     harness = OUT / SEED_HARNESS
     verify_harness(harness)
     metadata["upgrade_seed_harness"] = {"apk": SEED_HARNESS, "sha256": digest(harness)}
-    metadata["checks"] = checks(plan["source_revision"])
-    item = next(row for row in releases() if row["tag_name"] == plan["tag"])
-    if not item["draft"]:
-        raise RuntimeError("Published Android assets are immutable")
-    if gh("api", "repos/{owner}/{repo}/branches/main")["commit"]["sha"] != plan["source_revision"]:
-        raise RuntimeError("Main advanced; validate and reserve its new head instead")
-    write(OUT / "android-release.json", metadata)
-    write(OUT / "release-acceptance.json", receipt)
-    (OUT / "SHA256SUMS").write_text(
+    metadata["checks"] = checks(plan["source_revision"], wait=CHECKS_TIMEOUT)
+    staged = OUT / "release"
+    if staged.exists():
+        shutil.rmtree(staged)
+    staged.mkdir(parents=True)
+    write(staged / "android-release.json", metadata)
+    write(staged / "release-acceptance.json", receipt)
+    for path in (apk, harness):
+        shutil.copy2(path, staged / path.name)
+    (staged / SUMS).write_text(
         "".join(
-            f"{digest(path)}  {path.name}\n"
-            for path in (apk, harness, OUT / "android-release.json", OUT / "release-acceptance.json")
+            f"{digest(staged / name)}  {name}\n"
+            for name in (APK, SEED_HARNESS, "android-release.json", "release-acceptance.json")
         )
     )
-    notes = ROOT / "docs/android/ALPHA.md"
-    marker = (item.get("body") or "").splitlines()[0]
-    body = marker + "\n" + notes.read_text() + "\n\nBuild metadata: `android-release.json`. SHA-256: `SHA256SUMS`.\n"
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md") as file:
-        file.write(body)
-        file.flush()
-        command(
-            "gh",
-            "release",
-            "upload",
-            plan["tag"],
-            "--clobber",
-            str(apk),
-            str(harness),
-            str(OUT / "android-release.json"),
-            str(OUT / "release-acceptance.json"),
-            str(OUT / "SHA256SUMS"),
-        )
-        if gh("api", "repos/{owner}/{repo}/branches/main")["commit"]["sha"] != plan["source_revision"]:
-            raise RuntimeError("Main advanced during upload; leaving release as a draft")
-        command(
-            "gh",
-            "release",
-            "edit",
-            plan["tag"],
-            "--draft=false",
-            "--prerelease",
-            "--latest=false",
-            "--notes-file",
-            file.name,
-        )
-    print(command("gh", "release", "view", plan["tag"], "--json", "url", "--jq", ".url"))
+    return staged
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("plan", "reserve", "build", "verify", "acceptance", "publish"))
+    parser.add_argument("command", choices=("plan", "build", "verify", "acceptance", "stage"))
     parser.add_argument("--plan", type=Path, default=OUT / "plan.json")
     args = parser.parse_args()
     try:
         os.environ["SOUNDSIBLE_ANDROID_TEST_RELEASE"] = "1"
         OUT.mkdir(parents=True, exist_ok=True)
-        if args.command in ("plan", "reserve"):
-            plan = reserve() if args.command == "reserve" else allocate(releases(), declared_version(), clean())
-            write(args.plan, plan)
-            print(json.dumps(plan, indent=2))
+        if args.command == "plan":
+            planned = plan_build()
+            write(args.plan, planned)
+            print(json.dumps(planned, indent=2))
             return 0
-        plan = json.loads(args.plan.read_text())
-        apk = OUT / "Soundsible-Android-alpha.apk"
+        planned = json.loads(args.plan.read_text())
+        apk = OUT / APK
         if args.command == "build":
-            compile_apk(plan, apk)
+            compile_apk(planned, apk)
             shutil.copy2(
                 ROOT / "android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk",
                 OUT / SEED_HARNESS,
             )
         elif args.command == "verify":
-            write(OUT / "android-release.json", verify_apk(apk, plan))
+            write(OUT / "android-release.json", verify_apk(apk, planned))
         elif args.command == "acceptance":
-            write(OUT / "release-acceptance.json", acceptance(plan, apk))
+            write(OUT / "release-acceptance.json", acceptance(planned, apk))
         else:
-            publish(plan, apk, json.loads((OUT / "release-acceptance.json").read_text()))
+            print(stage(planned, apk, json.loads((OUT / "release-acceptance.json").read_text())))
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError, StopIteration) as error:
         # Do not echo captured subprocess streams: signing tools may print credentials on failure.
