@@ -21,7 +21,7 @@ Every [release](https://github.com/Arzuparreta/soundsible/releases) attaches:
 | `Soundsible_<version>_x64-setup.exe` | Windows 11 x64 | Installs, runs and uninstalls it through the real Windows UI ([below](#what-ci-proves)) |
 | `Soundsible_<version>_arm64-setup.exe` | Windows 11 ARM64 | The same, on a native ARM64 runner |
 | `Soundsible_<version>_amd64.deb` | Debian 12+, Ubuntu 22.04+ and Mint, x86-64 | Installed with apt on Ubuntu 24.04 and Debian 12, then driven: real playback and MPRIS against an independent station |
-| `Soundsible-<version>-1.x86_64.rpm` | Fedora and openSUSE, x86-64 | Installed with dnf on Fedora and driven the same way |
+| `soundsible-<version>-1.x86_64.rpm` | Fedora and openSUSE, x86-64 | Installed with dnf on Fedora and driven the same way |
 | `Soundsible_<version>_x86_64.flatpak` | Any distribution with Flatpak, x86-64 | Installed with `flatpak install` and driven the same way, inside its sandbox |
 | `soundsible-bin` in the AUR (once [publishing is set up](LINUX_PACKAGES.md#setting-up-publishing-once)) | Arch and derivatives, x86-64 | Built from the generated PKGBUILD with makepkg, installed with pacman and driven the same way |
 

@@ -6,7 +6,7 @@ CI builds the app once, as a `.deb`, and the other three repackage it.
 | Package | For | Install |
 | --- | --- | --- |
 | `Soundsible_<version>_amd64.deb` | Debian 12+, Ubuntu 22.04+, Mint | `sudo apt install ./Soundsible_<version>_amd64.deb` |
-| `Soundsible-<version>-1.x86_64.rpm` | Fedora, openSUSE | `sudo dnf install ./Soundsible-<version>-1.x86_64.rpm` |
+| `soundsible-<version>-1.x86_64.rpm` | Fedora, openSUSE | `sudo dnf install ./soundsible-<version>-1.x86_64.rpm` |
 | `Soundsible_<version>_x86_64.flatpak` | Any distribution with Flatpak | `flatpak install --user ./Soundsible_<version>_x86_64.flatpak` |
 | `soundsible-bin` (AUR, once [publishing is set up](#setting-up-publishing-once)) | Arch, Manjaro, EndeavourOS, CachyOS | `yay -S soundsible-bin` |
 
@@ -20,6 +20,15 @@ never on older. v0.21.1 was built on Ubuntu 24.04, and its engine needed glibc
 2.38: it did not start on Debian 12 or Ubuntu 22.04. The packages are now
 built in an Ubuntu 22.04 container (glibc 2.35), the oldest release they
 support.
+
+## RPM
+
+The `.rpm` is built by `scripts/linux_packages.py rpm` with `rpmbuild`, from
+the `.deb`'s files and `desktop-shell/packaging/linux/rpm/soundsible.spec.in`.
+Tauri can bundle an RPM itself, but its bundler took 45 minutes over the
+frozen engine on CI, against seconds for rpmbuild. The spec requires
+libraries rather than packages, so that Fedora and openSUSE, which name the
+packages differently, both resolve them.
 
 ## Flatpak
 
@@ -100,7 +109,7 @@ Desktop Build (`.github/workflows/desktop-build.yml`):
 
 | Job | Checks |
 | --- | --- |
-| `build-linux` | Builds the engine, the `.deb` and the `.rpm` in Ubuntu 22.04; engine smoke; Rust and D-Bus tests |
+| `build-linux` | Builds the engine and the `.deb` in Ubuntu 22.04, then the `.rpm` from the `.deb` with rpmbuild; engine smoke; Rust and D-Bus tests |
 | `smoke-linux-ubuntu` | The `.deb` installed with apt on the newest Ubuntu runner, next to Ubuntu's FFmpeg |
 | `smoke-linux-debian` | The `.deb` on Debian 12, the oldest glibc it claims |
 | `smoke-linux-fedora` | The `.rpm` installed with dnf on Fedora |

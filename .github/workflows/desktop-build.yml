@@ -113,7 +113,15 @@ jobs:
           SOUNDSIBLE_REPO_ROOT: ${{ github.workspace }}
         run: |
           npm ci
-          npm run tauri build -- --bundles deb,rpm
+          npm run tauri build -- --bundles deb
+
+      # From the .deb's files, with rpmbuild. Tauri's own RPM bundler took 45
+      # minutes over the frozen engine here.
+      - name: Build the .rpm
+        run: |
+          python scripts/linux_packages.py rpm \
+            --deb desktop-shell/src-tauri/target/release/bundle/deb/Soundsible_*_amd64.deb \
+            --out desktop-shell/src-tauri/target/release/bundle/rpm
 
       - name: Rust desktop and isolated D-Bus tests
         working-directory: desktop-shell/src-tauri

@@ -9,7 +9,10 @@ in step with the desktop shell.
 from __future__ import annotations
 
 import hashlib
+import io
+import os
 import re
+import tarfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -20,9 +23,12 @@ from scripts.linux_packages import (
     APP_ID,
     PACKAGING,
     check_deb,
+    extract_deb,
     pkgver,
     render_metainfo,
     render_pkgbuild,
+    render_spec,
+    rpm_version,
     write_flatpak,
 )
 
@@ -60,6 +66,51 @@ def test_pkgbuild_never_strips_the_engine(tmp_path):
 def test_prereleases_get_a_pkgver_arch_accepts():
     assert pkgver("0.22.0-rc.1") == "0.22.0rc.1"
     assert "-" not in pkgver("0.22.0-rc.1")
+
+
+def _real_deb(path: Path) -> Path:
+    """An `ar` archive laid out like the one Tauri writes."""
+    def member(name: str, data: bytes) -> bytes:
+        header = f"{name:<16}{0:<12}{0:<6}{0:<6}{100644:<8}{len(data):<10}`\n".encode()
+        return header + data + (b"\n" if len(data) % 2 else b"")
+
+    payload = io.BytesIO()
+    with tarfile.open(fileobj=payload, mode="w:gz") as data:
+        engine = tarfile.TarInfo("./usr/bin/soundsible-engine")
+        engine.size, engine.mode = 3, 0o755
+        data.addfile(engine, io.BytesIO(b"elf"))
+        folder = tarfile.TarInfo("./usr/share/applications")
+        folder.type = tarfile.DIRTYPE
+        data.addfile(folder)
+    path.write_bytes(b"!<arch>\n" + member("debian-binary", b"2.0\n")
+                     + member("control.tar.gz", b"x") + member("data.tar.gz", payload.getvalue()))
+    return path
+
+
+def test_rpm_extracts_the_debs_files(tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+
+    files = extract_deb(_real_deb(tmp_path / "Soundsible_1.2.3_amd64.deb"), root)
+
+    # Files only: listing /usr/share/applications would make the package own
+    # a directory every desktop shares.
+    assert files == ["/usr/bin/soundsible-engine"]
+    assert os.access(root / "usr" / "bin" / "soundsible-engine", os.X_OK)
+
+
+def test_spec_lists_the_files_and_never_rewrites_them():
+    spec = render_spec("1.2.3", ["/usr/bin/soundsible-engine"])
+
+    assert "Version:        1.2.3\n" in spec
+    assert "\n/usr/bin/soundsible-engine\n" in spec + "\n"
+    # Stripping cuts off the frozen engine's Python archive.
+    assert "%global __os_install_post %{nil}" in spec
+    assert not re.search(r"@[A-Z0-9_]+@", spec)
+
+
+def test_prereleases_get_a_version_rpm_orders_first():
+    assert rpm_version("0.22.0-rc.1") == "0.22.0~rc.1"
 
 
 def test_a_deb_from_another_version_is_refused(tmp_path):

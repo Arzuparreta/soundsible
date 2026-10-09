@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Turn the Linux .deb into the AUR recipe and the Flatpak build directory.
+"""Turn the Linux .deb into the .rpm, the AUR recipe and the Flatpak build directory.
 
-Both are repackagings of the .deb that Desktop Build installs and drives, not
-second builds: the binaries an Arch or Flatpak user runs are the ones CI
-tested. What differs per release is the version and the checksums, and neither
+All three are repackagings of the .deb that Desktop Build installs and drives,
+not second builds: the binaries a Fedora, Arch or Flatpak user runs are the
+ones CI tested. What differs per release is the version and the checksums, and neither
 may be written by hand, so the templates under
 ``desktop-shell/packaging/linux`` carry neither and this script fills them in.
 
 ``aur`` writes ``PKGBUILD``. Its ``.SRCINFO`` is left to
 ``makepkg --printsrcinfo``, which is the only thing that can say what
 ``.SRCINFO`` a PKGBUILD has.
+
+``rpm`` builds the .rpm with rpmbuild from the .deb's files.
 
 ``flatpak`` writes a directory flatpak-builder can run on: the manifest, the
 .deb, the metainfo with this release in it, and Flathub's shared modules at a
@@ -24,6 +26,8 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -88,11 +92,65 @@ def render_pkgbuild(version: str, deb: Path) -> str:
     return template
 
 
+def rpm_version(version: str) -> str:
+    """RPM forbids `-` in Version; `~` is how it spells a pre-release, so
+    `0.22.0~rc.1` sorts before `0.22.0`."""
+    return version.replace("-", "~")
+
+
+def extract_deb(deb: Path, destination: Path) -> list[str]:
+    """Unpack the .deb's files and return their paths, absolute, sorted.
+
+    A .deb is an `ar` archive whose `data.tar.*` member holds the files; the
+    format is simple enough to read here rather than depend on dpkg."""
+    with deb.open("rb") as handle:
+        if handle.read(8) != b"!<arch>\n":
+            raise SystemExit(f"{deb} is not a .deb")
+        while header := handle.read(60):
+            name = header[:16].decode().strip().rstrip("/")
+            size = int(header[48:58])
+            if name.startswith("data.tar"):
+                with tarfile.open(fileobj=handle, mode="r|*") as data:
+                    data.extractall(destination, filter="tar")
+                break
+            handle.seek(size + size % 2, 1)
+        else:
+            raise SystemExit(f"{deb} has no data.tar member")
+    return sorted("/" + str(path.relative_to(destination)) for path in destination.rglob("*") if not path.is_dir())
+
+
+def render_spec(version: str, files: list[str]) -> str:
+    template = (PACKAGING / "rpm" / "soundsible.spec.in").read_text()
+    return template.replace("@RPMVERSION@", rpm_version(version)).replace("@FILES@", "\n".join(files))
+
+
+def build_rpm(version: str, deb: Path, out: Path) -> Path:
+    with tempfile.TemporaryDirectory(prefix="soundsible-rpm-") as temporary:
+        top = Path(temporary)
+        root = top / "SOURCES" / "root"
+        root.mkdir(parents=True)
+        files = extract_deb(deb, root)
+        spec = top / "SPECS" / "soundsible.spec"
+        spec.parent.mkdir()
+        spec.write_text(render_spec(version, files))
+        subprocess.run([
+            "rpmbuild", "-bb", "--nodeps",
+            "--define", f"_topdir {top}",
+            # gzip, which every RPM-based distribution still reads.
+            "--define", "_binary_payload w6.gzdio",
+            str(spec),
+        ], check=True)
+        built = next((top / "RPMS").rglob("*.rpm"))
+        out.mkdir(parents=True, exist_ok=True)
+        return Path(shutil.copy2(built, out / built.name))
+
+
 def render_metainfo(version: str, date: str) -> str:
     template = (PACKAGING / f"{APP_ID}.metainfo.xml").read_text()
     raw = f"https://raw.githubusercontent.com/{REPOSITORY}/v{version}/docs/images/screenshots"
+    default = ' type="default"'
     screenshots = "\n".join(
-        f'    <screenshot{" type=\"default\"" if index == 0 else ""}>\n'
+        f"    <screenshot{default if index == 0 else ''}>\n"
         f"      <image>{raw}/light/{name}.webp</image>\n"
         f"      <caption>{escape(caption)}</caption>\n"
         f"    </screenshot>"
@@ -134,7 +192,7 @@ def write_flatpak(version: str, deb: Path, out: Path, date: str, shared_modules:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("aur", "flatpak"):
+    for name in ("aur", "rpm", "flatpak"):
         command = sub.add_parser(name)
         command.add_argument("--deb", type=Path, required=True, help="the .deb Desktop Build produced")
         command.add_argument("--out", type=Path, required=True, help="directory to write into")
@@ -150,6 +208,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "aur":
         args.out.mkdir(parents=True, exist_ok=True)
         (args.out / "PKGBUILD").write_text(render_pkgbuild(version, args.deb))
+    elif args.command == "rpm":
+        print(build_rpm(version, args.deb, args.out))
     else:
         date = args.date or datetime.now(timezone.utc).date().isoformat()
         write_flatpak(version, args.deb, args.out, date, args.shared_modules)
