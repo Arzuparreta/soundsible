@@ -168,7 +168,7 @@ async function applyAutostartPreference() {
   try {
     await invoke('set_autostart', { enabled: chkAutostart.checked });
   } catch {
-    // Autostart is non-fatal on restricted Windows installations.
+    // Autostart is non-fatal: Windows policy or a refused Flatpak portal can block it.
     await syncAutostartCheckbox();
   }
 }

@@ -119,7 +119,7 @@ Headless check for engine health + desktop player route:
 ./desktop-shell/scripts/smoke-test.sh --with-sidecar --with-tauri
 ```
 
-CI runs the same checks in `.github/workflows/desktop-shell.yml` (Linux + Windows sidecar/Tauri jobs).
+CI runs the Python engine check in `.github/workflows/desktop-shell.yml`; the sidecar and Tauri builds, and the installed-app smokes on Linux and Windows, run in `.github/workflows/desktop-build.yml`.
 
 **Windows sidecars:** native runners produce
 `soundsible-engine-x86_64-pc-windows-msvc.exe` and
