@@ -97,9 +97,18 @@ something was breaking.
 ```bash
 python scripts/release.py plan       # what would go out, and as what number
 python scripts/release.py prepare    # opens the bump PR, auto-merge armed
-#   ... it merges once the required checks pass ...
-python scripts/release.py finish     # tags the merge commit
+#   ... it merges once the required checks pass, and that is the release
 ```
+
+Merging the bump pull request is what publishes. `release-tag.yml` tags the
+merge commit with `vX.Y.Z` and starts the two workflows below on that tag; a
+tag pushed with `GITHUB_TOKEN` starts nothing by itself, so it dispatches them.
+To hold a release for review, disarm auto-merge on the bump pull request
+(`gh pr merge <url> --disable-auto`): it then goes out when someone merges it.
+
+`python scripts/release.py finish` is the manual fallback, for when that
+workflow did not run: it tags the merge commit from a checkout, and its push
+starts the same workflows. Either one refuses a tag that already exists.
 
 Or `/release` in Claude Code, which runs the three steps and waits in between.
 
@@ -114,7 +123,7 @@ number, which is how 1.0 will eventually happen — a label cannot decide that.
 
 ## What a tag builds
 
-Pushing `vX.Y.Z` starts two workflows:
+The `vX.Y.Z` tag starts two workflows:
 
 - **CI** builds and pushes the container images to GHCR: `X.Y.Z`, `X.Y`, and
   `latest` (stable releases only — a release candidate never moves `latest`).

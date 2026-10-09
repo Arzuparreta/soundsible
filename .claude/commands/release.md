@@ -25,9 +25,10 @@ like reaching 1.0).
 4. Wait for it to merge. It needs the same required checks as anything else,
    and it touches `shared/**`, so the container builds run: expect this to
    take a while. Poll with `gh pr checks <url> --watch` or come back to it.
-5. `python scripts/release.py finish` — tags the merge commit and pushes.
-   That tag is what builds the images and the installers and publishes the
-   GitHub Release.
+5. Merging is the release: `release-tag.yml` tags the merge commit and starts
+   the image and release builds on that tag. Check it with
+   `gh run list --workflow release-tag.yml --limit 1`. Only if it did not run,
+   `python scripts/release.py finish` tags from this checkout instead.
 
 Report the release URL when it exists. Do not hand-edit a version anywhere:
 every version in this repository is written by `scripts/version_sync.py`.
