@@ -235,8 +235,24 @@ class ProgramMixOutputTest {
                     meter.metrics.clear()
                     meter.await { it.first < 30 && it.second < 30 && it.marker in (2900.0 * outgoingLevel)..(3050.0 * outgoingLevel) }
                     instrumentation.runOnMainSync { decoders[1].seekTo(1000) }
+                    // The seek lands on the playback thread: the decoder pauses its output,
+                    // flushes and resumes it, and over HTTP it can buffer again right after
+                    // first reporting ready. Accepting the first ready poll let the assertion
+                    // below read the input mid-rebuffer. Wait for decoder and mix to agree,
+                    // for long enough that a pause in between would have been seen.
                     val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
-                    while ((!owner.readyInput(1) || owner.inputPositionUs(1) >= 20000) && System.nanoTime() < readyDeadline) Thread.sleep(10)
+                    val decoderReady = java.util.concurrent.atomic.AtomicBoolean()
+                    var steadySince = 0L
+                    var steady = false
+                    while (!steady && System.nanoTime() < readyDeadline) {
+                        instrumentation.runOnMainSync { decoderReady.set(decoders[1].playbackState == Player.STATE_READY) }
+                        val ready = decoderReady.get() && owner.readyInput(1) && owner.inputPositionUs(1) < 20000
+                        if (!ready) steadySince = 0L
+                        else if (steadySince == 0L) steadySince = System.nanoTime()
+                        else steady = System.nanoTime() - steadySince >= TimeUnit.MILLISECONDS.toNanos(300)
+                        if (!steady) Thread.sleep(10)
+                    }
+                    assertTrue("Corrected standby cue did not rebuffer and hold steady", steady)
                     assertTrue("Corrected standby cue did not rebuffer", owner.readyInput(1))
                     assertEquals("Standby phase correction reset master audio", epoch, owner.epoch())
                     assertTrue("Standby source advanced while silent and unarmed", owner.inputPositionUs(1) < 20000)
