@@ -111,6 +111,30 @@ def player_call(name, *signature_and_values):
     return bus("call", MPRIS, OBJECT, PLAYER, name, *signature_and_values)
 
 
+# The sink run-linux-ui-smoke.sh plays into; set it to check another one.
+SINK = os.environ.get("SOUNDSIBLE_SMOKE_SINK", "soundsible_test")
+
+
+def sink_rms(seconds=3.0):
+    """Root-mean-square level of what reached the sound server's sink.
+
+    An advancing media element proves only that a file decodes. The player
+    routes it through Web Audio to the device, and on WebKitGTK that route
+    once stayed silent while every element reported playback. parec holds
+    whole fragments back, so a short latency is what keeps a recording cut
+    off after a few seconds from coming back empty."""
+    rate = 8000
+    recorder = subprocess.Popen(["parec", "-d", f"{SINK}.monitor", "--raw", "--format=s16le",
+                                 "--channels=1", f"--rate={rate}", "--latency-msec=50"],
+                                stdout=subprocess.PIPE)
+    time.sleep(seconds)
+    recorder.terminate()
+    data = recorder.communicate()[0]
+    samples = memoryview(data[:len(data) // 2 * 2]).cast("h")
+    assert len(samples) > rate, f"recorded only {len(samples)} samples from {SINK}.monitor"
+    return math.sqrt(sum(sample * sample for sample in samples) / len(samples))
+
+
 def sandboxed(flatpak, command, *extra):
     """Run `command` inside the installed Flatpak, sharing /tmp, where every
     path this smoke hands the app lives."""
@@ -258,6 +282,7 @@ def run(app, engine, artifacts, flatpak=None):
             wait_for(lambda: web.script(audio_position) > 0.2, "real HTML audio started")
             actual_position = web.script(audio_position)
             wait_for(lambda: web.script(audio_position) > actual_position + 0.3, "real HTML audio position advanced")
+            levels = [sink_rms()]
             metadata = property_value("Metadata")
             assert first_title in metadata, metadata
             first_position = property_value("Position")
@@ -271,6 +296,10 @@ def run(app, engine, artifacts, flatpak=None):
             player_call("Play")
             wait_for(lambda: property_value("PlaybackStatus") == 's "Playing"', "MPRIS resume")
             wait_for(lambda: web.script(audio_position) > 0.2, "second real HTML audio started")
+            levels.append(sink_rms())
+            (artifacts / "audio-levels.json").write_text(json.dumps({"sink": SINK, "rms": levels}))
+            # The tracks are sines of amplitude 500 (RMS about 350); silence is 0.
+            assert all(level > 50 for level in levels), f"nothing audible reached {SINK}: RMS {levels}"
             player_call("Seek", "x", "5000000")
             wait_for(lambda: web.script(audio_position) >= 5, "real audio seek")
             bus("set-property", MPRIS, OBJECT, PLAYER, "Volume", "d", "0.25")
@@ -335,7 +364,7 @@ def run(app, engine, artifacts, flatpak=None):
                 "server_survives_quit": True,
                 "connection_switch_clears_mpris_signals": True,
             }, indent=2))
-            print("Linux installed-app smoke passed: real player, WAV and AAC playback, MPRIS, remote ACL and independent server lifecycle.", flush=True)
+            print("Linux installed-app smoke passed: real player, audible WAV and AAC playback, MPRIS, remote ACL and independent server lifecycle.", flush=True)
         except Exception:
             if web:
                 try:

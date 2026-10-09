@@ -48,6 +48,8 @@ describe('stable programme output', () => {
     ['iPhone', 'iPhone', 5],
     ['iPad', 'iPad', 5],
     ['Mozilla/5.0 (Macintosh; Intel Mac OS X)', 'MacIntel', 5],
+    // The Linux desktop app's WebKitGTK.
+    ['Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15', 'Linux x86_64', 0],
   ])('uses direct output on %s without creating or retrying a carrier', async (userAgent, platform, maxTouchPoints) => {
     vi.stubGlobal('navigator', { userAgent, platform, maxTouchPoints });
     const { output, context, monitor, events } = fixture();
@@ -62,6 +64,52 @@ describe('stable programme output', () => {
     expect(output.snapshot()).toMatchObject({ mode: 'direct', carrierPlaying: false });
     output.destroy();
     expect(monitor.disconnect).toHaveBeenCalledExactlyOnceWith(context.destination);
+  });
+
+  it.each([
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36',
+    'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0',
+  ])('keeps the carrier for Linux browsers other than WebKitGTK: %s', (userAgent) => {
+    vi.stubGlobal('navigator', { userAgent, platform: 'Linux x86_64', maxTouchPoints: 0 });
+    expect(fixture().output.initialize()).toBe('carrier');
+  });
+
+  it('abandons a carrier that plays without ever producing a frame', async () => {
+    vi.useFakeTimers();
+    try {
+      const { output, context, monitor, events } = fixture();
+      output.initialize();
+      const carrier = (output as unknown as { carrier: FakeCarrier }).carrier;
+      carrier.readyState = 0;
+
+      await output.play();
+      expect(output.snapshot().mode).toBe('carrier');
+      vi.advanceTimersByTime(2000);
+
+      expect(output.snapshot().mode).toBe('direct_fallback');
+      expect(carrier.pause).toHaveBeenCalled();
+      expect(monitor.connect).toHaveBeenLastCalledWith(context.destination);
+      expect(events.at(-1)).toBe('fallback_entered');
+      // A gesture must not put the listener back on the silent carrier.
+      expect(await output.retryFromGesture(true)).toBe(false);
+      expect(output.snapshot().mode).toBe('direct_fallback');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a carrier that has a frame by the deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const { output } = fixture();
+      output.initialize();
+      await output.play();
+      vi.advanceTimersByTime(2000);
+      expect(output.snapshot().mode).toBe('carrier');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('retains the carrier for desktop Macs', () => {
