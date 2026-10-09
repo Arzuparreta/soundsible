@@ -9,6 +9,8 @@ breaking change because nobody labelled the pull request.
 from __future__ import annotations
 
 import importlib.util
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -140,3 +142,32 @@ def test_an_unlabelled_pull_request_is_never_silently_ignored():
     summary = release.summarise(pulls, tag="v0.1.0")
     assert "#7" in summary
     assert "No impact label" in summary
+
+
+def test_what_the_tag_contains_decides_the_next_release(tmp_path, monkeypatch):
+    """Membership comes from history, not timestamps.
+
+    v0.22.0 was tagged at `12:57:06+02:00` and #327 merged at `12:55:21Z`,
+    two hours later; compared as text it sorted first and was left out. The
+    bump pull request, recorded as merged a second after its own commit,
+    belongs to the tag it produced.
+    """
+    def git(*args):
+        return subprocess.run(("git", *args), cwd=tmp_path, check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    git("init", "-q")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "bump")
+    bump = git("rev-parse", "HEAD")
+    git("tag", "v0.22.0")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "fix")
+    fix = git("rev-parse", "HEAD")
+    merged = [
+        {"number": 324, "title": "bump", "labels": [{"name": "impact:none"}],
+         "mergeCommit": {"oid": bump}},
+        {"number": 327, "title": "fix", "labels": [{"name": "impact:patch"}],
+         "mergeCommit": {"oid": fix}},
+    ]
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(release, "run", lambda *args, check=True: json.dumps(merged))
+    assert [pull.number for pull in release.merged_since("v0.22.0")] == [327]
