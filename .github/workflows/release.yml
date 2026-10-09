@@ -144,7 +144,7 @@ jobs:
 
             **Desktop app (beta)** — one machine, no terminal. Attached below:
             the Windows installers; `.deb` for Debian, Ubuntu and Mint; `.rpm`
-            for Fedora and openSUSE; and a `.flatpak` for any distribution
+            for Fedora; and a `.flatpak` for any distribution
             (`flatpak install Soundsible_*.flatpak`).
 
             **iPhone and iPad** — `Soundsible.ipa` is attached. Soundsible is

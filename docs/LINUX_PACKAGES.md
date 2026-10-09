@@ -7,7 +7,7 @@ CI builds the app once, as a `.deb`, and the other three repackage it.
 | --- | --- | --- |
 | `Soundsible_<version>_amd64.deb` | Debian 12+, Ubuntu 22.04+, Mint | `sudo apt install ./Soundsible_<version>_amd64.deb` |
 | `soundsible-<version>-1.x86_64.rpm` | Fedora | `sudo dnf install ./soundsible-<version>-1.x86_64.rpm` |
-| | openSUSE | `sudo zypper install --allow-unsigned-rpm ./soundsible-<version>-1.x86_64.rpm` |
+| | openSUSE (not tested in CI) | `sudo zypper install --allow-unsigned-rpm ./soundsible-<version>-1.x86_64.rpm` |
 | `Soundsible_<version>_x86_64.flatpak` | Any distribution with Flatpak | `flatpak install --user ./Soundsible_<version>_x86_64.flatpak` |
 | `soundsible-bin` (AUR, once [publishing is set up](#setting-up-publishing-once)) | Arch, Manjaro, EndeavourOS, CachyOS | `yay -S soundsible-bin` |
 
@@ -115,7 +115,6 @@ Desktop Build (`.github/workflows/desktop-build.yml`):
 | `smoke-linux-ubuntu` | The `.deb` installed with apt on the newest Ubuntu runner, next to Ubuntu's FFmpeg |
 | `smoke-linux-debian` | The `.deb` on Debian 12, the oldest glibc it claims |
 | `smoke-linux-fedora` | The `.rpm` installed with dnf on Fedora |
-| `smoke-linux-opensuse` | The `.rpm` installed with zypper on openSUSE Tumbleweed |
 | `smoke-linux-arch` | `soundsible-bin` built with makepkg from the generated PKGBUILD and installed with pacman |
 | `build-flatpak` | AppStream validation and the Flatpak bundle, built with Flathub's image |
 | `smoke-flatpak` | The bundle installed with `flatpak install` and driven inside its sandbox |
@@ -125,7 +124,9 @@ installed app: a real WAV library on an independent station, advancing audio,
 MPRIS control, the remote-command denial and the client's exit. In the
 containers WebKit's own process sandbox is disabled, because unprivileged
 containers cannot create the user namespaces it needs. The Ubuntu smoke runs
-with it.
+with it. WebKit without a GPU occasionally loses its web process under Xvfb,
+so a failed smoke runs once more and keeps the first attempt's evidence in
+`first-attempt/`; a package that is really broken fails both.
 
 To reproduce a distribution's run locally with the packages from a CI run:
 

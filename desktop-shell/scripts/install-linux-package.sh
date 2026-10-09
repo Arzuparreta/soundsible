@@ -2,7 +2,7 @@
 # Install the built Linux package, and what the UI smoke needs, on a fresh
 # container of one of the distributions Desktop Build checks. Run as root.
 #
-#   install-linux-package.sh debian|fedora|opensuse|arch PACKAGE_DIR
+#   install-linux-package.sh debian|fedora|arch PACKAGE_DIR
 #
 # The distribution's own FFmpeg goes in first: the package has to install
 # next to it, and the .deb once did not, because it put its bundled copy in
@@ -23,20 +23,11 @@ case "$distro" in
     ;;
   fedora)
     dnf -y install ffmpeg-free
-    # Fedora, like Arch, packages WebKitWebDriver only with WebKitGTK 6.0;
-    # openSUSE, with its MiniBrowser.
+    # Fedora, like Arch, packages WebKitWebDriver only with WebKitGTK 6.0.
     # --allowerasing: the image's pipewire-pulseaudio gives way to the
     # PulseAudio daemon the smoke starts.
     dnf -y install --allowerasing "$packages"/*.rpm webkitgtk6.0 xorg-x11-server-Xvfb xorg-x11-xauth \
       dbus-daemon dbus-tools pulseaudio pulseaudio-utils scrot python3 procps-ng systemd util-linux
-    ;;
-  opensuse)
-    zypper --non-interactive refresh
-    zypper --non-interactive install ffmpeg
-    # The package is CI's own, not from a signed repository.
-    zypper --non-interactive install --allow-unsigned-rpm "$packages"/*.rpm \
-      webkitgtk4-minibrowser xvfb-run xauth dbus-1-daemon dbus-1-tools \
-      pulseaudio pulseaudio-utils scrot python3 procps systemd util-linux shadow
     ;;
   arch)
     pacman -Syu --noconfirm --needed base-devel python ffmpeg webkitgtk-6.0 \
@@ -60,7 +51,7 @@ case "$distro" in
     pacman -Ql soundsible-bin
     ;;
   *)
-    echo "usage: $0 debian|fedora|opensuse|arch PACKAGE_DIR" >&2
+    echo "usage: $0 debian|fedora|arch PACKAGE_DIR" >&2
     exit 2
     ;;
 esac

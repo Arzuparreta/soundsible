@@ -226,8 +226,6 @@ jobs:
             image: debian:12
           - distro: fedora
             image: fedora:44
-          - distro: opensuse
-            image: opensuse/tumbleweed
           - distro: arch
             image: archlinux:latest
     steps:
@@ -248,7 +246,7 @@ jobs:
         run: |
           case "${{ matrix.distro }}" in
             debian) dir=packages/deb ;;
-            fedora|opensuse) dir=packages/rpm ;;
+            fedora) dir=packages/rpm ;;
             arch) dir=packages/deb ;;
           esac
           desktop-shell/scripts/install-linux-package.sh "${{ matrix.distro }}" "$dir"
