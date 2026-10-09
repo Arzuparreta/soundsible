@@ -125,7 +125,8 @@ def test_templates_name_no_version():
 
 
 def test_metainfo_describes_this_release():
-    root = ET.fromstring(render_metainfo("1.2.3", "2026-10-09"))
+    revision = "c" * 40
+    root = ET.fromstring(render_metainfo("1.2.3", "2026-10-09", revision))
 
     assert root.findtext("id") == APP_ID
     assert root.find("launchable").text == f"{APP_ID}.desktop"
@@ -133,9 +134,11 @@ def test_metainfo_describes_this_release():
     assert release.get("version") == "1.2.3"
     assert release.get("date") == "2026-10-09"
     images = [image.text for image in root.iter("image")]
-    assert images and all("/v1.2.3/" in image for image in images)
+    # The built commit: immutable once released, and unlike the version's own
+    # tag it exists while the release pull request is checked.
+    assert images and all(f"/{revision}/docs/" in image for image in images)
     for image in images:
-        relative = image.split("/v1.2.3/", 1)[1]
+        relative = image.split(f"/{revision}/", 1)[1]
         assert (ROOT / relative).is_file(), f"metainfo screenshot {relative} does not exist"
 
 
@@ -166,7 +169,7 @@ def test_flatpak_directory_has_everything_flatpak_builder_reads(tmp_path):
     module.write_text("{}")
     out = tmp_path / "build"
 
-    write_flatpak("1.2.3", _deb(tmp_path), out, "2026-10-09", shared)
+    write_flatpak("1.2.3", _deb(tmp_path), out, "2026-10-09", shared, "c" * 40)
 
     manifest = yaml.safe_load((out / f"{APP_ID}.yml").read_text())
     for entry in manifest["modules"]:

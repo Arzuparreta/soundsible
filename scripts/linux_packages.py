@@ -145,9 +145,13 @@ def build_rpm(version: str, deb: Path, out: Path) -> Path:
         return Path(shutil.copy2(built, out / built.name))
 
 
-def render_metainfo(version: str, date: str) -> str:
+def render_metainfo(version: str, date: str, revision: str) -> str:
     template = (PACKAGING / f"{APP_ID}.metainfo.xml").read_text()
-    raw = f"https://raw.githubusercontent.com/{REPOSITORY}/v{version}/docs/images/screenshots"
+    # From the commit being built: a released bundle keeps showing its own
+    # screenshots whatever main does later, and unlike the version's tag the
+    # commit already exists while the release pull request is checked —
+    # flatpak-builder-lint fetches every screenshot.
+    raw = f"https://raw.githubusercontent.com/{REPOSITORY}/{revision}/docs/images/screenshots"
     default = ' type="default"'
     screenshots = "\n".join(
         f"    <screenshot{default if index == 0 else ''}>\n"
@@ -175,11 +179,12 @@ def fetch_shared_modules(destination: Path) -> None:
     subprocess.run([*git, "checkout", "-q", "FETCH_HEAD"], check=True)
 
 
-def write_flatpak(version: str, deb: Path, out: Path, date: str, shared_modules: Path | None) -> None:
+def write_flatpak(version: str, deb: Path, out: Path, date: str, shared_modules: Path | None,
+                  revision: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     shutil.copy2(PACKAGING / "flatpak" / f"{APP_ID}.yml", out / f"{APP_ID}.yml")
     shutil.copy2(deb, out / "soundsible.deb")
-    (out / f"{APP_ID}.metainfo.xml").write_text(render_metainfo(version, date))
+    (out / f"{APP_ID}.metainfo.xml").write_text(render_metainfo(version, date, revision))
     modules = out / "shared-modules"
     if modules.exists():
         shutil.rmtree(modules)
@@ -201,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     flatpak.add_argument("--date", default=None, help="release date for the metainfo, YYYY-MM-DD (default: today, UTC)")
     flatpak.add_argument("--shared-modules", type=Path, default=None,
                          help="use this checkout of flathub/shared-modules instead of fetching it")
+    flatpak.add_argument("--revision", default=None, help="commit the screenshots come from (default: HEAD)")
     args = parser.parse_args(argv)
 
     version = args.version or declared_version()
@@ -212,7 +218,10 @@ def main(argv: list[str] | None = None) -> int:
         print(build_rpm(version, args.deb, args.out))
     else:
         date = args.date or datetime.now(timezone.utc).date().isoformat()
-        write_flatpak(version, args.deb, args.out, date, args.shared_modules)
+        revision = args.revision or subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, check=True, capture_output=True, text=True
+        ).stdout.strip()
+        write_flatpak(version, args.deb, args.out, date, args.shared_modules, revision)
     return 0
 
 
