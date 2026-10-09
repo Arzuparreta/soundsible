@@ -398,13 +398,17 @@ def app_links() -> None:
 
 
 def published_predecessor(items: list[dict], code: int) -> dict | None:
+    """The newest published APK older than ``code``.
+
+    The candidate's own version may already be out — a dry run on main between
+    releases, or a release rerun — and is no upgrade baseline for itself. A
+    published APK newer than the candidate means the candidate would be a
+    downgrade, which no user could install."""
     public = [item for item in items if release_code(item) is not None]
-    if not public:
-        return None
-    item = max(public, key=release_code)
-    if release_code(item) >= code:
-        raise RuntimeError("Published predecessor is not older than candidate")
-    return item
+    if any(release_code(item) > code for item in public):
+        raise RuntimeError("A published release is newer than the candidate")
+    older = [item for item in public if release_code(item) < code]
+    return max(older, key=release_code) if older else None
 
 
 def upgrade_baseline(plan: dict) -> tuple[Path, Path, dict]:

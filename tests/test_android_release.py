@@ -57,8 +57,9 @@ def test_predecessor_is_latest_published_alpha_not_a_failed_draft():
         [old, latest, {"tag_name": tag(5), "draft": True}, {"tag_name": "v-other", "draft": False}], 6
     ) == latest
     assert release.published_predecessor([{"tag_name": tag(3), "draft": True}], 4) is None
-    with pytest.raises(RuntimeError, match="not older"):
-        release.published_predecessor([latest], 4)
+    assert release.published_predecessor([old, latest], 4) == old
+    with pytest.raises(RuntimeError, match="newer than the candidate"):
+        release.published_predecessor([latest], 3)
 
 
 def test_public_upgrade_downloads_exact_old_apk_without_recompiling(monkeypatch, tmp_path):
@@ -117,8 +118,12 @@ def test_predecessor_may_be_a_version_release_or_a_legacy_alpha():
     unpublished = {"tag_name": "v0.22.1", "draft": True, "assets": [apk]}
     assert release.published_predecessor([legacy, without_apk], 220099) == legacy
     assert release.published_predecessor([legacy, with_apk, without_apk, unpublished], 220199) == with_apk
-    with pytest.raises(RuntimeError, match="not older"):
-        release.published_predecessor([with_apk], 220099)
+    # The candidate's own version, already out (dry run between releases, or
+    # a rerun), is skipped rather than refused.
+    assert release.published_predecessor([legacy, with_apk], 220099) == legacy
+    assert release.published_predecessor([with_apk], 220099) is None
+    with pytest.raises(RuntimeError, match="newer than the candidate"):
+        release.published_predecessor([with_apk], 210199)
 
 
 def test_repository_manifest_records_alpha_limits():
