@@ -24,7 +24,9 @@ case "$distro" in
   fedora)
     dnf -y install ffmpeg-free
     # Fedora, like Arch, packages WebKitWebDriver only with WebKitGTK 6.0.
-    dnf -y install "$packages"/*.rpm webkitgtk6.0 xorg-x11-server-Xvfb xorg-x11-xauth \
+    # --allowerasing: the image's pipewire-pulseaudio gives way to the
+    # PulseAudio daemon the smoke starts.
+    dnf -y install --allowerasing "$packages"/*.rpm webkitgtk6.0 xorg-x11-server-Xvfb xorg-x11-xauth \
       dbus-daemon dbus-tools pulseaudio pulseaudio-utils scrot python3 procps-ng systemd util-linux
     ;;
   arch)

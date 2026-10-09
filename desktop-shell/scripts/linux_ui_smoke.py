@@ -155,11 +155,23 @@ def run(app, engine, artifacts, flatpak=None):
                 path = root / name / suffix
                 path.mkdir(parents=True)
                 env[f"SOUNDSIBLE_{key}_DIR"] = str(path)
-            for kind in ("CONFIG", "DATA", "CACHE"):
-                env[f"XDG_{kind}_HOME"] = str(root / name / f"xdg-{kind.lower()}")
+            # Flatpak finds its per-user installation through XDG_DATA_HOME,
+            # and replaces all three inside the sandbox anyway.
+            if not flatpak:
+                for kind in ("CONFIG", "DATA", "CACHE"):
+                    env[f"XDG_{kind}_HOME"] = str(root / name / f"xdg-{kind.lower()}")
             return env
 
         station_env = environment("station")
+        # The library is two local WAVs; the station has no business on the
+        # internet here. Starting playback asks YouTube for related videos, and
+        # when YouTube answers a runner with a bot check that request holds the
+        # whole station for about 20 seconds, long enough for the player to
+        # skip the track. A proxy nothing listens on makes every outside
+        # request fail at once.
+        for variable in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+            station_env[variable] = "http://127.0.0.1:9"
+        station_env["NO_PROXY"] = station_env["no_proxy"] = "127.0.0.1,localhost"
         client_env = environment("client")
         station_log = (artifacts / "station.log").open("w")
         driver_log = (artifacts / "driver.log").open("w")
