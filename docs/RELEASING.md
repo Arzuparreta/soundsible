@@ -119,8 +119,12 @@ Pushing `vX.Y.Z` starts two workflows:
 - **CI** builds and pushes the container images to GHCR: `X.Y.Z`, `X.Y`, and
   `latest` (stable releases only — a release candidate never moves `latest`).
 - **Release** verifies the tag against the declaration, builds the Linux
-  `.deb` and the Windows x64 and arm64 installers, and publishes one GitHub
-  Release with all of them attached and generated notes.
+  packages, the Windows x64 and arm64 installers, the iPhone app and the
+  signed Android alpha APK, and publishes one GitHub Release with all of them
+  attached and generated notes. The Android job installs the APK over the
+  previous published one on an emulator and waits for the tagged commit's own
+  CI to be green before handing it over. If it fails, the GitHub Release is
+  not published; the container images, which CI pushes from the same tag, are.
 
 Every push to `main` also publishes a `edge` image, which reports
 `0.0.0-edge+<sha>` so two edge builds are never confused for each other.

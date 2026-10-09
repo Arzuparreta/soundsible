@@ -22,10 +22,13 @@ permanente y completar merge/publicación cuando todos los gates estén en verde
 Esta autorización sustituye la espera de revisión manual del 2026-10-05 para
 este trabajo de release; no permite saltar checks ni publicar artifacts debug.
 
-El canal independiente se ejecuta manualmente con `android-release.yml`, sólo
-desde `main` y en el entorno restringido `android-release`. El tooling
-`scripts/android_release.py` reserva códigos en drafts, valida la APK y exige
-aceptación de actualización/offline/App Links antes de publicar. La referencia
+Desde el 2026-10-09 la APK sale en la release de cada versión (`v*`), junto a
+servidor, escritorio e iOS: `release.yml` llama a `android-release.yml` en el tag,
+en el entorno restringido `android-release` (rama `main` y tags `v*`), y adjunta
+lo que ese workflow prepara. Ejecutado a mano sobre `main` es un ensayo que no
+publica. El tooling `scripts/android_release.py` deriva el `versionCode` de la
+versión, valida la APK, exige aceptación de actualización/offline/App Links y
+espera a que el CI del commit etiquetado esté en verde antes de entregarla. La referencia
 pública de firma es [SIGNING.json](SIGNING.json); capacidades y límites:
 [CAPABILITIES.json](CAPABILITIES.json). Instrucciones: [ALPHA](ALPHA.md).
 
@@ -61,12 +64,15 @@ Antes de habilitar el workflow de publicación deben cumplirse:
    con checksum en sus assets, y verificar sus SDK contra su metadata original.
    Tras actualizar, sustituir el harness por el del candidato para verificarlo.
 6. Versión procedente de `shared/version.py` y `scripts/version_sync.py`;
-   `versionCode` monotónico para el canal público, validado contra el último
-   publicado. No reutilizar counters de distintos workflows como si fueran uno.
-7. Publicación Android como **pre-release independiente**, con tag/identificador
-   generado por tooling y basado en versión/commit. No usar un tag que dispare
-   accidentalmente el workflow global `v*`, ni mover `releases/latest` del servidor,
-   desktop o iOS. Extender el tooling con tests antes de habilitar este canal.
+   `versionCode` monotónico, derivado de la versión y validado contra el último
+   publicado.
+7. ~~Publicación Android como pre-release independiente.~~ Sustituido el
+   2026-10-09 por decisión del usuario: todos los artefactos de una versión salen
+   juntos en su release `v*`; la APK conserva «alpha» en el nombre, que basta para
+   indicar su madurez. El `versionCode` se deriva de la versión
+   (`MMMmmpp99`, `-rc.N` en lugar de `99`), por encima de los códigos que usó el
+   canal `android-alpha/*`, cuyas prereleases siguen sirviendo de predecesoras
+   para la prueba de actualización.
 8. APK firmada, checksum, metadata de build limpio, permisos documentados,
    notas de instalación/actualización y límites verificados. El manifest de
    capacidades requerido y la decisión offline deben ser gates de publicación.

@@ -57,8 +57,9 @@ def test_predecessor_is_latest_published_alpha_not_a_failed_draft():
         [old, latest, {"tag_name": tag(5), "draft": True}, {"tag_name": "v-other", "draft": False}], 6
     ) == latest
     assert release.published_predecessor([{"tag_name": tag(3), "draft": True}], 4) is None
-    with pytest.raises(RuntimeError, match="not older"):
-        release.published_predecessor([latest], 4)
+    assert release.published_predecessor([old, latest], 4) == old
+    with pytest.raises(RuntimeError, match="newer than the candidate"):
+        release.published_predecessor([latest], 3)
 
 
 def test_public_upgrade_downloads_exact_old_apk_without_recompiling(monkeypatch, tmp_path):
@@ -93,24 +94,36 @@ def test_public_upgrade_downloads_exact_old_apk_without_recompiling(monkeypatch,
         release.upgrade_baseline({"version_code": 4})
 
 
-def test_allocation_counts_failed_drafts_and_leaves_other_channels_alone():
-    version = release.declared_version()
-    revision = "a" * 40
-    items = [{"tag_name": f"v{version}"}, {"tag_name": f"android-alpha/{version}-9-{'b' * 12}", "draft": True}]
-    plan = release.allocate(items, version, revision)
-    assert plan["version_code"] == 10
-    assert plan["tag"] == f"android-alpha/{version}-10-{revision[:12]}"
-    assert not plan["tag"].startswith("v")
-    assert release.allocate([], version, revision)["version_code"] == 2
+def test_version_codes_order_exactly_like_versions():
+    versions = ["0.22.0-rc.1", "0.22.0-rc.2", "0.22.0", "0.22.1", "0.23.0-rc.1", "0.23.0", "1.0.0"]
+    codes = [release.version_code(version) for version in versions]
+    assert codes == sorted(codes) and len(set(codes)) == len(codes)
+    # Above every code the draft allocator of the android-alpha channel used.
+    assert release.version_code("0.22.0") == 220099
+    plan = release.plan_for("0.22.0", "a" * 40)
+    assert plan["tag"] == "v0.22.0" and plan["version_code"] == 220099
 
 
-def test_counter_exhaustion_cannot_wrap_into_an_old_release():
-    with pytest.raises(RuntimeError, match="exhausted"):
-        release.allocate(
-            [{"tag_name": f"android-alpha/{release.declared_version()}-2100000000-{'b' * 12}"}],
-            release.declared_version(),
-            "a" * 40,
-        )
+@pytest.mark.parametrize("version", ["0.100.0", "0.1.100", "0.22.0-rc.99", "0.22.0-beta.1", "2100.0.0"])
+def test_versions_outside_the_layout_are_refused(version):
+    with pytest.raises(RuntimeError):
+        release.version_code(version)
+
+
+def test_predecessor_may_be_a_version_release_or_a_legacy_alpha():
+    legacy = {"tag_name": f"android-alpha/0.21.1-4-{'b' * 12}", "draft": False}
+    apk = {"name": release.APK}
+    with_apk = {"tag_name": "v0.22.0", "draft": False, "assets": [apk]}
+    without_apk = {"tag_name": "v0.21.1", "draft": False, "assets": [{"name": "Soundsible.ipa"}]}
+    unpublished = {"tag_name": "v0.22.1", "draft": True, "assets": [apk]}
+    assert release.published_predecessor([legacy, without_apk], 220099) == legacy
+    assert release.published_predecessor([legacy, with_apk, without_apk, unpublished], 220199) == with_apk
+    # The candidate's own version, already out (dry run between releases, or
+    # a rerun), is skipped rather than refused.
+    assert release.published_predecessor([legacy, with_apk], 220099) == legacy
+    assert release.published_predecessor([with_apk], 220099) is None
+    with pytest.raises(RuntimeError, match="newer than the candidate"):
+        release.published_predecessor([with_apk], 210199)
 
 
 def test_repository_manifest_records_alpha_limits():
@@ -144,15 +157,19 @@ def test_incomplete_gates_fail_closed(tmp_path, change):
         release.gates(tmp_path)
 
 
-@pytest.mark.parametrize("failed_check", ["Emulator shard 2/4 (API 36)", "lint"])
-def test_checks_require_full_android_and_shared_regression(monkeypatch, failed_check):
-    rows = [
-        {"id": i, "name": name, "conclusion": "success", "html_url": "https://github.com/check"}
+def _check_rows(status="completed", conclusion="success"):
+    return [
+        {"id": i, "name": name, "status": status, "conclusion": conclusion, "html_url": "https://github.com/check"}
         for i, name in enumerate(release.CHECKS)
     ]
+
+
+@pytest.mark.parametrize("failed_check", ["Emulator shard 2/4 (API 36)", "lint"])
+def test_checks_require_full_android_and_shared_regression(monkeypatch, failed_check):
+    rows = _check_rows()
     monkeypatch.setattr(release, "gh", lambda *args: [{"check_runs": rows}])
     assert len(release.checks("a" * 40)) == len(release.CHECKS)
-    rows.append({"id": 100, "name": failed_check, "conclusion": "failure"})
+    rows.append({"id": 100, "name": failed_check, "status": "completed", "conclusion": "failure"})
     with pytest.raises(RuntimeError, match="unsuccessful"):
         release.checks("a" * 40)
     rows.clear()
@@ -160,59 +177,173 @@ def test_checks_require_full_android_and_shared_regression(monkeypatch, failed_c
         release.checks("a" * 40)
 
 
-def test_published_run_reservation_cannot_replace_assets(monkeypatch):
-    revision = "a" * 40
-    monkeypatch.setattr(release, "clean", lambda: revision)
-    monkeypatch.setattr(release, "checks", lambda revision: [])
-    monkeypatch.setattr(release, "gh", lambda *args: {"commit": {"sha": revision}})
-    monkeypatch.setenv("GITHUB_RUN_ID", "123")
-    monkeypatch.setattr(
-        release,
-        "releases",
-        lambda: [
-            {
-                "tag_name": f"android-alpha/{release.declared_version()}-2-{revision[:12]}",
-                "draft": False,
-                "body": "<!-- android-run:123 -->",
-            }
-        ],
-    )
-    with pytest.raises(RuntimeError, match="already published"):
-        release.reserve()
+def test_checks_wait_for_the_tags_own_ci(monkeypatch):
+    # The tag is pushed on the release merge commit; its CI is still running.
+    answers = iter([_check_rows(status="in_progress", conclusion=None), _check_rows()])
+    monkeypatch.setattr(release, "gh", lambda *args: [{"check_runs": next(answers)}])
+    monkeypatch.setattr(release.time, "sleep", lambda seconds: None)
+    assert len(release.checks("a" * 40, wait=3600)) == len(release.CHECKS)
+    monkeypatch.setattr(release, "gh", lambda *args: [{"check_runs": _check_rows(status="in_progress", conclusion=None)}])
+    with pytest.raises(RuntimeError, match="running"):
+        release.checks("a" * 40)
 
 
-def test_receipt_from_a_different_apk_cannot_publish(monkeypatch, tmp_path):
-    revision = "a" * 40
-    apk = tmp_path / "test.apk"
-    apk.write_bytes(b"candidate")
-    plan = {"source_revision": revision, "version_code": 2}
-    monkeypatch.setattr(release, "clean", lambda: revision)
-    monkeypatch.setattr(release, "verify_apk", lambda *args: {})
-    with pytest.raises(RuntimeError, match="acceptance is incomplete"):
-        release.publish(plan, apk, {"source_revision": revision, "version_code": 2, "apk_sha256": "another artifact"})
+@pytest.mark.parametrize("ref_type,ref_name,ref,accepted", [
+    ("tag", "v{version}", "refs/tags/v{version}", True),
+    ("tag", "v0.0.1", "refs/tags/v0.0.1", False),
+    ("branch", "main", "refs/heads/main", True),
+    ("branch", "feature", "refs/heads/feature", False),
+])
+def test_only_the_versions_tag_or_main_build_the_public_apk(monkeypatch, ref_type, ref_name, ref, accepted):
+    version = release.declared_version()
+    monkeypatch.setattr(release, "clean", lambda: "a" * 40)
+    monkeypatch.setattr(release, "on_main", lambda revision: True)
+    monkeypatch.setattr(release, "releases", lambda: [])
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_REF_TYPE", ref_type)
+    monkeypatch.setenv("GITHUB_REF_NAME", ref_name.format(version=version))
+    monkeypatch.setenv("GITHUB_REF", ref.format(version=version))
+    if accepted:
+        assert release.plan_build()["tag"] == f"v{version}"
+    else:
+        with pytest.raises(RuntimeError):
+            release.plan_build()
 
 
-def test_main_advancing_during_upload_leaves_release_private(monkeypatch, tmp_path):
-    revision = "a" * 40
-    apk = tmp_path / "candidate.apk"
-    apk.write_bytes(b"candidate")
-    (tmp_path / release.SEED_HARNESS).write_bytes(b"matching harness")
-    plan = {"source_revision": revision, "version_code": 2, "tag": "fixture"}
-    receipt = {"source_revision": revision, "version_code": 2, "apk_sha256": release.digest(apk)}
+def _receipt(apk, revision):
+    receipt = {"source_revision": revision, "version_code": 220099, "apk_sha256": release.digest(apk)}
     for key in ("update_preserves_account_settings_offline", "downgrade_rejected", "wrong_signature_rejected",
                 "corrupt_apk_rejected", "release_startup", "offline_pcm", "app_links_verified",
                 "app_links_payload_delivered"):
         receipt[key] = True
-    monkeypatch.setattr(release, "OUT", tmp_path)
+    return receipt
+
+
+def test_receipt_from_a_different_apk_cannot_be_staged(monkeypatch, tmp_path):
+    revision = "a" * 40
+    apk = tmp_path / release.APK
+    apk.write_bytes(b"candidate")
+    plan = {"source_revision": revision, "version_code": 220099}
     monkeypatch.setattr(release, "clean", lambda: revision)
     monkeypatch.setattr(release, "verify_apk", lambda *args: {})
+    with pytest.raises(RuntimeError, match="acceptance is incomplete"):
+        release.stage(plan, apk, {**_receipt(apk, revision), "apk_sha256": "another artifact"})
+
+
+def test_staging_gathers_exactly_what_the_release_attaches(monkeypatch, tmp_path):
+    revision = "a" * 40
+    monkeypatch.setattr(release, "OUT", tmp_path)
+    apk = tmp_path / release.APK
+    apk.write_bytes(b"candidate")
+    (tmp_path / release.SEED_HARNESS).write_bytes(b"matching harness")
+    plan = {"source_revision": revision, "version_code": 220099, "tag": "v0.22.0"}
+    monkeypatch.setattr(release, "clean", lambda: revision)
+    monkeypatch.setattr(release, "verify_apk", lambda *args: {"tag": "v0.22.0"})
     monkeypatch.setattr(release, "verify_harness", lambda *args: None)
-    monkeypatch.setattr(release, "checks", lambda *args: [])
-    monkeypatch.setattr(release, "releases", lambda: [{"tag_name": "fixture", "draft": True, "body": "marker"}])
-    heads = iter([revision, "b" * 40])
-    monkeypatch.setattr(release, "gh", lambda *args: {"commit": {"sha": next(heads)}})
-    operations = []
-    monkeypatch.setattr(release, "command", lambda *args: operations.append(args))
-    with pytest.raises(RuntimeError, match="advanced during upload"):
-        release.publish(plan, apk, receipt)
-    assert len(operations) == 1 and operations[0][:3] == ("gh", "release", "upload")
+    waited = []
+    monkeypatch.setattr(release, "checks", lambda revision, wait: waited.append(wait) or [])
+    monkeypatch.setattr(release, "command", lambda *args: pytest.fail("Staging must not publish anything"))
+
+    staged = release.stage(plan, apk, _receipt(apk, revision))
+
+    assert waited == [release.CHECKS_TIMEOUT]
+    assert sorted(path.name for path in staged.iterdir()) == sorted(
+        [release.APK, release.SEED_HARNESS, "android-release.json", "release-acceptance.json", release.SUMS]
+    )
+    sums = (staged / release.SUMS).read_text()
+    assert f"{release.digest(apk)}  {release.APK}" in sums
+    metadata = json.loads((staged / "android-release.json").read_text())
+    assert metadata["upgrade_seed_harness"]["sha256"] == release.digest(tmp_path / release.SEED_HARNESS)
+
+
+def test_every_version_release_carries_the_apk():
+    import yaml
+
+    workflows = Path(__file__).resolve().parents[1] / ".github/workflows"
+    release_jobs = yaml.safe_load((workflows / "release.yml").read_text())["jobs"]
+    assert release_jobs["android"]["uses"] == "./.github/workflows/android-release.yml"
+    # A version is out on every platform or none.
+    assert "android" in release_jobs["publish"]["needs"]
+    android = yaml.safe_load((workflows / "android-release.yml").read_text())
+    triggers = android[True]  # YAML 1.1 reads the `on:` key as a boolean.
+    assert "workflow_call" in triggers
+    steps = android["jobs"]["alpha"]["steps"]
+    upload = next(step for step in steps if step.get("name") == "Upload the staged APK")
+    # publish downloads `soundsible-*` artifacts and attaches them.
+    assert upload["with"]["name"].startswith("soundsible-")
+    assert upload["with"]["path"].rstrip("/").endswith("android/build/alpha/release")
+    assert not any("publish" in (step.get("run") or "") for step in steps)
+
+
+@pytest.mark.parametrize("status,accepted", [("identical", True), ("ahead", True), ("behind", False), ("diverged", False)])
+def test_a_tag_off_main_never_reaches_the_signing_key(monkeypatch, status, accepted):
+    version = release.declared_version()
+    monkeypatch.setattr(release, "clean", lambda: "a" * 40)
+    asked = []
+    monkeypatch.setattr(release, "releases", lambda: [])
+    monkeypatch.setattr(release, "gh", lambda *args: asked.append(args) or {"status": status})
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{version}")
+    monkeypatch.setenv("GITHUB_REF", f"refs/tags/v{version}")
+    if accepted:
+        assert release.plan_build()["source_revision"] == "a" * 40
+    else:
+        with pytest.raises(RuntimeError, match="on main"):
+            release.plan_build()
+    assert asked == [("api", f"repos/{{owner}}/{{repo}}/compare/{'a' * 40}...main")]
+
+
+def test_planning_runs_before_the_signing_key_is_restored():
+    import yaml
+
+    workflow = Path(__file__).resolve().parents[1] / ".github/workflows/android-release.yml"
+    names = [step.get("name", "") for step in yaml.safe_load(workflow.read_text())["jobs"]["alpha"]["steps"]]
+    assert names.index("Verify gates and plan the build") < names.index("Restore permanent signing identity")
+
+
+def test_a_rerun_never_replaces_a_published_apk(monkeypatch):
+    version = release.declared_version()
+    monkeypatch.setattr(release, "clean", lambda: "a" * 40)
+    monkeypatch.setattr(release, "on_main", lambda revision: True)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{version}")
+    monkeypatch.setenv("GITHUB_REF", f"refs/tags/v{version}")
+    published = {"tag_name": f"v{version}", "draft": False, "assets": [{"name": release.APK}]}
+    monkeypatch.setattr(release, "releases", lambda: [published])
+    with pytest.raises(RuntimeError, match="immutable"):
+        release.plan_build()
+    # Published without an APK (or still a draft) is not a reason to refuse.
+    monkeypatch.setattr(release, "releases", lambda: [{**published, "assets": []}, {**published, "draft": True}])
+    assert release.plan_build()["tag"] == f"v{version}"
+
+
+@pytest.mark.parametrize("ref_type,present,head_matches,dispatched", [
+    ("tag", True, True, True),       # always: main's own run can be cancelled
+    ("branch", True, True, False),   # dry run, the commit already has them
+    ("branch", False, True, True),   # dry run on a commit Android CI skipped
+    ("branch", False, False, None),  # main moved on: refuse, do not dispatch
+])
+def test_the_released_commit_always_gets_its_android_checks(monkeypatch, ref_type, present, head_matches, dispatched):
+    revision = "a" * 40
+    monkeypatch.setenv("GITHUB_REF_TYPE", ref_type)
+    monkeypatch.setenv("GITHUB_REF_NAME", "v9.9.9" if ref_type == "tag" else "main")
+    rows = [{"name": name} for name in release.ANDROID_CHECKS] if present else [{"name": "tests"}]
+
+    def gh(*args):
+        if "branches/main" in args[-1]:
+            return {"commit": {"sha": revision if head_matches else "b" * 40}}
+        return [{"check_runs": rows}]
+
+    commands = []
+    monkeypatch.setattr(release, "gh", gh)
+    monkeypatch.setattr(release, "command", lambda *args: commands.append(args))
+    if dispatched is None:
+        with pytest.raises(RuntimeError, match="advanced"):
+            release.request_android_checks(revision)
+        assert commands == []
+        return
+    release.request_android_checks(revision)
+    expected_ref = "v9.9.9" if ref_type == "tag" else "main"
+    assert commands == ([("gh", "workflow", "run", "android-build.yml", "--ref", expected_ref)] if dispatched else [])

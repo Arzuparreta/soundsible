@@ -6,13 +6,15 @@ Android Auto y copias explícitas de música sin conexión.
 
 ## Instalar y actualizar / Install and update
 
-Descarga `Soundsible-Android-alpha.apk` y comprueba `SHA256SUMS`. Android pide
+Descarga `Soundsible-Android-alpha.apk` de la release de la versión y comprueba
+`SHA256SUMS-android.txt` (las alphas hasta la 0.21.1 lo llamaban `SHA256SUMS`). Android pide
 autorizar la instalación desde el navegador o gestor de archivos. Instala sobre
 una alpha anterior para conservar tu cuenta, ajustes y copias offline. No
 desinstales para actualizar. Soundsible Dev es una app separada: sus datos no
 se migran a la aplicación pública. Las actualizaciones son manuales.
 
-Download `Soundsible-Android-alpha.apk` and verify `SHA256SUMS`. Allow installation
+Download `Soundsible-Android-alpha.apk` from the version's release and verify
+`SHA256SUMS-android.txt` (alphas up to 0.21.1 called it `SHA256SUMS`). Allow installation
 from your browser or file manager when Android asks. Install over an earlier
 alpha to keep your account, settings and offline copies; do not uninstall first.
 Soundsible Dev is a separate app; its data is not migrated. Updates are manual.

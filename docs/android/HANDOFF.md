@@ -11,6 +11,9 @@ Estado vigente y forma de trabajar. Lo superado está en
   Distribución integrada mediante PR #304 y alpha publicada. El 2026-10-07 el
   usuario autorizó clave nueva y merge/publicación tras cerrar todos los gates.
   No publicar si la APK firmada o la aceptación final fallan.
+- 2026-10-09: la APK sale en la release `v*` de cada versión, con el resto de
+  artefactos, no como prerelease `android-alpha/*` aparte (decisión del usuario;
+  ver RELEASE_GATES punto 7). El nombre del archivo ya dice «alpha».
 - Paridad = paridad de **funciones** con la webapp (alpha). Si la web usa un apaño
   por una limitación del navegador, Android lo hace de la mejor forma nativa.
 - UI Solid compartida con adaptadores nativos. Las stores web no se importan en
@@ -77,7 +80,8 @@ Estado vigente y forma de trabajar. Lo superado está en
       base `origin/main` verificada y checks aprobados.
       Crédito `Co-authored-by` a emrothenberg en el commit de implementación y en la PR.
 - [x] Clave permanente creada fuera de Git, backup en disco independiente probado;
-      secrets en entorno `android-release`, restringido a `main`.
+      secrets en entorno `android-release`, restringido a `main` y, desde el
+      2026-10-09, a los tags `v*`, donde `release.yml` construye la APK de cada versión.
 - [x] Distribución implementada y aceptada localmente: APK release firmada,
       actualización conservando cuenta/ajustes/offline, negativos de instalación,
       arranque/PCM offline y App Links fríos/calientes. Evidencia en EVIDENCE.

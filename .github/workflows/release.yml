@@ -40,6 +40,19 @@ jobs:
       attestations: write
     uses: ./.github/workflows/desktop-build.yml
 
+  # The signed Android alpha. It builds, installs over the previous published
+  # APK on an emulator, and waits for this commit's own CI before handing the
+  # APK over, so it is the slowest job here. Its signing secrets live in the
+  # `android-release` environment, which admits main and `v*` tags only.
+  android:
+    needs: verify
+    permissions:
+      contents: read
+      checks: read
+      actions: write
+    uses: ./.github/workflows/android-release.yml
+    secrets: inherit
+
   # The iPhone app is not on the App Store — guideline 5.2.3 forbids downloading
   # media from YouTube — so a release *is* its distribution channel. The IPA and
   # the AltStore source that points at it ship with every tag.
@@ -80,7 +93,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: [installers, altstore_source]
+    needs: [installers, altstore_source, android]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -146,6 +159,12 @@ jobs:
             the Windows installers; `.deb` for Debian, Ubuntu and Mint; `.rpm`
             for Fedora; and a `.flatpak` for any distribution
             (`flatpak install Soundsible_*.flatpak`).
+
+            **Android (alpha)** — `Soundsible-Android-alpha.apk` is attached;
+            check it against `SHA256SUMS-android.txt`. Install it over an
+            earlier alpha to keep your account and offline copies:
+            [Android alpha](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/android/ALPHA.md).
+            `upgrade-seed-androidTest.apk` is test evidence, not an app.
 
             **iPhone and iPad** — `Soundsible.ipa` is attached. Soundsible is
             not on the App Store, so it installs through
