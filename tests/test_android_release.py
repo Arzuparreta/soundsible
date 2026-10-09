@@ -317,3 +317,33 @@ def test_a_rerun_never_replaces_a_published_apk(monkeypatch):
     # Published without an APK (or still a draft) is not a reason to refuse.
     monkeypatch.setattr(release, "releases", lambda: [{**published, "assets": []}, {**published, "draft": True}])
     assert release.plan_build()["tag"] == f"v{version}"
+
+
+@pytest.mark.parametrize("ref_type,present,head_matches,dispatched", [
+    ("tag", True, True, True),       # always: main's own run can be cancelled
+    ("branch", True, True, False),   # dry run, the commit already has them
+    ("branch", False, True, True),   # dry run on a commit Android CI skipped
+    ("branch", False, False, None),  # main moved on: refuse, do not dispatch
+])
+def test_the_released_commit_always_gets_its_android_checks(monkeypatch, ref_type, present, head_matches, dispatched):
+    revision = "a" * 40
+    monkeypatch.setenv("GITHUB_REF_TYPE", ref_type)
+    monkeypatch.setenv("GITHUB_REF_NAME", "v9.9.9" if ref_type == "tag" else "main")
+    rows = [{"name": name} for name in release.ANDROID_CHECKS] if present else [{"name": "tests"}]
+
+    def gh(*args):
+        if "branches/main" in args[-1]:
+            return {"commit": {"sha": revision if head_matches else "b" * 40}}
+        return [{"check_runs": rows}]
+
+    commands = []
+    monkeypatch.setattr(release, "gh", gh)
+    monkeypatch.setattr(release, "command", lambda *args: commands.append(args))
+    if dispatched is None:
+        with pytest.raises(RuntimeError, match="advanced"):
+            release.request_android_checks(revision)
+        assert commands == []
+        return
+    release.request_android_checks(revision)
+    expected_ref = "v9.9.9" if ref_type == "tag" else "main"
+    assert commands == ([("gh", "workflow", "run", "android-build.yml", "--ref", expected_ref)] if dispatched else [])

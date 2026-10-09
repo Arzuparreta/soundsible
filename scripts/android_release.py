@@ -57,9 +57,12 @@ CAPABILITIES = {
     "android-auto",
     "offline",
 }
-CHECKS = {
+ANDROID_CHECKS = {
     "Build, lint and unit tests",
     *(f"Emulator shard {i}/4 (API 36)" for i in range(4)),
+}
+CHECKS = {
+    *ANDROID_CHECKS,
     "tests",
     "lint",
     "ui_build",
@@ -204,6 +207,26 @@ def on_main(revision: str) -> bool:
     """Whether ``revision`` is part of the remote main, merged and reviewed."""
     status = gh("api", f"repos/{{owner}}/{{repo}}/compare/{revision}...main")["status"]
     return status in ("ahead", "identical")
+
+
+def request_android_checks(revision: str) -> None:
+    """Make sure ``revision`` gets the Android checks ``stage`` waits for.
+
+    Android development only runs when a push touches Android paths, and on
+    main a later push cancels it. On a tag it is always dispatched for the tag
+    itself, whose concurrency group no push to main shares; a dry run on main
+    dispatches it only when the commit has none."""
+    if os.getenv("GITHUB_REF_TYPE") != "tag":
+        pages = gh(
+            "api", "--paginate", "--slurp",
+            f"repos/{{owner}}/{{repo}}/commits/{revision}/check-runs?per_page=100",
+        )
+        names = {row["name"] for page in pages for row in page["check_runs"]}
+        if ANDROID_CHECKS <= names:
+            return
+        if gh("api", "repos/{owner}/{repo}/branches/main")["commit"]["sha"] != revision:
+            raise RuntimeError("Main advanced past this dry run; dispatch it again on the new head")
+    command("gh", "workflow", "run", "android-build.yml", "--ref", os.environ["GITHUB_REF_NAME"])
 
 
 def plan_build() -> dict:
@@ -654,7 +677,7 @@ def stage(plan: dict, apk: Path, receipt: dict) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("plan", "build", "verify", "acceptance", "stage"))
+    parser.add_argument("command", choices=("plan", "android-checks", "build", "verify", "acceptance", "stage"))
     parser.add_argument("--plan", type=Path, default=OUT / "plan.json")
     args = parser.parse_args()
     try:
@@ -666,6 +689,9 @@ def main() -> int:
             print(json.dumps(planned, indent=2))
             return 0
         planned = json.loads(args.plan.read_text())
+        if args.command == "android-checks":
+            request_android_checks(planned["source_revision"])
+            return 0
         apk = OUT / APK
         if args.command == "build":
             compile_apk(planned, apk)

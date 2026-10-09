@@ -24,6 +24,8 @@ jobs:
     permissions:
       contents: read
       checks: read
+      # To dispatch Android development for the commit being released.
+      actions: write
     env:
       GH_TOKEN: ${{ github.token }}
       SOUNDSIBLE_ANDROID_TEST_RELEASE: '1'
@@ -56,6 +58,9 @@ jobs:
           scripts/ci_retry.sh -- python -m pip install -r requirements.txt
       - name: Verify gates and plan the build
         run: python scripts/android_release.py plan
+      # Runs beside this job; `stage` waits for it at the end.
+      - name: Request this commit's Android checks
+        run: python scripts/android_release.py android-checks
       - name: Restore permanent signing identity
         env:
           SIGNING_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
