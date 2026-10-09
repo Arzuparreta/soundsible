@@ -118,7 +118,6 @@ Headless check for engine health + desktop player route:
 ```bash
 ./desktop-shell/scripts/smoke-test.sh              # Python engine
 ./desktop-shell/scripts/smoke-test.sh --with-sidecar
-./desktop-shell/scripts/smoke-test.sh --with-sidecar --with-tauri
 ```
 
 CI runs the Python engine check in `.github/workflows/desktop-shell.yml`; the sidecar and Tauri builds, and the installed-app smokes on Windows x64 and ARM64, run in `.github/workflows/desktop-build.yml`.

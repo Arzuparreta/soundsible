@@ -32,8 +32,8 @@ at boot — or with [Docker](DOCKER.md), and open the player in a browser.
 Chrome and other Chromium browsers install it as an app; Firefox plays it in a
 tab. Both drive the desktop's media keys and widgets.
 
-Releases up to 0.22.2 attached a Linux app (a `.deb`, later also an `.rpm` and
-a Flatpak). It was withdrawn because on Linux a Tauri app renders the player
+Earlier releases attached a Linux app (a `.deb`, later also an `.rpm` and a
+Flatpak). It was withdrawn because on Linux a Tauri app renders the player
 with WebKitGTK, not with the browser's engine: it was slower than the same
 player in Chrome or Firefox, froze opening Now Playing on a laptop with Intel
 graphics, and needed a workaround per WebKitGTK defect (no sound through a
