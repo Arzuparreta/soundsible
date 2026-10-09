@@ -334,8 +334,9 @@ def run(app, engine, artifacts, flatpak=None):
             # Now Playing is that animation; film it and look for the flash.
             video = artifacts / "now-playing.mkv"
             recorder = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "x11grab", "-framerate", "60",
-                                         "-i", os.environ["DISPLAY"], "-c:v", "libx264", "-qp", "0",
-                                         "-preset", "ultrafast", str(video)])
+                                         # FFV1 is lossless and built into every FFmpeg,
+                                         # Fedora's codec-limited ffmpeg-free included.
+                                         "-i", os.environ["DISPLAY"], "-c:v", "ffv1", str(video)])
             time.sleep(1.5)
             for _ in range(4):
                 web.script("document.querySelector('[data-omni-cover]').parentElement.querySelector('button').click()")
