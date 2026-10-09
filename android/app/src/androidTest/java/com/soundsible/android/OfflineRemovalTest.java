@@ -47,7 +47,22 @@ public class OfflineRemovalTest {
             File audio;
             while ((audio = store.local("member-track", generation)) == null) { assertTrue("Copy must be ready before injecting a real deletion refusal", System.nanoTime() < until); Thread.sleep(100); }
             partial = new File(audio.getParentFile(), audio.getName().replace(".audio", ".part"));
-            assertTrue(partial.mkdir()); held = new File(partial, "held"); Files.write(held.toPath(), "synthetic held file".getBytes(StandardCharsets.UTF_8));
+            held = new File(partial, "held");
+            // The copy reads as ready before the download's finally deletes its
+            // own .part path, so a directory made here at once can be removed
+            // under the write. Plant it until it survives that cleanup.
+            until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (true) {
+                assertTrue("Could not plant the held file", System.nanoTime() < until);
+                try {
+                    if (!partial.isDirectory()) assertTrue(partial.mkdir());
+                    Files.write(held.toPath(), "synthetic held file".getBytes(StandardCharsets.UTF_8));
+                } catch (java.nio.file.NoSuchFileException removed) {
+                    continue;
+                }
+                Thread.sleep(500);
+                if (held.exists()) break;
+            }
             web.evaluate(scenario, "document.querySelector('[data-library-menu]').click()"); click(scenario, "Manage offline music");
             waitFor(scenario, "!!document.querySelector('[data-testid=android-offline-manager]')");
             click(scenario, "Remove from this device");

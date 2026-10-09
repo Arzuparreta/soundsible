@@ -122,7 +122,15 @@ class PlaybackPlugin : Plugin() {
             }, { task -> main.post(task) })
         } catch (_: Exception) { call.reject("Device rename unavailable", "DEVICE_RENAME") }
     } }
-    private fun publish() { if (alive && visible) { notifyListeners("playbackState", snapshot()); notifyListeners("nativeLiveState", liveSnapshot()); notifyListeners("nativeDeviceState", deviceSnapshot()) } }
+    // Snapshots read the MediaController, which belongs to the main thread.
+    // Capacitor adds and removes listeners on its own thread and copies the
+    // unsynchronised list when notifying, so notifying from here could copy a
+    // half-updated list holding null and crash the app; notify on its thread.
+    private fun publish() {
+        if (!alive || !visible) return
+        val playback = snapshot(); val live = liveSnapshot(); val device = deviceSnapshot()
+        bridge.execute { notifyListeners("playbackState", playback); notifyListeners("nativeLiveState", live); notifyListeners("nativeDeviceState", device) }
+    }
     @PluginMethod fun liveDirectory(call: PluginCall) {
         val connection = EngineConnection.shared(context)
         val generation = call.getInt("generation")?.toLong() ?: -1L

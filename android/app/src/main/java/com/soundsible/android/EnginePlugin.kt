@@ -128,7 +128,8 @@ class EnginePlugin : Plugin() {
                 "library_updated", "saved_entities_updated", "favourites_updated", "downloader_update").forEach { event ->
                 next.on(event) {
                     if (epoch == connection.generation && socket === next) {
-                        notifyListeners("engineEvent", JSObject().put("event", event).put("generation", epoch))
+                        // Socket.IO calls back on its own thread; listeners live on Capacitor's.
+                        bridge.execute { notifyListeners("engineEvent", JSObject().put("event", event).put("generation", epoch)) }
                     }
                 }
             }
