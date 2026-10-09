@@ -14,6 +14,10 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --device=dri
+  # NVIDIA can reject WebKit's GBM buffers (a blank player). Keep accelerated
+  # rendering, but transfer frames through shared memory instead of DMA-BUF.
+  # WEBKIT_DISABLE_DMABUF_RENDERER also disables acceleration; do not use it.
+  - --env=WEBKIT_DMABUF_RENDERER_FORCE_SHM=1
   # The engine listens on 127.0.0.1, the app can join a station elsewhere on
   # the network, and search and downloads reach the internet.
   - --share=network

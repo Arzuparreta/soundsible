@@ -357,7 +357,9 @@ jobs:
       # session has no portal for; Flatpak's own sandbox is what this checks.
       - name: Exercise the installed Flatpak against an independent station
         env:
-          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          # Exercise the manifest's shared-memory renderer with acceleration
+          # available, rather than hiding its behavior behind a software-only run.
+          WEBKIT_DISABLE_DMABUF_RENDERER: "0"
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
         run: |
           PATH="$RUNNER_TEMP/tauri-driver:$PATH" \
