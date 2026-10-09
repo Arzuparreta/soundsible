@@ -143,8 +143,9 @@ def stale_flashes(video):
     frames that move away from the frame before them and are followed by an
     exact return to it: an animation never comes back to where it started, a
     stale buffer does. A transition is a burst of changing frames after at
-    least a third of a second of stillness; counting them is what tells a
-    clean recording from a frozen or blank one."""
+    least a third of a second of stillness that changed the screen
+    substantially; counting them is what tells a clean recording from a
+    frozen or blank one."""
     width, height = 160, 100
     raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(video), "-vf", f"scale={width}:{height}",
                           "-f", "rawvideo", "-pix_fmt", "gray", "-"], capture_output=True, check=True).stdout
@@ -154,9 +155,19 @@ def stale_flashes(video):
     def distance(first, second):
         return sum(abs(a - b) for a, b in zip(first, second)) / size
 
-    changing = [index for index in range(1, len(frames)) if distance(frames[index - 1], frames[index]) > 3]
-    transitions = sum(1 for position, index in enumerate(changing)
-                      if position == 0 or index - changing[position - 1] >= 20)
+    # A slide spread over many frames can move each one only a little (older
+    # WebKitGTK paints it that way), so a transition is judged by how much the
+    # whole burst changed the screen, not by its largest step.
+    bursts = []
+    for index in range(1, len(frames)):
+        change = distance(frames[index - 1], frames[index])
+        if change <= 0.3:
+            continue
+        if bursts and index - bursts[-1][0] < 20:
+            bursts[-1] = (index, bursts[-1][1] + change)
+        else:
+            bursts.append((index, change))
+    transitions = sum(1 for _, change in bursts if change > 4)
     flashes = []
     for index in range(1, len(frames) - 2):
         before = frames[index - 1]
