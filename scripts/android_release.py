@@ -215,6 +215,14 @@ def plan_build() -> dict:
     if os.getenv("GITHUB_REF_TYPE") == "tag":
         if os.getenv("GITHUB_REF_NAME") != f"v{declared_version()}":
             raise RuntimeError("Tag and declared version differ")
+        # A rerun after publication would rebuild the APK under the same
+        # versionCode and the release step would overwrite what users may
+        # already have installed. Published APKs are immutable.
+        if any(
+            item["tag_name"] == f"v{declared_version()}" and release_code(item) is not None
+            for item in releases()
+        ):
+            raise RuntimeError("This version's release already carries its APK; published assets are immutable")
     elif os.getenv("GITHUB_ACTIONS") and os.getenv("GITHUB_REF") != "refs/heads/main":
         raise RuntimeError("Only a release tag, or main as a dry run, builds the public APK")
     if not on_main(revision):

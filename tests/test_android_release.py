@@ -198,6 +198,7 @@ def test_only_the_versions_tag_or_main_build_the_public_apk(monkeypatch, ref_typ
     version = release.declared_version()
     monkeypatch.setattr(release, "clean", lambda: "a" * 40)
     monkeypatch.setattr(release, "on_main", lambda revision: True)
+    monkeypatch.setattr(release, "releases", lambda: [])
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_REF_TYPE", ref_type)
     monkeypatch.setenv("GITHUB_REF_NAME", ref_name.format(version=version))
@@ -279,6 +280,7 @@ def test_a_tag_off_main_never_reaches_the_signing_key(monkeypatch, status, accep
     version = release.declared_version()
     monkeypatch.setattr(release, "clean", lambda: "a" * 40)
     asked = []
+    monkeypatch.setattr(release, "releases", lambda: [])
     monkeypatch.setattr(release, "gh", lambda *args: asked.append(args) or {"status": status})
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
@@ -298,3 +300,20 @@ def test_planning_runs_before_the_signing_key_is_restored():
     workflow = Path(__file__).resolve().parents[1] / ".github/workflows/android-release.yml"
     names = [step.get("name", "") for step in yaml.safe_load(workflow.read_text())["jobs"]["alpha"]["steps"]]
     assert names.index("Verify gates and plan the build") < names.index("Restore permanent signing identity")
+
+
+def test_a_rerun_never_replaces_a_published_apk(monkeypatch):
+    version = release.declared_version()
+    monkeypatch.setattr(release, "clean", lambda: "a" * 40)
+    monkeypatch.setattr(release, "on_main", lambda revision: True)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{version}")
+    monkeypatch.setenv("GITHUB_REF", f"refs/tags/v{version}")
+    published = {"tag_name": f"v{version}", "draft": False, "assets": [{"name": release.APK}]}
+    monkeypatch.setattr(release, "releases", lambda: [published])
+    with pytest.raises(RuntimeError, match="immutable"):
+        release.plan_build()
+    # Published without an APK (or still a draft) is not a reason to refuse.
+    monkeypatch.setattr(release, "releases", lambda: [{**published, "assets": []}, {**published, "draft": True}])
+    assert release.plan_build()["tag"] == f"v{version}"
