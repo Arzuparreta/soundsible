@@ -25,6 +25,7 @@ attempt() {
   xvfb-run -a dbus-run-session -- bash -c '
     pulseaudio --start --exit-idle-time=-1
     pactl load-module module-null-sink sink_name=soundsible_test >/dev/null
+    pactl set-default-sink soundsible_test
     exec python3 "$@"
   ' smoke "$smoke" --artifacts "$1" "${@:2}"
 }

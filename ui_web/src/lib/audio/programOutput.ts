@@ -26,11 +26,25 @@ export interface ProgramOutputEvent extends ProgramOutputSnapshot {
 
 type OutputListener = (event: ProgramOutputEvent) => void;
 
-/** iPadOS can advertise itself as a Mac in both Safari and installed PWAs. */
+/**
+ * iPadOS can advertise itself as a Mac in both Safari and installed PWAs.
+ *
+ * WebKitGTK — the Linux desktop app, and GNOME Web — accepts a MediaStream as
+ * a source and resolves `play()`, then never fetches a frame: the carrier sits
+ * at readyState 0 while the decks play into it, and nothing reaches the sound
+ * server. Chrome and Android also say AppleWebKit, so they are excluded.
+ */
 function prefersDirectOutput(): boolean {
-  return /iPhone|iPad|iPod/.test(navigator.userAgent)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const agent = navigator.userAgent;
+  return /iPhone|iPad|iPod/.test(agent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    || (/\bLinux\b/.test(agent) && /AppleWebKit/.test(agent) && !/Chrome|Chromium|Android/.test(agent));
 }
+
+/** How long a carrier that accepted `play()` may go without a frame. */
+const CARRIER_START_TIMEOUT_MS = 2000;
+/** HTMLMediaElement.HAVE_CURRENT_DATA: a frame is there to play. */
+const HAVE_CURRENT_DATA = 2;
 
 /**
  * Device output after the mix and local volume control.
@@ -52,6 +66,9 @@ export class ProgramOutput {
   private stopObserving: (() => void) | null = null;
   private initialized = false;
   private destroyed = false;
+  /** A carrier that played and never produced audio is not tried again. */
+  private carrierStalled = false;
+  private startCheck: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly context: AudioContext,
@@ -116,6 +133,7 @@ export class ProgramOutput {
     try {
       await diagnosticPlay(this.carrier);
       if (this.destroyed) return;
+      this.watchCarrierStart();
     } catch (error) {
       this.emit('carrier_error', errorReason(error));
       this.enterFallback(errorReason(error));
@@ -123,6 +141,7 @@ export class ProgramOutput {
   }
 
   pause(): void {
+    this.clearStartCheck();
     if (this.carrier) diagnosticPause(this.carrier);
   }
 
@@ -131,7 +150,7 @@ export class ProgramOutput {
    * the carrier has accepted play, avoiding a silent optimistic switch.
    */
   async retryFromGesture(programPlaying: boolean): Promise<boolean> {
-    if (this.mode !== 'direct_fallback' || !this.carrier || !this.destination) return false;
+    if (this.mode !== 'direct_fallback' || !this.carrier || !this.destination || this.carrierStalled) return false;
     if (!programPlaying) return false;
     try {
       await diagnosticPlay(this.carrier);
@@ -155,6 +174,7 @@ export class ProgramOutput {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.clearStartCheck();
     const carrier = this.carrier;
     if (carrier) {
       diagnosticPause(carrier);
@@ -171,6 +191,29 @@ export class ProgramOutput {
     this.stopObserving?.();
     this.stopObserving = null;
     this.destination = null;
+  }
+
+  /**
+   * `play()` resolving is not sound. A carrier still without a frame once the
+   * context has been running for a while is abandoned for the direct path,
+   * so an engine like WebKitGTK that is not recognised up front still plays.
+   */
+  private watchCarrierStart(): void {
+    this.clearStartCheck();
+    this.startCheck = setTimeout(() => {
+      this.startCheck = null;
+      const carrier = this.carrier;
+      if (this.destroyed || this.mode !== 'carrier' || !carrier || carrier.paused) return;
+      if (this.context.state !== 'running' || carrier.readyState >= HAVE_CURRENT_DATA) return;
+      this.carrierStalled = true;
+      diagnosticPause(carrier);
+      this.enterFallback('carrier_stalled');
+    }, CARRIER_START_TIMEOUT_MS);
+  }
+
+  private clearStartCheck(): void {
+    if (this.startCheck) clearTimeout(this.startCheck);
+    this.startCheck = null;
   }
 
   private enterFallback(reason: string): void {
