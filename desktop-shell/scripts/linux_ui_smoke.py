@@ -2,7 +2,9 @@
 """Drive the installed Linux app through WebKit WebDriver and real MPRIS.
 
 Run under xvfb-run and dbus-run-session. All station/client data is disposable.
-No UI/API mocks: an independent station serves the shared SolidJS player and WAVs.
+No UI/API mocks: an independent station serves the shared SolidJS player, a
+WAV and an AAC (.m4a) track — the format YouTube downloads arrive in, which
+WebKitGTK decodes through the distribution's GStreamer plugins.
 """
 from __future__ import annotations
 
@@ -143,6 +145,13 @@ def run(app, engine, artifacts, flatpak=None):
                 chunk = b"".join(struct.pack("<h", int(500 * math.sin(2 * math.pi * (440 + index * 110) * n / 8000))) for n in range(8000))
                 for _ in range(90):
                     sound.writeframes(chunk)
+        # Downloads are AAC in an MP4 container. WebKitGTK plays them only if
+        # the distribution's GStreamer can decode AAC, which a WAV never asks.
+        ffmpeg = shutil.which("ffmpeg")
+        assert ffmpeg, "the AAC track is encoded with ffmpeg from PATH"
+        subprocess.run([ffmpeg, "-loglevel", "error", "-i", str(music / "smoke-1.wav"),
+                        "-c:a", "aac", "-b:a", "64k", str(music / "smoke-1.m4a")], check=True)
+        (music / "smoke-1.wav").unlink()
 
         def environment(name):
             env = dict(os.environ)
@@ -163,12 +172,14 @@ def run(app, engine, artifacts, flatpak=None):
             return env
 
         station_env = environment("station")
-        # The library is two local WAVs; the station has no business on the
-        # internet here. Starting playback asks YouTube for related videos, and
-        # when YouTube answers a runner with a bot check that request holds the
-        # whole station for about 20 seconds, long enough for the player to
-        # skip the track. A proxy nothing listens on makes every outside
-        # request fail at once.
+        # The library is two local files; the station has no business on the
+        # internet here. Opening the player asks the station for a listening
+        # plan, which looks the songs up on YouTube, and a runner gets a bot
+        # check that stretches that request to about 20 seconds. The player
+        # does not wait for it (checked in Chromium and WebKit), but in the
+        # driven WebKitGTK app the clicked track's stream was requested only
+        # after it returned, and the run then failed on the wrong track. A proxy
+        # nothing listens on makes every outside request fail at once.
         for variable in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
             station_env[variable] = "http://127.0.0.1:9"
         station_env["NO_PROXY"] = station_env["no_proxy"] = "127.0.0.1,localhost"
@@ -190,8 +201,8 @@ def run(app, engine, artifacts, flatpak=None):
             owner_headers = {"Authorization": f"Bearer {owner}"}
             http(origin + "/api/library/scan", {"path": str(music)}, headers=owner_headers)
             wait_for(lambda: http(origin + "/api/library/scan", headers=owner_headers)["state"] == "completed",
-                     "completed WAV library scan", 120)
-            wait_for(lambda: len(http(origin + "/api/library")["tracks"]) == 2, "real WAV library scan", 120)
+                     "completed library scan", 120)
+            wait_for(lambda: len(http(origin + "/api/library")["tracks"]) == 2, "real WAV and AAC library scan", 120)
             (artifacts / "library.json").write_text(json.dumps(http(origin + "/api/library"), indent=2))
             sentinel = Path(client_env["SOUNDSIBLE_CONFIG_DIR"]) / "desktop-engine-state.json"
             sentinel_bytes = json.dumps(state).encode()
@@ -324,7 +335,7 @@ def run(app, engine, artifacts, flatpak=None):
                 "server_survives_quit": True,
                 "connection_switch_clears_mpris_signals": True,
             }, indent=2))
-            print("Linux installed-app smoke passed: real player, WAV playback, MPRIS, remote ACL and independent server lifecycle.", flush=True)
+            print("Linux installed-app smoke passed: real player, WAV and AAC playback, MPRIS, remote ACL and independent server lifecycle.", flush=True)
         except Exception:
             if web:
                 try:

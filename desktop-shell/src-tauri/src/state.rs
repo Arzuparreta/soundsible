@@ -4,20 +4,15 @@ use std::path::{Path, PathBuf};
 
 pub const STATE_FILENAME: &str = "desktop-engine-state.json";
 
+// The engine writes more than this (pid, version, other directories); serde
+// skips what the shell never reads.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct EngineRuntimeState {
-    pub mode: String,
-    pub pid: u32,
-    pub host: String,
-    pub port: u16,
     pub base_url: String,
     pub health: String,
-    pub version: String,
     pub owner_token_file: Option<String>,
-    pub config_dir: String,
     pub log_dir: String,
-    pub music_dir: String,
 }
 
 impl EngineRuntimeState {

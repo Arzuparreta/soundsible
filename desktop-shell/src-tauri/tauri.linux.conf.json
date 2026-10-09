@@ -6,6 +6,11 @@
     "license": "MIT",
     "category": "Music",
     "shortDescription": "All-in-one music streaming service",
-    "longDescription": "Search the whole internet, then listen, save, download and manage everything in one place. The desktop app runs a private Soundsible station on this computer, or connects to one you already have."
+    "longDescription": "Search the whole internet, then listen, save, download and manage everything in one place. The desktop app runs a private Soundsible station on this computer, or connects to one you already have.",
+    "linux": {
+      "deb": {
+        "depends": ["gstreamer1.0-libav"]
+      }
+    }
   }
 }

@@ -22,6 +22,16 @@ needed glibc 2.38 and did not start on Debian 12 or Ubuntu 22.04. The packages a
 built in an Ubuntu 22.04 container (glibc 2.35), the oldest release they
 support.
 
+## AAC playback
+
+The app plays through WebKitGTK, which decodes with the distribution's
+GStreamer. Downloads are AAC in an `.m4a`, and on Debian and Ubuntu nothing
+WebKit pulls in decodes AAC, not even with recommended packages: the song
+loads and never plays. The `.deb` therefore depends on `gstreamer1.0-libav`
+(set in `desktop-shell/src-tauri/tauri.linux.conf.json`), and
+`soundsible-bin` on `gst-libav`. Fedora decodes AAC with what WebKitGTK
+already installs. Every smoke below plays an AAC track to keep it that way.
+
 ## RPM
 
 The `.rpm` is built by `scripts/linux_packages.py rpm` with `rpmbuild`, from
@@ -120,7 +130,7 @@ Desktop Build (`.github/workflows/desktop-build.yml`):
 | `smoke-flatpak` | The bundle installed with `flatpak install` and driven inside its sandbox |
 
 Every smoke runs `desktop-shell/scripts/linux_ui_smoke.py` against the
-installed app: a real WAV library on an independent station, advancing audio,
+installed app: a WAV and an AAC (`.m4a`) track on an independent station, advancing audio,
 MPRIS control, the remote-command denial and the client's exit. In the
 containers WebKit's own process sandbox is disabled, because unprivileged
 containers cannot create the user namespaces it needs. The Ubuntu smoke runs
