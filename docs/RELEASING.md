@@ -106,9 +106,10 @@ tag pushed with `GITHUB_TOKEN` starts nothing by itself, so it dispatches them.
 To hold a release for review, disarm auto-merge on the bump pull request
 (`gh pr merge <url> --disable-auto`): it then goes out when someone merges it.
 
-`python scripts/release.py finish` is the manual fallback, for when that
-workflow did not run: it tags the merge commit from a checkout, and its push
-starts the same workflows. Either one refuses a tag that already exists.
+If that job fails part-way, re-run it: it starts only the workflows that have
+no run on the tag yet. `python scripts/release.py finish` is the manual
+fallback for when it did not run at all: it tags the merge commit from a
+checkout, and its push starts the same workflows.
 
 Or `/release` in Claude Code, which runs the three steps and waits in between.
 

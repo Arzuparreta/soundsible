@@ -7,8 +7,10 @@ name: Release tag
 # A tag pushed with `GITHUB_TOKEN` starts no workflow, so this job pushes the
 # tag and then dispatches the two workflows a pushed tag would have started.
 # `workflow_dispatch` is the one event a `GITHUB_TOKEN` is allowed to cause.
-# If the tag already exists — `release.py finish` got there first — its own
-# push already started them, and this does nothing.
+# Each workflow is dispatched only if it has no run on the tag yet, so a
+# re-run after a failure part-way through starts whatever is still missing,
+# and a tag `release.py finish` already pushed (which started both) gets
+# nothing twice.
 on:
   pull_request:
     branches: [main]
@@ -49,13 +51,21 @@ jobs:
             exit 1
           fi
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "::notice::$tag already exists; its push started the release."
-            exit 0
+            echo "::notice::$tag already exists; starting only what has not run on it."
+            # A tag pushed moments ago may not have registered its runs yet.
+            sleep 60
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag --annotate "$tag" --message "Soundsible ${tag#v}"
+            git push origin "$tag"
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag --annotate "$tag" --message "Soundsible ${tag#v}"
-          git push origin "$tag"
-          gh workflow run release.yml --ref "$tag"
-          gh workflow run ci.yml --ref "$tag"
-          echo "::notice::$tag → $(git rev-parse --short HEAD); Release and CI dispatched on it."
+          for workflow in release.yml ci.yml; do
+            runs="$(gh run list --workflow "$workflow" --branch "$tag" --limit 1 --json databaseId --jq length)"
+            if [ "$runs" = 0 ]; then
+              gh workflow run "$workflow" --ref "$tag"
+              echo "::notice::$workflow dispatched on $tag."
+            else
+              echo "$workflow already has a run on $tag."
+            fi
+          done
