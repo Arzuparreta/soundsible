@@ -297,7 +297,9 @@ jobs:
           path: packages
 
       - name: Prepare the Flatpak build directory
-        run: python3 scripts/linux_packages.py flatpak --deb packages/deb/Soundsible_*_amd64.deb --out flatpak-build
+        run: >-
+          python3 scripts/linux_packages.py flatpak --deb packages/deb/Soundsible_*_amd64.deb
+          --out flatpak-build --revision "$GITHUB_SHA"
 
       - name: Validate the metainfo
         run: flatpak-builder-lint appstream flatpak-build/io.github.Arzuparreta.Soundsible.metainfo.xml
