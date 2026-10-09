@@ -5,15 +5,6 @@ fn idle_tray_icon() -> tauri::Result<tauri::image::Image<'static>> {
 }
 
 pub fn available(app: &AppHandle) -> bool {
-    #[cfg(target_os = "linux")]
-    if !app
-        .state::<super::desktop::DesktopState>()
-        .native
-        .tray_available
-        .load(std::sync::atomic::Ordering::Relaxed)
-    {
-        return false;
-    }
     app.tray_by_id("soundsible").is_some()
 }
 
@@ -94,29 +85,6 @@ pub fn open_pairing(app: &AppHandle) {
     let _ = app.emit("shell-view", "pairing");
 }
 
-#[cfg(target_os = "linux")]
-fn media_status(app: &AppHandle) -> String {
-    let state = app.state::<super::desktop::DesktopState>();
-    let guard = state.session.lock().ok();
-    if guard.as_ref().and_then(|g| g.as_ref()).is_none() {
-        return "No player connection".into();
-    }
-    if guard
-        .as_ref()
-        .and_then(|g| g.as_ref())
-        .is_some_and(|s| s.ready)
-    {
-        #[cfg(target_os = "linux")]
-        if !state.native.available() {
-            return "Desktop media controls unavailable".into();
-        }
-        "Desktop media controls connected".into()
-    } else {
-        "Native media controls need an updated server".into()
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
 fn media_status(_app: &AppHandle) -> String {
     "Browser media controls".into()
 }
@@ -150,9 +118,6 @@ pub fn attach_window_menu(app: &AppHandle, window: &tauri::WebviewWindow) -> Res
     Ok(())
 }
 
-pub fn refresh_media_status(app: &AppHandle) {
-    refresh_mode(app);
-}
 pub fn refresh_mode(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id("soundsible") {
         if let Ok(menu) = menu(app) {
@@ -183,11 +148,6 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 focus_main_window(tray.app_handle());
             }
         });
-    #[cfg(target_os = "linux")]
-    let builder = match crate::flatpak::tray_icon_dir() {
-        Some(dir) => builder.temp_dir_path(dir),
-        None => builder,
-    };
     builder.build(app)?;
     Ok(())
 }

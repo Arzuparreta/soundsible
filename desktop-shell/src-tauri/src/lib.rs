@@ -1,10 +1,6 @@
 mod client;
 mod desktop;
 mod engine;
-#[cfg(target_os = "linux")]
-mod flatpak;
-#[cfg(target_os = "linux")]
-mod linux_media;
 mod pairing;
 mod state;
 mod tray;
@@ -121,10 +117,6 @@ fn stop_engine(app: AppHandle, state: State<'_, AppState>) -> Result<(), String>
 
 #[tauri::command]
 async fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
-    if flatpak::sandboxed() {
-        return flatpak::set_autostart(enabled).await;
-    }
     use tauri_plugin_autostart::ManagerExt;
     if enabled {
         app.autolaunch().enable().map_err(|e| e.to_string())
@@ -135,10 +127,6 @@ async fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
 
 #[tauri::command]
 fn get_autostart(app: AppHandle) -> Result<bool, String> {
-    #[cfg(target_os = "linux")]
-    if flatpak::sandboxed() {
-        return Ok(flatpak::autostart_enabled());
-    }
     use tauri_plugin_autostart::ManagerExt;
     app.autolaunch().is_enabled().map_err(|e| e.to_string())
 }
@@ -494,17 +482,11 @@ fn handle_deep_link(app: &AppHandle, value: &str, start_if_idle: bool) {
 
 #[cfg(desktop)]
 fn single_instance() -> tauri::plugin::TauriPlugin<tauri::Wry> {
-    let builder = tauri_plugin_single_instance::Builder::new().callback(|app, _argv, _cwd| {
-        tray::focus_main_window(app);
-    });
-    // The plugin's bus name defaults to the Tauri identifier, and Flatpak only
-    // lets an app own names under its own ID.
-    #[cfg(target_os = "linux")]
-    let builder = match flatpak::app_id() {
-        Some(id) => builder.dbus_id(id),
-        None => builder,
-    };
-    builder.build()
+    tauri_plugin_single_instance::Builder::new()
+        .callback(|app, _argv, _cwd| {
+            tray::focus_main_window(app);
+        })
+        .build()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -537,7 +519,6 @@ pub fn run() {
             change_connection,
             quit_desktop,
             desktop::desktop_handshake,
-            desktop::desktop_snapshot,
             desktop::desktop_appearance,
             get_startup_profile,
             get_shell_theme,
@@ -570,8 +551,6 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 tray::attach_window_menu(app.handle(), &window)?;
             }
-            #[cfg(target_os = "linux")]
-            linux_media::start(app.handle().clone());
             if let Err(error) = tray::register_global_shortcuts(app.handle()) {
                 eprintln!("Desktop shortcuts unavailable: {error}");
             }

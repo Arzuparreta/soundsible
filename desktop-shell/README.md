@@ -1,14 +1,16 @@
 # Soundsible Desktop Shell
 
-Tauri consumer wrapper for Soundsible. It uses the official native folder
+Tauri consumer wrapper for Soundsible on Windows. It uses the official native folder
 dialog, supervises the bundled engine, exposes tray controls, and hands the
 webview to `/player/desktop/`. It also connects to an existing station at
 `/player/` without starting a local engine; see [Desktop client](../docs/DESKTOP_CLIENT.md).
 
 ## Dev workflow
 
-**Linux deps (once):** `webkit2gtk-4.1`, `gtk3`, `libayatana-appindicator`, `librsvg`, `base-devel`  
-Arch: `sudo pacman -S webkit2gtk-4.1 gtk3 libayatana-appindicator librsvg base-devel`
+The shell is built for Windows only — there is no Linux client
+([why](../docs/DESKTOP_BETA.md#no-linux-app)) — so run `npm run dev` on Windows.
+The configuration screen's unit and browser tests (`npm test`,
+`npm run test:ui`) run anywhere.
 
 From repo root, ensure Python deps are installed (`venv/` exists).
 
@@ -119,7 +121,7 @@ Headless check for engine health + desktop player route:
 ./desktop-shell/scripts/smoke-test.sh --with-sidecar --with-tauri
 ```
 
-CI runs the Python engine check in `.github/workflows/desktop-shell.yml`; the sidecar and Tauri builds, and the installed-app smokes on Linux and Windows, run in `.github/workflows/desktop-build.yml`.
+CI runs the Python engine check in `.github/workflows/desktop-shell.yml`; the sidecar and Tauri builds, and the installed-app smokes on Windows x64 and ARM64, run in `.github/workflows/desktop-build.yml`.
 
 **Windows sidecars:** native runners produce
 `soundsible-engine-x86_64-pc-windows-msvc.exe` and
@@ -146,6 +148,4 @@ Requires `rsvg-convert` (librsvg) and `@tauri-apps/cli`.
 
 **Platform notes:**
 
-- **Linux:** Colored static glyph in AppIndicator tray (VU-meter animation deferred).
 - **Windows:** Multi-size `.ico` from bundle set.
-- **macOS:** Colored glyph for v1; template (monochrome menu-bar) icon deferred until VU-meter tray work.

@@ -1,4 +1,4 @@
-import { desktopBridge } from '../lib/desktopMedia';
+import { desktopBridge } from '../lib/desktopBridge';
 /**
  * Appearance: the stored preference, what it resolves to, and keeping the
  * document in sync with the OS while it is `system`.

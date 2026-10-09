@@ -67,7 +67,7 @@ car controls are unverified. Broader offline and device support is on the
 | --- | --- |
 | **Your computer or server** | [Native installation](docs/INSTALL.md#2-install-on-your-computer) for Linux, macOS and Windows. This is the maintainer's primary installation method. |
 | **Docker / NAS** | [Docker Compose setup](docs/DOCKER.md), with persistent storage and prebuilt images. |
-| **Desktop, without a terminal** | [Download a desktop beta](https://github.com/Arzuparreta/soundsible/releases) for Windows or Linux (`.deb`, `.rpm` or Flatpak). Check the [platform status](docs/DESKTOP_BETA.md) before installing. |
+| **Windows, without a terminal** | [Download the desktop beta](https://github.com/Arzuparreta/soundsible/releases): one installer runs a station on this PC and its player. Check the [platform status](docs/DESKTOP_BETA.md) before installing. On Linux, use the native or Docker installation and the player in your browser. |
 
 For native and Docker installs, open **<http://localhost:5005/player/>** on the
 server, or replace `localhost` with its address on another device. The desktop
