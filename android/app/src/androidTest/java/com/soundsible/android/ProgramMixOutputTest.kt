@@ -243,14 +243,16 @@ class ProgramMixOutputTest {
                     val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
                     val decoderReady = java.util.concurrent.atomic.AtomicBoolean()
                     var steadySince = 0L
-                    while (System.nanoTime() < readyDeadline) {
+                    var steady = false
+                    while (!steady && System.nanoTime() < readyDeadline) {
                         instrumentation.runOnMainSync { decoderReady.set(decoders[1].playbackState == Player.STATE_READY) }
                         val ready = decoderReady.get() && owner.readyInput(1) && owner.inputPositionUs(1) < 20000
                         if (!ready) steadySince = 0L
                         else if (steadySince == 0L) steadySince = System.nanoTime()
-                        else if (System.nanoTime() - steadySince >= TimeUnit.MILLISECONDS.toNanos(300)) break
-                        Thread.sleep(10)
+                        else steady = System.nanoTime() - steadySince >= TimeUnit.MILLISECONDS.toNanos(300)
+                        if (!steady) Thread.sleep(10)
                     }
+                    assertTrue("Corrected standby cue did not rebuffer and hold steady", steady)
                     assertTrue("Corrected standby cue did not rebuffer", owner.readyInput(1))
                     assertEquals("Standby phase correction reset master audio", epoch, owner.epoch())
                     assertTrue("Standby source advanced while silent and unarmed", owner.inputPositionUs(1) < 20000)
