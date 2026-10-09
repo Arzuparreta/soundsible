@@ -72,6 +72,32 @@ A `.flatpak` file does not update itself: install the next one over it. Flathub
 would provide automatic updates. It is not published there yet — see
 [Flathub](#flathub).
 
+### Graphics on NVIDIA
+
+The Flatpak uses WebKit's shared-memory frame transport by default. NVIDIA can
+reject its GBM buffers, leaving a blank window even though the native menus
+appear. `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` avoids that transfer path while
+keeping hardware acceleration available. It trades zero-copy frame transfer
+for compatibility; it does not disable the GPU or WebKit's compositor.
+
+For an already installed bundle, apply the same setting and restart the app:
+
+```sh
+flatpak override --user --env=WEBKIT_DISABLE_DMABUF_RENDERER=0 \
+  --env=WEBKIT_DMABUF_RENDERER_FORCE_SHM=1 io.github.Arzuparreta.Soundsible
+```
+
+Setting `WEBKIT_DISABLE_DMABUF_RENDERER=1` is a different workaround: it also
+disables WebKit hardware acceleration and can make the player slow. The `=0`
+above cancels that earlier workaround. WebKit's
+[buffer transport selection](https://github.com/WebKit/WebKit/blob/webkitgtk-2.54.1/Source/WebKit/UIProcess/gtk/AcceleratedBackingStore.cpp)
+defines this distinction. On a system where DMA-BUF works, an override with
+`--env=WEBKIT_DMABUF_RENDERER_FORCE_SHM=0` restores the runtime's default path.
+
+A graphics workaround does not prove audio crash recovery. A WebKit process
+abort during playback needs separate investigation; preserve its logs and
+`coredumpctl info` output rather than treating a visible window as acceptance.
+
 ## AUR
 
 The AUR stores a recipe rather than binaries. `soundsible-bin`'s `PKGBUILD`
