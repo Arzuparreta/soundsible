@@ -247,3 +247,22 @@ def test_staging_gathers_exactly_what_the_release_attaches(monkeypatch, tmp_path
     assert f"{release.digest(apk)}  {release.APK}" in sums
     metadata = json.loads((staged / "android-release.json").read_text())
     assert metadata["upgrade_seed_harness"]["sha256"] == release.digest(tmp_path / release.SEED_HARNESS)
+
+
+def test_every_version_release_carries_the_apk():
+    import yaml
+
+    workflows = Path(__file__).resolve().parents[1] / ".github/workflows"
+    release_jobs = yaml.safe_load((workflows / "release.yml").read_text())["jobs"]
+    assert release_jobs["android"]["uses"] == "./.github/workflows/android-release.yml"
+    # A version is out on every platform or none.
+    assert "android" in release_jobs["publish"]["needs"]
+    android = yaml.safe_load((workflows / "android-release.yml").read_text())
+    triggers = android[True]  # YAML 1.1 reads the `on:` key as a boolean.
+    assert "workflow_call" in triggers
+    steps = android["jobs"]["alpha"]["steps"]
+    upload = next(step for step in steps if step.get("name") == "Upload the staged APK")
+    # publish downloads `soundsible-*` artifacts and attaches them.
+    assert upload["with"]["name"].startswith("soundsible-")
+    assert upload["with"]["path"].rstrip("/").endswith("android/build/alpha/release")
+    assert not any("publish" in (step.get("run") or "") for step in steps)
