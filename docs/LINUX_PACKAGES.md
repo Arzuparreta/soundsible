@@ -54,7 +54,8 @@ What it can reach:
 
 **Start at login** goes through the desktop's Background portal, which may ask
 for permission. The usual tauri-plugin-autostart entry would point at a path
-that only exists inside the sandbox.
+that only exists inside the sandbox. On a desktop whose portal has no
+Background interface, the box stays unchecked and the app starts as usual.
 
 A `.flatpak` file does not update itself: install the next one over it. Flathub
 would provide automatic updates. It is not published there yet — see
