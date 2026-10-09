@@ -98,6 +98,23 @@ A graphics workaround does not prove audio crash recovery. A WebKit process
 abort during playback needs separate investigation; preserve its logs and
 `coredumpctl info` output rather than treating a visible window as acceptance.
 
+### Stale frames after animations
+
+WebKitGTK 2.54 — the GNOME 50 runtime's, and Arch's — composites with Skia,
+and that compositor presents an old frame as a CSS animation ends: opening or
+closing Now Playing flashed the screen as it was when the slide began. With
+shared-memory transport it happened on 5 to 8 of 16 transitions under Xvfb;
+with `WEBKIT_USE_SKIA_FOR_COMPOSITION=0`, WebKit's previous compositor, on
+none, with the same number of animation frames and acceleration kept.
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` also removed it, but drew each slide in 3
+or 4 frames instead of 15.
+
+The app sets `WEBKIT_USE_SKIA_FOR_COMPOSITION=0` itself on Linux at start
+(`desktop-shell/src-tauri/src/main.rs`) unless the variable is already set,
+so `flatpak override --env=WEBKIT_USE_SKIA_FOR_COMPOSITION=1` brings Skia
+back to compare. Every Linux smoke films Now Playing opening and closing and
+fails on a frame that returns to an older image.
+
 ## AUR
 
 The AUR stores a recipe rather than binaries. `soundsible-bin`'s `PKGBUILD`

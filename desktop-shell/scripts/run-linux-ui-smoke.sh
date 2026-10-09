@@ -22,7 +22,7 @@ if [[ -z "${XDG_RUNTIME_DIR:-}" || ! -w "${XDG_RUNTIME_DIR}" ]]; then
 fi
 
 attempt() {
-  xvfb-run -a dbus-run-session -- bash -c '
+  xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
     pulseaudio --start --exit-idle-time=-1
     pactl load-module module-null-sink sink_name=soundsible_test >/dev/null
     pactl set-default-sink soundsible_test

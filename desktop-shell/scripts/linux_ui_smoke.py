@@ -135,6 +135,52 @@ def sink_rms(seconds=3.0):
     return math.sqrt(sum(sample * sample for sample in samples) / len(samples))
 
 
+def stale_flashes(video):
+    """Transitions the screen went through, and frames where it briefly
+    showed an older image and then returned.
+
+    Each frame is reduced to a 160x100 grey image. A flash is one or two
+    frames that move away from the frame before them and are followed by an
+    exact return to it: an animation never comes back to where it started, a
+    stale buffer does. A transition is a burst of changing frames after at
+    least a third of a second of stillness that changed the screen
+    substantially; counting them is what tells a clean recording from a
+    frozen or blank one."""
+    width, height = 160, 100
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(video), "-vf", f"scale={width}:{height}",
+                          "-f", "rawvideo", "-pix_fmt", "gray", "-"], capture_output=True, check=True).stdout
+    size = width * height
+    frames = [raw[index:index + size] for index in range(0, len(raw) - size + 1, size)]
+
+    def distance(first, second):
+        return sum(abs(a - b) for a, b in zip(first, second)) / size
+
+    # A slide spread over many frames can move each one only a little (older
+    # WebKitGTK paints it that way), so a transition is judged by how much the
+    # whole burst changed the screen, not by its largest step.
+    bursts = []
+    for index in range(1, len(frames)):
+        change = distance(frames[index - 1], frames[index])
+        if change <= 0.3:
+            continue
+        if bursts and index - bursts[-1][0] < 20:
+            bursts[-1] = (index, bursts[-1][1] + change)
+        else:
+            bursts.append((index, change))
+    transitions = sum(1 for _, change in bursts if change > 4)
+    flashes = []
+    for index in range(1, len(frames) - 2):
+        before = frames[index - 1]
+        if distance(before, frames[index]) <= 3:
+            continue
+        for length in (1, 2):
+            if distance(before, frames[index + length]) < 0.3 \
+                    and all(distance(before, frames[index + step]) > 3 for step in range(length)):
+                flashes.append(index)
+                break
+    return len(frames), transitions, flashes
+
+
 def sandboxed(flatpak, command, *extra):
     """Run `command` inside the installed Flatpak, sharing /tmp, where every
     path this smoke hands the app lives."""
@@ -300,6 +346,28 @@ def run(app, engine, artifacts, flatpak=None):
             (artifacts / "audio-levels.json").write_text(json.dumps({"sink": SINK, "rms": levels}))
             # The tracks are sines of amplitude 500 (RMS about 350); silence is 0.
             assert all(level > 50 for level in levels), f"nothing audible reached {SINK}: RMS {levels}"
+            # WebKitGTK 2.54's Skia compositor showed the screen as it was when
+            # an animation began, for a frame, as it ended. Opening and closing
+            # Now Playing is that animation; film it and look for the flash.
+            video = artifacts / "now-playing.mkv"
+            recorder = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "x11grab", "-framerate", "60",
+                                         # FFV1 is lossless and built into every FFmpeg,
+                                         # Fedora's codec-limited ffmpeg-free included.
+                                         "-i", os.environ["DISPLAY"], "-c:v", "ffv1", str(video)])
+            time.sleep(1.5)
+            for _ in range(4):
+                web.script("document.querySelector('[data-omni-cover]').parentElement.querySelector('button').click()")
+                time.sleep(1.5)
+                web.script("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))")
+                time.sleep(1.5)
+            recorder.send_signal(signal.SIGINT)
+            recorder.wait(30)
+            frames, transitions, flashes = stale_flashes(video)
+            assert frames > 300, f"recorded only {frames} frames of Now Playing"
+            # Four opens and four closes. Fewer means the window never showed
+            # them, and an absence of flashes would prove nothing.
+            assert transitions >= 8, f"Now Playing opened and closed 4 times, the screen changed {transitions} times"
+            assert not flashes, f"stale frames flashed while Now Playing opened and closed: {flashes}"
             player_call("Seek", "x", "5000000")
             wait_for(lambda: web.script(audio_position) >= 5, "real audio seek")
             bus("set-property", MPRIS, OBJECT, PLAYER, "Volume", "d", "0.25")
@@ -364,7 +432,7 @@ def run(app, engine, artifacts, flatpak=None):
                 "server_survives_quit": True,
                 "connection_switch_clears_mpris_signals": True,
             }, indent=2))
-            print("Linux installed-app smoke passed: real player, audible WAV and AAC playback, MPRIS, remote ACL and independent server lifecycle.", flush=True)
+            print("Linux installed-app smoke passed: real player, audible WAV and AAC playback, no stale frames, MPRIS, remote ACL and independent server lifecycle.", flush=True)
         except Exception:
             if web:
                 try:
