@@ -136,12 +136,15 @@ def sink_rms(seconds=3.0):
 
 
 def stale_flashes(video):
-    """Frames where the screen briefly shows an older image and then returns.
+    """Transitions the screen went through, and frames where it briefly
+    showed an older image and then returned.
 
     Each frame is reduced to a 160x100 grey image. A flash is one or two
     frames that move away from the frame before them and are followed by an
     exact return to it: an animation never comes back to where it started, a
-    stale buffer does."""
+    stale buffer does. A transition is a burst of changing frames after at
+    least a third of a second of stillness; counting them is what tells a
+    clean recording from a frozen or blank one."""
     width, height = 160, 100
     raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(video), "-vf", f"scale={width}:{height}",
                           "-f", "rawvideo", "-pix_fmt", "gray", "-"], capture_output=True, check=True).stdout
@@ -151,6 +154,9 @@ def stale_flashes(video):
     def distance(first, second):
         return sum(abs(a - b) for a, b in zip(first, second)) / size
 
+    changing = [index for index in range(1, len(frames)) if distance(frames[index - 1], frames[index]) > 3]
+    transitions = sum(1 for position, index in enumerate(changing)
+                      if position == 0 or index - changing[position - 1] >= 20)
     flashes = []
     for index in range(1, len(frames) - 2):
         before = frames[index - 1]
@@ -161,7 +167,7 @@ def stale_flashes(video):
                     and all(distance(before, frames[index + step]) > 3 for step in range(length)):
                 flashes.append(index)
                 break
-    return len(frames), flashes
+    return len(frames), transitions, flashes
 
 
 def sandboxed(flatpak, command, *extra):
@@ -345,8 +351,11 @@ def run(app, engine, artifacts, flatpak=None):
                 time.sleep(1.5)
             recorder.send_signal(signal.SIGINT)
             recorder.wait(30)
-            frames, flashes = stale_flashes(video)
+            frames, transitions, flashes = stale_flashes(video)
             assert frames > 300, f"recorded only {frames} frames of Now Playing"
+            # Four opens and four closes. Fewer means the window never showed
+            # them, and an absence of flashes would prove nothing.
+            assert transitions >= 8, f"Now Playing opened and closed 4 times, the screen changed {transitions} times"
             assert not flashes, f"stale frames flashed while Now Playing opened and closed: {flashes}"
             player_call("Seek", "x", "5000000")
             wait_for(lambda: web.script(audio_position) >= 5, "real audio seek")
