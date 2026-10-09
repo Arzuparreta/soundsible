@@ -133,9 +133,11 @@ def test_metainfo_describes_this_release():
     assert release.get("version") == "1.2.3"
     assert release.get("date") == "2026-10-09"
     images = [image.text for image in root.iter("image")]
-    assert images and all("/v1.2.3/" in image for image in images)
+    # Never the version's own tag, which does not exist while its release
+    # pull request is being built.
+    assert images and all("/main/docs/" in image for image in images)
     for image in images:
-        relative = image.split("/v1.2.3/", 1)[1]
+        relative = image.split("/main/", 1)[1]
         assert (ROOT / relative).is_file(), f"metainfo screenshot {relative} does not exist"
 
 

@@ -147,7 +147,10 @@ def build_rpm(version: str, deb: Path, out: Path) -> Path:
 
 def render_metainfo(version: str, date: str) -> str:
     template = (PACKAGING / f"{APP_ID}.metainfo.xml").read_text()
-    raw = f"https://raw.githubusercontent.com/{REPOSITORY}/v{version}/docs/images/screenshots"
+    # From main, not from the version's tag: the tag does not exist yet while
+    # the release pull request builds this, and flatpak-builder-lint fetches
+    # every screenshot. Flathub copies them into its own mirror at build time.
+    raw = f"https://raw.githubusercontent.com/{REPOSITORY}/main/docs/images/screenshots"
     default = ' type="default"'
     screenshots = "\n".join(
         f"    <screenshot{default if index == 0 else ''}>\n"
