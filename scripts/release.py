@@ -31,6 +31,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # scripts/ is a directory of standalone tools, not an importable package, so
@@ -107,22 +108,53 @@ def last_tag() -> str | None:
     return tags.splitlines()[0] if tags else None
 
 
+#: Merges this long before the tag's commit cannot be after it, whatever the
+#: clocks say, and are skipped without asking git about them.
+CLOCK_SLACK = timedelta(hours=1)
+
+
+def in_release(commit: str | None, merged_at: str, tag: str, tagged_at: datetime) -> bool:
+    """Whether the pull request merged as ``commit`` already shipped in ``tag``.
+
+    Asked of the history where it matters. Comparing GitHub's merge time
+    with the tag's commit time as text dropped #327, merged two hours after
+    v0.22.0, because git printed `12:57:06+02:00` and GitHub `12:55:21Z`; and
+    the bump pull request itself is recorded as merged a second after the
+    commit the tag points at, so even a correct time comparison misplaces it.
+    Only merges near or after the tag are checked against the history; in a
+    shallow clone that lacks the commit, the instants decide.
+    """
+    merged = datetime.fromisoformat(merged_at)
+    if merged < tagged_at - CLOCK_SLACK:
+        return True
+    if commit:
+        result = subprocess.run(
+            ("git", "merge-base", "--is-ancestor", commit, f"refs/tags/{tag}"),
+            capture_output=True, check=False,
+        )
+        if result.returncode in (0, 1):
+            return result.returncode == 0
+    return merged <= tagged_at
+
+
 def merged_since(tag: str | None) -> list[MergedPR]:
     """Pull requests merged into main after ``tag`` was cut."""
-    since = None
+    tagged_at = None
     if tag:
-        since = run("git", "log", "-1", "--format=%cI", f"refs/tags/{tag}")
-
+        tagged_at = datetime.fromisoformat(
+            run("git", "log", "-1", "--format=%cI", f"refs/tags/{tag}")
+        )
     raw = run(
         "gh", "pr", "list",
         "--state", "merged",
         "--base", "main",
         "--limit", "200",
-        "--json", "number,title,labels,mergedAt",
+        "--json", "number,title,labels,mergedAt,mergeCommit",
     )
     pulls: list[MergedPR] = []
     for entry in json.loads(raw or "[]"):
-        if since and entry["mergedAt"] <= since:
+        commit = (entry.get("mergeCommit") or {}).get("oid")
+        if tag and in_release(commit, entry["mergedAt"], tag, tagged_at):
             continue
         labels = {
             label["name"][len(LABEL_PREFIX):]
