@@ -3,23 +3,60 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
 import os
 from pathlib import Path
 import socket
 import subprocess
 import sys
+import tarfile
 import time
 from urllib.request import urlopen
 import ssl
 
-IMAGE = "bluenviron/mediamtx@sha256:7797ed3df88df21e8c04ecd0aff08ce49a5232d1db453e51f5480ef36bc80865"
+# The relay binary from MediaMTX's GitHub release, pinned by checksum. It used
+# to be the Docker Hub image of the same version, and a Docker Hub pull that
+# failed (exit 125) took every Android shard down with it before any test ran.
+MEDIAMTX_VERSION = "v1.19.3"
+MEDIAMTX_ARCHIVE = f"mediamtx_{MEDIAMTX_VERSION}_linux_amd64.tar.gz"
+MEDIAMTX_SHA256 = "a7ba21268fccda3ebc43fdad76b87fddb85ce77e725b5cb637bca724b5394fbe"
+MEDIAMTX_URL = f"https://github.com/bluenviron/mediamtx/releases/download/{MEDIAMTX_VERSION}/{MEDIAMTX_ARCHIVE}"
+
+
+def mediamtx() -> Path:
+    """The pinned relay binary, downloaded and checked once per machine."""
+    cache = Path(os.getenv("XDG_CACHE_HOME") or Path.home() / ".cache") / "soundsible" / "mediamtx" / MEDIAMTX_VERSION
+    binary = cache / "mediamtx"
+    if binary.exists():
+        return binary
+    for attempt in range(3):
+        try:
+            with urlopen(MEDIAMTX_URL, timeout=60) as response:
+                archive = response.read()
+            break
+        except OSError:
+            if attempt == 2:
+                raise
+            time.sleep(5 * (attempt + 1))
+    digest = hashlib.sha256(archive).hexdigest()
+    if digest != MEDIAMTX_SHA256:
+        raise RuntimeError(f"{MEDIAMTX_ARCHIVE} has sha256 {digest}, expected {MEDIAMTX_SHA256}")
+    cache.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
+        member = bundle.extractfile("mediamtx")
+        partial = cache / "mediamtx.partial"
+        partial.write_bytes(member.read())
+    partial.chmod(0o755)
+    partial.replace(binary)
+    return binary
 
 
 class LiveFixture:
     def __init__(self, directory: Path, ca: Path, certificate: Path, key: Path, log):
         self.directory, self.ca, self.certificate, self.key, self.log = directory, ca, certificate, key, log
         self.process = None
-        self.container = "soundsible-live-" + directory.parent.name
+        self.relay = None
 
     def start(self):
         self.directory.mkdir()
@@ -45,8 +82,8 @@ authHTTPExclude:
 webrtc: true
 webrtcAddress: :58889
 webrtcEncryption: true
-webrtcServerCert: /fixture/server.pem
-webrtcServerKey: /fixture/server-key.pem
+webrtcServerCert: {self.directory.parent / "server.pem"}
+webrtcServerKey: {self.directory.parent / "server-key.pem"}
 webrtcLocalUDPAddress: :58189
 webrtcLocalTCPAddress: :58189
 webrtcAdditionalHosts: [10.0.2.2]
@@ -65,12 +102,14 @@ paths:
                        "COMMUNITY_MEDIA_HEALTH_URL": "http://127.0.0.1:59997/v3/config/global/get"}
         try:
             self.process = subprocess.Popen([sys.executable, __file__, "--serve", "--cert", str(self.certificate), "--key", str(self.key)], env=environment, stdout=self.log, stderr=self.log)
-            subprocess.run(["docker", "run", "--detach", "--name", self.container, "--network", "host", "--mount", f"type=bind,src={self.directory.parent},dst=/fixture,readonly", IMAGE, "/fixture/live/mediamtx.yml"], check=True, stdout=self.log, stderr=self.log)
+            self.relay = subprocess.Popen([str(mediamtx()), str(config)], stdout=self.log, stderr=self.log)
             deadline = time.monotonic() + 30
             trust = ssl.create_default_context(cafile=self.ca)
             while time.monotonic() < deadline:
                 if self.process.poll() is not None:
                     raise RuntimeError("Community fixture exited; inspect fixture.log")
+                if self.relay.poll() is not None:
+                    raise RuntimeError("MediaMTX exited; inspect fixture.log")
                 try:
                     with urlopen("https://127.0.0.1:58443/health", context=trust, timeout=1) as response:
                         if response.status == 200:
@@ -83,15 +122,17 @@ paths:
             raise
 
     def close(self):
-        subprocess.run(["docker", "rm", "--force", self.container], stdout=self.log, stderr=self.log, check=False)
-        if self.process is not None:
-            self.process.terminate()
+        for attribute in ("relay", "process"):
+            process = getattr(self, attribute)
+            if process is None:
+                continue
+            process.terminate()
             try:
-                self.process.wait(timeout=5)
+                process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait()
-            self.process = None
+                process.kill()
+                process.wait()
+            setattr(self, attribute, None)
 
 
 def main():
