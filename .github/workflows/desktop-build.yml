@@ -44,8 +44,8 @@ concurrency:
 
 jobs:
   # A Linux binary runs on the glibc it was linked against and on newer ones,
-  # never on older. Built on ubuntu-latest, v0.21.1's engine needed glibc 2.38
-  # and did not start on Debian 12 or Ubuntu 22.04, two of the releases its
+  # never on older. Built on ubuntu-latest, the engine needed glibc 2.38 and
+  # did not start on Debian 12 or Ubuntu 22.04, two of the releases the
   # download table named. The packages are built on the oldest release they
   # support. That is a container rather than the ubuntu-22.04 runner image,
   # which GitHub is retiring.
@@ -226,6 +226,8 @@ jobs:
             image: debian:12
           - distro: fedora
             image: fedora:44
+          - distro: opensuse
+            image: opensuse/tumbleweed
           - distro: arch
             image: archlinux:latest
     steps:
@@ -246,7 +248,7 @@ jobs:
         run: |
           case "${{ matrix.distro }}" in
             debian) dir=packages/deb ;;
-            fedora) dir=packages/rpm ;;
+            fedora|opensuse) dir=packages/rpm ;;
             arch) dir=packages/deb ;;
           esac
           desktop-shell/scripts/install-linux-package.sh "${{ matrix.distro }}" "$dir"

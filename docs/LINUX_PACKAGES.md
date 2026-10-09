@@ -6,7 +6,8 @@ CI builds the app once, as a `.deb`, and the other three repackage it.
 | Package | For | Install |
 | --- | --- | --- |
 | `Soundsible_<version>_amd64.deb` | Debian 12+, Ubuntu 22.04+, Mint | `sudo apt install ./Soundsible_<version>_amd64.deb` |
-| `soundsible-<version>-1.x86_64.rpm` | Fedora, openSUSE | `sudo dnf install ./soundsible-<version>-1.x86_64.rpm` |
+| `soundsible-<version>-1.x86_64.rpm` | Fedora | `sudo dnf install ./soundsible-<version>-1.x86_64.rpm` |
+| | openSUSE | `sudo zypper install --allow-unsigned-rpm ./soundsible-<version>-1.x86_64.rpm` |
 | `Soundsible_<version>_x86_64.flatpak` | Any distribution with Flatpak | `flatpak install --user ./Soundsible_<version>_x86_64.flatpak` |
 | `soundsible-bin` (AUR, once [publishing is set up](#setting-up-publishing-once)) | Arch, Manjaro, EndeavourOS, CachyOS | `yay -S soundsible-bin` |
 
@@ -16,8 +17,8 @@ Only x86-64 is built.
 ## Why Ubuntu 22.04
 
 A Linux program runs on the glibc it was linked against and on newer ones,
-never on older. v0.21.1 was built on Ubuntu 24.04, and its engine needed glibc
-2.38: it did not start on Debian 12 or Ubuntu 22.04. The packages are now
+never on older. Built on Ubuntu 24.04, as the `.deb` used to be, the engine
+needed glibc 2.38 and did not start on Debian 12 or Ubuntu 22.04. The packages are now
 built in an Ubuntu 22.04 container (glibc 2.35), the oldest release they
 support.
 
@@ -114,6 +115,7 @@ Desktop Build (`.github/workflows/desktop-build.yml`):
 | `smoke-linux-ubuntu` | The `.deb` installed with apt on the newest Ubuntu runner, next to Ubuntu's FFmpeg |
 | `smoke-linux-debian` | The `.deb` on Debian 12, the oldest glibc it claims |
 | `smoke-linux-fedora` | The `.rpm` installed with dnf on Fedora |
+| `smoke-linux-opensuse` | The `.rpm` installed with zypper on openSUSE Tumbleweed |
 | `smoke-linux-arch` | `soundsible-bin` built with makepkg from the generated PKGBUILD and installed with pacman |
 | `build-flatpak` | AppStream validation and the Flatpak bundle, built with Flathub's image |
 | `smoke-flatpak` | The bundle installed with `flatpak install` and driven inside its sandbox |
