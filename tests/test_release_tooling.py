@@ -163,11 +163,24 @@ def test_what_the_tag_contains_decides_the_next_release(tmp_path, monkeypatch):
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "fix")
     fix = git("rev-parse", "HEAD")
     merged = [
+        # Long before the tag: decided by the clock, its commit is not here,
+        # as in a shallow clone.
+        {"number": 300, "title": "old", "labels": [{"name": "impact:minor"}],
+         "mergedAt": "2026-10-01T09:00:00Z", "mergeCommit": {"oid": "0" * 40}},
         {"number": 324, "title": "bump", "labels": [{"name": "impact:none"}],
-         "mergeCommit": {"oid": bump}},
+         "mergedAt": "2026-10-09T10:57:07Z", "mergeCommit": {"oid": bump}},
         {"number": 327, "title": "fix", "labels": [{"name": "impact:patch"}],
-         "mergeCommit": {"oid": fix}},
+         "mergedAt": "2026-10-09T12:55:21Z", "mergeCommit": {"oid": fix}},
+        # After the tag but missing from this clone: the instants decide.
+        {"number": 328, "title": "unfetched", "labels": [{"name": "impact:patch"}],
+         "mergedAt": "2026-10-09T13:13:00Z", "mergeCommit": {"oid": "f" * 40}},
     ]
+
+    def fake_run(*args, check=True):
+        if args[:2] == ("git", "log"):
+            return "2026-10-09T12:57:06+02:00"
+        return json.dumps(merged)
+
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(release, "run", lambda *args, check=True: json.dumps(merged))
-    assert [pull.number for pull in release.merged_since("v0.22.0")] == [327]
+    monkeypatch.setattr(release, "run", fake_run)
+    assert [pull.number for pull in release.merged_since("v0.22.0")] == [327, 328]
