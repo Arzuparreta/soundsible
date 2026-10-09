@@ -11,13 +11,16 @@ obvious state:
 
     plan      what would be released, and as what number
     prepare   open the version-bump pull request, with auto-merge armed
-    finish    once that pull request is in, tag the merge commit
+    finish    tag the merge commit, if `release-tag.yml` has not already
+
+Merging the bump pull request is the release: `release-tag.yml` tags the
+merge commit and starts the release and image builds. `finish` is the manual
+fallback for when that workflow did not run.
 
 `prepare` opens a pull request rather than pushing to `main` because the
 repository ruleset forbids the latter, and it runs from a developer or agent
 checkout rather than from Actions because a `GITHUB_TOKEN` push triggers no
-workflows — a bot-authored release would sit forever without the required
-checks, and its tag would build nothing.
+workflows — a bot-authored bump would sit forever without the required checks.
 """
 
 from __future__ import annotations
@@ -246,11 +249,11 @@ def cmd_prepare(args: argparse.Namespace) -> int:
     ).splitlines()[-1]
     print(f"\n{url}")
     if attempt("gh", "pr", "merge", url, "--squash", "--auto", "--delete-branch"):
-        print("Auto-merge armed. When it lands: scripts/release.py finish")
+        print("Auto-merge armed. Merging it tags the release and builds it.")
     else:
         print(
             "Could not arm auto-merge — the pull request above is still good.\n"
-            "Merge it yourself, then: scripts/release.py finish"
+            "Merging it tags the release and builds it."
         )
     return 0
 
@@ -284,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, handler, help_text in (
         ("plan", cmd_plan, "show what would be released and as what number"),
         ("prepare", cmd_prepare, "open the version-bump pull request"),
-        ("finish", cmd_finish, "tag the merged bump commit"),
+        ("finish", cmd_finish, "tag the merged bump commit (fallback)"),
     ):
         sub = subparsers.add_parser(name, help=help_text)
         sub.set_defaults(handler=handler)

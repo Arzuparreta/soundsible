@@ -5,9 +5,14 @@ name: Release
 # turns them into a single GitHub Release. Before this, engine tags published
 # images and no release page, desktop tags published draft releases nobody
 # ever pressed publish on, and the two lines used different numbers.
+#
+# `workflow_dispatch` is how `release-tag.yml` starts it: that workflow tags the
+# merged version bump with `GITHUB_TOKEN`, whose pushes start nothing. A
+# dispatch on anything but the matching tag fails `verify`.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
