@@ -200,14 +200,25 @@ def checks(revision: str, *, wait: float = 0) -> list[dict]:
         return [{"name": name, "url": latest[name]["html_url"], "conclusion": "success"} for name in sorted(CHECKS)]
 
 
+def on_main(revision: str) -> bool:
+    """Whether ``revision`` is part of the remote main, merged and reviewed."""
+    status = gh("api", f"repos/{{owner}}/{{repo}}/compare/{revision}...main")["status"]
+    return status in ("ahead", "identical")
+
+
 def plan_build() -> dict:
-    """The build this checkout is: a tag's own release, or a dry run on main."""
+    """The build this checkout is: a tag's own release, or a dry run on main.
+
+    Runs before the signing identity is restored, so a tag pushed on a commit
+    that never went through main cannot obtain a permanently signed APK."""
     revision = clean()
     if os.getenv("GITHUB_REF_TYPE") == "tag":
         if os.getenv("GITHUB_REF_NAME") != f"v{declared_version()}":
             raise RuntimeError("Tag and declared version differ")
     elif os.getenv("GITHUB_ACTIONS") and os.getenv("GITHUB_REF") != "refs/heads/main":
         raise RuntimeError("Only a release tag, or main as a dry run, builds the public APK")
+    if not on_main(revision):
+        raise RuntimeError("Only a commit on main builds the public APK")
     return plan_for(declared_version(), revision)
 
 
@@ -588,7 +599,8 @@ def stage(plan: dict, apk: Path, receipt: dict) -> Path:
 
     Nothing is published here: the release job uploads the directory as an
     artifact and the release's own publish step attaches it beside the other
-    platforms, so a version is out everywhere or nowhere."""
+    platforms, so the release page appears with the APK or not at all. (The
+    container images are pushed by ci.yml on the same tag, independently.)"""
     if clean() != plan["source_revision"]:
         raise RuntimeError("Checkout differs from the planned build")
     metadata = verify_apk(apk, plan)

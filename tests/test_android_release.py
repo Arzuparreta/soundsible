@@ -197,6 +197,7 @@ def test_checks_wait_for_the_tags_own_ci(monkeypatch):
 def test_only_the_versions_tag_or_main_build_the_public_apk(monkeypatch, ref_type, ref_name, ref, accepted):
     version = release.declared_version()
     monkeypatch.setattr(release, "clean", lambda: "a" * 40)
+    monkeypatch.setattr(release, "on_main", lambda revision: True)
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_REF_TYPE", ref_type)
     monkeypatch.setenv("GITHUB_REF_NAME", ref_name.format(version=version))
@@ -271,3 +272,29 @@ def test_every_version_release_carries_the_apk():
     assert upload["with"]["name"].startswith("soundsible-")
     assert upload["with"]["path"].rstrip("/").endswith("android/build/alpha/release")
     assert not any("publish" in (step.get("run") or "") for step in steps)
+
+
+@pytest.mark.parametrize("status,accepted", [("identical", True), ("ahead", True), ("behind", False), ("diverged", False)])
+def test_a_tag_off_main_never_reaches_the_signing_key(monkeypatch, status, accepted):
+    version = release.declared_version()
+    monkeypatch.setattr(release, "clean", lambda: "a" * 40)
+    asked = []
+    monkeypatch.setattr(release, "gh", lambda *args: asked.append(args) or {"status": status})
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+    monkeypatch.setenv("GITHUB_REF_NAME", f"v{version}")
+    monkeypatch.setenv("GITHUB_REF", f"refs/tags/v{version}")
+    if accepted:
+        assert release.plan_build()["source_revision"] == "a" * 40
+    else:
+        with pytest.raises(RuntimeError, match="on main"):
+            release.plan_build()
+    assert asked == [("api", f"repos/{{owner}}/{{repo}}/compare/{'a' * 40}...main")]
+
+
+def test_planning_runs_before_the_signing_key_is_restored():
+    import yaml
+
+    workflow = Path(__file__).resolve().parents[1] / ".github/workflows/android-release.yml"
+    names = [step.get("name", "") for step in yaml.safe_load(workflow.read_text())["jobs"]["alpha"]["steps"]]
+    assert names.index("Verify gates and plan the build") < names.index("Restore permanent signing identity")
