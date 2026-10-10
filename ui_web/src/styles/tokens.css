@@ -774,21 +774,13 @@
   --glass-rim: #3a4c40;
 }
 
-/* Theme cross-fade. `data-theme-transition` is set on <html> for the duration of a
-   theme flip — manual or driven by the OS switching light/dark — so every surface
-   eases between the two token sets instead of snapping. Uses --dur-short, which
-   collapses to 0ms under prefers-reduced-motion, and outranks the blanket
-   `transition-duration: 0.01ms` below on specificity, so the two stay consistent. */
-:root[data-theme-transition],
-:root[data-theme-transition] *,
-:root[data-theme-transition] *::before,
-:root[data-theme-transition] *::after {
-  transition: background-color var(--dur-short) var(--ease-in-out),
-    border-color var(--dur-short) var(--ease-in-out),
-    color var(--dur-short) var(--ease-in-out),
-    fill var(--dur-short) var(--ease-in-out),
-    stroke var(--dur-short) var(--ease-in-out),
-    box-shadow var(--dur-short) var(--ease-in-out) !important;
+/* A palette change is one style commit, including controls with their own
+   colour transitions. The attribute is removed synchronously after the flush. */
+:root[data-theme-paint],
+:root[data-theme-paint] *,
+:root[data-theme-paint] *::before,
+:root[data-theme-paint] *::after {
+  transition: none !important;
 }
 
 /* Desktop: tighten to a denser, pro layout. */

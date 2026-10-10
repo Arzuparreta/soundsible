@@ -233,21 +233,8 @@ html[data-hold-gesture] *:not(input):not(textarea) {
   overscroll-behavior-x: contain;
 }
 
-/* A route change gets one short arrival cue. It is intentionally quieter than
-   sheets and dialogs: those move to explain hierarchy, while peer navigation
-   only needs to confirm that the surface changed. */
-@media (max-width: 1023px) {
-  .view {
-    animation: view-enter var(--dur-short) var(--ease-out) both;
-  }
-}
-
-@keyframes view-enter {
-  from {
-    opacity: 0.72;
-    transform: translateY(4px);
-  }
-}
+/* Routes paint at their final opacity and position. Replaying an entrance
+   animation on a cached page makes unchanged content flash on every return. */
 
 /* ── Now playing, one treatment everywhere ──
    A row that is the song currently sounding looks the same whether it sits in

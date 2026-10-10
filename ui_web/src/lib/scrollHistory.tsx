@@ -31,7 +31,6 @@ let activeDepth: number | null = null;
 let activeRoute = '';
 let pendingPopId: string | null = null;
 let pendingRestore: PendingRestore | null = null;
-let restoreFrame: number | null = null;
 let settleFrame: number | null = null;
 let fallbackSequence = 0;
 
@@ -72,10 +71,6 @@ function writeEntry(entry: ScrollEntryState): void {
 
 function cancelRestore(): void {
   pendingRestore = null;
-  if (restoreFrame != null) {
-    cancelAnimationFrame(restoreFrame);
-    restoreFrame = null;
-  }
 }
 
 function activeRegistration(): ScrollRegistration | null {
@@ -85,44 +80,21 @@ function activeRegistration(): ScrollRegistration | null {
   return null;
 }
 
-/**
- * Restore once, after the route says its content is complete. There are no
- * geometry reads or retry loops: the browser clamps an obsolete offset
- * naturally if the reconstructed page is genuinely shorter.
- */
+/** Restore as soon as the committed route has complete content. settleRoute
+ * already runs before paint; scheduling another frame here exposes the top of
+ * the reconstructed page before its saved position, producing a visible jump.
+ * Reactive readiness effects run after Solid has updated the destination DOM. */
 function tryRestore(): void {
   const pending = pendingRestore;
   if (!pending || pending.entryId !== activeEntry?.id || pending.route !== activeRoute) return;
   const registration = activeRegistration();
-  if (!registration || !registration.ready() || restoreFrame != null) return;
+  if (!registration || !registration.ready()) return;
 
-  restoreFrame = requestAnimationFrame(() => {
-    restoreFrame = null;
-    if (
-      pendingRestore !== pending
-      || pending.entryId !== activeEntry?.id
-      || pending.route !== activeRoute
-    ) {
-      // Superseded: this restore is no longer owed to anyone.
-      return;
-    }
-    if (!registration.element.isConnected || !registration.ready()) {
-      // The surface this frame was scheduled against went away — a remount
-      // between scheduling and the frame landing — or stopped being ready.
-      // The restore is still owed, and nothing else is going to ask for it:
-      // anything that tried while this frame was in flight bailed on
-      // `restoreFrame != null`. Dropping it here is how a slow device ends up
-      // back at the top of a list instead of where it left off. Ask again,
-      // against whatever is mounted now.
-      tryRestore();
-      return;
-    }
-    pendingRestore = null;
-    const top = pending.fresh ? registration.landing?.() ?? pending.top : pending.top;
-    if (top == null) return;
-    registration.element.scrollTop = top;
-    positions.set(pending.entryId, registration.element.scrollTop);
-  });
+  pendingRestore = null;
+  const top = pending.fresh ? registration.landing?.() ?? pending.top : pending.top;
+  if (top == null) return;
+  registration.element.scrollTop = top;
+  positions.set(pending.entryId, registration.element.scrollTop);
 }
 
 function settleRoute(): void {
@@ -274,9 +246,7 @@ export function resetScrollHistoryForTests(): void {
   activeRoute = '';
   pendingPopId = null;
   pendingRestore = null;
-  if (restoreFrame != null) cancelAnimationFrame(restoreFrame);
   if (settleFrame != null) cancelAnimationFrame(settleFrame);
-  restoreFrame = null;
   settleFrame = null;
   fallbackSequence = 0;
 }
