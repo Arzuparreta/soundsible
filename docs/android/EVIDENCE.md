@@ -110,3 +110,17 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   /tmp/soundsible-alpha-android-sharing.png.
 - Sin teléfono físico: escucha, Bluetooth, coche y proveedores reales siguen
   pendientes para beta; esta evidencia automatizada no los sustituye.
+
+## 2026-10-10 — País y rankings de podcasts (PR #342)
+
+- Directorio nativo: selector de globo, rankings de programas y episodios por
+  país, categorías y resolución del episodio exacto hacia el controlador nativo
+  existente; conserva recomendaciones personalizadas y copias adquiridas por RSS.
+  Ajustes de reproducción y su buscador incluyen el país. Estado aislado por
+  generación, con resultados tardíos descartados al cambiar cuenta/conexión.
+- Validación: 1705 pruebas UI y typecheck; fixture podcast Python; inventario de
+  paridad sin los nuevos textos de país/rankings entre los huecos web exclusivos.
+  Ejecución HTTP en AVD API 36: PodcastCountryTest, PodcastTopTest y
+  PodcastDirectoryTest, 4 casos aprobados, más JVM/lint/APK de desarrollo.
+  Logs: /tmp/podcast-native-{all-final,fixture,integration}.log.
+  No publicación; no se modifica el transporte nativo.

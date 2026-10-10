@@ -95,12 +95,37 @@ def install(app, root: Path, accounts):
     threading.Thread(target=provider.serve_forever, daemon=True).start()
     upstream_get = requests.get
 
+    def directory_response(payload):
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(payload).encode()
+        response.headers["Content-Type"] = "application/json"
+        return response
+
     def get(url, **kwargs):
+        if isinstance(url, str) and url.startswith("https://rss.marketingtools.apple.com/api/v2/"):
+            episode_chart = url.endswith("/podcast-episodes.json")
+            records.append({"path": "country-chart", "country": url.split("/")[5], "episodes": episode_chart})
+            return directory_response({"feed": {"results": [{
+                "id": "900004" if episode_chart else "900003",
+                "name": "fixture ranked episode" if episode_chart else "fixture top podcast",
+                "artistName": "fixture top host", "genres": [{"genreId": "1489", "name": "News"}],
+                "url": "https://podcasts.apple.com/us/podcast/fixture/id900003?i=900004",
+            }]}})
         if isinstance(url, str) and url.startswith("https://rss.itunes.apple.com/"):
             # The Apple chart is never reached; the engine falls back to its search mix below.
             raise requests.ConnectionError("synthetic chart unavailable")
         if isinstance(url, str) and url.startswith("https://itunes.apple.com/"):
             params = kwargs.get("params", {})
+            if url.endswith("/lookup"):
+                rows = [{"kind": "podcast", "collectionId": 900003, "collectionName": "fixture top podcast",
+                         "feedUrl": external + "/directory/feed.xml"}]
+                if params.get("entity") == "podcastEpisode":
+                    rows.append({"kind": "podcast-episode", "collectionId": 900003, "trackId": 900004,
+                                 "trackName": "fixture ranked episode", "episodeGuid": "directory-episode-guid",
+                                 "episodeContentType": "audio", "episodeUrl": external + "/directory/episode.mp4"})
+                records.append({"path": "directory-lookup", "country": params.get("country")})
+                return directory_response({"results": rows})
             term = params.get("term", "")
             rows = (
                 [

@@ -312,7 +312,7 @@ for (const oldFeedId of [undefined, 'previous-subscription']) {
     await tapArtwork(page, row, isMobile);
     await expect(page.locator('[data-omni-player]')).toContainText(downloaded.title);
     await expect(page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true })).toBeVisible();
-    expect(streams).toContain('/api/static/stream/downloaded-900');
+    await expect.poll(() => streams).toContain('/api/static/stream/downloaded-900');
     expect(streams).not.toContain('/api/static/stream/unrelated-download');
     expect(previews).toEqual([]);
   });

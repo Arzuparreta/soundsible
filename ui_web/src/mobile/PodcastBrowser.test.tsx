@@ -24,7 +24,7 @@ it('discards a feed response after account change even if transport ignores canc
   const [generation, change] = createSignal(1);
   const view = render(() => <PodcastBrowser generation={generation()} subscriptions={[show]} acquired={[]} onPlay={vi.fn()} />);
   fireEvent.click(view.getByText(show.title)); change(2);
-  await waitFor(() => expect(mocks.request.mock.calls[0][1].signal.aborted).toBe(true));
+  await waitFor(() => expect(mocks.request.mock.calls.find(([path]) => String(path).includes('/feeds/'))![1].signal.aborted).toBe(true));
   old.resolve({ episodes: [episode] }); await Promise.resolve(); expect(view.queryByText(episode.title)).toBeNull();
 });
 it('keeps loaded episodes while paginating and deduplicates enclosure identity', async () => {
@@ -99,7 +99,7 @@ it('system Back cancels the show request before returning to the directory', asy
   const pending = deferred<{episodes: typeof episode[]}>(); mocks.request.mockReturnValue(pending.promise);
   const view = render(() => <PodcastBrowser generation={1} subscriptions={[show]} acquired={[]} onPlay={vi.fn()} />);
   fireEvent.click(view.getByText(show.title));
-  const signal = mocks.request.mock.calls[0][1].signal as AbortSignal;
+  const signal = mocks.request.mock.calls.find(([path]) => String(path).includes('/feeds/'))![1].signal as AbortSignal;
   expect(dispatchNavigationBack()).toBe(true); expect(signal.aborted).toBe(true);
   pending.resolve({ episodes: [episode] }); await Promise.resolve();
   expect(view.queryByText(episode.title)).toBeNull();

@@ -1,11 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import NativeSettings from './Settings';
 import { createNativeAppearance } from './appearance';
 import { createNativeFeedback } from './feedback';
 import { createSearchHistoryStorage } from '../lib/searchHistoryStorage';
 import { dispatchNavigationBack } from './backNavigation';
-import { setLocale } from '../lib/i18n';
+import { setLocale, t } from '../lib/i18n';
+import { request } from '../lib/http';
 import { createSignal } from 'solid-js';
 import type { ProgramState } from '../lib/program/runtime';
 vi.mock('./SettingsAccount', () => ({ default: () => <div data-testid="account">Account</div> }));
@@ -48,6 +49,21 @@ it('passes the latest native preference through Settings without an optimistic a
   await fireEvent.click(screen.getByRole('switch'));
   expect(command).toHaveBeenCalledWith({ action: 'autoplay', enabled: false, reload: false });
   expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+});
+it('finds and saves the podcast country in native playback settings', async () => {
+  const get = vi.spyOn(await import('../lib/http'), 'request').mockImplementation(async <T,>(path: string, options?: { body?: unknown }) =>
+    (path.endsWith('/countries') ? { countries: ['es', 'us'] } : { podcast_country: (options?.body as { podcast_country?: string })?.podcast_country ?? 'es' }) as T);
+  render(() => <NativeSettings user={{ id: 'member', username: 'member', display_name: 'Member', role: 'member', has_password: true }}
+    identity={() => 1} available={() => true} signal={new AbortController().signal} history={createSearchHistoryStorage(key => key)}
+    appearance={preference} feedback={feedback} playback={{ state: null, pending: false, available: false, command: vi.fn() }} onUser={vi.fn()} onLogout={vi.fn()}
+    library={{ trackCount: () => 0, sync: vi.fn(), onImport: vi.fn() }} online={() => false} />);
+  fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'podcast country' } });
+  fireEvent.click(document.querySelector('[data-settings-result="podcast-country"]')!);
+  await waitFor(() => expect(screen.getByRole('combobox', { name: t('podcasts.country') })).toHaveValue('es'));
+  fireEvent.change(screen.getByRole('combobox', { name: t('podcasts.country') }), { target: { value: 'us' } });
+  await waitFor(() => expect(request).toHaveBeenCalledWith('/api/discovery/settings', expect.objectContaining({ method: 'PATCH', body: { podcast_country: 'us' } })));
+  await waitFor(() => expect(screen.getByRole('combobox', { name: t('podcasts.country') })).toHaveValue('us'));
+  get.mockRestore();
 });
 it('searches settings the web way and opens the matching tab, Back clearing the search first', async () => {
   render(() => <NativeSettings user={{ id: 'member', username: 'member', display_name: 'Member', role: 'member', has_password: true }}

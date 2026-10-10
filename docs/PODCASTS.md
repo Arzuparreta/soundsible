@@ -11,6 +11,13 @@ to the right of the search field. A selection becomes active after the engine
 confirms it. Searches and both charts refresh when it changes. Old chart results
 are discarded when the selected country or signed-in account changes.
 
+Android's native podcast directory and playback settings expose the same country
+selection, show/episode charts and category filter. Country state is isolated by
+native connection generation. Episode resolution hands the exact episode to the
+existing native playback controller, retaining RSS provenance and reusing acquired
+episodes; discovery imports no web audio stores. Existing native personalized
+show recommendations remain available alongside the country charts.
+
 ## Apple sources
 
 - Search: <https://performance-partners.apple.com/search-api>, with `country`.

@@ -1,4 +1,6 @@
-import { createMemo, createSignal, For, Show } from 'solid-js';
+import { createMemo, createSignal, For, Show, onCleanup, createEffect, on } from 'solid-js';
+import { createPodcastCountry } from '../lib/podcastCountry';
+import { PodcastCountrySettings } from '../components/PodcastCountrySettings';
 import { SearchField } from '../components/SearchField';
 import { searchNativeSettings, type NativeSettingsTab } from './settingsSearch';
 import { UsersPanel } from '../components/UsersPanel';
@@ -46,6 +48,9 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
   }
   const captured = props.identity();
   const current = () => captured === props.identity() && props.available();
+  const country = createPodcastCountry(() => String(props.identity()));
+  createEffect(on(() => [props.identity(), props.available()], () => country.resetPodcastCountry()));
+  onCleanup(country.resetPodcastCountry);
   registerNativeBack(() => { if (query()) { setQuery(''); return true; } if (section() === 'account') return false; setSection('account'); return true; });
   return <section class={styles.library} data-testid="android-settings">
     <SearchField value={query()} placeholder={t('settings.searchPlaceholder')} onInput={setQuery} />
@@ -81,7 +86,9 @@ export default function NativeSettings(props: ComponentProps<typeof NativeSettin
     <Show when={section() === 'downloads' && props.user.role === 'admin'}><NativeSettingsDownloads identity={props.identity} available={props.available} /></Show>
     <Show when={section() === 'community'}><NativeSettingsCommunity identity={props.identity} available={props.available} /></Show>
     <Show when={section() === 'about'}><NativeSettingsAbout identity={props.identity} available={props.available} online={props.online} /></Show>
-    <Show when={section() === 'playback'}><NativeSettingsPlayback {...props.playback} /></Show>
+    <Show when={section() === 'playback'}><NativeSettingsPlayback {...props.playback} />
+      <Show when={current()}><PodcastCountrySettings state={country} disabled={props.busy} /></Show>
+    </Show>
     <Show when={section() === 'subsonic' && props.subsonic}>{settings => <NativeSettingsSubsonic {...settings()} />}</Show>
     <Show when={section() === 'appearance'}><AppearanceSettingsView theme={props.appearance.theme()} onTheme={props.appearance.setTheme} /></Show>
     <Show when={section() === 'accessibility'}><DisplayPreferencesView interfaceSize={props.appearance.interfaceSize()} highContrast={props.appearance.highContrast()}

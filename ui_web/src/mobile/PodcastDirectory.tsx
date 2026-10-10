@@ -9,15 +9,28 @@ import { podcastRecommendations, type RawPodcastRow } from '../lib/podcastRecomm
 import { openContextMenu } from '../lib/contextMenu';
 import { toast } from '../lib/toast';
 import { nativeFeedbackActions, podcastFeedback } from './songActions';
+import { createPodcastCountry } from '../lib/podcastCountry';
+import { PodcastCountryPicker } from '../components/PodcastCountryPicker';
+import PodcastCharts from './PodcastCharts';
+import type { PodcastEpisode, PopularPodcastEpisode } from '../types/podcast';
 
 const showInfo = (row: PodcastSearchResult): PodcastShowInfo => ({ title: row.title, author: row.author, rss_url: row.feed_url, image_url: row.image_url, itunes_collection_id: row.itunes_collection_id });
 
-export default function PodcastDirectory(props: { generation: number; disconnected?: boolean; onOpen(show: PodcastShowInfo): void;
-  subscribed?: (feed: string) => boolean; onSubscribe?: (show: PodcastShowInfo) => Promise<void> }) {
+export default function PodcastDirectory(props: { generation: number; disconnected?: boolean; activeId?: string; onOpen(show: PodcastShowInfo): void;
+  subscribed?: (feed: string) => boolean; onSubscribe?: (show: PodcastShowInfo) => Promise<void>;
+  onPlay?: (episode: PodcastEpisode, row: PopularPodcastEpisode) => Promise<void> }) {
+  const country = createPodcastCountry(() => String(props.generation));
+  const [countryError, setCountryError] = createSignal(false), [countryRetry, setCountryRetry] = createSignal(0);
+  createEffect(on(() => [props.generation, props.disconnected, countryRetry()] as const, () => {
+    let current = true;
+    country.resetPodcastCountry(); setCountryError(false);
+    if (!props.disconnected) void country.loadPodcastCountry().catch(() => { if (current && !props.disconnected) setCountryError(true); });
+    onCleanup(() => { current = false; country.resetPodcastCountry(); });
+  }));
   const [top, setTop] = createSignal<PodcastSearchResult[]>([]);
   const [subscribing, setSubscribing] = createSignal<string | null>(null);
   // Recommended shows for this account; refreshed per account and connection, never across them.
-  createEffect(on(() => [props.generation, props.disconnected] as const, ([generation, disconnected]) => {
+  createEffect(on(() => [props.generation, props.disconnected, country.podcastCountry()] as const, ([generation, disconnected]) => {
     setTop([]);
     if (disconnected) return;
     const controller = new AbortController();
@@ -44,11 +57,11 @@ export default function PodcastDirectory(props: { generation: number; disconnect
   const [error, setError] = createSignal(false);
   const [retry, setRetry] = createSignal(0);
   let epoch = 0;
-  createEffect(on(() => [query().trim(), props.generation, props.disconnected, retry()] as const, ([term, generation, disconnected]) => {
+  createEffect(on(() => [query().trim(), props.generation, props.disconnected, retry(), country.podcastCountry()] as const, ([term, generation, disconnected, , selectedCountry]) => {
     const job = ++epoch; const controller = new AbortController();
     setRows([]); setError(false); setBusy(Boolean(term && !disconnected));
     const timer = term && !disconnected ? setTimeout(() => {
-      void request<{ results?: PodcastSearchResult[] }>(`/api/discovery/podcasts/search?q=${encodeURIComponent(term.slice(0, 500))}&limit=25`, { signal: controller.signal, timeoutMs: 20000 }).then(result => {
+      void request<{ results?: PodcastSearchResult[] }>(`/api/discovery/podcasts/search?q=${encodeURIComponent(term.slice(0, 500))}&limit=25${selectedCountry ? `&country=${selectedCountry}` : ''}`, { signal: controller.signal, timeoutMs: 20000 }).then(result => {
         if (job !== epoch || generation !== props.generation || controller.signal.aborted) return;
         setRows((result.results ?? []).filter(row => row.feed_url));
       }).catch(() => { if (job === epoch && !controller.signal.aborted) setError(true); })
@@ -58,7 +71,10 @@ export default function PodcastDirectory(props: { generation: number; disconnect
   }));
   onCleanup(() => { epoch++; });
   return <section data-testid="android-podcast-directory">
+    <header style={{ display: 'flex', 'align-items': 'center', 'justify-content': 'space-between' }}><h2>{t('nav.podcasts')}</h2><PodcastCountryPicker state={country} disabled={props.disconnected} /></header>
+    <Show when={countryError()}><p role="alert">{t('common.loadFailed')} <button disabled={props.disconnected} onClick={() => setCountryRetry(n => n + 1)}>{t('common.retry')}</button></p></Show>
     <SearchField value={query()} placeholder={t('podcasts.searchPlaceholder')} onInput={setQuery} />
+    <PodcastCharts country={country} generation={props.generation} activeId={props.activeId} disconnected={props.disconnected} hidden={!!query().trim()} onOpen={row => props.onOpen(showInfo(row))} onPlay={(episode, row) => props.onPlay?.(episode, row) ?? Promise.reject(new Error('Playback unavailable'))} />
     <Show when={busy()}><p role="status">{t('common.loading')}</p></Show>
     <Show when={error()}><p role="alert">{t('common.loadFailed')}</p><button disabled={busy() || props.disconnected} onClick={() => setRetry(value => value + 1)}>{t('common.retry')}</button></Show>
     <Show when={query().trim() && !busy() && !error()}><For each={rows()} fallback={<EmptyState>{t('podcasts.noResults')}</EmptyState>}>{row => <MusicListRowView title={row.title} subtitle={row.author} seed={row.feed_url} disabled={props.disconnected} onActivate={() => props.onOpen(showInfo(row))} />}</For></Show>
