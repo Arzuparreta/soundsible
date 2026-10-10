@@ -1,6 +1,6 @@
 [package]
 name = "soundsible-desktop"
-version = "0.22.2"
+version = "0.23.0"
 description = "Soundsible consumer desktop shell"
 authors = ["Arzuparreta"]
 edition = "2021"
