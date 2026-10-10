@@ -28,8 +28,8 @@ function RouterShell(props: RouteSectionProps): JSX.Element {
  * green run meant "the runner was quick enough today", which is not a claim
  * worth blocking a merge on.
  *
- * Driving the frames explicitly asserts the same behaviour — that restoration
- * happens on a frame, after the surface reports ready — and asserts it the same
+ * Driving the frames explicitly asserts the same behaviour — that history settles
+ * before paint and restoration waits for the surface to report ready — and asserts it the same
  * way on every machine.
  */
 function installManualFrames() {
@@ -138,6 +138,8 @@ describe('scroll history', () => {
     expect(restored.scrollTop).toBe(0);
 
     setReady(true);
+    // The ready DOM must land before another paint can expose its top.
+    expect(restored.scrollTop).toBe(240);
     await frames.flush();
     expect(restored.scrollTop).toBe(240);
   });

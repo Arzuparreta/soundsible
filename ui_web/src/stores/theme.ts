@@ -51,7 +51,7 @@ function syncSystemThemeListener(theme: Theme): void {
 
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   systemMediaListener = () => {
-    if (state.theme === 'system') applyResolvedTheme(resolveTheme('system'), true);
+    if (state.theme === 'system') applyResolvedTheme(resolveTheme('system'));
   };
   systemMediaQuery = mq;
   if (typeof mq.addEventListener === 'function') {
@@ -66,38 +66,27 @@ function syncSystemThemeListener(theme: Theme): void {
   // changed, applyResolvedTheme is a no-op.
   systemVisibilityListener = () => {
     if (document.visibilityState !== 'visible') return;
-    if (state.theme === 'system') applyResolvedTheme(resolveTheme('system'), true);
+    if (state.theme === 'system') applyResolvedTheme(resolveTheme('system'));
   };
   document.addEventListener('visibilitychange', systemVisibilityListener);
 }
 
-/** Keep in sync with --dur-short in tokens.css (plus a little slack). */
-const THEME_TRANSITION_MS = 260;
-let themeTransitionTimer: ReturnType<typeof setTimeout> | null = null;
-
-/** Paint the resolved theme and the mobile status-bar colour. `animate` arms the
- * `[data-theme-transition]` cross-fade in tokens.css; the boot paint leaves it off
- * so the first frame is never animated. */
-function applyResolvedTheme(resolved: ResolvedTheme, animate = false): void {
+/** Paint the complete palette together, including the mobile status bar.
+ * A document-wide transition leaves surfaces interpolating from the previous
+ * palette while navigation can mount the next route. */
+function applyResolvedTheme(resolved: ResolvedTheme): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   if (root.dataset.theme === resolved) return;
 
-  if (animate) {
-    root.dataset.themeTransition = '';
-    // Flush styles so the transition rule is in effect *before* the tokens flip;
-    // without it some engines coalesce both changes and skip the animation.
-    void root.offsetWidth;
-    if (themeTransitionTimer) clearTimeout(themeTransitionTimer);
-    themeTransitionTimer = setTimeout(() => {
-      delete root.dataset.themeTransition;
-      themeTransitionTimer = null;
-    }, THEME_TRANSITION_MS);
-  }
-
+  // Existing controls have their own hover/focus colour transitions. Disable
+  // those just for this style commit so none retain the previous palette.
+  root.dataset.themePaint = '';
   root.dataset.theme = resolved;
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', THEME_COLORS[resolved]);
+  void root.offsetWidth;
+  delete root.dataset.themePaint;
 }
 
 /**
@@ -123,7 +112,7 @@ export function announceTheme(theme: Theme): void {
 /** Apply the theme to the document (token overrides live in tokens.css) and
  * sync the mobile status-bar colour. When `system`, follows prefers-color-scheme
  * and re-applies if the OS preference changes. */
-export function applyTheme(theme: Theme, animate = false): void {
-  applyResolvedTheme(resolveTheme(theme), animate);
+export function applyTheme(theme: Theme): void {
+  applyResolvedTheme(resolveTheme(theme));
   syncSystemThemeListener(theme);
 }

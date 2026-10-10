@@ -10,7 +10,7 @@ export const preferenceActions = {
   setTheme(theme: Theme): void {
     setState('theme', theme);
     localStorage.setItem('theme', theme);
-    applyTheme(theme, true);
+    applyTheme(theme);
     announceTheme(theme);
   },
   setHaptics(on: boolean): void {
