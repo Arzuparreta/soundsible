@@ -21,6 +21,7 @@ Every [release](https://github.com/Arzuparreta/soundsible/releases) attaches:
 | --- | --- | --- |
 | `Soundsible_<version>_x64-setup.exe` | Windows 11 x64 | Installs, runs and uninstalls it through the real Windows UI ([below](#what-ci-proves)) |
 | `Soundsible_<version>_arm64-setup.exe` | Windows 11 ARM64 | The same, on a native ARM64 runner |
+
 There is no macOS build. On a Mac, use the [native installation](INSTALL.md)
 or Docker.
 
