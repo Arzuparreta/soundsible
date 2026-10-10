@@ -2,13 +2,17 @@ import { useAppBar } from '../lib/appBar';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
-import { createMemo, createSignal, For, Show, onMount, onCleanup } from 'solid-js';
+import { createEffect, on, createMemo, createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
-import { api } from '../lib/api';
-import { state } from '../stores';
-import { ensureDiscover, topPodcasts, revalidating } from '../lib/discover';
+import { podcastCountry, countryName } from '../lib/podcastCountry';
+import { PodcastCountryPicker } from '../components/PodcastCountryPicker';
+import { desktopShell } from '../lib/shellLayout';
+import { user } from '../lib/session';
+import { api, request } from '../lib/api';
+import { state, actions } from '../stores';
+import { ensureDiscover, refreshDiscover, topPodcasts, topEpisodes, chartsCountry, chartFailed, episodesFailed, revalidating } from '../lib/discover';
 import { t } from '../lib/i18n';
-import type { PodcastSearchResult } from '../types/podcast';
+import type { PodcastSearchResult, PopularPodcastEpisode, PodcastEpisode } from '../types/podcast';
 import styles from './Podcasts.module.css';
 import { neutralCoverStyle } from '../lib/cover';
 import type { ActionMenuOptions } from '../components/ActionMenu';
@@ -39,9 +43,15 @@ export default function Podcasts() {
   const [subscribing, setSubscribing] = createSignal<Set<string>>(new Set());
 
   const subscribedFeeds = createMemo(() => new Set(state.podcastSubscriptions.map((s) => s.rss_url)));
+  const [genre, setGenre] = createSignal('');
+  const matchesGenre = (row: PodcastSearchResult) => !genre() || row.genres?.some(g => g.id === genre());
   const recommendedPodcasts = createMemo(() =>
-    topPodcasts().filter((podcast) => !subscribedFeeds().has(podcast.feed_url)),
+    chartsCountry() === podcastCountry() ? topPodcasts().filter(matchesGenre) : [],
   );
+  const popularEpisodes = createMemo(() => chartsCountry() === podcastCountry() ? topEpisodes().filter(matchesGenre) : []);
+  const genres = createMemo(() => chartsCountry() === podcastCountry()
+    ? [...new Map([...topPodcasts(), ...topEpisodes()].flatMap(row => row.genres ?? []).map(g => [g.id, g])).values()]
+        .sort((a, b) => a.name.localeCompare(b.name)) : []);
 
   /** Open a show from its card or row. Touch activates on release like every
    * other list, and a held press opens the show's menu instead of it. */
@@ -59,6 +69,34 @@ export default function Podcasts() {
       openContextMenu(menu(), event);
     },
   });
+
+  let disposed = false;
+  let episodeRequest: AbortController | undefined;
+  const [playingEpisode, setPlayingEpisode] = createSignal<string>();
+  const countryLabel = () => countryName(podcastCountry() ?? 'us');
+  createEffect(on(podcastCountry, (country, previous) => {
+    if (previous && country !== previous) { setGenre(''); refreshDiscover(); if (q().trim().length >= 2) run(q()); }
+  }));
+
+  const playPopularEpisode = async (episode: PopularPodcastEpisode) => {
+    if (playingEpisode()) return;
+    const account = user()?.id, country = podcastCountry();
+    const previousTrack = state.playback.currentTrack;
+    episodeRequest = new AbortController();
+    setPlayingEpisode(episode.episode_id);
+    try {
+      const data = await request<{ episode: PodcastEpisode; show_title: string; feed_url: string }>(
+        `/api/discovery/podcasts/episode?show_id=${episode.itunes_collection_id}&episode_id=${episode.episode_id}&country=${country}`,
+        { timeoutMs: 25000, signal: episodeRequest.signal });
+      if (disposed || user()?.id !== account || podcastCountry() !== country || state.playback.currentTrack !== previousTrack) return;
+      const feedId = state.podcastSubscriptions.find(show => show.rss_url === data.feed_url)?.id ?? data.feed_url;
+      const local = state.library.find(track => track.podcast_episode_guid === data.episode.guid
+        && (track.podcast_feed_id === feedId || track.podcast_feed_id === data.feed_url));
+      if (local) actions.playTrack(local);
+      else await actions.playEpisode(data.episode, data.show_title, feedId, data.episode.image ?? episode.image_url);
+    } catch { if (!disposed && user()?.id === account && podcastCountry() === country) toast.error(t('podcasts.episodeUnavailable')); }
+    finally { setPlayingEpisode(undefined); }
+  };
 
   let aborter: AbortController | undefined;
   let debounce: number | undefined;
@@ -161,12 +199,14 @@ export default function Podcasts() {
   };
 
   onCleanup(() => {
+    disposed = true;
+    episodeRequest?.abort();
     requestId += 1;
     aborter?.abort();
     clearTimeout(debounce);
   });
 
-  useAppBar({ title: () => t('nav.podcasts') });
+  useAppBar({ title: () => t('nav.podcasts'), trailing: () => <PodcastCountryPicker /> });
 
   return (
     <div class="view">
@@ -177,6 +217,7 @@ export default function Podcasts() {
           value={q()}
           onInput={onInput}
         />
+        <Show when={desktopShell()}><PodcastCountryPicker /></Show>
       </div>
 
       <div
@@ -211,8 +252,18 @@ export default function Podcasts() {
                 </div>
               </Show>
 
+              <Show when={genres().length > 0}>
+                <label class={styles.genreFilter}>
+                  <span>{t('podcasts.category')}</span>
+                  <select aria-label={t('podcasts.category')} value={genre()} onChange={event => setGenre(event.currentTarget.value)}>
+                    <option value="">{t('podcasts.allCategories')}</option>
+                    <For each={genres()}>{g => <option value={g.id}>{g.name}</option>}</For>
+                  </select>
+                </label>
+              </Show>
+
               <Show when={recommendedPodcasts().length > 0}>
-                <h2 class={styles.sectionTitle}>{t('podcasts.top')}</h2>
+                <h2 class={styles.sectionTitle}>{t('podcasts.topCountry', { country: countryLabel() })}</h2>
                 <div class={styles.grid}>
                   <For each={recommendedPodcasts()}>
                     {(p) => (
@@ -227,7 +278,27 @@ export default function Podcasts() {
                 </div>
               </Show>
 
-              <Show when={state.podcastSubscriptions.length === 0 && recommendedPodcasts().length === 0}>
+              <Show when={chartFailed()}><EmptyState compact tone="danger">
+                {t('podcasts.chartFailed')} <button type="button" class={styles.retry} onClick={refreshDiscover}>{t('common.retry')}</button>
+              </EmptyState></Show>
+              <Show when={popularEpisodes().length > 0}>
+                <h2 class={styles.sectionTitle}>{t('podcasts.topEpisodes', { country: countryLabel() })}</h2>
+                <div class={styles.episodeList}>
+                  <For each={popularEpisodes()}>{episode => <MusicListRow title={episode.title} subtitle={episode.author}
+                    seed={episode.episode_id} cover={episode.image_url} busy={playingEpisode() === episode.episode_id}
+                    busyLabel={t('common.loading')} onActivate={() => void playPopularEpisode(episode)}
+                    onMenu={() => openContextMenu({ title: episode.title, actions: [{ icon: menuIcons.play(),
+                      label: t('common.play'), disabled: !!playingEpisode(), onSelect: () => void playPopularEpisode(episode) }] })} />}</For>
+                </div>
+              </Show>
+              <Show when={episodesFailed()}><EmptyState compact tone="danger">
+                {t('podcasts.episodesFailed')} <button type="button" class={styles.retry} onClick={refreshDiscover}>{t('common.retry')}</button>
+              </EmptyState></Show>
+
+              <Show when={genre() && recommendedPodcasts().length === 0 && popularEpisodes().length === 0}>
+                <EmptyState compact>{t('podcasts.noCategoryResults')}</EmptyState>
+              </Show>
+              <Show when={!genre() && state.podcastSubscriptions.length === 0 && recommendedPodcasts().length === 0 && topEpisodes().length === 0 && !chartFailed() && !episodesFailed()}>
                 <Show when={state.loading || revalidating()} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}><SkeletonCards /></Show>
               </Show>
             </>

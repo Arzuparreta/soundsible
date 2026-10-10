@@ -17,7 +17,8 @@ async function mockPodcasts(page: Page) {
   await page.route((url) => url.pathname === '/api/library', (route) => route.fulfill({ json: {
     tracks: TRACKS, playlists: {}, settings: {}, podcast_subscriptions: subscriptions,
   } }));
-  await page.route('**/api/discovery/podcasts/recommendations**', (route) => route.fulfill({ json: { items: [POPULAR] } }));
+  await page.route('**/api/discovery/podcasts/top?**', (route) => route.fulfill({ json: { country: 'us', results: [POPULAR] } }));
+  await page.route('**/api/discovery/podcasts/top-episodes?**', (route) => route.fulfill({ json: { country: 'us', results: [] } }));
   await page.route('**/api/discovery/podcasts/search**', (route) => route.fulfill({ json: { results: [FOUND] } }));
   await page.route('**/api/podcasts/feeds/**', (route) => {
     const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4]);
@@ -42,6 +43,7 @@ async function mockPodcasts(page: Page) {
 
 /** Press the artwork, where nearly every tap on a card lands. */
 async function tapArtwork(page: Page, target: Locator, isMobile: boolean) {
+  await target.scrollIntoViewIfNeeded();
   const box = (await target.boundingBox())!;
   const point = { x: box.x + Math.min(box.width, box.height) / 2, y: box.y + Math.min(box.width, box.height) / 2 };
   if (isMobile) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
@@ -215,4 +217,87 @@ test('podcast buttons jump 15 seconds and each show resumes after switching and 
   await page.getByRole('button', { name: /^Reproducir episodio:/ }).click();
   await expect.poll(position).toBeGreaterThanOrEqual(29);
   await expect(pill.getByRole('button', { name: 'Avanzar 15 segundos' })).toBeVisible();
+});
+
+test('the globe selects the account country from the mobile header or desktop search bar', async ({ page, isMobile }, testInfo) => {
+  await mockPodcasts(page);
+  let country = 'us';
+  await page.route('**/api/discovery/settings', async route => {
+    if (route.request().method() === 'PATCH') country = route.request().postDataJSON().podcast_country;
+    await route.fulfill({ json: { podcast_country: country, learning_enabled: true, autoplay_enabled: false } });
+  });
+  await page.route('**/api/discovery/podcasts/top?**', route => {
+    const selected = new URL(route.request().url()).searchParams.get('country');
+    return route.fulfill({ json: { country: selected, results: [{ ...POPULAR, title: `Podcast de ${selected}` }] } });
+  });
+  await page.route('**/api/discovery/podcasts/top-episodes?**', route => {
+    const selected = new URL(route.request().url()).searchParams.get('country');
+    return route.fulfill({ json: { country: selected, results: [{ ...POPULAR, episode_id: '900', itunes_collection_id: '123', title: `Episodio de ${selected}` }] } });
+  });
+  await page.goto('/player/#/podcasts');
+  const selector = page.getByRole('combobox', { name: 'País para descubrir podcasts' });
+  await expect(selector).toHaveValue('us');
+  if (isMobile) {
+    await expect(page.locator('[data-app-bar]').getByRole('combobox')).toBeVisible();
+  } else {
+    const search = await page.getByPlaceholder('Buscar podcasts…').boundingBox();
+    const globe = await selector.boundingBox();
+    expect(globe!.x).toBeGreaterThan(search!.x + search!.width);
+  }
+  await selector.selectOption('es');
+  await expect(selector).toHaveValue('es');
+  await expect(page.getByRole('heading', { name: 'Podcasts populares en España' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Episodios populares en España' })).toBeVisible();
+  await expect(page.getByText('Episodio de es', { exact: true })).toBeVisible();
+  await expect(page.getByText('Podcast de us', { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('podcast-country.png') });
+  await page.goto('/player/#/settings/playback');
+  await expect(page.getByRole('combobox', { name: 'País para descubrir podcasts' })).toHaveValue('es');
+});
+
+test('a popular episode resolves and plays its exact audio without subscribing', async ({ page, isMobile }) => {
+  const { followed } = await mockPodcasts(page);
+  await page.route('**/api/discovery/podcasts/top-episodes?**', route => route.fulfill({ json: {
+    results: [{ ...POPULAR, episode_id: '900', itunes_collection_id: '123', title: 'Capítulo popular exacto' }],
+  } }));
+  const resolved: string[] = [];
+  await page.route('**/api/discovery/podcasts/episode?**', route => {
+    const url = new URL(route.request().url());
+    resolved.push(url.searchParams.get('episode_id')!);
+    return route.fulfill({ json: { show_title: 'Programa popular', feed_url: POPULAR.feed_url,
+      episode: { ...episode('Capítulo popular exacto'), guid: 'guid-900' } } });
+  });
+  await page.route('**/api/podcasts/enclosure/peek', route => route.fulfill({ json: { stream_token: 'episode-token' } }));
+  await page.route('**/api/podcasts/stream/**', route => route.fulfill({ contentType: 'audio/wav', body: silentWav }));
+  await page.goto('/player/#/podcasts');
+  const row = page.getByText('Capítulo popular exacto', { exact: true });
+  await expect(row).toBeVisible();
+  expect(resolved).toEqual([]);
+  await tapArtwork(page, row, isMobile);
+  await expect.poll(() => resolved).toEqual(['900']);
+  await expect(page.locator('[data-omni-player]')).toContainText('Capítulo popular exacto');
+  await expect(page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true })).toBeVisible();
+  expect(followed).toEqual([]);
+});
+
+test('category filters both country rankings while keeping followed shows visible', async ({ page }) => {
+  await mockPodcasts(page);
+  const news = [{ id: '1489', name: 'Noticias' }], comedy = [{ id: '1303', name: 'Comedia' }];
+  await page.route('**/api/discovery/podcasts/top?**', route => route.fulfill({ json: { results: [
+    { ...POPULAR, title: 'Podcast noticias', genres: news }, { ...FOUND, title: 'Podcast comedia', genres: comedy },
+  ] } }));
+  await page.route('**/api/discovery/podcasts/top-episodes?**', route => route.fulfill({ json: { results: [
+    { ...POPULAR, title: 'Episodio noticias', episode_id: '900', genres: news },
+    { ...FOUND, title: 'Episodio comedia', episode_id: '901', genres: comedy },
+  ] } }));
+  await page.goto('/player/#/podcasts');
+  const category = page.getByRole('combobox', { name: 'Filtrar estas listas por categoría' });
+  await category.selectOption('1303');
+  await expect(page.getByText('Podcast comedia', { exact: true })).toBeVisible();
+  await expect(page.getByText('Episodio comedia', { exact: true })).toBeVisible();
+  await expect(page.getByText('Podcast noticias', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Episodio noticias', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Programa seguido', { exact: true })).toBeVisible();
+  await category.selectOption('');
+  await expect(page.getByText('Podcast noticias', { exact: true })).toBeVisible();
 });

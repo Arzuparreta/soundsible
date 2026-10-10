@@ -827,6 +827,19 @@ export const zh: Dict = {
     empty: '歌单为空。',
   },
   podcasts: {
+    category: "按类别筛选这些列表",
+    allCategories: "所有类别",
+    noCategoryResults: "这些列表中没有此类别的结果。",
+
+    country: "发现播客的国家或地区",
+    countryHint: "应用于播客搜索以及热门播客和单集。音乐、自动播放和 DJ 保持不变。",
+    topCountry: "{country}的热门播客",
+    topEpisodes: "{country}的热门单集",
+    chartFailed: "无法加载热门播客。",
+    episodesFailed: "无法加载热门单集。",
+    episodeUnavailable: "此单集不可用。",
+    exploreCountry: "探索{country}的播客",
+
     skipBack: '后退15秒',
     skipForward: '前进15秒',
     searchPlaceholder: '搜索播客…',

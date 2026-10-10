@@ -833,6 +833,19 @@ export const en = {
     empty: 'Empty playlist.',
   },
   podcasts: {
+    category: "Filter these lists by category",
+    allCategories: "All categories",
+    noCategoryResults: "No results in these lists for this category.",
+
+    country: "Country for discovering podcasts",
+    countryHint: "Applies to podcast searches and popular podcasts and episodes. Music, autoplay and DJ stay the same.",
+    topCountry: "Popular podcasts in {country}",
+    topEpisodes: "Popular episodes in {country}",
+    chartFailed: "Couldn’t load the popular podcasts.",
+    episodesFailed: "Couldn’t load the popular episodes.",
+    episodeUnavailable: "This episode is unavailable.",
+    exploreCountry: "Explore podcasts in {country}",
+
     skipBack: 'Skip back 15 seconds',
     skipForward: 'Skip forward 15 seconds',
     searchPlaceholder: 'Search podcasts…',

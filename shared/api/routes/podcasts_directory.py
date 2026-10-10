@@ -8,14 +8,17 @@ from __future__ import annotations
 
 import logging
 import re
+from urllib.parse import urlsplit
 
 import requests
 from flask import jsonify, request
 
+from shared.podcast_regions import PODCAST_COUNTRIES
 from shared.api.memo import Memo
 from shared.hardening import rate_limit
 from shared.discovery_intelligence import (
     build_podcast_recommendations,
+    load_discovery_settings,
 )
 
 from .discovery_bp import discovery_bp
@@ -49,7 +52,7 @@ def discovery_podcast_recommendations():
         pass
     metadata = getattr(lib, "metadata", None)
     try:
-        exploration = _podcast_top_results("us", limit, "explicit")
+        exploration = _podcast_top_results(_request_country(), limit, "explicit")
     except Exception as exc:
         logger.info("Podcast recommendation exploration unavailable: %s", exc)
         exploration = []
@@ -72,6 +75,7 @@ def itunes_podcast_search():
             _ITUNES_SEARCH,
             params={
                 "term": q,
+                "country": _request_country(),
                 "media": "podcast",
                 "entity": "podcast",
                 "limit": limit,
@@ -95,9 +99,18 @@ def itunes_podcast_search():
 
 def _country_code(raw: str | None) -> str:
     c = (raw or "us").strip().lower()
-    if re.fullmatch(r"[a-z]{2}", c):
+    if c in PODCAST_COUNTRIES:
         return c
     return "us"
+
+
+def _request_country() -> str:
+    return _country_code(request.args.get("country") or load_discovery_settings().get("podcast_country"))
+
+
+@discovery_bp.route("/api/discovery/podcasts/countries", methods=["GET"])
+def podcast_countries():
+    return jsonify({"countries": sorted(PODCAST_COUNTRIES)})
 
 
 def _explicit_segment_from_request() -> str:
@@ -105,6 +118,11 @@ def _explicit_segment_from_request() -> str:
     if v in ("0", "false", "no", "non-explicit", "clean"):
         return "non-explicit"
     return "explicit"
+
+
+def _chart_genres(item: dict) -> list[dict]:
+    return [{"id": str(g["genreId"]), "name": str(g["name"])}
+            for g in item.get("genres", []) if isinstance(g, dict) and g.get("genreId") and g.get("name")]
 
 
 def _extract_top_podcast_chart(data: object) -> list[dict]:
@@ -146,6 +164,7 @@ def _extract_top_podcast_chart(data: object) -> list[dict]:
             {
                 "itunes_collection_id": cid_str,
                 "title": name,
+                "genres": _chart_genres(item),
                 "author": author,
                 "image_url": img,
             }
@@ -153,7 +172,7 @@ def _extract_top_podcast_chart(data: object) -> list[dict]:
     return out
 
 
-def _lookup_feed_urls(collection_ids: list[str]) -> dict[str, str]:
+def _lookup_feed_urls(collection_ids: list[str], country: str = "us") -> dict[str, str]:
     mapping: dict[str, str] = {}
     for i in range(0, len(collection_ids), _LOOKUP_CHUNK):
         part = [x for x in collection_ids[i : i + _LOOKUP_CHUNK] if x]
@@ -162,7 +181,7 @@ def _lookup_feed_urls(collection_ids: list[str]) -> dict[str, str]:
         try:
             resp = requests.get(
                 _ITUNES_LOOKUP,
-                params={"id": ",".join(part), "entity": "podcast"},
+                params={"id": ",".join(part), "entity": "podcast", "country": country},
                 timeout=20,
                 headers=_HTTP_HEADERS_ITUNES,
             )
@@ -194,12 +213,15 @@ def _top_podcasts_from_rss_chart(country: str, limit: int, explicit_seg: str) ->
     resp = requests.get(url, timeout=25, headers=_HTTP_HEADERS_RSS)
     resp.raise_for_status()
     chart_data = resp.json()
+    if explicit_seg == "non-explicit":
+        chart_data["feed"]["results"] = [r for r in chart_data.get("feed", {}).get("results", [])
+                                         if str(r.get("contentAdvisoryRating", "")).lower() not in ("explicit", "explict")]
     rows = _extract_top_podcast_chart(chart_data)
     if not rows:
         return []
 
     ids = [r["itunes_collection_id"] for r in rows]
-    feeds = _lookup_feed_urls(ids)
+    feeds = _lookup_feed_urls(ids, country)
 
     results: list[dict] = []
     for r in rows:
@@ -211,6 +233,7 @@ def _top_podcasts_from_rss_chart(country: str, limit: int, explicit_seg: str) ->
             {
                 "itunes_collection_id": cid,
                 "title": r["title"],
+                "genres": r["genres"],
                 "author": r["author"],
                 "feed_url": feed,
                 "image_url": r["image_url"],
@@ -290,10 +313,85 @@ def _podcast_top_results(country: str, limit: int, explicit_seg: str) -> list[di
 @discovery_bp.route("/api/discovery/podcasts/top", methods=["GET"])
 @rate_limit("discovery_podcasts_top", limit=60, window_sec=60)
 def itunes_podcast_top():
-    country = _country_code(request.args.get("country"))
+    country = _request_country()
     limit = min(50, max(1, request.args.get("limit", type=int) or 24))
     explicit_seg = _explicit_segment_from_request()
-    results = _podcast_top_results(country, limit, explicit_seg)
+    try:
+        results = _podcast_top_memo.resolve(f"chart:{country}:{limit}:{explicit_seg}",
+            lambda: _top_podcasts_from_rss_chart(country, limit, explicit_seg))
+    except Exception:
+        results = []
     if not results:
         return jsonify({"error": "Directory unreachable", "results": []}), 502
-    return jsonify({"results": results})
+    return jsonify({"country": country, "results": results})
+
+
+_episode_chart_memo: Memo[list] = Memo(ttl_sec=90, maxsize=64, negative_ttl_sec=15)
+_episode_lookup_memo: Memo[list] = Memo(ttl_sec=90, maxsize=64, negative_ttl_sec=15)
+
+
+def _top_episodes(country: str, limit: int) -> list[dict]:
+    url = f"https://rss.marketingtools.apple.com/api/v2/{country}/podcasts/top/{limit}/podcast-episodes.json"
+    resp = requests.get(url, timeout=25, headers=_HTTP_HEADERS_RSS)
+    resp.raise_for_status()
+    rows = []
+    for item in resp.json().get("feed", {}).get("results", []):
+        # The episode ID cannot be looked up directly. Its Apple link identifies
+        # the parent show, whose lookup supplies the feed and episode audio.
+        link = urlsplit(item.get("url") or "")
+        match = re.search(r"/id(\d+)$", link.path)
+        if link.hostname != "podcasts.apple.com" or not match or not str(item.get("id", "")).isdigit():
+            continue
+        rows.append({"episode_id": str(item["id"]), "itunes_collection_id": match[1],
+                     "title": item.get("name") or "Podcast", "author": item.get("artistName") or "",
+                     "image_url": item.get("artworkUrl100") or "", "genres": _chart_genres(item)})
+    feeds = _lookup_feed_urls(list(dict.fromkeys(r["itunes_collection_id"] for r in rows)), country)
+    return [dict(row, feed_url=feeds[row["itunes_collection_id"]]) for row in rows
+            if row["itunes_collection_id"] in feeds]
+
+
+@discovery_bp.route("/api/discovery/podcasts/top-episodes", methods=["GET"])
+@rate_limit("discovery_podcast_episodes", limit=60, window_sec=60)
+def top_podcast_episodes():
+    country = _request_country()
+    limit = min(50, max(1, request.args.get("limit", type=int) or 20))
+    try:
+        rows = _episode_chart_memo.resolve(f"{country}:{limit}", lambda: _top_episodes(country, limit))
+        return jsonify({"country": country, "results": rows})
+    except Exception as exc:
+        logger.info("Podcast episode chart unavailable: %s", exc)
+        return jsonify({"error": "Directory unreachable", "results": []}), 502
+
+
+@discovery_bp.route("/api/discovery/podcasts/episode", methods=["GET"])
+@rate_limit("discovery_podcast_episode", limit=60, window_sec=60)
+def podcast_chart_episode():
+    country = _request_country()
+    show_id = request.args.get("show_id") or ""
+    episode_id = request.args.get("episode_id") or ""
+    if not re.fullmatch(r"[0-9]{1,20}", show_id) or not re.fullmatch(r"[0-9]{1,20}", episode_id):
+        return jsonify({"error": "Invalid podcast episode"}), 400
+
+    def lookup():
+        resp = requests.get(_ITUNES_LOOKUP, params={"id": show_id, "country": country,
+                            "entity": "podcastEpisode", "limit": 200}, timeout=20, headers=_HTTP_HEADERS_ITUNES)
+        resp.raise_for_status()
+        return resp.json().get("results") or []
+
+    try:
+        rows = _episode_lookup_memo.resolve(f"{country}:{show_id}", lookup)
+        show = next((r for r in rows if r.get("kind") == "podcast" and str(r.get("collectionId")) == show_id), {})
+        row = next((r for r in rows if r.get("kind") == "podcast-episode"
+                    and str(r.get("trackId")) == episode_id and str(r.get("collectionId")) == show_id
+                    and r.get("episodeContentType") == "audio" and r.get("episodeUrl")), None)
+        if not row:
+            return jsonify({"error": "Episode unavailable"}), 404
+        return jsonify({"show_title": show.get("collectionName") or row.get("collectionName"),
+                        "feed_url": show.get("feedUrl") or row.get("feedUrl"),
+                        "episode": {"guid": row.get("episodeGuid") or episode_id, "title": row.get("trackName"),
+                                    "enclosure_url": row["episodeUrl"], "published": row.get("releaseDate"),
+                                    "duration_sec": (row.get("trackTimeMillis") or 0) / 1000,
+                                    "image": row.get("artworkUrl600") or row.get("artworkUrl100")}})
+    except Exception as exc:
+        logger.info("Podcast episode lookup unavailable: %s", exc)
+        return jsonify({"error": "Directory unreachable"}), 502

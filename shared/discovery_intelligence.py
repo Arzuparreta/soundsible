@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from shared.podcast_regions import valid_podcast_country
 from shared import request_scope
 from shared.models import LibraryMetadata, Track
 from shared.database import user_db
@@ -32,6 +33,7 @@ DEFAULT_SETTINGS = {
     # Let the DJ mix between songs. Off, it keeps the same route and plays each
     # song whole, one after another; nothing about what it picks changes.
     "dj_mixing": True,
+    "podcast_country": "us",
 }
 
 POSITIVE_LISTENING_EVENTS = {
@@ -331,6 +333,8 @@ def _read_discovery_settings() -> dict[str, Any]:
         out["volume_leveling"] = data["volume_leveling"]
     if isinstance(data.get("dj_mixing"), bool):
         out["dj_mixing"] = data["dj_mixing"]
+    if valid_podcast_country(data.get("podcast_country")):
+        out["podcast_country"] = data["podcast_country"].strip().lower()
     return out
 
 
@@ -344,6 +348,8 @@ def save_discovery_settings(patch: dict[str, Any]) -> dict[str, Any]:
         current["volume_leveling"] = bool(patch["volume_leveling"])
     if "dj_mixing" in patch:
         current["dj_mixing"] = bool(patch["dj_mixing"])
+    if "podcast_country" in patch and valid_podcast_country(patch["podcast_country"]):
+        current["podcast_country"] = patch["podcast_country"].strip().lower()
     current["v"] = SETTINGS_VERSION
     path = _settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)

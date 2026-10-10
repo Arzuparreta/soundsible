@@ -16,6 +16,7 @@ import re
 import requests
 from flask import Response, jsonify, request
 
+from shared.podcast_regions import valid_podcast_country
 from shared.hardening import rate_limit
 from shared.providers import deezer
 from shared.discovery_intelligence import (
@@ -93,11 +94,13 @@ def discovery_settings_patch():
         return jsonify({"error": "volume_leveling must be boolean"}), 400
     if "dj_mixing" in data and not isinstance(data.get("dj_mixing"), bool):
         return jsonify({"error": "dj_mixing must be boolean"}), 400
+    if "podcast_country" in data and not valid_podcast_country(data["podcast_country"]):
+        return jsonify({"error": "Unsupported podcast country"}), 400
     saved = save_discovery_settings(data)
     # Volume levelling and DJ mixing have nothing to do with what gets
     # recommended, so a patch that only touches them must not throw away a warm
     # personalized feed.
-    if set(data) - {"volume_leveling", "dj_mixing"}:
+    if set(data) - {"volume_leveling", "dj_mixing", "podcast_country"}:
         _invalidate_personalized_cache()
     return jsonify(saved)
 

@@ -24,6 +24,8 @@ vi.mock('@solidjs/router', () => ({
 vi.mock('../lib/api', () => ({ api: apiMock }));
 vi.mock('../lib/discover', () => ({
   ensureDiscover: vi.fn(),
+  refreshDiscover: vi.fn(),
+  topEpisodes: () => [], chartsCountry: () => undefined, chartFailed: () => false, episodesFailed: () => false,
   topPodcasts: () => [],
   revalidating: () => false,
 }));
