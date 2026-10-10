@@ -330,82 +330,80 @@ export default function SettingsShell(props: SettingsShellProps) {
 
   return (
     <div class={`view ${styles.page}`} data-settings-page data-layout={desktopShell() ? 'split' : 'stack'}>
-      {/* Keep the index painted with the current palette while its detail is
-          open. Visibility preserves layout/style; inert removes hidden controls. */}
-      <div class={styles.rail} classList={{ [styles.railHidden]: !desktopShell() && !!current() }}
-        inert={!desktopShell() && current() ? true : undefined}
-        aria-hidden={!desktopShell() && current() ? 'true' : undefined}>
-        <ViewHeader title={t('settings.title')} />
-        <ScrollArea primary={!desktopShell() && !current()} class={styles.railScroll}>
-          <SearchField
-            value={props.query}
-            placeholder={t('settings.searchPlaceholder')}
-            inputRef={(element) => (input = element)}
-            onInput={props.onQueryChange}
-            onKeyDown={onFieldKey}
-          />
+      <Show when={desktopShell() || !current()}>
+        <div class={styles.rail}>
+          <ViewHeader title={t('settings.title')} />
+          <ScrollArea primary={!desktopShell()} class={styles.railScroll}>
+            <SearchField
+              value={props.query}
+              placeholder={t('settings.searchPlaceholder')}
+              inputRef={(element) => (input = element)}
+              onInput={props.onQueryChange}
+              onKeyDown={onFieldKey}
+            />
 
-          <Show
-            when={matches()}
-            fallback={
-              <For each={groups()}>
-                {(group) => (
-                  <section class={styles.group}>
-                    <h2 class={styles.groupLabel}>{group.label}</h2>
-                    <div class={styles.catList}>
-                      <For each={group.sections}>
-                        {(section) => (
-                          <CategoryRow
-                            section={section}
-                            current={section.id === current()?.id}
+            <Show
+              when={matches()}
+              fallback={
+                <For each={groups()}>
+                  {(group) => (
+                    <section class={styles.group}>
+                      <h2 class={styles.groupLabel}>{group.label}</h2>
+                      <div class={styles.catList}>
+                        <For each={group.sections}>
+                          {(section) => (
+                            <CategoryRow
+                              section={section}
+                              current={section.id === current()?.id}
+                              compact={desktopShell()}
+                              onSelect={select}
+                            />
+                          )}
+                        </For>
+                      </div>
+                    </section>
+                  )}
+                </For>
+              }
+            >
+              {(list) => (
+                <>
+                  <p class={styles.srOnly} aria-live="polite">
+                    {list().length === 1
+                      ? t('settings.searchCountOne')
+                      : t('settings.searchCount', { count: list().length })}
+                  </p>
+                  <Show
+                    when={list().length > 0}
+                    fallback={
+                      <p class={styles.empty}>{t('settings.searchNoResults', { query: props.query })}</p>
+                    }
+                  >
+                    <div
+                      ref={results}
+                      class={styles.catList}
+                      role="group"
+                      aria-label={t('settings.searchResults')}
+                    >
+                      <For each={list()}>
+                        {(result) => (
+                          <ResultRow
+                            result={result}
+                            current={isCurrent(result)}
                             compact={desktopShell()}
-                            onSelect={select}
+                            onOpen={open}
+                            onKeyDown={onResultKey}
                           />
                         )}
                       </For>
                     </div>
-                  </section>
-                )}
-              </For>
-            }
-          >
-            {(list) => (
-              <>
-                <p class={styles.srOnly} aria-live="polite">
-                  {list().length === 1
-                    ? t('settings.searchCountOne')
-                    : t('settings.searchCount', { count: list().length })}
-                </p>
-                <Show
-                  when={list().length > 0}
-                  fallback={
-                    <p class={styles.empty}>{t('settings.searchNoResults', { query: props.query })}</p>
-                  }
-                >
-                  <div
-                    ref={results}
-                    class={styles.catList}
-                    role="group"
-                    aria-label={t('settings.searchResults')}
-                  >
-                    <For each={list()}>
-                      {(result) => (
-                        <ResultRow
-                          result={result}
-                          current={isCurrent(result)}
-                          compact={desktopShell()}
-                          onOpen={open}
-                          onKeyDown={onResultKey}
-                        />
-                      )}
-                    </For>
-                  </div>
-                </Show>
-              </>
-            )}
-          </Show>
-        </ScrollArea>
-      </div>
+                  </Show>
+                </>
+              )}
+            </Show>
+          </ScrollArea>
+        </div>
+      </Show>
 
       <Show when={current()} keyed>
         {(section) => (

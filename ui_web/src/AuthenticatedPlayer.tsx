@@ -42,8 +42,8 @@ function Player() {
       <Route path="/library" component={LibraryRoute} />
       <Route path="/favourites" component={Favourites} />
       <Route path="/search" component={Search} />
-      {/* One route identity keeps Settings mounted between its index/details. */}
-      <Route path={['/settings', '/settings/:section']} component={Settings} />
+      <Route path="/settings" component={Settings} />
+      <Route path="/settings/:section" component={Settings} />
       <Route path="/discover" component={DiscoverRedirect} />
       <Route path="/playlists" component={Playlists} />
       <Route path="/playlists/:name" component={PlaylistDetail} />

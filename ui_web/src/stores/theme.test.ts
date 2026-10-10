@@ -41,7 +41,7 @@ async function loadTheme(preference: string) {
 
 beforeEach(() => {
   document.documentElement.removeAttribute('data-theme');
-  document.documentElement.removeAttribute('data-theme-paint');
+  document.documentElement.removeAttribute('data-theme-transition');
   document.head.innerHTML = '<meta name="theme-color" content="#0c0c0e" />';
 });
 
@@ -58,11 +58,11 @@ describe('system theme', () => {
     applyTheme('system');
 
     expect(document.documentElement.dataset.theme).toBe('light');
-    expect(document.documentElement.dataset.themePaint).toBeUndefined();
+    expect(document.documentElement.dataset.themeTransition).toBeUndefined();
     expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#f6f6f7');
   });
 
-  it('applies the complete palette immediately when the OS flips while running', async () => {
+  it('repaints with a cross-fade when the OS flips while running', async () => {
     vi.useFakeTimers();
     const os = installMatchMedia(false);
     const { applyTheme } = await loadTheme('system');
@@ -71,9 +71,11 @@ describe('system theme', () => {
     os.set(true);
 
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(document.documentElement.dataset.themePaint).toBeUndefined();
+    expect(document.documentElement.dataset.themeTransition).toBe('');
     expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#0c0c0e');
 
+    vi.runAllTimers();
+    expect(document.documentElement.dataset.themeTransition).toBeUndefined();
   });
 
   it('re-reads the OS preference when a suspended PWA becomes visible again', async () => {
