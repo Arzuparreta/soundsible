@@ -45,3 +45,18 @@ describe('responsive artwork', () => {
     expect(container.querySelector('img')!.getAttribute('loading')).toBe('lazy');
   });
 });
+
+it('reuses the immediate decoding path only for previously painted artwork', () => {
+  const first = render(() => <div><CoverImage src="/warm-session-artwork.jpg" /></div>);
+  const image = first.container.querySelector('img')!;
+  expect(image).toHaveAttribute('loading', 'lazy');
+  fireEvent.load(image);
+  first.unmount();
+  const [src, setSrc] = createSignal('/warm-session-artwork.jpg');
+  const second = render(() => <div><CoverImage src={src()} /></div>);
+  expect(second.container.querySelector('img')).toHaveAttribute('loading', 'eager');
+  expect(second.container.querySelector('img')).toHaveAttribute('decoding', 'sync');
+  setSrc('/unseen-session-artwork.jpg');
+  expect(second.container.querySelector('img')).toHaveAttribute('loading', 'lazy');
+  expect(second.container.querySelector('img')).toHaveAttribute('decoding', 'async');
+});

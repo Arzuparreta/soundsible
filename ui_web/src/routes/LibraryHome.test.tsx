@@ -7,7 +7,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import LibraryHome from './LibraryHome';
 import { api } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-import { setSavedEntities } from '../lib/savedEntities';
+import { setSavedEntities, syncSavedEntities } from '../lib/savedEntities';
 
 beforeEach(() => {
   setLocale('en');
@@ -48,4 +48,19 @@ it('keeps an unavailable optional collection quiet on the Library root', async (
   expect(screen.queryByRole('region', { name: 'Saved albums' })).toBeNull();
   expect(screen.queryByRole('region', { name: 'Saved artists' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+});
+
+it('keeps cards and images mounted when a refresh returns fresh objects for the same bookmarks', async () => {
+  const entry = { kind: 'album' as const, name: 'Record', artist: 'Band', destination: '/album/Record?deezer_id=1', cover: '/record.jpg' };
+  vi.mocked(api.getSavedEntities).mockResolvedValue([entry]);
+  show();
+  const link = await screen.findByRole('link', { name: 'Record' });
+  const image = link.querySelector('img');
+  expect(image).not.toBeNull();
+  vi.mocked(api.getSavedEntities).mockResolvedValue([{ ...entry, artist: 'Updated Band' }]);
+  await syncSavedEntities();
+  await screen.findByText('Updated Band');
+  expect(screen.getByRole('link', { name: 'Record' })).toBe(link);
+  expect(link.querySelector('img')).toBe(image);
+  expect(screen.getByText('Updated Band')).toBeInTheDocument();
 });

@@ -376,3 +376,15 @@
     padding-top: var(--space-lg);
   }
 }
+
+/* Both stack surfaces share one grid cell. The index stays styled under the
+   detail instead of being recreated from a previously painted palette. */
+.page[data-layout='stack'] > .rail,
+.page[data-layout='stack'] > .detail {
+  grid-area: 1 / 1;
+}
+
+.railHidden {
+  visibility: hidden;
+  pointer-events: none;
+}
