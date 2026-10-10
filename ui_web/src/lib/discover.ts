@@ -1,7 +1,7 @@
+import { loadPodcastCountry, podcastCountry, resetPodcastCountry } from './podcastCountry';
 import { createSignal } from 'solid-js';
 import { request } from './api';
-import type { PodcastSearchResult } from '../types/podcast';
-import { podcastRecommendations, type RawPodcastRow } from './podcastRecommendations';
+import type { PodcastSearchResult, PopularPodcastEpisode } from '../types/podcast';
 import { user, userKey } from './session';
 
 /**
@@ -22,14 +22,17 @@ export interface RecentlySavedItem {
 
 const [recentSaved, setRecentSaved] = createSignal<RecentlySavedItem[]>([]);
 const [topPodcasts, setTopPodcasts] = createSignal<PodcastSearchResult[]>([]);
+const [topEpisodes, setTopEpisodes] = createSignal<PopularPodcastEpisode[]>([]);
+const [chartsCountry, setChartsCountry] = createSignal<string>();
+const [chartFailed, setChartFailed] = createSignal(false);
+const [episodesFailed, setEpisodesFailed] = createSignal(false);
 const [revalidating, setRevalidating] = createSignal(false);
 
-export { recentSaved, topPodcasts, revalidating };
+export { recentSaved, topPodcasts, topEpisodes, chartsCountry, chartFailed, episodesFailed, revalidating };
 
 const TTL_MS = 60_000;
 const KEY = {
   recent: 'discover:v3:recent',
-  podcasts: 'discover:v3:podcasts',
   ts: 'discover:v3:ts',
 } as const;
 
@@ -58,9 +61,7 @@ function hydrate(): void {
   setRecentSaved([]);
   setTopPodcasts([]);
   const r = readCache<RecentlySavedItem[]>(KEY.recent);
-  const p = readCache<PodcastSearchResult[]>(KEY.podcasts);
   if (r) setRecentSaved(r);
-  if (p) setTopPodcasts(p);
 }
 
 interface RawSaved {
@@ -81,6 +82,8 @@ export function resetDiscover(): void {
   inFlight = null;
   setRecentSaved([]);
   setTopPodcasts([]);
+  setTopEpisodes([]); setChartsCountry(undefined); setChartFailed(false); setEpisodesFailed(false);
+  resetPodcastCountry();
   setRevalidating(false);
 }
 async function revalidate(): Promise<void> {
@@ -107,14 +110,24 @@ async function revalidate(): Promise<void> {
         writeCache(KEY.recent, items);
       })
       .catch(() => {});
-    const podcasts = request<{ items?: RawPodcastRow[] }>('/api/discovery/podcasts/recommendations?limit=20', { timeoutMs: 20000 })
-      .then((d) => {
+    const podcasts = (async () => {
+      try {
+        await loadPodcastCountry();
         if (!current()) return;
-        const rows = podcastRecommendations(d.items);
-        setTopPodcasts(rows);
-        writeCache(KEY.podcasts, rows);
-      })
-      .catch(() => {});
+        const country = podcastCountry()!;
+        const forCountry = () => current() && podcastCountry() === country;
+        setChartsCountry(country); setTopPodcasts([]); setTopEpisodes([]);
+        setChartFailed(false); setEpisodesFailed(false);
+        await Promise.all([
+          request<{ results?: PodcastSearchResult[] }>(`/api/discovery/podcasts/top?country=${country}&limit=20`, { timeoutMs: 30000 })
+            .then(d => { if (forCountry()) setTopPodcasts(d.results ?? []); })
+            .catch(() => { if (forCountry()) setChartFailed(true); }),
+          request<{ results?: PopularPodcastEpisode[] }>(`/api/discovery/podcasts/top-episodes?country=${country}&limit=20`, { timeoutMs: 30000 })
+            .then(d => { if (forCountry()) setTopEpisodes(d.results ?? []); })
+            .catch(() => { if (forCountry()) setEpisodesFailed(true); }),
+        ]);
+      } catch { if (current()) { setChartFailed(true); setEpisodesFailed(true); } }
+    })();
     await Promise.all([recent, podcasts]);
     if (current()) writeCache(KEY.ts, Date.now());
   })().finally(() => {
@@ -130,9 +143,10 @@ export function ensureDiscover(): void {
   const ts = readCache<number>(KEY.ts) ?? 0;
   const stale = Date.now() - ts > TTL_MS;
   const empty = recentSaved().length === 0 && topPodcasts().length === 0;
-  if (stale || empty) void revalidate();
+  if (stale || empty || !chartsCountry() || !podcastCountry() || chartsCountry() !== podcastCountry()) void revalidate();
 }
 
 export function refreshDiscover(): void {
+  generation++; inFlight = null;
   void revalidate();
 }

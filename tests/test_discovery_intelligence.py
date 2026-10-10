@@ -542,3 +542,13 @@ def test_compose_discovery_feed_ranks_sections_diversifies_artists_and_removes_d
     assert all(section["id"] != "duplicate" for section in response["sections"])
     assert len(response["items"]) == len({item["id"] for item in response["items"]})
     assert response["profile"]["learning_enabled"] is True
+
+
+def test_podcast_country_persists_without_changing_music_settings(tmp_path):
+    _make_runtime(tmp_path)
+    original = load_discovery_settings()
+    assert original['podcast_country'] == 'us'
+    saved = save_discovery_settings({'podcast_country': ' ES '})
+    assert saved['podcast_country'] == 'es'
+    assert load_discovery_settings()['podcast_country'] == 'es'
+    assert {k: v for k, v in saved.items() if k != 'podcast_country'} == {k: v for k, v in original.items() if k != 'podcast_country'}

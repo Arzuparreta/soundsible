@@ -832,6 +832,19 @@ export const es: Dict = {
     empty: 'Lista vacía.',
   },
   podcasts: {
+    category: "Filtrar estas listas por categoría",
+    allCategories: "Todas las categorías",
+    noCategoryResults: "No hay resultados en estas listas para esta categoría.",
+
+    country: "País para descubrir podcasts",
+    countryHint: "Se aplica a las búsquedas y a los podcasts y episodios populares. La música, autoplay y DJ siguen igual.",
+    topCountry: "Podcasts populares en {country}",
+    topEpisodes: "Episodios populares en {country}",
+    chartFailed: "No se pudieron cargar los podcasts populares.",
+    episodesFailed: "No se pudieron cargar los episodios populares.",
+    episodeUnavailable: "Este episodio no está disponible.",
+    exploreCountry: "Explorar podcasts en {country}",
+
     skipBack: 'Retroceder 15 segundos',
     skipForward: 'Avanzar 15 segundos',
     searchPlaceholder: 'Buscar podcasts…',

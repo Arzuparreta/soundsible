@@ -138,9 +138,15 @@ export default function PodcastBrowser(props: { generation: number; subscription
     openContextMenu({ title: item.title, actions: [{ label: t(remove ? 'podcastShow.unsubscribe' : 'podcasts.subscribe'), disabled: mutation() || props.disconnected, onSelect: () => { if (generation === props.generation && show()?.rss_url === url && !disposed && (remove ? followed()?.id === id : !followed())) void follow(remove); } }] }, event);
   }
   const closeShow = () => { reset(); setDownloadedOnly(false); setShow(null); };
+  async function playChart(episode: PodcastEpisode, row: import('../types/podcast').PopularPodcastEpisode) {
+    const feed = props.subscriptions.find(show => show.rss_url === row.feed_url);
+    const acquired = props.acquired.find(track => track.podcast_episode_guid === episode.guid
+      && (track.podcast_rss_url === row.feed_url || !!feed && track.podcast_feed_id === feed.id));
+    await props.onPlay(acquired ?? { ...podcastEpisodeToTrack(episode, row.title, feed?.id, row.image_url), podcast_rss_url: row.feed_url });
+  }
   registerNativeBack(() => { if (!selected()) return false; closeShow(); return true; });
   return <section data-testid="android-podcasts">
-    <Show when={selected()} fallback={<><PodcastDirectory generation={props.generation} disconnected={props.disconnected} onOpen={open} subscribed={feed => props.subscriptions.some(row => row.rss_url === feed)} onSubscribe={subscribe} /><h2>{t('podcasts.yourShows')}</h2><For each={props.subscriptions} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}>{item => <MusicListRowView title={item.title} subtitle={item.author ?? ''} seed={item.id} disabled={props.disconnected} onActivate={() => open(item)} />}</For></>}>
+    <Show when={selected()} fallback={<><PodcastDirectory generation={props.generation} activeId={props.activeId} disconnected={props.disconnected} onOpen={open} onPlay={playChart} subscribed={feed => props.subscriptions.some(row => row.rss_url === feed)} onSubscribe={subscribe} /><h2>{t('podcasts.yourShows')}</h2><For each={props.subscriptions} fallback={<EmptyState>{t('podcasts.hint')}</EmptyState>}>{item => <MusicListRowView title={item.title} subtitle={item.author ?? ''} seed={item.id} disabled={props.disconnected} onActivate={() => open(item)} />}</For></>}>
       {selected => <><button onClick={closeShow}>{t('common.back')}</button><h2>{selected().title}</h2><button data-podcast-show-menu aria-label={t('songRow.ariaMore')} disabled={mutation()} onClick={showMenu}>⋯</button>
         <button disabled={busy() || props.disconnected} onClick={() => void load(selected(), false, true)}>{t('podcastShow.refresh')}</button>
         <button data-podcast-downloaded-only aria-pressed={downloadedOnly()} onClick={() => setDownloadedOnly(value => !value)}>{t('podcastShow.downloadedOnly')}</button>

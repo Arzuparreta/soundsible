@@ -329,7 +329,8 @@ export function SelectRow(props: {
   label: string;
   hint?: string;
   value: string;
-  onChange: (value: string) => void;
+  disabled?: boolean;
+  onChange: (value: string) => void | Promise<void>;
   anchor?: SettingAnchor;
   children: JSX.Element;
 }) {
@@ -339,8 +340,13 @@ export function SelectRow(props: {
       <select
         class={styles.select}
         value={props.value}
+        disabled={props.disabled}
         aria-label={props.label}
-        onChange={(event) => props.onChange(event.currentTarget.value)}
+        onChange={async (event) => {
+          const target = event.currentTarget;
+          try { await props.onChange(target.value); }
+          finally { target.value = props.value; }
+        }}
       >
         {props.children}
       </select>

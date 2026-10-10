@@ -28,6 +28,8 @@ export async function mockMusicEngine(page: Page | BrowserContext) {
       body = [];
     } else if (path === '/api/downloader/queue') {
       body = { queue: [], is_processing: false, logs: [] };
+    } else if (path === '/api/discovery/podcasts/countries') {
+      body = { countries: ['es', 'mx', 'us'] };
     } else if (path === '/api/discovery/settings') {
       body = { learning_enabled: true, autoplay_enabled: false };
     } else if (path === '/api/downloader/config') {

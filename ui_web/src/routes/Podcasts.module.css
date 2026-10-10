@@ -234,3 +234,9 @@
     animation: none;
   }
 }
+
+.bar > :first-child { flex: 1; min-width: 0; }
+.episodeList { margin-bottom: var(--space-lg); }
+
+.genreFilter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); margin-block: var(--space-lg); color: var(--ink-secondary); font-size: var(--text-label); }
+.genreFilter select { max-width: 100%; min-height: var(--control-h); padding: var(--space-xs) var(--space-md); font: inherit; color: var(--ink-primary); background: var(--bg-base); border: 1px solid var(--hairline); border-radius: var(--radius-sm); }

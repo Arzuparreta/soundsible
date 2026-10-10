@@ -32,6 +32,8 @@ export interface AppBarConfig {
   back?: () => void;
   backLabel?: () => string;
   actions?: () => AppBarAction[];
+  /** Native dropdowns need their own control to preserve platform keyboard behavior. */
+  trailing?: () => JSX.Element;
   /**
    * The page's own large title, when it draws one — an album cover's heading.
    * The bar then carries the title only once that heading scrolls out of

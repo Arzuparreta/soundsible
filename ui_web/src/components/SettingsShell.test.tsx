@@ -132,9 +132,9 @@ describe('settings shell on mobile', () => {
   it('says so when nothing matches', () => {
     renderShell();
 
-    search('podcasts');
+    search('zzznomatch');
 
-    expect(screen.getByText('Nada coincide con «podcasts»')).toBeInTheDocument();
+    expect(screen.getByText('Nada coincide con «zzznomatch»')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cuenta/ })).toBeNull();
   });
 

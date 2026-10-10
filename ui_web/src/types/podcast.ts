@@ -22,6 +22,7 @@ export interface PodcastEpisode {
 
 /** A podcast show from the iTunes directory search. */
 export interface PodcastSearchResult {
+  genres?: { id: string; name: string }[];
   title: string;
   author?: string;
   feed_url: string;
@@ -30,4 +31,9 @@ export interface PodcastSearchResult {
   recommendation_identity?: string;
   reason?: string;
   reason_code?: string;
+}
+
+/** A ranked episode; audio is resolved only when the listener plays it. */
+export interface PopularPodcastEpisode extends PodcastSearchResult {
+  episode_id: string;
 }

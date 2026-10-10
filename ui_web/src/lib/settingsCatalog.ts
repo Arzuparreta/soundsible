@@ -158,6 +158,7 @@ export const SETTINGS_CATALOG = {
         hint: 'settings.note.djMixing',
         aliases: ['settings.djMixingSearch', 'settings.group.dj'],
       },
+      { id: 'podcast-country', label: 'podcasts.country', hint: 'podcasts.countryHint', terms: ['podcasts', 'country', 'region'] },
       {
         id: 'learn-activity',
         label: 'settings.learnActivity',

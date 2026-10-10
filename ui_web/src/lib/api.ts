@@ -1349,7 +1349,10 @@ export const api = {
       autoplay_enabled?: boolean;
       volume_leveling?: boolean;
       dj_mixing?: boolean;
+      podcast_country?: string;
     }>('/api/discovery/settings'),
+  setPodcastCountry: (country: string) =>
+    request<{ podcast_country: string }>('/api/discovery/settings', { method: 'PATCH', body: { podcast_country: country } }),
   setVolumeLeveling: (enabled: boolean) =>
     request<{ volume_leveling?: boolean }>('/api/discovery/settings', {
       method: 'PATCH',

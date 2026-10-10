@@ -1,3 +1,4 @@
+import { PodcastCountrySettings } from './PodcastCountrySettings';
 import { AccountSettingsView } from './AccountSettingsView';
 import { SettingsLoad } from './SettingsLoad';
 import { BottomNavigationSettings } from './BottomNavigationSettings';
@@ -256,6 +257,8 @@ function PlaybackSection() {
       </SettingsGroup>
 
       <RecommendationSettingsView learning={learning()} onToggle={toggleLearning} onReset={resetLearning} />
+
+      <PodcastCountrySettings />
 
       {/* A diagnostic, not a preference: after everything that can be changed. */}
       <LinkStatusView reading={linkReading()} />

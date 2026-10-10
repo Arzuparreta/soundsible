@@ -186,7 +186,17 @@ def test_podcast_feed_token_and_range_keep_real_account_isolation(tmp_path):
             assert not any(
                 row["id"] == downloaded["id"] for row in owner.get(origin + "/api/library", timeout=10).json()["tracks"]
             )
+            for path in ("top", "top-episodes"):
+                chart = member.get(origin + f"/api/discovery/podcasts/{path}?country=es&limit=10", timeout=10)
+                assert chart.status_code == 200, chart.text
+                assert chart.json()["results"]
+            resolved = member.get(
+                origin + "/api/discovery/podcasts/episode?show_id=900003&episode_id=900004&country=es", timeout=10
+            )
+            assert resolved.status_code == 200, resolved.text
+            assert resolved.json()["episode"]["guid"] == "directory-episode-guid"
             records = member.get(origin + "/api/android-fixture/podcast-stats", timeout=10).json()["upstream"]
+            assert {"country-chart", "directory-lookup"} <= {row["path"] for row in records}
             assert any(row["range"] == "bytes=100-199" for row in records)
             assert all(not row["cookie_present"] for row in records)
         finally:

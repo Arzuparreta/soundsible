@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 _ITUNES_SEARCH = "https://itunes.apple.com/search"
 _ITUNES_LOOKUP = "https://itunes.apple.com/lookup"
-_APPLE_PODCAST_TOP = "https://rss.itunes.apple.com/api/v1/{country}/podcasts/top-podcasts/all/{limit}/{explicit}.json"
+_APPLE_PODCAST_TOP = "https://rss.marketingtools.apple.com/api/v2/{country}/podcasts/top/{limit}/podcasts.json"
 
 _HTTP_HEADERS_RSS = {
     "User-Agent": "SoundsibleDiscovery/1.0",

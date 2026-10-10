@@ -133,6 +133,7 @@ export function AppBar() {
         </Show>
 
         <div class={styles.actions}>
+          {bar()?.trailing?.()}
           <Index each={bar()?.actions?.() ?? []}>{(action) => <ActionButton action={action()} />}</Index>
         </div>
       </header>
