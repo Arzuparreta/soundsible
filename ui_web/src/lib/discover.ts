@@ -143,7 +143,7 @@ export function ensureDiscover(): void {
   const ts = readCache<number>(KEY.ts) ?? 0;
   const stale = Date.now() - ts > TTL_MS;
   const empty = recentSaved().length === 0 && topPodcasts().length === 0;
-  if (stale || empty || chartsCountry() !== podcastCountry()) void revalidate();
+  if (stale || empty || !chartsCountry() || !podcastCountry() || chartsCountry() !== podcastCountry()) void revalidate();
 }
 
 export function refreshDiscover(): void {
