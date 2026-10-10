@@ -105,7 +105,8 @@ def install(app, root: Path, accounts):
     def get(url, **kwargs):
         if isinstance(url, str) and url.startswith("https://rss.marketingtools.apple.com/api/v2/"):
             episode_chart = url.endswith("/podcast-episodes.json")
-            records.append({"path": "country-chart", "country": url.split("/")[5], "episodes": episode_chart})
+            records.append({"path": "country-chart", "country": url.split("/")[5], "episodes": episode_chart,
+                            "range": None, "cookie_present": bool(kwargs.get("headers", {}).get("Cookie"))})
             return directory_response({"feed": {"results": [{
                 "id": "900004" if episode_chart else "900003",
                 "name": "fixture ranked episode" if episode_chart else "fixture top podcast",
@@ -124,7 +125,8 @@ def install(app, root: Path, accounts):
                     rows.append({"kind": "podcast-episode", "collectionId": 900003, "trackId": 900004,
                                  "trackName": "fixture ranked episode", "episodeGuid": "directory-episode-guid",
                                  "episodeContentType": "audio", "episodeUrl": external + "/directory/episode.mp4"})
-                records.append({"path": "directory-lookup", "country": params.get("country")})
+                records.append({"path": "directory-lookup", "country": params.get("country"),
+                                "range": None, "cookie_present": bool(kwargs.get("headers", {}).get("Cookie"))})
                 return directory_response({"results": rows})
             term = params.get("term", "")
             rows = (

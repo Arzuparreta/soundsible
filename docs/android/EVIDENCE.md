@@ -124,3 +124,10 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   PodcastDirectoryTest, 4 casos aprobados, más JVM/lint/APK de desarrollo.
   Logs: /tmp/podcast-native-{all-final,fixture,integration}.log.
   No publicación; no se modifica el transporte nativo.
+
+- Corrección del fixture de rankings: sus registros incluyen los encabezados
+  observados para que la comprobación de aislamiento de cookies también cubra
+  charts y lookup. Regresión Python aprobada; ejecución conjunta HTTP/TLS de
+  PodcastTest, PodcastCountryTest, PodcastTopTest y PodcastDirectoryTest en
+  AVD API 36: 7 casos aprobados, más JVM/lint/APK de desarrollo.
+  Logs: /tmp/podcast-cookie-{fixture,integration}.log.
