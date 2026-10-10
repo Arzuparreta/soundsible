@@ -75,27 +75,30 @@ export default function Podcasts() {
   const [playingEpisode, setPlayingEpisode] = createSignal<string>();
   const countryLabel = () => countryName(podcastCountry() ?? 'us');
   createEffect(on(podcastCountry, (country, previous) => {
-    if (previous && country !== previous) { setGenre(''); refreshDiscover(); if (q().trim().length >= 2) run(q()); }
+    if (previous && country !== previous) {
+      episodeRequest?.abort(); episodeRequest = undefined; setPlayingEpisode(undefined);
+      setGenre(''); refreshDiscover(); if (q().trim().length >= 2) run(q());
+    }
   }));
 
   const playPopularEpisode = async (episode: PopularPodcastEpisode) => {
     if (playingEpisode()) return;
     const account = user()?.id, country = podcastCountry();
     const previousTrack = state.playback.currentTrack;
-    episodeRequest = new AbortController();
+    const controller = new AbortController(); episodeRequest = controller;
     setPlayingEpisode(episode.episode_id);
     try {
       const data = await request<{ episode: PodcastEpisode; show_title: string; feed_url: string }>(
         `/api/discovery/podcasts/episode?show_id=${episode.itunes_collection_id}&episode_id=${episode.episode_id}&country=${country}`,
-        { timeoutMs: 25000, signal: episodeRequest.signal });
-      if (disposed || user()?.id !== account || podcastCountry() !== country || state.playback.currentTrack !== previousTrack) return;
+        { timeoutMs: 25000, signal: controller.signal });
+      if (disposed || controller.signal.aborted || user()?.id !== account || podcastCountry() !== country || state.playback.currentTrack !== previousTrack) return;
       const feedId = state.podcastSubscriptions.find(show => show.rss_url === data.feed_url)?.id ?? data.feed_url;
       const local = state.library.find(track => track.podcast_episode_guid === data.episode.guid
         && (track.podcast_feed_id === feedId || track.podcast_feed_id === data.feed_url || track.podcast_rss_url === data.feed_url));
       if (local) actions.playTrack(local);
       else await actions.playEpisode(data.episode, data.show_title, feedId, data.episode.image ?? episode.image_url);
-    } catch { if (!disposed && user()?.id === account && podcastCountry() === country) toast.error(t('podcasts.episodeUnavailable')); }
-    finally { setPlayingEpisode(undefined); }
+    } catch { if (!disposed && !controller.signal.aborted && user()?.id === account && podcastCountry() === country) toast.error(t('podcasts.episodeUnavailable')); }
+    finally { if (episodeRequest === controller) { episodeRequest = undefined; setPlayingEpisode(undefined); } }
   };
 
   let aborter: AbortController | undefined;
