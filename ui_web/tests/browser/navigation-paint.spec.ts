@@ -82,3 +82,73 @@ test('theme paints atomically and a return keeps the selected palette', async ({
   expect(frames.every(frame => frame.theme === 'dark' && frame.opacity === '1' && frame.transform === 'none')).toBe(true);
   await expect(page.getByRole('searchbox')).toBeVisible();
 });
+
+
+test('Library artwork remains mounted through bookmark revalidation on return', async ({ page }) => {
+  const artwork = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="red"/></svg>');
+  let reads = 0;
+  let release!: () => void;
+  const response = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/library/saved-entities', async route => {
+    if (++reads > 1) await response;
+    await route.fulfill({ json: { entities: [
+      { kind: 'album', name: 'Record', destination: '/album/Record?deezer_id=1', cover: artwork },
+      { kind: 'artist', name: 'Band', destination: '/artist/Band?deezer_id=2', cover: artwork },
+    ] } });
+  });
+  await page.goto('/player/#/');
+  const images = page.locator('[data-primary-scroll] article img');
+  await expect(images).toHaveCount(2);
+  await expect.poll(() => images.evaluateAll(nodes => nodes.every(node => (node as HTMLImageElement).complete))).toBe(true);
+  await page.evaluate(() => { location.hash = '/search'; });
+  await expect(page.getByRole('searchbox')).toBeVisible();
+  await page.goBack();
+  await expect(images).toHaveCount(2);
+  await expect(images.first()).toHaveAttribute('loading', 'eager');
+  await expect(images.first()).toHaveAttribute('decoding', 'sync');
+  await page.evaluate(() => {
+    const retained = [...document.querySelectorAll('[data-primary-scroll] article img')];
+    Object.assign(window, { retainedArtwork: retained });
+  });
+  const refreshed = page.waitForResponse('**/api/library/saved-entities');
+  release();
+  await refreshed;
+  await expect(page.locator('[data-primary-scroll] > [aria-busy]')).toHaveAttribute('aria-busy', 'false');
+  expect(await page.evaluate(() => {
+    const retained = (window as unknown as { retainedArtwork: Element[] }).retainedArtwork;
+    return retained.every((node, index) => node.isConnected && document.querySelectorAll('[data-primary-scroll] article img')[index] === node);
+  })).toBe(true);
+});
+
+for (const back of ['app', 'history'] as const) {
+  test(`Settings index keeps its painted palette when returning via ${back}`, async ({ page }) => {
+    if (back === 'app') await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/player/#/settings');
+    const search = page.getByRole('searchbox');
+    await expect(search).toBeVisible();
+    await page.evaluate(() => Object.assign(window, { settingsIndex: document.querySelector('[data-settings-page] input[type="search"]') }));
+    for (const [from, to, theme] of [['Claro', 'Oscuro', 'dark'], ['Oscuro', 'Claro', 'light']]) {
+      await page.getByRole('button', { name: /^Apariencia/ }).click();
+      await page.getByRole('radio', { name: from, exact: true }).check();
+      await page.getByRole('radio', { name: to, exact: true }).check();
+      const framesPromise = page.evaluate(async () => {
+        const frames: { color: string; expected: string; connected: boolean }[] = [];
+        const index = (window as unknown as { settingsIndex: HTMLInputElement }).settingsIndex;
+        for (let i = 0; i < 30; i++) {
+          await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+          if (location.hash !== '#/settings') continue;
+          frames.push({ color: getComputedStyle(index).color, expected: getComputedStyle(document.body).color, connected: index.isConnected });
+        }
+        return frames;
+      });
+      if (back === 'app') await page.getByRole('button', { name: 'Volver', exact: true }).click();
+      else await page.goBack();
+      const frames = await framesPromise;
+      expect(frames.length).toBeGreaterThan(0);
+      expect(frames.every(frame => frame.connected && frame.color === frame.expected)).toBe(true);
+      await expect(search).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      expect(await page.evaluate(() => (window as unknown as { settingsIndex: Element }).settingsIndex === document.querySelector('[data-settings-page] input[type="search"]'))).toBe(true);
+    }
+  });
+}

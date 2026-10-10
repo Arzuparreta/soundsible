@@ -1,4 +1,5 @@
 import { createSignal } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { api } from './api';
 import { t } from './i18n';
 import { toast } from './toast';
@@ -7,7 +8,14 @@ import { pulseNavigation } from './tabNavigation';
 import { sameEntity, type SavedEntity } from './savedEntityIdentity';
 export { entityKeys, sameEntity, type SavedEntity } from './savedEntityIdentity';
 
-export const [savedEntities, setSavedEntities] = createSignal<SavedEntity[]>([]);
+const [entities, setEntities] = createStore<{ entries: SavedEntity[] }>({ entries: [] });
+export const savedEntities = () => entities.entries;
+/** Keep bookmark/card identity across refreshes, while updating metadata in place. */
+export function setSavedEntities(value: SavedEntity[] | ((previous: SavedEntity[]) => SavedEntity[])): SavedEntity[] {
+  const next = typeof value === 'function' ? value(savedEntities()) : value;
+  setEntities('entries', reconcile(next, { key: 'destination' }));
+  return savedEntities();
+}
 export const [entitiesLoading, setEntitiesLoading] = createSignal(false);
 export const [entitiesError, setEntitiesError] = createSignal(false);
 export const [entitiesBusy, setEntitiesBusy] = createSignal(false);
@@ -62,7 +70,8 @@ export async function setEntitySaved(entry: SavedEntity, saved: boolean, opts: {
   if (entitiesBusy()) return;
   const current = ++generation;
   setEntitiesBusy(true);
-  const previous = savedEntities();
+  // Reconciliation updates the live store in place; rollback needs its own snapshot.
+  const previous = savedEntities().map(item => ({ ...item, ...(item.keys ? { keys: [...item.keys] } : {}) }));
   setSavedEntities(saved
     ? (isEntitySaved(entry) ? previous : [entry, ...previous])
     : previous.filter((item) => !sameEntity(item, entry)));
