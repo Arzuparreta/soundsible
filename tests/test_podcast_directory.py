@@ -73,7 +73,21 @@ def test_episode_chart_identifies_show_and_retains_order(client):
     assert data['country'] == 'es'
     assert data['results'][0]['episode_id'] == '900'
     assert data['results'][0]['itunes_collection_id'] == '123'
-    lookup.assert_called_once_with(['123'], 'es')
+    lookup.assert_called_once_with(['123'], 'es', strict=True)
+
+
+def test_episode_feed_lookup_failure_is_retryable_instead_of_empty_chart(client):
+    chart = {'feed': {'results': [{'id': '900', 'name': 'Chapter',
+              'url': 'https://podcasts.apple.com/es/podcast/chapter/id123?i=900'}]}}
+    lookup = {'results': [{'kind': 'podcast', 'collectionId': 123, 'feedUrl': 'https://example.com/rss'}]}
+    with patch.object(directory.requests, 'get', side_effect=[
+            response(chart), requests.RequestException('offline'), response(chart), response(lookup)]):
+        failed = client.get('/api/discovery/podcasts/top-episodes')
+        assert failed.status_code == 502
+        assert failed.get_json()['error'] == 'Directory unreachable'
+        recovered = client.get('/api/discovery/podcasts/top-episodes')
+        assert recovered.status_code == 200
+        assert recovered.get_json()['results'][0]['episode_id'] == '900'
 
 
 def test_episode_resolution_plays_only_exact_audio_match(client):

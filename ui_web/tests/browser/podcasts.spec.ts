@@ -280,6 +280,44 @@ test('a popular episode resolves and plays its exact audio without subscribing',
   expect(followed).toEqual([]);
 });
 
+for (const oldFeedId of [undefined, 'previous-subscription']) {
+  test(`a popular episode reuses its RSS download with feed id ${oldFeedId ?? 'absent'}`, async ({ page, isMobile }) => {
+    await mockPodcasts(page);
+    const downloaded = { id: 'downloaded-900', title: 'Capítulo descargado', artist: 'Programa popular', duration: 600,
+      media_kind: 'podcast_episode', podcast_episode_guid: 'guid-900', podcast_rss_url: POPULAR.feed_url,
+      podcast_feed_id: oldFeedId };
+    await page.route((url) => url.pathname === '/api/library', route => route.fulfill({ json: {
+      tracks: [{ ...downloaded, id: 'unrelated-download', podcast_rss_url: FOUND.feed_url }, downloaded],
+      playlists: {}, settings: {}, podcast_subscriptions: [{ ...FOLLOWED, rss_url: POPULAR.feed_url }],
+    } }));
+    await page.route('**/api/discovery/podcasts/top-episodes?**', route => route.fulfill({ json: {
+      results: [{ ...POPULAR, episode_id: '900', itunes_collection_id: '123', title: 'Capítulo popular exacto' }],
+    } }));
+    await page.route('**/api/discovery/podcasts/episode?**', route => route.fulfill({ json: {
+      show_title: 'Programa popular', feed_url: POPULAR.feed_url,
+      episode: { ...episode('Capítulo popular exacto'), guid: 'guid-900' },
+    } }));
+    const streams: string[] = [], previews: string[] = [];
+    await page.route('**/api/static/stream/**', route => {
+      streams.push(new URL(route.request().url()).pathname);
+      return route.fulfill({ contentType: 'audio/wav', body: silentWav });
+    });
+    await page.route('**/api/podcasts/enclosure/peek', route => {
+      previews.push(route.request().url());
+      return route.abort();
+    });
+    await page.goto('/player/#/podcasts');
+    const row = page.getByText('Capítulo popular exacto', { exact: true });
+    await expect(row).toBeVisible();
+    await tapArtwork(page, row, isMobile);
+    await expect(page.locator('[data-omni-player]')).toContainText(downloaded.title);
+    await expect(page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true })).toBeVisible();
+    expect(streams).toContain('/api/static/stream/downloaded-900');
+    expect(streams).not.toContain('/api/static/stream/unrelated-download');
+    expect(previews).toEqual([]);
+  });
+}
+
 test('category filters both country rankings while keeping followed shows visible', async ({ page }) => {
   await mockPodcasts(page);
   const news = [{ id: '1489', name: 'Noticias' }], comedy = [{ id: '1303', name: 'Comedia' }];

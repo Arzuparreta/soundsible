@@ -91,7 +91,7 @@ export default function Podcasts() {
       if (disposed || user()?.id !== account || podcastCountry() !== country || state.playback.currentTrack !== previousTrack) return;
       const feedId = state.podcastSubscriptions.find(show => show.rss_url === data.feed_url)?.id ?? data.feed_url;
       const local = state.library.find(track => track.podcast_episode_guid === data.episode.guid
-        && (track.podcast_feed_id === feedId || track.podcast_feed_id === data.feed_url));
+        && (track.podcast_feed_id === feedId || track.podcast_feed_id === data.feed_url || track.podcast_rss_url === data.feed_url));
       if (local) actions.playTrack(local);
       else await actions.playEpisode(data.episode, data.show_title, feedId, data.episode.image ?? episode.image_url);
     } catch { if (!disposed && user()?.id === account && podcastCountry() === country) toast.error(t('podcasts.episodeUnavailable')); }

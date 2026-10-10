@@ -172,7 +172,7 @@ def _extract_top_podcast_chart(data: object) -> list[dict]:
     return out
 
 
-def _lookup_feed_urls(collection_ids: list[str], country: str = "us") -> dict[str, str]:
+def _lookup_feed_urls(collection_ids: list[str], country: str = "us", *, strict: bool = False) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for i in range(0, len(collection_ids), _LOOKUP_CHUNK):
         part = [x for x in collection_ids[i : i + _LOOKUP_CHUNK] if x]
@@ -189,6 +189,8 @@ def _lookup_feed_urls(collection_ids: list[str], country: str = "us") -> dict[st
             payload = resp.json()
         except Exception as exc:
             logger.warning("iTunes podcast lookup failed: %s", exc)
+            if strict:
+                raise
             continue
         for row in payload.get("results") or []:
             if not isinstance(row, dict):
@@ -345,7 +347,7 @@ def _top_episodes(country: str, limit: int) -> list[dict]:
         rows.append({"episode_id": str(item["id"]), "itunes_collection_id": match[1],
                      "title": item.get("name") or "Podcast", "author": item.get("artistName") or "",
                      "image_url": item.get("artworkUrl100") or "", "genres": _chart_genres(item)})
-    feeds = _lookup_feed_urls(list(dict.fromkeys(r["itunes_collection_id"] for r in rows)), country)
+    feeds = _lookup_feed_urls(list(dict.fromkeys(r["itunes_collection_id"] for r in rows)), country, strict=True)
     return [dict(row, feed_url=feeds[row["itunes_collection_id"]]) for row in rows
             if row["itunes_collection_id"] in feeds]
 
