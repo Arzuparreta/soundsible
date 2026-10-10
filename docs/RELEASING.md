@@ -128,8 +128,8 @@ The `vX.Y.Z` tag starts two workflows:
 
 - **CI** builds and pushes the container images to GHCR: `X.Y.Z`, `X.Y`, and
   `latest` (stable releases only — a release candidate never moves `latest`).
-- **Release** verifies the tag against the declaration, builds the Linux
-  packages, the Windows x64 and arm64 installers, the iPhone app and the
+- **Release** verifies the tag against the declaration, builds the Windows
+  x64 and arm64 installers, the iPhone app and the
   signed Android alpha APK, and publishes one GitHub Release with all of them
   attached and generated notes. The Android job installs the APK over the
   previous published one on an emulator and waits for the tagged commit's own

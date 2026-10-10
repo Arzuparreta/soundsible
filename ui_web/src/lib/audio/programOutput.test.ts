@@ -48,7 +48,7 @@ describe('stable programme output', () => {
     ['iPhone', 'iPhone', 5],
     ['iPad', 'iPad', 5],
     ['Mozilla/5.0 (Macintosh; Intel Mac OS X)', 'MacIntel', 5],
-    // The Linux desktop app's WebKitGTK.
+    // WebKitGTK, as in GNOME Web.
     ['Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15', 'Linux x86_64', 0],
   ])('uses direct output on %s without creating or retrying a carrier', async (userAgent, platform, maxTouchPoints) => {
     vi.stubGlobal('navigator', { userAgent, platform, maxTouchPoints });

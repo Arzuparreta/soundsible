@@ -5,7 +5,6 @@ fn main() {
             "change_connection",
             "quit_desktop",
             "desktop_handshake",
-            "desktop_snapshot",
             "desktop_appearance",
             "get_startup_profile",
             "get_shell_theme",

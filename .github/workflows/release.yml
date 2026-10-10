@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 jobs:
-  # Ninety minutes of Windows and Linux builds are not worth spending on a tag
+  # An hour and a half of Windows, Android and iPhone builds is not worth spending on a tag
   # that contradicts the tree it points at. CI checks this too; here it is a
   # precondition rather than a report.
   verify:
@@ -104,9 +104,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Only what is meant to be downloaded. The builds also pass each other
-      # tauri-driver and UI evidence, and `files: artifacts/**` would attach
-      # anything that landed here to the release.
+      # Only what is meant to be downloaded. The builds also upload test
+      # evidence, and `files: artifacts/**` would attach anything that landed
+      # here to the release.
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -160,10 +160,10 @@ jobs:
             docker pull ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
             ```
 
-            **Desktop app (beta)** — one machine, no terminal. Attached below:
-            the Windows installers; `.deb` for Debian, Ubuntu and Mint; `.rpm`
-            for Fedora; and a `.flatpak` for any distribution
-            (`flatpak install Soundsible_*.flatpak`).
+            **Windows desktop app (beta)** — one machine, no terminal: the
+            installers attached below run a station on this PC and its player.
+            On Linux, run the station natively or with Docker and open the
+            player in Chrome or Firefox, where it installs as an app.
 
             **Android (alpha)** — `Soundsible-Android-alpha.apk` is attached;
             check it against `SHA256SUMS-android.txt`. Install it over an
@@ -228,67 +228,3 @@ jobs:
           gh workflow run deploy.yml \
             --repo "${{ github.repository_owner }}/soundsible.github.io" \
             -f source_tag="$GITHUB_REF_NAME"
-
-  # The AUR holds a recipe, not binaries: a PKGBUILD that downloads the .deb
-  # attached above and repackages it, which is what `yay -S soundsible-bin`
-  # builds. Each release points it at the new .deb.
-  aur:
-    needs: publish
-    # Arch has no notion of a pre-release; publishing one would move every
-    # AUR user onto it.
-    if: ${{ !contains(github.ref_name, '-rc.') }}
-    runs-on: ubuntu-latest
-    container: archlinux:latest
-    timeout-minutes: 15
-    steps:
-      - name: Install makepkg and git
-        run: pacman -Syu --noconfirm --needed base-devel git openssh python
-
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: soundsible-desktop-linux-*
-          path: packages
-          merge-multiple: true
-
-      - name: Publish soundsible-bin
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          # Like SITE_DISPATCH_TOKEN: no key is the state before anyone has
-          # registered the package, not a broken release.
-          if [ -z "${AUR_SSH_PRIVATE_KEY:-}" ]; then
-            echo "::warning::AUR_SSH_PRIVATE_KEY is unset, so soundsible-bin was not updated to $GITHUB_REF_NAME. docs/LINUX_PACKAGES.md says how to set it up."
-            exit 0
-          fi
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          # Pinned rather than scanned, so a spoofed host cannot take the key.
-          # SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4, as published
-          # on aur.archlinux.org.
-          echo "aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN" > ~/.ssh/known_hosts
-          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
-
-          useradd -m builder
-          work=$(runuser -u builder -- mktemp -d)
-          chown builder "$work"
-          git clone ssh://aur@aur.archlinux.org/soundsible-bin.git "$work/aur"
-          python3 scripts/linux_packages.py aur --deb packages/deb/Soundsible_*_amd64.deb --out "$work/aur"
-          chown -R builder "$work"
-          (cd "$work/aur" && runuser -u builder -- makepkg --printsrcinfo > .SRCINFO)
-
-          cd "$work/aur"
-          # makepkg needed the checkout to belong to builder; git runs as root.
-          git config --global --add safe.directory "$work/aur"
-          git config user.name "${{ github.repository_owner }}"
-          git config user.email "${{ github.repository_owner }}@users.noreply.github.com"
-          git add PKGBUILD .SRCINFO
-          if git diff --cached --quiet; then
-            echo "soundsible-bin already describes $GITHUB_REF_NAME."
-            exit 0
-          fi
-          git commit -m "Update to ${GITHUB_REF_NAME#v}"
-          git push origin HEAD:master

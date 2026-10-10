@@ -233,26 +233,10 @@ fn spawn_engine(music_dir: &PathBuf, guard: &mut SupervisorInner) -> Result<Chil
     };
 
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    attach_unix_process_group(&mut command);
     command
         .spawn()
         .map_err(|e| format!("Failed to spawn engine: {e}"))
 }
-
-#[cfg(unix)]
-fn attach_unix_process_group(command: &mut Command) {
-    use std::os::unix::process::CommandExt;
-
-    unsafe {
-        command.pre_exec(|| {
-            libc::setsid();
-            Ok(())
-        });
-    }
-}
-
-#[cfg(not(unix))]
-fn attach_unix_process_group(_command: &mut Command) {}
 
 fn terminate_child_process(child: &mut Child) {
     let pid = child.id();
@@ -263,25 +247,6 @@ fn terminate_child_process(child: &mut Child) {
 fn terminate_pid(pid: u32) {
     if pid == 0 {
         return;
-    }
-
-    #[cfg(unix)]
-    {
-        let pgid = -(pid as i32);
-        unsafe {
-            libc::kill(pgid, libc::SIGTERM);
-        }
-        for _ in 0..40 {
-            if unsafe { libc::kill(pid as i32, 0) } != 0 {
-                break;
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
-        if unsafe { libc::kill(pid as i32, 0) } == 0 {
-            unsafe {
-                libc::kill(pgid, libc::SIGKILL);
-            }
-        }
     }
 
     #[cfg(windows)]

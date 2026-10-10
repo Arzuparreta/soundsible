@@ -8,8 +8,7 @@
 | --- | --- |
 | [Install & deployment](INSTALL.md) | Install on your computer or server, choose between the menu, `--daemon` and a systemd service, set up remote access, storage and a reverse proxy, and update. |
 | [Docker](DOCKER.md) | Run with Compose, mount an existing library, back up and upgrade. |
-| [Desktop beta](DESKTOP_BETA.md) | Download the Windows or Linux app and check what has been verified. |
-| [Linux packages](LINUX_PACKAGES.md) | The `.deb`, `.rpm`, Flatpak and AUR package: what each is, what the Flatpak can reach, and how the AUR package is published. |
+| [Desktop beta](DESKTOP_BETA.md) | Download the Windows app and check what has been verified, and why there is no Linux app. |
 | [Settings & sources](CONFIGURATION.md) | Settings, environment variables, accounts, downloads, YouTube cookies and where files live. |
 | [Bring your music](MUSIC_MIGRATION.md) | Import Spotify and Apple Music exports. |
 

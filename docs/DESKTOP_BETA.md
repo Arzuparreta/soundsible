@@ -1,11 +1,12 @@
 # Desktop app (beta)
 
-The desktop app packages the Station Engine, the web player, FFmpeg and ffprobe into
-one installer. You do not need Python, Git, Node.js, FFmpeg or a terminal.
+The Windows desktop app packages the Station Engine, the web player, FFmpeg and
+ffprobe into one installer. You do not need Python, Git, Node.js, FFmpeg or a
+terminal.
 
 The installer also offers **Connect to server** for a station you already run
 natively, in Docker or on another computer. See [Desktop client](DESKTOP_CLIENT.md)
-for connection modes and Linux media controls.
+for connection modes.
 
 In **Use this computer as server** mode, it serves the computer it is installed on: its engine listens on `127.0.0.1`
 on a random port, not on your network. To listen from a phone or another
@@ -20,16 +21,27 @@ Every [release](https://github.com/Arzuparreta/soundsible/releases) attaches:
 | --- | --- | --- |
 | `Soundsible_<version>_x64-setup.exe` | Windows 11 x64 | Installs, runs and uninstalls it through the real Windows UI ([below](#what-ci-proves)) |
 | `Soundsible_<version>_arm64-setup.exe` | Windows 11 ARM64 | The same, on a native ARM64 runner |
-| `Soundsible_<version>_amd64.deb` | Debian 12+, Ubuntu 22.04+ and Mint, x86-64 | Installed with apt on Ubuntu 24.04 and Debian 12, then driven: real playback and MPRIS against an independent station |
-| `soundsible-<version>-1.x86_64.rpm` | Fedora and openSUSE, x86-64 | Installed with dnf on Fedora and driven the same way; openSUSE is not tested |
-| `Soundsible_<version>_x86_64.flatpak` | Any distribution with Flatpak, x86-64 | Installed with `flatpak install` and driven the same way, inside its sandbox |
-| `soundsible-bin` in the AUR (once [publishing is set up](LINUX_PACKAGES.md#setting-up-publishing-once)) | Arch and derivatives, x86-64 | Built from the generated PKGBUILD with makepkg, installed with pacman and driven the same way |
-
-How each Linux package is made, what the Flatpak can reach, and how the AUR
-package is published: [Linux packages](LINUX_PACKAGES.md).
-
 There is no macOS build. On a Mac, use the [native installation](INSTALL.md)
 or Docker.
+
+### No Linux app
+
+Linux has no desktop app. Run the station [natively](INSTALL.md) — as a
+[systemd service](INSTALL.md#run-it-as-a-systemd-service) if it should start
+at boot — or with [Docker](DOCKER.md), and open the player in a browser.
+Chrome and other Chromium browsers install it as an app; Firefox plays it in a
+tab. Both drive the desktop's media keys and widgets.
+
+Earlier releases attached a Linux app (a `.deb`, later also an `.rpm` and a
+Flatpak). It was withdrawn because on Linux a Tauri app renders the player
+with WebKitGTK, not with the browser's engine: it was slower than the same
+player in Chrome or Firefox, froze opening Now Playing on a laptop with Intel
+graphics, and needed a workaround per WebKitGTK defect (no sound through a
+MediaStream, stale frames from its compositor, a blank window on NVIDIA, no AAC
+decoder on Debian and Ubuntu). An app that is worse than the browser has no
+reason to exist. Remove an installed one with
+`flatpak uninstall io.github.Arzuparreta.Soundsible`, `sudo apt remove
+soundsible` or `sudo dnf remove soundsible`.
 
 The Windows installers come with `SHA256SUMS-x64.txt` and
 `SHA256SUMS-arm64.txt`, and carry build-provenance attestations you can check
@@ -69,7 +81,7 @@ describes the desktop shell's maturity, not a separate version — see
 
 Windows ships as an NSIS `.exe` only; there is no MSI.
 
-`.github/workflows/desktop-shell.yml` exercises the interactive path on both
+`.github/workflows/desktop-build.yml` exercises the interactive path on both
 Windows architectures through the Windows UI Automation backend in
 `pywinauto`:
 
@@ -85,10 +97,6 @@ Windows architectures through the Windows UI Automation backend in
 
 `verify-pe-architecture.ps1` checks the machine field of the app, engine and
 FFmpeg. ARM64 artifacts may not silently fall back to x64 emulation.
-
-On Linux, CI builds the packages on Ubuntu 22.04 and installs each one on the
-distributions it is for, then drives the installed app — see
-[Linux packages](LINUX_PACKAGES.md#what-ci-proves).
 
 The browser-level shell suite separately checks cancellation, localization,
 minimum-window layout and 200% zoom without overlap. The shared player keeps
@@ -127,9 +135,9 @@ cd desktop-shell
 npm run build
 ```
 
-The release workflow builds the Windows x64 and ARM64 installers and the Linux
-`.deb`, `.rpm` and `.flatpak`, updates the AUR package, emits SHA-256 manifests, adds GitHub build-provenance attestations to
-the Windows installers, and publishes them on a `v*` tag alongside the server
+The release workflow builds the Windows x64 and ARM64 installers, emits SHA-256
+manifests, adds GitHub build-provenance attestations to the installers, and
+publishes them on a `v*` tag alongside the server
 images. A release candidate — `vX.Y.Z-rc.N` — is marked as a prerelease and
 never moves the `latest` container tag. See [RELEASING.md](RELEASING.md).
 
@@ -147,12 +155,12 @@ never moves the `latest` container tag. See [RELEASING.md](RELEASING.md).
 5. Decide and implement the stable update channel before publishing a stable
    desktop release.
 
-## Windows and Linux parity
+## Same engine and player
 
-Both installers use the same Station Engine and web player sources. Windows
-is built for x64 and ARM64; it does not have a separate, older feature branch.
-The desktop package serves localhost on both systems; network/server use is a
-separate installation mode. Linux systemd integration is Linux-specific.
+The installers use the same Station Engine and web player sources as every
+other installation, for x64 and ARM64; there is no separate, older feature
+branch. The desktop package serves localhost; network/server use is a separate
+installation mode.
 
 The media bundle includes both `ffmpeg` and `ffprobe`. Library repair uses
 ffprobe to inspect codecs and containers, and DJ analysis uses it to obtain

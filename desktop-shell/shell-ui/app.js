@@ -168,7 +168,7 @@ async function applyAutostartPreference() {
   try {
     await invoke('set_autostart', { enabled: chkAutostart.checked });
   } catch {
-    // Autostart is non-fatal: Windows policy or a refused Flatpak portal can block it.
+    // Autostart is non-fatal: Windows policy can block it.
     await syncAutostartCheckbox();
   }
 }
@@ -288,8 +288,8 @@ async function connectServer(restoring = false) {
         await invoke('set_autostart', { enabled: document.getElementById('chk-client-autostart').checked });
       } catch {
         // As in applyAutostartPreference: a desktop that refuses autostart
-        // (or, in a Flatpak, has no Background portal) must not stop the
-        // connection. The checkboxes go back to what is really set.
+        // must not stop the connection. The checkboxes go back to what is
+        // really set.
         await syncAutostartCheckbox();
       }
     }

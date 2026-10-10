@@ -29,7 +29,7 @@ type OutputListener = (event: ProgramOutputEvent) => void;
 /**
  * iPadOS can advertise itself as a Mac in both Safari and installed PWAs.
  *
- * WebKitGTK — the Linux desktop app, and GNOME Web — accepts a MediaStream as
+ * WebKitGTK — GNOME Web and other WebKitGTK browsers — accepts a MediaStream as
  * a source and resolves `play()`, then never fetches a frame: the carrier sits
  * at readyState 0 while the decks play into it, and nothing reaches the sound
  * server. Chrome and Android also say AppleWebKit, so they are excluded.
