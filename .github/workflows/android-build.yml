@@ -61,31 +61,31 @@ jobs:
       NPM_CONFIG_FETCH_RETRIES: '5'
       PIP_RETRIES: '10'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: ui_web/package-lock.json
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.11'
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6.0.1
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
         with:
           # The retired SDK tools package is still an action default.
           packages: platform-tools
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6.4.0
       - name: Install SDK and JS dependencies
         run: |
           scripts/ci_retry.sh -- sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
           scripts/ci_retry.sh -- npm ci --prefix ui_web
           scripts/ci_retry.sh -- python -m pip install -r requirements.txt
       - name: Cache pinned WebRTC dependency
-        uses: actions/cache@v4
+        uses: actions/cache@v6.1.0
         with:
           # Checksum-verified on every use; the key changes with the pin.
           path: android/build/webrtc-original.aar
@@ -99,7 +99,7 @@ jobs:
         run: ./gradlew --no-daemon :app:testDebugUnitTest
       - name: Upload development APKs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: soundsible-android-development-${{ github.sha }}
           retention-days: 14
@@ -129,23 +129,23 @@ jobs:
       NPM_CONFIG_FETCH_RETRIES: '5'
       PIP_RETRIES: '10'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: ui_web/package-lock.json
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.11'
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6.0.1
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
         with:
           packages: platform-tools
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6.4.0
       - name: Install native audio fixture dependencies
         run: |
           scripts/ci_retry.sh -- sudo apt-get -o Acquire::Retries=5 update
@@ -156,7 +156,7 @@ jobs:
           scripts/ci_retry.sh -- npm ci --prefix ui_web
           scripts/ci_retry.sh -- python -m pip install -r requirements.txt
       - name: Cache pinned WebRTC dependency
-        uses: actions/cache@v4
+        uses: actions/cache@v6.1.0
         with:
           # Checksum-verified on every use; the key changes with the pin.
           path: android/build/webrtc-original.aar
@@ -177,7 +177,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Packaged offline playback, process restart and real account integration (API 36)
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 36
           target: google_apis
@@ -190,7 +190,7 @@ jobs:
             scripts/android_ci_shard.sh ${{ matrix.shard }} 4
       - name: Upload emulator evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: soundsible-android-emulator-${{ matrix.shard }}-${{ github.sha }}
           retention-days: 14

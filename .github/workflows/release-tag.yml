@@ -33,10 +33,10 @@ jobs:
     steps:
       # The squash commit the merge created, not whatever main is by the time
       # this runs: another merge seconds later must not be what gets tagged.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
       - name: Tag the merge commit and start the release

@@ -81,7 +81,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       # Fail here, cheaply and with the whole list, rather than forty minutes
       # later on a signing error that names one missing file.
@@ -211,7 +211,7 @@ jobs:
 
           rm -f ~/".appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: soundsible-ios-signed
           path: ios/build/export/*.ipa

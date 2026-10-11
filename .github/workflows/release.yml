@@ -24,8 +24,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
       - name: Tag matches the declared version
@@ -72,8 +72,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: soundsible-ios-ipa
           path: ios-artifact
@@ -91,7 +91,7 @@ jobs:
             --out apps.json
           cat apps.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: soundsible-altstore-source
           path: apps.json
@@ -107,7 +107,7 @@ jobs:
       # Only what is meant to be downloaded. The builds also upload test
       # evidence, and `files: artifacts/**` would attach anything that landed
       # here to the release.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           path: artifacts
           pattern: soundsible-*
@@ -128,7 +128,7 @@ jobs:
       # pre-release, so the channel is visible in the number itself and cannot
       # be set to one thing and named another.
       - name: Publish the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           name: Soundsible ${{ github.ref_name }}
           files: artifacts/**
