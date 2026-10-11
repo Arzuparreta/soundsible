@@ -20,8 +20,11 @@ la PR #345. No despliega servicios ni publica releases.
   Se retira la opción eliminada sin activar DTLS. CLI también queda apagada
   por defecto. Referencia: [notas de 4.18.0](https://github.com/coturn/coturn/releases/tag/4.18.0).
 - FFmpeg de la línea 8.1, build mensual 8.1.3 del 30 de septiembre, en CI
-  y en el empaquetado desktop. Se verifican los cuatro hashes Linux/Windows,
-  x64/ARM64. Linux deja de descargar un master flotante sin checksum;
+  y en el empaquetado desktop, excepto Windows ARM64. El build nuevo falla
+  en el smoke nativo al generar audio FLAC con STATUS_ACCESS_VIOLATION
+  (run 38149650880); ese target conserva el pin 8.1.2 ya verificado de julio.
+  Se verificaron los hashes de los cuatro candidatos Linux/Windows, x64/ARM64;
+  un checksum correcto no demuestra compatibilidad del binario. Linux deja de descargar un master flotante sin checksum;
   ARM64 selecciona su archivo correcto. FFmpeg 9 queda fuera de esta entrega.
 
 ## Validación local

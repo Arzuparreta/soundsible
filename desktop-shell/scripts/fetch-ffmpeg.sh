@@ -37,10 +37,13 @@ case "$TARGET" in
     URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-8.1.zip"
     SHA256="7b801cdd3a1a0bb54ae6f572187e68b4ed54f52086cfee133fab2180bfb429fa"
     ;;
+  # Keep the last verified Windows ARM64 binary: the September 8.1.3 build
+  # crashes with STATUS_ACCESS_VIOLATION in the packaged real-audio CI smoke.
+  # Revisit this pin only when a replacement passes that same native smoke.
   aarch64-pc-windows-msvc)
-    ARCHIVE="$CACHE/ffmpeg-n8.1.3-9-g29e619e767-winarm64-gpl.zip"
-    URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-winarm64-gpl-8.1.zip"
-    SHA256="061a770557c30bbf8e0b6ca3810288a60f72b85088378b84be03277746f34f17"
+    ARCHIVE="$CACHE/ffmpeg-n8.1.2-34-g9b6c8969e0-winarm64-gpl.zip"
+    URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n8.1.2-34-g9b6c8969e0-winarm64-gpl-8.1.zip"
+    SHA256="abf3b41c200ce5346b9bb5be6fe634c4720d891778d8921f7b36b76d002b3c96"
     ;;
   *)
     echo "fetch-ffmpeg: unsupported target $TARGET — install ffmpeg via OS package manager" >&2
