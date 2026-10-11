@@ -25,7 +25,7 @@ move to the service later. Whichever you use first needs the
 
 ## 1. Requirements
 
-- **Python 3.10+**, **git**, and **Node.js 22+** with **npm**
+- **Python 3.10+**, **git**, and **Node.js 24 LTS** with **npm** (Node 22.22.2+ and 26 are also supported)
   (the web player is built from source during engine startup).
 - **FFmpeg** — not bundled; install via your OS package manager:
   - Debian/Ubuntu: `sudo apt install ffmpeg`
@@ -60,8 +60,9 @@ cd ui_web && npm ci && cd ..
 python3 run.py
 ```
 
-Check `node --version`: you need Node.js 22 or newer. If your distribution
-ships an older version, install a current Node.js release before `npm ci`.
+Check `node --version`: Node.js 24 LTS is recommended (the project version
+is recorded in `.nvmrc`). Node 22.22.2+ and 26 are also supported. If your distribution
+ships an older patch, update Node.js before `npm ci`.
 
 **Other distros** — swap step 1:
 

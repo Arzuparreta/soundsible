@@ -141,7 +141,7 @@ function stubMediaSession() {
   return { mediaSession, press: (action: string) => handlers.get(action)?.() };
 }
 
-const playbackCleanups: Array<() => void> = [];
+const storeCleanups: Array<() => void> = [];
 
 async function loadStore(
   apiOverrides: Record<string, unknown> = {},
@@ -469,7 +469,7 @@ async function loadStore(
   }));
 
   const store = await import('./index');
-  playbackCleanups.push(() => store.actions.dismissPlayback());
+  storeCleanups.push(() => store.disposeStore());
   const fireSocketEvent = (event: string, data?: unknown) => socketHandlers.get(event)?.(data);
   const fireProgramTransport = (event: Partial<ProgramTransportEvent>) => programTransportReporter?.({
     kind: 'pause',
@@ -517,10 +517,15 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-// Retire real recovery timers before the next test restores their audio mocks.
-// Longer session-change tests otherwise inherit startup watchdogs from old stores.
-afterEach(() => {
-  for (const cleanup of playbackCleanups.splice(0)) cleanup();
+// Retire the whole authenticated client before the next module generation.
+// Dismissing playback leaves library refreshes, sockets and runtime timers alive;
+// a late callback can otherwise enter the next test's module/mock registry.
+afterEach(async () => {
+  for (const cleanup of storeCleanups.splice(0)) cleanup();
+  // initStore warms discovery with a dynamic import. Disposing its lifetime
+  // cancels callbacks, but cannot cancel module evaluation. Finish that graph
+  // before the next test resets modules and installs another API mock.
+  await vi.dynamicImportSettled();
 });
 
 describe('Solid store library and playback resume', () => {
@@ -4330,8 +4335,9 @@ describe('preparation ownership after generated queue cleanup', () => {
     actions.playTrack(t1);
     fireDeckEvent('playing');
     actions.enterAutoMode();
-    await flush();
-    expect(preparationOwners[1].ids).toContain('route-00001');
+    // Planning owns asynchronous work beyond one timer turn. Wait for its
+    // observable ownership before testing that leaving Auto releases it.
+    await vi.waitFor(() => expect(preparationOwners[1].ids).toContain('route-00001'));
     actions.exitAutoMode();
     expect(preparationOwners[1].ids).toEqual([]);
   });
@@ -4425,16 +4431,14 @@ describe('podcast progress and time jumps', () => {
     await first;
     expect(audioService.load).not.toHaveBeenCalled();
     actions.resumePlayback();
-    await flush();
-    expect(audioService.load).toHaveBeenLastCalledWith('/podcast/resumed', 1, 0);
+    await vi.waitFor(() => expect(audioService.load).toHaveBeenLastCalledWith('/podcast/resumed', 1, 0));
   });
 
   it('reloads queued streamed episodes through a podcast token', async () => {
     const { actions, audioService, api } = await loadStore({ podcastPeek: vi.fn().mockResolvedValue({ stream_token: 'queued' }) });
     actions.playFrom([{ id: 'episode', title: 'Episode', artist: 'Show', source: 'preview', media_kind: 'podcast_episode', podcast_enclosure_url: episode('a').enclosure_url }], 0);
-    await flush();
+    await vi.waitFor(() => expect(audioService.load).toHaveBeenCalledWith('/podcast/queued', 1, 0));
     expect(api.podcastPeek).toHaveBeenCalledWith(episode('a').enclosure_url);
-    expect(audioService.load).toHaveBeenCalledWith('/podcast/queued', 1, 0);
   });
 });
 

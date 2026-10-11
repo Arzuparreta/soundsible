@@ -4,10 +4,18 @@ import { mockMusicEngine, openMusicPlayer, TRACKS } from './music-browser-fixtur
 test('a cold DJ route warms and arrives automatically without Retry', async ({ page }) => {
   await mockMusicEngine(page);
   let attempts = 0;
+  // Start the cold response after the route panel is visible, and keep the
+  // ready response pending until warming is observed. Pager animation must
+  // not consume the fixture's automatic two-second retry before the assertion.
+  let releaseCold!: () => void;
+  const coldGate = new Promise<void>(resolve => { releaseCold = resolve; });
+  let releaseReady!: () => void;
+  const readyGate = new Promise<void>(resolve => { releaseReady = resolve; });
   await page.route('**/api/discovery/music/dj-plan', async (route) => {
     attempts += 1;
     const cold = attempts === 1;
     const request = route.request().postDataJSON();
+    await (cold ? coldGate : readyGate);
     await route.fulfill({ json: {
       v: 6, plan_id: `route-${attempts}`, intent: 'auto_mode', profile: 'balanced',
       seed_identity: request.seed?.id, direction_revision: request.direction_revision,
@@ -25,9 +33,17 @@ test('a cold DJ route warms and arrives automatically without Retry', async ({ p
     await page.locator('[data-player-surface-open] nav[data-no-surface-swipe] button').nth(2).click();
   }
   const route = page.locator('[data-auto-tile="route"]');
-  await expect(route.locator('[data-route-loading="warming"]')).toBeVisible();
-  await expect(route.getByText(/Buscando qué pega con/)).toBeVisible();
-  await expect(route.getByRole('button', { name: 'Reintentar', exact: true })).toHaveCount(0);
+  try {
+    await expect(route).toBeVisible();
+    await expect(route.locator('[data-route-loading="planning"]')).toBeVisible();
+    releaseCold();
+    await expect(route.locator('[data-route-loading="warming"]')).toBeVisible();
+    await expect(route.getByText(/Buscando qué pega con/)).toBeVisible();
+    await expect(route.getByRole('button', { name: 'Reintentar', exact: true })).toHaveCount(0);
+  } finally {
+    releaseCold();
+    releaseReady();
+  }
   await expect(route.locator('[data-drag-row]').first()).toBeVisible();
   await expect(route.locator('[data-route-loading]')).toHaveCount(0);
   expect(attempts).toBe(2);

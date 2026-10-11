@@ -178,3 +178,17 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   una causa común demostrada. No se modifica audio/transportes de producción
   ni se publica una release. Plan y avisos de dependencias pendientes en
   `docs/audits/DEPENDENCY_UPDATE_PLAN.md`.
+
+## 2026-10-11 · Bloque 2 de mantenimiento compatible
+
+- Rama `codex/dependency-maintenance-block-2`: Node 24.21.0, Vite 8.3.4 y
+  Capacitor 8.5.3 coordinado. Se conserva JDK 21 y los mínimos Android. Los
+  globs de recuperación salen de TSX para evitar el fallo del scan Vite; la
+  carga diferida y la recuperación con URL alternativo mantienen sus contratos.
+- AVD API 36: StartupTest, PlaybackTest y LiveListenerTest, 5 casos aprobados
+  (Live HTTP/TLS), más JVM/lint/APK de desarrollo. Log:
+  `/tmp/soundsible-block2-android.log`. No incluye OfflineRestartTest local;
+  los cuatro shards del último head en GitHub siguen siendo obligatorios.
+- Node/JDK se seleccionan sólo en los comandos de validación; no se modifican
+  los runtimes globales. No se publica una alpha ni se abren los gates de parity
+  u offline. Plan en `docs/audits/DEPENDENCY_UPDATE_PLAN.md`.

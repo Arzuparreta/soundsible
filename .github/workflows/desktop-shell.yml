@@ -7,6 +7,7 @@ on:
   push:
     branches: [main, dev]
     paths:
+      - '.nvmrc'
       - 'desktop-shell/**'
       - 'shared/**'
       - 'player/**'
@@ -22,6 +23,7 @@ on:
   pull_request:
     branches: [main, dev]
     paths:
+      - '.nvmrc'
       - 'desktop-shell/**'
       - 'shared/**'
       - 'player/**'
@@ -48,9 +50,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.11"
           cache: pip
@@ -71,7 +73,7 @@ jobs:
     outputs:
       image: ${{ steps.version.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           sparse-checkout: desktop-shell/package-lock.json
           sparse-checkout-cone-mode: false
@@ -90,8 +92,11 @@ jobs:
       image: ${{ needs.browser_image.outputs.image }}
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/cache@v6.1.0
         with:
           path: ~/.npm
           key: npm-shell-${{ hashFiles('desktop-shell/package-lock.json') }}
@@ -108,7 +113,7 @@ jobs:
         run: npm run test:ui
       - name: Upload shell browser report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: desktop-shell-browser-report
           path: desktop-shell/playwright-report

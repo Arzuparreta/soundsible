@@ -140,14 +140,11 @@ test('login and its display preferences do not download the authenticated player
 test('an authenticated module failure has an accessible retry that clears failed browser modules', async ({ page }) => {
   await engine(page, Promise.resolve(), false);
   const player = /\/AuthenticatedPlayer[^/]*\.(?:js|tsx)(?:\?|$)/;
-  let failed = false;
-  await page.route(player, async route => {
-    if (!failed) {
-      failed = true;
-      await route.fulfill({ status: 503, body: 'temporary module failure', headers: { 'Cache-Control': 'no-store' } });
-    }
-    else await route.continue();
-  });
+  // A production modulepreload can fail before the actual import fetches the
+  // same URL again. Keep the outage until retry, rather than failing only preload.
+  await page.route(player, route => route.fulfill({
+    status: 503, body: 'temporary module failure', headers: { 'Cache-Control': 'no-store' },
+  }));
   await page.goto('/player/');
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.locator('#startup-screen')).toHaveCount(0);
@@ -310,7 +307,9 @@ test('a failed lazy player view retries without restarting playback', async ({ p
   await page.route(view, route => route.fulfill({ status: 503, body: 'temporary view failure', headers: { 'Cache-Control': 'no-store' } }));
   await page.goto('/player/#/library?view=songs');
   await page.getByRole('button', { name: /Reproducir Canción de biblioteca 320/ }).click();
-  const playing = page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true });
+  // The mobile workspace hides the underlying pill from accessibility while
+  // open. Inspect its transport state even when that pill is covered.
+  const playing = page.locator('[data-omni-player]').getByRole('button', { name: 'Pausar', exact: true, includeHidden: true });
   await expect(playing).toBeVisible();
   await page.getByRole('button', { name: /^NORMAL:/ }).click();
   await expect(page.getByRole('button', { name: 'Reintentar', exact: true })).toBeVisible();

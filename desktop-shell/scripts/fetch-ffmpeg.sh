@@ -18,19 +18,28 @@ CACHE="$ROOT/desktop-shell/build/ffmpeg-cache"
 mkdir -p "$VENDOR_DIR" "$BIN_DIR" "$CACHE"
 
 case "$TARGET" in
-  x86_64-unknown-linux-gnu|aarch64-unknown-linux-gnu)
-    ARCHIVE="$CACHE/ffmpeg-linux64.tar.xz"
-    URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+  x86_64-unknown-linux-gnu)
+    ARCHIVE="$CACHE/ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-8.1.tar.xz"
+    URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-8.1.tar.xz"
+    SHA256="97ce978979194b5cf7e06a5e68020dbdaa7a4f3294c5452b6a1bc347100dbb79"
+    ;;
+  aarch64-unknown-linux-gnu)
+    ARCHIVE="$CACHE/ffmpeg-n8.1.3-9-g29e619e767-linuxarm64-gpl-8.1.tar.xz"
+    URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-linuxarm64-gpl-8.1.tar.xz"
+    SHA256="10523d1e0be6b3ce62a9708cc50815c4b5eb5f36ae147fbe2afeecda6f2d6845"
     ;;
   # Windows pins a concrete build so the checksum is meaningful. BtbN prunes its
   # daily autobuild releases after about two weeks and keeps only the last build
   # of each month, so pin month-end tags (autobuild-YYYY-MM-<last day>-HH-MM) or
   # the download starts returning 404 once the daily release rotates out.
   x86_64-pc-windows-msvc)
-    ARCHIVE="$CACHE/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-gpl.zip"
-    URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-gpl-8.1.zip"
-    SHA256="cc4156d51387566ea8ba653fc3a04897bdf812fddf652428d9030bbf7ae24835"
+    ARCHIVE="$CACHE/ffmpeg-n8.1.3-9-g29e619e767-win64-gpl.zip"
+    URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-8.1.zip"
+    SHA256="7b801cdd3a1a0bb54ae6f572187e68b4ed54f52086cfee133fab2180bfb429fa"
     ;;
+  # Keep the last verified Windows ARM64 binary: the September 8.1.3 build
+  # crashes with STATUS_ACCESS_VIOLATION in the packaged real-audio CI smoke.
+  # Revisit this pin only when a replacement passes that same native smoke.
   aarch64-pc-windows-msvc)
     ARCHIVE="$CACHE/ffmpeg-n8.1.2-34-g9b6c8969e0-winarm64-gpl.zip"
     URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n8.1.2-34-g9b6c8969e0-winarm64-gpl-8.1.zip"

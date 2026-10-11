@@ -2,6 +2,7 @@ import { snapCarousel, snapPlayerCarousel, holdCarousel, releaseCarousel, holdFo
 import { expect, test, type Page } from '@playwright/test';
 import { settle } from './settle';
 import AxeBuilder from '@axe-core/playwright';
+import { silentStream } from './music-browser-fixture';
 
 const TRACKS = [
   {
@@ -45,6 +46,9 @@ async function mockEngine(page: Page) {
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
+  // Keep playback on its fixture song instead of decoding the API fallback's
+  // JSON as audio, failing it and moving the transport beneath gesture tests.
+  await silentStream(page);
   await page.addInitScript(() => {
     localStorage.clear();
     localStorage.setItem('lang', 'es');
@@ -332,33 +336,55 @@ test('a route row exposes its menu and still answers a hold', async ({ page }) =
   await expect(page.getByRole('dialog').getByRole('button', { name: 'Quitar de la ruta' })).toBeVisible();
 });
 
-test('mobile route insertion targets stay contextual and aligned', async ({ page }) => {
-  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
-  await openNowPlaying(page);
-  await page.getByRole('tab', { name: 'DJ' }).click();
-
+async function openRouteForRowChecks(page: Page, withRequests = false) {
+  await page.goto('/player/#/library?view=songs');
+  await expect(page.getByRole('button', { name: /Reproducir Una canción/ })).toBeVisible();
+  // Arrange the real DJ store; mode-tab and playback gestures have their own
+  // cases. This leaves the budget for insertion or movement, respectively.
+  await page.evaluate(async (requests) => {
+    const modulePath = '/player/src/stores/index.ts';
+    const { actions, state } = await import(/* @vite-ignore */ modulePath);
+    const source = state.library.find((track: { id: string }) => track.id === 'track-1')!;
+    actions.playFrom([source], 0);
+    actions.enterAutoMode({ source, deferPlanning: true });
+    if (requests) {
+      await actions.placeAutoTrack(state.library.find((track: { id: string }) => track.id === 'track-2')!);
+      await actions.placeAutoTrack(state.library.find((track: { id: string }) => track.id === 'track-3')!);
+    }
+  }, withRequests);
+  await expect(page.locator('[data-player-surface-open]')).toBeVisible();
   const route = page.locator('[data-auto-tile="route"]');
   await holdCarousel(page, '[data-auto-carousel]');
   await snapPlayerCarousel(page, 'auto', 'route');
   await releaseCarousel(page, '[data-auto-carousel]');
   await expect(route).not.toHaveAttribute('inert', '');
+  return route;
+}
 
-  await route.getByRole('button', { name: 'Añadir', exact: true }).click();
-  const browser = page.locator('[data-auto-tile="browser"]');
-  await expect(browser).not.toHaveAttribute('inert', '');
-  await browser.getByRole('button', { name: /^Biblioteca/ }).click();
-  await browser.getByRole('button', { name: /Luz de verano/ }).first().click();
-  await expect(route).not.toHaveAttribute('inert', '');
-  await route.getByRole('button', { name: 'Añadir', exact: true }).click();
-  await expect(browser).not.toHaveAttribute('inert', '');
-  await browser.getByRole('button', { name: /Horizonte/ }).first().click();
-  await expect(route).not.toHaveAttribute('inert', '');
+for (const title of ['Luz de verano', 'Horizonte']) {
+  test(`mobile route requests return from the browser with contextual insertion targets: ${title}`, async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
+    const route = await openRouteForRowChecks(page);
+    await route.getByRole('button', { name: 'Añadir', exact: true }).click();
+    const browser = page.locator('[data-auto-tile="browser"]');
+    await expect(browser).not.toHaveAttribute('inert', '');
+    await browser.getByRole('button', { name: /^Biblioteca/ }).click();
+    await browser.getByRole('button', { name: new RegExp(title) }).first().click();
+    await expect(route).not.toHaveAttribute('inert', '');
+    const insertionTargets = route.locator('button[aria-label^="Insertar una canción antes de"]');
+    await expect(insertionTargets).toHaveCount(1);
+    await expect(insertionTargets.first()).toBeHidden();
+    await expect(route).toContainText(title);
+  });
+}
 
+test('mobile route insertion targets stay contextual and aligned', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 1024) > 1023, 'compact player regression');
+  const route = await openRouteForRowChecks(page, true);
   const insertionTargets = route.locator('button[aria-label^="Insertar una canción antes de"]');
   await expect(insertionTargets).toHaveCount(2);
   await expect(insertionTargets.first()).toBeHidden();
   await expect(insertionTargets.last()).toBeHidden();
-
   const carriedRow = route.locator('[draggable="true"]').first();
   await holdForMenu(page, carriedRow);
   await page.getByRole('dialog').getByRole('button', { name: 'Mover', exact: true }).click();
@@ -477,7 +503,7 @@ test('NORMAL and DJ share centered desktop Stage geometry through scale reflows'
         };
       };
       const transport = stage.querySelector<HTMLButtonElement>(
-        'button[aria-label="Reintentar"], button[aria-label="Pausa"], button[aria-label="Reproducir"]',
+        'button[aria-label="Reintentar"], button[aria-label="Pausar"], button[aria-label="Reproducir"]',
       );
       const tile = stage.closest('[data-player-tile]');
       const cover = stage.querySelector('[data-player-cover-slot]');

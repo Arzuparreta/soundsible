@@ -108,16 +108,86 @@ un fallo: cualquier nueva aserción debe revisarse con sus artefactos.
 
 ## Bloque 2 · Mantenimiento compatible
 
-Pendiente; no incluido en la primera PR:
+Clientes e infraestructura se validaron inicialmente en las PR #347 y #346.
+Para reducir CI antes de fusionar, ambos cambios se integran ahora en #347:
+un solo head combinado, una revisión independiente y todos sus checks completos.
+#346 queda incorporada; no se publica una release desde esta entrega.
 
-- Actualizar Vite, Playwright y su imagen, Capacitor y la familia Tauri de forma
-  coordinada; revisar los avisos transitivos de mantenimiento que sigan abiertos.
-- Actualizar los demás paquetes Python dentro de las líneas compatibles.
-- Unificar la herramienta Node del proyecto en la LTS elegida y declarar sus
-  requisitos; Node/npm del equipo ya están actualizados. Seleccionar JDK 21
-  sólo para Android; no cambiar el Java global.
-- Revisar Actions, MediaMTX, coturn y los pins/checksums FFmpeg en entregas
-  separadas con pruebas de la plataforma afectada.
+1. **Clientes, Python y Node.** Node 24.21.0 LTS como referencia en `.nvmrc`,
+   CI y Docker; los manifests admiten también Node 22.22.2+ y 26. Vite 8.3.4,
+   Playwright 1.64.0 (imagen CI derivada del lock), Capacitor 8.5.3 coordinado
+   y Tauri 2.12.3 con sus plugins/transitivos compatibles. Python: curl-cffi
+   0.16.3, Flask-SocketIO 5.7.0, gevent 26.9.0, PyInstaller 6.22.3 y regeneración
+   completa del lock Docker con hashes bajo Python 3.13. Se conservan los mínimos
+   compatibles de la instalación nativa y la excepción Mac Intel del bloque 1.
+2. **Infraestructura.** Actions, MediaMTX, Coturn y FFmpeg, con validación propia;
+   evidencia en `docs/audits/DEPENDENCY_INFRASTRUCTURE.md`. No se
+   requiere desplegar para revisar estas entregas.
+
+Vite 8.3 exponía un fallo reproducible en el scan de dependencias con
+`import.meta.glob` dentro de TSX: después de quitar tipos, intentaba parsear JSX
+como JavaScript. Los dos globs de recuperación se extraen a módulos TS sin JSX;
+conservan carga diferida y el URL alternativo `?recovery` requerido por WebKit.
+El arranque con cache frío ya no falla. Los tests de navegador esperan el estilo
+tras el reflow y miden geometría en el mismo frame; la comprobación de reproducción
+tras recuperar un módulo encuentra también la mini-player oculta bajo el panel.
+El fixture DJ espera que el contenido del panel sea visible antes de responder
+por primera vez y mantiene pendiente la respuesta final hasta comprobar la espera; una animación lenta no puede consumir ese estado antes de la aserción.
+Con dos CPU y el arranque frío se reprodujo además un fallo real WebKit: la
+regla global de movimiento reducido daba una duración no nula a la transición
+de visibilidad de cada descendiente. El panel se revelaba capa a capa y sus filas
+seguían ocultas bajo carga. La regla ahora desactiva las transiciones; conserva
+los eventos de animación y la preferencia del usuario. No se aumenta el timeout
+ni se añaden retries ni se reduce la exigencia del audio Android.
+En producción, el fixture de avería mantiene el 503 hasta pulsar retry: fallar
+sólo el preload dejaba que el import posterior cargase el módulo correctamente.
+Las cuatro acciones de una canción encontrada tienen pruebas independientes y
+una sesión restaurada y una cola breve; la prueba de favoritos parte de una
+canción ya guardada, como exige el producto. La cobertura de colas largas
+permanece en sus propios casos.
+Un segundo shard señaló como flaky la prueba móvil que acumulaba dos inserciones
+y la geometría de movimiento. Cada inserción tiene ahora un caso propio y la
+geometría prepara dos peticiones mediante el store real. El fixture móvil sirve
+WAV silencioso válido en vez del fallback JSON, evitando fallos de decodificación
+que avanzaban el transporte durante los gestos. No se cambian retries ni timeout.
+
+Validación local de clientes/Python:
+
+- Instalación del lock Docker con hashes: 1921 pruebas Python, cobertura 76,54 %;
+  Ruff, comprobación de dependencias y sincronización de versión aprobados.
+- Entorno comunitario con sus pins reales: 21 pruebas aprobadas.
+- Web: typecheck y 1720 pruebas; shell: 9 pruebas y 13 casos de navegador.
+- Antes de abrir la PR, Chromium móvil/escritorio: 320 aprobados y 66 skips de los perfiles. Después,
+  WebKit móvil/escritorio: 311 aprobados y 75 skips, imagen Playwright de sólo
+  lectura y un worker. El caso DJ también pasó seis ejecuciones aisladas
+  consecutivas en WebKit. Los fallos se diagnosticaron y corrigieron antes de
+  abrir la PR; se exige además todo GitHub CI aprobado en su último head.
+  El primer CI falló en el refresco de biblioteca. Su fixture sólo cerraba
+  playback y dejaba vivos syncs/timers del cliente anterior.
+  Ahora llama a disposeStore completo antes de cambiar el registro de módulos.
+  Las pruebas de ownership DJ y tokens podcast esperan el estado observable
+  esperado, no un solo turno de temporizador que podía terminar antes del trabajo
+  asíncrono en runners cargados; conservan sus aserciones originales.
+- Tras los arreglos del CI: recuperación del módulo en producción aprobada en
+  los cuatro perfiles y las ocho acciones DJ aprobadas en WebKit móvil/escritorio
+  limitado a dos CPU. La repetición completa aprobó 328 casos Chromium (68 skips) y 319 WebKit
+  (77 skips), en ese orden y sin retries locales. Se exige además verde en cada
+  check del último head remoto antes de dar por completada la entrega.
+- Android: StartupTest, PlaybackTest y LiveListenerTest, 5 casos nativos HTTP/TLS
+  aprobados en AVD API 36, más JVM/lint/APK de desarrollo con JDK 21 seleccionado
+  sólo para esos comandos. La prueba local no incluye OfflineRestartTest;
+  los cuatro shards completos y Windows x64/ARM64 se validan en GitHub CI.
+- Cargo local sigue limitado por javascriptcoregtk 4.1 ausente; no equivale a
+  validar los instaladores Windows. No se cambia el Java ni Node global.
+
+Avisos: `npm audit` mantiene la cadena moderada Capacitor CLI → xcode → uuid
+(3 paquetes web, ninguno en shell) con la disposición documentada en bloque 1.
+OSV consultó 662 combinaciones fijadas: ningún aviso Python en esos locks; quedan
+`glib` 0.18.5, `paste` y `proc-macro-error`. Los cinco `unic-*` abandonados salen
+con la familia Tauri nueva. `glib` sigue ausente en ambos targets Windows. `dirs`
+6 sigue siendo la dependencia directa; el nuevo `dirs` 7 del lock es un transitivo
+Tauri, no una migración del código propio. La excepción Mac Intel conserva sus
+avisos y sus límites tal como se explicó en el bloque 1.
 
 ## Bloque 3 · Migraciones mayores
 

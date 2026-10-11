@@ -1,6 +1,6 @@
 services:
   coturn:
-    image: coturn/coturn:4.15.0-r0
+    image: coturn/coturn:4.18.0-r0
     restart: unless-stopped
     network_mode: host
     command:
@@ -12,7 +12,7 @@ services:
       - --static-auth-secret=${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
       - --fingerprint
       - --no-tls
-      - --no-dtls
+      # Coturn 4.18 disables DTLS by default; --no-dtls was removed.
       - --no-multicast-peers
       - --pidfile=/var/tmp/turnserver.pid
       - --log-file=stdout
@@ -24,7 +24,7 @@ services:
       start_period: 5s
 
   coturn-udp443:
-    image: coturn/coturn:4.15.0-r0
+    image: coturn/coturn:4.18.0-r0
     restart: unless-stopped
     network_mode: host
     command:
@@ -37,7 +37,7 @@ services:
       - --fingerprint
       - --no-tcp
       - --no-tls
-      - --no-dtls
+      # Coturn 4.18 disables DTLS by default; --no-dtls was removed.
       - --no-multicast-peers
       - --pidfile=/var/tmp/turnserver-udp443.pid
       - --log-file=stdout
@@ -49,7 +49,7 @@ services:
       start_period: 5s
 
   coturn-tls:
-    image: coturn/coturn:4.15.0-r0
+    image: coturn/coturn:4.18.0-r0
     restart: unless-stopped
     network_mode: host
     command:
@@ -63,7 +63,7 @@ services:
       - --static-auth-secret=${COMMUNITY_TURN_SECRET:?COMMUNITY_TURN_SECRET is required}
       - --fingerprint
       - --no-udp
-      - --no-dtls
+      # Coturn 4.18 disables DTLS by default; --no-dtls was removed.
       - --no-multicast-peers
       - --cert=/certs/turn.crt
       - --pkey=/certs/turn.key
@@ -112,7 +112,7 @@ services:
       start_period: 10s
 
   mediamtx:
-    image: bluenviron/mediamtx:1.19.3
+    image: bluenviron/mediamtx:1.21.2
     restart: unless-stopped
     environment:
       MTX_WEBRTCICESERVERS2_0_URL: turns:turn.84-247-161-82.sslip.io:443

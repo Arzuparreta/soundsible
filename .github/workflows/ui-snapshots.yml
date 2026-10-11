@@ -31,7 +31,7 @@ jobs:
     outputs:
       image: ${{ steps.version.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.ref_name }}
           sparse-checkout: ui_web/package-lock.json
@@ -52,9 +52,12 @@ jobs:
       image: ${{ needs.browser_image.outputs.image }}
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
       - name: Install JS dependencies
         working-directory: ui_web
         run: npm ci
@@ -77,7 +80,7 @@ jobs:
           fi
       - name: Upload the refreshed baselines for review
         if: steps.diff.outputs.changed == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ui-snapshots
           path: ui_web/tests/browser/**/*.png
