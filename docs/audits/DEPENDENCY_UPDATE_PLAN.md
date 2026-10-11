@@ -17,13 +17,25 @@ Cambios de esta entrega:
 
 | Área | Cambio |
 | --- | --- |
-| Python | cryptography 50.0.2, Werkzeug 3.1.9, urllib3 2.8.0 y Flask 3.1.3 como mínimos seguros. |
+| Python | cryptography 50.0.2 salvo Mac Intel (48.0.1 a <49 para conservar wheels), Werkzeug 3.1.9, urllib3 2.8.0 y Flask 3.1.3. |
 | Comunidad | Flask 3.1.3, Werkzeug 3.1.9 y cryptography 50.0.2; Flask-SocketIO 5.6.1 por compatibilidad con el RequestContext de Flask corregido. |
 | Sidecar | yt-dlp 2026.8.19, igual que requirements.txt. |
 | npm | Vitest 4.1.11 en los dos clientes; Solid 1.9.17 permite seroval/seroval-plugins 1.6.9. Locks con los patches compatibles de los transitivos afectados y sus dependencias. |
 | Rust | rustls 0.23.42 → 0.23.45 y rustls-webpki 0.103.13 → 0.103.15; resto del lock conservado. |
 
 ### Avisos que no se resuelven forzando versiones
+
+La revisión detectó que cryptography 49 eliminó los wheels de macOS x86_64.
+La instalación nativa documentada no exige Rust/OpenSSL para compilarla:
+requirements.txt selecciona >=48.0.1,<49 sólo en Mac Intel, la última línea con
+wheels universales, y >=50.0.2 en el resto. No se presenta esa excepción como
+libre de avisos: OSV conserva tres problemas distintos (PKCS#7 y dos del
+verificador X.509), también publicados como PYSEC. Soundsible usa Fernet,
+PBKDF2 y Ed25519; no invoca descifrado PKCS#7 ni el verificador X.509 de
+cryptography. La excepción y sus avisos se mantienen visibles; el resto de
+plataformas y los contenedores reciben la versión corregida. Véanse el
+[changelog](https://cryptography.io/en/50.0.2/changelog/#v49-0-0) y
+[los wheels de 48.0.1](https://pypi.org/project/cryptography/48.0.1/#files).
 
 `npm audit` pasa de 13 paquetes afectados a 3 en web y de 4 a 0 en la shell.
 En web queda una sola cadena moderada: `@capacitor/cli → xcode → uuid`.
@@ -74,6 +86,11 @@ un fallo: cualquier nueva aserción debe revisarse con sus artefactos.
 
 - Python 3.13, instalación del lock con hashes: 1921 pruebas, cobertura 76,54 %;
   Ruff, pip check y sincronización de versión aprobados.
+- Excepción Mac Intel: selección de markers en cinco combinaciones de
+  plataforma/arquitectura; pip download --only-binary recupera el wheel universal
+  de 48.0.1 para CPython 3.13/macOS x86_64. Con 48.0.1, 38 pruebas de backup,
+  identidad comunitaria y autenticación Subsonic aprobadas en Linux; no se
+  presenta esa comprobación como una ejecución nativa en macOS.
 - Servicio comunitario en un entorno separado con sus pins reales: 21 pruebas.
   Flask-SocketIO 5.5.1 falló con Flask actualizado; 5.6.1 corrigió esa combinación.
 - Web: 1720 pruebas Vitest y typecheck. Shell: 9 pruebas y 13 casos de navegador.
