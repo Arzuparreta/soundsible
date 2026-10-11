@@ -11,6 +11,42 @@ const t1: Track = { id: 't1', title: 'One', artist: 'Artist', duration: 180 };
 const t2: Track = { id: 't2', title: 'Two', artist: 'Artist', duration: 200 };
 
 describe('portable remote playback', () => {
+  it.each([
+    { id: 'dQw4w9WgXcQ', title: 'Song', artist: 'A', source: 'preview' as const },
+    { id: 'ep', title: 'Episode', artist: 'Show', source: 'preview' as const, media_kind: 'podcast_episode',
+      podcast_episode_guid: 'ep', podcast_enclosure_url: 'https://example.com/episode.mp3' },
+  ])('replaces the receiver DJ session with $title without asking for confirmation', async (track) => {
+    const confirmDialog = vi.fn().mockResolvedValue(false);
+    const store = await loadStore({ __confirmDialog: confirmDialog,
+      podcastPeek: vi.fn().mockResolvedValue({ stream_token: 'receiver-token' }) }); store.initStore(); await flush();
+    store.actions.playFrom([t1, t2], 0);
+    store.actions.enterAutoMode();
+    expect(store.state.autoMode.active).toBe(true);
+    store.fireSocketEvent('playback_start_requested', { track, state: { session: null } });
+    await flush();
+    expect(store.state.autoMode.active).toBe(false);
+    expect(store.state.playback.currentTrack).toMatchObject(track);
+    expect(store.state.playback.queue.map(item => item.id)).toEqual([track.id]);
+    expect(confirmDialog).not.toHaveBeenCalled();
+  });
+
+  it('restores an offline podcast request paused and mints its token on resume', async () => {
+    const track = { id: 'ep', title: 'Episode', artist: 'Show', source: 'preview' as const, media_kind: 'podcast_episode',
+      podcast_episode_guid: 'ep', podcast_enclosure_url: 'https://example.com/episode.mp3' };
+    const podcastPeek = vi.fn().mockResolvedValue({ stream_token: 'reconnected-token' });
+    const store = await loadStore({ podcastPeek, getPlaybackState: vi.fn().mockResolvedValue({
+      device_id: 'dev1', track_id: track.id, track, session: null, position_sec: 0, updated_at: Date.now() / 1000,
+    }) });
+    await store.actions.checkResume();
+    expect(store.state.playback).toMatchObject({ currentTrack: track, phase: 'paused', isPlaying: false });
+    expect(store.audioService.prime).not.toHaveBeenCalled();
+    expect(podcastPeek).not.toHaveBeenCalled();
+    store.actions.resumePlayback(); await flush();
+    expect(podcastPeek).toHaveBeenCalledWith(track.podcast_enclosure_url);
+    expect(store.audioService.load).toHaveBeenCalledWith('/podcast/reconnected-token', 1, expect.any(Number));
+    expect(store.audioService.resume).not.toHaveBeenCalled();
+  });
+
   it('retains stream identity, record metadata and row identities on the receiver', async () => {
     const store = await loadStore(); store.initStore(); await flush();
     const track = { id: 'dQw4w9WgXcQ', source: 'preview', title: 'Song', artist: 'A', album: 'Record',

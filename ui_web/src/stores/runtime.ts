@@ -541,6 +541,9 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
           youtube_id: typeof trk.youtube_id === 'string' ? trk.youtube_id : undefined,
           media_kind: typeof trk.media_kind === 'string' ? trk.media_kind : undefined
         };
+        // An individual remote selection replaces this receiver's DJ session.
+        // Session-bearing handoffs have already taken the restore path above.
+        if (state.autoMode.active) ports.actions.exitAutoMode();
         ports.actions.playTrack(t);
         const pos = Number(data?.state?.position_sec);
         if (Number.isFinite(pos) && pos > 0) lifetime.setTimeout(() => ports.actions.seek(pos), 400);

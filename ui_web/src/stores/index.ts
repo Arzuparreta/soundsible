@@ -332,6 +332,12 @@ function createClient() {
     set podcastProgressOwner(value) {
       podcasts.podcastProgressOwner = value;
     },
+    get podcastSourcePending() {
+      return podcasts.podcastSourcePending;
+    },
+    set podcastSourcePending(value) {
+      podcasts.podcastSourcePending = value;
+    },
     get trackUrl() {
       return transport.trackUrl;
     },

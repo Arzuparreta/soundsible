@@ -7,7 +7,7 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.TimeUnit
-/** An unresolved catalogue occurrence is not a library song: its queue menu offers removal only, never song/DJ/offline actions. */
+/** Unresolved occurrences can be removed or sent to a device, without library/DJ/offline actions. */
 class PendingQueueMenuTest {
     @Test fun httpPendingQueueMenu() = run(InstrumentationRegistry.getArguments().getString("fixtureOrigin")!!)
     @Test fun tlsPendingQueueMenu() = run(InstrumentationRegistry.getArguments().getString("tlsOrigin")!!)
@@ -44,7 +44,7 @@ class PendingQueueMenuTest {
                 waitFor("!document.querySelector('[role=dialog]')")
                 waitFor(menu("unresolved fixture future"))
                 waitFor("!!document.querySelector('[role=dialog]')")
-                assertEquals("Pending occurrence exposed song actions: " + web.evaluate(scenario, labels()), "true", web.evaluate(scenario, labels() + "===JSON.stringify(['Remove from queue'])"))
+                assertEquals("Pending occurrence menu: " + web.evaluate(scenario, labels()), "true", web.evaluate(scenario, labels() + "===JSON.stringify(['Remove from queue','Play on device'])"))
                 web.evaluate(scenario, "Array.from(document.querySelectorAll('[role=dialog] button[data-pressable]')).find(b=>b.textContent.trim()==='Remove from queue').click()")
                 waitFor("window.__pendingState.items.length===1&&!window.__pendingState.items.some(item=>item.source==='pending')")
                 assertEquals(key, web.evaluate(scenario, "window.__pendingState.items[0].key"))

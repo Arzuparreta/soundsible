@@ -147,3 +147,10 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
 - Lógica y envío del adaptador cubiertos por Vitest; el servidor valida las
   descripciones y mantiene el aislamiento de dispositivos por cuenta. No se
   modifica el transporte nativo ni se publica una release.
+- Seguimiento de PR #344: los cuatro shards de CI detectaron expectativas
+  obsoletas en `SongMenuTest` y `PendingQueueMenuTest` (mensaje de petición
+  enviada y acción remota para referencias pendientes). Ambas clases corregidas
+  y ejecutadas conjuntamente por HTTP/TLS: 4 casos aprobados en AVD API 36,
+  más JVM/lint/APK de desarrollo. Log:
+  `/tmp/soundsible-pr344-android-integration.log`. La entrega requiere además
+  todos los checks de GitHub aprobados sobre el último commit de la PR.
