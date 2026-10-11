@@ -520,8 +520,12 @@ beforeEach(() => {
 // Retire the whole authenticated client before the next module generation.
 // Dismissing playback leaves library refreshes, sockets and runtime timers alive;
 // a late callback can otherwise enter the next test's module/mock registry.
-afterEach(() => {
+afterEach(async () => {
   for (const cleanup of storeCleanups.splice(0)) cleanup();
+  // initStore warms discovery with a dynamic import. Disposing its lifetime
+  // cancels callbacks, but cannot cancel module evaluation. Finish that graph
+  // before the next test resets modules and installs another API mock.
+  await vi.dynamicImportSettled();
 });
 
 describe('Solid store library and playback resume', () => {
