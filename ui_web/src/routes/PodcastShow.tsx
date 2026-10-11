@@ -2,6 +2,8 @@ import Button from '../components/Button';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
+import { openPlayOnDevice } from '../components/DeviceSheet';
+import { podcastEpisodeToTrack } from '../lib/track';
 import { BackIcon, CheckIcon, DownloadIcon, RefreshIcon, menuIcons } from '../components/icons';
 import { useAppBar } from '../lib/appBar';
 import { desktopShell } from '../lib/shellLayout';
@@ -324,6 +326,7 @@ export default function PodcastShow() {
                   actionLabel={`${t('podcastShow.ariaPlay')}: ${ep.title}`} onActivate={() => playEp(ep)}
                   onMenu={() => openContextMenu({ title: ep.title, subtitle: title(), actions: [
                     { icon: menuIcons.play(), label: t('podcastShow.ariaPlay'), onSelect: () => playEp(ep) },
+                    { icon: menuIcons.device(), label: t('trackActions.playOnDevice'), onSelect: () => openPlayOnDevice(localByGuid().get(ep.guid) ?? podcastEpisodeToTrack(ep, show()?.title, show()?.id, image())) },
                     { icon: downloaded() ? menuIcons.check() : menuIcons.download(), label: t(downloaded() ? 'podcastShow.ariaDownloaded' : downloading() ? 'collection.downloading' : 'podcastShow.ariaDownload'), disabled: downloaded() || downloading(),
                       onSelect: () => void actions.downloadEpisode(ep, show()) },
                   ] })} />}>

@@ -11,7 +11,7 @@ import type { PodcastEpisode, PodcastSubscription, PodcastShowInfo } from '../ty
 import type { Track } from '../types/music';
 
 /** Feed browsing imports no audio runtime; only the selected episode reaches native NORMAL. */
-export default function PodcastBrowser(props: { generation: number; subscriptions: PodcastSubscription[]; acquired: Track[]; disconnected?: boolean; activeId?: string; onPlay(track: Track): Promise<void>; onChanged?(): Promise<void> }) {
+export default function PodcastBrowser(props: { generation: number; subscriptions: PodcastSubscription[]; acquired: Track[]; disconnected?: boolean; activeId?: string; onPlay(track: Track): Promise<void>; onPlayOnDevice?(track: Track): void; onChanged?(): Promise<void> }) {
   const [show, setShow] = createSignal<PodcastShowInfo | null>(null);
   const [followResult, setFollowResult] = createSignal<{ url: string; subscription: PodcastShowInfo | null } | null>(null);
   const followed = createMemo(() => followResult()?.url === show()?.rss_url ? followResult()?.subscription : props.subscriptions.find(row => row.rss_url === show()?.rss_url));
@@ -127,6 +127,7 @@ export default function PodcastBrowser(props: { generation: number; subscription
     const acquired = track(episode).source !== 'preview';
     openContextMenu({ title: episode.title, actions: [
       { label: t('common.play'), disabled, onSelect: () => { if (current()) void props.onPlay(track(episode)).catch(() => { if (current()) setError(true); }); } },
+      ...(props.onPlayOnDevice ? [{ label: t('trackActions.playOnDevice'), disabled, onSelect: () => { if (current()) props.onPlayOnDevice!(track(episode)); } }] : []),
       ...(!acquired && !existing ? [{ label: t('podcastShow.ariaDownload'), disabled, onSelect: () => { if (current() && !episodeJob(episode)) void acquire(episode); } }] : []),
       ...(existing && ['failed', 'interrupted'].includes(existing.status) ? [{ label: t('common.retry'), disabled, onSelect: () => { if (current() && episodeJob(episode)?.id === existing.id) void acquire(episode, 'retry', existing); } }] : []),
       ...(existing ? [{ label: t('common.cancel'), disabled, onSelect: () => { if (current() && episodeJob(episode)?.id === existing.id) void acquire(episode, 'remove', existing); } }] : []),

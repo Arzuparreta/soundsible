@@ -1003,7 +1003,7 @@ export const zh: Dict = {
     transfer: '转移播放',
     sendingTo: '正在发送到 {device}…',
     fallbackDevice: '设备',
-    playingOn: '正在设备上播放',
+    playingOn: '播放请求已发送',
     failed: '无法控制设备',
     title: '在…上播放',
     searching: '正在查找设备…',

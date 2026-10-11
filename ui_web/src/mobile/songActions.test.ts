@@ -47,14 +47,23 @@ it('lists only other online devices and asks the chosen one to play the library 
   const menu = mocks.menu.mock.calls[0][0];
   expect(menu.actions.map((action: { label: string }) => action.label)).toEqual(['Laptop']);
   menu.actions[0].onSelect(); await flush();
-  expect(mocks.request.mock.calls[1]).toEqual(['/api/playback/remote-command', expect.objectContaining({ body: { device_id: 'laptop', command: 'play', track_id: 'song' } })]);
+  expect(mocks.request.mock.calls[1]).toEqual(['/api/playback/remote-command', expect.objectContaining({ body: { device_id: 'laptop', command: 'play', track_id: 'song', track: song } })]);
   expect(progress.update).toHaveBeenCalledWith('success', 'deviceSheet.playingOn');
 });
 
-it('says so when there is nowhere to play, and never offers previews or podcasts', async () => {
+it('says so when there is nowhere to play', async () => {
   mocks.request.mockResolvedValueOnce({ devices: [{ device_id: 'self', socket_active: true }] });
   await openNativePlayOnDevice(song, async () => 'self', () => true);
   expect(mocks.toast.info).toHaveBeenCalledWith('deviceSheet.emptyOthers'); expect(mocks.menu).not.toHaveBeenCalled();
-  await openNativePlayOnDevice({ ...song, source: 'preview' }, async () => 'self', () => true);
-  expect(mocks.request).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  { ...song, id: 'dQw4w9WgXcQ', source: 'preview' as const },
+  { ...song, source: 'preview' as const, media_kind: 'podcast_episode', podcast_enclosure_url: 'https://example.com/episode.mp3' },
+])('sends portable previews and podcast episodes without acquiring them', async track => {
+  mocks.request.mockResolvedValue({ devices: [{ device_id: 'laptop', socket_active: true }] });
+  mocks.toast.loading.mockReturnValue({ update: vi.fn(), dismiss: vi.fn() });
+  await openNativePlayOnDevice(track, async () => 'self', () => true);
+  mocks.menu.mock.calls[0][0].actions[0].onSelect(); await flush();
+  expect(mocks.request.mock.calls[1][1].body).toEqual({ device_id: 'laptop', command: 'play', track_id: track.id, track });
 });

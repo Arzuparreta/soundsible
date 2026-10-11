@@ -35,6 +35,7 @@ export interface SessionPorts {
   ensureGeneratedQueue: () => GeneratedQueueController;
   loadIndex: (i: number, opts?: LoadOptions) => void;
   podcastProgressOwner: string | undefined;
+  podcastSourcePending: boolean;
   trackUrl: (track: Track) => string;
   levelFor: (entry: PlaybackQueueEntry | Track | null | undefined) => number;
 }
@@ -272,6 +273,10 @@ export function createSession(ports: SessionPorts, lifetime: RuntimeLifetime) {
     primeRestored(state.playback.queue[0], pos);
   }
   function primeRestored(entry: PlaybackQueueEntry, position: number): void {
+    ports.podcastSourcePending = entry.source === 'preview' && isPodcastTrack(entry) && Boolean(entry.podcast_enclosure_url);
+    // A preview episode needs a receiver token. Resume will mint it through
+    // loadIndex; priming a library URL here would leave the wrong source loaded.
+    if (ports.podcastSourcePending) return;
     if (isPendingEntry(entry)) {
       ports.unmatchedSelection = {
         queueId: entry.queueId,

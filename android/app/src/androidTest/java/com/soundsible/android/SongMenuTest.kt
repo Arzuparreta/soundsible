@@ -73,7 +73,7 @@ class SongMenuTest {
                 web.evaluate(scenario, "${menuButton("Song menu laptop")}.click()")
                 assertTrue("Peer never asked to play", received.await(15, TimeUnit.SECONDS))
                 assertEquals("member-track", started.get().getJSONObject("track").getString("id"))
-                waitFor("document.body.innerText.includes('Playing on device')")
+                waitFor("document.body.innerText.includes('Playback request sent')")
             }
         } finally { peer.off(); peer.disconnect(); connection.clearSession(true) }
     }

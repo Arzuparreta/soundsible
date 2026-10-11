@@ -2,6 +2,8 @@ import { useAppBar } from '../lib/appBar';
 import { mobileListLayout } from '../lib/listLayout';
 import { MusicListRow } from '../components/MusicListRow';
 import { openContextMenu } from '../lib/contextMenu';
+import { openPlayOnDevice } from '../components/DeviceSheet';
+import { podcastEpisodeToTrack } from '../lib/track';
 import { createEffect, on, createMemo, createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { A, useNavigate, useSearchParams } from '@solidjs/router';
 import { podcastCountry, countryName } from '../lib/podcastCountry';
@@ -81,7 +83,7 @@ export default function Podcasts() {
     }
   }));
 
-  const playPopularEpisode = async (episode: PopularPodcastEpisode) => {
+  const playPopularEpisode = async (episode: PopularPodcastEpisode, remote = false) => {
     if (playingEpisode()) return;
     const account = user()?.id, country = podcastCountry();
     const previousTrack = state.playback.currentTrack;
@@ -95,7 +97,8 @@ export default function Podcasts() {
       const feedId = state.podcastSubscriptions.find(show => show.rss_url === data.feed_url)?.id ?? data.feed_url;
       const local = state.library.find(track => track.podcast_episode_guid === data.episode.guid
         && (track.podcast_feed_id === feedId || track.podcast_feed_id === data.feed_url || track.podcast_rss_url === data.feed_url));
-      if (local) actions.playTrack(local);
+      if (remote) openPlayOnDevice(local ?? podcastEpisodeToTrack(data.episode, data.show_title, feedId, data.episode.image ?? episode.image_url));
+      else if (local) actions.playTrack(local);
       else await actions.playEpisode(data.episode, data.show_title, feedId, data.episode.image ?? episode.image_url);
     } catch { if (!disposed && !controller.signal.aborted && user()?.id === account && podcastCountry() === country) toast.error(t('podcasts.episodeUnavailable')); }
     finally { if (episodeRequest === controller) { episodeRequest = undefined; setPlayingEpisode(undefined); } }
@@ -291,7 +294,8 @@ export default function Podcasts() {
                     seed={episode.episode_id} cover={episode.image_url} busy={playingEpisode() === episode.episode_id}
                     busyLabel={t('common.loading')} onActivate={() => void playPopularEpisode(episode)}
                     onMenu={() => openContextMenu({ title: episode.title, actions: [{ icon: menuIcons.play(),
-                      label: t('common.play'), disabled: !!playingEpisode(), onSelect: () => void playPopularEpisode(episode) }] })} />}</For>
+                      label: t('common.play'), disabled: !!playingEpisode(), onSelect: () => void playPopularEpisode(episode) },
+                      { icon: menuIcons.device(), label: t('trackActions.playOnDevice'), disabled: !!playingEpisode(), onSelect: () => void playPopularEpisode(episode, true) }] })} />}</For>
                 </div>
               </Show>
               <Show when={episodesFailed()}><EmptyState compact tone="danger">

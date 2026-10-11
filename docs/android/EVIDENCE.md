@@ -131,3 +131,26 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   PodcastTest, PodcastCountryTest, PodcastTopTest y PodcastDirectoryTest en
   AVD API 36: 7 casos aprobados, más JVM/lint/APK de desarrollo.
   Logs: /tmp/podcast-cookie-{fixture,integration}.log.
+
+## 2026-10-11 · Reproducir elementos en otro dispositivo
+
+- Rama `codex/remote-play-any-track`, commit que incluye esta entrada: los menús
+  de canción, catálogo sin resolver y episodio envían una descripción portable
+  por el transporte de dispositivos de la cuenta. Una petición individual no
+  necesita archivo en biblioteca ni sesión de traspaso. Se conservan las guardas
+  de cuenta y las restricciones de ocurrencias en la ruta DJ.
+- `DeviceCatalogSessionTest` verifica recepción de stream, referencia de catálogo
+  y episodio, sustitución del programa y PCM nativo por HTTP y TLS. Regresión
+  conjunta con `DeviceSessionTest` y `DevicesUiTest`: 6 casos aprobados en AVD
+  API 36; JVM, lint y APK de desarrollo aprobados. Log:
+  `/tmp/soundsible-remote-android-integration.log`.
+- Lógica y envío del adaptador cubiertos por Vitest; el servidor valida las
+  descripciones y mantiene el aislamiento de dispositivos por cuenta. No se
+  modifica el transporte nativo ni se publica una release.
+- Seguimiento de PR #344: los cuatro shards de CI detectaron expectativas
+  obsoletas en `SongMenuTest` y `PendingQueueMenuTest` (mensaje de petición
+  enviada y acción remota para referencias pendientes). Ambas clases corregidas
+  y ejecutadas conjuntamente por HTTP/TLS: 4 casos aprobados en AVD API 36,
+  más JVM/lint/APK de desarrollo. Log:
+  `/tmp/soundsible-pr344-android-integration.log`. La entrega requiere además
+  todos los checks de GitHub aprobados sobre el último commit de la PR.

@@ -13,6 +13,11 @@
   explicitly asks to include other working-tree changes.
 - All work in Soundsible reaches `main` through a pull request from a branch —
   never commit to `main` directly.
+- Opening or pushing a PR does not complete the task. Before reporting it as
+  finished, wait for every GitHub check on its latest remote head to complete
+  successfully (intentional workflow skips are allowed). Inspect failures,
+  fix their causes, commit and push, then wait again for that new head. Local
+  validation alone never satisfies this completion gate.
 - Before merging a PR, request `@codex review` if the automatic Codex review
   does not cover its current head. Wait for completion, inspect both review
   bodies and inline comments, evaluate each finding, and fix confirmed problems

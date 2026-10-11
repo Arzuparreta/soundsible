@@ -9,6 +9,7 @@ import styles from './DeviceSheet.module.css';
 import { EmptyState } from './EmptyState';
 import { SkeletonRows } from './Skeleton';
 import { createResponsiveTap } from '../lib/responsiveTap';
+import { remotePlayRequest } from '../lib/remotePlayback';
 
 const others = (devs: Device[]): Device[] => devs.filter((d) => d.device_id !== state.device.device_id);
 
@@ -28,7 +29,7 @@ function deviceIcon(type?: string): JSX.Element {
   );
 }
 
-/** Pick a device to play a (library) track on. */
+/** Pick a device to resolve and play this element on. */
 export function openPlayOnDevice(track: Track): void {
   openOverlay((close) => {
     const [devs, setDevs] = createSignal<Device[]>([]);
@@ -47,7 +48,7 @@ export function openPlayOnDevice(track: Track): void {
       close();
       const h = toast.loading(t('deviceSheet.sendingTo', { device: d.device_name ?? t('deviceSheet.fallbackDevice') }));
       try {
-        await api.remoteCommand(d.device_id, 'play', { track_id: track.id });
+        await api.remoteCommand(d.device_id, 'play', remotePlayRequest(track));
         h.update('success', t('deviceSheet.playingOn'));
       } catch {
         h.update('error', t('deviceSheet.failed'));

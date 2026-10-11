@@ -8,6 +8,8 @@ import { buildTrackMenu, musicLinkActions } from './trackActions';
 import { openPlaylistPicker } from './PlaylistPicker';
 import type { MenuAction } from './ActionMenu';
 import { menuIcons } from './icons';
+import { openPlayOnDevice } from './DeviceSheet';
+import type { ContextTrack } from '../lib/playbackQueue';
 
 export interface EntryMenuContext {
   track?: Track;
@@ -36,7 +38,14 @@ export function buildEntryMenu(entry: SavedEntry, ctx: EntryMenuContext = {}): M
     label: t(downloading ? 'collection.downloading' : 'collection.download'), disabled: downloading,
     onSelect: () => { if (ctx.onDownload) ctx.onDownload(); else void actions.downloadSaved(entry); },
   });
-  if (track) list.push(...buildTrackMenu(track, { collection: false, onAddToPlaylist: openPlaylistPicker, music: ctx.music }));
+  if (track) list.push(...buildTrackMenu(track, { collection: false, onAddToPlaylist: openPlaylistPicker, music: ctx.music, onPlayOnDevice: openPlayOnDevice }));
+  if (!track && entry.title && entry.artist) {
+    const pending: ContextTrack = {
+      ...savedToTrack(entry, new Map())!,
+      pendingResolve: { catalogItemId: entry.keys[0], title: entry.title, artist: entry.artist, duration: entry.duration },
+    };
+    list.push({ icon: menuIcons.device(), label: t('trackActions.playOnDevice'), onSelect: () => openPlayOnDevice(pending) });
+  }
   if (!track && ctx.music) list.push(...musicLinkActions(ctx.music));
   if (ctx.onRadio) {
     const radio = list.findIndex((action) => action.label === t('trackActions.startRadio') || action.label === t('modeChange.startRadio'));

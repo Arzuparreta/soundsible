@@ -108,6 +108,20 @@ class DeviceCatalogSessionTest {
             assertEquals(failuresBefore, failuresAfter)
             control(0, 0); pcm.set(false); main { active.prepare(); active.play() }
             await("Explicit retry did not recover exhausted matcher") { pcm.get() && main { active.isPlaying && active.currentMediaItem?.mediaId == "C1111111111" } }
+            // Single-element commands use the same native source resolvers as a
+            // local selection, without requiring a published handoff session.
+            fun remote(track: JSONObject) {
+                pcm.set(false)
+                core("/api/playback/remote-command", "POST", JSONObject().put("device_id", id).put("command", "play").put("track", track))
+            }
+            remote(JSONObject().put("id", "C1111111111").put("source", "preview").put("title", "Portable stream").put("artist", "fixture artist"))
+            await("Portable stream did not replace the native programme") { pcm.get() && main { active.mediaItemCount == 1 && active.isPlaying && active.mediaMetadata.title.toString() == "Portable stream" } }
+            remote(pending("deezer:track:portable", "fixture resolved song").put("source", "preview"))
+            await("Portable catalogue reference did not resolve natively") { pcm.get() && main { active.mediaItemCount == 1 && active.isPlaying && active.currentMediaItem?.mediaId == "C1111111111" && active.mediaMetadata.title.toString() == "fixture resolved song" } }
+            remote(JSONObject().put("id", "member-episode-guid").put("source", "preview").put("media_kind", "podcast_episode")
+                .put("title", "Portable episode").put("artist", "member fixture podcast").put("podcast_episode_guid", "member-episode-guid")
+                .put("podcast_feed_id", "member-feed").put("podcast_enclosure_url", "https://podcasts.fixture.example/member/episode.mp4"))
+            await("Portable episode did not mint a native podcast source") { pcm.get() && main { active.mediaItemCount == 1 && active.isPlaying && active.mediaMetadata.title.toString() == "Portable episode" && active.mediaMetadata.extras?.getBoolean(ProgramQueue.PODCAST) == true } }
             // Reset while a real delayed matcher is in flight cannot populate the cleared programme.
             val delayed = JSONArray().put(pending("deezer:track:999999", "fixture review song cancel"))
             handoff(delayed, 0)

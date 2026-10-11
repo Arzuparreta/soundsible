@@ -11,8 +11,10 @@ vi.mock('../stores', () => ({
 vi.mock('../lib/i18n', () => ({ t: (key: string) => key }));
 vi.mock('./trackActions', () => ({ buildTrackMenu: () => [] }));
 vi.mock('./PlaylistPicker', () => ({ openPlaylistPicker: vi.fn() }));
+vi.mock('./DeviceSheet', () => ({ openPlayOnDevice: vi.fn() }));
 vi.mock('../lib/contextMenu', () => ({ openContextMenu: vi.fn() }));
 import { buildEntryMenu } from './entryActions';
+import { openPlayOnDevice } from './DeviceSheet';
 
 const entry = { keys: ['deezer:42'], title: 'Unresolved song', artist: 'Artist' };
 beforeEach(() => { store.saved = false; store.favourite = false; store.downloading = false; store.owned = undefined; vi.clearAllMocks(); });
@@ -20,10 +22,12 @@ beforeEach(() => { store.saved = false; store.favourite = false; store.downloadi
 describe('mobile entry menus', () => {
   it('opens unresolved catalogue actions without resolving or saving, and preserves their original keys', () => {
     const list = buildEntryMenu(entry);
-    expect(list.map((action) => action.label)).toEqual(['collection.save', 'collection.download']);
+    expect(list.map((action) => action.label)).toEqual(['collection.save', 'collection.download', 'trackActions.playOnDevice']);
     expect(store.actions.toggleSaved).not.toHaveBeenCalled();
     list[0].onSelect(); expect(store.actions.toggleSaved).toHaveBeenCalledWith(entry);
     list[1].onSelect(); expect(store.actions.downloadSaved).toHaveBeenCalledWith(entry);
+    list[2].onSelect(); expect(openPlayOnDevice).toHaveBeenCalledWith(expect.objectContaining({ source: 'preview',
+      originKeys: entry.keys, pendingResolve: { catalogItemId: 'deezer:42', artist: 'Artist', title: 'Unresolved song', duration: undefined } }));
   });
   it('uses the surface download handler and disables a pending download', () => {
     const download = vi.fn();
