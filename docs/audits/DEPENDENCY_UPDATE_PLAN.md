@@ -130,7 +130,12 @@ tras el reflow y miden geometría en el mismo frame; la comprobación de reprodu
 tras recuperar un módulo encuentra también la mini-player oculta bajo el panel.
 El fixture DJ espera que el contenido del panel sea visible antes de responder
 por primera vez y mantiene pendiente la respuesta final hasta comprobar la espera; una animación lenta no puede consumir ese estado antes de la aserción.
-No se añaden retries ni se reduce la exigencia del audio Android.
+Con dos CPU y el arranque frío se reprodujo además un fallo real WebKit: la
+regla global de movimiento reducido daba una duración no nula a la transición
+de visibilidad de cada descendiente. El panel se revelaba capa a capa y sus filas
+seguían ocultas bajo carga. La regla ahora desactiva las transiciones; conserva
+los eventos de animación y la preferencia del usuario. No se aumenta el timeout
+ni se añaden retries ni se reduce la exigencia del audio Android.
 
 Validación local de clientes/Python:
 
@@ -143,6 +148,9 @@ Validación local de clientes/Python:
   lectura y un worker. El caso DJ también pasó seis ejecuciones aisladas
   consecutivas en WebKit. Los fallos se diagnosticaron y corrigieron antes de
   abrir la PR; se exige además todo GitHub CI aprobado en su último head.
+  El primer CI falló en el refresco de biblioteca. Su fixture sólo cerraba
+  playback y dejaba vivos syncs/timers del cliente anterior.
+  Ahora llama a disposeStore completo antes de cambiar el registro de módulos.
 - Android: StartupTest, PlaybackTest y LiveListenerTest, 5 casos nativos HTTP/TLS
   aprobados en AVD API 36, más JVM/lint/APK de desarrollo con JDK 21 seleccionado
   sólo para esos comandos. La prueba local no incluye OfflineRestartTest;

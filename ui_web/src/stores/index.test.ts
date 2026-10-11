@@ -141,7 +141,7 @@ function stubMediaSession() {
   return { mediaSession, press: (action: string) => handlers.get(action)?.() };
 }
 
-const playbackCleanups: Array<() => void> = [];
+const storeCleanups: Array<() => void> = [];
 
 async function loadStore(
   apiOverrides: Record<string, unknown> = {},
@@ -469,7 +469,7 @@ async function loadStore(
   }));
 
   const store = await import('./index');
-  playbackCleanups.push(() => store.actions.dismissPlayback());
+  storeCleanups.push(() => store.disposeStore());
   const fireSocketEvent = (event: string, data?: unknown) => socketHandlers.get(event)?.(data);
   const fireProgramTransport = (event: Partial<ProgramTransportEvent>) => programTransportReporter?.({
     kind: 'pause',
@@ -517,10 +517,11 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-// Retire real recovery timers before the next test restores their audio mocks.
-// Longer session-change tests otherwise inherit startup watchdogs from old stores.
+// Retire the whole authenticated client before the next module generation.
+// Dismissing playback leaves library refreshes, sockets and runtime timers alive;
+// a late callback can otherwise enter the next test's module/mock registry.
 afterEach(() => {
-  for (const cleanup of playbackCleanups.splice(0)) cleanup();
+  for (const cleanup of storeCleanups.splice(0)) cleanup();
 });
 
 describe('Solid store library and playback resume', () => {
