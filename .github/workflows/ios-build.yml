@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 20
     container: swift:6.3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: Unit tests (Linux)
         working-directory: ios/SoundsibleKit
@@ -55,7 +55,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       # Deliberately not pinned to an Xcode version. The runner image ships a
       # current one, and a pin here rots into a "no such directory" failure the
@@ -141,7 +141,7 @@ jobs:
             || { echo "::error::The bundle says $version but the tree declares $declared"; exit 1; }
           echo "Soundsible $version"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: soundsible-ios-ipa
           path: ios/build/Soundsible.ipa

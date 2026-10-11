@@ -108,7 +108,10 @@ un fallo: cualquier nueva aserción debe revisarse con sus artefactos.
 
 ## Bloque 2 · Mantenimiento compatible
 
-Se entrega en dos PR abiertas independientes, sin fusionar ni publicar:
+Clientes e infraestructura se validaron inicialmente en las PR #347 y #346.
+Para reducir CI antes de fusionar, ambos cambios se integran ahora en #347:
+un solo head combinado, una revisión independiente y todos sus checks completos.
+#346 queda incorporada; no se publica una release desde esta entrega.
 
 1. **Clientes, Python y Node.** Node 24.21.0 LTS como referencia en `.nvmrc`,
    CI y Docker; los manifests admiten también Node 22.22.2+ y 26. Vite 8.3.4,
@@ -118,7 +121,7 @@ Se entrega en dos PR abiertas independientes, sin fusionar ni publicar:
    completa del lock Docker con hashes bajo Python 3.13. Se conservan los mínimos
    compatibles de la instalación nativa y la excepción Mac Intel del bloque 1.
 2. **Infraestructura.** Actions, MediaMTX, Coturn y FFmpeg, con validación propia;
-   evidencia en `docs/audits/DEPENDENCY_INFRASTRUCTURE.md` en su rama/PR. No se
+   evidencia en `docs/audits/DEPENDENCY_INFRASTRUCTURE.md`. No se
    requiere desplegar para revisar estas entregas.
 
 Vite 8.3 exponía un fallo reproducible en el scan de dependencias con

@@ -21,9 +21,9 @@ from download_retry import fetch  # noqa: E402
 # fetched with download_retry. It used to be the Docker Hub image of the same
 # version, and a Docker Hub pull that failed (exit 125) took every Android
 # shard down with it before any test ran.
-MEDIAMTX_VERSION = "v1.19.3"
+MEDIAMTX_VERSION = "v1.21.2"
 MEDIAMTX_ARCHIVE = f"mediamtx_{MEDIAMTX_VERSION}_linux_amd64.tar.gz"
-MEDIAMTX_SHA256 = "a7ba21268fccda3ebc43fdad76b87fddb85ce77e725b5cb637bca724b5394fbe"
+MEDIAMTX_SHA256 = "121be6e00397e473a95d83c75f4fcd3819a6af3b0e1a50889cba43ab4fab6a27"
 MEDIAMTX_URL = f"https://github.com/bluenviron/mediamtx/releases/download/{MEDIAMTX_VERSION}/{MEDIAMTX_ARCHIVE}"
 
 
