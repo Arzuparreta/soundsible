@@ -503,7 +503,7 @@ test('NORMAL and DJ share centered desktop Stage geometry through scale reflows'
         };
       };
       const transport = stage.querySelector<HTMLButtonElement>(
-        'button[aria-label="Reintentar"], button[aria-label="Pausa"], button[aria-label="Reproducir"]',
+        'button[aria-label="Reintentar"], button[aria-label="Pausar"], button[aria-label="Reproducir"]',
       );
       const tile = stage.closest('[data-player-tile]');
       const cover = stage.querySelector('[data-player-cover-slot]');
