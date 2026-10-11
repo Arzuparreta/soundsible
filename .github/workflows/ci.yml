@@ -282,6 +282,8 @@ jobs:
 
           mismatches = []
           for requirement in requirements:
+              if requirement.marker is not None and not requirement.marker.evaluate():
+                  continue
               name = requirement.name.lower().replace("_", "-").replace(".", "-")
               version = locked.get(name)
               if version is None:
