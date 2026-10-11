@@ -13,6 +13,7 @@ import org.webrtc.AudioTrackSink
 import java.nio.ByteOrder
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.sqrt
 
 /** Independent synthetic publisher -> real relay -> service MediaSession Live player. */
@@ -47,18 +48,30 @@ class LiveListenerTest {
             instrumentation.runOnMainSync { future.set(work()) }
             return future.get().get(15, TimeUnit.SECONDS)
         }
+        val decodedFrames = AtomicLong()
+        val audibleFrames = AtomicLong()
+        val publishedFrames = AtomicLong()
+        val rms = AtomicReference(0.0)
         fun await(label: String, condition: () -> Boolean) {
             val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
             while (System.nanoTime() < until) { if (condition()) return; Thread.sleep(50) }
-            fail(label)
+            val state = AtomicReference("no controller")
+            instrumentation.runOnMainSync { browser?.let {
+                state.set("state=${it.playbackState}, requested=${it.playWhenReady}, playing=${it.isPlaying}, volume=${it.volume}")
+            } }
+            fail("$label ($state, decoded=${decodedFrames.get()}, audible=${audibleFrames.get()}, published=${publishedFrames.get()}, rms=${rms.get()})")
         }
-        val rms = AtomicReference(0.0)
         val sink = AudioTrackSink { data, bits, rate, channels, frames, _ ->
             if (bits == 16 && rate == 48000 && channels >= 1 && frames > 0) {
                 val samples = data.asReadOnlyBuffer().order(ByteOrder.LITTLE_ENDIAN)
                 var squares = 0.0; var count = 0
                 while (samples.remaining() >= 2) { val value = samples.short.toDouble(); squares += value * value; count++ }
-                if (count > 0) rms.set(sqrt(squares / count))
+                if (count > 0) {
+                    val level = sqrt(squares / count)
+                    rms.set(level)
+                    decodedFrames.incrementAndGet()
+                    if (level > 500) audibleFrames.incrementAndGet()
+                }
             }
         }
         try {
@@ -78,6 +91,7 @@ class LiveListenerTest {
                     for (channel in 0 until channels) { bytes[offset + channel * 2] = value.toByte(); bytes[offset + channel * 2 + 1] = (value shr 8).toByte() }
                     frame++
                 }
+                publishedFrames.incrementAndGet()
             }
             publisher = LivePeer(context, connection, room.getString("whip_url"), room.getString("publish_token"), true, {}, inputFactory = { input })
             publisher.start()
@@ -149,9 +163,14 @@ class LiveListenerTest {
             }
             instrumentation.runOnMainSync { active.play() }
             await("MediaSession resume was ignored") { instrumentation.runOnMainSync { playing.set(active.isPlaying) }; playing.get() }
+            // READY can precede decoded media after WHEP recovery. Verify that
+            // recovery separately before attributing missing PCM to Activity close.
+            val beforeResumeAudio = audibleFrames.get()
+            await("Relay recovered its connection but not decoded programme") { audibleFrames.get() >= beforeResumeAudio + 10 }
             scenario.close(); scenario = null
-            rms.set(0.0)
-            await("Activity close stopped remote programme") { rms.get() > 500 }
+            // Observe fresh non-silent frames, including ones between polls.
+            val beforeCloseAudio = audibleFrames.get()
+            await("Activity close stopped remote programme") { audibleFrames.get() >= beforeCloseAudio + 50 }
             okhttp3.OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build().newCall(okhttp3.Request.Builder()
                 .url("https://10.0.2.2:58443/__fixture/socket-cut").header("X-Android-Fixture", "isolated")
                 .post(JSONObject().put("session_id", sessionId).put("role", "guest").toString().toRequestBody("application/json".toMediaType())).build()).execute().use { assertEquals(200, it.code) }

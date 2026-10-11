@@ -154,3 +154,27 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   más JVM/lint/APK de desarrollo. Log:
   `/tmp/soundsible-pr344-android-integration.log`. La entrega requiere además
   todos los checks de GitHub aprobados sobre el último commit de la PR.
+
+## 2026-10-11 · Seguridad de dependencias y diagnóstico Live en CI
+
+- Rama `codex/dependency-security-block-1`, commit que incluye esta entrada.
+  El run de main 38135594239 falló en `LiveListenerTest.httpCoreRelay`, en la
+  comprobación de PCM después del cierre de Activity. La prueba ahora verifica
+  primero PCM nuevo tras recuperar WHEP y cuenta buffers audibles dentro del
+  callback, sin depender de muestrear la última RMS cada 50 ms. Exige 50 buffers
+  no silenciosos después del cierre; conserva timeout y no añade retries.
+- Tres ejecuciones completas HTTP/TLS de la clase final: 6 casos aprobados en
+  AVD API 36, más JVM/lint/APK de desarrollo en cada ejecución. Logs:
+  `/tmp/soundsible-android-live-repeat-{1,2,3}.log`. En caso de fallo se imprimen
+  estado/volumen del controlador, buffers decodificados/audibles y del publicador,
+  y última RMS para distinguir fuente, transporte y lifecycle.
+- Los artefactos del run fallido no demuestran que el cierre parase el receptor;
+  se mantuvo activo hasta el cleanup de la aserción. Las repeticiones aprobadas
+  tampoco prueban ausencia de toda carrera. Los cuatro shards de la PR son el
+  gate final; no se ocultan nuevos fallos mediante reruns sin diagnóstico.
+- Revisión de los últimos 25 runs Android: 18 aprobados, 4 fallidos, 3 cancelados.
+  Los otros fallos fueron el registro incompleto de cookies de los fixtures de
+  podcasts y expectativas antiguas de menús, ya corregidos en main. No hubo
+  una causa común demostrada. No se modifica audio/transportes de producción
+  ni se publica una release. Plan y avisos de dependencias pendientes en
+  `docs/audits/DEPENDENCY_UPDATE_PLAN.md`.
