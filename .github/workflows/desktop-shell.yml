@@ -7,6 +7,7 @@ on:
   push:
     branches: [main, dev]
     paths:
+      - '.nvmrc'
       - 'desktop-shell/**'
       - 'shared/**'
       - 'player/**'
@@ -22,6 +23,7 @@ on:
   pull_request:
     branches: [main, dev]
     paths:
+      - '.nvmrc'
       - 'desktop-shell/**'
       - 'shared/**'
       - 'player/**'
@@ -91,6 +93,9 @@ jobs:
       options: --ipc=host
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
       - uses: actions/cache@v4
         with:
           path: ~/.npm

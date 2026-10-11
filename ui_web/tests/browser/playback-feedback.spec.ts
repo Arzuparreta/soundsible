@@ -66,7 +66,7 @@ test('touch selection uses the orange treatment before audio loads and scrolling
     await expect(row).not.toHaveAttribute('data-now-playing');
     await main.tap();
     await expect(row).toHaveAttribute('data-now-playing', '');
-    expect(await row.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(pressed);
+    await expect(row).toHaveCSS('background-color', pressed);
     await expect(page.locator('[data-omni-player] button[aria-busy]')).toHaveAttribute('aria-busy', 'true');
   } finally {
     release();
