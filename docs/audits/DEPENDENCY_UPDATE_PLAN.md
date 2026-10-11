@@ -136,6 +136,12 @@ de visibilidad de cada descendiente. El panel se revelaba capa a capa y sus fila
 seguían ocultas bajo carga. La regla ahora desactiva las transiciones; conserva
 los eventos de animación y la preferencia del usuario. No se aumenta el timeout
 ni se añaden retries ni se reduce la exigencia del audio Android.
+En producción, el fixture de avería mantiene el 503 hasta pulsar retry: fallar
+sólo el preload dejaba que el import posterior cargase el módulo correctamente.
+Las cuatro acciones de una canción encontrada tienen pruebas independientes y
+una sesión restaurada y una cola breve; la prueba de favoritos parte de una
+canción ya guardada, como exige el producto. La cobertura de colas largas
+permanece en sus propios casos.
 
 Validación local de clientes/Python:
 
@@ -143,7 +149,7 @@ Validación local de clientes/Python:
   Ruff, comprobación de dependencias y sincronización de versión aprobados.
 - Entorno comunitario con sus pins reales: 21 pruebas aprobadas.
 - Web: typecheck y 1720 pruebas; shell: 9 pruebas y 13 casos de navegador.
-- Chromium móvil/escritorio: 320 aprobados y 66 skips de los perfiles. Después,
+- Antes de abrir la PR, Chromium móvil/escritorio: 320 aprobados y 66 skips de los perfiles. Después,
   WebKit móvil/escritorio: 311 aprobados y 75 skips, imagen Playwright de sólo
   lectura y un worker. El caso DJ también pasó seis ejecuciones aisladas
   consecutivas en WebKit. Los fallos se diagnosticaron y corrigieron antes de
@@ -151,6 +157,10 @@ Validación local de clientes/Python:
   El primer CI falló en el refresco de biblioteca. Su fixture sólo cerraba
   playback y dejaba vivos syncs/timers del cliente anterior.
   Ahora llama a disposeStore completo antes de cambiar el registro de módulos.
+- Tras los arreglos del CI: recuperación del módulo en producción aprobada en
+  los cuatro perfiles y las ocho acciones DJ aprobadas en WebKit móvil/escritorio
+  limitado a dos CPU. Se repite la suite completa y se exige verde en cada check
+  del último head remoto antes de dar por completada la entrega.
 - Android: StartupTest, PlaybackTest y LiveListenerTest, 5 casos nativos HTTP/TLS
   aprobados en AVD API 36, más JVM/lint/APK de desarrollo con JDK 21 seleccionado
   sólo para esos comandos. La prueba local no incluye OfflineRestartTest;
