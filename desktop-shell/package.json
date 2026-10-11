@@ -16,7 +16,7 @@
     "@playwright/test": "^1.62.0",
     "@tauri-apps/cli": "^2.11.4",
     "vite": "^8.1.5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
