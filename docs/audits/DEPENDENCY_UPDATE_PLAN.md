@@ -142,6 +142,11 @@ Las cuatro acciones de una canción encontrada tienen pruebas independientes y
 una sesión restaurada y una cola breve; la prueba de favoritos parte de una
 canción ya guardada, como exige el producto. La cobertura de colas largas
 permanece en sus propios casos.
+Un segundo shard señaló como flaky la prueba móvil que acumulaba dos inserciones
+y la geometría de movimiento. Cada inserción tiene ahora un caso propio y la
+geometría prepara dos peticiones mediante el store real. El fixture móvil sirve
+WAV silencioso válido en vez del fallback JSON, evitando fallos de decodificación
+que avanzaban el transporte durante los gestos. No se cambian retries ni timeout.
 
 Validación local de clientes/Python:
 
