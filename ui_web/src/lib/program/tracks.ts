@@ -56,7 +56,8 @@ export function queueTrack(entry: ProgramTrack, held?: Track): Track {
   if (held) return held.source === 'preview' ? withRecord(held, record) : held;
   return {
     id: entry.id, title: entry.title, artist: entry.artist, album: entry.album, duration: entry.duration, ...record,
-    source: entry.source === 'preview' || entry.source === 'podcast' ? 'preview' : undefined,
+    source: entry.source === 'preview' || entry.source === 'podcast' || entry.source === 'pending' ? 'preview' : undefined,
+    ...(entry.pendingResolve ? { pendingResolve: entry.pendingResolve } : {}),
     ...(entry.mediaKind === 'podcast_episode' ? { media_kind: 'podcast_episode' as const, podcast_feed_id: entry.feedId,
       podcast_episode_guid: entry.episodeGuid, podcast_enclosure_url: entry.enclosure } : {}),
   } as Track;

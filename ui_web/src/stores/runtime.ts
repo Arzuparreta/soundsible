@@ -532,6 +532,7 @@ export function createRuntime(ports: RuntimePorts, lifetime: RuntimeLifetime) {
       }
       if (trk && typeof trk.id === 'string') {
         const t: Track = {
+          ...trk,
           id: trk.id,
           title: typeof trk.title === 'string' ? trk.title : '',
           artist: typeof trk.artist === 'string' ? trk.artist : '',

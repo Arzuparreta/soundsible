@@ -125,3 +125,14 @@ describe('menu icons', () => {
     expect(unlabelled(playlistMenuOptions('Mix', { onEdit: () => {} }).actions ?? [])).toEqual([]);
   });
 });
+
+it('offers remote playback for streams and podcasts, including during DJ, but keeps route occurrences protected', () => {
+  for (const track of [
+    { id: 'dQw4w9WgXcQ', title: 'Song', artist: 'A', source: 'preview' as const },
+    { id: 'ep', title: 'Episode', artist: 'Show', source: 'preview' as const, media_kind: 'podcast_episode', podcast_enclosure_url: 'https://example.com/ep.mp3' },
+  ]) {
+    expect(labels(track, { onPlayOnDevice: () => {} })).toContain('Play on device');
+    expect(labels(track, { onPlayOnDevice: () => {}, auto: true })).toContain('Play on device');
+    expect(labels(track, { onPlayOnDevice: () => {}, inRoute: true })).not.toContain('Play on device');
+  }
+});

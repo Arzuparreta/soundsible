@@ -5,7 +5,6 @@ import { request } from '../lib/http';
 import { t } from '../lib/i18n';
 import { musicLinks, type MusicMetadata } from '../lib/musicLinks';
 import { toast } from '../lib/toast';
-import { isPodcastTrack } from '../lib/track';
 import type { CatalogItem, RecommendationContext, Track } from '../types/music';
 import type { PodcastSearchResult } from '../types/podcast';
 
@@ -55,10 +54,10 @@ export function nativeFeedbackActions(feedback: Feedback | null, current: () => 
   ];
 }
 
-/** Only songs the server has can be started elsewhere; a DJ set is not handed over song by song. */
-export const canPlayOnDevice = (track: Track) => (track.source ?? 'local') === 'local' && !isPodcastTrack(track);
+export { canPlayOnDevice } from '../lib/remotePlayback';
+import { canPlayOnDevice, remotePlayRequest } from '../lib/remotePlayback';
 
-/** Lists the account's other online devices and asks the chosen one to play this library song. */
+/** Lists the account's other online devices and asks the chosen one to play this element. */
 export async function openNativePlayOnDevice(track: Track, self: () => Promise<string | null>, current: () => boolean, event?: MouseEvent): Promise<void> {
   if (!current() || !canPlayOnDevice(track)) return;
   let devices: Device[];
@@ -74,7 +73,7 @@ export async function openNativePlayOnDevice(track: Track, self: () => Promise<s
       if (!current()) return;
       const name = device.device_name ?? t('deviceSheet.fallbackDevice');
       const progress = toast.loading(t('deviceSheet.sendingTo', { device: name }));
-      void request('/api/playback/remote-command', { method: 'POST', body: { device_id: device.device_id, command: 'play', track_id: track.id }, timeoutMs: 8000 })
+      void request('/api/playback/remote-command', { method: 'POST', body: { device_id: device.device_id, command: 'play', ...remotePlayRequest(track) }, timeoutMs: 8000 })
         .then(() => { if (current()) progress.update('success', t('deviceSheet.playingOn')); else progress.dismiss(); })
         .catch(() => { if (current()) progress.update('error', t('deviceSheet.failed')); else progress.dismiss(); });
     },

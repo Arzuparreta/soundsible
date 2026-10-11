@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { api, ApiError } from '../lib/api';
 import { itemArtist } from '../lib/catalogTrack';
+import { savedFromCatalogItem, savedToTrack } from '../lib/saved';
 import { createNativeCatalogActions } from './catalogActions';
 import { createNativeDiscoveryFeed } from './discoveryFeed';
 import NativeEntityProfile from './EntityProfile';
@@ -30,6 +31,7 @@ export default function CatalogSearch(props: {
   generation: number; tracks: Track[]; saved: SavedEntry[]; disconnected: boolean; history?: ReturnType<typeof createSearchHistoryStorage>;
   offlineMenuActions?: (tracks: Track[]) => MenuAction[];
   onResolvedMenu?: (track: Track, event?: MouseEvent, actions?: MenuAction[]) => void;
+  onPlayOnDevice?: (track: Track) => void;
   savedEntities?: SavedEntity[]; onEntityMenu?: (entry: SavedEntity, event?: MouseEvent) => void;
   onPlayCollection?: (tracks: Track[], index: number) => Promise<void>;
   activeId?: string; isActive?: (track: Track) => boolean; onAcquire?: (track: Track) => Promise<void>; onPlay: (track: Track) => Promise<void>; onChanged: () => Promise<void>;
@@ -136,6 +138,8 @@ export default function CatalogSearch(props: {
     }
     openContextMenu({ title: item.title, actions: [
       { label: t('common.play'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('play') },
+      ...(props.onPlayOnDevice && item.title && itemArtist(item) ? [{ label: t('trackActions.playOnDevice'), disabled: props.disconnected,
+        onSelect: () => { if (current()) props.onPlayOnDevice!(savedToTrack(savedFromCatalogItem(item), new Map())!); } }] : []),
       { label: t(saved ? 'collection.unsave' : 'collection.save'), selected: saved, disabled: props.disconnected || pending() === item.id, onSelect: () => run(saved ? 'remove' : 'save') },
       ...(props.onAcquire && (!trackFor(item) || trackFor(item)?.source === 'preview') ? [{ label: t('collectionControl.download'), disabled: props.disconnected || pending() === item.id, onSelect: () => run('acquire') }] : []),
       ...nativeMusicLinkActions(catalogItemMusic(item), path => { if (current()) openEntity(path); }, props.disconnected),

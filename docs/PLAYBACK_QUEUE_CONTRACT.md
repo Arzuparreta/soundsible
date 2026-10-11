@@ -190,6 +190,23 @@ playback on another device. The same menu remains available through right-click
 or a mobile long press. Queue movement and removal identify the occurrence by
 `queueId`; collection actions do not move it or replace it when a download lands.
 
+**Play on device** sends a portable element through the account-scoped server
+to the chosen device's Socket.IO room. The command accepts a bounded `track`
+descriptor as well as the legacy `track_id`: library files use canonical library
+metadata, previews carry their video identity, unresolved catalogue songs carry
+`pendingResolve`, and streamed episodes carry their enclosure and episode/feed
+identity. The destination uses its ordinary player to resolve the catalogue or
+mint a fresh podcast token. Resolved media URLs, tokens, file paths and queue
+ownership are not forwarded. A new selection clears the destination's stored
+session; pause/resume and whole-session handoff retain their existing contracts.
+
+The action is also available from saved/catalogue song menus and podcast episode
+menus. Sending an independent element does not modify the sender's DJ session;
+DJ route occurrence menus retain their restrictions. The success message confirms
+acceptance of a request, not audible playback. If a browser rejects startup with
+`NotAllowedError`, the selected element remains paused with the existing tap-to-play
+hint, instead of retrying or skipping it as a failed stream.
+
 DJ Route rows expose the same collection controls and metadata editing for local
 files alongside the route's own session actions. A cued handoff retains its
 collection menu; route actions that would invalidate that committed transition

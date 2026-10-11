@@ -1011,7 +1011,7 @@ export const es: Dict = {
     transfer: 'Transferir reproducción',
     sendingTo: 'Enviando a {device}…',
     fallbackDevice: 'dispositivo',
-    playingOn: 'Reproduciendo en el dispositivo',
+    playingOn: 'Solicitud enviada',
     failed: 'No se pudo controlar el dispositivo',
     title: 'Reproducir en…',
     searching: 'Buscando dispositivos…',

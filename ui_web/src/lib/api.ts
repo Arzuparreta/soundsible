@@ -588,7 +588,7 @@ export const api = {
   /** Devices registered for playback in this scope (for remote control). */
   listDevices: () => request<{ devices?: Device[] }>('/api/devices'),
   /** Send a transport command to another device (it acts via Socket.IO). */
-  remoteCommand: (deviceId: string, command: RemoteCommand, extra?: { track_id?: string; position_sec?: number }) =>
+  remoteCommand: (deviceId: string, command: RemoteCommand, extra?: { track_id?: string; track?: import('./playbackQueue').ContextTrack; position_sec?: number }) =>
     request<{ status?: string }>('/api/playback/remote-command', {
       method: 'POST',
       body: { device_id: deviceId, command, ...extra },

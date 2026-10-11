@@ -11,6 +11,7 @@ import { t } from '../lib/i18n';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import { menuIcons as icons } from './icons';
+import { canPlayOnDevice } from '../lib/remotePlayback';
 
 /**
  * Context for building a track's action menu. Optional callbacks let later
@@ -28,9 +29,8 @@ export interface TrackMenuContext {
   /** Opens the metadata editor, which also owns cover art. */
   onEditMetadata?: (track: Track) => void;
   onPlayOnDevice?: (track: Track) => void;
-  /** Inside a DJ session. There is no manual queue to add to, no station to
-   * start, and no second device to hand the set to — offering any of them is
-   * offering to break the thing the listener is currently running. */
+  /** Inside a DJ session, queue and station actions belong to the DJ. Sending
+   * an individual song to another device leaves this session intact. */
   auto?: boolean;
   /** An occurrence in the DJ route. The route decides where the song plays and
    * its own menu moves or drops it, so this leaves out everything that plays,
@@ -148,7 +148,7 @@ export function buildTrackMenu(track: Track, ctx: TrackMenuContext = {}): MenuAc
       });
     }
   }
-  if (ctx.onPlayOnDevice && isLibrary && !inAuto)
+  if (ctx.onPlayOnDevice && canPlayOnDevice(track) && !inRoute)
     list.push({ icon: icons.device(), label: t('trackActions.playOnDevice'), onSelect: () => ctx.onPlayOnDevice!(track) });
   if (ctx.playlistName && ctx.onRemoveFromPlaylist)
     list.push({ icon: icons.remove(), label: t('trackActions.removeFromPlaylist'), danger: true, onSelect: () => ctx.onRemoveFromPlaylist!(track) });

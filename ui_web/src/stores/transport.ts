@@ -412,7 +412,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
       ports.podcastSourcePending = false;
       return audioService.load(podcastStreamUrl(stream_token), 1, resumePosition);
     })) : staged ?? (opts.freshDeck ? audioService.recover(trackUrl(track), resumePosition, level) : isPodcastTrack(track) ? audioService.load(trackUrl(track), level, resumePosition) : audioService.load(trackUrl(track), level));
-    void Promise.resolve(start).catch(lifetime.guard(() => onPlaybackFailed(generation, 'load')));
+    void Promise.resolve(start).catch(lifetime.guard((error: unknown) => onStartRejected(generation, error)));
     // `waiting` is not guaranteed for a media element whose play promise never
     // settles. Arm startup supervision from the request itself so an infinite
     // 0:00 spinner has a bounded recovery path.
@@ -441,6 +441,17 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
     });
   }
   let runWhenAudible: (() => void) | null = null;
+  function onStartRejected(generation: number, error: unknown): void {
+    if (generation !== loadGeneration) return;
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'NotAllowedError') {
+      clearStallTimer();
+      cancelActiveAttempt('gesture_required');
+      setState('playback', { isPlaying: false, isLoading: false, loadError: false, needsGesture: true, phase: 'paused' });
+      ports.pushPlaybackState();
+      return;
+    }
+    onPlaybackFailed(generation, 'load');
+  }
   function flushWhenAudible(): void {
     const work = runWhenAudible;
     runWhenAudible = null;
@@ -838,7 +849,7 @@ export function createTransport(ports: TransportPorts, lifetime: RuntimeLifetime
         isLoading: true,
         phase: 'loading'
       });
-      void audioService.resume(origin).catch(lifetime.guard(() => onPlaybackFailed(attempt.generation, 'load')));
+      void audioService.resume(origin).catch(lifetime.guard((error: unknown) => onStartRejected(attempt.generation, error)));
     },
     pausePlayback(origin: ProgramTransportOrigin = 'ui'): void {
       const pb = state.playback;

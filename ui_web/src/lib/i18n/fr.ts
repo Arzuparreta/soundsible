@@ -1019,7 +1019,7 @@ export const fr: Dict = {
     transfer: 'Transférer la lecture',
     sendingTo: 'Envoi vers {device}…',
     fallbackDevice: 'appareil',
-    playingOn: 'Lecture sur l’appareil',
+    playingOn: 'Demande de lecture envoyée',
     failed: 'Impossible de contrôler l’appareil',
     title: 'Lire sur…',
     searching: 'Recherche d’appareils…',

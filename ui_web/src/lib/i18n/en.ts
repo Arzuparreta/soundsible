@@ -1011,7 +1011,7 @@ export const en = {
     transfer: 'Transfer playback',
     sendingTo: 'Sending to {device}…',
     fallbackDevice: 'device',
-    playingOn: 'Playing on device',
+    playingOn: 'Playback request sent',
     failed: 'Could not control the device',
     title: 'Play on…',
     searching: 'Looking for devices…',

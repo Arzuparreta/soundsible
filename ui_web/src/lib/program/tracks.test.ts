@@ -16,6 +16,7 @@ it('keeps an unresolved catalogue identity in the native queue until playback', 
   expect(programTrack(pending)).toMatchObject({ source: 'pending', id: pending.id, pendingResolve: pending.pendingResolve });
   const invalid = { ...pending, pendingResolve: { ...pending.pendingResolve, title: '' } };
   expect(programTrack(invalid)).toBeNull();
+  expect(queueTrack(programTrack(pending)!)).toMatchObject({ source: 'preview', pendingResolve: pending.pendingResolve });
 });
 
 it('hands the native queue the record and the place on it, and nothing that is not one', () => {
