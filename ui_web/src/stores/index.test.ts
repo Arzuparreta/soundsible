@@ -4331,8 +4331,9 @@ describe('preparation ownership after generated queue cleanup', () => {
     actions.playTrack(t1);
     fireDeckEvent('playing');
     actions.enterAutoMode();
-    await flush();
-    expect(preparationOwners[1].ids).toContain('route-00001');
+    // Planning owns asynchronous work beyond one timer turn. Wait for its
+    // observable ownership before testing that leaving Auto releases it.
+    await vi.waitFor(() => expect(preparationOwners[1].ids).toContain('route-00001'));
     actions.exitAutoMode();
     expect(preparationOwners[1].ids).toEqual([]);
   });
