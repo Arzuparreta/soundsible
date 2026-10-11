@@ -4427,16 +4427,14 @@ describe('podcast progress and time jumps', () => {
     await first;
     expect(audioService.load).not.toHaveBeenCalled();
     actions.resumePlayback();
-    await flush();
-    expect(audioService.load).toHaveBeenLastCalledWith('/podcast/resumed', 1, 0);
+    await vi.waitFor(() => expect(audioService.load).toHaveBeenLastCalledWith('/podcast/resumed', 1, 0));
   });
 
   it('reloads queued streamed episodes through a podcast token', async () => {
     const { actions, audioService, api } = await loadStore({ podcastPeek: vi.fn().mockResolvedValue({ stream_token: 'queued' }) });
     actions.playFrom([{ id: 'episode', title: 'Episode', artist: 'Show', source: 'preview', media_kind: 'podcast_episode', podcast_enclosure_url: episode('a').enclosure_url }], 0);
-    await flush();
+    await vi.waitFor(() => expect(audioService.load).toHaveBeenCalledWith('/podcast/queued', 1, 0));
     expect(api.podcastPeek).toHaveBeenCalledWith(episode('a').enclosure_url);
-    expect(audioService.load).toHaveBeenCalledWith('/podcast/queued', 1, 0);
   });
 });
 

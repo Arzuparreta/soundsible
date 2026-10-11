@@ -162,10 +162,14 @@ Validación local de clientes/Python:
   El primer CI falló en el refresco de biblioteca. Su fixture sólo cerraba
   playback y dejaba vivos syncs/timers del cliente anterior.
   Ahora llama a disposeStore completo antes de cambiar el registro de módulos.
+  Las pruebas de ownership DJ y tokens podcast esperan el estado observable
+  esperado, no un solo turno de temporizador que podía terminar antes del trabajo
+  asíncrono en runners cargados; conservan sus aserciones originales.
 - Tras los arreglos del CI: recuperación del módulo en producción aprobada en
   los cuatro perfiles y las ocho acciones DJ aprobadas en WebKit móvil/escritorio
-  limitado a dos CPU. Se repite la suite completa y se exige verde en cada check
-  del último head remoto antes de dar por completada la entrega.
+  limitado a dos CPU. La repetición completa aprobó 328 casos Chromium (68 skips) y 319 WebKit
+  (77 skips), en ese orden y sin retries locales. Se exige además verde en cada
+  check del último head remoto antes de dar por completada la entrega.
 - Android: StartupTest, PlaybackTest y LiveListenerTest, 5 casos nativos HTTP/TLS
   aprobados en AVD API 36, más JVM/lint/APK de desarrollo con JDK 21 seleccionado
   sólo para esos comandos. La prueba local no incluye OfflineRestartTest;
