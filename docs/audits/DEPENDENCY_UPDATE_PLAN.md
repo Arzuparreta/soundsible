@@ -234,7 +234,7 @@ en el último head de la PR. No se publica ni se fusiona automáticamente.
 
 Pendientes tras esta entrega; evaluar beneficio, compatibilidad y coste:
 
-- Python 3.15 y actualización de la base Debian.
+- Python 3.15; Debian Trixie se aborda en la entrega descrita abajo.
 - Vitest 5: entrega descrita abajo.
 - AGP 9 + Gradle 9 + Kotlin integrado.
 - OkHttp 5.5 junto con compileSdk 37; OkHttp 5.4 y dirs 7 se abordan arriba.
@@ -263,3 +263,31 @@ Logs `/tmp/soundsible-vitest5-{ui,shell,chromium,webkit}.log`. No se ejecuta
 `npm run build` local. npm audit conserva los tres paquetes de la cadena moderada
 Capacitor CLI/xcode/uuid en web y ninguno en shell. El gate remoto y revisión
 Codex del último head son obligatorios antes del merge.
+
+### Debian Trixie · 2026-10-12
+
+#350 (Vitest 5) se fusionó tras checks completos aprobados y revisión Codex
+sin hallazgos del head `d05f92a2`. El primer smoke Windows x64 llegó a motor
+saludable y segunda apertura, pero falló en restaurar desde tray, con un error
+COM de foco. Una repetición del mismo job/commit en un runner nuevo aprobó la
+aserción intacta. Windows ARM64 y los cuatro shards Android aprobaron.
+
+Los stages Node 24/Python 3.13 del motor pasan de Bookworm a Trixie. La imagen
+comunitaria y su stub CI declaran Trixie explícitamente en lugar de `slim`
+flotante. Python, lock con hashes, usuario/UID, volúmenes y puertos conservan sus
+contratos; no se elevan mínimos de instalación nativa ni runtimes desktop.
+
+Python 3.15 estable se publicó, pero la comprobación directa de Docker Hub
+rechazó `python:3.15-slim-trixie` con `no such manifest`. El catálogo local de
+uv sólo ofreció 3.15.0b1 y rechazó 3.15.0; esa beta se eliminó sin usarse en
+validación. No se cambia producción a una prerelease ni se construye un runtime
+alternativo por defecto. Reabrir Python 3.15 cuando exista la imagen estable y
+validar entonces lock, C extensions, gevent/curl-cffi y empaquetado separado.
+
+Validación local: ambas imágenes construidas; motor Debian 13/Python 3.13,
+FFmpeg 7.1.5 de Debian y `pip check` aprobados. Diez pruebas de runtime FFmpeg y
+sonoridad contra el binario real, diez pruebas comunitarias con sus pins reales
+(y herramientas de test aisladas), aprobadas. Motor saludable y HTML/JS
+compilados servidos por la imagen; Community health 200 con SQLite y stub
+MediaMTX en red aislada. Logs `/tmp/soundsible-trixie-*.log`. La suite Python
+completa, Docker x64/ARM64 y revisión del head son gates remotos antes del merge.
