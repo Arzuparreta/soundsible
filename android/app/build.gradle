@@ -14,10 +14,10 @@ android {
             def keyPath = System.getenv('ANDROID_KEYSTORE')
             def passwordPath = System.getenv('ANDROID_KEYSTORE_PASSWORD_FILE')
             if (keyPath && passwordPath) {
-                storeFile file(keyPath)
-                storePassword file(passwordPath).text.trim()
-                keyAlias 'soundsible-android'
-                keyPassword storePassword
+                storeFile = file(keyPath)
+                storePassword = file(passwordPath).text.trim()
+                keyAlias = 'soundsible-android'
+                keyPassword = storePassword
             }
         }
     }
@@ -25,14 +25,14 @@ android {
     namespace = "com.soundsible.android"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.soundsible.android"
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode metadata.version_code as int
-        versionName metadata.version
+        applicationId = "com.soundsible.android"
+        minSdk = rootProject.ext.minSdkVersion
+        targetSdk = rootProject.ext.targetSdkVersion
+        versionCode = metadata.version_code as int
+        versionName = metadata.version
         buildConfigField "String", "SOURCE_REVISION", JsonOutput.toJson(metadata.source_revision)
         testInstrumentationRunnerArguments expectedVersion: metadata.version
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -46,13 +46,13 @@ android {
     }
     buildTypes {
         debug {
-            applicationIdSuffix ".dev"
+            applicationIdSuffix = ".dev"
             resValue "string", "app_name", "Soundsible Dev"
             resValue "string", "title_activity_main", "Soundsible Dev"
         }
         release {
-            signingConfig signingConfigs.distribution
-            minifyEnabled false
+            signingConfig = signingConfigs.distribution
+            minifyEnabled = false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -74,7 +74,7 @@ repositories {
 }
 
 dependencies {
-    implementation(name: "soundsible-webrtc", ext: "aar")
+    implementation ":soundsible-webrtc@aar"
     implementation "androidx.media3:media3-exoplayer:1.11.1"
     implementation "androidx.media3:media3-session:1.11.1"
     implementation "androidx.media3:media3-datasource-okhttp:1.11.1"

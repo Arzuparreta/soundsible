@@ -42,8 +42,9 @@ Solid y su comportamiento en dispositivo sigue [sin verificar](IOS.md).
 
 - Node 22 o posterior, npm, Python 3.10+, git.
 - **JDK 21**. Exportar `JAVA_HOME` y poner su `bin` delante del JDK del sistema.
-- Android SDK: command-line tools, platform-tools, plataforma API 36 y
-  build-tools 36.0.0. Android Studio es opcional para los comandos de terminal.
+- Android SDK: command-line tools, platform-tools, plataforma API 37.0 (compileSdk)
+  y build-tools 36.0.0. targetSdk sigue en 36. Android Studio es opcional para los
+  comandos de terminal.
 - Para emulador: KVM accesible, paquete emulator e imagen
   `system-images;android-36;google_apis;x86_64`.
 
@@ -62,7 +63,8 @@ python scripts/android.py doctor
 ```
 
 Capacitor core/CLI/Android están fijados conjuntamente; Gradle Wrapper incluye
-checksum. El mínimo del proyecto es API 24 y WebView Chrome 120. **Eso es un
+checksum. El build usa AGP 9 con su Kotlin integrado (sin plugin
+`org.jetbrains.kotlin.android`). El mínimo del proyecto es API 24 y WebView Chrome 120. **Eso es un
 mínimo técnico, no evidencia de funcionamiento en Android antiguos.** La matriz
 inicial usa API 36; ampliar versiones requiere pruebas, especialmente de WebView.
 
