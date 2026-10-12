@@ -217,3 +217,22 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   11 casos nativos HTTP/TLS aprobados, sin fallos/skips; 65 pruebas JVM.
   Log `/tmp/soundsible-socketio-integration.log`, baseline con desbordamiento:
   `/tmp/soundsible-socketio-baseline.xml`. CI debe repetirse en el nuevo head.
+
+## 2026-10-12 · Bloque 3: AGP 9, Gradle 9 y compileSdk 37
+
+- Rama `codex/dependency-android-agp9`: AGP 9.3.3 con Kotlin integrado, Gradle
+  9.8.1, compileSdk 37 (`android-37.0`), minSdk 24/targetSdk 36 sin cambios,
+  OkHttp 5.5.0, CameraX 1.6.2 y AndroidX actualizados. JDK 21 de la toolchain.
+- 65 pruebas JVM, lint sin errores, APK debug/test y release firmada con un
+  keystore temporal (`apksigner verify`). Logs `/tmp/soundsible-agp93-build.log`.
+- AGP 9.4.1 descartado: su `android-test-engine` 1.0.1 trunca argumentos con
+  comas (`notClass`, `class`); log `/tmp/soundsible-agp94-args.log`. Con 9.3.3
+  los valores llegan completos (`/tmp/soundsible-agp93-args.log`).
+- AVD API 36, suite completa sin shards: 215 casos, 210 aprobados; fallos sólo
+  TLS (`/tmp/soundsible-agp93-integration.log`). Baseline `main` con el mismo
+  filtro: OfflineTest/ProgramPcmTest TLS también fallan
+  (`/tmp/soundsible-main-tls-baseline.log`). Causa local: conexión keep-alive
+  TLS cerrada por el fixture y descarga offline sin reintento. CarLibrary,
+  CatalogSearch y Podcast aislados: 7/7 (`/tmp/soundsible-branch-car-podcast.log`).
+  Los cuatro shards del último head en GitHub siguen siendo el gate.
+

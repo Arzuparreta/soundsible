@@ -236,8 +236,8 @@ Pendientes tras esta entrega; evaluar beneficio, compatibilidad y coste:
 
 - Python 3.15; Debian Trixie se aborda en la entrega descrita abajo.
 - Vitest 5: entrega descrita abajo.
-- AGP 9 + Gradle 9 + Kotlin integrado.
-- OkHttp 5.5 junto con compileSdk 37; OkHttp 5.4 y dirs 7 se abordan arriba.
+- AGP 9 + Gradle 9 + Kotlin integrado: entrega descrita abajo.
+- OkHttp 5.5 junto con compileSdk 37: entrega descrita abajo.
 
 No se elevan automáticamente los mínimos Android/iOS. Cada migración requiere
 su validación funcional y de empaquetado; estar en latest no es un gate de
@@ -293,3 +293,61 @@ compilados servidos por la imagen; Community health 200 con SQLite y stub
 MediaMTX en red aislada. Logs `/tmp/soundsible-trixie-*.log`. La suite Python
 completa y Docker x64/ARM64 son gates remotos antes del merge. La revisión
 remota no es un gate: su falta de cuota no detiene el trabajo autorizado.
+
+### Android AGP 9 · 2026-10-12
+
+#351 (Trixie) se fusionó tras checks completos aprobados.
+
+Toolchain Android: AGP 8.13.0 → 9.3.3 y Gradle 8.14.3 → 9.8.1 (última estable),
+con wrapper regenerado y SHA-256 de la distribución y del JAR comprobados contra
+services.gradle.org.
+
+AGP 9.4.1 se probó y se descarta por ahora. Ejecuta las pruebas conectadas con
+`android-test-engine` 1.0.1, fijado dentro del plugin, que separa
+`android-test.instrumentation-args` por comas sin escape: `notClass=A,B,C` llega
+al dispositivo como `notClass=A`, y un filtro `class=A,B` como `class=A`, sin
+error. En la suite completa entraron LiveRestartTest y ReleaseUpdateTest, que
+`scripts/android.py` excluye porque se ejecutan por fases externas, y fallaron
+siete casos. Con AGP 9.3.3 el mismo comando conserva ambos valores y ejecuta
+sólo la clase esperada. El engine 1.0.8 ya parsea comas escapadas; reabrir AGP
+9.4+ cuando el plugin estable lo incluya y repetir la comprobación de
+argumentos antes de cambiar la versión. Se retira el
+plugin `org.jetbrains.kotlin.android`: AGP 9 compila Kotlin integrado y el
+`jvmTarget` 21 pasa a `kotlin.compilerOptions`. Cambios de comportamiento de
+AGP 9 tratados explícitamente: `resValues` vuelve a activarse (lo usa el nombre
+de la APK de desarrollo) y `proguard-android.txt` deja de existir; se usa
+`proguard-android-optimize.txt`, sin efecto mientras `minifyEnabled = false`.
+El script de la app pasa a sintaxis de asignación, notación de dependencia de
+una cadena y búsquedas explícitas en `rootProject.ext`: no quedan avisos de
+Gradle 10 propios. Los restantes salen de AGP y de los build scripts generados
+por Capacitor en `node_modules` y `capacitor-cordova-android-plugins`; se
+resolverán con sus versiones.
+
+compileSdk 36 → 37 (plataforma estable `android-37.0` en CI, doctor y docs);
+minSdk 24 y targetSdk 36 no cambian, así que no se activan comportamientos
+nuevos del sistema ni cambian los dispositivos admitidos. Con ello entra
+OkHttp 5.5.0. Bibliotecas: CameraX 1.4.2 → 1.6.2, AndroidX activity 1.13.0,
+appcompat 1.8.0, core 1.19.1, fragment 1.9.1, webkit 1.17.1, ZXing 3.5.4 y
+org.json de pruebas 20260814. Capacitor sigue en 8 estable: 9 sólo existe como
+alpha. Media3, Socket.IO, splashscreen, coordinatorlayout y test ya estaban en
+su última versión estable.
+
+Validación local: 65 pruebas JVM, lint (0 errores), APK de desarrollo y de
+pruebas, y APK release firmada con un keystore temporal (`apksigner verify`;
+minSdk 24, targetSdk 36, compileSdk 37 en el manifest). AVD API 36, suite
+completa de `scripts/android.py integration` sin shards: 215 casos, 210
+aprobados. Los cinco fallos son variantes TLS (CarLibrary, CatalogSearch,
+Offline, Podcast y ProgramPcm). OfflineTest y ProgramPcmTest TLS fallan igual
+en `main` (AGP 8.13, OkHttp 5.4) con el mismo filtro local; CarLibrary,
+CatalogSearch y Podcast aprueban aislados en esta rama (7 de 7). Causa local:
+el fixture TLS cierra una conexión keep-alive reutilizada y `OfflineStore`
+descarga con `retryOnConnectionFailure(false)`, así que la copia queda en
+`network` (`EOFException` al leer cabeceras). No es efecto de esta migración;
+se trata aparte. StartupTest, PlaybackTest y LiveListenerTest (HTTP/TLS)
+aprueban 5 de 5. PairingTest, que usa CameraX, aprueba.
+El gate remoto exige los cuatro shards Android en el último head de la PR.
+
+Python 3.15 sigue pendiente: Docker Hub sólo ofrece `3.15.0rc3` y no existe
+`python:3.15-slim-trixie`. Se reabre con la imagen estable. El resto de
+dependencias directas Python, npm y Cargo estaba en su última versión
+estable el 2026-10-12 (salvo parches diarios de boto3, que el rango admite).
