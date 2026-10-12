@@ -79,7 +79,8 @@ dependencies {
     implementation "androidx.media3:media3-session:1.11.1"
     implementation "androidx.media3:media3-datasource-okhttp:1.11.1"
     implementation("io.socket:socket.io-client:2.1.2") { exclude group: "org.json", module: "json" }
-    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    // OkHttp 5.5 requires compileSdk 37; keep the API 36-compatible line until the AGP migration.
+    implementation "com.squareup.okhttp3:okhttp:5.4.0"
     // Pairing QR: camera preview/analysis and a pure-Java decoder; no Google Play services required.
     implementation "androidx.camera:camera-camera2:1.4.2"
     implementation "androidx.camera:camera-lifecycle:1.4.2"
