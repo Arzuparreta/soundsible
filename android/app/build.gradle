@@ -2,7 +2,6 @@ import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
 apply plugin: 'com.android.application'
-apply plugin: 'org.jetbrains.kotlin.android'
 
 def metadataFile = rootProject.file('build-info.json')
 if (!metadataFile.exists()) throw new GradleException('Run python scripts/android.py prepare first')
@@ -40,12 +39,11 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    buildFeatures { buildConfig = true }
+    buildFeatures { buildConfig = true; resValues = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    kotlinOptions { jvmTarget = "21" }
     buildTypes {
         debug {
             applicationIdSuffix ".dev"
@@ -55,10 +53,12 @@ android {
         release {
             signingConfig signingConfigs.distribution
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
+
+kotlin { compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21 } }
 
 gradle.taskGraph.whenReady { graph ->
     if (graph.allTasks.any { it.name == 'packageRelease' } &&
@@ -79,8 +79,7 @@ dependencies {
     implementation "androidx.media3:media3-session:1.11.1"
     implementation "androidx.media3:media3-datasource-okhttp:1.11.1"
     implementation("io.socket:socket.io-client:2.1.2") { exclude group: "org.json", module: "json" }
-    // OkHttp 5.5 requires compileSdk 37; keep the API 36-compatible line until the AGP migration.
-    implementation "com.squareup.okhttp3:okhttp:5.4.0"
+    implementation "com.squareup.okhttp3:okhttp:5.5.0"
     // Pairing QR: camera preview/analysis and a pure-Java decoder; no Google Play services required.
     implementation "androidx.camera:camera-camera2:1.4.2"
     implementation "androidx.camera:camera-lifecycle:1.4.2"

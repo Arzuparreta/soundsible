@@ -47,7 +47,7 @@ def doctor() -> None:
     java = subprocess.run([tool("java"), "-version"], capture_output=True, text=True, check=True)
     if not re.search(r'version "21(?:\.|\")', java.stderr + java.stdout):
         raise RuntimeError("Use JDK 21 (JAVA_HOME and PATH), not the system's default JDK")
-    for relative in ("platform-tools/adb", "platforms/android-36/android.jar", "build-tools/36.0.0"):
+    for relative in ("platform-tools/adb", "platforms/android-37.0/android.jar", "build-tools/36.0.0"):
         if not (sdk() / relative).exists():
             raise RuntimeError(f"Missing SDK component: {relative}; see docs/ANDROID.md")
     if not (UI / "node_modules/@capacitor/cli").is_dir():

@@ -56,7 +56,7 @@ máquina):
 export ANDROID_HOME="$HOME/Android/Sdk"
 export JAVA_HOME=/ruta/al/jdk-21
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0' 'emulator' 'system-images;android-36;google_apis;x86_64'
+sdkmanager 'platform-tools' 'platforms;android-37.0' 'build-tools;36.0.0' 'emulator' 'system-images;android-36;google_apis;x86_64'
 npm ci --prefix ui_web
 python scripts/android.py doctor
 ```

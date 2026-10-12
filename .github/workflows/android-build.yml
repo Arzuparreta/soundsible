@@ -83,7 +83,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6.4.0
       - name: Install SDK and JS dependencies
         run: |
-          scripts/ci_retry.sh -- sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+          scripts/ci_retry.sh -- sdkmanager 'platform-tools' 'platforms;android-37.0' 'build-tools;36.0.0'
           scripts/ci_retry.sh -- npm ci --prefix ui_web
           scripts/ci_retry.sh -- python -m pip install -r requirements.txt
       - name: Cache pinned WebRTC dependency
@@ -154,7 +154,7 @@ jobs:
           scripts/ci_retry.sh -- sudo apt-get -o Acquire::Retries=5 install -y ffmpeg
       - name: Install SDK and JS dependencies
         run: |
-          scripts/ci_retry.sh -- sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+          scripts/ci_retry.sh -- sdkmanager 'platform-tools' 'platforms;android-37.0' 'build-tools;36.0.0'
           scripts/ci_retry.sh -- npm ci --prefix ui_web
           scripts/ci_retry.sh -- python -m pip install -r requirements.txt
       - name: Cache pinned WebRTC dependency

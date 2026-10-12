@@ -53,7 +53,7 @@ jobs:
         run: |
           scripts/ci_retry.sh -- sudo apt-get -o Acquire::Retries=5 update
           scripts/ci_retry.sh -- sudo apt-get -o Acquire::Retries=5 install -y ffmpeg
-          scripts/ci_retry.sh -- sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+          scripts/ci_retry.sh -- sdkmanager 'platform-tools' 'platforms;android-37.0' 'build-tools;36.0.0'
           scripts/ci_retry.sh -- npm ci --prefix ui_web
           scripts/ci_retry.sh -- python -m pip install -r requirements.txt
       - name: Verify gates and plan the build
