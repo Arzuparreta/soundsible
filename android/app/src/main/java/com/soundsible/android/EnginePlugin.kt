@@ -119,7 +119,7 @@ class EnginePlugin : Plugin() {
             val options = IO.Options().apply {
                 forceNew = true; reconnection = true; reconnectionAttempts = 5
                 reconnectionDelay = 1000; reconnectionDelayMax = 5000; timeout = 8000
-                callFactory = connection.client; webSocketFactory = connection.client
+                callFactory = SocketIoCallFactory(connection.client); webSocketFactory = connection.client
                 extraHeaders = cookie?.let { mapOf("Cookie" to listOf(it)) } ?: emptyMap()
             }
             val next = IO.socket(selectedOrigin, options)

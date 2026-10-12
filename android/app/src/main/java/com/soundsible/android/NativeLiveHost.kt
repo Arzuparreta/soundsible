@@ -202,7 +202,7 @@ internal class NativeLiveHost(
                 val options = IO.Options().apply {
                     forceNew = true; reconnection = true; reconnectionAttempts = 4
                     reconnectionDelay = 500; reconnectionDelayMax = 4000; timeout = 8000
-                    callFactory = client; webSocketFactory = client
+                    callFactory = SocketIoCallFactory(client); webSocketFactory = client
                     auth = mapOf("session_id" to created.getString("id"), "host_token" to created.getString("host_token"))
                 }
                 val next = IO.socket(endpoint.toString(), options)

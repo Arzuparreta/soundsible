@@ -192,3 +192,28 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
 - Node/JDK se seleccionan sólo en los comandos de validación; no se modifican
   los runtimes globales. No se publica una alpha ni se abren los gates de parity
   u offline. Plan en `docs/audits/DEPENDENCY_UPDATE_PLAN.md`.
+
+## 2026-10-12 · Bloque 3: transporte OkHttp 5
+
+- Rama `codex/dependency-major-transports`: OkHttp 5.4.0 en el artefacto Android,
+  también seleccionado para Media3 y Socket.IO. SDKs y política TLS sin cambios.
+  5.5.0 rechazado por el gate AAR: exige compileSdk 37; se conserva compileSdk 36.
+- AVD API 36: StartupTest, PlaybackTest y LiveListenerTest, 5 casos aprobados
+  (reproducción y Live HTTP/TLS), 0 fallos/skips; 64 pruebas JVM, lint y APK de
+  desarrollo aprobados. Logs: `/tmp/soundsible-okhttp-integration.log` y
+  `/tmp/soundsible-okhttp-gradle.log`. Entorno Python con el lock del bloque 2.
+  El primer intento con `.venv` terminó antes de las pruebas por timeout de
+  arranque del fixture comunitario; no se modificaron timeouts ni aserciones.
+- Inicializador AndroidX de OkHttp presente en el manifest combinado. Los
+  cuatro shards completos del último head y el empaquetado Windows siguen
+  siendo el gate remoto; esto no acredita escucha física ni publica una alpha.
+
+- Corrección tras CI: shards 0/3 reprodujeron `StackOverflowError` de Engine.IO
+  al cerrar polling con el executor OkHttp detenido. Los cinco call factories
+  Socket.IO usan `SocketIoCallFactory`: el callback de error se encola en
+  EventThread antes de cerrar de nuevo, evitando la reentrada. La prueba JVM
+  reproduce el error sin el adaptador y pasa con él.
+  EntityBookmarksTest, LiveRecoveryTest, LivePollingTest y TransportResetTest:
+  11 casos nativos HTTP/TLS aprobados, sin fallos/skips; 65 pruebas JVM.
+  Log `/tmp/soundsible-socketio-integration.log`, baseline con desbordamiento:
+  `/tmp/soundsible-socketio-baseline.xml`. CI debe repetirse en el nuevo head.

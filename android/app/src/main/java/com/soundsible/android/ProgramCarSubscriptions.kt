@@ -76,7 +76,7 @@ internal class ProgramCarSubscriptions(
             val options = IO.Options().apply {
                 forceNew = true; reconnection = true; reconnectionAttempts = 5
                 reconnectionDelay = 1000; reconnectionDelayMax = 5000; timeout = 8000
-                callFactory = connection.client; webSocketFactory = connection.client
+                callFactory = SocketIoCallFactory(connection.client); webSocketFactory = connection.client
                 extraHeaders = mapOf("Cookie" to listOf(cookie))
             }
             val next = IO.socket(connection.origin, options)

@@ -103,7 +103,7 @@ internal class NativeDeviceSession(context: Context, private val connection: Eng
                     val options = IO.Options().apply {
                         forceNew = true; reconnection = true; reconnectionAttempts = 5
                         reconnectionDelay = 1000; reconnectionDelayMax = 5000; timeout = 8000
-                        callFactory = transport; webSocketFactory = transport
+                        callFactory = SocketIoCallFactory(transport); webSocketFactory = transport
                         extraHeaders = mapOf("Cookie" to listOf(connection.cookieHeader(generation)!!))
                     }
                     val next = IO.socket(connection.origin, options); socket = next

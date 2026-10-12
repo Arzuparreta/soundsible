@@ -191,12 +191,53 @@ avisos y sus límites tal como se explicó en el bloque 1.
 
 ## Bloque 3 · Migraciones mayores
 
-Pospuesto hasta evaluar cada beneficio, compatibilidad y coste:
+Estado comprobado el 2026-10-12: los bloques 1 y 2 están integrados en `main`
+(PR #345 y #347). Todos los checks del último head de #347 aprobaron, salvo
+el tag de release omitido deliberadamente. #346 quedó incorporada al bloque 2.
+
+Primera entrega del bloque 3: transporte Android y directorios desktop.
+
+- OkHttp 4.12.0 → 5.4.0. Gradle selecciona el artefacto Android y alinea las
+  cadenas Media3 y Socket.IO en la misma versión. Conserva minSdk/targetSdk y
+  compileSdk 36; no se activa ECH ni se cambia la política de certificados,
+  redirecciones o DNS de Soundsible. Las correcciones de HTTP/2, timeouts y
+  transporte están descritas en el [changelog oficial](https://raw.githubusercontent.com/square/okhttp/master/CHANGELOG.md).
+- Se probó 5.5.0: `:app:checkDebugAarMetadata` la rechaza porque exige
+  compileSdk 37. El AAR de 5.4.0 exige 36. El salto a 5.5 queda unido a la
+  evaluación de AGP/SDK, sin suprimir ese gate ni elevar SDKs automáticamente.
+- dirs 6 → 7 como dependencia directa; la versión 7 ya estaba en el lock por
+  Tauri. Sólo cambia la selección de Soundsible en el lock. El cambio incompatible
+  afecta a `preference_dir` en Windows; el código propio sólo usa `config_dir`,
+  cuyo destino no cambia. Véase el [changelog de dirs](https://docs.rs/crate/dirs/7.0.0).
+- Cargo completo local sigue bloqueado por JavaScriptCoreGTK 4.1 ausente.
+  El módulo real `state.rs` compila con dirs 7 en un crate temporal y sus cinco
+  pruebas existentes aprueban. Esto no sustituye el empaquetado Windows de CI.
+
+Validación local: 64 pruebas JVM, lint y APK aprobados; StartupTest,
+PlaybackTest y LiveListenerTest en AVD API 36, cinco casos aprobados por
+HTTP/TLS sin skips. Inicializador AndroidX de OkHttp presente en el manifest
+combinado. Evidencia y limitaciones en `docs/android/EVIDENCE.md`.
+El primer CI detectó `StackOverflowError` en los shards 0 y 3: cuando se
+retira un executor propio, OkHttp 5 puede llamar a `onFailure` en el mismo stack
+de `enqueue`. Engine.IO intenta cerrar polling desde ese callback y reentra
+antes de marcar el transporte como cerrado. `SocketIoCallFactory` encola los
+fallos en EventThread en todos los transportes Socket.IO; conserva cancelación,
+clonación y callbacks de respuesta. No se retrasa ni se elimina el shutdown del
+executor. La prueba JVM usa handshake y el executor real detenido: reproduce
+el desbordamiento sin el adaptador y aprueba con él. Once casos nativos de
+marcadores, recuperación Live, polling y reset HTTP/TLS aprueban; suite JVM:
+65 pruebas. Logs en `/tmp/soundsible-socketio-integration.log` y
+`/tmp/soundsible-socketio-baseline.xml`.
+
+El gate remoto exige los cuatro shards Android y los dos instaladores Windows
+en el último head de la PR. No se publica ni se fusiona automáticamente.
+
+Pendientes tras esta entrega; evaluar beneficio, compatibilidad y coste:
 
 - Python 3.15 y actualización de la base Debian.
 - Vitest 5.
 - AGP 9 + Gradle 9 + Kotlin integrado.
-- OkHttp 5 y dirs 7.
+- OkHttp 5.5 junto con compileSdk 37; OkHttp 5.4 y dirs 7 se abordan arriba.
 
 No se elevan automáticamente los mínimos Android/iOS. Cada migración requiere
 su validación funcional y de empaquetado; estar en latest no es un gate de
