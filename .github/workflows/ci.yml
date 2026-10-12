@@ -348,7 +348,7 @@ jobs:
           docker run --detach --name soundsible-mediamtx-stub-ci \
             --network soundsible-community-ci \
             --network-alias mediamtx \
-            python:3.13-slim \
+            python:3.13-slim-trixie \
             python -c 'from http.server import BaseHTTPRequestHandler, HTTPServer; Handler = type("Handler", (BaseHTTPRequestHandler,), {"do_GET": lambda self: (self.send_response(200), self.end_headers()), "log_message": lambda *args: None}); HTTPServer(("", 9997), Handler).serve_forever()'
           cleanup() {
             docker logs soundsible-community-ci || true

@@ -1,6 +1,6 @@
 # Only static browser assets leave this stage. Run Node/Vite natively rather
 # than under QEMU when the runtime image targets another architecture.
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS ui-build
+FROM --platform=$BUILDPLATFORM node:24-trixie-slim AS ui-build
 
 WORKDIR /build/ui_web
 COPY ui_web/package.json ui_web/package-lock.json ./
@@ -11,7 +11,7 @@ COPY branding/logo-mark.svg /build/branding/logo-mark.svg
 RUN npm run build
 
 
-FROM python:3.13-slim-bookworm AS python-build
+FROM python:3.13-slim-trixie AS python-build
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /build
@@ -22,7 +22,7 @@ COPY requirements.docker.lock ./
 RUN pip wheel --require-hashes --wheel-dir /wheels -r requirements.docker.lock
 
 
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.13-slim-trixie AS runtime
 
 # Left empty on purpose. An arg-less build then reports the version that
 # shared/version.py declares, instead of inventing a second answer that only
