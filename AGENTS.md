@@ -18,11 +18,13 @@
   successfully (intentional workflow skips are allowed). Inspect failures,
   fix their causes, commit and push, then wait again for that new head. Local
   validation alone never satisfies this completion gate.
-- Before merging a PR, request `@codex review` if the automatic Codex review
-  does not cover its current head. Wait for completion, inspect both review
-  bodies and inline comments, evaluate each finding, and fix confirmed problems
-  with appropriate validation. Record the disposition of dismissed findings.
-  Repeat after fixes; a green CI run alone does not close the review gate.
+- Remote Codex review is optional, not a merge gate. Review may be performed
+  by an agnostic subagent in the current harness, or omitted when appropriate.
+  Remote review quotas, account availability, and review-service failures must
+  never stop authorized work or require another merge confirmation. Inspect
+  any available findings, fix confirmed problems with appropriate validation,
+  and record the disposition of dismissed findings. GitHub checks on the latest
+  head and the current-base verification remain required.
 - Before opening any pull request, fetch its target branch from GitHub and
   verify that the working branch contains that latest remote base. For the
   usual `main` target, run `git fetch origin` followed by

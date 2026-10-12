@@ -261,8 +261,9 @@ Chromium móvil/escritorio, 328 aprobados y 68 skips; después WebKit móvil/esc
 319 aprobados y 77 skips, un worker y mount de sólo lectura, sin retries.
 Logs `/tmp/soundsible-vitest5-{ui,shell,chromium,webkit}.log`. No se ejecuta
 `npm run build` local. npm audit conserva los tres paquetes de la cadena moderada
-Capacitor CLI/xcode/uuid en web y ninguno en shell. El gate remoto y revisión
-Codex del último head son obligatorios antes del merge.
+Capacitor CLI/xcode/uuid en web y ninguno en shell. Los checks remotos del último head son obligatorios antes del merge. La
+revisión remota es opcional; puede sustituirse por un subagente agnóstico del
+harness o omitirse según el cambio. La cuota de otra cuenta no bloquea el trabajo.
 
 ### Debian Trixie · 2026-10-12
 
@@ -290,4 +291,5 @@ sonoridad contra el binario real, diez pruebas comunitarias con sus pins reales
 (y herramientas de test aisladas), aprobadas. Motor saludable y HTML/JS
 compilados servidos por la imagen; Community health 200 con SQLite y stub
 MediaMTX en red aislada. Logs `/tmp/soundsible-trixie-*.log`. La suite Python
-completa, Docker x64/ARM64 y revisión del head son gates remotos antes del merge.
+completa y Docker x64/ARM64 son gates remotos antes del merge. La revisión
+remota no es un gate: su falta de cuota no detiene el trabajo autorizado.
