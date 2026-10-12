@@ -217,6 +217,18 @@ Validación local: 64 pruebas JVM, lint y APK aprobados; StartupTest,
 PlaybackTest y LiveListenerTest en AVD API 36, cinco casos aprobados por
 HTTP/TLS sin skips. Inicializador AndroidX de OkHttp presente en el manifest
 combinado. Evidencia y limitaciones en `docs/android/EVIDENCE.md`.
+El primer CI detectó `StackOverflowError` en los shards 0 y 3: cuando se
+retira un executor propio, OkHttp 5 puede llamar a `onFailure` en el mismo stack
+de `enqueue`. Engine.IO intenta cerrar polling desde ese callback y reentra
+antes de marcar el transporte como cerrado. `SocketIoCallFactory` encola los
+fallos en EventThread en todos los transportes Socket.IO; conserva cancelación,
+clonación y callbacks de respuesta. No se retrasa ni se elimina el shutdown del
+executor. La prueba JVM usa handshake y el executor real detenido: reproduce
+el desbordamiento sin el adaptador y aprueba con él. Once casos nativos de
+marcadores, recuperación Live, polling y reset HTTP/TLS aprueban; suite JVM:
+65 pruebas. Logs en `/tmp/soundsible-socketio-integration.log` y
+`/tmp/soundsible-socketio-baseline.xml`.
+
 El gate remoto exige los cuatro shards Android y los dos instaladores Windows
 en el último head de la PR. No se publica ni se fusiona automáticamente.
 

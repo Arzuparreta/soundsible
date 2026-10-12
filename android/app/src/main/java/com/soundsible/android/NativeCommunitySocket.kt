@@ -27,7 +27,7 @@ internal class NativeCommunitySocket(
     private val socket = IO.socket(endpoint.toString(), IO.Options().apply {
         forceNew = true; reconnection = true; reconnectionAttempts = 4
         reconnectionDelay = 500; reconnectionDelayMax = 4000; timeout = 8000
-        callFactory = client; webSocketFactory = client; this.auth = auth
+        callFactory = SocketIoCallFactory(client); webSocketFactory = client; this.auth = auth
         if (transports != null) { require(transports.all { it in setOf("polling", "websocket") }); this.transports = transports }
     })
     init {

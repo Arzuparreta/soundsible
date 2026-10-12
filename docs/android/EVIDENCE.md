@@ -207,3 +207,13 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
 - Inicializador AndroidX de OkHttp presente en el manifest combinado. Los
   cuatro shards completos del último head y el empaquetado Windows siguen
   siendo el gate remoto; esto no acredita escucha física ni publica una alpha.
+
+- Corrección tras CI: shards 0/3 reprodujeron `StackOverflowError` de Engine.IO
+  al cerrar polling con el executor OkHttp detenido. Los cinco call factories
+  Socket.IO usan `SocketIoCallFactory`: el callback de error se encola en
+  EventThread antes de cerrar de nuevo, evitando la reentrada. La prueba JVM
+  reproduce el error sin el adaptador y pasa con él.
+  EntityBookmarksTest, LiveRecoveryTest, LivePollingTest y TransportResetTest:
+  11 casos nativos HTTP/TLS aprobados, sin fallos/skips; 65 pruebas JVM.
+  Log `/tmp/soundsible-socketio-integration.log`, baseline con desbordamiento:
+  `/tmp/soundsible-socketio-baseline.xml`. CI debe repetirse en el nuevo head.
