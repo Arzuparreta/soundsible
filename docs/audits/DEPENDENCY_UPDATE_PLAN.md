@@ -235,7 +235,7 @@ en el último head de la PR. No se publica ni se fusiona automáticamente.
 Pendientes tras esta entrega; evaluar beneficio, compatibilidad y coste:
 
 - Python 3.15 y actualización de la base Debian.
-- Vitest 5.
+- Vitest 5: entrega descrita abajo.
 - AGP 9 + Gradle 9 + Kotlin integrado.
 - OkHttp 5.5 junto con compileSdk 37; OkHttp 5.4 y dirs 7 se abordan arriba.
 
@@ -243,3 +243,23 @@ No se elevan automáticamente los mínimos Android/iOS. Cada migración requiere
 su validación funcional y de empaquetado; estar en latest no es un gate de
 compatibilidad. AltStore PAL continúa sin verificar. No se publica una release
 ni se modifica la versión de Soundsible en estos bloques.
+
+### Vitest 5 · 2026-10-12
+
+#349 se fusionó en `main` después de 26 checks aprobados, cuatro skips de
+workflow y revisión Codex del head `49d6013d` sin hallazgos ni comentarios inline.
+
+Web y shell pasan de Vitest 4.1.11 a 5.0.4 con sus locks. Los mínimos existentes
+Node/Vite satisfacen los requisitos nuevos. Se acepta `clearMocks: true` por
+defecto: ninguna prueba requiere historial compartido entre casos. No se añaden
+flags de compatibilidad ni se modifican aserciones, configuración o código de
+producto. Sólo se actualiza Vitest y sus transitivos asociados. Referencia:
+[guía oficial de migración](https://vitest.dev/guide/migration/).
+
+Validación local: typecheck y 1.720 tests web; nueve tests shell; suite completa
+Chromium móvil/escritorio, 328 aprobados y 68 skips; después WebKit móvil/escritorio,
+319 aprobados y 77 skips, un worker y mount de sólo lectura, sin retries.
+Logs `/tmp/soundsible-vitest5-{ui,shell,chromium,webkit}.log`. No se ejecuta
+`npm run build` local. npm audit conserva los tres paquetes de la cadena moderada
+Capacitor CLI/xcode/uuid en web y ninguno en shell. El gate remoto y revisión
+Codex del último head son obligatorios antes del merge.
