@@ -168,8 +168,8 @@ class PlaybackService : MediaLibraryService() {
             // Each source pins the selected account; every HTTP request revalidates it.
             val epoch = connection.generation
             val selected = connection.origin
-            val client = synchronized(this) { transport?.takeIf { it.first == epoch }?.second ?: connection.client.newBuilder()
-                .dispatcher(okhttp3.Dispatcher()).connectionPool(okhttp3.ConnectionPool())
+            val client = synchronized(this) { transport?.takeIf { it.first == epoch }?.second ?: okhttp3.ConnectionPool().let { pool -> connection.client.newBuilder()
+                .dispatcher(okhttp3.Dispatcher()).connectionPool(pool)
                 .retryOnConnectionFailure(false).eventListener(object : okhttp3.EventListener() {
                 override fun callStart(call: okhttp3.Call) { audioCalls[call] = call.request().url.queryParameter("android_occurrence") ?: "" }
                 override fun connectStart(call: okhttp3.Call, address: java.net.InetSocketAddress, proxy: java.net.Proxy) { connectedCalls.add(call) }
@@ -181,17 +181,19 @@ class PlaybackService : MediaLibraryService() {
                 val request = chain.request().newBuilder().url(chain.request().url.newBuilder().removeAllQueryParameters("android_generation").removeAllQueryParameters("android_occurrence").build()).header("Cookie", cookie).build()
                 val response = try { chain.proceed(request) } catch (failure: java.io.IOException) {
                     // Never replay a body or an HTTP error. OkHttp has retired this
-                    // failed pooled socket; a new exchange rechecks the account.
+                    // failed pooled socket; the idle ones are likely as stale, so the
+                    // new exchange opens a fresh socket and rechecks the account.
                     val connected = connectedCalls.contains(chain.call())
                     if (BuildConfig.DEBUG) android.util.Log.d("AudioConnection", "Headers failed; connected=$connected cancelled=${chain.call().isCanceled()}")
                     if (request.method != "GET" || !AudioConnectionRepair.allowed(failure, connected, false, chain.call().isCanceled()) || epoch != connection.generation || selected != connection.origin) throw failure
+                    pool.evictAll()
                     chain.proceed(request)
                 }
                 if (epoch != connection.generation) { response.close(); throw java.io.IOException("STALE_SESSION") }
                 if (response.isSuccessful && ::previews.isInitialized) previews.loaded(chain.request().url.queryParameter("android_occurrence") ?: "")
                 if (response.code == 401) main.post { if (epoch == connection.generation) player.pause() }
                 response
-            }.build()
+            }.build() }
                 .also { transport = epoch to it }
             }
             OkHttpDataSource.Factory(client).createDataSource()
