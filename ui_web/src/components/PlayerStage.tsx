@@ -417,23 +417,22 @@ export function PlayerStage(props: {
                     </button>
                   </Show>
 
-
-
                   <Show when={!podcast() && isSavedTrack(current())}>
                     <span class={styles.favouriteAction}>
                       <FavouriteButton favourite={savedFromTrack(current())} class={styles.actBtn} tooltip />
                     </span>
                   </Show>
 
+                  {/* No wrapper here: once the song is downloaded the button
+                      renders nothing, and an empty box would still be a flex
+                      item — a second gap beside the heart. */}
                   <Show when={!podcast()}>
-                    <span class={styles.collectionAction}>
-                      <CollectionButton
-                        entry={savedFromTrack(current())}
-                        class={styles.actBtn}
-                        hideOwned
-                        tooltip
-                      />
-                    </span>
+                    <CollectionButton
+                      entry={savedFromTrack(current())}
+                      class={`${styles.actBtn} ${styles.collectionAction}`}
+                      hideOwned
+                      tooltip
+                    />
                   </Show>
 
                   <Show when={props.mode === 'now-playing' && !podcast()}>
