@@ -343,8 +343,8 @@ CatalogSearch y Podcast aprueban aislados en esta rama (7 de 7). Causa local:
 el fixture TLS cierra una conexión keep-alive reutilizada y `OfflineStore`
 descarga con `retryOnConnectionFailure(false)`, así que la copia queda en
 `network` (`EOFException` al leer cabeceras). No es efecto de esta migración;
-corregido aparte: la descarga offline descarta los sockets inactivos y repite
-el GET una vez en un socket nuevo (ver `docs/android/EVIDENCE.md`). StartupTest, PlaybackTest y LiveListenerTest (HTTP/TLS)
+corregido aparte: cada descarga offline abre su propio socket y nunca reutiliza
+uno del pool (ver `docs/android/EVIDENCE.md`). StartupTest, PlaybackTest y LiveListenerTest (HTTP/TLS)
 aprueban 5 de 5. PairingTest, que usa CameraX, aprueba.
 El gate remoto exige los cuatro shards Android en el último head de la PR.
 
