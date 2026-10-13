@@ -214,7 +214,7 @@ def youtube_suggest():
     if not q:
         return jsonify({"suggestions": []})
     
-    url = "http://suggestqueries.google.com/complete/search"
+    url = "https://suggestqueries.google.com/complete/search"
     # Note: Using 'firefox' client ensures we get a pure JSON array instead of JSONP
     params = {
         "client": "firefox",
