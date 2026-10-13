@@ -236,3 +236,17 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   CatalogSearch y Podcast aislados: 7/7 (`/tmp/soundsible-branch-car-podcast.log`).
   Los cuatro shards del último head en GitHub siguen siendo el gate.
 
+## 2026-10-13 · Descarga offline: socket inactivo cerrado por el servidor
+
+- `OfflineStore` descargaba con `retryOnConnectionFailure(false)` y sin
+  reparación: si el servidor había cerrado el socket keep-alive reutilizado, la
+  copia acababa en `network` (`unexpected end of stream`/`EOFException` antes de
+  las cabeceras). Ahora usa la regla del reproductor (`AudioConnectionRepair`):
+  sólo ese fallo, sin conexión nueva en la llamada y sin cancelar, vacía los
+  sockets inactivos del pool y repite el GET una vez. Nunca se repite un cuerpo.
+- Sin vaciar el pool, el reintento tomaba otro socket inactivo que el fixture
+  TLS también cortaba (a mitad de cuerpo): OfflineTest/ProgramPcmTest TLS
+  fallaron en 3 de 4 rondas (`/tmp/soundsible-offline-repair-without-evict.log`).
+  Con el vaciado, 3 de 3 rondas y después Offline, ProgramPcm, OfflineRestart,
+  OfflineRemoval, CarOfflineExpiry y OfflinePluginLifecycle HTTP/TLS 9/0 dos
+  veces (`/tmp/soundsible-offline-repair-1.log`, `-2.log`); 65 JVM y lint.
