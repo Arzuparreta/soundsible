@@ -91,7 +91,7 @@ defaults are listed in [section 7](#7-where-soundsible-keeps-its-files).
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `SOUNDSIBLE_YT_SEARCH_SOURCE` | `ytmusic` | `ytmusic` or `youtube`. YouTube Music gives cleaner metadata but is not always reachable from a datacenter IP; set `youtube` on a VPS whose searches come back empty. |
+| `SOUNDSIBLE_YT_SEARCH_SOURCE` | `youtube` | `youtube` or `ytmusic`. Plain YouTube search returns title, creator and duration in one request; YouTube Music returns only ids and titles and is not always reachable from a datacenter IP. |
 | `SOUNDSIBLE_YT_PROXY` | unset | Private HTTP relay used for both YouTube resolution and the resulting media transfer. For the supported VPS topology use Soundsible's Tailscale-only relay; see [VPS_RELAY.md](VPS_RELAY.md). |
 | `SOUNDSIBLE_YTDLP_COOKIE_FILE` | `cookies.txt` in the configuration directory | YouTube cookies file; see [YouTube cookies](#youtube-cookies). |
 | `SOUNDSIBLE_YTDLP_FORCE_IPV4` | `true` | Forces yt-dlp over IPv4, because some VPS IPv6 routes hang during YouTube extraction. |
