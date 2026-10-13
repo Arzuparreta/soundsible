@@ -250,3 +250,17 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   Con el vaciado, 3 de 3 rondas y después Offline, ProgramPcm, OfflineRestart,
   OfflineRemoval, CarOfflineExpiry y OfflinePluginLifecycle HTTP/TLS 9/0 dos
   veces (`/tmp/soundsible-offline-repair-1.log`, `-2.log`); 65 JVM y lint.
+
+## 2026-10-13 · Reproductor: reintento en socket nuevo
+
+- `PlaybackService` ya repetía una vez el GET de audio cuando un socket del pool
+  moría antes de las cabeceras (`AudioConnectionRepair`), pero el reintento
+  podía tomar otro socket inactivo igual de viejo. Ahora vacía antes los
+  sockets inactivos de su propio pool, como la descarga offline.
+- Playback, TransportReset, Closure, Radio, Autoplay, ProgramPcm, Offline,
+  CarLibrary y CarEvents HTTP/TLS, 5 rondas de 18 casos: la reparación saltó
+  sin cancelar (`Headers failed; connected=false cancelled=false`) y la
+  reproducción siguió. 17 casos aprueban en las 5 rondas; CarLibrary TLS falló
+  en 3 por su copia offline: socket del pool cortado por el fixture TLS a mitad
+  de cuerpo (~2,8 MB), sin relación con el reproductor; se trata aparte. 65 JVM
+  y lint. Logs `/tmp/soundsible-player-evict-{1..5}.log`.
