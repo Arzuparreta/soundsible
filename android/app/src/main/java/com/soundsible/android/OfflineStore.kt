@@ -199,7 +199,19 @@ class OfflineStore private constructor(private val context: Context) {
         try {
             synchronized(this) { requireProfile(epoch); require(valid(id,ticket,epoch,rev)); database.execSQL("UPDATE copies SET state='downloading' WHERE id=? AND ticket=?", arrayOf(id,ticket)) }
             val cookie = connection.cookieHeader(epoch) ?: error("session")
-            val call = connection.client.newBuilder().retryOnConnectionFailure(false).callTimeout(30, java.util.concurrent.TimeUnit.MINUTES).build().newCall(Request.Builder().url(connection.origin + "/api/static/stream/" + Uri.encode(id)).header("Cookie", cookie).build())
+            val connected = java.util.concurrent.atomic.AtomicBoolean(false)
+            val client = connection.client.newBuilder().retryOnConnectionFailure(false).callTimeout(30, java.util.concurrent.TimeUnit.MINUTES)
+                .eventListener(object : okhttp3.EventListener() { override fun connectStart(call: Call, inetSocketAddress: java.net.InetSocketAddress, proxy: java.net.Proxy) = connected.set(true) })
+                .addInterceptor { chain ->
+                    try { chain.proceed(chain.request()) } catch (failure: java.io.IOException) {
+                        // The server may close idle pooled sockets as one is reused. Drop the
+                        // idle ones and send one GET on a fresh socket; never replay a body.
+                        if (!AudioConnectionRepair.allowed(failure, connected.get(), false, chain.call().isCanceled()) || !valid(id,ticket,epoch,rev)) throw failure
+                        connection.client.connectionPool.evictAll()
+                        chain.proceed(chain.request())
+                    }
+                }.build()
+            val call = client.newCall(Request.Builder().url(connection.origin + "/api/static/stream/" + Uri.encode(id)).header("Cookie", cookie).build())
             synchronized(this) { require(valid(id,ticket,epoch,rev)); active = id to call }
             call.execute().use { response ->
                 if (response.code == 401) { clear(); error("session") }
