@@ -159,6 +159,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2.9.2
         with:
           workspaces: desktop-shell/src-tauri
+          # PR/tag caches cannot be reused by the next PR. The two target
+          # caches exceed 1 GB together; keep main's reusable entries resident.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # pywinauto drives the installed app in the UI smoke below.
       - name: Install Python dependencies

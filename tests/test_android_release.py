@@ -164,7 +164,7 @@ def _check_rows(status="completed", conclusion="success"):
     ]
 
 
-@pytest.mark.parametrize("failed_check", ["Emulator shard 2/4 (API 36)", "lint"])
+@pytest.mark.parametrize("failed_check", ["Emulator shard 2/8 (API 36)", "Emulator shard 7/8 (API 36)", "lint"])
 def test_checks_require_full_android_and_shared_regression(monkeypatch, failed_check):
     rows = _check_rows()
     monkeypatch.setattr(release, "gh", lambda *args: [{"check_runs": rows}])
@@ -317,6 +317,22 @@ def test_a_rerun_never_replaces_a_published_apk(monkeypatch):
     # Published without an APK (or still a draft) is not a reason to refuse.
     monkeypatch.setattr(release, "releases", lambda: [{**published, "assets": []}, {**published, "draft": True}])
     assert release.plan_build()["tag"] == f"v{version}"
+
+
+def test_release_gate_requires_every_configured_emulator_shard():
+    import yaml
+
+    workflow = Path(__file__).resolve().parents[1] / ".github/workflows/android-build.yml"
+    jobs = yaml.safe_load(workflow.read_text())["jobs"]
+    emulator = jobs["emulator"]
+    shards = emulator["strategy"]["matrix"]["shard"]
+    assert shards == list(range(len(shards)))
+    expected = {jobs["static"]["name"]}
+    expected.update(emulator["name"].replace("${{ matrix.shard }}", str(i)) for i in shards)
+    # Renaming/adding a shard must not let a release pass with partial evidence.
+    assert release.ANDROID_CHECKS == expected
+    action = next(s for s in emulator["steps"] if s.get("name", "").startswith("Packaged offline"))
+    assert f"scripts/android_ci_shard.sh ${{{{ matrix.shard }}}} {len(shards)}" in action["with"]["script"]
 
 
 @pytest.mark.parametrize("ref_type,present,head_matches,dispatched", [
