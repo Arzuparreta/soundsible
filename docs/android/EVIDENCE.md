@@ -264,3 +264,16 @@ Los resultados locales anteriores no sustituyen esos checks del head vigente.
   en 3 por su copia offline: socket del pool cortado por el fixture TLS a mitad
   de cuerpo (~2,8 MB), sin relación con el reproductor; se trata aparte. 65 JVM
   y lint. Logs `/tmp/soundsible-player-evict-{1..5}.log`.
+
+## 2026-10-13 · Descarga offline: un socket propio por copia
+
+- Con el reintento de #353, CarLibrary TLS seguía fallando (3 de 5 rondas): la
+  copia tomaba un socket del pool y el fixture TLS lo cortaba a mitad de cuerpo
+  (~2,8 MB), un fallo que no se puede reintentar sin repetir el cuerpo. Cada
+  copia usa ahora un pool sin conexiones inactivas: abre su propio socket y lo
+  cierra al terminar. Un handshake TLS por canción es despreciable frente a la
+  descarga. El reintento de #353 ya no tiene caso y se retira.
+- Playback, TransportReset, Closure, Radio, Autoplay, ProgramPcm, Offline,
+  CarLibrary, CarEvents, OfflineRestart, OfflineRemoval, CarOfflineExpiry y
+  OfflinePluginLifecycle HTTP/TLS: 23/0 en 3 rondas
+  (`/tmp/soundsible-offline-fresh-{1..3}.log`); 65 JVM y lint.
