@@ -59,7 +59,7 @@ CAPABILITIES = {
 }
 ANDROID_CHECKS = {
     "Build, lint and unit tests",
-    *(f"Emulator shard {i}/4 (API 36)" for i in range(4)),
+    *(f"Emulator shard {i}/8 (API 36)" for i in range(8)),
 }
 CHECKS = {
     *ANDROID_CHECKS,

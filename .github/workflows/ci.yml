@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   # The required checks (docker, docker_arm64, community_docker) are the slow
-  # ones — a full image build plus an emulated arm64 build. Most PRs (UI copy,
+  # ones — full image builds for amd64 and arm64. Most PRs (UI copy,
   # docs, desktop-shell) touch nothing that ends up in either image, so this
   # gates them to a fast skip instead of a full rebuild. Skipped is still a
   # passing conclusion for required status checks, so it doesn't weaken the
@@ -373,25 +373,24 @@ jobs:
           exit 1
 
   docker_arm64:
-    needs: [changes, docker]
+    needs: changes
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
       startsWith(github.ref, 'refs/tags/v') ||
       needs.changes.outputs.docker == 'true'
-    runs-on: ubuntu-latest
+    # Build on native ARM rather than spending minutes compiling under QEMU.
+    # Independent of the amd64 job; both remain checks on the same PR commit.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
-      - name: Set up ARM emulation
-        uses: docker/setup-qemu-action@v4.4.0
-        with:
-          platforms: arm64
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4.4.1
       - name: Build the production image for Apple Silicon and ARM servers
         run: >-
           docker buildx build --platform linux/arm64
-          ${{ github.event_name == 'schedule' && '--no-cache' || '--cache-from type=gha,scope=docker-arm64 --cache-to type=gha,mode=max,scope=docker-arm64' }}
+          ${{ github.event_name == 'schedule' && '--no-cache' || '--cache-from type=gha,scope=docker-arm64' }}
+          ${{ github.event_name != 'schedule' && github.ref == 'refs/heads/main' && '--cache-to type=gha,mode=max,scope=docker-arm64' || '' }}
           --pull --target runtime --provenance=false --output type=cacheonly .
 
   ui_accessibility_profiles:
@@ -539,7 +538,8 @@ jobs:
           cache-from: |
             type=gha,scope=docker-arm64
             type=gha,scope=docker-publish
-          cache-to: type=gha,mode=max,scope=docker-publish
+          # Tags read main's cache without saving another isolated copy of it.
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,scope=docker-publish' || '' }}
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4.2.2
         with:
