@@ -126,10 +126,12 @@ history. Adding a second account turns on sign-in.
 [Accounts](docs/CONFIGURATION.md#6-accounts-multi-user)
 
 **What leaves my server?**
-The requests it needs to work: searches and streams to YouTube, song and
-artist lookups to Deezer and MusicBrainz, lyrics to LRCLIB, podcast searches to
-Apple. Your listening history and recommendation profile stay on the server and
-are never uploaded. Live goes through a relay run by the project, or your own,
+The requests it needs to work: searches and streams to YouTube, search
+suggestions (the text you type) to Google, song and artist lookups to Deezer
+and MusicBrainz, lyrics to LRCLIB, podcast searches to Apple, and podcast feeds
+and episodes to each show's own host. If you turn on automatic downloader updates,
+those come from PyPI. Your listening history and recommendation profile stay on
+the server and are never uploaded. Live goes through a relay run by the project, or your own,
 and can be turned off.
 [Privacy](docs/TELEMETRY_PRIVACY.md) · [Settings](docs/CONFIGURATION.md#features)
 

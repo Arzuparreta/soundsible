@@ -96,7 +96,7 @@ Compose reads optional values from a `.env` file beside `compose.yaml`:
 SOUNDSIBLE_TAG=edge
 SOUNDSIBLE_PORT=5005
 SOUNDSIBLE_ADMIN_TOKEN=replace-with-a-long-random-value
-SOUNDSIBLE_YT_SEARCH_SOURCE=ytmusic
+SOUNDSIBLE_YT_SEARCH_SOURCE=youtube
 SOUNDSIBLE_PREVIEW_CACHE_MB=2048
 SOUNDSIBLE_COMMUNITY_DISABLED=false
 ```

@@ -40,8 +40,8 @@ error survives all three attempts:
 
 Datacenter addresses are often treated as automated traffic. In order of effort:
 
-1. Set `SOUNDSIBLE_YT_SEARCH_SOURCE=youtube` if YouTube Music searches come
-   back empty.
+1. If you set `SOUNDSIBLE_YT_SEARCH_SOURCE=ytmusic` and searches come back
+   empty, remove it to go back to the default, `youtube`.
 2. Add YouTube cookies — see [Configuration → YouTube cookies](CONFIGURATION.md#youtube-cookies).
 3. Route YouTube through a trusted home computer with the
    [VPS relay](VPS_RELAY.md).
